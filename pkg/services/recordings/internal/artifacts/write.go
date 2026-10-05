@@ -3,6 +3,7 @@ package artifacts
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -65,7 +66,11 @@ func (writer *AtomicWriter) Write(path string, value Recording) error {
 		_ = temporary.Close()
 		return fmt.Errorf("secure temporary recording: %w", err)
 	}
-	if _, err := temporary.Write(data); err != nil {
+	n, err := temporary.Write(data)
+	if err == nil && n != len(data) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write temporary recording: %w", err)
 	}

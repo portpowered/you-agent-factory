@@ -48,6 +48,7 @@ func (h *recordedHistory) ListSessions(_ context.Context, request factorysession
 	if err != nil {
 		return factorysessions.ListSessionsResult{}, fmt.Errorf("list recorded Factory Sessions: %w", err)
 	}
+	result.Warnings = append([]factorysessions.RecordedSessionDiagnostic(nil), listed.Warnings...)
 	result.RecordedSessions = make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
 	for _, session := range listed.Sessions {
 		result.RecordedSessions = append(result.RecordedSessions, factorysessions.RecordedSessionListSummary{

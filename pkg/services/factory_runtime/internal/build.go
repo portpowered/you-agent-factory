@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -19,6 +20,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -56,6 +58,7 @@ type RuntimeFactory struct {
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	providerSessions         providersessions.Service
+	workerAttemptScheduler   platformclock.TimerSource
 }
 
 func NewRuntimeFactory(
@@ -76,6 +79,7 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
+	workerAttemptScheduler platformclock.TimerSource,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:             quorumPolicy,
@@ -95,6 +99,7 @@ func NewRuntimeFactory(
 		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
 		providerSessions:         providerSessions,
+		workerAttemptScheduler:   workerAttemptScheduler,
 	}
 }
 
@@ -137,7 +142,8 @@ func (f *RuntimeFactory) Build(
 	worldStateProjector factory.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
@@ -187,9 +193,9 @@ func (f *RuntimeFactory) Build(
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("runtime logger factory returned nil")
 	}
-	if workerSessionsFactory == nil {
+	if workerSessions == nil {
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
-		return nil, fmt.Errorf("Worker Sessions factory is required")
+		return nil, fmt.Errorf("worker sessions service is required")
 	}
 	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
@@ -284,8 +290,10 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerService,
 		mockWorkersConfig,
-		workerSessionsFactory,
+		workerSessions,
+		workerAttempts,
 		f.providerSessions,
+		f.workerAttemptScheduler,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -359,8 +367,10 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerService workers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerSessions workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	providerSessions providersessions.Service,
+	workerAttemptScheduler platformclock.TimerSource,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -397,12 +407,8 @@ func assembleRuntimeBundle(
 			recording.RecordEvent(event)
 		}
 	}
-	workerSessions, err := workerSessionsFactory(workerService, clock)
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
-	if workerSessions == nil {
-		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+	if workerAttempts == nil {
+		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
 	}
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
@@ -413,6 +419,7 @@ func assembleRuntimeBundle(
 		runtimeScheduler,
 		workerService,
 		workerSessions,
+		workerAttempts,
 		loadedFactoryCfg,
 		invocationInterpolation,
 		invocationFileReader(inputFiles),
@@ -421,6 +428,7 @@ func assembleRuntimeBundle(
 		runtimeMode,
 		structuredLogger,
 		clock,
+		workerAttemptScheduler,
 		inlineDispatch,
 		eventHistory,
 		workerRecordingIdentity(runtimeInstanceID),

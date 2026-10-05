@@ -213,7 +213,6 @@ PACKAGE_BOUNDARY_BASE_REF ?=
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
-RETIRED_SURFACE_CHECK_ROOT ?= .
 # "auto" selects a per-user cache shared by every worktree (os.UserCacheDir()/you-lint).
 # Entries are keyed by source content, never by checkout path, so a fresh worktree
 # reuses checkers another worktree compiled. Set a path to opt out.
@@ -241,7 +240,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check golangci-lint-run repolint lint-migration-smoke retired-surface-check fmt-check contracts-check
+LINT_TARGETS_BASE := vet pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check provider-catalog-check model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -286,7 +285,7 @@ define run_timed_step
 endef
 
 
-.PHONY: golangci golangci-lint-run repolint lint-baseline-growth lint-migration-smoke
+.PHONY: golangci golangci-lint-run lint-migration-smoke
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
@@ -318,9 +317,9 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
+.PHONY: lint-full pkg-boundary service-cycle-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
-.PHONY: retired-surface-check readme-check deadcode dashboard-verify
+.PHONY: readme-check deadcode dashboard-verify
 
 .PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
@@ -443,7 +442,7 @@ api-package-pack-smoke:
 
 api-package-verify: api-package-pack-smoke
 
-packaged-factory-package-smoke: packaged-factory-catalog-check packaged-factory-package-script-test
+packaged-factory-package-smoke: repository-lint-run packaged-factory-package-script-test
 
 packaged-factory-package-verify: packaged-factory-package-smoke
 
@@ -451,11 +450,11 @@ packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
 	$(PYTHON) -B -m unittest discover -s packages/packaged-factories/factories/dub-video/scripts -p 'test_dub_*.py'
 
-packaged-factory-package-pack-check: packaged-factory-catalog-check
+packaged-factory-package-pack-check: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-pack', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-candidate.mjs --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-pack --run-id 1 --source-commit $(shell git rev-parse HEAD)
 
-packaged-factory-package-candidate-dry-run: packaged-factory-catalog-check
+packaged-factory-package-candidate-dry-run: repository-lint-run
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-dry-run', { recursive: true, force: true })"
 	node scripts/packaged-factories-package-pr-dry-run.mjs --event-name pull_request --prerequisite-result success --ref refs/pull/local/head --repository portpowered/you-agent-factory --run-id 1 --source-commit $(shell git rev-parse HEAD) --pull-request-head-sha $(shell git rev-parse HEAD) --package-directory packages/packaged-factories --output-directory .artifacts/packaged-factories-local-dry-run --workspace-directory .
 
@@ -576,7 +575,7 @@ test-acp-provider-prebuilt:
 	$(GO) test ./tests/integration/providers/acp -run '^TestPrebuiltACPDeliveredResultsSurvivePeerExit$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/lint-baseline-growth.test.mjs scripts/ci/lint-shape-baseline.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -1002,9 +1001,6 @@ packaged-factory-consumption-check:
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
-packaged-factory-catalog-check:
-	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
-
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
@@ -1024,54 +1020,46 @@ model-provider-package-check:
 # fetched (Backend Lint checks out with fetch-depth 0).
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-# Tag union under which the repolint analyzers see every Go file once.
-REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
-REPOLINT_DIR ?= .artifacts/repolint
-REPOLINT_BASELINE := internal/lint/analyzers/baseline.txt
+GOLANGCI_DIR ?= .artifacts/golangci
 ifeq ($(OS),Windows_NT)
-REPOLINT_BIN := $(REPOLINT_DIR)/repolint.exe
+GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository.exe
 else
-REPOLINT_BIN := $(REPOLINT_DIR)/repolint
+GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository
 endif
 
-# golangci runs both halves: the built-in golangci-lint linters and the
-# repository's go/analysis analyzers (cmd/repolint) through go vet -vettool.
-golangci: golangci-lint-run repolint
+# Repository source diagnostics run through the supported module plugin.
+.PHONY: golangci-build repository-lint-run
+ifeq ($(GOLANGCI_PREBUILT),1)
+golangci-build:
+	@test -f "$(GOLANGCI_REPOSITORY)"
+	@test -f "$(GOLANGCI_DIR)/host-path.txt"
+else
+golangci-build:
+	$(GO) test ./internal/lint/analyzers ./tools/golangcilintplugin
+	$(PYTHON) scripts/build-golangci.py --destination "$(GOLANGCI_DIR)" -- $(GOLANGCI_LINT) custom --destination "$(GOLANGCI_DIR)"
+endif
+
+repository-lint-run: golangci-build
+	@git merge-base HEAD origin/main
+	$(GOLANGCI_REPOSITORY) run --config .golangci-repository-default.yml ./...
+	$(GOLANGCI_REPOSITORY) run --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
+# Compiler tag union shared with the compiler-owner analyzer.
+REPOSITORY_LINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
+
+# All shared diagnostics execute inside the supported golangci module plugin.
+golangci: golangci-lint-run repository-lint-run
 
 LINT_MIGRATION_COHORT ?= all
 
-lint-migration-smoke:
-	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(GOLANGCI_LINT)"
+lint-migration-smoke: golangci-build
+	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(abspath $(GOLANGCI_REPOSITORY))"
 
 golangci-lint-run:
 	@git merge-base HEAD origin/main
 	$(GOLANGCI_LINT) run ./...
 
-.PHONY: repolint-build
-repolint-build:
-	@mkdir -p $(REPOLINT_DIR)
-	$(GO) test ./internal/lint/analyzers
-	$(GO) build -o $(REPOLINT_BIN) ./cmd/repolint
-
-repolint: lint-baseline-growth
-	$(GO) vet -vettool=$(abspath $(REPOLINT_BIN)) -layering.check-stale=false -behavior.check-stale=false -construction.check-stale=false -petripublic.check-stale=false -serviceshape.check-stale=false -functionalshape.check-stale=false ./...
-	$(GO) vet -tags=$(REPOLINT_TAGS) -vettool=$(abspath $(REPOLINT_BIN)) ./...
-	$(NODE) scripts/ci/lint-baseline-growth.mjs --head "$(REPOLINT_BASELINE)" --units "$(REPOLINT_DIR)/units.txt" --collect-tags "$(REPOLINT_TAGS)" --go "$(GO)"
-
-# New rule IDs seed once; established rule IDs never admit new keys.
-lint-baseline-growth: repolint-build
-	@base=$$(git merge-base HEAD origin/main) || { echo "lint-baseline-growth: origin/main is not fetched"; exit 1; }; \
-	if ! git cat-file -e "$$base:$(REPOLINT_BASELINE)" 2>/dev/null; then \
-		echo "lint-baseline-growth: no baseline at merge-base $$base; skipping"; exit 0; fi; \
-	git show "$$base:$(REPOLINT_BASELINE)" > "$(REPOLINT_DIR)/baseline.base" || exit 1; \
-	"$(REPOLINT_BIN)" -baseline-growth="$(REPOLINT_DIR)/baseline.base"
-
-
-retired-surface-check:
-	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")
-
-deadcode:
-	$(call run_lint_checker,./cmd/deadcodecheck,)
+deadcode: golangci-build
+	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

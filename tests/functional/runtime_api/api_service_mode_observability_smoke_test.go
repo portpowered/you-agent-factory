@@ -135,7 +135,7 @@ func requirePublicWorkForTrace(t *testing.T, server serviceModeAPI, traceID stri
 				return workID
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("public Work listing never exposed trace %q", traceID)
 	return ""
@@ -214,7 +214,7 @@ func waitForPublicFactorySession(
 		if match(session) {
 			return session
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	session := server.Session(t)
 	t.Fatalf("timed out waiting for public Factory Session within %s: %#v", timeout, session.Runtime)

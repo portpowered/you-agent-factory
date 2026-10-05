@@ -382,6 +382,7 @@ type ListSessionsResult struct {
 	LiveSessions     []LiveSessionSummary
 	DurableSessions  []DurableSessionListSummary
 	RecordedSessions []RecordedSessionListSummary
+	Warnings         []RecordedSessionDiagnostic
 }
 
 // LiveSessionSummary is the shared live workspace session row for scope=live and

@@ -77,6 +77,9 @@ func (a *runtimeAttempt) Complete(
 			r.finishControlHistory(controlHistory, controlOutcome, a.dispatchID, final.State)
 		}
 		if committed {
+			if state == workersessions.StateCompleted {
+				r.publishBufferedWorkerOutput(context.WithoutCancel(ctx), a.workerID, a.attemptID, result.Result)
+			}
 			r.logTerminal(a.workerID, a.attemptID, final)
 			r.publishTerminalRecordOrLog(
 				context.WithoutCancel(ctx),
@@ -90,6 +93,7 @@ func (a *runtimeAttempt) Complete(
 		delete(r.runtimeAttempts, a.workerID)
 		delete(r.runtimeAttemptControls, a.workerID)
 		r.mu.Unlock()
+		r.releaseRuntimeAttemptKey(a.key, a.workerID)
 	})
 	return nil
 }
@@ -771,7 +775,7 @@ const (
 )
 
 func providerBindingSourceID(id string) events.SourceID {
-	return events.SourceID(id + "/provider-binding")
+	return events.SourceID(publicWorkerID(id) + "/provider-binding")
 }
 
 func lifecycleProvenance(provider string) workers.Provenance {
@@ -791,7 +795,7 @@ func isTerminalLifecycleRecord(record events.Record) bool {
 }
 
 // publishOpeningRecord commits the one opening KindSession/PhaseStarted
-// workers.Draft onto workersessions.Topic(id), detached from any
+// workers.Draft onto r.observationTopic(id), detached from any
 // caller-owned backing array, before Start ever calls the injected
 // workers.Service. It runs under
 // id's publication lock, the same lock PublishRecord and
@@ -825,17 +829,17 @@ func (r *registry) publishOpeningRecord(
 	}
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
-		SourceID:       events.SourceID(id),
+		SourceID:       events.SourceID(publicWorkerID(id)),
 		SourceSequence: openingSourceSequence,
 		SourceEventID:  openingSourceEventID,
 	}
-	if _, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft); err != nil {
+	if _, err := r.appendDraft(ctx, r.observationTopic(id), identity, workerDraftSchemaID, draft); err != nil {
 		openingErr := fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingOpening, err)
 		if recording != nil {
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
 				r.logger.Warn(
 					"worker session recording opening cleanup failed",
-					"sessionID", id,
+					"sessionID", publicWorkerID(id),
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
 					"error", abortErr.Error(),
@@ -850,7 +854,7 @@ func (r *registry) publishOpeningRecord(
 			if abortErr := recording.Abort(context.WithoutCancel(ctx), err); abortErr != nil {
 				r.logger.Warn(
 					"worker session recording opening cleanup failed",
-					"sessionID", id,
+					"sessionID", publicWorkerID(id),
 					"attemptID", attemptID,
 					"outcome", "cleanup_failed",
 					"error", abortErr.Error(),
@@ -879,7 +883,7 @@ func firstWorkerRecording(recordingsForSession []recordings.WorkerSessionRecordi
 }
 
 // publishTerminalRecord commits the one terminal KindSession workers.Draft
-// onto workersessions.Topic(id), derived from state+result, through the same
+// onto r.observationTopic(id), derived from state+result, through the same
 // appendDraft helper publishOpeningRecord and PublishRecord already share.
 // It runs under id's publication lock and closes id's publication window
 // before attempting the append: once this call starts, no concurrent or
@@ -911,11 +915,11 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
-		SourceID:       events.SourceID(id),
+		SourceID:       events.SourceID(publicWorkerID(id)),
 		SourceSequence: terminalSourceSequence,
 		SourceEventID:  terminalSourceEventID,
 	}
-	appendResult, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, r.observationTopic(id), identity, workerDraftSchemaID, draft)
 	pub.mu.Unlock()
 	if recording != nil {
 		closeErr := r.closeWorkerRecording(
@@ -943,7 +947,7 @@ func (r *registry) publishTerminalRecordOrLog(ctx context.Context, id, attemptID
 	if err := r.publishTerminalRecord(ctx, id, attemptID, state, result); err != nil {
 		r.logger.Info(
 			"worker session terminal record publication failed",
-			"sessionID", id,
+			"sessionID", publicWorkerID(id),
 			"attemptID", attemptID,
 			"state", string(state),
 			"outcome", "publish_failed",
@@ -966,20 +970,37 @@ func (r *registry) associateProviderSessionFromResult(
 	}
 	reference, err := continuation.ToSessionRef()
 	if err != nil {
-		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", publicWorkerID(id), "attemptID", dispatchID, "outcome", "rejected")
 		return
 	}
 	_, err = r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: id,
-		DispatchID:      dispatchID,
-		Reference:       reference,
+		WorkerSessionID:  publicWorkerID(id),
+		FactorySessionID: workerAddressScope(id),
+		DispatchID:       dispatchID,
+		Reference:        reference,
 	})
 	if err != nil {
-		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", publicWorkerID(id), "attemptID", dispatchID, "outcome", "rejected")
 	}
 }
 
 var reconciliationFailureCause = map[workers.WorkstationDispatchReconciliationReason]workersessions.FailureCauseKind{
 	workers.WorkstationDispatchReconciliationReasonProcessGone: workersessions.FailureCauseProcessGone,
 	workers.WorkstationDispatchReconciliationReasonTimeout:     workersessions.FailureCauseTimeout,
+}
+
+// observationTopic uses the immutable admitted owner for source-native Events.
+// Payloads and public cursors continue to carry the supplied Worker identity.
+func (r *registry) observationTopic(id string) events.Topic {
+	r.mu.RLock()
+	if address := r.workerAddressLocked(id); address != "" {
+		id = address
+	}
+	metadata := r.observations[id]
+	factorySessionID := ""
+	if metadata != nil && !metadata.direct {
+		factorySessionID = firstNonEmpty(metadata.sourceFactorySessionID, metadata.factorySessionID)
+	}
+	r.mu.RUnlock()
+	return workersessions.Topic(publicWorkerID(id), factorySessionID)
 }

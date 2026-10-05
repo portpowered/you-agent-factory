@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -30,7 +31,7 @@ func (r *registry) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	idCollectionStartedAt := r.clock.Now()
-	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	ids := r.observationListIDs(query.cursor, query.scope, req.States, req.FactorySessionID, req.RuntimeID)
 	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
@@ -101,12 +102,15 @@ func decodeObservationListCursor(value string) (string, error) {
 	return string(decoded), nil
 }
 
-func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State) []string {
+func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State, factorySessionID, runtimeID string) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, len(r.observations))
 	for id, metadata := range r.observations {
-		if metadata == nil || id <= cursor || !observationScopeMatches(metadata.direct, scope) {
+		if runtimeID != "" && (metadata == nil || metadata.runtimeID != runtimeID) {
+			continue
+		}
+		if metadata == nil || !observationFactoryScopeMatches(metadata, factorySessionID) || publicWorkerID(id) <= cursor || !observationScopeMatches(metadata.direct, scope) {
 			continue
 		}
 		session, exists := r.sessions[id]
@@ -115,8 +119,14 @@ func (r *registry) observationListIDs(cursor string, scope workersessions.Observ
 		}
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
-	return ids
+	sort.Slice(ids, func(i, j int) bool {
+		left, right := publicWorkerID(ids[i]), publicWorkerID(ids[j])
+		if left == right {
+			return ids[i] < ids[j]
+		}
+		return left < right
+	})
+	return slices.CompactFunc(ids, func(left, right string) bool { return publicWorkerID(left) == publicWorkerID(right) })
 }
 
 func observationListPage(ids []string, limit int) []string {
@@ -148,7 +158,7 @@ func observationListNextToken(allIDs, pageIDs []string) string {
 	if len(allIDs) <= len(pageIDs) || len(pageIDs) == 0 {
 		return ""
 	}
-	return base64.StdEncoding.EncodeToString([]byte(pageIDs[len(pageIDs)-1]))
+	return base64.StdEncoding.EncodeToString([]byte(publicWorkerID(pageIDs[len(pageIDs)-1])))
 }
 
 func observationScopeMatches(direct bool, scope workersessions.ObservationScope) bool {
@@ -185,9 +195,9 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	session, metadata, ok := r.loadObservationState(req.WorkerSessionID, req.FactorySessionID)
 	if !ok {
-		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		r.logger.Info("worker session identity transcript read", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
 	}
 	providerSession := providers.SessionRef{}
@@ -281,15 +291,15 @@ func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, 1)
 	for id, session := range r.sessions {
-		matches := id == req.WorkerSessionID
+		matches := session.ID == req.WorkerSessionID
 		if req.WorkerSessionID == "" {
 			matches = session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == req.ProviderSession
 		}
-		if matches {
+		if matches && observationFactoryScopeMatches(r.observations[id], req.FactorySessionID) {
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) == 0 {
+	if len(ids) == 0 || (req.WorkerSessionID != "" && len(ids) > 1) {
 		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
 	}
 	sortStrings(ids)
@@ -319,13 +329,6 @@ func projectObservationEvent(record events.Record, workerSessionIDArgs ...string
 		SchemaID:       string(record.SchemaID),
 		Payload:        append([]byte(nil), record.Payload...),
 	}
-}
-
-func observationWorkerSessionIDFromTopic(topic events.Topic) string {
-	value := strings.TrimSpace(string(topic))
-	value = strings.TrimPrefix(value, "worker-session/")
-	value = strings.TrimSuffix(value, "/events")
-	return value
 }
 
 func (r *registry) ListObservations(ctx context.Context, req workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -381,7 +384,8 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	ids := make([]string, 0, 1)
 	for id, session := range r.sessions {
 		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == req.ProviderSession {
+			session.ProviderSessionAssociation.Reference == req.ProviderSession &&
+			observationFactoryScopeMatches(r.observations[id], req.FactorySessionID) {
 			ids = append(ids, id)
 		}
 	}
@@ -390,9 +394,8 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 		r.logger.Info("worker session observation get", "outcome", "not_found")
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	// An exact Provider Session identity must be unique. If corrupted or
-	// legacy state ever contains two matches, deterministic identity order
-	// still makes the result stable without exposing both as one observation.
+	// Provider references may recur across Factory Sessions. Select only within
+	// the requested owner, preserving deterministic order for retained attempts.
 	sortStrings(ids)
 	projected, err := r.projectObservation(ctx, ids[0])
 	// Native transcript detail is optional; the retained association and
@@ -413,22 +416,22 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	// Provider detail is optional enrichment. Preserve the live identity and
-	// lifecycle when its native transcript cannot be projected.
-	projected, err := r.projectObservation(ctx, req.WorkerSessionID)
+	// Provider detail is optional enrichment of the scoped Worker identity.
+	// Retain lifecycle facts when its native transcript cannot be projected.
+	projected, err := r.projectObservation(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
 		return workersessions.Observation{}, err
 	}
 	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
 	return projected, nil
 }
 
-func (r *registry) projectObservation(ctx context.Context, id string) (workersessions.Observation, error) {
+func (r *registry) projectObservation(ctx context.Context, id string, factorySessionIDs ...string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	projected, err := r.projectWorkerSessionIdentity(ctx, id)
+	projected, err := r.projectWorkerSessionIdentity(ctx, id, factorySessionIDs...)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -443,12 +446,12 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 // identity and lifecycle timing without consulting Provider Sessions. The
 // canonical Worker-ID history stream uses this boundary so missing provider
 // transcript storage cannot hide retained Worker Session records.
-func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) (workersessions.Observation, error) {
+func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string, factorySessionIDs ...string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
 
-	session, metadata, ok := r.loadObservationState(id)
+	session, metadata, ok := r.loadObservationState(id, factorySessionIDs...)
 	if !ok {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
@@ -498,11 +501,15 @@ func observedTerminalCause(session workersessions.Session) *workersessions.Failu
 
 // loadObservationState returns detached snapshots of the registered session
 // and observation metadata for id. ok is false when either is missing.
-func (r *registry) loadObservationState(id string) (workersessions.Session, *observation, bool) {
+func (r *registry) loadObservationState(id string, factorySessionIDs ...string) (workersessions.Session, *observation, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	id = r.workerAddressLocked(id, factorySessionIDs...)
 	session, exists := r.sessions[id]
 	metadata := r.observations[id]
+	if !observationFactoryScopeMatches(metadata, factorySessionIDs...) {
+		return workersessions.Session{}, nil, false
+	}
 	if exists {
 		session = cloneSession(session)
 	}
@@ -515,17 +522,31 @@ func (r *registry) loadObservationState(id string) (workersessions.Session, *obs
 	return session, metadata, true
 }
 
+func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...string) bool {
+	if len(factorySessionIDs) == 0 || strings.TrimSpace(factorySessionIDs[0]) == "" {
+		return true
+	}
+	if metadata == nil {
+		return false
+	}
+	scope := strings.TrimSpace(factorySessionIDs[0])
+	// A direct process-owned Worker has no Factory execution correlation. Its
+	// compatibility session route belongs only to the primary runtime alias.
+	return metadata.factorySessionID == scope || (metadata.direct && metadata.factorySessionID == "" && scope == workers.DefaultSessionID)
+}
+
 // baseObservation projects the registry-owned identity, correlation, and
 // lifecycle facts that never require the Provider Sessions root.
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
-		WorkerSessionID:            id,
+		WorkerSessionID:            publicWorkerID(id),
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 		Model:                      cloneOptionalExecutionFact(session.Model),
 		ReasoningEffort:            cloneOptionalExecutionFact(session.ReasoningEffort),
 		TokenUsage:                 cloneObservationTokenUsage(metadata.tokenUsage),
 		Direct:                     metadata.direct,
+		RuntimeID:                  metadata.runtimeID,
 		FactorySessionID:           metadata.factorySessionID,
 		WorkIDs:                    append([]string(nil), metadata.workIDs...),
 		TurnID:                     metadata.turnID,
@@ -563,6 +584,9 @@ func applyObservationTiming(projected *workersessions.Observation, session worke
 		projected.Duration = nonNegativeDuration(ended.Sub(started))
 		projected.DurationBasis = workersessions.DurationBasisRecordedTimestamps
 	case !session.Terminal():
+		if metadata.clock != nil {
+			clock = metadata.clock
+		}
 		projected.Duration = nonNegativeDuration(clock.Now().Sub(started))
 		projected.DurationBasis = workersessions.DurationBasisActiveClock
 	}
@@ -948,4 +972,39 @@ func (s *observationSubscription) closeSource() {
 		cancel()
 		s.source.Next(cancelled)
 	}
+}
+
+// LoadWorkerRecording forwards the optional Recordings-owned durable reader
+// through the same per-Factory-Session Worker Sessions instance used for
+// observation. It is intentionally not part of the broad Worker Sessions
+// service contract; runtime projections discover this read capability only
+// when the composed capture service provides it.
+//
+//nolint:contextcheck // Legacy optional reader accepts nil; normalize only that compatibility case.
+func (r *registry) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+// A successfully published opening that loses scoped admission to close is
+// canceled. Publication failures retain their separate FAILED classification.
+func (r *registry) cancelInvocationBeforeAdmission(ctx context.Context, id, attemptID string) workersessions.Session {
+	final, committed := r.commitTerminal(id, workersessions.StateCanceled, workersessions.TerminalResult{})
+	if committed {
+		r.logTerminal(id, attemptID, final)
+	}
+	r.publishTerminalSnapshot(ctx, id, attemptID, final)
+	return final
 }

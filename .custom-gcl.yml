@@ -1,0 +1,7 @@
+version: v2.11.4
+name: golangci-repository
+destination: .artifacts/golangci
+plugins:
+  - module: github.com/portpowered/infinite-you
+    import: github.com/portpowered/infinite-you/tools/golangcilintplugin
+    path: .

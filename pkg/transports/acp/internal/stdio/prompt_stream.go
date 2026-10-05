@@ -35,7 +35,6 @@ import (
 
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -353,7 +352,6 @@ func (s *Server) detachAttachments(ctx context.Context, cache *attachmentCache) 
 		return
 	}
 	detachCtx := context.WithoutCancel(ctx)
-	logger := logging.EnsureLogger(s.logger)
 	cache.mu.Lock()
 	attachments := make(map[string]chatsessions.Attachment, len(cache.bySession))
 	for sessionID, attachment := range cache.bySession {
@@ -365,7 +363,7 @@ func (s *Server) detachAttachments(ctx context.Context, cache *attachmentCache) 
 			SessionID:    sessionID,
 			AttachmentID: attachment.ID,
 		}); err != nil {
-			logger.Warn("acp stdio attachment detach failed", "sessionId", sessionID, "outcome", terminalOutcomeLabel(err))
+			s.logger.Warn("acp stdio attachment detach failed", "sessionId", sessionID, "outcome", terminalOutcomeLabel(err))
 		}
 	}
 }

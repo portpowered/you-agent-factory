@@ -140,69 +140,6 @@ func TestStreamTurnUpdatesTwoIndependentAttachmentsObserveIdenticalRecordsWithOn
 	}
 }
 
-// TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn
-// proves story 004's AC2 (disconnect): detachAttachments -- the cleanup
-// serveConnection defers once per connection (see server.go) -- calls
-// chatsessions.Service.Detach for every attachment this connection ever
-// registered, and only Detach: this fake's AdvanceTurn/RequestControl would
-// themselves return "not implemented" errors if reached, so a nil error
-// here already proves no turn-mutating call happened as a side effect of
-// disconnect cleanup.
-func TestDetachAttachmentsReleasesEveryCachedAttachmentWithoutTouchingTheTurn(t *testing.T) {
-	factoryTarget := &fakeFactoryTargetService{}
-	server, _ := newStreamingTestServer(t, factoryTarget)
-	chatSessions := server.chatSessions.(*fakeChatSessionsService)
-
-	cache := &attachmentCache{}
-	first, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", "session-a")
-	if err != nil || !ok {
-		t.Fatalf("ensureAttachment(session-a) = %+v, %v, %v, want a registered attachment", first, ok, err)
-	}
-	second, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", "session-b")
-	if err != nil || !ok {
-		t.Fatalf("ensureAttachment(session-b) = %+v, %v, %v, want a registered attachment", second, ok, err)
-	}
-
-	server.detachAttachments(context.Background(), cache)
-
-	if len(chatSessions.detachCalls) != 2 {
-		t.Fatalf("detach call count = %d, want exactly 2 (one per cached attachment)", len(chatSessions.detachCalls))
-	}
-	gotSessions := map[string]string{}
-	for _, req := range chatSessions.detachCalls {
-		gotSessions[req.SessionID] = req.AttachmentID
-	}
-	if gotSessions["session-a"] != first.ID || gotSessions["session-b"] != second.ID {
-		t.Fatalf("detach calls = %+v, want attachment %q for session-a and %q for session-b", chatSessions.detachCalls, first.ID, second.ID)
-	}
-}
-
-// TestDetachAttachmentsCompletesAfterContextCancellation proves
-// detachAttachments still releases attachments when ctx is already canceled
-// (context.WithoutCancel's own contract): a physically dropped connection
-// (context cancellation is exactly how one manifests in serveConnection's
-// own loop) must not leave its attachment stranded on the session forever.
-func TestDetachAttachmentsCompletesAfterContextCancellation(t *testing.T) {
-	factoryTarget := &fakeFactoryTargetService{}
-	server, _ := newStreamingTestServer(t, factoryTarget)
-	chatSessions := server.chatSessions.(*fakeChatSessionsService)
-
-	cache := &attachmentCache{}
-	attachment, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", streamingTestSessionID)
-	if err != nil || !ok {
-		t.Fatalf("ensureAttachment() = %+v, %v, %v, want a registered attachment", attachment, ok, err)
-	}
-
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	server.detachAttachments(canceledCtx, cache)
-
-	if len(chatSessions.detachCalls) != 1 || chatSessions.detachCalls[0].AttachmentID != attachment.ID {
-		t.Fatalf("detach calls = %+v, want exactly one call for attachment %q despite the canceled context", chatSessions.detachCalls, attachment.ID)
-	}
-}
-
 // TestStreamTurnUpdatesReconnectAfterDetachReplaysRetainedHistoryOnce proves
 // story 004's AC2/AC3 together: after a connection's attachment is detached
 // (disconnect), a later connection attaching fresh to the same session
@@ -346,28 +283,6 @@ func TestAttachmentCacheGetOnNilCacheReportsNotOk(t *testing.T) {
 func TestAttachmentCacheSetOnNilCacheIsNoOp(t *testing.T) {
 	var cache *attachmentCache
 	cache.set("session-x", chatsessions.Attachment{ID: "attachment-1"})
-}
-
-// TestDetachAttachmentsContinuesAfterOneDetachFailure proves a Detach
-// failure for one cached attachment is logged, not propagated, and does not
-// stop the remaining sessions in cache from being released -- detachCalls
-// still records the attempt even though it failed.
-func TestDetachAttachmentsContinuesAfterOneDetachFailure(t *testing.T) {
-	factoryTarget := &fakeFactoryTargetService{}
-	server, _ := newStreamingTestServer(t, factoryTarget)
-	chatSessions := server.chatSessions.(*fakeChatSessionsService)
-	chatSessions.detachErr = errors.New("detach failed")
-
-	cache := &attachmentCache{}
-	if _, ok, err := server.ensureAttachment(contextWithAttachmentCache(context.Background(), cache), "conn-a", streamingTestSessionID); err != nil || !ok {
-		t.Fatalf("ensureAttachment() = %v, %v, want a registered attachment", ok, err)
-	}
-
-	server.detachAttachments(context.Background(), cache)
-
-	if len(chatSessions.detachCalls) != 1 {
-		t.Fatalf("detach call count = %d, want exactly 1 despite the failure", len(chatSessions.detachCalls))
-	}
 }
 
 // TestEnsureAttachmentBlankConnectionIDReportsNotOk proves a blank

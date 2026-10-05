@@ -16,6 +16,7 @@ import (
 // a paused live Factory Session returns a typed INVOCATION_PAUSED failure through
 // the public session invocation API without fabricating a completed primary result.
 func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldInvocationFactory(t, nil)
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(
@@ -72,6 +73,7 @@ func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
 // accepts submitted work through the public session-control boundary while
 // keeping that work buffered instead of advancing it into active processing.
 func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -130,6 +132,7 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 // buffered during pause in submission order through public session-control and
 // dispatch observation boundaries.
 func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:        factoryDir,
@@ -195,6 +198,7 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 // the public session-control boundary leave durable SESSION_LIFECYCLE_CONTROL
 // Factory Events in chronological order with public control operation kinds.
 func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -260,6 +264,7 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 // on an interrupted customer state surfaces INTERRUPTED stop summaries with
 // dispatch context on public session and work read surfaces.
 func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldInterruptedInspectFactory(t)
 	mockWorkersPath := writeInterruptedInspectMockWorkers(t)
 	server := startInterruptedInspectAPIServer(t, factoryDir, mockWorkersPath)
@@ -320,6 +325,7 @@ func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
 // and leave each Factory Session in the expected lifecycle state after control.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
+	t.Parallel()
 	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
@@ -441,6 +447,7 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 // lifecycle controls through the public API return HTTP conflict with typed rejection
 // outcomes and leave the session in its prior terminal lifecycle state.
 func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
+	t.Parallel()
 	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,

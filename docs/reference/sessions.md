@@ -40,6 +40,19 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
+## List recorded history
+
+Run `you --json session list --history-only` to inspect retained Factory Session
+recordings. The HTTP equivalent is `GET /factory-sessions?scope=history`; the
+`you.factory_session.list` MCP tool accepts `scope: "history"`.
+
+Unreadable or damaged recordings are omitted from `recordedSessions`. The
+request succeeds and returns a `warnings` array with each omitted recording's
+relative `artifactReference`, `UNREADABLE_RECORDING` code, and safe `reason`.
+Human output also names these recordings. History listing does not modify them.
+Warnings appear in history and all scopes. A recording directory enumeration
+failure or an unreachable selected host still fails the request.
+
 ## Finite Worker Session event captures
 
 Use `worker-sessions stream --replay-only` when you need a redirect-safe

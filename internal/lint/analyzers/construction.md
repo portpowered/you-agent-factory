@@ -1,10 +1,10 @@
 # Construction analysis
 
 `RegisteredConstruction` and `DurableConstruction` run in the shared
-`cmd/repolint` multichecker through `go vet -vettool`. `make golangci` invokes
-the pinned built-in linters and this driver; `make repolint` runs analyzer
-fixtures, builds the driver once, analyzes the canonical tag union, and checks
-baseline growth. T20/T29 consumers use these analyzers. The former
+golangci module plugin. `make golangci` invokes the pinned built-in linters and
+strict shared analyzers in ordinary and complete-tag configurations, including
+baseline growth. The temporary `make repolint` dependency retains compiler
+ownership checking until its analyzer migration. T20/T29 consumers use these analyzers. The former
 `internal/contractguard` construction Scan APIs and durable command are removed.
 
 ## Metadata and staged policy
@@ -28,7 +28,7 @@ The `chat-target-catalog` capability set remains report-only. The analyzer
 returns `[]ConstructionFinding` with mode, set, caller, callee, file, line, and
 rule. Report observations do not emit blocking diagnostics or enter the
 baseline. Enforced findings and conservative unresolved debt use the shared
-exact `baseline.txt`; stale entries fail and `make lint-baseline-growth` rejects
+exact `baseline.txt`; stale entries fail and the `baselinegrowth` analyzer rejects
 growth. No owner is enabled by this migration.
 
 ## Bounded typed rules

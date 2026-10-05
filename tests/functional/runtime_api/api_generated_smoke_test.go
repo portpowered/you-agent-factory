@@ -155,7 +155,7 @@ func waitForGeneratedWorkAtEndpoint(t *testing.T, endpoint string, traceID strin
 				return work
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 	t.Fatalf("timed out waiting for trace %q at %s; last work response: %#v", traceID, placeID, work)
@@ -190,7 +190,7 @@ func waitForGeneratedWorkIDsCompleteAtEndpoint(t *testing.T, endpoint string, wo
 			}
 			return items
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)

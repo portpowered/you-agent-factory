@@ -15,11 +15,9 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -34,17 +32,14 @@ import (
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -268,19 +263,6 @@ type localWorkerSessionsBoundary struct {
 	service workersessions.Service
 }
 
-type localWorkerSessionsExecution struct {
-	workers.Service
-	publisher workers.ProgressPublisher
-}
-
-func (execution localWorkerSessionsExecution) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	request.Input.ProgressPublisher = execution.publisher
-	return execution.Service.Execute(ctx, request)
-}
-
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
 var _ workersessionscli.LocalControlBoundary = (*localWorkerSessionsBoundary)(nil)
 
@@ -370,34 +352,7 @@ func (b *localWorkerSessionsBoundary) Close(ctx context.Context) error {
 	return nil
 }
 
-func provideLocalWorkerSessionsBoundary(
-	eventsService events.Service,
-	providerSessions providersessions.Service,
-	logger logging.Logger,
-	workerService workers.Service,
-	recording recordings.WorkerSessionRecordingService,
-) (*localWorkerSessionsBoundary, error) {
-	if workerService == nil {
-		return nil, fmt.Errorf("construct local Worker Sessions boundary: Workers service is required")
-	}
-	// The local direct route has no Factory Runtime publisher to supply. Bind
-	// the same Worker Sessions-owned observation bridge used by Factory Runtime
-	// before the first dispatch so provider-session association and source-native
-	// Worker drafts reach the local session topic as well.
-	observationPublisher := workersessions.NewProviderSessionObservationPublisher(nil)
-	execution := localWorkerSessionsExecution{Service: workerService, publisher: observationPublisher.Publish}
-	service, err := workersessionswire.NewService(
-		execution,
-		eventsService,
-		logger,
-		platformclock.Real{},
-		providerSessions,
-		recording,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
-	}
-	observationPublisher.Bind(service)
+func provideLocalWorkerSessionsBoundary(service workersessions.Service) (*localWorkerSessionsBoundary, error) {
 	return &localWorkerSessionsBoundary{service: service}, nil
 }
 

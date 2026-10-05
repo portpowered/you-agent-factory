@@ -3,7 +3,6 @@ package review_failure_routing
 import (
 	"context"
 	"testing"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -38,8 +37,7 @@ func TestProjectLead_ContinueDecisionKeepsProjectWaitingWithoutEscalation(t *tes
 	if response.Outcome != factoryapi.WorkOutcomeContinue {
 		t.Fatalf("project lead outcome = %q, want CONTINUE", response.Outcome)
 	}
-	// Give a wrongly routed needs-supervision token time to be escalated.
-	time.Sleep(3 * time.Second)
+	awaitReviewFailureQuiescence(t, scenario)
 
 	works := scenario.listWorks(t)
 	assertReviewFailureWorkStates(t, works, map[string]string{projectID: "waiting"})

@@ -64,7 +64,7 @@ make pkg-maint
 make ui-deadcode
 make script-timeout-companion-smoke-100
 make current-factory-watcher-switch-smoke
-make packaged-factory-catalog-check
+make repository-lint-run
 make packaged-factory-package-script-test
 make packaged-factory-package-pack-check
 make packaged-factory-package-candidate-dry-run

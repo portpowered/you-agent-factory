@@ -5,14 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 )
-
-var settledRetiredCLIPaths = retiredsurfaceguard.SettledRetiredCLIPaths()
 
 var settledRetiredCLIInvocations = []struct {
 	name string
@@ -32,17 +28,7 @@ var settledRetiredCLIInvocations = []struct {
 	{name: "mcp serve", args: []string{"mcp", "serve"}},
 }
 
-var canonicalCLIReplacementPaths = [][]string{
-	{"config", "init"},
-	{"factory", "config", "validate"},
-	{"factory", "config", "flatten"},
-	{"factory", "config", "expand"},
-	{"factory", "create"},
-	{"factory", "update"},
-	{"factory", "replace-current"},
-}
-
-var settledRetiredDocsTopics = retiredsurfaceguard.SettledRetiredDocsTopics()
+var settledRetiredDocsTopics = []string{"packaged-fusion", "packaged-goal", "packaged-tts", "mcp-hosts"}
 
 var canonicalDocsTopicSamples = []string{
 	"agents",
@@ -134,79 +120,6 @@ func TestRetiredCLICommands_RejectUnknownAtRuntime(t *testing.T) {
 	}
 }
 
-func TestRetiredCLICommands_AbsentFromProductionCommandTree(t *testing.T) {
-	root := newLegacyTestRootCommand()
-
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("walk command tree: %v", err)
-	}
-
-	registered := make(map[string]struct{}, len(inventory.Commands))
-	for _, record := range inventory.Commands {
-		registered[record.Path] = struct{}{}
-	}
-
-	for _, path := range settledRetiredCLIPaths {
-		if _, stillRegistered := registered[path]; stillRegistered {
-			t.Fatalf("retired path %q is still registered in the production command tree", path)
-		}
-	}
-}
-
-func TestRetiredCLICommands_NoHiddenDeprecatedOrAliasWrappers(t *testing.T) {
-	root := newLegacyTestRootCommand()
-
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("walk command tree: %v", err)
-	}
-
-	retired := make(map[string]struct{}, len(settledRetiredCLIPaths))
-	for _, path := range settledRetiredCLIPaths {
-		retired[path] = struct{}{}
-	}
-
-	for _, record := range inventory.Commands {
-		if _, stillRegistered := retired[record.Path]; stillRegistered {
-			t.Fatalf("retired path %q is still registered", record.Path)
-		}
-		if record.Visibility == "hidden" || record.Lifecycle == "deprecated" {
-			for path := range retired {
-				if record.Path == path {
-					t.Fatalf("%s command %q reintroduces retired path", record.Visibility, record.Path)
-				}
-			}
-		}
-		for _, alias := range record.Aliases {
-			for _, retiredPath := range settledRetiredCLIPaths {
-				retiredSegments := strings.Fields(strings.TrimPrefix(retiredPath, "you "))
-				if len(retiredSegments) < 2 {
-					continue
-				}
-				retiredLeaf := retiredSegments[len(retiredSegments)-1]
-				recordSegments := strings.Fields(strings.TrimPrefix(record.Path, "you "))
-				if len(recordSegments) < 2 {
-					continue
-				}
-				if alias == retiredLeaf && strings.Join(recordSegments[:len(recordSegments)-1], " ") == strings.Join(retiredSegments[:len(retiredSegments)-1], " ") {
-					t.Fatalf("alias %q on %q would reintroduce retired path %q", alias, record.Path, retiredPath)
-				}
-			}
-		}
-	}
-}
-
-func TestRetiredCLICommands_CanonicalReplacementsRemainReachable(t *testing.T) {
-	root := newLegacyTestRootCommand()
-
-	for _, path := range canonicalCLIReplacementPaths {
-		if _, _, err := root.Find(path); err != nil {
-			t.Fatalf("find canonical replacement %v: %v", path, err)
-		}
-	}
-}
-
 func TestRetiredDocsTopics_RejectUnsupportedAtRuntime(t *testing.T) {
 	for _, topic := range settledRetiredDocsTopics {
 		topic := topic
@@ -225,82 +138,6 @@ func TestRetiredDocsTopics_RejectUnsupportedAtRuntime(t *testing.T) {
 				t.Fatalf("retired docs topic %s wrote stdout %q", topic, got)
 			}
 		})
-	}
-}
-
-func TestRetiredDocsTopics_AbsentFromRegistry(t *testing.T) {
-	supported := make(map[string]struct{}, len(docscli.SupportedTopics()))
-	for _, topic := range docscli.SupportedTopics() {
-		supported[topic] = struct{}{}
-	}
-	commands := make(map[string]struct{}, len(docscli.SupportedTopicCommands()))
-	for _, command := range docscli.SupportedTopicCommands() {
-		commands[command] = struct{}{}
-	}
-
-	for _, topic := range settledRetiredDocsTopics {
-		if _, stillSupported := supported[topic]; stillSupported {
-			t.Fatalf("retired topic %q is still listed in SupportedTopics()", topic)
-		}
-		if _, stillAccepted := commands[topic]; stillAccepted {
-			t.Fatalf("retired topic %q is still accepted by SupportedTopicCommands()", topic)
-		}
-	}
-}
-
-func TestRetiredDocsTopics_NoCompatibilityAliases(t *testing.T) {
-	retired := make(map[string]struct{}, len(settledRetiredDocsTopics))
-	for _, topic := range settledRetiredDocsTopics {
-		retired[topic] = struct{}{}
-	}
-
-	for _, entry := range docscli.TopicIndexEntries() {
-		if _, isRetired := retired[entry.Name]; isRetired {
-			t.Fatalf("retired topic %q is registered as a canonical docs topic", entry.Name)
-		}
-		for _, alias := range entry.Aliases {
-			if _, isRetired := retired[alias]; isRetired {
-				t.Fatalf("compatibility alias %q on topic %q reintroduces retired docs topic", alias, entry.Name)
-			}
-		}
-	}
-
-	for _, topic := range settledRetiredDocsTopics {
-		got, err := docscli.Markdown(topic)
-		if err == nil || got != "" {
-			t.Fatalf("Markdown(%q) = %q, %v; want unsupported-topic error", topic, got, err)
-		}
-		if !strings.Contains(err.Error(), `unsupported docs topic "`+topic+`"`) {
-			t.Fatalf("Markdown(%q) error = %v, want unsupported-topic error", topic, err)
-		}
-	}
-}
-
-func TestRetiredDocsTopics_AbsentFromDocsCommandValidArgs(t *testing.T) {
-	root := newLegacyTestRootCommand()
-	docsCmd, _, err := root.Find([]string{"docs"})
-	if err != nil {
-		t.Fatalf("find docs command: %v", err)
-	}
-
-	validArgs := make(map[string]struct{}, len(docsCmd.ValidArgs))
-	for _, arg := range docsCmd.ValidArgs {
-		validArgs[arg] = struct{}{}
-	}
-
-	for _, topic := range settledRetiredDocsTopics {
-		if _, stillAccepted := validArgs[topic]; stillAccepted {
-			t.Fatalf("retired topic %q is still listed in docs command ValidArgs", topic)
-		}
-	}
-}
-
-func TestRetiredDocsTopics_AbsentFromDocsIndex(t *testing.T) {
-	index := docscli.IndexMarkdown("you")
-	for _, topic := range settledRetiredDocsTopics {
-		if strings.Contains(index, "`"+topic+"`") {
-			t.Fatalf("docs index still lists retired topic %q:\n%s", topic, index)
-		}
 	}
 }
 
@@ -347,47 +184,6 @@ func TestRetiredDocsTopics_CanonicalTopicsRemainResolvable(t *testing.T) {
 				t.Fatalf("Markdown(%q) returned empty body", alias)
 			}
 		})
-	}
-}
-
-func TestRetiredSurfaceGuards_ProductionTreePasses(t *testing.T) {
-	root := newLegacyTestRootCommand()
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("walk command tree: %v", err)
-	}
-
-	cliInventory := retiredsurfaceguard.CLIInventory{
-		Commands: make([]retiredsurfaceguard.CLICommandRecord, 0, len(inventory.Commands)),
-	}
-	for _, record := range inventory.Commands {
-		cliInventory.Commands = append(cliInventory.Commands, retiredsurfaceguard.CLICommandRecord{
-			Path:              record.Path,
-			Aliases:           append([]string(nil), record.Aliases...),
-			Visibility:        record.Visibility,
-			Lifecycle:         record.Lifecycle,
-			DeprecatedMessage: record.DeprecatedMessage,
-		})
-	}
-
-	indexEntries := make([]retiredsurfaceguard.DocsTopicEntry, 0, len(docscli.TopicIndexEntries()))
-	for _, entry := range docscli.TopicIndexEntries() {
-		indexEntries = append(indexEntries, retiredsurfaceguard.DocsTopicEntry{
-			Name:    entry.Name,
-			Aliases: append([]string(nil), entry.Aliases...),
-		})
-	}
-	docsRegistry := retiredsurfaceguard.DocsRegistry{
-		SupportedTopics:   docscli.SupportedTopics(),
-		SupportedCommands: docscli.SupportedTopicCommands(),
-		IndexEntries:      indexEntries,
-	}
-
-	if violations := retiredsurfaceguard.ScanCLIReintroductionViolations(cliInventory); len(violations) != 0 {
-		t.Fatalf("CLI guard violations = %#v", violations)
-	}
-	if violations := retiredsurfaceguard.ScanDocsReintroductionViolations(docsRegistry); len(violations) != 0 {
-		t.Fatalf("docs guard violations = %#v", violations)
 	}
 }
 

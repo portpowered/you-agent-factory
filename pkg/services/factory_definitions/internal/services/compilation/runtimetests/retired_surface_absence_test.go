@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,7 +15,7 @@ import (
 	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 )
 
-var settledScopedNamedFactoryPaths = retiredsurfaceguard.SettledScopedNamedFactoryPaths()
+var settledScopedNamedFactoryPaths = []string{"@you/goal", "@you/tts"}
 
 func TestRetiredEncodedPathResolution_ProductionMappingUsesHierarchicalLayout(t *testing.T) {
 	rootDir := t.TempDir()

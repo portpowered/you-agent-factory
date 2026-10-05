@@ -1,13 +1,13 @@
 # golangci-lint configuration. Built-in linters live here; rules with no
 # off-the-shelf equivalent are go/analysis analyzers in internal/lint/analyzers,
-# built into cmd/repolint and run by `make repolint`. Both halves are run by
+# loaded by the custom golangci module plugin. Both halves are run by
 # `make golangci`, which `make lint` includes.
 version: "2"
 
 run:
   timeout: 30m
   tests: true
-  # Tag union so build-tagged Go files are analyzed too (see REPOLINT_TAGS).
+  # Tag union so build-tagged Go files are analyzed too (see REPOSITORY_LINT_TAGS).
   build-tags:
     - functionallong
     - backendconformance

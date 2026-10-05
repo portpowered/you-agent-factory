@@ -145,6 +145,7 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 				return factorysessions.ListSessionsResult{}, err
 			}
 			result.RecordedSessions = recorded.RecordedSessions
+			result.Warnings = recorded.Warnings
 		}
 	}
 	if scope == factorysessions.SessionListScopeHistory {

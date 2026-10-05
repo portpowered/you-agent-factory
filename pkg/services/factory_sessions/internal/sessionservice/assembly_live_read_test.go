@@ -473,7 +473,8 @@ func TestRecordedHistoryPreservesScopeOrderingAndReadFailure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	failure := errors.New("selected recording read failed")
-	inventory := &recordedInventoryStub{result: recordings.RecordedSessionInventoryResult{Sessions: []recordings.RecordedSessionSummary{
+	warnings := []factorysessions.RecordedSessionDiagnostic{{ArtifactReference: "bad.json", Code: "UNREADABLE_RECORDING", Reason: "Recording could not be decoded."}}
+	inventory := &recordedInventoryStub{result: recordings.RecordedSessionInventoryResult{Warnings: warnings, Sessions: []recordings.RecordedSessionSummary{
 		{FactorySessionID: "peer", ArtifactReference: "b", Format: recordings.RecordedSessionFormatV2JSONL},
 		{FactorySessionID: "chosen", ArtifactReference: "z", Format: recordings.RecordedSessionFormatV1JSON},
 		{FactorySessionID: "chosen", ArtifactReference: "a", Format: recordings.RecordedSessionFormatV2JSONL},
@@ -486,10 +487,11 @@ func TestRecordedHistoryPreservesScopeOrderingAndReadFailure(t *testing.T) {
 			{SessionID: "chosen", Source: factorysessions.RecordedSessionListSourceHistory, ArtifactReference: "z", Format: "V1_JSON"},
 			{SessionID: "peer", Source: factorysessions.RecordedSessionListSourceHistory, ArtifactReference: "b", Format: "V2_JSONL"},
 		}
-		if err != nil || result.Scope != scope || !reflect.DeepEqual(result.RecordedSessions, want) {
+		if err != nil || result.Scope != scope || !reflect.DeepEqual(result.RecordedSessions, want) || !reflect.DeepEqual(result.Warnings, warnings) {
 			t.Fatalf("%s history = %#v, %v", scope, result, err)
 		}
 		result.RecordedSessions[0].SessionID = "mutated"
+		result.Warnings[0].Reason = "mutated"
 	}
 	if inventory.root != filepath.Join("selected-home", ".you-agent-factory", "recordings") {
 		t.Fatalf("recording root = %q", inventory.root)

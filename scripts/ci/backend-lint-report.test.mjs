@@ -356,24 +356,24 @@ test("structured finding growth exceeds an allowance even on one diagnostic line
 	assert.match(grown.failures.join("\n"), /packaged-factory-consumption-check reported 2 violation\(s\), exceeding its baseline allowance of 1/);
 });
 
-test("retired-surface-check has no allowance left to absorb a regression", () => {
-	assert.equal(BACKEND_LINT_ALLOWANCES["retired-surface-check"], undefined);
+test("repository-fixture-check has no allowance left to absorb a regression", () => {
+	assert.equal(BACKEND_LINT_ALLOWANCES["repository-fixture-check"], undefined);
 
 	const summary = summarizeBackendLintReport(report({
 		targets: [
 			...baselineTargets(),
-			unallowlistedTarget("retired-surface-check", "inventory drift\nLINT_VIOLATION_COUNT: 1"),
+			unallowlistedTarget("repository-fixture-check", "inventory drift\nLINT_VIOLATION_COUNT: 1"),
 		],
 	}));
 
 	assert.equal(summary.ok, false);
 	assert.match(
 		summary.failures.join("\n"),
-		/retired-surface-check failed with 1 reported violation\(s\); no baseline allowance exists/,
+		/repository-fixture-check failed with 1 reported violation\(s\); no baseline allowance exists/,
 	);
 	assert.match(
 		renderBackendLintVerdict(summary),
-		/retired-surface-check: baseline 0 -> current 1 \(delta \+1; new failure\)/,
+		/repository-fixture-check: baseline 0 -> current 1 \(delta \+1; new failure\)/,
 	);
 });
 
@@ -520,4 +520,18 @@ test("dropping deadcode from the lint suite fails the policy", () => {
 		/deadcode is gated with no allowance and must run in every lint report, but it was not observed/,
 	);
 	assert.match(renderBackendLintSummary(summary), /### No-allowance targets/);
+});
+
+test("shared golangci diagnostics must be observed and have no allowance", () => {
+	assert.equal(BACKEND_LINT_ALLOWANCES.golangci, undefined);
+	const missing = summarizeBackendLintReport(report({
+		targets: baselineTargets().filter((target) => target.name !== "golangci"),
+	}));
+	assert.equal(missing.ok, false);
+	assert.match(missing.failures.join("\n"), /golangci .*must run.*not observed/);
+	const failed = summarizeBackendLintReport(report({
+		targets: baselineTargets({ golangci: { status: "fail", output: "LINT_VIOLATION_COUNT: 1" } }),
+	}));
+	assert.equal(failed.ok, false);
+	assert.match(failed.failures.join("\n"), /golangci failed.*no baseline allowance exists/);
 });
