@@ -1,0 +1,3426 @@
+{
+  "date": "2026-10-05",
+  "go_version": "go1.25.0",
+  "platform": "windows/amd64",
+  "prepared_source_snapshot": "uncommitted optimization changes in this worktree; re-prepare after edits",
+  "accounting": "Windows Job Object aggregate user plus kernel CPU of coordinator and all descendants; measurement script itself excluded",
+  "samples": [
+    {
+      "sample": "monolith-no-wire-final",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "monolith-no-wire-final.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 56.028774600010365,
+        "user_cpu_seconds": 12.3125,
+        "kernel_cpu_seconds": 20.90625,
+        "total_cpu_seconds": 33.21875,
+        "process_count": 46,
+        "active_processes": 0
+      },
+      "complete": true,
+      "packages": 393,
+      "reported_test_entries": 11047,
+      "inventory_scope": "merged-top-level/native-package"
+    },
+    {
+      "sample": "monolith-no-wire-details",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-monolith-details",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "monolith-no-wire-details.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 64.05881880002562,
+        "user_cpu_seconds": 19.625,
+        "kernel_cpu_seconds": 27.734375,
+        "total_cpu_seconds": 47.359375,
+        "process_count": 76,
+        "active_processes": 0
+      },
+      "complete": true,
+      "packages": 393,
+      "reported_test_entries": 18890,
+      "inventory_scope": "all test/subtest entries"
+    },
+    {
+      "sample": "monolith-prebuilt-final",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "monolith-prebuilt-final.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 80.05481549992692,
+        "user_cpu_seconds": 15.390625,
+        "kernel_cpu_seconds": 24.75,
+        "total_cpu_seconds": 40.140625,
+        "process_count": 47,
+        "active_processes": 0
+      },
+      "complete": true,
+      "packages": 445,
+      "reported_test_entries": 11537,
+      "inventory_scope": "merged-top-level/native-package"
+    },
+    {
+      "sample": "monolith-prebuilt-details",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-monolith-details",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "monolith-prebuilt-details.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 68.15828660002444,
+        "user_cpu_seconds": 20.046875,
+        "kernel_cpu_seconds": 30.40625,
+        "total_cpu_seconds": 50.453125,
+        "process_count": 77,
+        "active_processes": 0
+      },
+      "complete": true,
+      "packages": 445,
+      "reported_test_entries": 19731,
+      "inventory_scope": "all test/subtest entries"
+    },
+    {
+      "sample": "monolith-goal-final",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "C:/Users/andre/AppData/Local/Temp/you-unit-audit-20261004/monolith-goal-final.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 65.18397160002496,
+        "user_cpu_seconds": 14.734375,
+        "kernel_cpu_seconds": 23.671875,
+        "total_cpu_seconds": 38.40625,
+        "process_count": 46,
+        "active_processes": 0
+      },
+      "complete": true,
+      "package_count": 393,
+      "test_count": 11043,
+      "inventory_scope": "merged-top-level/native-package"
+    },
+    {
+      "sample": "monolith-goal-details",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-monolith-details",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "C:/Users/andre/AppData/Local/Temp/you-unit-audit-20261004/monolith-goal-details.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 79.14741779991891,
+        "user_cpu_seconds": 20.3125,
+        "kernel_cpu_seconds": 29.84375,
+        "total_cpu_seconds": 50.15625,
+        "process_count": 76,
+        "active_processes": 0
+      },
+      "complete": true,
+      "package_count": 393,
+      "test_count": 18887,
+      "inventory_scope": "all subtests"
+    },
+    {
+      "sample": "monolith-reviewed-final",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "C:/Users/andre/AppData/Local/Temp/you-unit-audit-20261004/monolith-reviewed-final.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 66.15284080000129,
+        "user_cpu_seconds": 15.453125,
+        "kernel_cpu_seconds": 24.53125,
+        "total_cpu_seconds": 39.984375,
+        "process_count": 46,
+        "active_processes": 0
+      },
+      "complete": true,
+      "package_count": 393,
+      "test_count": 11043,
+      "inventory_scope": "merged-top-level/native-package"
+    },
+    {
+      "sample": "monolith-delivery-details",
+      "scope": "prepared execution only",
+      "measurement": {
+        "command": [
+          "unitlane",
+          "-monolith-prebuilt",
+          "-monolith-details",
+          "-count=1",
+          "-jobs=2",
+          "-timing-output",
+          "C:/Users/andre/AppData/Local/Temp/you-unit-audit-20261004/monolith-delivery-details.timing.json"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 62.110732400091365,
+        "user_cpu_seconds": 15.1875,
+        "kernel_cpu_seconds": 27.046875,
+        "total_cpu_seconds": 42.234375,
+        "process_count": 76,
+        "active_processes": 0
+      },
+      "complete": true,
+      "package_count": 393,
+      "test_count": 18893,
+      "inventory_scope": "all subtests"
+    }
+  ],
+  "package_cpu_attribution": "process CPU deltas for merged package groups and direct native process CPU; excludes helper descendants; Windows accounting quantization applies",
+  "package_cpu_seconds_sum": 31.296875,
+  "packages": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
+      "cpu_seconds": 4.84375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service",
+      "cpu_seconds": 3.375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/goal",
+      "cpu_seconds": 2.28125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
+      "cpu_seconds": 2.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
+      "cpu_seconds": 1.828125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
+      "cpu_seconds": 1.21875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/openapitests",
+      "cpu_seconds": 1.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "cpu_seconds": 0.75
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http",
+      "cpu_seconds": 0.515625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex",
+      "cpu_seconds": 0.421875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
+      "cpu_seconds": 0.40625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "cpu_seconds": 0.40625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
+      "cpu_seconds": 0.375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
+      "cpu_seconds": 0.375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution",
+      "cpu_seconds": 0.34375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "cpu_seconds": 0.34375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
+      "cpu_seconds": 0.328125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/cli",
+      "cpu_seconds": 0.3125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
+      "cpu_seconds": 0.296875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
+      "cpu_seconds": 0.296875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "cpu_seconds": 0.28125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
+      "cpu_seconds": 0.265625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "cpu_seconds": 0.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit",
+      "cpu_seconds": 0.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults",
+      "cpu_seconds": 0.234375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "cpu_seconds": 0.234375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/internal/service",
+      "cpu_seconds": 0.21875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
+      "cpu_seconds": 0.203125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/process/managedchild",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio",
+      "cpu_seconds": 0.171875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/http",
+      "cpu_seconds": 0.171875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
+      "cpu_seconds": 0.171875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+      "cpu_seconds": 0.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/httpserver",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/systeminitializationtests",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/internal/service",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli/workflow",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/rollingfile",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/internal/service",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factory",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/root",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/promptassets",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/replay",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/local",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/content",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/contentstaging",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/generatedartifacts",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/locking",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/process",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/pty",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/wiretranscript",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/workerinference",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/effects",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay/fixturetests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recorded_session_inventory",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/docs",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/process",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/browser",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/clock",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/contextscope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/cronschedule",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/grpc",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/internal/filesystemreplace",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/processmemory",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/random",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/stdio",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/taskgroup",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/edges",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/clonetests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/failuremetadatatests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/graphtopologytests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/taxonomytests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/review",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/subagent",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/tts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/outcometests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mcp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/circuitbreakertests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/dispatchertests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/goalroutingtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/operatordefaults",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session/smoke",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backendregistry",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider_test",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/tests/load/worker_recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/invocation_preparation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/request_preparation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/session",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/acp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clidiag",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliserver",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/default",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factoryrun",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/compat",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/mappingtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/taxonomyvalidationtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
+      "cpu_seconds": 0.0
+    }
+  ],
+  "coverage_comparison": {
+    "changed_owners": 10,
+    "statements_in_scope": 11481,
+    "previously_covered_production_blocks_lost": 0,
+    "goal_unit_and_contract": {
+      "before_covered_statements": 37,
+      "after_covered_statements": 45,
+      "total_statements": 55,
+      "lost_covered_blocks": []
+    },
+    "full_monolith_vs_native": {
+      "native_blocks": 117368,
+      "merged_blocks": 117368,
+      "native_covered_statements": 116646,
+      "merged_covered_statements": 116658,
+      "lost_covered_blocks": [
+        "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go:107.43,109.5"
+      ]
+    }
+  },
+  "inventory_comparison": {
+    "retained_unit_entries": 18890,
+    "wiring_integration_entries": 1169,
+    "wiring_integration_packages": 54,
+    "missing_retained_unit_entries": 0,
+    "missing_moved_wiring_entries": 0,
+    "final_unit_entries": 18893,
+    "goal_component_replacement_changes": {
+      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/goal": {
+        "removed": [
+          "TestMaterializePackagedGoalFactory_DerivesRolePromptsFromCanonicalSource",
+          "TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization",
+          "TestMaterializePackagedGoalFactory_WritesEditableSplitLayout",
+          "TestPackagedGoalPromptDriftFailsClosedWithoutFileSystem",
+          "TestPackagedGoalPromptDrift_FailsWhenMaterializedPromptDrifts",
+          "TestPackagedGoalPromptDrift_FailsWhenMaterializedPromptDrifts/executor",
+          "TestPackagedGoalPromptDrift_FreshMaterializationMatchesCanonicalSource"
+        ],
+        "added": [
+          "TestPackagedGoalPromptComponents",
+          "TestPackagedGoalPromptComponents/station",
+          "TestPackagedGoalPromptComponents/worker",
+          "TestPackagedGoalPromptRequiresFileSystem"
+        ]
+      },
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine": {
+        "removed": [],
+        "added": [
+          "TestNormalizedSubmissionRejectsCanceledContextBeforeEngineState"
+        ]
+      },
+      "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events": {
+        "removed": [],
+        "added": [
+          "TestSubscriptionOverflowRejectsNewOffersWithoutReservingCapacity",
+          "TestSubscriptionShutdownReleasesUndeliveredEvent",
+          "TestSubscriptionShutdownReleasesUndeliveredEvent/drain-cancel",
+          "TestSubscriptionShutdownReleasesUndeliveredEvent/drain-overflow",
+          "TestSubscriptionShutdownReleasesUndeliveredEvent/relay-overflow"
+        ]
+      }
+    }
+  },
+  "final_package_cpu_observations": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/httpserver",
+      "cpu_seconds": 0.34375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/process",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/process/managedchild",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/stdio",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/taskgroup",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/events/internal/service",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "cpu_seconds": 0.390625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution",
+      "cpu_seconds": 0.546875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service",
+      "cpu_seconds": 0.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
+      "cpu_seconds": 0.390625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
+      "cpu_seconds": 2.484375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
+      "cpu_seconds": 0.3125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
+      "cpu_seconds": 0.453125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex",
+      "cpu_seconds": 0.34375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service",
+      "cpu_seconds": 0.21875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/process",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/browser",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/clock",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/contentstaging",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/contextscope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/cronschedule",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/generatedartifacts",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/grpc",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/internal/filesystemreplace",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/locking",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
+      "cpu_seconds": 0.265625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
+      "cpu_seconds": 0.890625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/processmemory",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/pty",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/random",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/replay",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/rollingfile",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/wiretranscript",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
+      "cpu_seconds": 0.40625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/service",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/internal/service",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/edges",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/clonetests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
+      "cpu_seconds": 1.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/failuremetadatatests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/graphtopologytests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts/taxonomytests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "cpu_seconds": 0.21875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/goal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "cpu_seconds": 1.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/promptassets",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/review",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/subagent",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/tts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/outcometests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/systeminitializationtests",
+      "cpu_seconds": 0.203125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/workerinference",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mcp",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "cpu_seconds": 0.328125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri",
+      "cpu_seconds": 0.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime",
+      "cpu_seconds": 0.34375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation",
+      "cpu_seconds": 0.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/circuitbreakertests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/dispatchertests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/goalroutingtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli/workflow",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence",
+      "cpu_seconds": 0.171875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
+      "cpu_seconds": 0.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/operatordefaults",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
+      "cpu_seconds": 0.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session/smoke",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen",
+      "cpu_seconds": 0.203125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backendregistry",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/effects",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/local",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service",
+      "cpu_seconds": 3.515625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
+      "cpu_seconds": 0.546875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/cli",
+      "cpu_seconds": 0.453125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/http",
+      "cpu_seconds": 0.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults",
+      "cpu_seconds": 0.15625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
+      "cpu_seconds": 0.375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
+      "cpu_seconds": 0.59375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
+      "cpu_seconds": 0.171875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/catalogdata",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider_test",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
+      "cpu_seconds": 2.390625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
+      "cpu_seconds": 0.421875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
+      "cpu_seconds": 0.484375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay/fixturetests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger",
+      "cpu_seconds": 0.375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recorded_session_inventory",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/internal/service",
+      "cpu_seconds": 0.421875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/tests/load/worker_recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow",
+      "cpu_seconds": 0.078125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/internal/service",
+      "cpu_seconds": 0.0625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/invocation_preparation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/request_preparation/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest",
+      "cpu_seconds": 0.546875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit",
+      "cpu_seconds": 0.484375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
+      "cpu_seconds": 0.484375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/session",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/stdio",
+      "cpu_seconds": 0.125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/acp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clidiag",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliserver",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry",
+      "cpu_seconds": 0.234375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/default",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/docs",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factory",
+      "cpu_seconds": 0.1875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factoryrun",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
+      "cpu_seconds": 0.359375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http",
+      "cpu_seconds": 0.4375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/compat",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/http/recordings",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/mappingtests",
+      "cpu_seconds": 0.015625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/openapitests",
+      "cpu_seconds": 1.609375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",
+      "cpu_seconds": 0.09375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/taxonomyvalidationtests",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/content",
+      "cpu_seconds": 0.046875
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",
+      "cpu_seconds": 0.109375
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio",
+      "cpu_seconds": 0.0
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/root",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+      "cpu_seconds": 0.140625
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections",
+      "cpu_seconds": 0.03125
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
+      "cpu_seconds": 5.03125
+    }
+  ]
+}

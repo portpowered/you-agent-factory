@@ -160,8 +160,6 @@ flowchart LR
 | [`pkg/services/recordings/internal/projections/projectiontests`](../../../../pkg/services/recordings/internal/projections/projectiontests) | 0 | 0 | XX% | XX% |
 | [`pkg/services/recordings/internal/projections/workstation`](../../../../pkg/services/recordings/internal/projections/workstation) | 1021 | 1 | 84.5% | 63.1% |
 | [`pkg/services/recordings/internal/replay`](../../../../pkg/services/recordings/internal/replay) | 5207 | 8 | 78.6% | 53.5% |
-| [`pkg/services/recordings/internal/replay/clocktests`](../../../../pkg/services/recordings/internal/replay/clocktests) | 0 | 0 | XX% | XX% |
-| [`pkg/services/recordings/internal/replay/configtests`](../../../../pkg/services/recordings/internal/replay/configtests) | 0 | 0 | XX% | XX% |
 | [`pkg/services/recordings/internal/replay/fixturetests`](../../../../pkg/services/recordings/internal/replay/fixturetests) | 0 | 0 | XX% | XX% |
 | [`pkg/services/recordings/internal/services/artifacts_export`](../../../../pkg/services/recordings/internal/services/artifacts_export) | 46 | 2 | XX% | XX% |
 | [`pkg/services/recordings/internal/services/artifacts_export/internal/service`](../../../../pkg/services/recordings/internal/services/artifacts_export/internal/service) | 499 | 2 | 74.4% | 60.2% |

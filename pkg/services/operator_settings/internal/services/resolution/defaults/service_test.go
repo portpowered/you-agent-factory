@@ -1,4 +1,4 @@
-package service_test
+package settingsresolution_test
 
 import (
 	"context"

@@ -1,8 +1,11 @@
-package service
+package stresstests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	visualizationservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -23,8 +26,10 @@ const (
 	scaleProbeField         = "__runtime_metrics_scale_probe"
 )
 
-func runRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t *testing.T) {
-	t.Helper()
+func TestRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t *testing.T) {
+	if testing.Short() {
+		t.Skip("500/2000-artifact decoded-record lifetime profile")
+	}
 	smallRoot := installScaleMetricsTree(t, scaleSmallArtifactCount)
 	largeRoot := installScaleMetricsTree(t, scaleLargeArtifactCount)
 
@@ -156,7 +161,7 @@ func newScaleMetricsQuery(t *testing.T) (factoryvisualization.RuntimeMetricsQuer
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
 	tracked := &scaleMetricsReader{delegate: reader}
-	query, err := NewRuntimeMetricsQuery(tracked, logging.NoopLogger{})
+	query, err := visualizationservice.NewRuntimeMetricsQuery(tracked, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
@@ -236,11 +241,64 @@ func (reader *scaleMetricsReader) waitForFinalizers(want int64) bool {
 		// no production synchronization can replace this GC checkpoint.
 		runtime.GC()
 		runtime.Gosched()
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Millisecond) //nolint:testsleep // This stress measurement waits for real GC finalizers, which an injected clock cannot advance.
 	}
 	return reader.finalized.Load() >= want
 }
 
 type scaleDecodedRecordProbe struct {
 	marker byte
+}
+
+func writeRuntimeMetricsJSONL(
+	t *testing.T,
+	path string,
+	records []factoryvisualization.RuntimeMetricRecord,
+	tornTail string,
+) {
+	t.Helper()
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create metrics artifact %q: %v", path, err)
+	}
+	encoder := json.NewEncoder(file)
+	for _, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			_ = file.Close()
+			t.Fatalf("encode metrics artifact %q: %v", path, err)
+		}
+	}
+	if tornTail != "" {
+		if _, err := file.WriteString(tornTail); err != nil {
+			_ = file.Close()
+			t.Fatalf("write torn metrics tail %q: %v", path, err)
+		}
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close metrics artifact %q: %v", path, err)
+	}
+}
+
+func metricRecord(
+	name string,
+	value float64,
+	sessionID string,
+	runtimeID string,
+	workstation string,
+	workerType string,
+	provider string,
+	reason string,
+	unit string,
+) factoryvisualization.RuntimeMetricRecord {
+	return factoryvisualization.RuntimeMetricRecord{
+		"metric_name":         name,
+		"value":               value,
+		"session_id":          sessionID,
+		"runtime_instance_id": runtimeID,
+		"workstation":         workstation,
+		"worker_type":         workerType,
+		"provider":            provider,
+		"reason":              reason,
+		"unit":                unit,
+	}
 }

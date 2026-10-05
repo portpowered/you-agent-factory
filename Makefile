@@ -137,6 +137,7 @@ FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 FUNCTIONAL_LONG_COMPILE_PACKAGES := $(FUNCTIONAL_LONG_PACKAGES) ./pkg/services/models/internal/backendconformance
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
+STRESS_FIXTURE_PACKAGES := ./tests/stress/factory_session_snapshots ./pkg/services/models/internal/backends/localai/codecs/stresstests ./pkg/services/factory_visualization/internal/service/stresstests
 RELEASE_DEFAULT_PACKAGES := ./tests/release/...
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
@@ -608,6 +609,7 @@ test-localai-runner-v2-prebuilt:
 	$(GO) test ./tests/internal/localai/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
+	$(MAKE) test-wiring-integration
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -731,6 +733,25 @@ functional-test-viz:
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+.PHONY: test-stress-fixtures test-unit-monolith test-unit-monolith-prepare test-unit-monolith-prebuilt test-wiring-integration
+test-stress-fixtures:
+	$(GO) test -p=2 $(STRESS_FIXTURE_PACKAGES) -count=1 -timeout 5m -v
+
+# Opt-in until implementation coverage and source-change rebuild profiles pass.
+test-unit-monolith:
+	$(GO) run ./cmd/unitlane -monolith -count=1
+
+# Build once after edits; the execution target runs that explicit source snapshot.
+test-unit-monolith-prepare:
+	$(GO) build -o .artifacts/unitlane$(if $(filter Windows_NT,$(OS)),.exe,) ./cmd/unitlane
+	.artifacts/unitlane$(if $(filter Windows_NT,$(OS)),.exe,) -monolith-prepare -jobs $(UNIT_DEFAULT_JOBS)
+
+test-unit-monolith-prebuilt:
+	.artifacts/unitlane$(if $(filter Windows_NT,$(OS)),.exe,) -monolith-prebuilt -count=1 $(if $(UNIT_TIMING_OUTPUT),-timing-output "$(UNIT_TIMING_OUTPUT)",)
+
+test-wiring-integration:
+	$(GO) run ./cmd/unitlane -wiring-integration -count=1 -jobs $(UNIT_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
 
 ifeq ($(OS),Windows_NT)
 ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL)),$(findstring sh.exe,$(SHELL)),$(findstring bash.exe,$(SHELL))))

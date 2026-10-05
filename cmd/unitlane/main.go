@@ -19,6 +19,11 @@ import (
 const modulePath = testlanes.ModulePath
 
 type config struct {
+	monolith           bool
+	monolithDetails    bool
+	monolithPrepare    bool
+	monolithPrebuilt   bool
+	wiringIntegration  bool
 	count              int
 	jobs               int
 	root               string
@@ -51,12 +56,24 @@ func main() {
 
 func run() error {
 	cfg := parseConfig()
-	packages, err := discoverUnitPackages(cfg.root)
+	if cfg.monolithPrebuilt {
+		return runPreparedMonolith(cfg)
+	}
+	var packages []string
+	var err error
+	if cfg.wiringIntegration {
+		packages, err = discoverWiringPackages(cfg.root)
+	} else {
+		packages, err = discoverUnitPackages(cfg.root)
+	}
 	if err != nil {
 		return fmt.Errorf("discover unit packages: %w", err)
 	}
 	if len(packages) == 0 {
 		return fmt.Errorf("discover unit packages: no packages found under %s", cfg.root)
+	}
+	if cfg.monolith || cfg.monolithPrepare {
+		return runMonolithUnitTests(cfg, packages)
 	}
 	if err := runUnitTests(cfg, packages); err != nil {
 		return fmt.Errorf("run unit lane: %w", err)
@@ -66,6 +83,11 @@ func run() error {
 
 func parseConfig() config {
 	var cfg config
+	flag.BoolVar(&cfg.monolith, "monolith", false, "experimental shared Go unit binary; always executes fresh tests and requires Python 3")
+	flag.BoolVar(&cfg.monolithDetails, "monolith-details", false, "emit full subtest diagnostics/inventory for the experimental monolith (higher reporting CPU)")
+	flag.BoolVar(&cfg.monolithPrepare, "monolith-prepare", false, "prepare all unit binaries and their inventory without executing tests")
+	flag.BoolVar(&cfg.monolithPrebuilt, "monolith-prebuilt", false, "execute the explicitly prepared unit suite; skips discovery and build checks, requires re-preparation after changes")
+	flag.BoolVar(&cfg.wiringIntegration, "wiring-integration", false, "run retained legacy wiring integration checks instead of unit tests")
 	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
 	flag.IntVar(&cfg.jobs, "jobs", defaultUnitLaneJobs(), "go test -p value")
 	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
@@ -83,15 +105,32 @@ func parseConfig() config {
 }
 
 func discoverPackages(root string) ([]string, error) {
+	return discoverPackagesMatching(root, testlanes.IsUnitPackage)
+}
+
+func discoverWiringPackages(root string) ([]string, error) {
+	return discoverPackagesMatching(root, isWiringIntegrationPackage)
+}
+
+func isWiringIntegrationPackage(pkg string) bool {
+	lane, owned := testlanes.ForImportPath(pkg)
+	return owned && lane == testlanes.LaneIntegration && slices.Contains(strings.Split(pkg, "/"), "wire")
+}
+
+func discoverPackagesMatching(root string, include func(string) bool) ([]string, error) {
 	rootPath := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(root)), "/...")
 	rootPath = strings.TrimPrefix(rootPath, "./")
 	if rootPath == "" || rootPath == "." {
 		return nil, fmt.Errorf("unit package root must name a repository directory")
 	}
-	return discoverPackagesUnder(filepath.FromSlash(rootPath), modulePath+"/"+rootPath)
+	return discoverPackagesUnderMatching(filepath.FromSlash(rootPath), modulePath+"/"+rootPath, include)
 }
 
 func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
+	return discoverPackagesUnderMatching(rootDir, importPrefix, testlanes.IsUnitPackage)
+}
+
+func discoverPackagesUnderMatching(rootDir, importPrefix string, include func(string) bool) ([]string, error) {
 	packageSet := make(map[string]struct{})
 	err := filepath.WalkDir(rootDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -121,7 +160,7 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 		if relativeDir != "." {
 			pkg += "/" + filepath.ToSlash(relativeDir)
 		}
-		if testlanes.IsUnitPackage(pkg) {
+		if include(pkg) {
 			packageSet[pkg] = struct{}{}
 		}
 		return nil
@@ -144,13 +183,16 @@ func runUnitTests(cfg config, packages []string) error {
 	accumulator := newUnitTimingAccumulator(expectedPackages)
 	baseArgs := baseGoTestArgs(cfg)
 	baseLen := commandArgLen(baseArgs)
+	packageArgs := localPackageArguments(packages)
 	var laneErr error
 	for len(packages) > 0 {
 		batch := make([]string, 0, len(packages))
+		batchArgs := make([]string, 0, len(packages))
 		currentLen := baseLen
 		for len(packages) > 0 {
 			next := packages[0]
-			nextLen := len(next)
+			nextArg := packageArgs[0]
+			nextLen := len(nextArg)
 			if len(batch) > 0 {
 				nextLen++
 			}
@@ -161,10 +203,12 @@ func runUnitTests(cfg config, packages []string) error {
 				return fmt.Errorf("go test command too long for package %q", next)
 			}
 			batch = append(batch, next)
+			batchArgs = append(batchArgs, nextArg)
 			currentLen += nextLen
 			packages = packages[1:]
+			packageArgs = packageArgs[1:]
 		}
-		capture, err := runGoTest(cfg, localPackageArguments(batch), batch)
+		capture, err := runGoTest(cfg, batchArgs, batch)
 		accumulator.add(capture)
 		if err != nil {
 			laneErr = err
@@ -177,6 +221,9 @@ func runUnitTests(cfg config, packages []string) error {
 		run = unitTimingRunIdentity(cfg)
 	}
 	summary := accumulator.summaryWithRun(time.Since(started).Seconds(), run)
+	if cfg.wiringIntegration {
+		summary.Lane = "wiring integration"
+	}
 	var outputErrs []error
 	if err := writeUnitTimingSummary(stdoutWriter, summary); err != nil {
 		outputErrs = append(outputErrs, err)

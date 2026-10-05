@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -36,14 +35,7 @@ func (persistence *recordingPackagedFactoryPersistence) PrepareFactoryLayout(
 }
 
 func TestInstallPackagedFactory_CreateAndReplaceUseExplicitPackagedPreparation(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("published catalog is missing @you/goal")
-	}
+	definition := installationDefinitionFixture()
 	persistence := &recordingPackagedFactoryPersistence{
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
 	}

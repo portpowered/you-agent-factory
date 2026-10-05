@@ -18,12 +18,14 @@ const (
 )
 
 var specializedPackageSegments = map[string]Lane{
+	"wire":             LaneIntegration,
 	"contracttests":    LaneContract,
 	"exhaustiontests":  LaneMaintenance,
 	"functionaltests":  LaneFunctional,
 	"integrationtests": LaneIntegration,
 	"runtimetests":     LaneIntegration,
 	"servertests":      LaneIntegration,
+	"stresstests":      LaneStress,
 }
 
 var explicitlyClassifiedPackages = map[string]Lane{
@@ -44,6 +46,10 @@ func ForImportPath(importPath string) (lane Lane, ok bool) {
 		return lane, true
 	}
 	switch {
+	case importPath == ModulePath+"/pkg/wire" || strings.HasPrefix(importPath, ModulePath+"/pkg/wire/"):
+		// Legacy private behavior and graph witnesses stay available during owner
+		// migration, but application composition never belongs in the unit lane.
+		return LaneIntegration, true
 	case importPath == ModulePath+"/contracts":
 		return LaneContract, true
 	case importPath == ModulePath+"/cmd" || strings.HasPrefix(importPath, ModulePath+"/cmd/"):
