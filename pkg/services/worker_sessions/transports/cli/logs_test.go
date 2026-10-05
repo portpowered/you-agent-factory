@@ -63,7 +63,7 @@ func TestReadLogsFollowCommittedTailAndRingGap(t *testing.T) {
 			var available atomic.Bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasSuffix(r.URL.Path, "/events") {
-					if r.URL.Query().Get("after_position") != "1" || r.URL.Query().Get("stream_generation_id") != "" {
+					if r.URL.Query().Has("after_position") || r.URL.Query().Has("stream_generation_id") {
 						t.Errorf("live handoff cursor: %s", r.URL)
 					}
 					available.Store(true)

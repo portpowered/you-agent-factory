@@ -133,7 +133,7 @@ func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, frame workerSess
 
 func workerSessionStreamFailure(err error) (string, string) {
 	switch {
-	case errors.Is(err, workersessions.ErrObservationSourceGap):
+	case errors.Is(err, workersessions.ErrObservationSourceGap), errors.Is(err, workersessions.ErrObservationCursorStale):
 		return "WORKER_SESSION_STREAM_GAP", "retained Worker Session event history is unavailable"
 	case errors.Is(err, workersessions.ErrObservationSourceClosed):
 		return "WORKER_SESSION_STREAM_CLOSED", "Worker Session event source closed before terminal"

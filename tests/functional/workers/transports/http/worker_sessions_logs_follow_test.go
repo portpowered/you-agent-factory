@@ -11,9 +11,41 @@ import (
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Factory notifications use Factory Event coordinates, unlike the dedicated
+// Worker capture. A real explicit-session attempt proves that following its
+// durable prefix never substitutes a capture position into that stream.
+func TestWorkerSessionCapturedLogsFactoryFollow(t *testing.T) {
+	t.Parallel()
+	finish := make(chan struct{})
+	runner := newFunctionalWorkerGate(finish)
+	dir := support.ScaffoldSingleStepFactory(t, "captured-factory-follow")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+	})
+	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
+	submitted := support.SubmitSessionWorkAt(t, server.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Payload: map[string]string{"title": "Factory durable follow"},
+	})
+	runner.waitStarted(t)
+	list := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, workerSessionsListURL(server.URL(), opened.Session.Id, *submitted.WorkId))
+	if len(list.Sessions) != 1 {
+		t.Fatalf("Factory follow target count=%d", len(list.Sessions))
+	}
+	id := list.Sessions[0].WorkerSessionId
+	followed := readCapturedLiveFollow(t, server, id, finish)
+	ended := waitCapturedTerminal(t, server.URL(), id)
+	if !reflect.DeepEqual(followed, ended.Events) {
+		t.Fatal("Factory follow lost or duplicated committed records")
+	}
+}
 
 // Provider completion races the prefix/live handoff when the first durable
 // frame reaches stdout. The observer must drain the real asynchronous capture

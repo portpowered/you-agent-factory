@@ -474,32 +474,41 @@ func TestStreamWorkerSessionEventsBySessionIDReplayOnlyWritesSummaryAndPreserves
 }
 
 func TestStreamWorkerSessionEventsBySessionIDWritesExplicitSourceFailure(t *testing.T) {
-	service := &fakeObservationService{
-		getResult: workersessions.Observation{
-			WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
-			ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
-		},
-		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
-			{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap},
-		}},
-	}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
+	t.Parallel()
+	for name, sourceErr := range map[string]error{
+		"retention gap":                    workersessions.ErrObservationSourceGap,
+		"cursor evicted during connection": workersessions.ErrObservationCursorStale,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{
+				getResult: workersessions.Observation{
+					WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+					ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
+				},
+				streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+					{Kind: workersessions.ObservationDeliverySourceFailure, Err: sourceErr},
+				}},
+			}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
 
-	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
-		Provider: factoryapi.LoadableProviderSessionProvider("cursor"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "cursor-session-1",
-	})
+			handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+				Provider: factoryapi.LoadableProviderSessionProvider("cursor"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "cursor-session-1",
+			})
 
-	frames := decodeSSEFrames(t, recorder.Body.String())
-	if len(frames) != 1 || frames[0].Delivery != "SOURCE_FAILURE" || frames[0].Event != nil {
-		t.Fatalf("frames = %#v, want one source failure without an event", frames)
-	}
-	if frames[0].ErrorCode == nil || *frames[0].ErrorCode != "WORKER_SESSION_STREAM_GAP" {
-		t.Fatalf("error code = %#v, want WORKER_SESSION_STREAM_GAP", frames[0].ErrorCode)
-	}
-	if frames[0].ErrorMessage == nil || !strings.Contains(*frames[0].ErrorMessage, "retained") {
-		t.Fatalf("error message = %#v, want safe retained-history message", frames[0].ErrorMessage)
+			frames := decodeSSEFrames(t, recorder.Body.String())
+			if len(frames) != 1 || frames[0].Delivery != "SOURCE_FAILURE" || frames[0].Event != nil {
+				t.Fatalf("frames = %#v, want one source failure without an event", frames)
+			}
+			if frames[0].ErrorCode == nil || *frames[0].ErrorCode != "WORKER_SESSION_STREAM_GAP" {
+				t.Fatalf("error code = %#v, want WORKER_SESSION_STREAM_GAP", frames[0].ErrorCode)
+			}
+			if frames[0].ErrorMessage == nil || !strings.Contains(*frames[0].ErrorMessage, "retained") {
+				t.Fatalf("error message = %#v, want safe retained-history message", frames[0].ErrorMessage)
+			}
+		})
 	}
 }
 

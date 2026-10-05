@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -123,26 +122,23 @@ func (f *logsFollower) observe(ctx context.Context) (<-chan struct{}, <-chan err
 	wake := make(chan struct{}, 1)
 	result := make(chan error, 1)
 	joined := make(chan struct{})
-	config, position := f.config, f.position
+	config := f.config
 	go func() {
 		defer close(joined)
-		result <- observeLogsEvents(ctx, config, position, wake)
+		result <- observeLogsEvents(ctx, config, wake)
 	}()
 	return wake, result, joined
 }
 
-func observeLogsEvents(ctx context.Context, config ReadConfig, position int64, wake chan<- struct{}) error {
+func observeLogsEvents(ctx context.Context, config ReadConfig, wake chan<- struct{}) error {
 	endpoint, err := workerSessionEventsEndpoint(config.Server, "", config.WorkerSessionID, "", "", "", false)
 	if err != nil {
 		return err
 	}
-	query := endpoint.Query()
-	// An at-head durable token can yield no events in this invocation. Zero
-	// means no known Events position, not a valid exclusive Events cursor.
-	if position > 0 {
-		query.Set("after_position", strconv.FormatInt(position, 10))
-	}
-	endpoint.RawQuery = query.Encode()
+	// The Factory observation stream uses Factory Event positions, while logs
+	// use Worker capture positions. Never send a durable log position as an
+	// Events cursor. Replayed notifications only wake the durable reader; its
+	// generation-bound nextToken alone acknowledges emitted records.
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
 		return err

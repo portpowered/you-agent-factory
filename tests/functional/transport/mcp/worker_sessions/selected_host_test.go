@@ -58,6 +58,10 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runCapturedLogsPolling(t, process)
 	})
+	t.Run("real host captured logs cursor isolation", func(t *testing.T) {
+		t.Parallel()
+		runCapturedLogsCursorIsolation(t, process)
+	})
 	t.Run("real host interrupt and transcript", func(t *testing.T) {
 		t.Parallel()
 		runRealHostInterrupt(t, process)
