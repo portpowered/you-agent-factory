@@ -224,16 +224,13 @@ PACKAGE_BOUNDARY_BASELINE_CACHE_DIR ?= auto
 LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
-LINT_LANE_PACKAGE := ./cmd/lintlane
 # Optional CI outputs can be defined but blank. Use the canonical lane budget
-# for blank handoffs; lintlane still rejects invalid nonblank overrides.
+# for blank handoffs; report setup rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
 ifeq ($(strip $(LINT_JOBS)),)
 override LINT_JOBS := $(GO_LANE_BUDGET)
 endif
-# Keep the recursive command available to lintlane without spelling the
-# special $(MAKE) variable in this recipe; GNU Make executes such recipes
-# during -n so recursive builds can receive the dry-run flag.
+# Keep recursive Make behind an alias so make -n does not execute it.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
 # Local `make lint` runs LINT_TARGETS_BASE, adds the UI gates only when ui/
@@ -972,8 +969,40 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "TestReplayEventStreamArtifactSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Only lint recipes use Git sh on Windows; global budget arithmetic retains
+# the caller's shell. Override LINT_SHELL for another installed POSIX shell.
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+LINT_SHELL ?= $(SHELL)
+else
+# Windows Make requires a shell executable path without spaces.
+LINT_SHELL ?= $(subst \,/,$(shell for %%I in ("$(or $(ProgramW6432),$(ProgramFiles))\Git\bin\sh.exe") do @echo %%~sI))
+endif
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	@"$(LINT_MAKE)" --no-print-directory lint-run SHELL="$(LINT_SHELL)" LINT_JOBS="$(LINT_JOBS)"
+else
+lint: lint-run
+endif
+
+.PHONY: lint-run
+lint-run:
+	@run_dir=$$("$(NODE)" scripts/ci/backend-lint-report.mjs --begin-run --jobs "$(LINT_JOBS)" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)); \
+	test -n "$$run_dir" || exit 1; \
+	status=0; \
+	"$(LINT_MAKE)" --no-print-directory --keep-going --jobs="$(LINT_JOBS)" --output-sync=target lint-observe-selected LINT_RUN_DIR="$$run_dir" || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --collect-run "$$run_dir" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS) || status=1; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --remove-run "$$run_dir" || status=1; \
+	exit $$status
+
+.PHONY: lint-observe-selected $(addprefix lint-observe-,$(LINT_TARGETS))
+lint-observe-selected: $(addprefix lint-observe-,$(LINT_TARGETS))
+$(addprefix lint-observe-,$(LINT_TARGETS)): lint-observe-%:
+	@"$(NODE)" scripts/ci/backend-lint-report.mjs --start-target "$(LINT_RUN_DIR)" --name "$*" || exit 1; \
+	status=0; \
+	TEMP="$(LINT_RUN_DIR)/$*.tmp" TMP="$(LINT_RUN_DIR)/$*.tmp" TMPDIR="$(LINT_RUN_DIR)/$*.tmp" \
+	"$(LINT_MAKE)" --no-print-directory $(if $(filter Windows_NT,$(OS)),SHELL="$(LINT_SHELL)",) "$*" >"$(LINT_RUN_DIR)/$*.log" 2>&1 || status=$$?; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --record-target "$(LINT_RUN_DIR)" --name "$*" --exit-code "$$status" || exit 1; \
+	exit $$status
 
 lint-full:
 	$(MAKE) lint LINT_FULL=1

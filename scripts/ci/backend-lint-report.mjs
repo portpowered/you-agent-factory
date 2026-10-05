@@ -1,11 +1,13 @@
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import {
 	BACKEND_LINT_BASELINE_SOURCE,
 	evaluateBackendLintPolicy,
 } from "./backend-lint-policy.mjs";
+
+import { tmpdir } from "node:os";
 
 const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
@@ -84,8 +86,8 @@ function machineReadableViolationCount(target) {
 		};
 	}
 
-	const matches = textValue(target?.output).match(/^\s*LINT_VIOLATION_COUNT:\s*(\d+)\s*$/gim) || [];
-	if (matches.length !== 1) {
+	const matches = textValue(target?.output).split(/\r?\n/).filter((line) => /^\s*LINT_VIOLATION_COUNT:/i.test(line));
+	if (matches.length !== 1 || !/^\s*LINT_VIOLATION_COUNT:\s*\d+\s*$/i.test(matches[0])) {
 		return null;
 	}
 	const count = Number(matches[0].replace(/^\s*LINT_VIOLATION_COUNT:\s*/i, ""));
@@ -473,8 +475,121 @@ function optionValue(args, name) {
 	return args[index + 1];
 }
 
+// These operations consume explicit run records. GNU Make alone starts and
+// schedules checks; this module never discovers sources or invokes tools.
+function selectedTargets(targets) {
+	if (!targets.length || targets.some((name) => !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name))) {
+		throw new Error("lint selection must contain safe nonempty target names");
+	}
+	return [...new Set(targets)];
+}
+
+function runMetadata(directory) {
+	const resolved = realpathSync(directory);
+	if (dirname(resolved) !== realpathSync(tmpdir()) || !basename(resolved).startsWith("you-lint-run-")) {
+		throw new Error("not an owned lint run directory");
+	}
+	const metadata = JSON.parse(readFileSync(join(resolved, "run.json"), "utf8"));
+	if (metadata.directory !== resolved || !Number.isSafeInteger(metadata.jobs) || metadata.jobs < 1
+		|| !Number.isSafeInteger(metadata.started) || metadata.started < 0
+		|| JSON.stringify(selectedTargets(metadata.targets)) !== JSON.stringify(metadata.targets)) {
+		throw new Error("invalid lint run metadata");
+	}
+	return metadata;
+}
+
+function targetPath(directory, name, suffix) {
+	const metadata = runMetadata(directory);
+	if (!metadata.targets.includes(name)) throw new Error(`unselected lint target: ${name}`);
+	return join(metadata.directory, `${name}.${suffix}`);
+}
+
+export function beginLintRun(jobs, targets, reportPath = "") {
+	// Invalidate the previous report before validation or any child can fail.
+	if (reportPath) {
+		mkdirSync(dirname(resolve(reportPath)), { recursive: true });
+		writeFileSync(reportPath, "null\n");
+	}
+	if (!/^[0-9]+$/.test(jobs) || !Number.isSafeInteger(Number(jobs)) || Number(jobs) < 1) {
+		throw new Error("LINT_JOBS must be a positive integer");
+	}
+	const selection = selectedTargets(targets);
+	const directory = realpathSync(mkdtempSync(join(tmpdir(), "you-lint-run-")));
+	writeFileSync(join(directory, "run.json"), JSON.stringify({ directory, jobs: Number(jobs), targets: selection, started: Date.now() }));
+	return directory.replaceAll("\\", "/");
+}
+
+export function startLintTarget(directory, name) {
+	const path = targetPath(directory, name, "start.json");
+	mkdirSync(targetPath(directory, name, "tmp"));
+	writeFileSync(path, JSON.stringify({ started: Date.now() }), { flag: "wx" });
+}
+
+export function recordLintTarget(directory, name, exitCode) {
+	if (!/^[0-9]+$/.test(exitCode) || !Number.isSafeInteger(Number(exitCode))) throw new Error("invalid target exit code");
+	const start = JSON.parse(readFileSync(targetPath(directory, name, "start.json"), "utf8"));
+	if (!Number.isSafeInteger(start.started) || start.started < 0) throw new Error("invalid target start record");
+	const output = readFileSync(targetPath(directory, name, "log"), "utf8");
+	const result = { name, status: Number(exitCode) === 0 ? "pass" : "fail", durationMillis: Math.max(0, Date.now() - start.started), output };
+	if (result.status === "fail") result.error = `make ${name} exited ${exitCode}`;
+	const count = countViolations(result);
+	if (count.count !== null) {
+		result.violationCount = count.count;
+		result.violationCountSource = count.source;
+	}
+	writeFileSync(targetPath(directory, name, "result.json"), JSON.stringify(result), { flag: "wx" });
+}
+
+export function collectLintRun(directory, targets, reportPath = "") {
+	const metadata = runMetadata(directory);
+	if (JSON.stringify(selectedTargets(targets)) !== JSON.stringify(metadata.targets)) throw new Error("lint selection changed during run");
+	const results = metadata.targets.map((name) => {
+		const result = JSON.parse(readFileSync(targetPath(directory, name, "result.json"), "utf8"));
+		if (!isReportTarget(result) || result.name !== name) throw new Error(`malformed lint result: ${name}`);
+		return result;
+	});
+	const report = { version: REPORT_VERSION, jobs: metadata.jobs, totalDurationMillis: Math.max(0, Date.now() - metadata.started), targets: results };
+	if (reportPath) {
+		mkdirSync(dirname(resolve(reportPath)), { recursive: true });
+		writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");
+	}
+	return report;
+}
+
+export function removeLintRun(directory) {
+	const metadata = runMetadata(directory);
+	rmSync(metadata.directory, { recursive: true });
+}
+
+function runBookkeeping(args) {
+	const targets = args.includes("--") ? args.slice(args.indexOf("--") + 1) : [];
+	const reportPath = args.includes("--report") ? optionValue(args, "--report") : "";
+	if (args.includes("--begin-run")) {
+		process.stdout.write(beginLintRun(optionValue(args, "--jobs"), targets, reportPath) + "\n");
+	} else if (args.includes("--start-target")) {
+		startLintTarget(optionValue(args, "--start-target"), optionValue(args, "--name"));
+	} else if (args.includes("--record-target")) {
+		recordLintTarget(optionValue(args, "--record-target"), optionValue(args, "--name"), optionValue(args, "--exit-code"));
+	} else if (args.includes("--remove-run")) {
+		removeLintRun(optionValue(args, "--remove-run"));
+	} else if (args.includes("--collect-run")) {
+		const report = collectLintRun(optionValue(args, "--collect-run"), targets, reportPath);
+		for (const target of report.targets) {
+			process.stdout.write(`===== lint target: ${target.name} =====\n${target.output}\n${target.error || ""}\n===== lint target: ${target.name}: ${target.status.toUpperCase()} =====\n`);
+		}
+		const failures = report.targets.filter((target) => target.status === "fail");
+		process.stdout.write(failures.length ? `LINT FAILED: ${failures.length} target(s)\n` : `LINT PASSED: ${report.targets.length} target(s) completed successfully\n`);
+		for (const target of failures) process.stdout.write(`  ${target.name} (rerun: make ${target.name})\n`);
+		if (failures.length) process.exitCode = 1;
+	} else {
+		return false;
+	}
+	return true;
+}
+
 function runCli() {
 	const args = process.argv.slice(2);
+	if (runBookkeeping(args)) return;
 	const reportPath = optionValue(args, "--report");
 	const summaryPath = optionValue(args, "--summary");
 	const commentPath = optionValue(args, "--comment");
@@ -495,5 +610,8 @@ function runCli() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-	runCli();
+	try { runCli(); } catch (error) {
+		process.stderr.write(`Backend Lint harness failure: ${error.message}\n`);
+		process.exitCode = 1;
+	}
 }
