@@ -801,6 +801,12 @@ jobs:
             .github/workflows/ci.yml
       - name: Check Go formatting
         run: make fmt-check
+      - name: Race-check shared lint plugin
+        run: go test -race ./tools/golangcilintplugin -run Plugin -count=1 -timeout 15m
+      - name: Build and smoke-test shared lint plugin
+        run: |
+          make golangci-build
+          python3 scripts/lint-migration-smoke.py manifest --golangci "$PWD/.artifacts/golangci/golangci-repository"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}

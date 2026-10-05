@@ -1,0 +1,18 @@
+version: "2"
+run:
+  timeout: 30m
+  tests: true
+linters:
+  default: none
+  enable:
+    - repolint
+  settings:
+    custom:
+      repolint:
+        type: module
+        description: Shared repository go/analysis rules
+        settings:
+          defer-stale: [layering, behavior, construction, petripublic, serviceshape, functionalshape]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

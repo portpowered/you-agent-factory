@@ -10,6 +10,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/go-co-op/gocron/v2 v2.16.4
+	github.com/golangci/plugin-module-register v0.1.2
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.6.0

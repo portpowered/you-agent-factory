@@ -301,12 +301,14 @@ class PkgFixtures(SizeFixtures):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "all"))
+    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "all"))
     parser.add_argument("--golangci", required=True)
     args = parser.parse_args()
-    tool = shlex.split(args.golangci)
+    tool = ([str(Path(args.golangci).resolve())] if Path(args.golangci).is_file()
+            else shlex.split(args.golangci))
     version = checked(tool + ["version"], ROOT)
-    assert "version 2.11.4 " in version, f"expected pinned golangci-lint v2.11.4: {version}"
+    assert ("version 2.11.4 " in version or "version v2.11.4-custom-gcl-" in version), (
+        f"expected pinned golangci-lint v2.11.4: {version}")
     checked(tool + ["config", "verify"], ROOT)
     parent = ROOT / ".artifacts/lint-migration-smoke"
     parent.mkdir(parents=True, exist_ok=True)
@@ -315,6 +317,40 @@ def main() -> None:
     print(f"Artifacts: {artifacts}\n{version.strip()}", flush=True)
     fixtures = SizeFixtures(tool, artifacts, (ROOT / ".golangci.yml").read_text(encoding="utf-8"))
     try:
+        if args.cohort == "manifest":
+            fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+            root = fixtures.module("manifest-authority")
+            write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc executeWork(inputID string) string { return inputID }\n")
+            fixtures.lint(root, "manifest-permitted", [])
+            write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc newRunCommand() {}\n")
+            fixtures.lint(root, "manifest-handwritten-command", [("repolint", "cli-manifest-authority:")])
+            write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc execute(key string) { switch key { case \"with-server\": } }\n")
+            fixtures.lint(root, "manifest-binding-switch", [("repolint", "binding with-server")])
+            write(root, "contracts/fixture/shape.go", """package shape
+type Command struct{}
+type flagSet struct{}
+func (*Command) Flags() *flagSet { return &flagSet{} }
+func (*flagSet) String(name, value, usage string) {}
+""")
+            write(root, "pkg/transports/cli/root_work.go", """package cli
+import "github.com/portpowered/infinite-you/contracts/fixture"
+var command = &shape.Command{}
+""")
+            fixtures.lint(root, "manifest-command-metadata", [("repolint", "cobra.Command metadata")])
+            write(root, "pkg/transports/cli/root_work.go", """package cli
+import "github.com/portpowered/infinite-you/contracts/fixture"
+func execute(command *shape.Command) { command.Flags().String("name", "", "help") }
+""")
+            fixtures.lint(root, "manifest-direct-flags", [("repolint", "public input registration")])
+            write(root, "pkg/transports/cli/root_work.go", "package cli\ntype SessionFamilyBindings struct{}\n")
+            fixtures.lint(root, "manifest-mirror-storage", [("repolint", "CLI-shape mirror")])
+            write(root, "pkg/transports/cli/root_work.go", "package cli\n")
+            write(root, ".golangci.yml", fixtures.config.replace(
+                "[layering, behavior, construction, petripublic, serviceshape, functionalshape]", "[missing]"))
+            fixtures.lint(root, "manifest-invalid-settings", [], error="unknown deferred analyzer")
+            write(root, ".golangci.yml", fixtures.config.replace("repolint", "missing"))
+            fixtures.lint(root, "manifest-unregistered-plugin", [], error="not found")
         if args.cohort in ("size", "all"):
             fixtures.thresholds()
             fixtures.test_and_suppression()

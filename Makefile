@@ -1024,6 +1024,28 @@ model-provider-package-check:
 # fetched (Backend Lint checks out with fetch-depth 0).
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+GOLANGCI_DIR ?= .artifacts/golangci
+ifeq ($(OS),Windows_NT)
+GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository.exe
+else
+GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository
+endif
+
+# The module plugin is staged before retiring the standalone enforcement path.
+.PHONY: golangci-build repository-lint-run
+ifeq ($(GOLANGCI_PREBUILT),1)
+golangci-build:
+	@test -f "$(GOLANGCI_REPOSITORY)"
+else
+golangci-build:
+	$(GO) test ./tools/golangcilintplugin
+	$(GOLANGCI_LINT) custom --destination "$(GOLANGCI_DIR)"
+endif
+
+repository-lint-run: golangci-build
+	@git merge-base HEAD origin/main
+	$(GOLANGCI_REPOSITORY) run --config .golangci-repository-default.yml ./...
+	$(GOLANGCI_REPOSITORY) run --config .golangci-repository.yml --build-tags="$(REPOLINT_TAGS)" ./...
 # Tag union under which the repolint analyzers see every Go file once.
 REPOLINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 REPOLINT_DIR ?= .artifacts/repolint
