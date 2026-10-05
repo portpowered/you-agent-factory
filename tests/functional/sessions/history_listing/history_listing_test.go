@@ -1,6 +1,7 @@
 package historylisting_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -173,5 +174,94 @@ func assertHistoryResult(t *testing.T, result factoryapi.ListFactorySessionsResp
 	}
 	if !reflect.DeepEqual(actualRows, rows) || !reflect.DeepEqual(actualWarnings, warnings) {
 		t.Fatalf("rows=%v warnings=%v; want %v %v", actualRows, actualWarnings, rows, warnings)
+	}
+}
+
+// H6 owns a populated durable inventory beside a live workspace and degraded
+// history. This cell does not execute workers or call any provider.
+func TestHistoryListingPreservesPopulatedScopes(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	factory := support.ScaffoldSingleStepFactory(t, "history-populated-scopes")
+	recordingRoot := filepath.Join(home, ".you-agent-factory", "recordings")
+	_, warnings := seedHistory(t, recordingRoot, "mixed")
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(home)
+	var process support.Process
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factory, Env: env, Edges: historyEdges(home, recordingRoot, "mixed"),
+		BeforeStart: func(_ testing.TB, p support.Process, _ root.Input) { process = p },
+	})
+	body := `{"requestId":"history-durable-scope","source":{"kind":"INLINE_WORKFLOW","inlineWorkflow":{"inlineSource":{"encoding":"utf-8","inline":"return \"history-scope-result\";"}}}}`
+	response, err := http.Post(server.URL()+"/factory-sessions/sync", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("durable start = %d %s %v", response.StatusCode, data, err)
+	}
+	var completed factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(data, &completed); err != nil {
+		t.Fatal(err)
+	}
+	if completed.Status != "SUCCEEDED" {
+		t.Fatalf("durable status = %s", completed.Status)
+	}
+	for _, scope := range []string{"live", "persisted", "history", "all"} {
+		response, err := http.Get(server.URL() + "/factory-sessions?scope=" + scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var httpResult factoryapi.ListFactorySessionsResponse
+		err = json.NewDecoder(response.Body).Decode(&httpResult)
+		response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK {
+			t.Fatalf("HTTP %s: %v %d", scope, err, response.StatusCode)
+		}
+		assertPopulatedScope(t, httpResult, scope, completed.SessionId, warnings)
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--json", "session", "list", "--scope", scope})
+		inputs.Env, inputs.WorkingDirectory = env, factory
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf("CLI %s: %v %s", scope, err, inputs.Stderr())
+		}
+		var cliResult factoryapi.ListFactorySessionsResponse
+		if err := json.NewDecoder(bytes.NewBufferString(inputs.Stdout())).Decode(&cliResult); err != nil {
+			t.Fatal(err)
+		}
+		assertPopulatedScope(t, cliResult, scope, completed.SessionId, warnings)
+	}
+}
+
+func assertPopulatedScope(t *testing.T, result factoryapi.ListFactorySessionsResponse, scope, durableID string, warnings []string) {
+	t.Helper()
+	hasDurable := false
+	if result.DurableSessions != nil {
+		for _, row := range *result.DurableSessions {
+			if row.SessionId == durableID {
+				hasDurable = true
+			}
+		}
+	}
+	if hasDurable != (scope == "persisted" || scope == "all") {
+		t.Fatalf("scope %s durable=%v: %#v", scope, hasDurable, result)
+	}
+	if (len(result.Sessions) > 0) != (scope == "live" || scope == "all") {
+		t.Fatalf("scope %s live rows = %d", scope, len(result.Sessions))
+	}
+	if scope == "history" || scope == "all" {
+		if result.RecordedSessions == nil || len(*result.RecordedSessions) < 2 {
+			t.Fatalf("scope %s lost healthy history", scope)
+		}
+		if result.Warnings == nil || len(*result.Warnings) != len(warnings) {
+			t.Fatalf("scope %s lost warnings", scope)
+		}
+		for i, warning := range *result.Warnings {
+			if warning.ArtifactReference != warnings[i] {
+				t.Fatalf("warning %d = %#v", i, warning)
+			}
+		}
+	} else if result.Warnings != nil || result.RecordedSessions != nil {
+		t.Fatalf("scope %s included history", scope)
 	}
 }
