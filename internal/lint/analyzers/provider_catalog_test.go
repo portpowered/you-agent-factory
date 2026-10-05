@@ -3,8 +3,8 @@ package analyzers
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,13 +20,64 @@ func providerCatalogFixture(t *testing.T) fstest.MapFS {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed, err := exec.Command("git", "-C", root, "ls-files", "-z", "--", providerInputs).Output()
-	if err != nil {
-		t.Fatal(err)
+	// Owned fixture inventory; Git discovery is exercised only by static smoke.
+	names := []string{
+		"api/openapi.yaml",
+		"packages/model-providers/generated/catalog.json",
+		"packages/model-providers/generated/provider-manifest.schema.json",
+		"packages/model-providers/generated/provider-catalog.schema.json",
+		"packages/model-providers/generated/runtime-acp.json",
+		"packages/model-providers/providers/antigravity/provider.yaml",
+		"packages/model-providers/providers/claude/provider.yaml",
+		"packages/model-providers/providers/codex/provider.yaml",
+		"packages/model-providers/providers/copilot-acp/provider.yaml",
+		"packages/model-providers/providers/cursor/provider.yaml",
+		"packages/model-providers/providers/droid-acp/provider.yaml",
+		"packages/model-providers/providers/fast-agent-acp/provider.yaml",
+		"packages/model-providers/providers/gemini/provider.yaml",
+		"packages/model-providers/providers/grok-build-acp/provider.yaml",
+		"packages/model-providers/providers/iflow-acp/provider.yaml",
+		"packages/model-providers/providers/kilocode-acp/provider.yaml",
+		"packages/model-providers/providers/kimi-acp/provider.yaml",
+		"packages/model-providers/providers/kiro/provider.yaml",
+		"packages/model-providers/providers/mux-acp/provider.yaml",
+		"packages/model-providers/providers/openclaw-acp/provider.yaml",
+		"packages/model-providers/providers/opencode/provider.yaml",
+		"packages/model-providers/providers/pi/provider.yaml",
+		"packages/model-providers/providers/pool-acp/provider.yaml",
+		"packages/model-providers/providers/qoder-acp/provider.yaml",
+		"packages/model-providers/providers/qwen-acp/provider.yaml",
+		"packages/model-providers/providers/reasonix-acp/provider.yaml",
+		"packages/model-providers/providers/trae-acp/provider.yaml",
+		"packages/model-providers/providers/zeroclaw-acp/provider.yaml",
+		"packages/model-providers/providers/copilot-acp/harness.yaml",
+		"packages/model-providers/providers/cursor/harness.yaml",
+		"packages/model-providers/providers/droid-acp/harness.yaml",
+		"packages/model-providers/providers/fast-agent-acp/harness.yaml",
+		"packages/model-providers/providers/gemini/harness.yaml",
+		"packages/model-providers/providers/grok-build-acp/harness.yaml",
+		"packages/model-providers/providers/iflow-acp/harness.yaml",
+		"packages/model-providers/providers/kilocode-acp/harness.yaml",
+		"packages/model-providers/providers/kimi-acp/harness.yaml",
+		"packages/model-providers/providers/kiro/harness.yaml",
+		"packages/model-providers/providers/mux-acp/harness.yaml",
+		"packages/model-providers/providers/openclaw-acp/harness.yaml",
+		"packages/model-providers/providers/opencode/harness.yaml",
+		"packages/model-providers/providers/pi/harness.yaml",
+		"packages/model-providers/providers/pool-acp/harness.yaml",
+		"packages/model-providers/providers/qoder-acp/harness.yaml",
+		"packages/model-providers/providers/qwen-acp/harness.yaml",
+		"packages/model-providers/providers/reasonix-acp/harness.yaml",
+		"packages/model-providers/providers/trae-acp/harness.yaml",
+		"packages/model-providers/providers/zeroclaw-acp/harness.yaml",
 	}
-	snapshot, err := readProviderSnapshot(root, strings.Split(string(listed), "\x00"))
-	if err != nil {
-		t.Fatal(err)
+	snapshot := fstest.MapFS{}
+	for _, name := range names {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot[name] = &fstest.MapFile{Data: data, Mode: 0o644}
 	}
 	return snapshot
 }
@@ -140,83 +191,163 @@ func TestProviderCatalogEachOutputAndInputInvalidatesCache(t *testing.T) {
 	}
 }
 
-func TestProviderCatalogGitIncludesIgnoredAndDeletedInputs(t *testing.T) {
+func TestProviderCatalogAcquisition(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	command := exec.Command("git", "init", "-q", root)
-	if out, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %s: %v", out, err)
+	for _, test := range []struct {
+		name, want                                 string
+		failCommand                                int
+		ignored, deleted, readFailure, statFailure bool
+	}{
+		{name: "clean"},
+		{name: "ignored", ignored: true, want: "new/provider.yaml"},
+		{name: "deleted", deleted: true},
+		{name: "root-failure", failCommand: 1, want: "locate provider repository"},
+		{name: "list-failure", failCommand: 2, want: "list provider inputs"},
+		{name: "ignored-list-failure", failCommand: 3, want: "list ignored provider inputs"},
+		{name: "read-failure", readFailure: true, want: "read api/openapi.yaml: permission denied"},
+		{name: "stat-failure", statFailure: true, want: "inspect .*scaffold.txt: permission denied"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			snapshot := providerCatalogFixture(t)
+			var names []string
+			for name := range snapshot {
+				if strings.HasPrefix(name, providerInputs+"/") {
+					names = append(names, name)
+				}
+			}
+			scaffold := providerInputs + "/new/scaffold.txt"
+			if test.ignored || test.statFailure {
+				snapshot[scaffold] = &fstest.MapFile{Data: []byte("unread content")}
+			}
+			if test.deleted {
+				names = append(names, scaffold)
+			}
+			names = append(names, providerInputs+"/claude/provider.yaml") // Duplicate Git entries read once.
+			calls := 0
+			git := providerCatalogGitFake(t, names, test.ignored || test.statFailure, test.failCommand, &calls)
+			reads := map[string]int{}
+			files := providerAcquisitionFS{MapFS: snapshot, reads: reads}
+			if test.readFailure {
+				files.denied = "api/openapi.yaml"
+			}
+			if test.statFailure {
+				files.denied = scaffold
+			}
+			bound := providerCatalogForDirectory("fixture", git, func(root string) fs.FS {
+				if root != "fixture" {
+					t.Fatalf("unexpected root %q", root)
+				}
+				return files
+			})
+			assertProviderAcquisition(t, bound.Name, snapshot, reads, test.want == "", calls, test.failCommand)
+			source := "package providercatalog"
+			if test.want != "" {
+				source += fmt.Sprintf(" // want %q", "provider-catalog: .*"+test.want)
+			}
+			directory, cleanup, err := analysistest.WriteFiles(map[string]string{modulePrefix + "internal/providercatalog/source.go": source})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cleanup)
+			analysistest.Run(t, directory, bound, modulePrefix+"internal/providercatalog")
+			for name, count := range reads {
+				if count != 1 {
+					t.Fatalf("read %s %d times", name, count)
+				}
+			}
+		})
 	}
-	for name, file := range providerCatalogFixture(t) {
-		target := filepath.Join(root, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			t.Fatal(err)
+}
+
+func providerCatalogGitFake(t *testing.T, names []string, ignored bool, failCommand int, calls *int) func(...string) ([]byte, error) {
+	t.Helper()
+	return func(args ...string) ([]byte, error) {
+		*calls++
+		expected := [][]string{
+			{"-C", "fixture", "rev-parse", "--show-toplevel"},
+			{"-C", "fixture", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", providerInputs},
+			{"-C", "fixture", "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", providerInputs},
 		}
-		if err := os.WriteFile(target, file.Data, 0o644); err != nil {
-			t.Fatal(err)
+		if *calls > len(expected) || strings.Join(args, "\x00") != strings.Join(expected[*calls-1], "\x00") {
+			t.Fatalf("unexpected Git acquisition: %v", args)
+		}
+		if *calls == failCommand {
+			return []byte("controlled failure"), fmt.Errorf("command failed")
+		}
+		if *calls == 1 {
+			return []byte("fixture\n"), nil
+		}
+		if *calls == 2 {
+			return []byte(strings.Join(names, "\x00") + "\x00"), nil
+		}
+		if ignored {
+			return []byte(providerInputs + "/new/scaffold.txt\x00"), nil
+		}
+		return nil, nil
+	}
+}
+
+func assertProviderAcquisition(t *testing.T, identity string, snapshot fstest.MapFS, reads map[string]int, clean bool, calls, failCommand int) {
+	t.Helper()
+	if clean && identity != providerCatalogSnapshot(snapshot, nil).Name {
+		t.Fatal("acquisition changed snapshot identity")
+	}
+	if reads[providerInputs+"/new/scaffold.txt"] != 0 {
+		t.Fatal("acquisition read unrelated scaffold content")
+	}
+	for name := range reads {
+		if snapshot[name] == nil {
+			t.Fatalf("read outside fixture: %s", name)
 		}
 	}
-	before := ProviderCatalogForDirectory(root)
-	ignored := providerInputs + "/new/scaffold.txt"
-	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("scaffold.txt\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if failCommand != 0 && (calls != failCommand || len(reads) != 0) {
+		t.Fatal("failed Git acquisition continued")
 	}
-	target := filepath.Join(root, filepath.FromSlash(ignored))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatal(err)
+}
+
+// A per-invocation filesystem records reads and injects acquisition failures.
+type providerAcquisitionFS struct {
+	fstest.MapFS
+	reads  map[string]int
+	denied string
+}
+
+func (s providerAcquisitionFS) ReadFile(name string) ([]byte, error) {
+	if name == s.denied {
+		return nil, fs.ErrPermission
 	}
-	if err := os.WriteFile(target, []byte("ignored"), 0o644); err != nil {
-		t.Fatal(err)
+	data, err := s.MapFS.ReadFile(name)
+	if err == nil {
+		s.reads[name]++
 	}
-	withIgnored := ProviderCatalogForDirectory(root)
-	if before.Name == withIgnored.Name {
-		t.Fatal("ignored populated directory was excluded")
+	return data, err
+}
+
+func (s providerAcquisitionFS) Stat(name string) (fs.FileInfo, error) {
+	if name == s.denied {
+		return nil, fs.ErrPermission
 	}
-	directory, cleanup, err := analysistest.WriteFiles(map[string]string{modulePrefix + "internal/providercatalog/source.go": "package providercatalog // want `new/provider.yaml`"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanup)
-	analysistest.Run(t, directory, withIgnored, modulePrefix+"internal/providercatalog")
-	command = exec.Command("git", "-C", root, "add", "-f", ignored)
-	if out, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("git add fixture: %s: %v", out, err)
-	}
-	if err := os.Remove(target); err != nil {
-		t.Fatal(err)
-	}
-	if before.Name != ProviderCatalogForDirectory(root).Name {
-		t.Fatal("deleted tracked scaffold remains in virtual tree")
-	}
+	return s.MapFS.Stat(name)
 }
 
 func TestProviderCatalogReadOnlyAndFailure(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
 	name := providercatalog.CatalogPath
-	target := filepath.Join(root, filepath.FromSlash(name))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	data := []byte("stale")
-	if err := os.WriteFile(target, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := readProviderSnapshot(root, nil)
+	source := fstest.MapFS{name: &fstest.MapFile{Data: bytes.Clone(data)}}
+	snapshot, err := readProviderSnapshot(source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(snapshot[name].Data, data) {
-		t.Fatal("snapshot changed bytes")
+	if !bytes.Equal(snapshot[name].Data, data) || !bytes.Equal(source[name].Data, data) {
+		t.Fatal("acquisition changed output bytes")
 	}
-	after, err := os.ReadFile(target)
-	if err != nil || !bytes.Equal(after, data) {
-		t.Fatal("acquisition wrote output")
-	}
-	if _, err := readProviderSnapshot(root, []string{"../escape"}); err == nil {
+	if _, err := readProviderSnapshot(source, []string{"../escape"}); err == nil {
 		t.Fatal("escaping path accepted")
 	}
-	if _, err := readProviderSnapshot(root, []string{"packages/model-providers/generated"}); err == nil {
+	source["packages/model-providers/generated"] = &fstest.MapFile{Mode: fs.ModeDir}
+	if _, err := readProviderSnapshot(source, []string{"packages/model-providers/generated"}); err == nil {
 		t.Fatal("unreadable directory accepted")
 	}
 	directory, cleanup, err := analysistest.WriteFiles(map[string]string{

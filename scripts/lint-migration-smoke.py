@@ -357,6 +357,18 @@ def main() -> None:
             fixtures.lint(root, "provider-output-recovery-extra-ignored", [])
             for name, payload in tracked.items():
                 assert (root / name).read_bytes() == payload, f"lint modified {name}"
+            # Real Git ignored/deleted acquisition belongs in this static lane.
+            scaffold = "packages/model-providers/providers/new/scaffold.txt"
+            write(root, ".gitignore", "scaffold.txt\n")
+            write(root, scaffold, "ignored populated input")
+            fixtures.lint(root, "provider-ignored-populated-input", [("repolint", "new/provider.yaml")])
+            assert (root / scaffold).read_text() == "ignored populated input"
+            checked(["git", "add", "-f", scaffold], root)
+            fixtures.lint(root, "provider-tracked-populated-input", [("repolint", "new/provider.yaml")])
+            (root / scaffold).unlink()
+            fixtures.lint(root, "provider-deleted-tracked-input-recovery", [])
+            for name, payload in tracked.items():
+                assert (root / name).read_bytes() == payload, f"lint modified {name}"
             outside = fixtures.module("provider-unrelated")
             write(outside, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
             write(outside, "internal/unrelated/source.go", "package unrelated\n")

@@ -35,23 +35,30 @@ var ProviderCatalog = &analysis.Analyzer{
 // Git supplies the inventory, including ignored populated input directories;
 // validation receives only memory and never traverses the working tree.
 func ProviderCatalogForDirectory(directory string) *analysis.Analyzer {
-	output, err := exec.Command("git", "-C", directory, "rev-parse", "--show-toplevel").CombinedOutput()
+	return providerCatalogForDirectory(directory, func(args ...string) ([]byte, error) {
+		return exec.Command("git", args...).CombinedOutput()
+	}, func(root string) fs.FS { return os.DirFS(root) })
+}
+
+// Dependencies belong to this invocation; unit tests replace only acquisition.
+func providerCatalogForDirectory(directory string, git func(...string) ([]byte, error), files func(string) fs.FS) *analysis.Analyzer {
+	output, err := git("-C", directory, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return providerCatalogSnapshot(nil, fmt.Errorf("locate provider repository: %w: %s", err, output))
 	}
 	root := strings.TrimSpace(string(output))
-	output, err = exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", providerInputs).CombinedOutput()
+	output, err = git("-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", providerInputs)
 	if err != nil {
 		return providerCatalogSnapshot(nil, fmt.Errorf("list provider inputs: %w: %s", err, output))
 	}
-	ignored, err := exec.Command("git", "-C", root, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", providerInputs).CombinedOutput()
+	ignored, err := git("-C", root, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--", providerInputs)
 	if err != nil {
 		return providerCatalogSnapshot(nil, fmt.Errorf("list ignored provider inputs: %w: %s", err, ignored))
 	}
-	return providerCatalogSnapshot(readProviderSnapshot(root, strings.Split(string(output)+string(ignored), "\x00")))
+	return providerCatalogSnapshot(readProviderSnapshot(files(root), strings.Split(string(output)+string(ignored), "\x00")))
 }
 
-func readProviderSnapshot(root string, listed []string) (fstest.MapFS, error) {
+func readProviderSnapshot(source fs.FS, listed []string) (fstest.MapFS, error) {
 	names := append([]string{"api/openapi.yaml", providercatalog.CatalogPath, providercatalog.ManifestSchemaPath,
 		providercatalog.CatalogSchemaPath, providercatalog.RuntimeCatalogPath}, listed...)
 	sort.Strings(names)
@@ -63,10 +70,9 @@ func readProviderSnapshot(root string, listed []string) (fstest.MapFS, error) {
 		if !fs.ValidPath(name) || strings.Contains(name, "\\") || strings.Contains(name, ":") {
 			return snapshot, fmt.Errorf("unsafe provider input path %q", name)
 		}
-		target := filepath.Join(root, filepath.FromSlash(name))
 		if strings.HasPrefix(name, providerInputs+"/") && filepath.Base(name) != "provider.yaml" && filepath.Base(name) != "harness.yaml" {
 			// Preserve populated-directory evidence without reading unrelated content.
-			if _, err := os.Stat(target); errors.Is(err, fs.ErrNotExist) {
+			if _, err := fs.Stat(source, name); errors.Is(err, fs.ErrNotExist) {
 				continue
 			} else if err != nil {
 				return snapshot, fmt.Errorf("inspect %s: %w", name, err)
@@ -74,7 +80,7 @@ func readProviderSnapshot(root string, listed []string) (fstest.MapFS, error) {
 			snapshot[name] = &fstest.MapFile{Mode: 0o644}
 			continue
 		}
-		data, err := os.ReadFile(target)
+		data, err := fs.ReadFile(source, name)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue // Deleted tracked files are absent from the working snapshot.
 		}
