@@ -71,15 +71,14 @@ type FactoryRuntimePorts struct {
 // FactoryDefinitionsPorts contains Factory Definitions-owned opening
 // collaborators.
 type FactoryDefinitionsPorts struct {
-	Validator                     factorydefinitions.Validator
-	NamedPaths                    factorydefinitions.NamedPathResolver
-	Service                       factorydefinitions.Service
-	RuntimeRouter                 *factorysessions.DefinitionRuntimeRouter
-	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
-	LoadFactory                   factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig            factorydefinitions.ReplayRuntimeConfigDecoder
-	CaptureLoadedFactorySnapshot  factorydefinitions.LoadedFactorySnapshotCapturer
+	Validator                    factorydefinitions.Validator
+	NamedPaths                   factorydefinitions.NamedPathResolver
+	Service                      factorydefinitions.Service
+	RuntimeRouter                *factorysessions.DefinitionRuntimeRouter
+	LoadFactory                  factorydefinitions.LoadedFactoryLoader
+	NewLoadedFactory             factorydefinitions.LoadedFactorySourceFactory
+	DecodeReplayConfig           factorydefinitions.ReplayRuntimeConfigDecoder
+	CaptureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
 }
 
 // FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
@@ -171,7 +170,6 @@ type Root struct {
 	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
-	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
 	factoryRuntimeAssembler          FactoryRuntimeAssembler
 	workService                      work.Service
 	providerSessions                 providersessions.Service
@@ -249,7 +247,6 @@ func NewRoot(
 		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
-		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
 		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
 		workService:                      workPorts.Service,
 		providerSessions:                 providerSessions.Service,
@@ -353,7 +350,6 @@ func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
 		portRequirement{"named path resolver", group.NamedPaths},
 		portRequirement{"service", group.Service},
 		portRequirement{"runtime router", group.RuntimeRouter},
-		portRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
 		portRequirement{"loaded factory loader", group.LoadFactory},
 		portRequirement{"loaded factory source factory", group.NewLoadedFactory},
 		portRequirement{"replay runtime config decoder", group.DecodeReplayConfig},

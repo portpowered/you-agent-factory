@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -86,8 +87,10 @@ func NewAssembly(
 	sidecars *SidecarOpening,
 	instanceHost InstanceHost,
 	preparation *RuntimePreparation,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation)
+	return factoryruntimeinternal.NewAssembly(bundleOpening, sidecars, instanceHost, preparation, recordingsRuntime, initialFactorySnapshot)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening

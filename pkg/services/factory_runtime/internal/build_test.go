@@ -781,7 +781,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 		t.Fatal(err)
 	}
 	assembly, err := factoryinternal.NewAssembly(opening.Open,
-		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
+		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -794,7 +794,7 @@ func TestBuild_AssemblyOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(
 			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}, EffectiveFactory: *loaded.FactoryConfig()}}
 	start := func(ctx context.Context, request factory.RuntimeActivationRequest) (*factory.RuntimeActivation, error) {
 		attempts++
-		return assembleCleanupTestRuntime(ctx, assembly, dir, loaded, scopes, clock, request)
+		return assembleCleanupTestRuntime(ctx, assembly, dir, loaded, clock, request)
 	}
 	result, err := root.Activate(t.Context(), request, start)
 	assertOpeningFailureWithoutPublication(t, result, err, openingErr, cleanupErr)
@@ -832,10 +832,10 @@ func assertOpeningFailureWithoutPublication(t *testing.T, result factory.Runtime
 // proved separately by the functional lane.
 func assembleCleanupTestRuntime(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
-	loaded interfaces.MutableLoadedFactorySource, scopes recordings.RuntimeScopeService,
+	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (*factory.RuntimeActivation, error) {
-	_, record, _, err := assembleTestRuntimeRecord(ctx, assembly, dir, loaded, scopes, clock, request)
+	_, record, _, err := assembleTestRuntimeRecord(ctx, assembly, dir, loaded, clock, request)
 	if record == nil {
 		return nil, err
 	}
@@ -847,15 +847,15 @@ func assembleCleanupTestRuntime(
 
 func assembleTestRuntimeRecord(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
-	loaded interfaces.MutableLoadedFactorySource, scopes recordings.RuntimeScopeService,
+	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.SessionBuildSpec, error) {
 	builder, record, spec, _, _, err := assembly.Assemble(
 		ctx, "", "", false, "recording.json", "", request.FactorySessionID, request.FactorySessionID,
-		nil, nil, nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
+		nil, nil, nil, nil, interfaces.RuntimeModeBatch, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{}, 0,
-		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil, scopes, nil,
+		"", "", false, false, nil, clock, zap.NewNop(), nil, nil, nil, nil, nil,
 		dir, dir, dir, loaded, request.RuntimeID, nil, nil, nil, nil, nil, false,
 	)
 	return builder, record, spec, err
@@ -883,18 +883,23 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open,
-		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{},
-		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()))
-	if err != nil {
-		t.Fatal(err)
-	}
 	var recorded recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{capturedRequest: &recorded,
 		ledgerFactory: func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
 			return &recordingfixtures.ScriptedRuntimeLedger{GenerationID: recorded.RecordingID}
 		}}
-	builder, initial, spec, err := assembleTestRuntimeRecord(t.Context(), assembly, dir, loaded, scopes, clock,
+	var snapshots []interfaces.LoadedFactorySource
+	snapshot := func(source interfaces.LoadedFactorySource) (*interfaces.FactorySnapshot, error) {
+		snapshots = append(snapshots, source)
+		return nil, nil
+	}
+	assembly, err := factoryinternal.NewAssembly(opening.Open,
+		factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{},
+		runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop()), scopes, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	builder, initial, spec, err := assembleTestRuntimeRecord(t.Context(), assembly, dir, loaded, clock,
 		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial-runtime"})
 	if err != nil {
 		t.Fatal(err)
@@ -915,6 +920,9 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	t.Cleanup(func() { _ = replacement.CloseArtifacts() })
 	assertReplacementSelections(t, initial, replacement, recorded, clock)
 	assertReplacementBuildValues(t, replacement, recorded, spec, dir)
+	if len(snapshots) != 2 || snapshots[0] != initial.LoadedRuntimeConfig() || snapshots[1] != replacement.LoadedRuntimeConfig() {
+		t.Fatalf("selected snapshot sources = %#v, want independent initial and replacement candidates", snapshots)
+	}
 }
 
 func assertReplacementBuildValues(t *testing.T, replacement factory.RuntimeRecord, recorded recordings.RuntimeScopeRequest, spec factory.SessionBuildSpec, dir string) {

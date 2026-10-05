@@ -180,8 +180,6 @@ func openPortableReplayDurableOwner(
 	resolveClock factoryruntime.ClockResolver,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -232,8 +230,6 @@ func openPortableReplayDurableOwner(
 				submissionRecorder,
 				dispatchRecorder,
 				recordingsRuntime,
-				initialFactorySnapshotFactory,
-				loadFactory,
 				automationService,
 			)
 			// A failed opening can still own artifacts. Register them before
@@ -263,8 +259,6 @@ func preparePortableReplayRuntime(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
 ) (runtimeports.RuntimeInstance, error) {
 	runtime, err := assemblePortableReplayRuntime(
@@ -282,8 +276,6 @@ func preparePortableReplayRuntime(
 		submissionRecorder,
 		dispatchRecorder,
 		recordingsRuntime,
-		initialFactorySnapshotFactory,
-		loadFactory,
 		automationService,
 	)
 	if err != nil {
@@ -371,8 +363,6 @@ func assemblePortableReplayRuntime(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
 ) (runtimeports.RuntimeInstance, error) {
 	if factoryRuntimeAssembler == nil {
@@ -408,8 +398,6 @@ func assemblePortableReplayRuntime(
 		configured.Recordings.WorkflowID,
 		configured.Session.SessionID,
 		configured.Session.SessionID,
-		nil,
-		loadFactory,
 		providerOverride,
 		providerCommandRunner,
 		scriptCommandRunner,
@@ -438,8 +426,6 @@ func assemblePortableReplayRuntime(
 		nil,
 		mutationOwner.RecordPetriTokenMutations,
 		projection.ReconstructFactoryWorldState,
-		recordingsRuntime,
-		initialFactorySnapshotFactory,
 		configured.Definition.Directory,
 		root.FactoryRootDir,
 		configured.Definition.ExecutionBaseDir,

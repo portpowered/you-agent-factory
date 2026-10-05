@@ -23,10 +23,12 @@ import (
 // Assembly owns the product-policy dependencies used to assemble each
 // session-owned Factory Runtime.
 type Assembly struct {
-	bundleOpening BundleOpeningOperation
-	sidecars      *SidecarOpening
-	instanceHost  instancehost.Service
-	preparation   *runtimebuild.Service
+	bundleOpening          BundleOpeningOperation
+	sidecars               *SidecarOpening
+	instanceHost           instancehost.Service
+	preparation            *runtimebuild.Service
+	recordingsRuntime      recordings.RuntimeScopeService
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory
 }
 
 // NewAssembly constructs the inert compatibility assembly selected by Wire.
@@ -37,13 +39,19 @@ func NewAssembly(
 	sidecars *SidecarOpening,
 	instanceHost instancehost.Service,
 	preparation *runtimebuild.Service,
+	recordingsRuntime recordings.RuntimeScopeService,
+	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (*Assembly, error) {
 	if bundleOpening == nil {
 		return nil, fmt.Errorf("factory runtime bundle opening is required")
 	}
+	if recordingsRuntime == nil {
+		return nil, fmt.Errorf("recordings runtime opening is required")
+	}
 	return &Assembly{
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
-		preparation: preparation,
+		preparation:       preparation,
+		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot,
 	}, nil
 }
 
@@ -60,8 +68,6 @@ func (a *Assembly) Assemble(
 	workflowID string,
 	defaultSessionID string,
 	metricsSessionID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factoryruntime.LoadedFactoryLoader,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 	scriptCommandRunner platformprocess.CommandRunner,
@@ -90,8 +96,6 @@ func (a *Assembly) Assemble(
 	completionFactory func(string) func(string),
 	petriMutationRecorder factoryruntime.PetriMutationRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeScopeService,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	dir string,
 	factoryRootDir string,
 	executionBaseDir string,
@@ -115,18 +119,13 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
 	}
-	if recordingsRuntime == nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
-			"Recordings runtime opening is required",
-		)
-	}
 	// Replay hooks consume the same detached event history as world-state
 	// reconstruction. A successor recording can legitimately reset its local
 	// logical clock, but the replay engine must observe that history in one
 	// monotonic generation order. Keep spec.ReplayEvents raw below so the
 	// read-only canonical ledger remains byte-equivalent to the source.
 	replayExecutionArtifact := normalizedReplayArtifactForExecution(replayArtifact)
-	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := a.recordingsRuntime.ReplayExecution(
 		replayExecutionArtifact,
 	)
 	if err != nil {
@@ -168,7 +167,7 @@ func (a *Assembly) Assemble(
 		resumeInput,
 		restoredWorldState,
 		restoredEventHistory,
-		recordingsRuntime,
+		a.recordingsRuntime,
 	); err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
@@ -189,7 +188,7 @@ func (a *Assembly) Assemble(
 			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
 			submissionRecorder, dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
 			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
-			progressPublisher, dispatchCompleted, worldStateProjector, recordingsRuntime, initialFactorySnapshot,
+			progressPublisher, dispatchCompleted, worldStateProjector, a.recordingsRuntime, a.initialFactorySnapshot,
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
