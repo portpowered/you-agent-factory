@@ -182,20 +182,19 @@ func (a *Assembly) Assemble(
 	// that low-level effect at the composition boundary and Workers adapts it
 	// privately when Execute receives the runtime-scoped override.
 	replayCommandRunner := replayProcessRunner
-	spec, err := builder.BuildSpec(
-		ctx,
-		dir,
-		factoryRootDir,
-		defaultSessionID,
-		executionBaseDir,
-		loadedFactory,
-		runtimeInstanceID,
-		replayProvider,
-		replayCommandRunner,
-		replayhooks.Adapt(replayHooks),
-		completionPlanner,
-		true,
-	)
+	spec, err := a.preparation.PrepareExecutionSpec(ctx, runtimebuild.BuildDefaults{
+		WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
+		ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+	}, runtimebuild.SessionBuildValues{
+		Dir: dir, FolderPath: factoryRootDir, SessionID: defaultSessionID,
+		ExecutionBaseDir: executionBaseDir, LoadedFactoryCfg: loadedFactory,
+		RuntimeInstanceID: runtimeInstanceID, PreserveCompatibilityDefaultRecordPath: true,
+	}, factoryruntime.SessionBuildSpec{
+		BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
+		ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
+		CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
+	}, providerOverride, providerCommandRunner, scriptCommandRunner, mockWorkersConfig,
+		runtimebuild.MockCommandRunnerFactory(mockCommandRunnerFactory))
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
@@ -219,7 +218,24 @@ func (a *Assembly) Assemble(
 	); err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
-	instance, err := builder.Build(ctx, spec)
+	var progressPublisher workers.ProgressPublisher
+	if progressFactory != nil {
+		progressPublisher = progressFactory(spec.SessionID)
+	}
+	var dispatchCompleted func(string)
+	if completionFactory != nil {
+		dispatchCompleted = completionFactory(spec.SessionID)
+	}
+	// Opening consumes the fixed owners directly. The returned compatibility
+	// builder is retained only for later replacement operations.
+	instance, err := a.bundleOpening.Open(
+		ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
+		runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
+		defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
+		submissionRecorder, dispatchRecorder, backendScopeID, factoryRunnerID, verbose,
+		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
+		progressPublisher, dispatchCompleted, worldStateProjector, recordingsRuntime, initialFactorySnapshot,
+	)
 	if err != nil {
 		// Preserve partial resource ownership for Sessions even though no
 		// lifecycle or runnable generation can be published.

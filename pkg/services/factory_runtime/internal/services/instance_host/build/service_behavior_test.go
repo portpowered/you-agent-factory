@@ -17,6 +17,7 @@ import (
 	runtimestate "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -44,6 +45,72 @@ func TestService_BuildSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *test
 	}
 	assertSelectedBuildSpec(t, spec, fixture)
 	assertSelectedWorkerDefaults(t, fixture.loaded)
+}
+
+func TestPrepareExecutionSpecKeepsOpeningEffectsIndependent(t *testing.T) {
+	t.Parallel()
+	preparation := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop())
+	for _, name := range []string{"replay", "selected", "mock"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			candidate := &runtimeBuildLoadedSource{factoryDir: "/factory/" + name, config: &factorydefinitions.FactoryConfig{}}
+			replayProvider := &testutil.NativeProvider{}
+			replayRunner := platformprocess.CommandRunner(&behaviorCommandRunner{selection: name + "-replay"})
+			providerRunner := platformprocess.CommandRunner(&behaviorCommandRunner{selection: name + "-provider"})
+			var selectedProvider providers.Service
+			var scriptRunner platformprocess.CommandRunner
+			var mockConfig *workers.MockWorkersConfig
+			if name != "replay" {
+				selectedProvider = &testutil.NativeProvider{}
+				scriptRunner = &behaviorCommandRunner{selection: name + "-script"}
+			}
+			if name == "mock" {
+				mockConfig = &workers.MockWorkersConfig{}
+			}
+			var wrapped []platformprocess.CommandRunner
+			decorate := func(config *workers.MockWorkersConfig, definitions factorydefinitions.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
+				if config != mockConfig || definitions != candidate {
+					t.Fatal("mock opening changed selected config or candidate")
+				}
+				wrapped = append(wrapped, next)
+				return next
+			}
+			clock := &platformclock.Real{}
+			logger := zap.NewNop().With(zap.String("opening", name))
+			spec, err := preparation.PrepareExecutionSpec(context.Background(), runtimebuild.BuildDefaults{},
+				runtimebuild.SessionBuildValues{SessionID: name, RuntimeInstanceID: "runtime-" + name, LoadedFactoryCfg: candidate},
+				runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: logger, ProviderOverride: replayProvider, ReplayCommandRunner: replayRunner},
+				selectedProvider, providerRunner, scriptRunner, mockConfig, decorate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertPreparedExecutionEffects(t, spec, clock, logger, replayProvider, selectedProvider, replayRunner, scriptRunner)
+			if name == "mock" {
+				if spec.ProviderCommandRunner != providerRunner || len(wrapped) != 2 || wrapped[0] != providerRunner || wrapped[1] != scriptRunner {
+					t.Fatalf("mock execution selections = %#v, wrappers = %#v", spec, wrapped)
+				}
+			} else if spec.ProviderCommandRunner != nil || len(wrapped) != 0 {
+				t.Fatal("ordinary opening acquired mock execution effects")
+			}
+		})
+	}
+}
+
+func assertPreparedExecutionEffects(t *testing.T, spec runtimebuild.SessionBuildSpec, clock factory.Clock, logger *zap.Logger,
+	replayProvider, selectedProvider providers.Service, replayRunner, scriptRunner platformprocess.CommandRunner,
+) {
+	t.Helper()
+	wantProvider, wantRunner := replayProvider, replayRunner
+	if selectedProvider != nil {
+		wantProvider = selectedProvider
+	}
+	if scriptRunner != nil {
+		wantRunner = scriptRunner
+	}
+	if spec.ProviderOverride != wantProvider || spec.CommandRunnerOverride != wantRunner || spec.ReplayCommandRunner != replayRunner ||
+		spec.Clock != clock || spec.BaseLogger != logger {
+		t.Fatalf("opening changed selected execution effects: %#v", spec)
+	}
 }
 
 type selectedBuildFixture struct {
@@ -481,7 +548,7 @@ type runtimeBuildLoadedSource struct {
 	replacements   []factorydefinitions.PortableBundledFileReplacement
 }
 
-type behaviorCommandRunner struct{}
+type behaviorCommandRunner struct{ selection string }
 
 func (*behaviorCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return platformprocess.CommandResult{}, nil
