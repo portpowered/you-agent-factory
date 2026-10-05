@@ -105,6 +105,7 @@ func mergeScopedSessionList(
 		LiveSessions:     liveRows,
 		DurableSessions:  append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
 		RecordedSessions: append([]factorysessions.RecordedSessionListSummary(nil), scoped.RecordedSessions...),
+		Warnings:         append([]factorysessions.RecordedSessionDiagnostic(nil), scoped.Warnings...),
 	}, nil
 }
 
@@ -175,6 +176,7 @@ func applySessionListScope(result factorysessions.ListSessionsResult, request fa
 		return factorysessions.ListSessionsResult{
 			Scope:            scope,
 			RecordedSessions: recorded,
+			Warnings:         append([]factorysessions.RecordedSessionDiagnostic(nil), result.Warnings...),
 		}
 	default:
 		return factorysessions.ListSessionsResult{
@@ -182,6 +184,7 @@ func applySessionListScope(result factorysessions.ListSessionsResult, request fa
 			LiveSessions:     sortLiveSessionSummaries(deduplicateLiveSessionsForAllScope(live, durable)),
 			DurableSessions:  sortDurableSessionSummaries(durable),
 			RecordedSessions: recorded,
+			Warnings:         append([]factorysessions.RecordedSessionDiagnostic(nil), result.Warnings...),
 		}
 	}
 }

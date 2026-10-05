@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -114,7 +115,7 @@ func executeBuiltInGoalRepeaterResult(
 
 	transitioner := subsystems.NewTransitioner(
 		net,
-		nil,
+		logging.NoopLogger{},
 		func() time.Time { return now },
 		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
 		runtimefixtures.RuntimeWorkstationLookupFixture{

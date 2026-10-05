@@ -32,7 +32,7 @@ func NewCascadingFailure(n *state.Net, logger logging.Logger, now func() time.Ti
 	}
 	return &CascadingFailureSubsystem{
 		state:  n,
-		logger: logging.EnsureLogger(logger),
+		logger: logger,
 		now:    now,
 	}
 }

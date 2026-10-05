@@ -34,6 +34,7 @@ func (s *Service) runAgentLoop(
 		s.agentRunHarness,
 		s.agentLoopRunner(request, identity, providerOverride),
 		agentrun.DetachedRequest{
+			Correlation:       request.Correlation,
 			Attempt:           runnerRequest,
 			ProgressPublisher: request.Input.ProgressPublisher,
 			ToolPolicy:        request.Target.Tools.AgentToolPolicy,

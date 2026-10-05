@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -24,7 +25,7 @@ func TestSubscribe_ConcurrentSubscribersObserveContiguousLiveHistory(t *testing.
 	const totalAppends = 200
 	const subscribers = 20
 
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent-subscribe/events")
 
@@ -108,7 +109,7 @@ func TestSubscribe_ConcurrentSubscribersObserveContiguousLiveHistory(t *testing.
 // it.
 func TestSubscribe_ConcurrentAppendDuringCancellationNeverPanics(t *testing.T) {
 	const rounds = 500
-	st := New()
+	st := New(logging.NoopLogger{})
 	topic := events.Topic("chat-session/cancel-append-race/events")
 
 	for i := range rounds {
@@ -148,7 +149,7 @@ func TestSubscribe_NoGoroutineLeakAcrossSubscribeNextAndClose(t *testing.T) {
 	runtime.GC()
 	baseline := runtime.NumGoroutine()
 
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/goroutine-leak/events")
 

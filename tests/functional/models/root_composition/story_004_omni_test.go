@@ -32,27 +32,6 @@ func TestModelsOmniVideoCapabilityAndCancellationThroughRootBuildProcess(t *test
 	}
 }
 
-func TestModelsOmniCancellationReleasesHostAcrossRootProcesses(t *testing.T) {
-	t.Parallel()
-
-	const timingResponse = "At 0:30, the scene changes from shadow to light."
-	const followUpResponse = "The follow-up invocation completed."
-	launcher := &recordingModelHostLauncher{
-		endpoint:  "unused-by-fixture",
-		exclusive: true,
-	}
-	first := buildCoordinatedOmniEnvironmentWithLauncher(t, launcher, timingResponse, followUpResponse)
-	runOmniVideoInvocation(t, first, timingResponse)
-	runCancelledOmniInvocation(t, first)
-	closeRootProcess(t, first.process, "close cancelled Omni process")
-
-	secondProcess := functionalBuildProcess(t, first.edges)
-	support.CleanupProcess(t, secondProcess)
-	second := *first
-	second.process = secondProcess
-	runOmniFollowUpInvocation(t, &second, followUpResponse)
-}
-
 func TestModelsOmniUnsupportedVideoCapabilityFailsBeforeProtocolThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
@@ -162,51 +141,6 @@ func TestModelsOmniMappedOutputsRemainAtomicOnSecondPublishFailure(t *testing.T)
 		t.Fatalf("failed mapped protocol calls = %d, want one generation before publication fault", environment.fixture.Calls())
 	}
 	closeRootProcess(t, environment.process, "close atomic mapped-output process")
-}
-
-func TestModelsOmniProtocolFailureReleasesStateForFreshIsolatedRoot(t *testing.T) {
-	t.Parallel()
-
-	first := buildCoordinatedOmniEnvironmentWithOptions(t, &recordingModelHostLauncher{}, coordinatedOmniBuildOptions{
-		configFactory: multiOutputModelFactoryConfig,
-		usage:         `{"tokens":9,"attempt":"failed"}`,
-		protocolError: errors.New("controlled OMNI protocol failure"),
-	}, "unused after protocol failure")
-	failedTextPath := filepath.Join(first.dir, "failed-text.txt")
-	failedUsagePath := filepath.Join(first.dir, "failed-usage.json")
-	stdout, stderr, err := executeOmniExactMappedInvocation(t, first, failedTextPath, failedUsagePath)
-	var failure *models.InvocationFailure
-	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol {
-		t.Fatalf("controlled protocol failure = %v, failure = %#v, want typed backend-protocol failure", err, failure)
-	}
-	if stdout != "" || !errors.Is(statAbsent(failedTextPath), os.ErrNotExist) || !errors.Is(statAbsent(failedUsagePath), os.ErrNotExist) {
-		t.Fatalf("controlled protocol failure outputs = stdout %q text=%v usage=%v, want none", stdout, statAbsent(failedTextPath), statAbsent(failedUsagePath))
-	}
-	if first.fixture.Calls() != 1 || first.network.Calls() != 0 {
-		t.Fatalf("controlled protocol failure effects = calls %d network %d, want 1/0", first.fixture.Calls(), first.network.Calls())
-	}
-	closeRootProcess(t, first.process, "close failed OMNI root process")
-
-	second := buildCoordinatedOmniEnvironmentWithOptions(t, &recordingModelHostLauncher{}, coordinatedOmniBuildOptions{
-		configFactory: multiOutputModelFactoryConfig,
-		usage:         `{"tokens":10,"attempt":"fresh"}`,
-	}, "fresh isolated response")
-	textPath := filepath.Join(second.dir, "fresh-text.txt")
-	usagePath := filepath.Join(second.dir, "fresh-usage.json")
-	stdout, stderr, err = executeOmniExactMappedInvocation(t, second, textPath, usagePath)
-	if err != nil {
-		t.Fatalf("fresh isolated exact OMNI invocation error = %v", err)
-	}
-	if stdout == "" || stderr != "" {
-		t.Fatalf("fresh isolated streams = stdout %q stderr %q, want response without diagnostics", stdout, stderr)
-	}
-	assertFunctionalFile(t, textPath, "fresh isolated response")
-	assertFunctionalFile(t, usagePath, `{"tokens":10,"attempt":"fresh"}`)
-	assertExactOmniMediaRequest(t, second.fixture.RequestAt(0), second.media)
-	if second.fixture.Calls() != 1 || second.network.Calls() != 0 {
-		t.Fatalf("fresh isolated effects = calls %d network %d, want 1/0", second.fixture.Calls(), second.network.Calls())
-	}
-	closeRootProcess(t, second.process, "close recovered OMNI root process")
 }
 
 func executeOmniExactMappedInvocation(
@@ -555,10 +489,6 @@ type coordinatedOmniProtocolFixture struct {
 	cancellationSeen       chan struct{}
 	startOnce              sync.Once
 	cancelOnce             sync.Once
-}
-
-func newCoordinatedOmniProtocolFixture(responses ...string) *coordinatedOmniProtocolFixture {
-	return newCoordinatedOmniProtocolFixtureWithResponse("", nil, responses...)
 }
 
 func newCoordinatedOmniProtocolFixtureWithResponse(

@@ -29,6 +29,7 @@ var specializedPackageSegments = map[string]Lane{
 }
 
 var explicitlyClassifiedPackages = map[string]Lane{
+	ModulePath + "/tools/golangcilintplugin":                                  LaneMaintenance,
 	ModulePath + "/packages/packaged-factories":                               LaneMaintenance,
 	ModulePath + "/packages/model-providers":                                  LaneMaintenance,
 	ModulePath + "/pkg/services/factory_sessions/internal/execution/fixtures": LaneIntegration,

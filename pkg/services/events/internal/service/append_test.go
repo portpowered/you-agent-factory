@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
@@ -22,7 +23,7 @@ func validAppendRequest() events.AppendRequest {
 }
 
 func TestAppend_AcceptsAndAssignsFirstPosition(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	result, err := st.Append(context.Background(), validAppendRequest())
 	if err != nil {
 		t.Fatalf("Append() error = %v", err)
@@ -39,7 +40,7 @@ func TestAppend_AcceptsAndAssignsFirstPosition(t *testing.T) {
 }
 
 func TestAppend_AssignsContiguousPositionsInCallOrder(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	for i := 1; i <= 3; i++ {
@@ -57,7 +58,7 @@ func TestAppend_AssignsContiguousPositionsInCallOrder(t *testing.T) {
 }
 
 func TestAppend_DifferentTopicsHaveIndependentOrdering(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	reqA := validAppendRequest()
@@ -80,7 +81,7 @@ func TestAppend_DifferentTopicsHaveIndependentOrdering(t *testing.T) {
 }
 
 func TestAppend_DuplicateIdentityReturnsOriginalRecordWithoutAdvancingHead(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 
@@ -122,7 +123,7 @@ func TestAppend_DuplicateIdentityReturnsOriginalRecordWithoutAdvancingHead(t *te
 }
 
 func TestAppend_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 	req.Payload = nil // malformed: empty payload
@@ -144,7 +145,7 @@ func TestAppend_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -163,7 +164,7 @@ func TestAppend_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -180,7 +181,7 @@ func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -195,7 +196,7 @@ func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
 }
 
 func TestAppend_CallerMutationOfRequestPayloadCannotAlterStoredRecord(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 
 	payload := json.RawMessage(`{"tool":"grep"}`)
@@ -215,7 +216,7 @@ func TestAppend_CallerMutationOfRequestPayloadCannotAlterStoredRecord(t *testing
 }
 
 func TestAppend_CallerMutationOfReturnedRecordCannotAlterLaterObservations(t *testing.T) {
-	st := New()
+	st := New(logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 

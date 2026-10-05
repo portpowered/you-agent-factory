@@ -17,7 +17,7 @@ var FunctionalShape = &analysis.Analyzer{
 
 var functionalShapeRules = setOf("functional-test-missing-subsection", "functional-test-unclassified-domain", "deprecated-runtime-api-file", "deprecated-runtime-api-test")
 
-var functionalDomains = setOf("transport", "workers", "orchestration", "workstations", "work", "sessions", "factory", "factory_definitions", "providers", "provider_sessions", "operator_settings", "events", "recordings", "models", "guards", "resources", "observability", "product", "resilience")
+var functionalDomains = setOf("transport", "workers", "orchestration", "workstations", "work", "sessions", "factory", "factory_definitions", "automations", "providers", "provider_sessions", "operator_settings", "events", "recordings", "models", "guards", "resources", "observability", "product", "resilience")
 
 func runFunctionalShape(pass *analysis.Pass) (any, error) {
 	unit, ok := unitKey(pass)

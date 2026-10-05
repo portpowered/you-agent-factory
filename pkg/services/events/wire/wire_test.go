@@ -4,9 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func validAppendRequest() events.AppendRequest {
@@ -18,6 +25,103 @@ func validAppendRequest() events.AppendRequest {
 		SourceEventID:  "evt-1",
 		SchemaID:       "worker.output.v1",
 		Payload:        json.RawMessage(`{"tool":"grep","status":"ok"}`),
+	}
+}
+
+func TestNewServiceLoggerModesPreserveObservations(t *testing.T) {
+	t.Parallel()
+	core, captured := observer.New(zapcore.DebugLevel)
+	logger := logging.NewZapLogger(zap.New(core), true)
+	for _, test := range []struct {
+		name    string
+		loggers []logging.Logger
+		logged  bool
+	}{
+		{"omitted", nil, false},
+		{"nil", []logging.Logger{nil}, false},
+		{"noop", []logging.Logger{logging.NoopLogger{}}, false},
+		{"first nil stays quiet", []logging.Logger{nil, logger}, false},
+		{"supplied", []logging.Logger{logger, logging.NoopLogger{}}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			captured.TakeAll()
+			service, err := NewService(test.loggers...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if captured.Len() != 0 {
+				t.Fatal("construction emitted diagnostics")
+			}
+			assertOwnerObservations(t, service)
+			logs := captured.TakeAll()
+			if test.logged && len(logs) == 0 {
+				t.Fatal("supplied logger received no operations")
+			}
+			if !test.logged && len(logs) != 0 {
+				t.Fatalf("quiet mode emitted %d records", len(logs))
+			}
+			if test.logged {
+				assertOwnerDiagnostics(t, logs)
+			}
+		})
+	}
+}
+
+func assertOwnerDiagnostics(t *testing.T, logs []observer.LoggedEntry) {
+	t.Helper()
+	var accepted, duplicate bool
+	for _, entry := range logs {
+		if strings.Contains(fmt.Sprint(entry.Message, entry.ContextMap()), "owner-private-payload") {
+			t.Fatal("payload leaked to logger")
+		}
+		if entry.Message != "events append outcome" {
+			continue
+		}
+		fields := entry.ContextMap()
+		if fields["topic"] != "chat-session/abc/events" || fields["source_id"] != "worker-1" || fields["position"] != uint64(1) {
+			t.Fatalf("unsafe or missing correlation: %v", fields)
+		}
+		accepted = accepted || fields["outcome"] == "accepted"
+		duplicate = duplicate || fields["outcome"] == "duplicate"
+	}
+	if !accepted || !duplicate {
+		t.Fatal("supplied logger lost append outcomes")
+	}
+}
+
+func assertOwnerObservations(t *testing.T, service events.Service) {
+	t.Helper()
+	ctx := t.Context()
+	req := validAppendRequest()
+	req.Payload = json.RawMessage(`{"content":"owner-private-payload"}`)
+	first, err := service.Append(ctx, req)
+	if err != nil || first.Outcome != events.AppendOutcomeAccepted || first.Record.ID.Position != 1 {
+		t.Fatalf("first append = %+v, %v", first, err)
+	}
+	duplicate, err := service.Append(ctx, req)
+	if err != nil || duplicate.Outcome != events.AppendOutcomeDuplicate || !reflect.DeepEqual(first.Record, duplicate.Record) {
+		t.Fatalf("duplicate = %+v, %v", duplicate, err)
+	}
+	read, err := service.Read(ctx, events.ReadRequest{Topic: req.Topic, From: events.Cursor{Topic: req.Topic}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := events.ReadResult{Records: []events.Record{first.Record}, Next: events.Cursor{Topic: req.Topic, Position: 1}, Retained: events.RetainedRange{Topic: req.Topic, Earliest: 1, Head: 1}, Outcome: events.ReadOutcomeProgress}
+	if !reflect.DeepEqual(read, want) {
+		t.Fatalf("read = %+v, %v", read, err)
+	}
+	child, cancel := context.WithCancel(ctx)
+	sub, err := service.Subscribe(child, events.SubscribeRequest{Topic: req.Topic, From: read.Next, Limit: 10})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+	if delivery := sub.Next(child); delivery.Kind != events.DeliveryCanceled {
+		t.Fatalf("canceled delivery = %+v", delivery)
+	}
+	if err := service.(eventsWireTestCloser).Close(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 

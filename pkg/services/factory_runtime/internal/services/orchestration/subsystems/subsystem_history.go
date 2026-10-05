@@ -29,7 +29,7 @@ var _ Subsystem = (*HistorySubsystem)(nil)
 // NewHistory creates a HistorySubsystem.
 func NewHistory(logger logging.Logger) *HistorySubsystem {
 	return &HistorySubsystem{
-		logger: logging.EnsureLogger(logger),
+		logger: logger,
 	}
 }
 

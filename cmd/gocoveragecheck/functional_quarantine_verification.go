@@ -20,8 +20,13 @@ type functionalQuarantineSelectorVerification struct {
 	selectorCount int
 	manifest      functionalQuarantine
 	ratchet       *functionalQuarantineRatchetVerification
-	once          sync.Once
-	err           error
+	// overlapCoverage lets the coverage invocation start before the retained
+	// runtime selector check finishes. The check is still joined (and its
+	// failure returned) when the coverage run returns, so it stays fail-closed;
+	// selection never depends on its result.
+	overlapCoverage bool
+	once            sync.Once
+	err             error
 }
 
 type functionalQuarantineRatchetVerification struct {
@@ -136,6 +141,15 @@ func (verification *functionalQuarantineSelectorVerification) wait() error {
 		)
 	})
 	return verification.err
+}
+
+// waitBeforeSelection blocks for the selector check unless the coverage lane
+// opted into overlapping it with the coverage build and test run.
+func (verification *functionalQuarantineSelectorVerification) waitBeforeSelection() error {
+	if verification == nil || verification.overlapCoverage {
+		return nil
+	}
+	return verification.wait()
 }
 
 func (verification *functionalQuarantineSelectorVerification) waitRatchet() error {

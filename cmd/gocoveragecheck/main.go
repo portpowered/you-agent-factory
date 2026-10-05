@@ -435,6 +435,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	}
 	selectorVerification := startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
 	if selectorVerification != nil {
+		selectorVerification.overlapCoverage = true
 		selectorVerification.ratchet = startFunctionalQuarantineRatchetVerification(
 			selectorVerification.manifest,
 			cfg.timeout,

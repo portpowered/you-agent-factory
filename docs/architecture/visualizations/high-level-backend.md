@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TB
   subgraph input["Inputs"]
-    s_services_automations["automations<br/>8985 LOC · 7 subservices"]
+    s_services_automations["automations<br/>9180 LOC · 7 subservices"]
     s_services_chat_sessions["chat sessions<br/>4958 LOC · 0 subservices"]
     s_services_webhooks["webhooks<br/>718 LOC · 0 subservices"]
     s_services_work["work<br/>19737 LOC · 5 subservices"]
@@ -18,13 +18,13 @@ flowchart TB
   end
   subgraph execution["Execution"]
     s_services_models["models<br/>39272 LOC · 5 subservices"]
-    s_services_provider_sessions["provider sessions<br/>5382 LOC · 2 subservices"]
+    s_services_provider_sessions["provider sessions<br/>5380 LOC · 2 subservices"]
     s_services_providers["providers<br/>14772 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>18390 LOC · 0 subservices"]
     s_services_workers["workers<br/>22145 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
-    s_services_events["events<br/>1939 LOC · 0 subservices"]
+    s_services_events["events<br/>1936 LOC · 0 subservices"]
     s_services_recordings["recordings<br/>30980 LOC · 8 subservices"]
   end
   subgraph metrics["Metrics"]
@@ -121,7 +121,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 
 | Service | Subservices |
 | --- | --- |
-| [`automations`](services/automations.md) | (subservice) cron (568 LOC)<br/>(subservice) cursorscopes (361 LOC)<br/>(subservice) filesystem watchers (1129 LOC)<br/>(subservice) hosted sources (1309 LOC)<br/>(subservice) reconciliation (985 LOC)<br/>(subservice) script pollers (740 LOC)<br/>(subservice) sourcelifecycle (863 LOC) |
+| [`automations`](services/automations.md) | (subservice) cron (568 LOC)<br/>(subservice) cursorscopes (361 LOC)<br/>(subservice) filesystem watchers (1161 LOC)<br/>(subservice) hosted sources (1309 LOC)<br/>(subservice) reconciliation (985 LOC)<br/>(subservice) script pollers (743 LOC)<br/>(subservice) sourcelifecycle (863 LOC) |
 | [`chat_sessions`](services/chat_sessions.md) | — |
 | [`costs`](services/costs.md) | — |
 | [`edges`](services/edges.md) | — |
@@ -132,7 +132,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (444 LOC)<br/>(subservice) live view projection (530 LOC)<br/>(subservice) response event presentation (329 LOC) |
 | [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (738 LOC)<br/>(subservice) resolution (302 LOC) |
-| [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1518 LOC)<br/>(subservice) cursor reader (2914 LOC) |
+| [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1474 LOC)<br/>(subservice) cursor reader (2914 LOC) |
 | [`providers`](services/providers.md) | (subservice) acp (2745 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5568 LOC) |
 | [`recordings`](services/recordings.md) | (subservice) artifacts export (592 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (611 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (307 LOC)<br/>(subservice) recording lifecycle (784 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (2607 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |

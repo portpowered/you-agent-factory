@@ -343,7 +343,7 @@ func workerDraftRecord(t *testing.T, workerSessionID string, position events.Agg
 	if err != nil {
 		t.Fatalf("marshal worker draft: %v", err)
 	}
-	topic := workersessions.Topic(workerSessionID)
+	topic := workersessions.Topic(workerSessionID, "factory-1")
 	return events.Record{
 		ID:             events.RecordID{Topic: topic, Position: position},
 		SourceType:     "worker_session",
@@ -386,16 +386,25 @@ func closedResponseCursor() *factorysessions.ResponseEventCursor {
 }
 
 func TestServiceRunSequencesAssociatedWorkerLifecycleFromRetainedTail(t *testing.T) {
+	t.Parallel()
 	const workerSessionID = "worker-session-1"
 	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
 	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{
-		workersessions.Topic(workerSessionID): {
+		workersessions.Topic(workerSessionID, "source-owner"): {
 			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
 			workerLifecycleRecord(t, workerSessionID, 2, workers.PhaseUpdated, "RUNNING"),
 			workerLifecycleRecord(t, workerSessionID, 3, workers.PhaseCompleted, "COMPLETED"),
 		},
 	}}
-	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: workerAssociationStream(t, "dispatch-1", workerSessionID)}
+	source := "source-owner"
+	association := workerAssociationStream(t, "dispatch-1", workerSessionID)
+	association.History[0].Context.SessionID = &source
+	for index := range workerEvents.records[workersessions.Topic(workerSessionID, source)] {
+		workerEvents.records[workersessions.Topic(workerSessionID, source)][index].ID.Topic = workersessions.Topic(workerSessionID, source)
+	}
+	// Same Worker identity on the requested/public scope must never be consumed.
+	workerEvents.records[workersessions.Topic(workerSessionID, "factory-1")] = []events.Record{workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseFailed, "FAILED")}
+	target := bridgeTarget{cursor: closedResponseCursor(), factoryEvents: association}
 
 	got, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
 		context.Background(), "chat-1", 4, "factory-1", nil,
@@ -416,7 +425,7 @@ func TestServiceRunSequencesAssociatedWorkerContentRecordsWithOpeningParent(t *t
 	const workerSessionID = "worker-session-content"
 	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
 	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{
-		workersessions.Topic(workerSessionID): {
+		workersessions.Topic(workerSessionID, "factory-1"): {
 			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
 			workerDraftRecord(t, workerSessionID, 2, workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"answer"}`)}),
 			workerDraftRecord(t, workerSessionID, 3, workers.Draft{Kind: workers.KindTool, Phase: workers.PhaseDelta, Payload: json.RawMessage(`{"toolCallId":"native-tool","outputDelta":"tool output"}`)}),
@@ -455,7 +464,7 @@ func TestServiceRunSequencesAssociatedWorkerLifecycleLiveBeforeInvokeReturns(t *
 	liveDelivered := make(chan struct{})
 	workerEvents := &bridgeWorkerEvents{
 		deliverLive: true, liveDelivered: liveDelivered,
-		records: map[events.Topic][]events.Record{workersessions.Topic(workerSessionID): {
+		records: map[events.Topic][]events.Record{workersessions.Topic(workerSessionID, "factory-1"): {
 			workerLifecycleRecord(t, workerSessionID, 1, workers.PhaseStarted, "STARTING"),
 			workerLifecycleRecord(t, workerSessionID, 2, workers.PhaseUpdated, "RUNNING"),
 			workerLifecycleRecord(t, workerSessionID, 3, workers.PhaseFailed, "FAILED"),

@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required: [artifactReference, code, reason]
+properties:
+  artifactReference:
+    type: string
+    minLength: 1
+    description: Recording-root-relative artifact path. This value does not grant filesystem access.
+  code:
+    type: string
+    enum: [UNREADABLE_RECORDING]
+  reason:
+    type: string
+    minLength: 1
+    description: Safe explanation that excludes recording content and absolute host paths.

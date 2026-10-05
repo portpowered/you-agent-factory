@@ -4,15 +4,7 @@ export const BACKEND_LINT_BASELINE_SOURCE =
 // These are measured current-main failures, not extra capacity. A failing
 // checker is allowed only while its observed count remains at or below the
 // recorded count; a clean checker and any unlisted failure remain gated.
-export const BACKEND_LINT_ALLOWANCES = Object.freeze({
-	"packaged-factory-consumption-check": {
-		baselineViolationCount: 1,
-		reason: "The migration-ledger matrix has one direct packaged-factories import instead of using the catalog boundary.",
-		ownerOrLane: "Packaged-factory consumption-boundary remediation lane",
-		deadline: "2026-10-15",
-		removalCondition: "Route the matrix through the Factory Definitions catalog boundary, then delete this allowance when hosted packaged-factory-consumption-check passes.",
-	},
-});
+export const BACKEND_LINT_ALLOWANCES = Object.freeze({});
 
 // Targets recorded here are gated with no allowance at all: any failure is a
 // policy failure on its first run, and the target must appear in every Backend
@@ -20,6 +12,10 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 // dropping a target from LINT_TARGETS would otherwise be a silent way to turn
 // a red ratchet green without doing the decoupling work it is measuring.
 export const BACKEND_LINT_REQUIRED_TARGETS = Object.freeze({
+	golangci: {
+		reason: "Built-in and shared compiler diagnostics, including live CLI manifest authority, must run without any report allowance.",
+		ownerOrLane: "Shared repository lint",
+	},
 	deadcode: {
 		reason: "Exact normalized backend dead-code finding set: the committed baseline is the sole durable tolerance source, and the analyzer must run on every Backend Lint report.",
 		ownerOrLane: "Backend dead-code gate",

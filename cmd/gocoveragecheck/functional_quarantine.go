@@ -104,7 +104,7 @@ func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, 
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if selectorVerification != nil {
-		err = selectorVerification.wait()
+		err = selectorVerification.waitBeforeSelection()
 	} else {
 		err = verifyFunctionalTestQuarantineSelectors(manifest, timeout, short, jobs, repoRoot)
 	}
@@ -210,7 +210,7 @@ func resolveCoverageTestPackages(cfg config, repoRoot string, selectorVerificati
 	// current-tree inventory interval. Its result is checked again after static
 	// quarantine validation before selection is returned.
 	if selectorVerification != nil {
-		_ = selectorVerification.wait()
+		_ = selectorVerification.waitBeforeSelection()
 	}
 	discoveryStarted := startFunctionalDiscovery(functionalDiscoveryRequestLabel(cfg))
 	packages, listedPackages, err := resolveFunctionalTestPackagesWithMetadata(cfg, repoRoot)

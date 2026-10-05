@@ -3,7 +3,6 @@ package root_composition_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -112,9 +111,4 @@ func functionalStartLocalAI(t testing.TB, options ...localai.Options) *localai.F
 func functionalNewHTTPServer(t testing.TB, handler http.Handler) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(handler)
-}
-
-func functionalListen(t testing.TB, network, address string) (net.Listener, error) {
-	t.Helper()
-	return net.Listen(network, address)
 }

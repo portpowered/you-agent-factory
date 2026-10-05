@@ -172,8 +172,6 @@ internal/functionaltestmetadata/record.go: unreachable func: CustomerScenarioCou
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Lookup
 internal/packagedfactorycatalog/definition_catalog.go: unreachable func: DefinitionCatalog.Names
 internal/packagedfactorycatalog/manifest.go: unreachable func: GenerateManifest
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredCLIPaths
-internal/retiredsurfaceguard/inventory.go: unreachable func: SettledRetiredDocsTopics
 internal/testpath/testpath.go: unreachable func: MustRepoPathFromCaller
 internal/testpath/testpath.go: unreachable func: MustRepoRootFromCaller
 internal/testpath/testpath.go: unreachable func: isRepoRoot
@@ -767,7 +765,6 @@ pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_result_hook.go: unreachable func: recordedFailure
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: handedOffToWorkers
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: newRecordedWorkerSessionObservation
-pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: startThroughWorkerSessions
 pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go: unreachable func: workerSessionDispatchOutcome
 pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go: unreachable func: continuationFromLegacySession
 pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go: unreachable func: workInputsFromDispatch
@@ -1792,13 +1789,12 @@ pkg/services/work/transports/cli/work/watch.go: unreachable func: RenderWatchTra
 pkg/services/work/transports/http/admission_mapping.go: unreachable func: SubmitWorkResponseFromResult
 pkg/services/work/transports/http/read_mapping.go: unreachable func: WorkReadModelToGenerated
 pkg/services/worker_sessions/internal/service/classify.go: unreachable func: safeDetailWithDiagnostics
+pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerServerOwnedSupervision
+pkg/services/worker_sessions/internal/service/execution_handoff.go: unreachable func: registry.registerSupervision
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.driveInvocation
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.ensureObservation
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.transitionToStarting
-pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: registry.registerServerOwnedSupervision
-pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: registry.registerSupervision
 pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: supervision.installCancelFailure
-pkg/services/worker_sessions/publish.go: unreachable func: ProviderSessionObservationPublisher.WithLogger
 pkg/services/worker_sessions/transports/cli/continue.go: unreachable func: NewControl
 pkg/services/worker_sessions/transports/cli/service.go: unreachable func: readInvokeRequest
 pkg/services/worker_sessions/transports/http/adapter.go: unreachable func: NewAdapter
@@ -1947,8 +1943,6 @@ pkg/transports/acp/internal/session/session.go: unreachable func: chunkUpdate
 pkg/transports/acp/internal/stdio/prompt_stream.go: unreachable func: Server.rebuildWorkerChildProjectionBudget
 pkg/transports/acp/internal/stdio/response_bridge.go: unreachable func: attachmentCache.boundWorkerChildProjection
 pkg/transports/cli/acp/service.go: unreachable func: filterACPProviders
-pkg/transports/cli/baseline/docs_topics.go: unreachable func: SerializeDocsTopicIndex
-pkg/transports/cli/baseline/docs_topics.go: unreachable func: formatDocsTopicLine
 pkg/transports/cli/baseline/fixture_text.go: unreachable func: NormalizeFixtureText
 pkg/transports/cli/baseline/fixture_text.go: unreachable func: ReadFixtureText
 pkg/transports/cli/baseline/help_output.go: unreachable func: NormalizeHelpOutput
@@ -2129,7 +2123,6 @@ pkg/transports/mapping/workerdiagnostics/generated.go: unreachable func: transcr
 pkg/transports/mapping/workflow.go: unreachable func: WorkflowSessionResultToAPI
 pkg/transports/mapping/workflow.go: unreachable func: WorkflowSessionResultUpdatedPayloadToAPI
 pkg/wire/session_runtime_providers.go: unreachable func: provideWorkersProviderCommandRunner
-pkg/wire/worker_sessions_providers.go: unreachable func: provideWorkerSessionsFactory
 tests/functional/factory/definitions/process.go: unreachable func: buildDefinitionsProcess
 tests/functional/internal/restclient/adapter.go: unreachable func: Adapter.GetFactoryResponseEventsBySessionID
 tests/functional/internal/restclient/adapter.go: unreachable func: Adapter.GetStatus

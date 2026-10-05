@@ -3,6 +3,8 @@ package http
 import (
 	"context"
 	"errors"
+	"io"
+	"io/fs"
 	"net/http"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -41,7 +43,11 @@ func (h *Handler) writeProviderSessionError(
 	case errors.Is(err, providersessions.ErrAmbiguousSessionFile):
 		h.writeError(w, http.StatusInternalServerError, "multiple provider session files match session identifier", "INTERNAL_ERROR")
 	default:
-		h.logger.Error("load provider session details failed", zap.Error(err))
+		h.logger.Error("load provider session details failed",
+			zap.String("provider", string(params.Provider)),
+			zap.String("cause", providerSessionFailureCause(err)),
+			zap.String("session_id", string(params.Id)),
+			zap.String("outcome", "failed"))
 		h.writeError(w, http.StatusInternalServerError, "failed to load provider session details", "INTERNAL_ERROR")
 	}
 }
@@ -72,4 +78,19 @@ func (h *Handler) logCursorProviderSessionLookupNotFound(
 		)
 	}
 	h.logger.Info("cursor provider session lookup not found", fields...)
+}
+
+func providerSessionFailureCause(err error) string {
+	switch {
+	case errors.Is(err, fs.ErrPermission):
+		return "permission_denied"
+	case errors.Is(err, fs.ErrNotExist):
+		return "not_found"
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return "unexpected_eof"
+	case errors.Is(err, providersessions.ErrSessionStorageUnavailable):
+		return "storage_io_failure"
+	default:
+		return "internal_failure"
+	}
 }

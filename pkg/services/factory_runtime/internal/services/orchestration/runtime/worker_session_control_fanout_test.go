@@ -791,3 +791,138 @@ func BenchmarkRecordedWorkerSessionObservationScopedList(b *testing.B) {
 		}
 	}
 }
+
+func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
+	for _, runtimeID := range []string{"", "resolved-runtime", "contradictory-runtime"} {
+		t.Run("runtime="+runtimeID, func(t *testing.T) {
+			t.Parallel()
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+			cfg := &runtimeConfig{workerSessions: sessions, workerAttempts: sessions}
+			request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+			request.Execution.RuntimeID = runtimeID
+			request.Execution.Dispatch.DispatchID = "logical-dispatch"
+			execution := workers.ExecuteRequest{}
+			execution.Correlation.RuntimeID = "resolved-runtime"
+			execution.Correlation.DispatchID = "logical-dispatch"
+			execution.Correlation.AttemptID = "physical-attempt"
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			if _, err := prepare(context.Background(), &execution); err != nil {
+				t.Fatal(err)
+			}
+			wantKey := workersessions.RuntimeAttemptKey{RuntimeID: "resolved-runtime", DispatchID: "logical-dispatch"}
+			if sessions.request.Key != wantKey || sessions.request.ID != "logical-dispatch" || sessions.request.AttemptID != "physical-attempt" {
+				t.Fatalf("admission identities = %#v", sessions.request)
+			}
+			wantRuntime := runtimeID
+			if wantRuntime == "" {
+				wantRuntime = "resolved-runtime"
+			}
+			if sessions.request.Execution.Execution.RuntimeID != wantRuntime {
+				t.Fatalf("execution runtime = %q, want %q", sessions.request.Execution.Execution.RuntimeID, wantRuntime)
+			}
+			if request.Execution.RuntimeID != runtimeID {
+				t.Fatal("preparation mutated caller execution")
+			}
+		})
+	}
+}
+
+func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("owned observation close failure")
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}, closeErr: cause}
+	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, runtimeID: "owned-runtime"}}
+	if err := f.stopDispatchRuntime(context.Background(), ""); !errors.Is(err, cause) {
+		t.Fatalf("stop runtime = %v, want exact close failure", err)
+	}
+	if sessions.closedRuntime != "owned-runtime" {
+		t.Fatalf("closed runtime = %q, want owned-runtime", sessions.closedRuntime)
+	}
+}
+
+func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
+	t.Parallel()
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+	selected := platformclock.NewDeterministic(time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
+	selectedExecution := &testWorkstationBoundary{}
+	selectedScheduler := platformclock.NewDeterministic(time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
+	cfg := &runtimeConfig{workerSessions: struct{ workersessions.Service }{sessions.Service}, workerAttempts: sessions, clock: selected,
+		workerExecution: selectedExecution, workerAttemptScheduler: selectedScheduler}
+	request := workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{RuntimeID: "runtime-clock"}}
+	execution := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{RuntimeID: "runtime-clock", DispatchID: "dispatch-clock", AttemptID: "physical-clock"}}
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	cfg.clock = platformclock.Real{}
+	cfg.workerExecution = &testWorkstationBoundary{}
+	cfg.workerAttemptScheduler = platformclock.Real{}
+	cfg.workerAttempts = &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+	terminal, err := prepare(context.Background(), &execution)
+	if err != nil || terminal == nil {
+		t.Fatalf("preparation = %v, %v", terminal, err)
+	}
+	if sessions.clock != selected {
+		t.Fatalf("opener clock = %v, want captured source", sessions.clock)
+	}
+	if sessions.execution != selectedExecution || sessions.scheduler != selectedScheduler {
+		t.Fatal("opener lost the captured execution or deadline scheduler")
+	}
+}
+
+type beginRuntimeAttemptService struct {
+	factory.WorkerAttemptOpener
+	workersessions.Service
+	request       workersessions.RuntimeAttemptRequest
+	completed     *workers.WorkstationDispatchResult
+	completeErr   error
+	completeCalls int
+	beginErr      error
+	existing      workersessions.Session
+	getErr        error
+	closedRuntime string
+	closeErr      error
+	execution     workers.Service
+	scheduler     platformclock.TimerSource
+	clock         platformclock.Source
+	cancel        func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+}
+
+func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
+	service.closedRuntime = runtimeID
+	return service.closeErr
+}
+
+func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
+	if service.getErr != nil {
+		return workersessions.Session{}, service.getErr
+	}
+	return service.existing, nil
+}
+
+func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
+	_ context.Context,
+	request workersessions.RuntimeAttemptRequest,
+	execution workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) (workersessions.RuntimeAttempt, error) {
+	service.request = request
+	service.execution = execution
+	service.scheduler = scheduler
+	service.clock = clock
+	service.cancel = cancel
+	if service.beginErr != nil {
+		return nil, service.beginErr
+	}
+	return workersessions.RuntimeAttempt(func(
+		_ context.Context,
+		result workers.WorkstationDispatchResult,
+		err error,
+	) error {
+		service.completeCalls++
+		if service.completed == nil {
+			service.completed = &result
+			service.completeErr = err
+		}
+		return nil
+	}), nil
+}

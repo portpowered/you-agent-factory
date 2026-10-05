@@ -1,5 +1,10 @@
 package factorysessions
 
+import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+
+// RecordedSessionDiagnostic is the Recordings-owned safe omitted-artifact diagnostic.
+type RecordedSessionDiagnostic = recordings.RecordedSessionDiagnostic
+
 // ScopedLiveSessionSummary is the detached, representation-neutral live row
 // returned after Factory Sessions has merged workspace and durable live rows.
 type ScopedLiveSessionSummary struct {
@@ -21,6 +26,7 @@ type ScopedSessionListResult struct {
 	LiveSessions     []ScopedLiveSessionSummary
 	DurableSessions  []DurableSessionListSummary
 	RecordedSessions []RecordedSessionListSummary
+	Warnings         []RecordedSessionDiagnostic
 }
 
 // RecordedSessionListSource identifies the read-only source represented by a

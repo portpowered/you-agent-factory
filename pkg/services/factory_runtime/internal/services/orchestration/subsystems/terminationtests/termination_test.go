@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -15,7 +16,7 @@ import (
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -46,7 +47,7 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 
 func TestTerminationCheck_DoesNotTerminateWithImmediatelyRunnableWork(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -66,7 +67,7 @@ func TestTerminationCheck_DoesNotTerminateWithImmediatelyRunnableWork(t *testing
 
 func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -89,7 +90,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 
 func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -112,7 +113,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 
 func TestTerminationCheck_ClassifiesDrainedNonTerminalWorkByDistinctCustomerWorkID(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -143,7 +144,7 @@ func TestTerminationCheck_ClassifiesDrainedNonTerminalWorkByDistinctCustomerWork
 
 func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
@@ -164,7 +165,7 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 
 func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
@@ -192,7 +193,7 @@ func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(
 
 func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -211,7 +212,7 @@ func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 
 func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -233,7 +234,7 @@ func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 
 func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeService)
+	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeService)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{

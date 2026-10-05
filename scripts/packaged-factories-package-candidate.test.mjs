@@ -75,6 +75,8 @@ test("Packaged Factories candidate is attributable and leaves package sources un
 		outputDirectory,
 		runId: "9876543210",
 		sourceCommit,
+		// The Make prerequisite and dedicated plugin smoke own real lint proof.
+		verifyGeneratedCatalog: async () => {},
 	});
 
 	assert.deepEqual(await readFile(packageManifestPath), packageManifestBefore);
@@ -118,6 +120,7 @@ test("API and Packaged Factories candidates share release identity and provenanc
 		...input,
 		packageDirectory,
 		outputDirectory: factoriesOutput,
+		verifyGeneratedCatalog: async () => {},
 	});
 
 	assert.equal(
@@ -135,6 +138,7 @@ test("repeated preparation preserves Packaged Factories candidate evidence", asy
 		packageDirectory,
 		runId: "123456789",
 		sourceCommit,
+		verifyGeneratedCatalog: async () => {},
 	};
 
 	const first = await prepareCandidate({
@@ -160,6 +164,7 @@ test("invalid shared identity fails before creating candidate output", async (t)
 			outputDirectory,
 			runId: "042",
 			sourceCommit,
+			verifyGeneratedCatalog: async () => {},
 		}),
 		/run ID must be a canonical positive integer/,
 	);

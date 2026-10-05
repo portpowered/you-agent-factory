@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -44,7 +45,8 @@ func (automationNowOnlyClock) Now() time.Time { return time.Date(2001, 1, 1, 0, 
 func TestAutomationsClockPreservesSelectedSchedulingAndNowOnlyCompatibility(t *testing.T) {
 	t.Parallel()
 	clock := clockwork.NewFakeClockAt(time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC))
-	selected := provideAutomationsClock(clock)
+	scheduler := platformclock.NewDeterministic(time.Unix(42, 0), time.Second)
+	selected := provideAutomationsClock(clock, scheduler)
 	timer := selected.NewTimer(time.Minute)
 	clock.Advance(time.Minute)
 	select {
@@ -55,12 +57,23 @@ func TestAutomationsClockPreservesSelectedSchedulingAndNowOnlyCompatibility(t *t
 	default:
 		t.Fatal("selected clock advancement did not fire timer")
 	}
-	// A supported Now-only source historically selects wall scheduling. This
-	// stages that actual policy until T01 provides its canonical scheduler view.
-	wall := provideAutomationsClock(automationNowOnlyClock{})
-	if !wall.Now().After(automationNowOnlyClock{}.Now()) {
-		t.Fatal("Now-only input did not retain wall scheduling")
+	// Facts keep their selected origin while waits use the normalized scheduler.
+	view := provideAutomationsClock(automationNowOnlyClock{}, scheduler)
+	if !view.Now().Equal(automationNowOnlyClock{}.Now()) || view.Since(view.Now().Add(-time.Hour)) != time.Hour || view.Until(view.Now().Add(time.Hour)) != time.Hour {
+		t.Fatal("Now-only facts were replaced")
 	}
+	controlled := view.NewTimer(time.Second)
+	defer controlled.Stop()
+	scheduler.SetTick(1)
+	select {
+	case instant := <-controlled.Chan():
+		if !instant.Equal(scheduler.Now()) {
+			t.Fatal("timer used fact time instead of scheduler time")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected scheduler did not fire")
+	}
+	wall := provideAutomationsClock(automationNowOnlyClock{}, platformclock.Real{})
 	ready := wall.NewTimer(0)
 	defer ready.Stop()
 	select {

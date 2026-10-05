@@ -47,12 +47,11 @@ func NewTerminationCheckWithRuntime(
 	if now == nil {
 		now = time.Now
 	}
-	l := logging.EnsureLogger(logger)
 	return &TerminationCheckSubsystem{
 		state:       n,
-		logger:      l,
+		logger:      logger,
 		runtimeMode: mode,
-		evaluator:   scheduler.NewEnablementEvaluator(l, now, runtimeConfig),
+		evaluator:   scheduler.NewEnablementEvaluator(logger, now, runtimeConfig),
 	}
 }
 

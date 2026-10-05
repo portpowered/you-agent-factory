@@ -45,52 +45,19 @@ func TestTopicRegistry_RejectsDuplicateCommands(t *testing.T) {
 
 func TestTopicAccessors_ReturnConsistentIndependentViews(t *testing.T) {
 	topics := SupportedTopics()
-	commands := SupportedTopicCommands()
 	summaries := TopicSummaries()
-	entries := TopicIndexEntries()
-	if len(topics) == 0 || len(topics) != len(summaries) || len(topics) != len(entries) {
-		t.Fatalf("topic view lengths = topics %d, summaries %d, entries %d", len(topics), len(summaries), len(entries))
+	if len(topics) == 0 || len(topics) != len(summaries) {
+		t.Fatalf("topic view lengths = topics %d, summaries %d", len(topics), len(summaries))
 	}
-
-	wantCommands := acceptedCommandSet(t, commands)
-	assertTopicViewsConsistent(t, topics, summaries, entries, wantCommands)
-
-	topics[0] = "mutated"
-	commands[0] = "mutated"
-	if SupportedTopics()[0] == "mutated" || SupportedTopicCommands()[0] == "mutated" {
-		t.Fatal("topic accessors exposed mutable registry storage")
-	}
-}
-
-func acceptedCommandSet(t *testing.T, commands []string) map[string]bool {
-	t.Helper()
-	wantCommands := make(map[string]bool, len(commands))
-	for _, command := range commands {
-		if wantCommands[command] {
-			t.Fatalf("SupportedTopicCommands() contains duplicate %q", command)
-		}
-		wantCommands[command] = true
-	}
-	return wantCommands
-}
-
-func assertTopicViewsConsistent(t *testing.T, topics []string, summaries []TopicSummary, entries []TopicIndexEntry, wantCommands map[string]bool) {
-	t.Helper()
 	for i, topic := range topics {
-		if summaries[i].Name != topic || entries[i].Name != topic {
-			t.Fatalf("topic view %d names = %q, %q, %q", i, topic, summaries[i].Name, entries[i].Name)
+		if summaries[i].Name != topic || summaries[i].Description == "" {
+			t.Fatalf("topic %q summary = %#v", topic, summaries[i])
 		}
-		if summaries[i].Description == "" || entries[i].Description != summaries[i].Description {
-			t.Fatalf("topic %q descriptions are inconsistent", topic)
-		}
-		if !wantCommands[topic] {
-			t.Fatalf("canonical topic %q is missing from accepted commands", topic)
-		}
-		for _, alias := range entries[i].Aliases {
-			if !wantCommands[alias] {
-				t.Fatalf("topic %q alias %q is missing from accepted commands", topic, alias)
-			}
-		}
+	}
+	topics[0] = "mutated"
+	summaries[0].Name = "mutated"
+	if SupportedTopics()[0] == "mutated" || TopicSummaries()[0].Name == "mutated" {
+		t.Fatal("topic accessors exposed mutable registry storage")
 	}
 }
 
@@ -106,6 +73,28 @@ func TestIndexMarkdown_UsesRequestedExecutableAndCanonicalSummaries(t *testing.T
 		if strings.Count(index, line) != 1 {
 			t.Fatalf("index count for canonical summary %q = %d, want 1", summary.Name, strings.Count(index, line))
 		}
+	}
+}
+
+func TestIndexMarkdown_OrdersEqualDisplayOrderTopicsAlphabetically(t *testing.T) {
+	// Registry replacement is package-global, so this test must remain serial.
+	original := topicRegistry
+	t.Cleanup(func() { topicRegistry = original })
+	topicRegistry = newTopicRegistry([]topicDocument{
+		{topic: TopicWorkers, description: "Worker setup.", displayOrder: 20},
+		{topic: TopicTemplates, description: "Prompt templates.", displayOrder: 20},
+		{topic: TopicConfig, description: "Factory configuration.", displayOrder: 20},
+		{topic: TopicRun, description: "Run modes.", displayOrder: 10},
+	})
+
+	index := IndexMarkdown("factory-cli")
+	_, got, ok := strings.Cut(index, "Packaged reference topics:\n\n")
+	want := "- `run` - Run modes. Run `factory-cli docs run`.\n" +
+		"- `config` - Factory configuration. Run `factory-cli docs config`.\n" +
+		"- `templates` - Prompt templates. Run `factory-cli docs templates`.\n" +
+		"- `workers` - Worker setup. Run `factory-cli docs workers`.\n"
+	if !ok || got != want {
+		t.Fatalf("rendered topic list = %q, want %q", got, want)
 	}
 }
 

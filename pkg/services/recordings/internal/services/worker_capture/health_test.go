@@ -163,3 +163,24 @@ func TestReplayWorkerRecordingMapsLegacyStatesAndRejectsUnknownState(t *testing.
 		t.Fatalf("unknown status error = %v, want compatibility classification", err)
 	}
 }
+
+func TestWorkerCaptureRequestScopedTopicRequiresMatchingOwner(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{"factory-session", "other-session", ""} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			request := WorkerSessionRecordingRequest{
+				RecordingID: "recording", WorkerSessionID: "recorded-worker", FactorySessionID: scope,
+				Topic: "factory-worker-session/ZmFjdG9yeS1zZXNzaW9u/cmVjb3JkZWQtd29ya2Vy/events",
+			}
+			err := request.Validate()
+			if scope == "factory-session" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if !errors.Is(err, ErrInvalidWorkerRecordingRequest) {
+				t.Fatalf("foreign capture request = %v", err)
+			}
+		})
+	}
+}

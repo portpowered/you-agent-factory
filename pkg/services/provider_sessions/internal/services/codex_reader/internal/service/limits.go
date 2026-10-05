@@ -40,10 +40,6 @@ type parseBudget struct {
 	diagnosticsFull           bool
 	transcriptLimitReported   bool
 	retainedTextLimitReported bool
-	limitCategory             string
-	limitConfigured           int64
-	limitObserved             int64
-	limitLine                 int
 }
 
 func (b *parseBudget) beginLine() bool {
@@ -100,12 +96,4 @@ func (b *parseBudget) recordedDiagnostic() {
 	if b.diagnosticRecords >= maxCodexDiagnosticRecords {
 		b.diagnosticsFull = true
 	}
-}
-
-func (b *parseBudget) setLimit(category string, configured, observed int64, line int) {
-	b.stopParsing = true
-	b.limitCategory = category
-	b.limitConfigured = configured
-	b.limitObserved = observed
-	b.limitLine = line
 }
