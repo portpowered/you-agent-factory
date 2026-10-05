@@ -134,7 +134,7 @@ func (r sessionProjectionReader) BuildSessionProjectionContext(
 	}
 	runtime := runtimebinding.ServiceForLiveRuntime(selected.Runtime)
 	if runtime == nil {
-		return factorysessions.ProjectionContext{}, fmt.Errorf("Factory Runtime observation is required")
+		return factorysessions.ProjectionContext{}, fmt.Errorf("factory runtime observation is required")
 	}
 	observationResult, err := runtime.Observe(ctx, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
@@ -143,35 +143,19 @@ func (r sessionProjectionReader) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, err
 	}
 	bundle := runtimebinding.BundleFromSession(session)
-	var snapshot *legacysnapshot.Snapshot
-	if runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime); runtime != nil {
-		if provider, ok := runtime.(legacysnapshot.WorkProvider); ok && provider != nil {
-			snapshot, err = provider.GetWorkStateSnapshot(ctx)
-			if err != nil {
-				return factorysessions.ProjectionContext{}, err
-			}
-		}
-	}
-	var sessionProjectionFacts *recordings.SessionProjectionFacts
-	if bundle != nil {
-		if reader, ok := bundle.RecordingLedger().(recordings.SessionProjectionReader); ok && reader != nil {
-			facts, factsErr := reader.CurrentSessionProjectionFacts()
-			if factsErr != nil {
-				return factorysessions.ProjectionContext{}, factsErr
-			}
-			sessionProjectionFacts = &facts
-		}
+	snapshot, sessionProjectionFacts, err := r.readProjectionFacts(ctx, session)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
 	}
 	var checkpointStore factoryruntime.JavaScriptCheckpointStore
 	if interfaces.IsJavaScriptOrchestratorFactory(runtimeCfg.FactoryConfig()) {
 		checkpointStore = sessionCheckpointStore(session, r.checkpoints)
 	}
 	startedAt := time.Time{}
-	backendScopeID := ""
 	if bundle != nil {
 		startedAt = bundle.StartTime()
 	}
-	backendScopeID = runtimebinding.BackendScopeID(r.backendScope, session)
+	backendScopeID := runtimebinding.BackendScopeID(r.backendScope, session)
 	placement := session.Placement()
 	resolvedIdentity, err := r.identity.Normalize(ctx, identity.NormalizeRequest{
 		BackendScopeID: backendScopeID, FolderPath: placement.FolderPath, Target: placement.Target,
@@ -187,6 +171,31 @@ func (r sessionProjectionReader) BuildSessionProjectionContext(
 		CheckpointStore: checkpointStore, SessionProjection: sessionProjectionFacts,
 		WorldStateProjector: r.projector, Now: r.clock.Now().UTC(),
 	})
+}
+
+func (r sessionProjectionReader) readProjectionFacts(ctx context.Context, session *livesession.LiveSession) (*legacysnapshot.Snapshot, *recordings.SessionProjectionFacts, error) {
+	var snapshot *legacysnapshot.Snapshot
+	var err error
+	if runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime); runtime != nil {
+		if provider, ok := runtime.(legacysnapshot.WorkProvider); ok && provider != nil {
+			snapshot, err = provider.GetWorkStateSnapshot(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	var sessionProjectionFacts *recordings.SessionProjectionFacts
+	bundle := runtimebinding.BundleFromSession(session)
+	if bundle != nil {
+		if reader, ok := bundle.RecordingLedger().(recordings.SessionProjectionReader); ok && reader != nil {
+			facts, factsErr := reader.CurrentSessionProjectionFacts()
+			if factsErr != nil {
+				return nil, nil, factsErr
+			}
+			sessionProjectionFacts = &facts
+		}
+	}
+	return snapshot, sessionProjectionFacts, nil
 }
 
 // BuildSessionProjectionContext exposes the existing projection on the

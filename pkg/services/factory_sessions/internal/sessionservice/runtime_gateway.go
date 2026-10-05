@@ -246,20 +246,6 @@ func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
 	return fs.durableExecution
 }
 
-func (fs *SessionRuntime) observeLiveLifecycleControl(
-	sessionID string,
-	operation factorysessions.LifecycleControlKind,
-	control factorysessions.ControlRequest,
-	outcome factorysessions.LifecycleControlOutcome,
-	status factorysessions.LifecycleStatus,
-	err error,
-) {
-	if fs == nil {
-		return
-	}
-	runtimebinding.ObserveLifecycleControl(fs.logger, fs.sessionState, sessionID, operation, control, outcome, status, err)
-}
-
 var _ roles.SessionGateway = (*Service)(nil)
 
 // AttachSessionGateway installs the Wire-constructed gateway used by all
@@ -296,6 +282,11 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		backendScope: runtime.backendScopeID, identity: runtime.identity,
 	}
 	projection := runtime.projectionReader()
+	lifecycle := sessionLifecycleReader{
+		state: runtime.sessionState, active: &runtime.runtimeState,
+		lifecycle: runtime.runtimeLifecycle, releaseAdmission: runtime.releaseWorkAdmissionProjection,
+		logger: runtime.logger,
+	}
 	return newSessionHost(
 		runtime.sessionState,
 		projection.BuildSessionProjectionContext,
@@ -303,9 +294,9 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		routing.BackendScopeID,
 		routing.LogicalSessionKeyID,
 		runtimebinding.StreamGenerationID,
-		runtime.WorkerSessionsObservationForSession,
-		runtime.stopFactorySession,
-		runtime.observeLiveLifecycleControl,
+		lifecycle.WorkerSessionsObservationForSession,
+		lifecycle.StopLiveSession,
+		lifecycle.ObserveLiveLifecycleControl,
 		runtime.durableExecutionService,
 		runtime.newJavaScriptCheckpointStore,
 	)

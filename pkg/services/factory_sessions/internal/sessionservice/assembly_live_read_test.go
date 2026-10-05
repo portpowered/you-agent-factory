@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -25,6 +27,192 @@ import (
 )
 
 type workerSessionsObservationMarker struct{ workersessions.Service }
+
+type hostLifecycleStub struct {
+	factoryruntime.RuntimeLifecycle
+	err     error
+	stopped factoryruntime.RuntimeRun
+	onStop  func()
+}
+
+func (s *hostLifecycleStub) Stop(run factoryruntime.RuntimeRun) error {
+	s.stopped = run
+	if s.onStop != nil {
+		s.onStop()
+	}
+	return s.err
+}
+
+type hostControlMetrics struct {
+	factoryruntime.NoopEmitter
+	fields []factoryruntime.Fields
+}
+
+func (m *hostControlMetrics) Counter(_ context.Context, name string, value float64, fields factoryruntime.Fields) error {
+	if name == factoryruntime.RuntimeLifecycleControl && value == 1 {
+		m.fields = append(m.fields, fields)
+	}
+	return nil
+}
+
+type hostControlRecord struct {
+	generationRuntimeRecord
+	metrics factoryruntime.MetricsEmitter
+}
+
+func (r *hostControlRecord) RuntimeMetrics() factoryruntime.MetricsEmitter { return r.metrics }
+
+type hostWorkerObservation struct {
+	workersessions.Service
+	workID string
+}
+
+func (s hostWorkerObservation) ListObservations(_ context.Context, _ workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkIDs: []string{s.workID}}}}, nil
+}
+
+type hostWorkerRuntime struct {
+	factoryruntime.Service
+	id        string
+	requested string
+}
+
+func (s *hostWorkerRuntime) WorkerSessionsObservationForSession(id string) workersessions.ObservationService {
+	s.requested = id
+	return hostWorkerObservation{workID: s.id}
+}
+
+func TestSessionHostLifecyclePreservesFailedStopRetryAndPeers(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	active := &runtimebinding.State{}
+	failure := errors.New("injected addressed stop failure")
+	lifecycle := &hostLifecycleStub{err: failure}
+	var released []string
+	reader := sessionLifecycleReader{
+		state: state, active: active, lifecycle: lifecycle,
+		releaseAdmission: func(id string) { released = append(released, id) },
+	}
+	for _, id := range []string{"first", "peer"} {
+		run := invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Handle: run}}, id == "first")
+	}
+	selected := state.Resolve("first")
+	active.SetActive(context.Background(), selected.ID, runtimebinding.HandleFromSession(selected))
+	if err := reader.StopLiveSession("first"); !errors.Is(err, failure) {
+		t.Fatalf("failed stop = %v", err)
+	}
+	if !reflect.DeepEqual(state.Registry().IDs(), []string{"first", "peer"}) || len(released) != 0 || active.Active().SessionID != "first" {
+		t.Fatal("failed stop retired a session or released admission")
+	}
+	if lifecycle.stopped != runtimebinding.HandleFromSession(selected) {
+		t.Fatal("stop effect targeted a peer run")
+	}
+	lifecycle.err = nil
+	if err := reader.StopLiveSession("first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimebinding.RequireLiveSession(state, "first"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("retired session read = %v", err)
+	}
+	if _, err := runtimebinding.RequireLiveSession(state, "peer"); err != nil {
+		t.Fatalf("peer read after retry = %v", err)
+	}
+	if !reflect.DeepEqual(released, []string{"first"}) || active.Active().SessionID != "peer" {
+		t.Fatalf("retirement effects = %v, active = %#v", released, active.Active())
+	}
+	if err := reader.StopLiveSession("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) || len(released) != 1 {
+		t.Fatalf("missing stop = %v, releases = %v", err, released)
+	}
+}
+
+func TestSessionHostWorkerReadsPreserveAddressedAndStartupFallback(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	active := &runtimebinding.State{}
+	first, peer, startup := &hostWorkerRuntime{id: "first-work"}, &hostWorkerRuntime{id: "peer-work"}, &hostWorkerRuntime{id: "startup-work"}
+	for id, runtime := range map[string]*hostWorkerRuntime{"first": first, "peer": peer} {
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{
+			Handle: invocationQueryRun{record: &generationRuntimeRecord{service: runtime}},
+		}}, id == "peer")
+	}
+	active.SetStartup(&generationRuntimeRecord{service: startup})
+	reader := sessionLifecycleReader{state: state, active: active}
+	for _, tc := range []struct{ selector, work string }{{"first", "first-work"}, {"peer", "peer-work"}, {"missing", "startup-work"}} {
+		view := reader.WorkerSessionsObservationForSession(tc.selector)
+		got, err := view.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "requested"})
+		if err != nil || len(got.Observations) != 1 || !reflect.DeepEqual(got.Observations[0].WorkIDs, []string{tc.work}) {
+			t.Fatalf("%s worker read = %#v, %v", tc.selector, got, err)
+		}
+	}
+	if first.requested != "first" || peer.requested != "peer" || startup.requested != "missing" {
+		t.Fatal("worker observation lost the requested public identity")
+	}
+	// The production host captures the reader, so changing the legacy wrapper
+	// afterwards cannot redirect an existing host to a different registry.
+	runtime := &SessionRuntime{sessionState: state, runtimeLifecycle: &hostLifecycleStub{}}
+	host := SessionServiceHost(runtime)
+	runtime.sessionState = newWorkResolverSessionState()
+	got, err := host.(dependencyHost).WorkerSessionsObservationForSession("peer").ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "requested"})
+	if err != nil || len(got.Observations) != 1 || !reflect.DeepEqual(got.Observations[0].WorkIDs, []string{"peer-work"}) {
+		t.Fatalf("captured production host worker read = %#v, %v", got, err)
+	}
+}
+
+func TestSessionHostLifecycleDiagnosticsPreserveMissingClassification(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.InfoLevel)
+	reader := sessionLifecycleReader{state: newWorkResolverSessionState(), logger: zap.New(core)}
+	reader.ObserveLiveLifecycleControl("missing", factorysessions.LifecycleControlCancel, factorysessions.ControlRequest{}, "", "", fmt.Errorf("private detail: %w", factorysessions.ErrSessionNotFound))
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Level != zap.InfoLevel || entries[0].ContextMap()["session_id"] != "missing" || entries[0].ContextMap()["outcome"] != "ERROR" {
+		t.Fatalf("missing-session diagnostic = %#v", entries)
+	}
+}
+
+func TestSessionHostLifecycleDiagnosticsStayOnAddressedRecord(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	first, peer := &hostControlMetrics{}, &hostControlMetrics{}
+	for id, metrics := range map[string]*hostControlMetrics{"first": first, "peer": peer} {
+		record := &hostControlRecord{generationRuntimeRecord: generationRuntimeRecord{service: &observeStubRuntime{}}, metrics: metrics}
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Handle: invocationQueryRun{record: record}}}, id == "peer")
+	}
+	core, logs := observer.New(zap.InfoLevel)
+	reader := sessionLifecycleReader{state: state, logger: zap.New(core)}
+	reader.ObserveLiveLifecycleControl("first", factorysessions.LifecycleControlPause, factorysessions.ControlRequest{RequestID: "request-first"}, factorysessions.LifecycleControlOutcomeAccepted, factorysessions.LifecycleStatusPaused, nil)
+	if len(first.fields) != 1 || first.fields[0].Reason != "PAUSE" || first.fields[0].Outcome != "ACCEPTED" || len(peer.fields) != 0 {
+		t.Fatalf("control metrics first=%#v peer=%#v", first.fields, peer.fields)
+	}
+	if entries := logs.All(); len(entries) != 1 || entries[0].ContextMap()["session_id"] != "first" {
+		t.Fatalf("addressed control logs = %#v", entries)
+	}
+}
+
+func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	active := &runtimebinding.State{}
+	newSession := func() *livesession.LiveSession {
+		return &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{
+			Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
+		}}
+	}
+	previous, replacement := newSession(), newSession()
+	state.Registry().Upsert(previous, true)
+	active.SetActive(context.Background(), previous.ID, runtimebinding.HandleFromSession(previous))
+	lifecycle := &hostLifecycleStub{onStop: func() { state.Registry().Upsert(replacement, true) }}
+	reader := sessionLifecycleReader{state: state, active: active, lifecycle: lifecycle}
+	if err := reader.StopLiveSession("selected"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimebinding.RequireLiveSession(state, "selected"); err != nil {
+		t.Fatalf("replacement read after captured generation stop = %v", err)
+	}
+	if lifecycle.stopped != runtimebinding.HandleFromSession(previous) || active.ActiveHandle() != runtimebinding.HandleFromSession(replacement) {
+		t.Fatal("stop or active selection crossed replacement generations")
+	}
+}
 
 type projectionIdentityStub struct {
 	sessionidentity.Service
@@ -67,16 +255,7 @@ func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
 			},
 		}, id == "first")
 	}
-	for _, selector := range []string{factorysessions.DefaultSessionID, "peer", "first"} {
-		session := state.Resolve(selector)
-		got, err := reader.BuildSessionProjectionContext(ctx, session)
-		if err != nil || got.FactorySessionID != session.ID || got.Session.IsDefault != session.IsDefault ||
-			got.BackendScopeID != "backend-"+session.ID || got.LogicalSessionKeyID != "logical-"+session.ID ||
-			got.Observation.Health.StreamGenerationID != "generation-"+session.ID || !got.Now.Equal(now) || got.Now.Location() != time.UTC {
-			t.Fatalf("projection %q = %#v, %v", selector, got, err)
-		}
-		got.Session.FolderPath = "detached mutation"
-	}
+	assertSessionProjectionIdentities(t, reader, now)
 	first, peer := state.Resolve("first"), state.Resolve("peer")
 	sessionCheckpointStore(first, nil).Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "first-checkpoint"})
 	got, err := reader.BuildSessionProjectionContext(ctx, first)
@@ -96,6 +275,28 @@ func TestSessionProjectionReaderUsesAddressedFactsAndErrors(t *testing.T) {
 	if err != nil || got.BackendScopeID != "selected-backend" || len(got.JavaScriptCheckpoints) != 1 {
 		t.Fatalf("host projection without gateway = %#v, %v", got, err)
 	}
+	assertSessionProjectionFailures(t, reader)
+}
+
+func assertSessionProjectionIdentities(t *testing.T, reader sessionProjectionReader, now time.Time) {
+	t.Helper()
+	state, ctx := reader.state, context.Background()
+	for _, selector := range []string{factorysessions.DefaultSessionID, "peer", "first"} {
+		session := state.Resolve(selector)
+		got, err := reader.BuildSessionProjectionContext(ctx, session)
+		if err != nil || got.FactorySessionID != session.ID || got.Session.IsDefault != session.IsDefault ||
+			got.BackendScopeID != "backend-"+session.ID || got.LogicalSessionKeyID != "logical-"+session.ID ||
+			got.Observation.Health.StreamGenerationID != "generation-"+session.ID || !got.Now.Equal(now) || got.Now.Location() != time.UTC {
+			t.Fatalf("projection %q = %#v, %v", selector, got, err)
+		}
+		got.Session.FolderPath = "detached mutation"
+	}
+}
+
+func assertSessionProjectionFailures(t *testing.T, reader sessionProjectionReader) {
+	t.Helper()
+	state, ctx := reader.state, context.Background()
+	first, peer := state.Resolve("first"), state.Resolve("peer")
 	failure := errors.New("addressed observation failed")
 	first.Runtime.Factory.(*observeStubRuntime).err = failure
 	if _, err := reader.BuildSessionProjectionContext(ctx, first); !errors.Is(err, failure) {
@@ -609,15 +810,17 @@ func TestProcessDurableScopeRetainsSelectedCapabilitiesAndDetachedSettings(t *te
 			state.Registry().Upsert(&livesession.LiveSession{ID: "peer", SessionState: livesession.SessionState{FactoryDir: "other"}, Handle: &runtimebinding.SessionState{Instance: &generationRuntimeRecord{service: peer}}}, true)
 			scope := NewProcessDurableScope(state)
 			got, err := scope.ResumeRuntimeScope(filepath.Join(project, "."))
-			if err != nil || got.WorkerSettings.DefaultModel != "selected-model" || got.MockWorkers.MockWorkers[0].ID != "selected-mock" {
-				t.Fatalf("selected resume facts = %#v, %v", got, err)
+			if err != nil {
+				t.Fatal(err)
 			}
+			assertDetachedResumeSettings(t, got.WorkerSettings, got.MockWorkers)
 			got.WorkerSettings.DefaultModel = "mutated"
 			got.MockWorkers.MockWorkers[0].ID = "mutated"
 			again, err := scope.ResumeRuntimeScope(project)
-			if err != nil || again.WorkerSettings.DefaultModel != "selected-model" || again.MockWorkers.MockWorkers[0].ID != "selected-mock" {
-				t.Fatalf("resume facts were not detached: %#v, %v", again, err)
+			if err != nil {
+				t.Fatal(err)
 			}
+			assertDetachedResumeSettings(t, again.WorkerSettings, again.MockWorkers)
 			if _, err := got.WorkerAttemptStarter(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, failure) {
 				t.Fatalf("selected worker error = %v", err)
 			}
@@ -659,26 +862,17 @@ func TestSessionIdentityReaderPreservesDefaultSuccessorAndPeer(t *testing.T) {
 		}, id == "peer")
 	}
 	active.SetActive(context.Background(), "first", nil)
-	got, err := reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
-	if err != nil || got.Session == nil || got.Session.ID != "first" || !got.Remapped || got.Unresolved {
-		t.Fatalf("active default successor = %#v, %v", got, err)
-	}
+	assertDefaultSuccessor(t, reader, "first", true)
 	active.ClearActive()
-	got, err = reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
-	if err != nil || got.Session == nil || got.Session.ID != "peer" || !got.Remapped {
-		t.Fatalf("current default successor = %#v, %v", got, err)
-	}
+	assertDefaultSuccessor(t, reader, "peer", true)
 	// A real default wins over both active and current non-default records.
 	first := state.Resolve("first")
 	first.IsDefault = true
 	state.Registry().Upsert(first, false)
-	got, err = reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
-	if err != nil || got.Session == nil || got.Session.ID != "first" || got.Remapped {
-		t.Fatalf("real default = %#v, %v", got, err)
-	}
+	assertDefaultSuccessor(t, reader, "first", false)
 	state.Registry().Remove("first")
 	for _, selector := range []string{"peer", "missing", "first"} {
-		got, err = reader.ResolveSyncPreflightTarget(selector, nil)
+		got, err := reader.ResolveSyncPreflightTarget(selector, nil)
 		if err != nil || got.Remapped || got.Unresolved || (selector == "peer") != (got.Session != nil) {
 			t.Fatalf("after retirement %q = %#v, %v", selector, got, err)
 		}
@@ -686,13 +880,7 @@ func TestSessionIdentityReaderPreservesDefaultSuccessorAndPeer(t *testing.T) {
 	if reader.BackendScopeID() != "selected-backend" || reader.LogicalSessionKeyID(state.Resolve("peer")) != "logical-peer" || reader.LogicalSessionKeyID(nil) != "" {
 		t.Fatal("addressed logical/backend facts changed")
 	}
-	host := SessionServiceHost(&SessionRuntime{sessionState: state, backendScopeID: reader.backendScope, identity: reader.identity})
-	got, err = host.ResolveSyncPreflightTarget("old", &factorydefinitions.FactorySessionLogicalResolveHint{
-		BackendScopeID: "selected-backend", LogicalSessionKeyID: "peer",
-	})
-	if err != nil || got.Session == nil || got.Session.ID != "peer" || !got.Remapped || host.LogicalSessionKeyID(got.Session) != "logical-peer" {
-		t.Fatalf("production host routing without gateway = %#v, %v", got, err)
-	}
+	assertHostLogicalRemapping(t, reader)
 	reader.identity = projectionIdentityStub{err: errors.New("identity unavailable")}
 	if reader.LogicalSessionKeyID(state.Resolve("peer")) != "" {
 		t.Fatal("failed optional logical identity must stay empty")
@@ -728,5 +916,34 @@ func TestSessionIdentityReaderLogicalPreflight(t *testing.T) {
 				t.Fatalf("logical preflight = %#v, %v", got, err)
 			}
 		})
+	}
+}
+
+func assertDetachedResumeSettings(t *testing.T, settings *factoryruntime.JavaScriptWorkerSettings, mock *workers.MockWorkersConfig) {
+	t.Helper()
+	if settings.DefaultModel != "selected-model" || mock.MockWorkers[0].ID != "selected-mock" {
+		t.Fatalf("selected detached resume settings = %#v, mock = %#v", settings, mock)
+	}
+}
+
+func assertDefaultSuccessor(t *testing.T, reader sessionIdentityReader, wantID string, remapped bool) {
+	t.Helper()
+	got, err := reader.ResolveSyncPreflightTarget(factorysessions.DefaultSessionID, nil)
+	if err != nil || got.Session == nil {
+		t.Fatalf("default successor = %#v, %v", got, err)
+	}
+	if got.Session.ID != wantID || got.Remapped != remapped || got.Unresolved {
+		t.Fatalf("default successor = %#v, want %s remapped=%t", got, wantID, remapped)
+	}
+}
+
+func assertHostLogicalRemapping(t *testing.T, reader sessionIdentityReader) {
+	t.Helper()
+	host := SessionServiceHost(&SessionRuntime{sessionState: reader.state, backendScopeID: reader.backendScope, identity: reader.identity})
+	got, err := host.ResolveSyncPreflightTarget("old", &factorydefinitions.FactorySessionLogicalResolveHint{
+		BackendScopeID: "selected-backend", LogicalSessionKeyID: "peer",
+	})
+	if err != nil || got.Session == nil || got.Session.ID != "peer" || !got.Remapped || host.LogicalSessionKeyID(got.Session) != "logical-peer" {
+		t.Fatalf("production host routing without gateway = %#v, %v", got, err)
 	}
 }
