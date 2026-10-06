@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -10,6 +11,84 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestCanonicalCanceledDispatchDropsRoutingAndWorkOutput(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{"terminal", "cancellation", "outcome"} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			dispatch := workers.WorkstationDispatchResult{Result: canceledRoutingTestResult()}
+			switch source {
+			case "terminal":
+				dispatch.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+			case "cancellation":
+				dispatch.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+			case "outcome":
+				dispatch.Result.Outcome = workers.OutcomeCanceled
+			}
+			result := canonicalWorkResult(workers.WorkstationDispatchRequest{}, dispatch, errors.New("signal exit"))
+			assertCanceledRoutingResult(t, result)
+			if result.Error != "native diagnostic" || result.Metrics.RetryCount != 2 {
+				t.Fatalf("cancellation lost diagnostics or execution metrics: %#v", result)
+			}
+		})
+	}
+}
+
+func TestCanceledMaterializationDropsRoutingWithoutCreatingWork(t *testing.T) {
+	t.Parallel()
+	service := &countingMaterializationWorkService{}
+	result := canceledRoutingTestResult()
+	result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+	result = applyMaterializedWorkerOutput(t.Context(), service, nil, nil, work.WorkDispatch{}, result,
+		workers.ProposedOutput{Classification: "done", Feedback: "partial feedback",
+			ProposedWork: []workers.ProposedWork{{WorkTypeID: "task", Name: "partial"}}}, true)
+	assertCanceledRoutingResult(t, result)
+	if service.calls.Load() != 0 {
+		t.Fatal("canceled execution materialized proposed Work")
+	}
+}
+
+func TestCanceledDispatchProjectionDropsClassifierFeedback(t *testing.T) {
+	t.Parallel()
+	result, err := workstationDispatchResultFromExecute(workers.WorkstationDispatchRequest{}, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeCanceled, ProposedOutputPresent: true,
+		Output: workers.ProposedOutput{Classification: "done", Feedback: "partial feedback",
+			Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
+	}, context.Canceled)
+	if !errors.Is(err, context.Canceled) || result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		t.Fatalf("dispatch = %#v, %v; want cancellation", result, err)
+	}
+	assertCanceledRoutingResult(t, result.Result)
+	if result.ProposedOutput == nil || !reflect.DeepEqual(*result.ProposedOutput, workers.ProposedOutput{}) {
+		t.Fatalf("canceled proposal = %#v", result.ProposedOutput)
+	}
+}
+
+func canceledRoutingTestResult() workers.WorkResult {
+	return workers.WorkResult{
+		Outcome: workers.OutcomeAccepted, Output: "partial", Error: "native diagnostic",
+		OutputContent:      []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}},
+		RecordedOutputWork: []work.FactoryWorkItem{{ID: "partial-work"}},
+		StructuredResult:   map[string]any{"partial": true}, StructuredResultPresent: true,
+		Feedback: "partial feedback", SelectedClassificationLabel: "done",
+		Continuation:    &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
+		FailureDetail:   &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown},
+		FailureMetadata: &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable},
+		Metrics:         workers.WorkMetrics{RetryCount: 2},
+	}
+}
+
+func assertCanceledRoutingResult(t *testing.T, result workers.WorkResult) {
+	t.Helper()
+	if result.Outcome != workers.OutcomeCanceled || result.Cancellation == nil ||
+		result.Output != "" || len(result.OutputContent) != 0 || len(result.RecordedOutputWork) != 0 ||
+		result.StructuredResult != nil || result.StructuredResultPresent ||
+		result.Feedback != "" || result.SelectedClassificationLabel != "" || result.Continuation != nil ||
+		result.FailureDetail != nil || result.FailureMetadata != nil {
+		t.Fatalf("canceled result retained routing, output or retry data: %#v", result)
+	}
+}
 
 func TestBeginWorkerAttemptResolvesForceAndRecoversDetachedResult(t *testing.T) {
 	t.Parallel()
@@ -42,8 +121,12 @@ func TestBeginWorkerAttemptResolvesForceAndRecoversDetachedResult(t *testing.T) 
 				t.Fatal(err)
 			}
 			original := workers.ExecuteResult{
-				Outcome:          workers.ExecutionOutcomeFailed,
-				Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
+				Outcome: workers.ExecutionOutcomeFailed,
+				Output: workers.ProposedOutput{
+					Primary:        []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}},
+					Classification: "done", Feedback: "partial feedback",
+					ProposedWork: []workers.ProposedWork{{WorkTypeID: "task", Name: "partial"}},
+				},
 				StructuredResult: map[string]any{"partial": true}, StructuredResultPresent: true,
 				Continuation: &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
 				Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, RetryHint: true, Message: "signal exit"},
@@ -76,7 +159,7 @@ func assertDirectAttemptForceResult(t *testing.T, resolved workers.ExecuteResult
 		}
 		return
 	}
-	if resolved.Outcome != workers.ExecutionOutcomeCanceled || resolved.Cancellation == nil || len(resolved.Output.Primary) != 0 || resolved.StructuredResultPresent || resolved.StructuredResult != nil || resolved.Continuation != nil || resolved.Failure == nil || resolved.Failure.RetryHint {
+	if resolved.Outcome != workers.ExecutionOutcomeCanceled || resolved.Cancellation == nil || !reflect.DeepEqual(resolved.Output, workers.ProposedOutput{}) || resolved.StructuredResultPresent || resolved.StructuredResult != nil || resolved.Continuation != nil || resolved.Failure == nil || resolved.Failure.RetryHint {
 		t.Fatalf("confirmed force retained retry/output: %#v", resolved)
 	}
 }

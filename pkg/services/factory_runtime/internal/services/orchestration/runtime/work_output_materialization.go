@@ -403,11 +403,7 @@ func applyMaterializedWorkerOutput(
 		if result.Cancellation == nil {
 			result.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
 		}
-		result.Output = ""
-		result.StructuredResult = nil
-		result.StructuredResultPresent = false
-		result.OutputContent = nil
-		result.RecordedOutputWork = nil
+		clearWorkstationCanceledResult(&result, &proposals)
 		return result
 	}
 	if len(proposals.ProposedWork) == 0 &&

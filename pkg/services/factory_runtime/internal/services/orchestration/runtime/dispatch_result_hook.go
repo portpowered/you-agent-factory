@@ -349,8 +349,7 @@ func canonicalWorkResult(
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
-		workResult.FailureDetail = nil
-		workResult.FailureMetadata = nil
+		clearWorkstationCanceledResult(&workResult, &workers.ProposedOutput{})
 		return workResult
 	}
 	if dispatchErr != nil || result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed {

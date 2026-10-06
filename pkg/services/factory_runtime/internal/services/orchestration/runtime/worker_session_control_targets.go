@@ -600,6 +600,10 @@ func clearWorkstationCanceledResult(
 ) {
 	workResult.Outcome = workers.OutcomeCanceled
 	workResult.Output = ""
+	workResult.OutputContent = nil
+	workResult.RecordedOutputWork = nil
+	workResult.Feedback = ""
+	workResult.SelectedClassificationLabel = ""
 	workResult.StructuredResult = nil
 	workResult.StructuredResultPresent = false
 	workResult.Continuation = nil
