@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"reflect"
 	"slices"
 	"strings"
@@ -125,6 +126,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.EnsureBackendScope,
 		fixture.InitialActivation,
 		nil,
+		recordingreplay.NewBehavior(),
 		fixture.LiveChangeCoordinator,
 	)
 }
