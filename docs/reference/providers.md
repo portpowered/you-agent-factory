@@ -460,3 +460,31 @@ or use a built-in preset.
 - `you docs run` for terminal output modes and run selection
 - `you docs javascript-workflows` for JavaScript child execution
 - `you docs sessions` for Factory Session and dispatch inspection
+
+## Recorded Codex session details
+
+The dashboard and `GET /provider-sessions/detail` read Codex history captured by
+`you`. Select `provider=codex`, `kind=session_id`, and the recorded provider
+session ID. Details remain available after execution and a host restart without
+access to Codex rollout files. Cursor details continue to use Cursor storage.
+
+Only recorded associations in the selected profile resolve. Unknown IDs,
+native-only sessions, and sessions recorded in another profile return
+`404 NOT_FOUND`. Multiple captured associations with the same provider tuple
+return `500 INTERNAL_ERROR`; `you` does not choose or merge their histories.
+Unreadable or incomplete captured details return a safe error. Use Worker
+Session logs to inspect the captured prefix and capture health.
+
+The response retains `providerSession`, `source`, `parse`, and `transcript`.
+Transcript entries preserve captured message and tool order. Available
+`tokenUsage` reflects captured usage. Entry timestamps are capture times,
+not provider event times. Uncaptured entry facts, including native line numbers,
+are omitted.
+
+Codex source metadata has an empty `relativePath`, zero `sizeBytes`, and no
+`modifiedAt`. Native parsing facts, inferred turns, and per-turn usage are
+unavailable: parse counters are zero where uncaptured, and required collections
+remain empty arrays. Captured event count and available tool or reasoning
+summaries remain available. Private reasoning and missing history are never
+reconstructed. A complete capture with no transcript content returns an empty
+transcript; a storage failure does not return complete empty success.

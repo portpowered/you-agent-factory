@@ -87,6 +87,25 @@ func (s DirectoryStore) SaveCurrentBoard(ctx context.Context, factoryDirectory, 
 	return nil
 }
 
+// SaveCurrentBoardIfAbsent preserves even invalid existing bytes. The caller
+// holds local default-session ownership across this check and atomic write.
+func (s DirectoryStore) SaveCurrentBoardIfAbsent(ctx context.Context, factoryDirectory, artifact string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := s.files.ReadFile(s.currentBoardPath())
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return cancelErr
+	}
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return &persistenceError{operation: "read current board reference", cause: err}
+	}
+	return s.SaveCurrentBoard(ctx, factoryDirectory, artifact)
+}
+
 func (reference currentBoardReference) validate(factoryDirectory string) error {
 	if reference.SchemaVersion != currentBoardSchemaVersion || reference.FactorySessionID != "~default" {
 		return errors.New("unsupported current board reference version or session")

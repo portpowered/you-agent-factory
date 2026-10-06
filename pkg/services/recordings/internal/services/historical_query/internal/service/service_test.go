@@ -95,21 +95,7 @@ func TestHistoricalQueryRetainsTypedStateAndDetachedView(t *testing.T) {
 			if !reflect.DeepEqual(peer.projected, state) {
 				t.Fatalf("derived projection received %+v; want %+v", peer.projected, state)
 			}
-			wantTick, wantEvents := 2, 1
-			if empty {
-				wantTick, wantEvents = 0, 0
-			}
-			if len(peer.events) != wantEvents || peer.tick != wantTick || result.WorldState.SelectedTick != wantTick ||
-				result.WorldState.Scope != identity.Scope || result.WorldState.SchemaVersion != recordings.WorldStateViewSchemaV1 {
-				t.Fatalf("projection input/view metadata = %+v, %+v", peer, result.WorldState)
-			}
-			if !empty && (peer.events[0].Context.SessionID == nil || *peer.events[0].Context.SessionID != "session" ||
-				result.WorldState.Through != result.Events[0].Cursor) {
-				t.Fatal("session scope or cursor lost")
-			}
-			if empty && result.WorldState.Through != (recordings.CanonicalEventCursor{}) {
-				t.Fatal("empty recording acquired a cursor")
-			}
+			assertHistoricalProjectionMetadata(t, empty, identity, peer, result)
 			wantPayload, err := json.Marshal(state)
 			if err != nil || result.WorldState.Payload != string(wantPayload) {
 				t.Fatalf("view changed: %s, %v", result.WorldState.Payload, err)
@@ -125,6 +111,25 @@ func TestHistoricalQueryRetainsTypedStateAndDetachedView(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertHistoricalProjectionMetadata(t *testing.T, empty bool, identity recordings.HistoricalRecordingIdentity, peer *historicalProjectionPeer, result recordings.HistoricalRecordingQueryResult) {
+	t.Helper()
+	wantTick, wantEvents := 2, 1
+	if empty {
+		wantTick, wantEvents = 0, 0
+	}
+	if len(peer.events) != wantEvents || peer.tick != wantTick || result.WorldState.SelectedTick != wantTick ||
+		result.WorldState.Scope != identity.Scope || result.WorldState.SchemaVersion != recordings.WorldStateViewSchemaV1 {
+		t.Fatalf("projection input/view metadata = %+v, %+v", peer, result.WorldState)
+	}
+	if !empty && (peer.events[0].Context.SessionID == nil || *peer.events[0].Context.SessionID != "session" ||
+		result.WorldState.Through != result.Events[0].Cursor) {
+		t.Fatal("session scope or cursor lost")
+	}
+	if empty && result.WorldState.Through != (recordings.CanonicalEventCursor{}) {
+		t.Fatal("empty recording acquired a cursor")
 	}
 }
 

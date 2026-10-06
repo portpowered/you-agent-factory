@@ -17,6 +17,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
@@ -471,9 +472,8 @@ func runHostedRuntime(
 		}
 		// Runner construction can defer loading until Run. These typed failures
 		// still describe startup even after the runner has been constructed.
-		var inputFailure *recordings.ReplayInputError
 		var hostFailure *initializer.RuntimeHostStartupError
-		if !started || errors.As(resultErr, &inputFailure) || errors.As(resultErr, &hostFailure) ||
+		if !started || recordingscli.MapReplayInputFailure(resultErr) != nil || errors.As(resultErr, &hostFailure) ||
 			errors.Is(resultErr, interfaces.ErrRuntimeSnapshotResolutionFailed) || errors.Is(resultErr, interfaces.ErrFactoryLayoutNotFound) {
 			resultErr = clidiag.WithStartupCause(resultErr)
 		}
@@ -500,6 +500,14 @@ func runHostedRuntime(
 		startupDisclosure,
 		func() *recordings.ResumeRecoveryMetadata { return recoveryMetadata },
 	)
+	var skippedRecordings func() []string
+	boundObserver := onBound
+	onBound = func(binding factorysessions.RuntimeHostBinding) {
+		if skippedRecordings != nil {
+			emitBoardAdoptionWarning(cfg.BoardAdoptionOutput, skippedRecordings())
+		}
+		boundObserver(binding)
+	}
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
@@ -514,6 +522,9 @@ func runHostedRuntime(
 	}
 	if factorySvc == nil {
 		return fmt.Errorf("construct local runtime: builder returned nil runner")
+	}
+	if provider, ok := factorySvc.(interface{ SkippedBoardRecordings() []string }); ok {
+		skippedRecordings = provider.SkippedBoardRecordings
 	}
 	recoveryMetadata = resumeRecoveryMetadataForRunner(factorySvc)
 	if cfg.Port <= 0 {
@@ -865,4 +876,19 @@ func invocationFactoryEventRenderer(
 		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
 		InvocationOutputMode: cfg.InvocationOutputMode,
 	})
+}
+
+func skippedBoardRecordingsForRunner(runner initializer.LocalRuntimeRunner) []string {
+	if provider, ok := runner.(interface{ SkippedBoardRecordings() []string }); ok {
+		return provider.SkippedBoardRecordings()
+	}
+	return nil
+}
+
+func (runner hostedInvocationRunner) SkippedBoardRecordings() []string {
+	return skippedBoardRecordingsForRunner(runner.runner)
+}
+
+func (runner cleanInvocationSnapshotRunner) SkippedBoardRecordings() []string {
+	return skippedBoardRecordingsForRunner(runner.runner)
 }

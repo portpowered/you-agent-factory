@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -135,11 +136,13 @@ func buildProcessWithContext(
 
 // RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a
 // command failure has no authored public diagnostic contract.
-func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+func RequireSafeCLIDiagnostic(t testing.TB, stderr string, startup ...bool) factoryapi.ErrorResponse {
 	t.Helper()
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
-		t.Fatalf("decode safe CLI diagnostic: %v\nstderr=%q", err, stderr)
+	if len(startup) > 0 && startup[0] {
+		response = testutil.RequireStartupCLIDiagnostic(t, stderr)
+	} else if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode safe CLI diagnostic: %v; stderr=%q", err, stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("CLI_COMMAND_FAILED") || response.Message != "command failed" {
 		t.Fatalf("safe CLI diagnostic = %#v, want CLI_COMMAND_FAILED/command failed", response)

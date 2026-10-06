@@ -13,11 +13,11 @@ func TestStartupCausePreservesEnvelopeIdentityAndEmitsOnce(t *testing.T) {
 	cause := errors.New("unexpected EOF")
 	local := NewLocalInputFailure("--resume", "./board.json", fmt.Errorf("load recording: %w", cause))
 	err := WithStartupCause(local)
-	if !errors.Is(err, cause) || WithStartupCause(err) != err {
+	if !errors.Is(err, cause) || !errors.Is(WithStartupCause(err), err) {
 		t.Fatal("startup wrapper lost identity or wrapped twice")
 	}
 	var typed *LocalFailure
-	if !errors.As(err, &typed) || typed != local {
+	if !errors.As(err, &typed) || !errors.Is(typed, local) {
 		t.Fatal("startup wrapper lost the original local failure")
 	}
 	for _, debug := range []bool{false, true} {

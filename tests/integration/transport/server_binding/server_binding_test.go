@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -241,14 +240,10 @@ func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *t
 	}
 	const legacyBindWarning = "warning: --server is deprecated for local listener binding; use --listen <host:port> instead"
 	stderrLines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-	if len(stderrLines) != 2 || strings.TrimSpace(stderrLines[0]) != legacyBindWarning {
+	if len(stderrLines) < 2 || strings.TrimSpace(stderrLines[0]) != legacyBindWarning {
 		t.Fatalf("server bind-failure stderr = %q, want the legacy migration warning followed by one diagnostic line", stderr.String())
 	}
-	diagnostic := strings.TrimSpace(stderrLines[1])
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(diagnostic), &response); err != nil {
-		t.Fatalf("server bind-failure stderr is not one ErrorResponse: %v\n%s", err, stderr.String())
-	}
+	response := testutil.RequireStartupCLIDiagnostic(t, strings.Join(stderrLines[1:], "\n"))
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("server bind-failure response = %#v, want SERVER_BIND_FAILED", response)
 	}

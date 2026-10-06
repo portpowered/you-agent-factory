@@ -146,6 +146,9 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
 		if err != nil {
+			writer.catalogMu.Lock()
+			writer.catalogDamaged = true
+			writer.catalogMu.Unlock()
 			continue
 		}
 		if err := writer.rebuildRecordingIndex(ctx, id); err != nil {
@@ -153,6 +156,9 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 				return err
 			}
 			writer.indexUnavailableCapture(file.Name(), data)
+			writer.catalogMu.Lock()
+			writer.catalogDamaged = true
+			writer.catalogMu.Unlock()
 		}
 	}
 	return nil
@@ -166,6 +172,12 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 	defer entry.mu.Unlock()
 	if err := writer.hydrate(ctx, id, entry); err != nil {
 		return err
+	}
+	if entry.damaged {
+		// A readable torn prefix cannot prove the missing tail's associations.
+		writer.catalogMu.Lock()
+		writer.catalogDamaged = true
+		writer.catalogMu.Unlock()
 	}
 	for _, session := range entry.sessions {
 		if len(session.records) == 0 {

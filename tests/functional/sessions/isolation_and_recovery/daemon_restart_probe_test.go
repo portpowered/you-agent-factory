@@ -69,13 +69,14 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("F1 F2 graceful DAG restart", func(t *testing.T) {
 		testRestartProbeDAG(t, process, boardDir, boardAPIs[:2], runner)
 	})
-	t.Run("PlainBoard graceful DAG restart without selector", func(t *testing.T) {
+	t.Run("F3 explicit restore seeds reference then plain relaunch", func(t *testing.T) {
 		// Both journeys exercise local ~default ownership, so run this smallest
 		// cohort in order before the independent parallel projects below.
 		runner.calls.Store(0)
 		home := t.TempDir()
 		invocations := 0
 		var retainedReference []byte
+		var explicitPath string
 		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:5], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations > 0 {
 				reference, err := os.ReadFile(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json"))
@@ -86,11 +87,24 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 					t.Fatal("graceful restart replaced the selected recording reference")
 				}
 				retainedReference = reference
+				if invocations == 1 {
+					var selected struct{ ArtifactReference string }
+					if err := json.Unmarshal(reference, &selected); err != nil {
+						t.Fatal(err)
+					}
+					explicitPath = selected.ArtifactReference
+					if err := os.Remove(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json")); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}
 			invocations++
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = implicitRepo
+			if invocations == 2 {
+				inputs.Input.Args = append(inputs.Input.Args, "--record", explicitPath)
+			}
 			return inputs
 		}, 0)
 	})
@@ -104,21 +118,41 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 		invocations := 0
+		var adoptedInputs *support.CapturedInputs
+		junk := filepath.Join(home, ".you-agent-factory", "recordings", "2020", "01", "01", "old.json")
+		junkBytes := []byte(`{"private":"` + restartProbeSecret + `"`)
 		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[5:8], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations == 1 {
 				// Simulate a pre-reference installation without altering its
 				// confirmed board or canonical recording. Future relaunches
 				// must use the automatically adopted reference.
-				if err := os.Remove(filepath.Join(repo, ".you-agent-factory", "current-board.json")); err != nil {
+				refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+				var selected struct{ ArtifactReference string }
+				if err := json.Unmarshal(mustReadSeededReplayArtifact(t, refPath), &selected); err != nil {
 					t.Fatal(err)
 				}
+				if err := os.Remove(refPath); err != nil {
+					t.Fatal(err)
+				}
+				writeRestartProbeFile(t, junk, junkBytes)
+				testLegacyBoardRejections(t, process, repo, home, selected.ArtifactReference, &starts, runner, files)
 			}
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = repo
+			if invocations == 1 {
+				adoptedInputs = inputs
+			}
 			invocations++
 			return inputs
 		}, 0)
+		want := `Skipped 1 unreadable recordings during legacy board adoption: ["2020/01/01/old.json"]`
+		if adoptedInputs == nil || strings.Count(adoptedInputs.Stderr(), want) != 1 || strings.Contains(adoptedInputs.Stderr(), restartProbeSecret) {
+			t.Fatalf("missing paths-only skip warning: %s", adoptedInputs.Stderr())
+		}
+		if !bytes.Equal(mustReadSeededReplayArtifact(t, junk), junkBytes) {
+			t.Fatal("adoption changed unreadable history")
+		}
 	}) {
 		return
 	}
@@ -127,13 +161,26 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		dir := support.ScaffoldFactory(t, config)
 		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+		refPath := filepath.Join(dir, ".you-agent-factory", "current-board.json")
+		existing := []byte("invalid reference § —")
+		invocations := 0
 		// Reuse the same process, public ~default identity, root and JSONL
 		// recording across three joined shutdowns, including terminal recovery.
 		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[8:11], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+			if invocations == 1 {
+				if _, err := os.Stat(refPath); !errors.Is(err, fs.ErrNotExist) {
+					t.Fatalf("fresh explicit initialized reference: %v", err)
+				}
+				writeRestartProbeFile(t, refPath, existing)
+			}
+			invocations++
 			inputs := restartProbeInputs(t, dir)
 			inputs.Input.Args[len(inputs.Input.Args)-1] = filepath.Join(dir, "current-board.jsonl")
 			return inputs
 		}, 23201)
+		if !bytes.Equal(mustReadSeededReplayArtifact(t, refPath), existing) {
+			t.Fatal("explicit restore replaced existing invalid reference")
+		}
 	}) {
 		return
 	}
@@ -454,6 +501,7 @@ type restartProbeFiles struct {
 	corruptRoot   string
 	corruptReads  atomic.Int32
 	corruptWrites atomic.Int32
+	failReference atomic.Bool
 }
 
 func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
@@ -469,6 +517,9 @@ func (files *restartProbeFiles) ReadFile(path string) ([]byte, error) {
 }
 
 func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	if files.failReference.Load() && filepath.Base(path) == "current-board.json" && filepath.Base(filepath.Dir(path)) == ".you-agent-factory" {
+		return errors.New("controlled reference publication failure")
+	}
 	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptWrites.Add(1)
 		return errors.New("unexpected write during rejected opening")
@@ -587,4 +638,104 @@ func assertPlainBoardGuardDispatches(t *testing.T, runner *restartProbeUnexpecte
 			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
 		}
 	}
+}
+
+// The local ~default board is stopped between cells; a rejection must neither
+// start a host/worker nor publish a pointer or repair the selected history.
+func testLegacyBoardRejections(t *testing.T, process support.Process, repo, home, artifact string, starts *atomic.Int32, runner *restartProbeUnexpectedRunner, files *restartProbeFiles) {
+	t.Helper()
+	original := mustReadSeededReplayArtifact(t, artifact)
+	duplicate := filepath.Join(home, ".you-agent-factory", "recordings", "2020", "01", "01", "duplicate.json")
+	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	for _, name := range []string{"two readable matches", "zero readable matches", "identified corrupt history", "explicit corrupt path", "explicit publication failure"} {
+		t.Run(name, func(t *testing.T) {
+			if name == "two readable matches" {
+				writeRestartProbeFile(t, duplicate, original)
+			}
+			selected := original
+			if name == "zero readable matches" || name == "explicit corrupt path" {
+				selected = []byte(`{"private":"` + restartProbeSecret + `"`)
+			}
+			if name == "identified corrupt history" {
+				selected = corruptIdentifiedBoardHistory(t, original)
+			}
+			writeRestartProbeFile(t, artifact, selected)
+			beforeStarts, beforeCalls := starts.Load(), runner.calls.Load()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+			inputs.Input.WorkingDirectory = repo
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			if strings.HasPrefix(name, "explicit") {
+				inputs.Input.Args = append(inputs.Input.Args, "--record", artifact)
+			}
+			files.failReference.Store(name == "explicit publication failure")
+			t.Cleanup(func() { files.failReference.Store(false) })
+			err := process.Execute(inputs.Input)
+			files.failReference.Store(false)
+			assertLegacyBoardRejection(t, name, err, inputs, starts.Load()-beforeStarts, runner.calls.Load()-beforeCalls, artifact, refPath, selected)
+			// Publication follows initial recording opening, so that failure may
+			// append startup events. Do not repair that valid retained ledger;
+			// the subsequent adoption must restore its unchanged public Work.
+			if name != "explicit publication failure" {
+				writeRestartProbeFile(t, artifact, original)
+			}
+			if name == "two readable matches" {
+				if err := os.Remove(duplicate); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func assertLegacyBoardRejection(t *testing.T, name string, err error, inputs *support.CapturedInputs, newStarts, newCalls int32, artifact, refPath string, selected []byte) {
+	t.Helper()
+	if err == nil || newStarts != 0 || newCalls != 0 {
+		t.Fatalf("%s did not fail before readiness/activation: %v", name, err)
+	}
+	if name == "identified corrupt history" {
+		var diagnostic interface{ CLIErrorCode() string }
+		if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CURRENT_BOARD_RECORDING_CORRUPT" {
+			t.Fatalf("identified history did not reach fatal reconstruction: %v", err)
+		}
+	}
+	if strings.Contains(inputs.Stdout()+inputs.Stderr()+err.Error(), restartProbeSecret) {
+		t.Fatal("rejection leaked recording contents")
+	}
+	if name != "explicit publication failure" && !bytes.Equal(mustReadSeededReplayArtifact(t, artifact), selected) {
+		t.Fatal("failed startup repaired history")
+	}
+	if _, err := os.Stat(refPath); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("failed startup published reference")
+	}
+}
+
+func corruptIdentifiedBoardHistory(t *testing.T, original []byte) []byte {
+	t.Helper()
+	var history map[string]any
+	if err := json.Unmarshal(original, &history); err != nil {
+		t.Fatal(err)
+	}
+	events, ok := history["events"].([]any)
+	if !ok {
+		t.Fatal("fixture has no canonical events")
+	}
+	changed := false
+	for _, value := range events {
+		event := value.(map[string]any)
+		if event["type"] == "WORK_REQUEST" {
+			// Preserve identity and ordered metadata, but break the typed
+			// Work payload so inventory succeeds and reconstruction is fatal.
+			event["payload"] = restartProbeSecret
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		t.Fatal("fixture has no Work request")
+	}
+	data, err := json.Marshal(history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

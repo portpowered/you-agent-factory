@@ -1,9 +1,9 @@
 package service_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -12,31 +12,28 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service"
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestCodexRequiredEffectsAreRejectedAtOwnerConstruction(t *testing.T) {
+func TestCapturedReaderRequiredAtOwnerConstruction(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	for _, missing := range []string{"filesystem", "Codex directory walker", "Codex symlink resolver"} {
+	for _, missing := range []string{"filesystem", "captured activity reader"} {
 		t.Run(missing, func(t *testing.T) {
 			var files providersessionsinternal.FileSystem = platformfilesystem.Local{}
-			walk := providersessionsinternal.CodexWalkDirectory(filepath.WalkDir)
-			resolve := providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks)
+			var captured recordings.WorkerCapturedActivityReader = emptyCapturedReader{}
 			switch missing {
 			case "filesystem":
 				files = nil
-			case "Codex directory walker":
-				walk = nil
-			case "Codex symlink resolver":
-				resolve = nil
+			case "captured activity reader":
+				captured = nil
 			}
 			constructors := []func() (providersessions.Service, error){
 				func() (providersessions.Service, error) {
-					return internalservice.NewForRoots(files, walk, resolve, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, root, root)
+					return internalservice.NewForRoots(files, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, root, captured)
 				},
 				func() (providersessions.Service, error) {
-					return internalservice.New(files, func() (string, error) { t.Fatal("home lookup before required-effect rejection"); return "", nil }, walk, resolve, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS))
+					return internalservice.New(files, func() (string, error) { t.Fatal("home lookup before required-effect rejection"); return "", nil }, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS), captured)
 				},
 			}
 			for _, construct := range constructors {
@@ -52,55 +49,20 @@ func TestCodexRequiredEffectsAreRejectedAtOwnerConstruction(t *testing.T) {
 func TestHomeFailurePreservesCauseAndNilOwnerService(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("controlled home failure")
-	service, err := internalservice.New(platformfilesystem.Local{}, func() (string, error) { return "", cause }, filepath.WalkDir, filepath.EvalSymlinks, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS))
+	service, err := internalservice.New(platformfilesystem.Local{}, func() (string, error) { return "", cause }, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS), emptyCapturedReader{})
 	if service != nil || !errors.Is(err, cause) || err.Error() != "home directory: controlled home failure" {
 		t.Fatalf("New = %#v, %v; want nil service and wrapped home cause", service, err)
 	}
 }
 
-func TestNewForRootsSatisfiesPublishedProviderSessionsService(t *testing.T) {
-	t.Parallel()
+type emptyCapturedReader struct{}
 
-	codexRoot := writeCodexSessionFixture(t, "internal-root-1")
-	service, err := internalservice.NewForRoots(
-		platformfilesystem.Local{},
-		providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
-		providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
-		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
-		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
-		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
-		codexRoot,
-		t.TempDir(),
-	)
-	if err != nil {
-		t.Fatalf("NewForRoots() error = %v", err)
-	}
-	var root providersessions.Service = service
-
-	ref := providers.SessionRef{
-		Provider: providers.IDCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "internal-root-1",
-	}
-	result, err := root.Inspect(providersessions.InspectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Inspect() = %v", err)
-	}
-	if result.Session != ref {
-		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
-	}
+func (emptyCapturedReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return recordings.WorkerCapturedCatalogPage{}, nil
 }
-
-func writeCodexSessionFixture(t *testing.T, sessionID string) string {
-	t.Helper()
-	root := t.TempDir()
-	sessionDir := filepath.Join(root, "2026", "07", "16")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir session fixture: %v", err)
-	}
-	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
-	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\"}\n"), 0o600); err != nil {
-		t.Fatalf("write session fixture: %v", err)
-	}
-	return root
+func (emptyCapturedReader) ReadWorkerCapturedActivity(context.Context, recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	panic("unexpected activity read")
+}
+func (emptyCapturedReader) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
+	panic("unexpected lookup")
 }

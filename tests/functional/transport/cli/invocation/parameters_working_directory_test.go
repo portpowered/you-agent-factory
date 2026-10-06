@@ -1,8 +1,6 @@
 package invocation_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -114,15 +112,7 @@ func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
 		)
 	}
 
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal(bytes.TrimSpace([]byte(inputs.Stderr())), &response); err != nil {
-		t.Fatalf(
-			"stderr is not one ErrorResponse: %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
+	response := testutil.RequireStartupCLIDiagnostic(t, inputs.Stderr())
 	if response.Code != factoryapi.ErrorResponseCode("CURRENT_FACTORY_NOT_FOUND") {
 		t.Fatalf("ErrorResponse = %#v, want code CURRENT_FACTORY_NOT_FOUND", response)
 	}

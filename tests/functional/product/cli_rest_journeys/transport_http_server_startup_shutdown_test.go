@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/pprof/profile"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -601,10 +602,7 @@ func assertBindFailureObservation(t *testing.T, observation bindFailureObservati
 		t.Fatalf("run stderr is missing the legacy listener migration warning:\n%s", stderr)
 	}
 	stderr = strings.TrimPrefix(stderr, legacyBindWarning)
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
-		t.Fatalf("run stderr is not exactly one ErrorResponse after the migration warning: %v\n%s", err, observation.stderr)
-	}
+	response := testutil.RequireStartupCLIDiagnostic(t, stderr)
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
 	}

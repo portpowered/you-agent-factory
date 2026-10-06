@@ -68,7 +68,8 @@ func WriteStartupCauses(output io.Writer, err error) bool {
 	root := failure.error
 	// Coded presentation is already in the primary envelope. Its unwrapped
 	// implementation cause supplies the additional diagnostic.
-	if _, coded := root.(CodedError); coded {
+	// Inspect only this node: errors.As would recursively traverse cyclic causes.
+	if _, coded := root.(CodedError); coded { //nolint:errorlint // Direct-node presentation selection preserves bounded traversal.
 		root = errors.Unwrap(root)
 	}
 	writeCauses(output, debugCauseChain(root), "")
@@ -108,7 +109,7 @@ func errorCauses(err error) ([]error, bool) {
 			seen[current] = true
 		}
 		nodes = append(nodes, current)
-		switch wrapped := current.(type) {
+		switch wrapped := current.(type) { //nolint:errorlint // Unwrap exactly one node; recursive errors.As can loop on cycles.
 		case interface{ Unwrap() []error }:
 			children := wrapped.Unwrap()
 			if len(children) > maxDebugCauseDepth {

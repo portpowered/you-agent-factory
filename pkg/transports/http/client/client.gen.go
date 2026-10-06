@@ -7529,7 +7529,7 @@ type ProviderSessionTranscriptEntry struct {
 	// EncryptedContent Compact encrypted reasoning payload when the provider exposes it.
 	EncryptedContent *string `json:"encryptedContent,omitempty"`
 
-	// LineNumber One-based JSONL line number that produced this transcript entry when applicable.
+	// LineNumber One-based source line; omitted when uncaptured.
 	LineNumber *int `json:"lineNumber,omitempty"`
 
 	// Name Tool or function name when present.
@@ -7541,7 +7541,7 @@ type ProviderSessionTranscriptEntry struct {
 	// Output Compact tool output when present.
 	Output *string `json:"output,omitempty"`
 
-	// SourceType Raw provider event or item type that produced this transcript entry.
+	// SourceType Captured event type for Codex when available; raw event type for Cursor.
 	SourceType *string `json:"sourceType,omitempty"`
 
 	// Status Provider or inferred status value when present.
@@ -7553,7 +7553,7 @@ type ProviderSessionTranscriptEntry struct {
 	// Text Plaintext transcript body when present.
 	Text *string `json:"text,omitempty"`
 
-	// Timestamp Provider event timestamp when present in the source session stream.
+	// Timestamp Capture time for Codex; provider time for Cursor.
 	Timestamp *time.Time `json:"timestamp,omitempty"`
 
 	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.

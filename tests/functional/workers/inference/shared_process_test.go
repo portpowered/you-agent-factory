@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -34,11 +35,17 @@ const (
 
 var sharedInferenceGroup = &inferenceProcessGroup{}
 
-// TestMain owns the one process group used by the controlled P003 inference
-// scenarios. The process is intentionally started lazily so package selectors
-// that only exercise construction tests do not pay for a service-mode host.
+// TestMain owns the reusable process groups used by controlled P003 inference
+// scenarios, including isolated profiles for global provider-association reads.
+// Hosts start lazily so construction-only selectors do not pay for hosting.
 func TestMain(m *testing.M) {
 	code := m.Run()
+	for variant, group := range selectedObservationGroups {
+		if err := group.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close selected observation %s process group: %v\n", variant, err)
+			code = 1
+		}
+	}
 	closeErr := sharedInferenceGroup.close()
 	if closeErr != nil {
 		fmt.Fprintf(os.Stderr, "close shared inference process group: %v\n", closeErr)
@@ -108,7 +115,6 @@ func (group *inferenceProcessGroup) setup() {
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = newInferenceProviderOverride()
 	group.workerRecordings = &inferenceWorkerRecordingRouter{
-		fallback:    newWSRFT004RecordingStore(),
 		bySession:   make(map[string]recordings.WorkerRecordingWriter),
 		byWorker:    make(map[string]inferenceWorkerRecordingRoute),
 		byRecording: make(map[string]inferenceWorkerRecordingRoute),
@@ -145,7 +151,11 @@ func (group *inferenceProcessGroup) setup() {
 		ScriptCommandRunner:                 group.scripts,
 		ProviderOverride:                    group.override,
 		WorkerRecordingWriter:               group.workerRecordings,
-		ProviderRegistrations:               registrations,
+		FactorySessionsWorkingDirectory:     platformfilesystem.Local{WorkingDirectory: group.rootDir},
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+			group.workerRecordings.fallback = store
+		},
+		ProviderRegistrations: registrations,
 	})
 	if err != nil {
 		group.setupErr = err

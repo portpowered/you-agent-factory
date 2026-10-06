@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -137,10 +138,7 @@ func assertRejectedResume(t *testing.T, process support.Process, debug bool, fix
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("corrupt resume succeeded")
 	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
-		t.Fatalf("decode stderr: %v; stderr=%q", err, inputs.Stderr())
-	}
+	response := testutil.RequireStartupCLIDiagnostic(t, inputs.Stderr())
 	if string(response.Code) != "SERVER_START_FAILED" || response.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("response = %#v, want SERVER_START_FAILED/internal", response)
 	}
