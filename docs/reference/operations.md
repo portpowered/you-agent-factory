@@ -536,6 +536,10 @@ the interrupt joins its source and reports `SUCCESSOR_ADMISSION` with
 `WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED`. The sibling keeps
 running. Retrying the same tuple after restarting the host returns that saved
 failure, even after the sibling has ended; it does not admit the successor.
+Factory-origin Worker Session replacement returns `UNSUPPORTED` before any
+source control or successor admission. Factory Runtime owns replacement of
+those attempts. A direct invocation's Factory Session correlation preserves
+its eligibility for interruption.
 New interruptions capture the execution recipe and exact
 Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that

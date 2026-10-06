@@ -149,6 +149,7 @@ func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
 		status int
 		code   string
 	}{
+		{workersessions.ErrInterruptFactoryUnsupported, http.StatusConflict, "UNSUPPORTED"},
 		{workersessions.ErrInterruptContinuationUnsupported, http.StatusConflict, "PROVIDER_UNSUPPORTED"},
 		{workersessions.ErrInterruptProviderSessionMissing, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
 		{workersessions.ErrInterruptProviderSessionInvalid, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},

@@ -53,6 +53,7 @@ func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
 		cause error
 		code  string
 	}{
+		{workersessions.ErrInterruptFactoryUnsupported, "UNSUPPORTED"},
 		{workersessions.ErrInterruptContinuationUnsupported, "PROVIDER_UNSUPPORTED"},
 		{workersessions.ErrInterruptProviderSessionMissing, "WORKER_SESSION_INTERRUPT_CONFLICT"},
 		{workersessions.ErrInterruptProviderSessionInvalid, "WORKER_SESSION_INTERRUPT_CONFLICT"},

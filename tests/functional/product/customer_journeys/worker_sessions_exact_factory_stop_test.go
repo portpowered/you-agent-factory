@@ -3,6 +3,7 @@ package customer_journeys_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	workercli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -53,6 +55,7 @@ func TestExactStopFactoryJoinsAndPreservesSibling(t *testing.T) {
 		if live.TerminalCause != nil || live.ProviderSession != nil {
 			t.Fatalf("live no-reference Worker = %#v", live)
 		}
+		assertFactoryInterruptRefusesBeforeStop(t, server, runner, target, index+2)
 		joinedExactFactoryStop(t, server, runner.slots[index+1], target, action, index == 1)
 		state := "CANCELED"
 		if action == "terminate" {
@@ -87,6 +90,58 @@ func TestExactStopFactoryJoinsAndPreservesSibling(t *testing.T) {
 	assertCapturedStopCause(t, server.URL(), "exact-sibling", "COMPLETED")
 	if runner.callCount() != 4 {
 		t.Fatalf("provider calls=%d, want direct sibling and three Runtime attempts", runner.callCount())
+	}
+}
+
+// Extend the live Factory journey without another process graph. Both public
+// transports must refuse replacement while Runtime and the direct sibling
+// retain their original execution; the following joined stop proves recovery.
+func assertFactoryInterruptRefusesBeforeStop(t *testing.T, server *fleetCharacterizationServer, runner *fleetCharacterizationRunner, target routeCharacterizationDispatch, calls int) {
+	t.Helper()
+	successor := "refused-" + target.workerSessionID
+	requestID := "factory-interrupt-" + target.workerSessionID
+	payload, err := json.Marshal(factoryapi.WorkerSessionInterruptRequest{
+		RequestId: requestID, SuccessorWorkerSessionId: successor, ReplacementMessage: "replacement",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL()+"/worker-sessions/"+target.workerSessionID+"/interrupt", strings.NewReader(string(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var refusal factoryapi.WorkerSessionInterruptError
+	if err := json.NewDecoder(response.Body).Decode(&refusal); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusConflict || refusal.Code != "UNSUPPORTED" || string(refusal.Phase) != "VALIDATION" {
+		t.Fatalf("Factory interrupt HTTP=%d/%#v", response.StatusCode, refusal)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", server.URL(), "worker-sessions", "interrupt", target.workerSessionID,
+		"--request-id", requestID, "--successor-worker-session-id", successor, "--replacement-message", "replacement", "--async", "--output", "json"})
+	err = server.Execute(t, inputs.Input)
+	var diagnostic *workercli.CLIError
+	if !errors.As(err, &diagnostic) || diagnostic.Code != "UNSUPPORTED" || diagnostic.Phase != "VALIDATION" {
+		t.Fatalf("Factory interrupt CLI=%#v err=%v", diagnostic, err)
+	}
+	assertFleetCharacterizationSnapshot(t, server, target.workerSessionID, target.dispatchID, "RUNNING")
+	assertFleetCharacterizationSnapshot(t, server, "exact-sibling", "sibling-dispatch", "RUNNING")
+	if runner.callCount() != calls {
+		t.Fatalf("Factory refusal provider calls=%d want=%d", runner.callCount(), calls)
+	}
+	absent, err := http.Get(server.URL() + "/worker-sessions/" + successor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer absent.Body.Close()
+	if absent.StatusCode != http.StatusNotFound {
+		t.Fatalf("refused successor status=%d", absent.StatusCode)
 	}
 }
 

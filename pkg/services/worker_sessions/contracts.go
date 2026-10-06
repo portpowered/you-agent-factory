@@ -841,6 +841,8 @@ var (
 	ErrInterruptSuccessorAdmissionFailed = errors.New("worker session: interrupt successor admission failed")
 	// ErrInterruptContinuationUnsupported refuses redirection before source cancellation.
 	ErrInterruptContinuationUnsupported = errors.New("worker session: provider continuation unsupported")
+	// ErrInterruptFactoryUnsupported preserves Factory Runtime's replacement authority.
+	ErrInterruptFactoryUnsupported = errors.New("worker session: Factory interruption unsupported")
 	// ErrInterruptServerStopping reports rejection while the owning process
 	// lifecycle is stopping.
 	ErrInterruptServerStopping = errors.New("worker session: interrupt server is stopping")

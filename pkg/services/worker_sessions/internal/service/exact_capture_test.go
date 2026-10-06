@@ -731,6 +731,48 @@ type interruptContinuationSupportFake struct {
 	reference providers.SessionRef
 }
 
+func TestInterruptFactoryOriginRefusesBeforeControlEffects(t *testing.T) {
+	t.Parallel()
+	for _, hasReference := range []bool{false, true} {
+		t.Run(fmt.Sprint(hasReference), func(t *testing.T) {
+			t.Parallel()
+			r, supervision := newRunningPauseRegistry(t)
+			r.runtimeAttempts["worker-1"] = struct{}{}
+			if !hasReference {
+				source := r.sessions["worker-1"]
+				source.ProviderSessionAssociation = nil
+				r.sessions["worker-1"] = source
+			}
+			source := r.sessions["worker-1"].Clone()
+			query := &interruptContinuationSupportFake{supported: true}
+			r.continuationSupport = query
+			result, err := r.Interrupt(t.Context(), workersessions.InterruptRequest{
+				RequestID: "factory-refusal", SourceWorkerSessionID: source.ID,
+				SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
+			})
+			if !errors.Is(err, workersessions.ErrInterruptFactoryUnsupported) || result.Accepted || result.Phase != workersessions.InterruptPhaseValidation {
+				t.Fatalf("Factory refusal result=%#v err=%v", result, err)
+			}
+			if !reflect.DeepEqual(r.sessions[source.ID], source) || supervision.interrupting || supervision.controlHistory != nil ||
+				r.activeStarts != 0 || len(r.interruptReplays) != 0 || len(r.publications[source.ID].accepted) != 0 || query.reference != (providers.SessionRef{}) {
+				t.Fatal("Factory refusal changed source, published control history or reserved execution")
+			}
+			if _, err := r.Get(t.Context(), workersessions.GetRequest{ID: "successor-session"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+				t.Fatalf("successor reserved: %v", err)
+			}
+		})
+	}
+}
+
+func TestInterruptDirectFactoryCorrelationPreservesEligibility(t *testing.T) {
+	t.Parallel()
+	r, supervision := newRunningPauseRegistry(t)
+	supervision.execution.Execution.FactorySessionID = "correlated-factory-session"
+	if err := r.interruptOrigin("worker-1"); err != nil {
+		t.Fatalf("direct correlation changed ownership: %v", err)
+	}
+}
+
 func (fake *interruptContinuationSupportFake) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
 	fake.reference = reference
 	return fake.supported, fake.err
