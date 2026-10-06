@@ -745,7 +745,7 @@ func writeNativeForceFactoryWithFailedState(t *testing.T, fixture cancelFixture,
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		"workers/process-worker/AGENTS.md": "---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: CODEX\nexecutorProvider: CODEX\nstopToken: COMPLETE\n---\nObserve the source Work.\n",
+		"workers/process-worker/AGENTS.md": "---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: codex\nexecutorProvider: codex\nstopToken: COMPLETE\n---\nObserve the source Work.\n",
 		"workstations/process/AGENTS.md":   "---\ntype: MODEL_WORKSTATION\n---\nProcess the source Work.\n",
 	}
 	for name, content := range files {

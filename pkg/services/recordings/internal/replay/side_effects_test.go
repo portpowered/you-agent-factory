@@ -89,6 +89,20 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 	}
 }
 
+func TestSideEffects_InferPreservesCanceledDispatch(t *testing.T) {
+	sideEffects := &SideEffects{records: []sideEffectRecord{{
+		hasCompletion: true,
+		completion: &replayCompletion{result: workerexecution.WorkResult{
+			Outcome: workerexecution.OutcomeCanceled,
+			Output:  "partial output must not become success",
+		}},
+	}}}
+	response, err := sideEffects.Infer(t.Context(), workerexecution.ProviderInferenceRequest{})
+	if !errors.Is(err, context.Canceled) || response.Content != "" || response.Diagnostics != nil {
+		t.Fatalf("canceled dispatch inference = %+v, error=%v", response, err)
+	}
+}
+
 func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
 	artifact := replaySideEffectArtifact(t)
 	sideEffects, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact)

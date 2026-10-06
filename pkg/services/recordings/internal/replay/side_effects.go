@@ -432,6 +432,11 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 	}
 
 	result := record.completion.result
+	if result.Outcome == workerexecution.OutcomeCanceled {
+		// A stopped dispatch has no successful provider response. Preserve its
+		// cancellation at this boundary so Workers cannot retry empty output.
+		return workerexecution.InferenceResponse{}, context.Canceled
+	}
 	failureMetadata := result.FailureMetadata
 	if result.Outcome == workerexecution.OutcomeFailed && failureMetadata != nil {
 		return workerexecution.InferenceResponse{}, workers.NewProviderError(
