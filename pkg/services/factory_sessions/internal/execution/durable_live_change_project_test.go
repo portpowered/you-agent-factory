@@ -87,7 +87,7 @@ func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *t
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil, nil, nil)
 
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "standalone-session")
 	if hooks.NewChildExecutor == nil {
@@ -347,20 +347,40 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
 	t.Parallel()
 	service := &JavaScriptRuntimeService{}
-	if err := service.BindWorkerScope(nil, "runtime", "generation", nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
+	if err := service.BindWorkerScope(nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
 		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
 	}
 }
 
-func TestBindWorkerScopeRetainsExecutionAndCapturedChildIdentity(t *testing.T) {
+func TestBindWorkerScopeRetainsCapturedChildIdentityAndObservationHandles(t *testing.T) {
 	t.Parallel()
-	invocation := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	invocation := &recordingWorkerExecution{
+		result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted},
+		onExecute: func(request workers.ExecuteRequest) {
+			request.Input.ProgressPublisher(workers.ProgressFragment{Correlation: request.Correlation, Kind: workers.ResponseFragmentKind, Payload: "child output"})
+		},
+	}
+	var firstProgress, secondProgress []workers.ProgressFragment
+	var firstAttempts, secondAttempts []workers.ExecutionCorrelation
+	var firstCompletions, secondCompletions int
+	starter := func(attempts *[]workers.ExecutionCorrelation, completions *int) childWorkerAttemptStarter {
+		return func(_ context.Context, request workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+			*attempts = append(*attempts, request.Correlation)
+			return func(_ context.Context, result workers.ExecuteResult, err error) error {
+				if result.Outcome != workers.ExecutionOutcomeAccepted || err != nil {
+					t.Errorf("completion = %#v, %v", result, err)
+				}
+				*completions++
+				return nil
+			}, nil
+		}
+	}
 	service := newProcessChildRuntime(invocation)
-	if err := service.BindWorkerScope(nil, "runtime-first", "generation-first", nil, nil, nil); err != nil {
+	if err := service.BindWorkerScope(nil, "runtime-first", "generation-first", nil, nil, nil, func(fragment workers.ProgressFragment) { firstProgress = append(firstProgress, fragment) }, starter(&firstAttempts, &firstCompletions)); err != nil {
 		t.Fatal(err)
 	}
 	first := service.childExecutorHooks(ChildExecutorModeLive, "first-parent").NewChildExecutor("first-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
-	if err := service.BindWorkerScope(nil, "runtime-second", "generation-second", nil, nil, nil); err != nil {
+	if err := service.BindWorkerScope(nil, "runtime-second", "generation-second", nil, nil, nil, func(fragment workers.ProgressFragment) { secondProgress = append(secondProgress, fragment) }, starter(&secondAttempts, &secondCompletions)); err != nil {
 		t.Fatal(err)
 	}
 	second := service.childExecutorHooks(ChildExecutorModeLive, "second-parent").NewChildExecutor("second-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
@@ -377,6 +397,23 @@ func TestBindWorkerScopeRetainsExecutionAndCapturedChildIdentity(t *testing.T) {
 		got := invocation.request.Correlation
 		if got.FactorySessionID != scenario.session || got.RuntimeID != scenario.runtime || got.GenerationID != scenario.generation {
 			t.Fatalf("child correlation = %#v, want session %q runtime %q generation %q", got, scenario.session, scenario.runtime, scenario.generation)
+		}
+	}
+	for index, observed := range []struct {
+		session     string
+		progress    []workers.ProgressFragment
+		attempts    []workers.ExecutionCorrelation
+		completions int
+	}{
+		{"first-child", firstProgress, firstAttempts, firstCompletions},
+		{"second-child", secondProgress, secondAttempts, secondCompletions},
+	} {
+		if len(observed.progress) != 2 || len(observed.attempts) != 1 || observed.completions != 1 {
+			t.Fatalf("scope %d observations = %#v", index, observed)
+		}
+		fragment := observed.progress[0]
+		if fragment.Correlation.FactorySessionID != observed.session || fragment.Payload != "child output" || observed.attempts[0].FactorySessionID != observed.session || observed.progress[1].Kind != workers.CompletedFragmentKind || observed.progress[1].DispatchID != observed.attempts[0].DispatchID {
+			t.Fatalf("scope %d crossed observation routes: %#v", index, observed)
 		}
 	}
 }

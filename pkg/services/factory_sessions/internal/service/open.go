@@ -741,6 +741,8 @@ type workerScopeBinder interface {
 		providers.Service,
 		*workers.MockWorkersConfig,
 		platformprocess.CommandRunner,
+		workers.ProgressPublisher,
+		func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 	) error
 }
 
@@ -753,12 +755,14 @@ func bindWorkerScope(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {
 	binder, ok := execution.(workerScopeBinder)
 	if !ok {
 		return fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	if err := binder.BindWorkerScope(admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride); err != nil {
+	if err := binder.BindWorkerScope(admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter); err != nil {
 		return fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}
 	return nil
@@ -783,19 +787,6 @@ func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.Prog
 	return nil
 }
 
-func setWorkerProgressPublisher(execution any, publisher workers.ProgressPublisher) {
-	if publisher == nil {
-		return
-	}
-	setter, ok := execution.(interface {
-		SetWorkerProgressPublisher(workers.ProgressPublisher)
-	})
-	if !ok {
-		return
-	}
-	setter.SetWorkerProgressPublisher(publisher)
-}
-
 type runtimeWorkerAttemptStarterProvider interface {
 	BeginWorkerAttempt(
 		context.Context,
@@ -818,24 +809,6 @@ func runtimeWorkerAttemptStarter(
 		}
 	}
 	return nil
-}
-
-func setWorkerAttemptStarter(
-	execution any,
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) {
-	if starter == nil {
-		return
-	}
-	setter, ok := execution.(interface {
-		SetWorkerAttemptStarter(
-			func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-		)
-	})
-	if !ok {
-		return
-	}
-	setter.SetWorkerAttemptStarter(starter)
 }
 
 type historicalRecordingReader interface {

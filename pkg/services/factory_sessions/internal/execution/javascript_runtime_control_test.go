@@ -74,7 +74,7 @@ func TestJavaScriptRuntimeService_ChildPolicySetsNarrowerWorkerTimeout(t *testin
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil, nil, nil)
 
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "timeout-policy-session")
 	if hooks.NewChildExecutor == nil {

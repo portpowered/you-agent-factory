@@ -29,7 +29,7 @@ type factoryDefinitionsConstructionStub struct {
 }
 
 func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
-	err := bindWorkerScope("session-42", struct{}{}, nil, "runtime-1", "generation-1", nil, nil, nil)
+	err := bindWorkerScope("session-42", struct{}{}, nil, "runtime-1", "generation-1", nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "session-42") || !strings.Contains(err.Error(), "binder is required") {
 		t.Fatalf("missing scope binder error = %v, want session and required binder", err)
 	}

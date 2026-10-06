@@ -448,7 +448,7 @@ func NewProcessDurableRuntime(
 	service.persistenceProjectRoot = currentProjectRoot
 	service.resumeRuntimeScope = resumeScope
 	service.persistenceWarningLogger = logger
-	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", providerOverride, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", providerOverride, nil, nil, nil, nil)
 	return service
 }
 

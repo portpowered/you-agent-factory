@@ -369,11 +369,11 @@ func bindDurableExecutionCapabilities(
 		providerOverride,
 		mockWorkers,
 		commandRunner,
+		progressPublisher,
+		attemptStarter,
 	); err != nil {
 		return err
 	}
-	setWorkerProgressPublisher(execution, progressPublisher)
-	setWorkerAttemptStarter(execution, attemptStarter)
 	return nil
 }
 

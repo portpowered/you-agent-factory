@@ -610,20 +610,14 @@ func (owner *portableReplayRuntimeOwner) BindWorkerScope(
 	_ providers.Service,
 	_ *workers.MockWorkersConfig,
 	_ platformprocess.CommandRunner,
+	publisher workers.ProgressPublisher,
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {
+	owner.progressPublisher = publisher
+	owner.attemptStarter = starter
 	owner.workerRuntimeID = runtimeID
 	owner.workerGenerationID = generationID
 	return nil
-}
-
-func (owner *portableReplayRuntimeOwner) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {
-	owner.progressPublisher = publisher
-}
-
-func (owner *portableReplayRuntimeOwner) SetWorkerAttemptStarter(
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) {
-	owner.attemptStarter = starter
 }
 
 type portableReplayWorkerService struct {

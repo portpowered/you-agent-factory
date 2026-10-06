@@ -332,7 +332,7 @@ func NewJavaScriptRuntimeService(
 		startInflight:           make(map[string]*startInflightFlight),
 		controlReplay:           make(map[string]controlReplayRecord),
 	}
-	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil, nil, nil)
 	return service
 }
 

@@ -32,7 +32,6 @@ type childWorkerExecutionBinding struct {
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride platformprocess.CommandRunner
-	progressPublisher     workers.ProgressPublisher
 	publish               childWorkerProgressPublisher
 }
 
@@ -54,7 +53,8 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 }
 
 // BindWorkerScope registers the owning runtime's request facts and resource
-// handles. The Workers operation is fixed by construction.
+// handles atomically. Captured children retain these immutable handles across
+// later registrations. The Workers operation is fixed by construction.
 func (s *JavaScriptRuntimeService) BindWorkerScope(
 	admission factory.ResourceCapacityLeaseAdmission,
 	runtimeID string,
@@ -62,13 +62,15 @@ func (s *JavaScriptRuntimeService) BindWorkerScope(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {
 	s.invokerMu.Lock()
 	defer s.invokerMu.Unlock()
 	if s.workerExecution == nil || s.workerExecution.execute == nil {
 		return errors.New("Workers Execute capability is required")
 	}
-	s.workerExecution = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+	s.workerExecution = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
 	return nil
 }
 
@@ -79,12 +81,15 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter childWorkerAttemptStarter,
 ) *childWorkerExecutionBinding {
 	if execution == nil {
 		return nil
 	}
 	binding := &childWorkerExecutionBinding{
 		execute:               execution,
+		attemptStarter:        attemptStarter,
 		runtimeID:             strings.TrimSpace(runtimeID),
 		generationID:          strings.TrimSpace(generationID),
 		providerOverride:      providerOverride,
@@ -117,9 +122,6 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 		if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
 			fragment.Correlation.DispatchID = workerDispatchID
 		}
-		s.invokerMu.RLock()
-		progressPublisher := binding.progressPublisher
-		s.invokerMu.RUnlock()
 		if progressPublisher != nil {
 			progressPublisher(fragment)
 			return
@@ -127,42 +129,6 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 		s.PublishWorkerProgress(fragment)
 	}
 	return binding
-}
-
-// SetWorkerProgressPublisher attaches the runtime-owned progress bridge to
-// the already-bound child Execute operation. Runtime construction creates the
-// bridge while it binds the session-owned Worker Sessions service, which is
-// later than the durable execution service itself. Keeping this as a narrow
-// optional bind preserves the existing Execute seam for standalone, replay,
-// and test compositions.
-func (s *JavaScriptRuntimeService) SetWorkerProgressPublisher(
-	publisher workers.ProgressPublisher,
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	if s.workerExecution != nil {
-		s.workerExecution.progressPublisher = publisher
-	}
-	s.invokerMu.Unlock()
-}
-
-// SetWorkerAttemptStarter attaches the Runtime-owned Worker Session opening
-// boundary to the direct child Execute route. Runtime remains responsible for
-// admission and execution; the returned completion callback only commits the
-// durable Worker Session observation after Execute returns.
-func (s *JavaScriptRuntimeService) SetWorkerAttemptStarter(
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	if s.workerExecution != nil {
-		s.workerExecution.attemptStarter = starter
-	}
-	s.invokerMu.Unlock()
 }
 
 func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {

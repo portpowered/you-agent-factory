@@ -139,7 +139,7 @@ func TestChildWorkerExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.workerExecution = service.newChildWorkerExecutionBinding(involver, nil, "", "", nil, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(involver, nil, "", "", nil, nil, nil, nil, nil)
 	policy := factory.DefaultJavaScriptPolicy()
 	policy.MaxRetries = 1
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "direct-structured-retry")
@@ -914,7 +914,7 @@ func TestChildStartProgressBridgePreservesDurableOwnerAndPeer(t *testing.T) {
 					CanonicalDraft: validMessageDeltaDraft(request.Correlation.DispatchID),
 				})
 			}
-			service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "runtime", "generation", nil, nil, nil)
+			service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "runtime", "generation", nil, nil, nil, nil, nil)
 			forwarded := 0
 			hooks := service.childExecutorHooksForStart(ChildExecutorModeLive, sessionID, nil, nil, nil, func(fragment workers.ProgressFragment) {
 				if fragment.DispatchID == "" || fragment.Correlation.DispatchID != fragment.DispatchID {
