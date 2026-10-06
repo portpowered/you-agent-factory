@@ -23,6 +23,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -738,7 +739,7 @@ func readSharedInferenceWorkerReplay(
 }
 
 func sharedInferenceProcessEnvironment(homeDir string) []string {
-	return support.IsolatedHomeEnvironment(homeDir)
+	return isolatedHomeEnvironment(homeDir)
 }
 
 func setSharedInferenceEnvironment(environment []string, name, value string) []string {
@@ -829,3 +830,19 @@ var _ platformprocess.CommandRunner = (*inferenceResponseCaptureRunner)(nil)
 var _ recordings.WorkerRecordingWriter = (*inferenceWorkerRecordingRouter)(nil)
 var _ recordings.WorkerRecordingReader = (*inferenceWorkerRecordingRouter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*inferenceWorkerRecordingRouter)(nil)
+
+// isolatedHomeEnvironment keeps configuration and model discovery in this
+// scenario's home without changing the environment used by parallel tests.
+func isolatedHomeEnvironment(home string) []string {
+	environment := make([]string, 0, len(os.Environ())+3)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") ||
+			strings.EqualFold(name, runcli.ModelCacheDirEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+home, "USERPROFILE="+home,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
+}

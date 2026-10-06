@@ -795,7 +795,7 @@ func setWorkerExecution(
 			strings.TrimSpace(sessionID),
 		)
 	}
-	if missingPortDependency(workerService) {
+	if workerService == nil {
 		return fmt.Errorf(
 			"bind Workers Execute for Factory Session %q: Workers service is required",
 			strings.TrimSpace(sessionID),

@@ -176,31 +176,6 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 	}
 }
 
-func TestNewRootRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
-	t.Parallel()
-
-	factory, err := NewRoot(
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
-	if factory != nil {
-		t.Fatalf("NewRoot() = %#v, want nil factory", factory)
-	}
-	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
-		t.Fatalf("NewRoot() error = %q, want %q", got, want)
-	}
-}
-
 func TestNewServiceFromAssemblyConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 

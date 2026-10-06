@@ -22,10 +22,10 @@ def write(root, name, text):
     target.write_text(text, encoding="utf-8")
 
 
-def invoke(reporter, upstream, root, expected, diagnostic):
+def invoke(reporter, upstream, root, anchor, expected, diagnostic):
     environment = dict(os.environ, GOWORK="off")
     result = subprocess.run(
-        [sys.executable, str(reporter), "--"] + upstream, cwd=root, env=environment,
+        [sys.executable, str(reporter), "--historical-base", anchor, "--"] + upstream, cwd=root, env=environment,
         text=True, capture_output=True, timeout=180,
     )
     output = result.stdout + result.stderr
@@ -82,9 +82,36 @@ func main() {{ golangcilintplugin.New() }}
             "tools/golangcilintplugin/plugin.go: unreachable func: Abandoned",
         ]) + "\n"
         write(root, "docs/internal/baselines/deadcode-baseline.txt", baseline)
-        invoke(reporter, upstream, root, 0, "baseline matches")
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        def git(*arguments):
+            return subprocess.run(["git", *arguments], cwd=root, env=environment,
+                                  text=True, capture_output=True, check=True).stdout.strip()
+        git("init", "--initial-branch=main")
+        for key, value in [("user.name", "Deadcode Smoke"), ("user.email", "fixture@example.invalid"),
+                           ("commit.gpgsign", "false"), ("core.hooksPath", str(root / "no-hooks"))]:
+            git("config", key, value)
+        git("add", ".")
+        git("commit", "-m", "established allowances")
+        anchor = git("rev-parse", "HEAD")
+        git("update-ref", "refs/remotes/origin/main", anchor)
+        invoke(reporter, upstream, root, anchor, 0, "baseline matches")
         assert (root / "bin/deadcode-current.txt").read_text() == baseline
         print("PASS: real host calls are live; abandoned analyzer/plugin and test-only functions remain dead")
+
+        (root / "pkg/relocated").mkdir()
+        git("mv", "pkg/product/product.go", "pkg/relocated/product.go")
+        write(root, "cmd/product/main.go", f'''package main
+import "{MODULE}/pkg/relocated"
+func main() {{ product.Live() }}
+''')
+        (root / "pkg/product/product_test.go").unlink()
+        baseline = baseline.replace("pkg/product/product.go", "pkg/relocated/product.go")
+        write(root, "docs/internal/baselines/deadcode-baseline.txt", baseline)
+        git("add", ".")
+        git("commit", "-m", "relocate compiler-owned source")
+        invoke(reporter, upstream, root, anchor, 0, "baseline matches")
+        print("PASS: faithful Git relocation retains only its compiler-owned allowance")
 
         write(root, "tools/golangcilintplugin/plugin.go", f'''package golangcilintplugin
 import "{MODULE}/internal/lint/analyzers"
@@ -92,12 +119,16 @@ func New() {{ analyzers.Live() }}
 func Abandoned() {{}}
 func NewDeadFunction() {{}}
 ''')
-        invoke(reporter, upstream, root, 1, "baseline drift")
+        invoke(reporter, upstream, root, anchor, 1, "baseline drift")
         assert "NewDeadFunction" in (root / "bin/deadcode-current.txt").read_text()
         assert (root / "docs/internal/baselines/deadcode-baseline.txt").read_text() == baseline
         print("PASS: a new unused plugin function fails the unchanged baseline")
+        write(root, "docs/internal/baselines/deadcode-baseline.txt",
+              (root / "bin/deadcode-current.txt").read_text())
+        invoke(reporter, upstream, root, anchor, 1, "deadcode historical allowance growth")
+        print("PASS: matching enlarged actual/baseline still rejects new plugin debt")
         (root / pointer).unlink()
-        invoke(reporter, upstream, root, 1, "read generated golangci host")
+        invoke(reporter, upstream, root, anchor, 1, "read generated golangci host")
         print("PASS: absent production host fails closed")
     return 0
 

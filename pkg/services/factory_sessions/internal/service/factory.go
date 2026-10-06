@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -31,105 +30,12 @@ import (
 // privately at its own service boundary.
 type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) platformprocess.CommandRunner
 
-// The owner-port contracts below are the Factory Sessions-owned construction
-// vocabulary for the one process-scoped runtime-opening factory. Each
-// contract names one owner and contains only the fixed collaborators selected
-// for that owner by canonical Wire composition. Runtime opening receives the
-// contracts as separate constructor arguments; there is no aggregate
-// dependency bag or secondary graph for an operation to consult.
-
-// ProviderSessionsPorts contains the Provider Sessions-owned runtime
-// collaborators.
-type ProviderSessionsPorts struct {
-	Service providersessions.Service
-}
-
 // ProviderOverrideService is the optional request-scoped Providers root
 // replacement selected by process composition. The distinct interface keeps
 // Wire from confusing the override with the process-owned Providers root when
 // both are available in the same provider set.
 type ProviderOverrideService interface {
 	providers.Service
-}
-
-// FactoryRuntimePorts contains Factory Runtime's opening collaborators.
-type FactoryRuntimePorts struct {
-	Logger                          *zap.Logger
-	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
-	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
-	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	RuntimeRoot                     FactoryRuntimeRoot
-	ResolveClock                    factoryruntime.ClockResolver
-	NewSessionLogger                factoryruntime.SessionLoggerFactory
-	Clock                           factoryruntime.Clock
-	ProviderOverride                ProviderOverrideService
-	SubmissionRecorder              recordings.SubmissionRecorder
-	DispatchRecorder                recordings.DispatchRecorder
-}
-
-// FactoryDefinitionsPorts contains Factory Definitions-owned opening
-// collaborators.
-type FactoryDefinitionsPorts struct {
-	Validator                    factorydefinitions.Validator
-	NamedPaths                   factorydefinitions.NamedPathResolver
-	Service                      factorydefinitions.Service
-	RuntimeRouter                *factorysessions.DefinitionRuntimeRouter
-	LoadFactory                  factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory             factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig           factorydefinitions.ReplayRuntimeConfigDecoder
-	CaptureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
-}
-
-// FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
-type FactorySessionsPorts struct {
-	RuntimeAssembly                roles.RuntimeAssembly
-	DurableExecutionFactory        DurableExecutionFactory
-	FactorySessionExecutionFactory FactorySessionExecutionFactory
-	FactoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator       factorysessions.EditableFactoryValidator
-	ProcessRuntimeFactory          roles.ProcessRuntimeFactory
-	GenerateSessionID              factorysessions.SessionIDGenerator
-	GenerateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
-	ResolveHome                    factorysessions.HomeDirectoryResolver
-	ProviderIdentities             factorysessions.ProviderIdentityResolver
-	InvocationMetricsRecorder      roles.InvocationMetricsRecorder
-}
-
-// WorkPorts contains Work-owned opening collaborators.
-type WorkPorts struct {
-	Service work.Service
-}
-
-// AutomationsPorts contains Automations-owned opening collaborators.
-type AutomationsPorts struct {
-	Service automations.Service
-}
-
-// WebhooksPorts contains the Webhooks root used to attach hosted delivery to
-// the runtime's canonical recording stream.
-type WebhooksPorts struct {
-	Service webhooks.Service
-}
-
-// ModelsPorts contains the Models root used while opening a session.
-type ModelsPorts struct {
-	Service models.Service
-}
-
-// RecordingsPorts contains Recordings-owned opening collaborators.
-type RecordingsPorts struct {
-	Service recordings.Service
-	Runtime recordings.RuntimeScopeService
-}
-
-// WorkersPorts contains Workers-owned opening collaborators.
-type WorkersPorts struct {
-	// Service is the one process-scoped Workers root. Factory Session opening
-	// consumes it as a capability and never constructs a replacement runtime.
-	Service                          workers.Service
-	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	ProviderCommandRunner            ProviderCommandRunner
-	ScriptCommandRunner              ScriptCommandRunner
 }
 
 // ProviderCommandRunner and ScriptCommandRunner are distinct Wire keys for
@@ -141,12 +47,6 @@ type ProviderCommandRunner interface {
 
 type ScriptCommandRunner interface {
 	platformprocess.CommandRunner
-}
-
-// OperatorSettingsPorts contains the Operator Settings capability used
-// to establish the session backend scope.
-type OperatorSettingsPorts struct {
-	EnsureBackendScope operatorsettings.BackendScopeEnsurer
 }
 
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
@@ -202,282 +102,97 @@ type Root struct {
 }
 
 func NewRoot(
-	providerSessions *ProviderSessionsPorts,
-	factoryRuntime *FactoryRuntimePorts,
-	factoryDefinitions *FactoryDefinitionsPorts,
-	factorySessions *FactorySessionsPorts,
-	workPorts *WorkPorts,
-	automationsPorts *AutomationsPorts,
-	modelsPorts *ModelsPorts,
-	recordingsPorts *RecordingsPorts,
-	webhooksPorts *WebhooksPorts,
-	workersPorts *WorkersPorts,
-	operatorSettings *OperatorSettingsPorts,
+	providerSessions providersessions.Service,
+	logger *zap.Logger,
+	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
+	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	runtimeRoot FactoryRuntimeRoot,
+	resolveClock factoryruntime.ClockResolver,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+	clock factoryruntime.Clock,
+	providerOverride ProviderOverrideService,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	validator factorydefinitions.Validator,
+	namedPaths factorydefinitions.NamedPathResolver,
+	definitions factorydefinitions.Service,
+	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	assembly roles.RuntimeAssembly,
+	durableExecutionFactory DurableExecutionFactory,
+	factorySessionExecutionFactory FactorySessionExecutionFactory,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	processRuntimeFactory roles.ProcessRuntimeFactory,
+	generateSessionID factorysessions.SessionIDGenerator,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	workService work.Service,
+	automationService automations.Service,
+	webhooksService webhooks.Service,
+	modelService models.Service,
+	recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService,
+	workerService workers.Service,
+	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
+	providerCommandRunner ProviderCommandRunner,
+	scriptCommandRunner ScriptCommandRunner,
+	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 ) (*Root, error) {
-	if err := validateOwnerPorts(
-		providerSessions,
-		factoryRuntime,
-		factoryDefinitions,
-		factorySessions,
-		workPorts,
-		automationsPorts,
-		modelsPorts,
-		recordingsPorts,
-		webhooksPorts,
-		workersPorts,
-		operatorSettings,
-	); err != nil {
-		return nil, err
-	}
-	if initialActivation == nil {
-		return nil, fmt.Errorf("initial Runtime activation is required")
-	}
-
 	root := &Root{
 		initialActivation:                initialActivation,
-		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
-		workerService:                    workersPorts.Service,
-		modelService:                     modelsPorts.Service,
-		automationService:                automationsPorts.Service,
-		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
-		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
-		recordingsService:                recordingsPorts.Service,
-		recordingsRuntime:                recordingsPorts.Runtime,
-		replayInputs:                     recordingsPorts.Runtime,
-		webhooksService:                  webhooksPorts.Service,
-		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
-		factoryDefinitions:               factoryDefinitions.Service,
-		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
-		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
-		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
-		workService:                      workPorts.Service,
-		providerSessions:                 providerSessions.Service,
-		factoryDefinitionValidator:       factoryDefinitions.Validator,
-		namedPaths:                       factoryDefinitions.NamedPaths,
-		factoryWorkflows:                 factoryRuntime.FactoryWorkflows,
-		workflowPreview:                  factoryRuntime.WorkflowPreview,
-		loadFactory:                      factoryDefinitions.LoadFactory,
-		newLoadedFactory:                 factoryDefinitions.NewLoadedFactory,
-		decodeReplayConfig:               factoryDefinitions.DecodeReplayConfig,
-		captureLoadedFactorySnapshot:     factoryDefinitions.CaptureLoadedFactorySnapshot,
-		resolveClock:                     factoryRuntime.ResolveClock,
-		newSessionLogger:                 factoryRuntime.NewSessionLogger,
-		baseLogger:                       factoryRuntime.Logger,
-		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
-		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
-		generateSessionID:                factorySessions.GenerateSessionID,
-		ensureOperatorBackendScope:       operatorSettings.EnsureBackendScope,
-		generateRuntimeInstanceID:        factorySessions.GenerateRuntimeInstanceID,
-		resolveHome:                      factorySessions.ResolveHome,
-		providerIdentities:               factorySessions.ProviderIdentities,
-		clock:                            factoryRuntime.Clock,
-		providerOverride:                 factoryRuntime.ProviderOverride,
-		invocationMetricsRecorder:        factorySessions.InvocationMetricsRecorder,
-		providerCommandRunner:            workersPorts.ProviderCommandRunner,
-		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
-		submissionRecorder:               factoryRuntime.SubmissionRecorder,
-		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
+		durableExecutionFactory:          durableExecutionFactory,
+		workerService:                    workerService,
+		modelService:                     modelService,
+		automationService:                automationService,
+		factorySessionsRuntimeAssembly:   assembly,
+		factorySessionExecutionFactory:   factorySessionExecutionFactory,
+		recordingsService:                recordingsService,
+		recordingsRuntime:                recordingsRuntime,
+		replayInputs:                     recordingsRuntime,
+		webhooksService:                  webhooksService,
+		workersMockCommandRunnerFactory:  workersMockCommandRunnerFactory,
+		factoryDefinitions:               definitions,
+		definitionRuntimeRouter:          runtimeRouter,
+		factoryScaffoldInitializer:       factoryScaffoldInitializer,
+		editableFactoryValidator:         editableFactoryValidator,
+		workService:                      workService,
+		providerSessions:                 providerSessions,
+		factoryDefinitionValidator:       validator,
+		namedPaths:                       namedPaths,
+		factoryWorkflows:                 factoryWorkflows,
+		workflowPreview:                  workflowPreview,
+		loadFactory:                      loadFactory,
+		newLoadedFactory:                 newLoadedFactory,
+		decodeReplayConfig:               decodeReplayConfig,
+		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
+		resolveClock:                     resolveClock,
+		newSessionLogger:                 newSessionLogger,
+		baseLogger:                       logger,
+		providerFromCommandRunnerFactory: providerFromCommandRunnerFactory,
+		processRuntimeFactory:            processRuntimeFactory,
+		generateSessionID:                generateSessionID,
+		ensureOperatorBackendScope:       ensureBackendScope,
+		generateRuntimeInstanceID:        generateRuntimeInstanceID,
+		resolveHome:                      resolveHome,
+		providerIdentities:               providerIdentities,
+		clock:                            clock,
+		providerOverride:                 providerOverride,
+		invocationMetricsRecorder:        invocationMetricsRecorder,
+		providerCommandRunner:            providerCommandRunner,
+		scriptCommandRunner:              scriptCommandRunner,
+		submissionRecorder:               submissionRecorder,
+		dispatchRecorder:                 dispatchRecorder,
 	}
-	root.runtimeRoot = factoryRuntime.RuntimeRoot
+	root.runtimeRoot = runtimeRoot
 	return root, nil
-}
-
-// validateOwnerPorts checks the fixed owner contracts in declaration order.
-// It deliberately performs no collaborator calls, so an incomplete process
-// graph fails before any operation-scoped work can begin.
-func validateOwnerPorts(
-	providerSessions *ProviderSessionsPorts,
-	factoryRuntime *FactoryRuntimePorts,
-	factoryDefinitions *FactoryDefinitionsPorts,
-	factorySessions *FactorySessionsPorts,
-	workPorts *WorkPorts,
-	automations *AutomationsPorts,
-	modelsPorts *ModelsPorts,
-	recordingsPorts *RecordingsPorts,
-	webhooksPorts *WebhooksPorts,
-	workersPorts *WorkersPorts,
-	operatorSettings *OperatorSettingsPorts,
-) error {
-	for _, validate := range []func() error{
-		func() error { return validateProviderSessions(providerSessions) },
-		func() error { return validateFactoryRuntime(factoryRuntime) },
-		func() error { return validateFactoryDefinitions(factoryDefinitions) },
-		func() error { return validateFactorySessions(factorySessions) },
-		func() error { return validateWork(workPorts) },
-		func() error { return validateAutomations(automations) },
-		func() error { return validateModels(modelsPorts) },
-		func() error { return validateRecordings(recordingsPorts) },
-		func() error { return validateWebhooks(webhooksPorts) },
-		func() error { return validateWorkers(workersPorts) },
-		func() error { return validateOperatorSettings(operatorSettings) },
-	} {
-		if err := validate(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateProviderSessions(group *ProviderSessionsPorts) error {
-	if err := requirePorts("Provider Sessions", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Provider Sessions",
-		portRequirement{"service", group.Service},
-	)
-}
-
-func validateFactoryRuntime(group *FactoryRuntimePorts) error {
-	if err := requirePorts("Factory Runtime", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Factory Runtime",
-		portRequirement{"logger", group.Logger},
-		portRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
-		portRequirement{"workflow preview operation", group.WorkflowPreview},
-		portRequirement{"Workers mock command runner factory", group.WorkersMockCommandRunnerFactory},
-		portRequirement{"clock resolver", group.ResolveClock},
-		portRequirement{"session logger factory", group.NewSessionLogger},
-		portRequirement{"clock", group.Clock},
-	)
-}
-
-func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
-	if err := requirePorts("Factory Definitions", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Factory Definitions",
-		portRequirement{"validator", group.Validator},
-		portRequirement{"named path resolver", group.NamedPaths},
-		portRequirement{"service", group.Service},
-		portRequirement{"runtime router", group.RuntimeRouter},
-		portRequirement{"loaded factory loader", group.LoadFactory},
-		portRequirement{"loaded factory source factory", group.NewLoadedFactory},
-		portRequirement{"replay runtime config decoder", group.DecodeReplayConfig},
-		portRequirement{"loaded factory snapshot capturer", group.CaptureLoadedFactorySnapshot},
-	)
-}
-
-func validateFactorySessions(group *FactorySessionsPorts) error {
-	if err := requirePorts("Factory Sessions", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Factory Sessions",
-		portRequirement{"runtime assembly", group.RuntimeAssembly},
-		portRequirement{"durable execution factory", group.DurableExecutionFactory},
-		portRequirement{"session execution factory", group.FactorySessionExecutionFactory},
-		portRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
-		portRequirement{"editable factory validator", group.EditableFactoryValidator},
-		portRequirement{"process runtime factory", group.ProcessRuntimeFactory},
-		portRequirement{"session ID generator", group.GenerateSessionID},
-		portRequirement{"runtime instance ID generator", group.GenerateRuntimeInstanceID},
-		portRequirement{"home directory resolver", group.ResolveHome},
-		portRequirement{"provider identity resolver", group.ProviderIdentities},
-	)
-}
-
-func validateWork(group *WorkPorts) error {
-	if err := requirePorts("Work", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Work",
-		portRequirement{"service", group.Service},
-	)
-}
-
-func validateAutomations(group *AutomationsPorts) error {
-	if err := requirePorts("Automations", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Automations",
-		portRequirement{"service", group.Service},
-	)
-}
-
-func validateModels(group *ModelsPorts) error {
-	if err := requirePorts("Models", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Models",
-		portRequirement{"service", group.Service},
-	)
-}
-
-func validateRecordings(group *RecordingsPorts) error {
-	if err := requirePorts("Recordings", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Recordings",
-		portRequirement{"service", group.Service},
-		portRequirement{"runtime", group.Runtime},
-	)
-}
-
-func validateWorkers(group *WorkersPorts) error {
-	if err := requirePorts("Workers", group); err != nil {
-		return err
-	}
-	if missingPortDependency(group.Service) {
-		return fmt.Errorf("Factory Sessions runtime-opening Workers service is required")
-	}
-	return validatePortRequirements("Workers",
-		portRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
-		portRequirement{"provider command runner", group.ProviderCommandRunner},
-		portRequirement{"script command runner", group.ScriptCommandRunner},
-	)
-}
-
-func validateWebhooks(group *WebhooksPorts) error {
-	if err := requirePorts("Webhooks", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Webhooks",
-		portRequirement{"service", group.Service},
-	)
-}
-
-func validateOperatorSettings(group *OperatorSettingsPorts) error {
-	if err := requirePorts("Operator Settings", group); err != nil {
-		return err
-	}
-	return validatePortRequirements("Operator Settings",
-		portRequirement{"backend scope ensurer", group.EnsureBackendScope},
-	)
-}
-
-type portRequirement struct {
-	member string
-	value  any
-}
-
-func requirePorts(owner string, ports any) error {
-	if missingPortDependency(ports) {
-		return fmt.Errorf("Factory Sessions runtime-opening %s owner ports are required", owner)
-	}
-	return nil
-}
-
-func validatePortRequirements(owner string, requirements ...portRequirement) error {
-	for _, requirement := range requirements {
-		if missingPortDependency(requirement.value) {
-			return fmt.Errorf("Factory Sessions runtime-opening %s %s is required", owner, requirement.member)
-		}
-	}
-	return nil
-}
-
-func missingPortDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
-	}
 }
 
 func (r *Root) openForRequest(
