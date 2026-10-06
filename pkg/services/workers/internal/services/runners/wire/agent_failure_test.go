@@ -387,7 +387,7 @@ func TestAgentRunnerCancellationThroughServiceComposition(t *testing.T) {
 	var got serviceAgentExecutionOutcome
 	select {
 	case got = <-outcome:
-	case <-time.After(time.Second):
+	case <-time.After(time.Second): //nolint:testsleep // Bounds a cancellation deadlock; provider admission and cancellation are synchronized by channels.
 		t.Fatal("Execute() did not return after cancellation")
 	}
 	if !errors.Is(got.err, context.Canceled) {

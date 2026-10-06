@@ -337,7 +337,7 @@ func resolveServiceAgentRunner(
 	t *testing.T,
 	providersService providers.Service,
 	publish workers.ProgressPublisher,
-) workers.Runner {
+) runners.Strategy {
 	t.Helper()
 	runner, err := agentImplementation(runners.AgentDependencies{Providers: providersService, Publish: publish})
 	if err != nil {
