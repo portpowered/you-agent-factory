@@ -30,7 +30,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
@@ -319,27 +318,6 @@ func NewRuntimeAssembly(
 		definitionActivationGateway,
 	)
 	return assembly, nil
-}
-
-// NewServiceFromAssembly binds the already-composed owner assembly to the
-// existing process root.
-func NewServiceFromAssembly(
-	assembly RuntimeAssembly,
-	root *factorysessionroot.Root,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (*factorysessionroot.Root, error) {
-	service, err := factorysessionroot.NewRootFromAssembly(
-		assembly,
-		root,
-		liveChangeCoordinator,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
-	}
-	return service, nil
 }
 
 func NewDurableExecution(

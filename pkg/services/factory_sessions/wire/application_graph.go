@@ -152,6 +152,7 @@ func NewRoot(
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation RuntimeModelInvocationOperation,
+	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	return service.NewRoot(
 		providerSessions,
@@ -195,6 +196,7 @@ func NewRoot(
 		ensureBackendScope,
 		initialActivation,
 		modelInvocation,
+		liveChangeCoordinator,
 	)
 }
 

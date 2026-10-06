@@ -588,14 +588,6 @@ func provideSessionCheckpointStoreFactory() factoryruntime.JavaScriptCheckpointS
 	}
 }
 
-func provideFactorySessionsService(
-	assembly factorysessionwire.RuntimeAssembly,
-	root *factorysessionwire.Root,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-) (factorysessions.Service, error) {
-	return factorysessionwire.NewServiceFromAssembly(assembly, root, liveChangeCoordinator)
-}
-
 // provideFactorySessionsCapability publishes the already-composed Sessions root
 // through the neutral process capability. The initializer retains the opaque
 // value without importing the Sessions service; pkg/root reifies it at the

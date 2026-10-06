@@ -13,7 +13,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -37,6 +40,7 @@ func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
 
 // runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
+	LiveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	ProviderSessions             providersessions.Service
 	Logger                       *zap.Logger
 	FactoryWorkflows             factoryruntime.JavaScriptWorkflowDefinitions
@@ -122,6 +126,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.EnsureBackendScope,
 		fixture.InitialActivation,
 		nil,
+		fixture.LiveChangeCoordinator,
 	)
 }
 func TestNewFactoryRemainsInert(t *testing.T) {
@@ -199,8 +204,9 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 }
 
 func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
-	factorySessionsRoot := &factorySessionsConstructionStub{}
+	factorySessionsRoot := &legacyservice.Assembly{}
 	return runtimeOpeningFixture{
+		LiveChangeCoordinator:        livechange.NewCoordinator(),
 		InitialActivation:            inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
 		ProviderSessions:             providerSessionsConstructionStub{},
 		Logger:                       zap.NewNop(),

@@ -51,7 +51,7 @@ type ScriptCommandRunner interface {
 }
 
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
-// Its Assembly is bound after the other process services have been composed.
+// Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
@@ -142,8 +142,15 @@ func NewRoot(
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
+	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
+	if err != nil {
+		return nil, err
+	}
 	root := &Root{
+		Assembly:                       concrete,
+		liveChangeCoordinator:          liveChangeCoordinator,
 		initialActivation:              initialActivation,
 		modelInvocation:                modelInvocation,
 		durableExecutionFactory:        durableExecutionFactory,
