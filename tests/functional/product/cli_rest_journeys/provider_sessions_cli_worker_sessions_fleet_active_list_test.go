@@ -78,7 +78,8 @@ func (a activeFleetFixture) assertPages(t *testing.T, ctx context.Context) {
 	f := c.fixture
 	env := a.env
 	works, sessions, expectedIDs := a.works, a.sessions, a.ids
-	// The command-runner edge holds RUNNING before returning provider output.
+	// Alpha streams captured usage before the command-runner gate returns;
+	// its peers remain RUNNING without any captured provider output.
 	// STARTING is covered by component tests: this public edge cannot hold it.
 	for _, scope := range []string{"all", "factory"} {
 		var order []string
@@ -233,9 +234,10 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 		inputs := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
 			"worker-sessions", "show", "--session", sessions[workID], "--worker-session-id", expectedIDs[workID], "--output", "json")
 		decodeCLIJSON(t, inputs, &selected)
-		if selected.WorkerSessionID != expectedIDs[workID] || selected.FactorySessionID == nil || *selected.FactorySessionID != sessions[workID] || selected.State != "RUNNING" || selected.Transcript != "UNAVAILABLE" || selected.TokenUsage != nil || !selected.ProviderSessionAvailable || !containsString(selected.WorkIDs, workID) {
+		if selected.WorkerSessionID != expectedIDs[workID] || selected.FactorySessionID == nil || *selected.FactorySessionID != sessions[workID] || selected.State != "RUNNING" || selected.Transcript != "UNAVAILABLE" || !selected.ProviderSessionAvailable || !containsString(selected.WorkIDs, workID) {
 			t.Fatalf("denied selected show lost captured identity: %#v", selected)
 		}
+		assertActiveFleetUsage(t, selected, "UNAVAILABLE")
 	}
 	// The terminal sibling retains captured usage and the associated transcript
 	// envelope. Explicit transcript reads still cross the optional native edge
@@ -330,19 +332,28 @@ func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, se
 		if row.Transcript != alphaTranscript {
 			t.Fatalf("active provider transcript=%q, want %q: %#v", row.Transcript, alphaTranscript, row)
 		}
-		if alphaTranscript == "AVAILABLE" {
-			if row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 8 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != 12 || row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != 20 {
-				t.Fatalf("available provider usage changed or disappeared: %#v", row.TokenUsage)
-			}
-		} else if row.TokenUsage != nil {
-			// Current active usage comes from the optional native projection;
-			// missing storage must report absence, never synthesize zero usage.
-			t.Fatalf("unavailable provider usage is untruthful: %#v", row)
-		}
+		assertActiveFleetUsage(t, row, alphaTranscript)
 		return
 	}
 	if row.ProviderSession != nil || row.ProviderSessionAvailable || row.TokenUsage != nil || row.EndedAt != nil {
 		t.Fatalf("held command invented unavailable provider/usage/terminal facts: %#v", row)
+	}
+}
+
+func assertActiveFleetUsage(t *testing.T, row workerSessionJSON, alphaTranscript string) {
+	t.Helper()
+	// Captured turn.completed usage survives unavailable native transcripts.
+	// Codex captures input/output, but no total_tokens. The optional native
+	// transcript supplies total 20 only on the compatibility Work-scoped read.
+	if row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 8 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != 12 || *row.TokenUsage.InputTokens+*row.TokenUsage.OutputTokens != 20 {
+		t.Fatalf("captured provider usage changed or disappeared: %#v", row.TokenUsage)
+	}
+	if alphaTranscript == "AVAILABLE" {
+		if row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != 20 {
+			t.Fatalf("native compatibility total changed: %#v", row.TokenUsage)
+		}
+	} else if row.TokenUsage.TotalTokens != nil {
+		t.Fatalf("capture invented an unreported total: %#v", row.TokenUsage)
 	}
 }
 

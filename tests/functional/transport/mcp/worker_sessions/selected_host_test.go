@@ -192,7 +192,10 @@ func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSe
 
 func startCancellableMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// The session spans host shutdown/recovery and independent profile setup.
+	// Bound individual protocol operations, rather than expiring the transport
+	// while the scenario is preparing its next host.
+	ctx, cancel := context.WithCancel(t.Context())
 	stdinRead, stdinWrite := io.Pipe()
 	stdoutRead, stdoutWrite := io.Pipe()
 	done := make(chan error, 1)
@@ -224,7 +227,9 @@ func startCancellableMCP(t *testing.T, process support.Process, host string) (*m
 		}
 	})
 	client := mcp.NewClient(&mcp.Implementation{Name: "selected-host-parity", Version: "test"}, nil)
-	session, err := client.Connect(ctx, &mcp.IOTransport{Reader: stdoutRead, Writer: stdinWrite}, nil)
+	connectCtx, cancelConnect := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelConnect()
+	session, err := client.Connect(connectCtx, &mcp.IOTransport{Reader: stdoutRead, Writer: stdinWrite}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,6 +260,8 @@ func readHost(w http.ResponseWriter, r *http.Request) {
 
 func callTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
@@ -353,6 +360,8 @@ func assertReadView(t *testing.T, result map[string]any, view, host string) {
 
 func assertWorkerDiscovery(t *testing.T, ctx context.Context, session *mcp.ClientSession) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	result, err := session.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
