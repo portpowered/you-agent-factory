@@ -94,6 +94,20 @@ Post-merge or integrated Project validation stays with its named later gate.
 
 
 class LanePromptPolicyTest(unittest.TestCase):
+    def test_loopback_handoff_resolution_and_wrapping(self):
+        prompts = {owner: '\n'.join(clause for _, clause in rules)
+                   for owner, rules in policy.LOOPBACK_RULES.items()}
+        self.assertEqual(policy.check_loopback_policy(prompts), [])
+        wrapped = {owner: text.replace(' ', '\n') for owner, text in prompts.items()}
+        self.assertEqual(policy.check_loopback_policy(wrapped), [])
+        for owner, rules in policy.LOOPBACK_RULES.items():
+            for name, clause in rules:
+                with self.subTest(owner=owner, rule=name):
+                    changed = dict(prompts)
+                    changed[owner] = changed[owner].replace(clause, '')
+                    self.assertEqual(policy.check_loopback_policy(changed),
+                                     [f'{owner}:loopback-{name}: missing policy clause: {clause}'])
+
     def test_p1_p3_complete_ownership_and_false_review_handoff_clauses(self):
         self.assertEqual(policy.check_ownership_policy(OWNER_PLAN, OWNER_PROCESS, OWNER_REVIEW), [])
 

@@ -46,6 +46,27 @@ you submit batch --dry-run factory/docs/batch-input-example.json --session <sess
 Replace `<session_id>` with a live id from `you session list` (for example
 `c803e7f7-1361-4ba6-bb2b-b5c9cfeb2754` on a long-running host).
 
+## Loopback proposals
+
+A project-tagged thoughts loopback that finds gaps saves its raw corrective
+batch in the main checkout at
+`docs/temp/projects/<project>/proposals/<loopback-name>.json`, dry-runs it in
+the bound Session and returns ACCEPTED naming the path. It submits no Project
+children. Write/dry-run failures remain truthful FAILED results, retaining any
+saved reference. Both outcomes pass through thoughts reporting states to their
+original terminal state and one origin-preserving project-report. The existing
+tag match wakes only the waiting owning lead; reports wait while it is busy.
+The lead reviews/edits the draft against immutable authority and live ownership,
+then submits with a verified receipt or records a reason and release event in
+progress.md. Request/origin deduplication and the existing two-successor recovery
+budget still apply. Untagged loopbacks retain their own dry-run/submission/receipt
+or accepted hold and cannot wake a tagged peer Project.
+
+Activate config and prompts together after independent validation and merge.
+There is no report backfill. On rollback preserve drafts, Work and event history;
+drain or operator-hold reporting Work before restoring config/prompts together.
+Leads never perform Work controls to drain or acknowledge reports.
+
 ## Verification
 
 When changing these factory-local docs or the checked-in example, run the
