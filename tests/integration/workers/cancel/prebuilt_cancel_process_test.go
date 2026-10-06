@@ -715,6 +715,10 @@ func TestPrebuiltWorkerSessionForceFactoryWorkRemainsFailed(t *testing.T) {
 }
 
 func writeNativeForceFactory(t *testing.T, fixture cancelFixture) {
+	writeNativeForceFactoryWithFailedState(t, fixture, true)
+}
+
+func writeNativeForceFactoryWithFailedState(t *testing.T, fixture cancelFixture, withFailedState bool) {
 	t.Helper()
 	path := filepath.Join(fixture.factoryDir, "factory.json")
 	content, err := os.ReadFile(path)
@@ -729,6 +733,10 @@ func writeNativeForceFactory(t *testing.T, fixture cancelFixture) {
 	station := definition["workstations"].([]any)[0].(map[string]any)
 	delete(station, "type")
 	station["onFailure"] = []any{map[string]any{"workType": "task", "state": "init"}}
+	if !withFailedState {
+		workType := definition["workTypes"].([]any)[0].(map[string]any)
+		workType["states"] = []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "complete", "type": "TERMINAL"}}
+	}
 	encoded, err := json.Marshal(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -748,6 +756,53 @@ func writeNativeForceFactory(t *testing.T, fixture cancelFixture) {
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestPrebuiltWorkerSessionForceFactoryWithoutFailedStateHasNoEffect(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("owned force capability requires Windows Job or Linux retained leader")
+	}
+	t.Parallel()
+	binary := resolveCancelArtifact(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 110*time.Second)
+	defer cancel()
+	fixture := writeNativeForceFixture(t, "codex")
+	writeNativeForceFactoryWithFailedState(t, fixture, false)
+	daemon := startCancelDaemon(t, ctx, binary, fixture)
+	session := waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
+	workID := submitCancelWork(t, ctx, fixture.serverURL, session, "source")
+	source := waitForRunningWorkerSession(t, ctx, fixture.serverURL, session, workID, daemon)
+	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "source")
+	registerFailedTreeCleanup(t, tree)
+	before := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	result := runCancelCLI(ctx, binary, fixture, "worker-sessions", "terminate", source.WorkerSessionId,
+		"--force", "--request-id", source.WorkerSessionId+"-kill", "--expected-attempt-id", source.AttemptId)
+	assertNativeForceUnsupported(t, result)
+	assertNativeTreesLive(t, tree)
+	observation, err := getJSON[factoryapi.WorkerSessionObservation](ctx, http.DefaultClient, fixture.serverURL+"/worker-sessions/"+source.WorkerSessionId)
+	if err != nil || string(observation.State) != "RUNNING" || observation.TerminalCause != nil {
+		t.Fatalf("refused force changed source: %+v, %v", observation, err)
+	}
+	after := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	if !reflect.DeepEqual(before.State, after.State) {
+		t.Fatalf("refused force moved Work: before=%+v after=%+v", before.State, after.State)
+	}
+	status, body, err := postWorkerSessionCancel(ctx, fixture.serverURL, source.WorkerSessionId)
+	var response factoryapi.WorkerSessionControlResponse
+	if err != nil || status != http.StatusOK || json.Unmarshal(body, &response) != nil || string(response.Outcome) != "APPLIED" || string(response.State) != "CANCELED" {
+		t.Fatalf("graceful cancel after refusal: status=%d body=%s error=%v", status, body, err)
+	}
+	assertNativeLaunchCount(t, fixture, 1)
+	stopCancelDaemon(t, binary, fixture, daemon)
+	t.Log("PASS: missing authored FAILED state refused force without process, Worker or Work effect; graceful cancel remained available")
+}
+
+func assertNativeForceUnsupported(t *testing.T, result cancelCommandResult) {
+	t.Helper()
+	var response factoryapi.WorkerSessionControlResponse
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != "UNSUPPORTED" || string(response.State) != "RUNNING" {
+		t.Fatalf("missing FAILED disposition force = %+v, response=%+v", result, response)
 	}
 }
 

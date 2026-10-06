@@ -14,6 +14,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -860,6 +862,47 @@ func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T)
 			execution.Input.AttemptControlObserver(owned)
 			if retained != owned || (withObserver && forwarded != owned) {
 				t.Fatal("executing handle lost during runtime preparation")
+			}
+		})
+	}
+}
+
+func TestRuntimeAttemptPreparationForceRequiresAuthoredFailedPlacement(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"failed", "missing-state", "missing-place", "mixed-work", "unknown-work", "resource-only"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			var retained providers.AttemptControl
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{},
+				controlObserver: func(control providers.AttemptControl) { retained = control }}
+			net := &state.Net{WorkTypes: map[string]*state.WorkType{
+				"task": {States: []state.StateDefinition{{Value: "failed", Category: state.StateCategoryFailed}}},
+			}, Places: map[string]*petri.Place{"task:failed": {ID: "task:failed"}}}
+			inputs := []workers.WorkInput{{Kind: string(workers.DataTypeWork), WorkID: "source", WorkTypeID: "task"},
+				{Kind: string(workers.DataTypeResource), WorkTypeID: "capacity"}}
+			switch variant {
+			case "missing-state":
+				net.WorkTypes["task"].States = nil
+			case "missing-place":
+				delete(net.Places, "task:failed")
+			case "mixed-work":
+				inputs = append(inputs, workers.WorkInput{Kind: string(workers.DataTypeWork), WorkTypeID: "other"})
+			case "unknown-work":
+				inputs[0].WorkTypeID = "other"
+			case "resource-only":
+				inputs = inputs[1:]
+			}
+			cfg := &runtimeConfig{workerAttempts: sessions, net: net}
+			request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+			execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: inputs}}
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			if _, err := prepare(t.Context(), &execution); err != nil {
+				t.Fatal(err)
+			}
+			owned := &projectedAttemptControl{identity: "owned"}
+			execution.Input.AttemptControlObserver(owned)
+			if (retained == owned) != (variant == "failed") {
+				t.Fatalf("retained force capability = %v, variant %s", retained, variant)
 			}
 		})
 	}
