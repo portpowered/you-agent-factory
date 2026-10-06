@@ -902,6 +902,40 @@ func assertEmptyRestoredDispatchResourceRefs(t *testing.T) {
 	}
 }
 
+func TestRestoredWorkTokenPreservesTextPayload(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		content []work.WorkContentPart
+		want    string
+	}{
+		{name: "missing content"},
+		{name: "image only", content: []work.WorkContentPart{{Type: work.WorkContentPartTypeImage, File: "image.png"}}},
+		{name: "exact UTF-8", content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: " restart § — B\n"}}, want: " restart § — B\n"},
+		{name: "ordered mixed content", content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "§ "},
+			{Type: work.WorkContentPartTypeImage, File: "image.png"},
+			{Type: work.WorkContentPartTypeText, Text: "— B"},
+		}, want: "§ — B"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := work.FactoryWorkItem{ID: "work-restored", Content: tc.content}
+			token := restoredWorkToken(item, "task:init", "request", nil, time.Unix(0, 0).UTC())
+			if string(token.Color.Payload) != tc.want {
+				t.Fatalf("restored payload = %q, want %q", token.Color.Payload, tc.want)
+			}
+			if len(tc.content) > 0 {
+				originalText := item.Content[0].Text
+				token.Color.Content[0].Text = "changed"
+				if item.Content[0].Text != originalText {
+					t.Fatal("restored content aliases saved content")
+				}
+			}
+		})
+	}
+}
+
 func TestRestoredWorkPlacementHandlesApprovalAndTokenIdentityCollisions(t *testing.T) {
 	net := buildSimpleNet()
 	net.Transitions["t-approval"] = &petri.Transition{ID: "t-approval", Type: petri.TransitionHumanApproval}

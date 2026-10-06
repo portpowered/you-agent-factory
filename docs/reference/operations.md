@@ -44,6 +44,27 @@ pipelines. Submit initial or later Work through the existing submitted-Work
 surfaces described by `you docs work`; use `you docs sessions` to confirm that
 the addressed Factory Session is still live.
 
+## Reopen a recorded board after a graceful stop
+
+Use an explicit recording path for a board that must survive a restart.
+Plain continuous hosting without that path does not select a previous board.
+
+1. Start the board with this command:
+
+   ```bash
+   you run --dir ./factory --continuously --with-server --record ./recordings/current-board.json
+   ```
+
+2. Stop the selected server with `you server stop`, or send `POST /shutdown`.
+3. Wait for the owning process to exit.
+4. Run the same startup command with the same Factory directory and recording path.
+5. Read the Work through the Factory Session API before submitting new Work.
+
+The reopened board retains recorded Work identities, states, tags, content, and relations.
+Blocked Work stays blocked until its dependency reaches the required state.
+Completed Work does not dispatch again.
+This procedure covers graceful restart with a selected recording; it does not establish recovery after forced termination.
+
 ## Stop a local server gracefully on Windows
 
 Use this procedure when a Windows terminal cannot deliver a usable console
