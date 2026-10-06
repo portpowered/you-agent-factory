@@ -12,8 +12,9 @@ import (
 )
 
 // Recovery returns detached data only. Neither a saved input nor an opening
-// authorizes another execution; the committed source admission link and exact
-// terminal successor must both agree with the immutable request.
+// authorizes another execution; the committed source lineage and exact terminal
+// successor must both agree with the immutable request. The opening-derived
+// lineage alone cannot prove Workers admission.
 func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueRequest, source *archivedContinuationSource) (*continueReplay, error) {
 	target := source.target
 	ctx := r.serverOwnedContext()
@@ -132,6 +133,12 @@ func continuationTerminalResult(payload json.RawMessage, status, attemptID strin
 	}
 	result := &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	if state == workersessions.StateFailed {
+		// Opening/recipe failures terminalize a reserved successor before Workers
+		// admission, yet can leave a complete capture and reverse opening link.
+		// Publication failure therefore cannot prove accepted admission on replay.
+		if terminal.FailureCause == string(workersessions.FailureCauseEventPublicationFailure) {
+			return nil, workersessions.ErrContinuationExecutionUnavailable
+		}
 		result.Outcome = workersessions.TerminalOutcomeFailed
 		result.Cause = &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(terminal.FailureCause), Detail: terminal.FailureDetail, AgentRunFailureClass: terminal.AgentRunFailureClass}
 	}

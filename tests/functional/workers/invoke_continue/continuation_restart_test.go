@@ -178,7 +178,7 @@ func assertNativeContinuationCommand(t *testing.T, requests []platformprocess.Co
 // store. No native provider files exist; only the command edge is substituted.
 func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"completed", "failed", "lost-input-ack"} {
+	for _, name := range []string{"completed", "failed", "lost-input-ack", "uncertain-opening", "unadmitted-recipe"} {
 		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, name) })
 	}
 }
@@ -191,13 +191,9 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	successorResult := platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "continued COMPLETE")}
-	if failed {
-		successorResult = platformprocess.CommandResult{Stderr: []byte("Error: thread/resume failed: no rollout found for thread id opaque-restart-thread"), ExitCode: 1}
-	}
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")},
-		successorResult,
+		continuationRestartCommandResult(failed),
 	)
 	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 	first := startContinuationRestartHost(t, root, host, home, route)
@@ -224,6 +220,10 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 	fresh := startContinuationRestartHost(t, root, host, home, route)
+	if successor := continuationRestartUnadmittedSuccessor(name); successor != "" {
+		assertUncertainContinuationAfterRestart(t, fresh, root, host, home, dir, route, runner, successor)
+		return
+	}
 	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
 		"--request-id", requestID, "--successor-worker-session-id", "restart-successor", "--user-message", "fresh host follow-up"})
 	continued.Input.Env, continued.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
@@ -245,6 +245,83 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())
 	}
 	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner, failed, requestID)
+}
+
+func continuationRestartCommandResult(failed bool) platformprocess.CommandResult {
+	if failed {
+		return platformprocess.CommandResult{Stderr: []byte("Error: thread/resume failed: no rollout found for thread id opaque-restart-thread"), ExitCode: 1}
+	}
+	return platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "continued COMPLETE")}
+}
+
+func continuationRestartUnadmittedSuccessor(name string) string {
+	switch name {
+	case "uncertain-opening":
+		return "continuation-opening-ack-lost-successor"
+	case "unadmitted-recipe":
+		return "continuation-unadmitted-recipe-successor"
+	default:
+		return ""
+	}
+}
+
+// F7-C9/C10: a synced input and persisted opening with a lost acknowledgement
+// do not prove Workers admission. Sequential hosts share the actual store;
+// neither the exact retry nor changed tuples may execute the provider again.
+func assertUncertainContinuationAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner, successor string) {
+	t.Helper()
+	assertUncertainContinuationRequests(t, previous, home, dir, runner, successor)
+	if err := previous.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := previous.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	assertUncertainContinuationRequests(t, fresh, home, dir, runner, successor)
+	show := support.FakeInputs(t.Context(), []string{"you", "--server", fresh.baseURL, "--json", "worker-sessions", "show", "--worker-session-id", "restart-source"})
+	show.Input.Env, show.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := fresh.process.Execute(show.Input); err != nil {
+		t.Fatalf("uncertain continuation lost source: %v %s %s", err, show.Stdout(), show.Stderr())
+	}
+	var observation factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(show.Stdout()), &observation); err != nil {
+		t.Fatal(err)
+	}
+	// The captured read model exposes the reserved identity from the committed
+	// successor opening. That historical link does not prove external admission.
+	if observation.State != "COMPLETED" || observation.SuccessorWorkerSessionId == nil ||
+		*observation.SuccessorWorkerSessionId != successor {
+		t.Fatalf("uncertain opening lost terminal source or reserved identity: %#v", observation)
+	}
+}
+
+func assertUncertainContinuationRequests(t *testing.T, host invokeContinueStartedProcess, home, dir string, runner *testutil.ProviderCommandRunner, successor string) {
+	t.Helper()
+	for _, cell := range []struct {
+		message, successor, code string
+		remote                   bool
+	}{
+		{"fresh host follow-up", successor, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", false},
+		{"fresh host follow-up", successor, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", true},
+		{"changed follow-up", successor, "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT", false},
+		{"fresh host follow-up", "changed-successor", "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT", true},
+	} {
+		flags := []string{"you", "--json"}
+		if cell.remote {
+			flags = append(flags, "--remote", "--server", host.baseURL)
+		}
+		request := support.FakeInputs(t.Context(), append(flags, "worker-sessions", "continue", "restart-source",
+			"--request-id", "uncertain-opening-request", "--successor-worker-session-id", cell.successor, "--user-message", cell.message, "--async"))
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		if err := host.process.Execute(request.Input); err == nil {
+			t.Fatal("uncertain opening admitted continuation")
+		}
+		assertDirectWorkerSessionCLIError(t, request, cell.code)
+		if strings.Contains(request.Stdout()+request.Stderr(), "private-continuation") || runner.CallCount() != 1 {
+			t.Fatalf("uncertain retry leaked diagnostic or admitted provider: calls=%d %s %s", runner.CallCount(), request.Stdout(), request.Stderr())
+		}
+	}
 }
 
 func continuationRestartRequestID(name string) string {

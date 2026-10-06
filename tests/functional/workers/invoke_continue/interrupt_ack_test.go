@@ -25,7 +25,11 @@ func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, re
 	if strings.HasPrefix(record.WorkerSessionID, "interrupt-admission-failure-") {
 		return errors.New("private-successor-opening-detail")
 	}
-	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+	err := store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+	if err == nil && record.WorkerSessionID == "continuation-opening-ack-lost-successor" {
+		return errors.New("private-continuation-opening-acknowledgement-detail")
+	}
+	return err
 }
 
 func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
@@ -195,7 +199,8 @@ func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 }
 
 func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, request workers.WorkstationDispatchRequest) error {
-	if target.WorkerSessionID == "restart-recipe-write-failure" || target.WorkerSessionID == "restart-recipe-unsafe" {
+	if target.WorkerSessionID == "restart-recipe-write-failure" || target.WorkerSessionID == "restart-recipe-unsafe" ||
+		target.WorkerSessionID == "continuation-unadmitted-recipe-successor" {
 		return errors.New("private-recipe-sync-detail")
 	}
 	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request)

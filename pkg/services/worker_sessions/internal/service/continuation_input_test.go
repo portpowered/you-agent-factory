@@ -271,7 +271,7 @@ func retainedContinuationFixture(t *testing.T) (*registry, continuePlan, recordi
 
 func TestContinuationTerminalResultPreservesOutcomeAndRejectsCorruption(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"completed", "failed", "canceled", "terminated", "attempt", "phase", "status", "missing-cause", "unknown-cause", "corrupt"} {
+	for _, cell := range []string{"completed", "failed", "canceled", "terminated", "attempt", "phase", "status", "missing-cause", "unknown-cause", "publication-failure", "corrupt"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			state, result, encoded := continuationTerminalFixture(t, cell)
@@ -314,6 +314,8 @@ func continuationTerminalFixture(t *testing.T, cell string) (workersessions.Stat
 		terminal.FailureCause = ""
 	case "unknown-cause":
 		terminal.FailureCause = "UNKNOWN"
+	case "publication-failure":
+		terminal.FailureCause = string(workersessions.FailureCauseEventPublicationFailure)
 	}
 	draft.Payload, _ = json.Marshal(terminal)
 	encoded, _ := json.Marshal(draft)
