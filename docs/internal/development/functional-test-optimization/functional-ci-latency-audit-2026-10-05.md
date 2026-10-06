@@ -2802,3 +2802,13 @@ shared-session repetitions pass after this change, and the affected repository
 lint reports zero issues. The three additional opt-ins compile natively with
 empty selectors and retain nil-safe teardown. Complete final-source Linux and
 hosted checks remain required.
+
+Linux registration rejects the three additional Providers/Codex/invoke-continue
+hooks because those packages still have executable fixtures; those inactive
+hooks are withdrawn. Factory Definitions has no such exclusions. Its test-only
+bridge moves to a test file and delegates directly to lazy fixture setup; its
+existing teardown is shared by native TestMain and the monolith cleanup hook.
+The retired production-helper dead-code baseline entry is deleted. An obsolete
+selected-time directory-helper reference left by the last cleanup causes a
+monolith build failure before any valid complete-suite timing; it is removed.
+That 109.69s incomplete run is excluded from latency baselines.

@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// F-T01Ã¢â‚¬â€œF-T09 share one immutable default-role host. Sequencing is deliberate:
+// F-T01ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“F-T09 share one immutable default-role host. Sequencing is deliberate:
 // each A/B stop/peer journey advances the same selected scheduler, so separate
 // parallel leaves would change one another's eligibility. The whole journey
 // runs in parallel with independent legacy/ingress hosts.
@@ -40,7 +40,6 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 			FactoryDir: hostDir,
 			Edges: serviceedges.Edges{
 				Clock: selectedTimeFacts{facts}, ProcessScheduler: scheduler, ScriptCommandRunner: router,
-				FactorySessionsWorkingDirectory:    functionalWorkingDirectory(hostDir),
 				FactoryRuntimeInputs:               files,
 				FactoryRuntimeInputDirectoryWalker: files.walk,
 				SubmissionRecorder: func(record work.FactorySubmissionRecord) {
