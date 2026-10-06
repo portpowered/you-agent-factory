@@ -295,7 +295,7 @@ func (w *Writer) writeWorkers(
 			return 0, err
 		}
 		workerDir := filepath.Join(workersDir, segment)
-		content := w.renderBody(worker.Body)
+		var content []byte
 		if worker.Type == "" {
 			if !overwrite {
 				exists, err := w.agentsFileExists(workerDir)
@@ -318,6 +318,8 @@ func (w *Writer) writeWorkers(
 					err,
 				)
 			}
+		} else {
+			content = w.renderBody(worker.Body)
 		}
 		if err := w.writeAgents(workerDir, content); err != nil {
 			return 0, fmt.Errorf(
@@ -395,7 +397,7 @@ func (w *Writer) writeWorkstation(
 		}
 	}
 	definition, promptContent := workstationForExpansion(workstation)
-	content := w.renderBody(definition.Body)
+	var content []byte
 	if !workstationHasRuntimeFields(workstation) {
 		content, err = w.renderWorkstation(definition)
 		if err != nil {
@@ -405,6 +407,8 @@ func (w *Writer) writeWorkstation(
 				err,
 			)
 		}
+	} else {
+		content = w.renderBody(definition.Body)
 	}
 	if err := w.writeAgents(workstationDir, content); err != nil {
 		return 0, 0, fmt.Errorf(
