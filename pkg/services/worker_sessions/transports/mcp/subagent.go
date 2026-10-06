@@ -49,8 +49,9 @@ func decodeAction(raw json.RawMessage) (string, json.RawMessage, error) {
 		}
 		fields[key] = value
 		if key == "action" {
-			if err := json.Unmarshal(value, &action); err != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) || !slices.Contains([]string{"RUN", ActionList, ActionRead, ActionControl}, action) {
-				return "", nil, fmt.Errorf("action must be RUN, LIST, READ or CONTROL")
+			action, err = decodeActionSelector(value)
+			if err != nil {
+				return "", nil, err
 			}
 		}
 	}
@@ -63,4 +64,12 @@ func decodeAction(raw json.RawMessage) (string, json.RawMessage, error) {
 	delete(fields, "action")
 	input, err := json.Marshal(fields)
 	return action, input, err
+}
+
+func decodeActionSelector(value json.RawMessage) (string, error) {
+	var action string
+	if err := json.Unmarshal(value, &action); err != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) || !slices.Contains([]string{"RUN", ActionList, ActionRead, ActionControl}, action) {
+		return "", fmt.Errorf("action must be RUN, LIST, READ or CONTROL")
+	}
+	return action, nil
 }
