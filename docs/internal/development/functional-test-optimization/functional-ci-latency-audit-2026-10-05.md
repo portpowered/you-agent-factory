@@ -5,17 +5,27 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `e243441e58`, passes hosted Functional
-Coverage in **247s complete / 169.073s coverage**, 68 packages / 738 results,
-no retries, 110 compiler commands and 17 links after a prefix f0 archive
-restore. Frontend Browser also passes, including the earlier Add workstation
-dialog failure. The complete workflow, including Backend Lint, passes. This source
-corrects the preceding head's two new unreachable support declarations by
-reusing existing cursor helpers with explicit session arguments; no deadcode
-allowance is added. The complete hosted two-minute checkpoint
+The latest measured published source, `f7e138ae4e`, passes hosted Functional
+Coverage in **222s complete / 154.403s coverage**, 68 packages / 738 results,
+six compiler commands and 33 links, including one recovered Agent cancellation
+failure. Its workflow fails Backend Integration on a released probe-port race;
+the correction uses server-owned port binding and passes three focused Linux
+repetitions and both scoped linters. The preceding `e243441e58` workflow passes
+all checks, with Functional Coverage taking **247s complete / 169.073s coverage**,
+no retries, 110 compiler commands and 17 links after a prefix f0 archive restore.
+The complete hosted two-minute checkpoint
 remains **unmet** and the PR stays draft. The earlier warm three-minute
 checkpoint is merged. Keep prior complete 146s, 198s and 207s samples and their
 cache/retry differences; 146 seconds is not a reliable ceiling.
+
+A private rendered-file cache prototype passes the complete unchanged functional
+lane. In one matched four-CPU comparison, baseline takes **181.21s / 564.70
+CPU-seconds**, versus **145.74s / 452.47 CPU-seconds** for the prototype: about
+20% less elapsed time and aggregate CPU. This supports caching immutable,
+format-specific packaged Factory renderings. It does not justify sharing live
+Factory Session state. The prototype is not shipped; it needs the production
+writer and validation dependency boundaries preserved. The failed JSON-only
+prototype and the slower prepared-struct cache experiment are retained below.
 
 The published worker CLI home and native-join change passes full local coverage
 with **38 monolith groups / 569 registrations**, all **68 packages / 738 results**,
@@ -4024,3 +4034,79 @@ including Backend Lint, confirming the duplicate helper correction.
 Raw evidence: `.artifacts/latency-audit/packaged-preparation-cache-paired/`,
 `.artifacts/latency-audit/cli-outcome-home-paired/` and
 `.artifacts/latency-audit/pr2923-worker-home-joins-hosted/`.
+
+## Rendered-file prototype: full functional proof and matched timing
+
+A private Linux prototype captures the current installer's materialized output
+for 20 embedded packaged Factories. It reuses file bytes across process
+instances while creating every case's fresh home and retaining staged layout
+validation, ownership leases, stamps, customer-edit reconciliation, refresh
+backups and atomic publication. The production tree does not contain this
+prototype. Its snapshot input is a private audit artifact, and custom writer
+and validation-dependency selection is not yet suitable for production.
+
+Initial JSON-only snapshots pass six native repetitions per version of the
+invocation/result and dispatch-usage customer groups: baseline consumes
+14.776348 CPU-seconds / 14.493914341 seconds wall, candidate 7.398516 /
+9.223422374. The full lane then correctly fails three YAML/YML customer leaves
+because the requested roots are missing. Preserve this failure; do not claim
+the narrow passing comparison establishes a complete optimization.
+
+Corrected snapshots come from real public installs in JSON, YAML and YML: 60
+format variants, 588 files, 1,822,949 bytes in the serialized snapshot artifact.
+Capture permissions from Linux, not Windows UNC stat results. Preserve actual
+directory and file modes and select the requested root filename. The unchanged
+CLI format, validation, customer-edit preservation and explicit replacement
+assertions pass. Six native repetitions per version, now including packaged
+YAML portability, all pass: baseline consumes 27.578133 CPU-seconds /
+29.166335468 seconds wall; candidate 11.599016 / 16.946829844. This is 57.9%
+less CPU and 41.9% less wall for these selected customer groups.
+
+The corrected prototype passes two complete, unweakened functional coverage
+runs: all 68 packages / 738 results, 736 pass and two skip, without retries.
+The first takes 139.07s supervisor / 129.857s coverage / 429.04 CPU-seconds,
+with zero compiler commands and 20 supervisor links. This is not a hosted
+checkpoint and is not directly comparable with earlier changed-source runs.
+
+For a stronger comparison, run baseline then corrected prototype in one
+continuous Linux session with the same four CPUs, jobs=8, GOGC=100, coverage
+manifest and quarantine. Both complete without retries. Baseline takes
+181.21s supervisor / 167.779s coverage / 564.70 CPU-seconds; prototype takes
+145.74s / 134.493s / 452.47 CPU-seconds. Total CPU falls 19.9% and supervisor
+wall 19.6% in this one matched pair. Baseline has three compiler commands
+(7.513292 CPU-seconds); prototype has zero. Both have 20 links, but prototype
+link CPU rises from 39.759837 to 64.912419 and active link wall from 37.695s to
+46.225s. Preserve that variation and do not equate this pair with a stable
+hosted speedup. The private source is restored to canonical after comparison.
+
+The production implementation should generate immutable format-specific
+renderings through the canonical compiler/writer, bind them to exact packaged
+payload and rendering policy, and load them through the owning Factory
+Definitions composition. Replay through the authored writer's filesystem
+boundary rather than the prototype's persistence-filesystem shortcut. Preserve
+portable-file effects and custom dependency behavior, cancellation, file modes,
+fresh runtime/session state and final staged validation. Keep arbitrary or
+changed payloads on the existing preparation path. The prototype proves useful
+potential; it does not prove that bypassing arbitrary supplied validation or
+writer ports is correct.
+
+Published cancellation-cleanup head f7e138ae4e passes hosted functional CI in
+222s complete / 154.403s coverage with six compiler commands and 33 links. One
+TestAgentSharedProcess/Cancel failure recovers on the existing same-head retry;
+retain its flake ledger and do not claim it is fixed. Workflow fails Backend
+Integration when a released probe port is claimed before the browser-test
+server binds. The successful browser cases now use server-owned automatic port
+binding and derive the observed endpoint from the public dashboard readiness
+line. The deliberately occupied explicit-listen failure remains. All launcher
+suppression, concurrent endpoint distinction and post-stop port-reuse assertions
+remain. Three focused Linux repetitions pass in 11.454s; both scoped linters
+pass. No timeout or retry allowance is increased.
+
+Evidence: `.artifacts/latency-audit/rendered-layout-spike-paired/`,
+`.artifacts/latency-audit/rendered-layout-spike-full/` (failed first prototype),
+`.artifacts/latency-audit/rendered-layout-formats-spike-paired/`,
+`.artifacts/latency-audit/rendered-layout-formats-spike-full/`,
+`.artifacts/latency-audit/rendered-layout-formats-matched-baseline/`,
+`.artifacts/latency-audit/rendered-layout-formats-matched-candidate/`,
+`.artifacts/latency-audit/pr2923-causal-hosted/` and
+`.artifacts/latency-audit/pr2923-causal-flakes/`.
