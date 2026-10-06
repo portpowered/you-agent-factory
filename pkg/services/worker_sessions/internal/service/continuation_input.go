@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -60,25 +61,50 @@ func (r *registry) persistContinuationInput(plan continuePlan) error {
 		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
 		FactorySessionID: target.FactorySessionID, RequestID: "continue/" + plan.request.RequestID,
 	}
-	_, err = r.operations.PersistWorkerControlInput(context.WithoutCancel(ctx), key, input)
+	if err := r.requireNewContinuationInput(ctx, key, plan.request, target); err != nil {
+		return err
+	}
+	return r.syncContinuationInput(ctx, key, plan.request, target, input)
+}
+
+func (r *registry) syncContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey, req workersessions.ContinueRequest, target recordings.WorkerControlTarget, input []byte) error {
+	_, err := r.operations.PersistWorkerControlInput(context.WithoutCancel(ctx), key, input)
 	if errors.Is(err, recordings.ErrWorkerControlConflict) {
 		return workersessions.ErrContinuationRequestIDConflict
 	}
 	if err != nil {
 		r.logger.Info("worker session continuation input unavailable", "sourceWorkerSessionID", target.WorkerSessionID,
-			"requestID", plan.request.RequestID, "outcome", "persistence_failed")
+			"requestID", req.RequestID, "outcome", "persistence_failed")
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	stored, err := r.restart.ReadWorkerContinuationInput(ctx, key)
 	if err == nil {
-		_, err = decodeContinuationInput(stored, plan.request, target)
+		_, err = decodeContinuationInput(stored, req, target)
 	}
 	if err != nil || !bytes.Equal(stored, input) {
 		r.logger.Info("worker session continuation input unavailable", "sourceWorkerSessionID", target.WorkerSessionID,
-			"requestID", plan.request.RequestID, "outcome", "read_failed")
+			"requestID", req.RequestID, "outcome", "read_failed")
 		return recordings.ErrWorkerRecordingPersistence
 	}
 	return nil
+}
+
+// A retained tuple may have crossed admission before its caller lost the
+// acknowledgement. Only a missing artifact permits a new admission. Recovery
+// must reconcile committed successor facts rather than reusing these bytes as
+// permission to execute the provider again.
+func (r *registry) requireNewContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey, req workersessions.ContinueRequest, target recordings.WorkerControlTarget) error {
+	stored, err := r.restart.ReadWorkerContinuationInput(ctx, key)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	if _, err := decodeContinuationInput(stored, req, target); err != nil {
+		return err
+	}
+	return workersessions.ErrContinuationExecutionUnavailable
 }
 
 func encodeContinuationInput(plan continuePlan, target recordings.WorkerControlTarget) ([]byte, error) {

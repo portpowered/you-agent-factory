@@ -418,7 +418,11 @@ func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner 
 
 func (store *restartRecipeStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	if store.input != nil {
-		return store.input(), store.err
+		input := store.input()
+		if len(input) == 0 && store.err == nil {
+			return nil, os.ErrNotExist
+		}
+		return input, store.err
 	}
 	return nil, store.err
 }
