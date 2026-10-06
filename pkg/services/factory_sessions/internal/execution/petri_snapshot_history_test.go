@@ -142,6 +142,11 @@ func TestPetriSnapshotSizeRejectionRetainsPendingLatestAndReportsRecovery(t *tes
 	if len(service.pendingPetriHistory) != 0 || len(service.sessions["~default"].petriMutations) != 2 {
 		t.Fatal("fitting save lost unpublished sibling or retained pending state")
 	}
+	assertSnapshotPersistenceEpisode(t, logs)
+}
+
+func assertSnapshotPersistenceEpisode(t *testing.T, logs *observer.ObservedLogs) {
+	t.Helper()
 	if logs.FilterMessage("durable Factory Session persistence degraded").Len() != 1 || logs.FilterMessage("durable Factory Session persistence recovered").Len() != 1 {
 		t.Fatal("degradation/recovery episode diagnostics missing or repeated")
 	}
