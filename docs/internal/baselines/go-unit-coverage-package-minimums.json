@@ -1241,10 +1241,6 @@
       "minimum": 94.40
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
-      "minimum": 83.91
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor",
       "minimum": 43.36
     },

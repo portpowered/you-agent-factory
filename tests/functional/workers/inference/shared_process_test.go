@@ -107,8 +107,13 @@ func (group *inferenceProcessGroup) setup() {
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = newInferenceProviderOverride()
+	store, err := newInferenceRecordingStore(filepath.Join(group.rootDir, "worker-capture"))
+	if err != nil {
+		group.setupErr = err
+		return
+	}
 	group.workerRecordings = &inferenceWorkerRecordingRouter{
-		fallback:    newWSRFT004RecordingStore(),
+		fallback:    store,
 		bySession:   make(map[string]recordings.WorkerRecordingWriter),
 		byWorker:    make(map[string]inferenceWorkerRecordingRoute),
 		byRecording: make(map[string]inferenceWorkerRecordingRoute),

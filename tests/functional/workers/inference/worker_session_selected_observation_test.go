@@ -185,9 +185,9 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, state)
 	}
 	assertSelectedProviderEnrichment(t, matching[0], false)
-	// Work-scoped compatibility retains native details; canonical identity
-	// reads derive facts from capture regardless of optional provider files.
-	assertSelectedProviderEnrichment(t, workRows[0], variant == "available")
+	// Work-scoped compatibility reads the same capture whether native files
+	// exist or are absent. An active prefix remains unavailable.
+	assertSelectedProviderEnrichment(t, workRows[0], state == "COMPLETED" && providerID != "")
 	assertSelectedProviderEnrichment(t, shown, false)
 }
 
@@ -232,10 +232,10 @@ func assertSelectedProviderEnrichment(t *testing.T, row factoryapi.WorkerSession
 	wantEvents := 0
 	if available {
 		wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
-		wantEvents = 2
+		wantEvents = 9
 	}
 	if row.Transcript != wantTranscript || row.Parse.EventCount != wantEvents || row.Parse.MalformedLineCount != 0 || row.Parse.UnknownEventCount != 0 || len(row.Parse.Errors) != 0 || row.TurnUsage != nil {
-		t.Fatalf("provider enrichment = %#v, want transcript %s and %d native events without turn usage", row, wantTranscript, wantEvents)
+		t.Fatalf("provider enrichment = %#v, want transcript %s and %d captured events without turn usage", row, wantTranscript, wantEvents)
 	}
 }
 

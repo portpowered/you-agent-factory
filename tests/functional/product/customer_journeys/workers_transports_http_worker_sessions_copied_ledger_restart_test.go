@@ -3,15 +3,18 @@ package customer_journeys_test
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -50,67 +53,19 @@ type copiedLedgerReplayFixture struct {
 	releaseFirst          func()
 }
 
+// Replay and captured inspection share the relocated production journal.
+// The wrapper observes recording identity without maintaining a second snapshot.
 type copiedLedgerWorkerRecordingWriter struct {
-	unavailableWorkerControlStore
-	delegate      *remoteWorkerRecordingStore
-	directory     string
-	mu            sync.RWMutex
-	persistenceMu sync.Mutex
-	identity      string
+	recordings.WorkerRecordingStore
+	mu       sync.RWMutex
+	identity string
 }
 
-func (writer *copiedLedgerWorkerRecordingWriter) PersistWorkerRecord(
-	ctx context.Context,
-	record recordings.WorkerRecordingRecord,
-) error {
-	return writer.persist(ctx, record.RecordingID, func() error {
-		return writer.delegate.PersistWorkerRecord(ctx, record)
-	})
-}
-
-func (writer *copiedLedgerWorkerRecordingWriter) PersistWorkerRecordingFailure(
-	ctx context.Context,
-	failure recordings.WorkerRecordingFailure,
-) error {
-	return writer.persist(ctx, failure.RecordingID, func() error {
-		return writer.delegate.PersistWorkerRecordingFailure(ctx, failure)
-	})
-}
-
-func (writer *copiedLedgerWorkerRecordingWriter) LoadWorkerRecording(
-	ctx context.Context,
-	recordingID string,
-) (recordings.WorkerRecordingSnapshot, error) {
-	return writer.delegate.LoadWorkerRecording(ctx, recordingID)
-}
-
-func (writer *copiedLedgerWorkerRecordingWriter) persist(
-	ctx context.Context,
-	recordingID string,
-	operation func() error,
-) error {
-	if err := writer.rememberIdentity(recordingID); err != nil {
+func (writer *copiedLedgerWorkerRecordingWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if err := writer.rememberIdentity(record.RecordingID); err != nil {
 		return err
 	}
-	writer.persistenceMu.Lock()
-	defer writer.persistenceMu.Unlock()
-	if err := operation(); err != nil {
-		return err
-	}
-	snapshot, err := writer.delegate.LoadWorkerRecording(ctx, recordingID)
-	if err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(snapshot)
-	if err != nil {
-		return fmt.Errorf("encode copied-ledger Worker recording: %w", err)
-	}
-	fileName := hex.EncodeToString([]byte(recordingID)) + ".json"
-	path := filepath.Join(writer.directory, fileName)
-	if err := os.WriteFile(path, encoded, 0o600); err != nil {
-		return fmt.Errorf("persist copied-ledger Worker recording: %w", err)
-	}
-	return nil
+	return writer.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
 func (writer *copiedLedgerWorkerRecordingWriter) rememberIdentity(identity string) error {
@@ -134,32 +89,12 @@ func (writer *copiedLedgerWorkerRecordingWriter) recordingIdentity() string {
 }
 
 func newCopiedLedgerWorkerRecordingWriter(directory string) (*copiedLedgerWorkerRecordingWriter, error) {
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return nil, fmt.Errorf("create copied-ledger Worker recording directory: %w", err)
-	}
-	delegate := newRemoteWorkerRecordingStore()
-	entries, err := os.ReadDir(directory)
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	store, err := recordingswire.NewWorkerRecordingFileWriter(storage, storage, storage, platformclock.Real{}, directory, uuid.NewString())
 	if err != nil {
-		return nil, fmt.Errorf("read copied-ledger Worker recording directory: %w", err)
+		return nil, err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(directory, entry.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("read copied-ledger Worker recording snapshot: %w", err)
-		}
-		var snapshot recordings.WorkerRecordingSnapshot
-		if err := json.Unmarshal(data, &snapshot); err != nil {
-			return nil, fmt.Errorf("decode copied-ledger Worker recording snapshot: %w", err)
-		}
-		if strings.TrimSpace(snapshot.RecordingID) == "" {
-			return nil, recordings.ErrInvalidWorkerRecordingRequest
-		}
-		delegate.snapshots[snapshot.RecordingID] = cloneRemoteWorkerRecordingSnapshot(snapshot)
-	}
-	return &copiedLedgerWorkerRecordingWriter{delegate: delegate, directory: directory}, nil
+	return &copiedLedgerWorkerRecordingWriter{WorkerRecordingStore: store}, nil
 }
 
 type copiedLedgerReplayRunner struct {

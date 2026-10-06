@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -29,13 +32,14 @@ import (
 type captureOnlyWorkerWriter struct {
 	recordings.WorkerRecordingWriter
 	recordings.WorkerRecordingReader
+	recordings.WorkerCapturedActivityReader
 }
 
 func TestWorkerControlsRefuseCaptureOnlyStoreAtProcessAdmission(t *testing.T) {
 	t.Parallel()
-	store := newWSRFT004RecordingStore()
+	store := newWSRFT004RecordingStore(t)
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		WorkerRecordingWriter: captureOnlyWorkerWriter{WorkerRecordingWriter: store, WorkerRecordingReader: store},
+		WorkerRecordingWriter: captureOnlyWorkerWriter{WorkerRecordingWriter: store, WorkerRecordingReader: store, WorkerCapturedActivityReader: store},
 	})
 	if process != nil {
 		support.CleanupProcess(t, process)
@@ -354,6 +358,7 @@ func queueWSRFT004ProviderResult(
 }
 
 type wsrFT004RecordingProbe struct {
+	recordings.WorkerCapturedActivityReader
 	// This fixture owns capture faults, not durable controls.
 	unavailableWorkerControlStore
 	delegate          recordings.WorkerRecordingWriter
@@ -373,141 +378,29 @@ type wsrFT004RecordingProbe struct {
 
 func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004RecordingProbe {
 	t.Helper()
+	store := newWSRFT004RecordingStore(t)
 	return &wsrFT004RecordingProbe{
-		delegate:     newWSRFT004RecordingStore(),
-		failOpening:  failOpening,
-		liveByWorker: make(map[string]recordings.WorkerRecordingProjection),
+		WorkerCapturedActivityReader: store,
+		delegate:                     store,
+		failOpening:                  failOpening,
+		liveByWorker:                 make(map[string]recordings.WorkerRecordingProjection),
 	}
 }
 
-type wsrFT004RecordingStore struct {
-	unavailableWorkerControlStore
-	mu        sync.Mutex
-	snapshots map[string]recordings.WorkerRecordingSnapshot
-}
-
-func newWSRFT004RecordingStore() *wsrFT004RecordingStore {
-	return &wsrFT004RecordingStore{snapshots: make(map[string]recordings.WorkerRecordingSnapshot)}
-}
-
-func (store *wsrFT004RecordingStore) PersistWorkerRecord(
-	ctx context.Context,
-	record recordings.WorkerRecordingRecord,
-) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	snapshot := cloneWSRFT004Snapshot(store.snapshots[record.RecordingID])
-	snapshot.RecordingID = record.RecordingID
-	session := findWSRFT004Session(&snapshot, record.WorkerSessionID)
-	history := append([]events.Record(nil), session.Records...)
-	history = append(history, record.Record.Detached())
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:       record.RecordingID,
-		WorkerSessionID:   record.WorkerSessionID,
-		Topic:             record.Record.ID.Topic,
-		Failure:           session.Failure,
-		ExecutionTerminal: session.ExecutionTerminal,
-		Records:           history,
-	})
+// Use one real journal for both replay and captured projections. Fault probes
+// wrap acceptance at the external recording edge; no parallel ledger is seeded.
+func newWSRFT004RecordingStore(t *testing.T) recordings.WorkerRecordingStore {
+	t.Helper()
+	store, err := newInferenceRecordingStore(t.TempDir())
 	if err != nil {
-		return err
+		t.Fatal(err)
 	}
-	session.Topic = projection.Topic
-	session.Status = projection.Status
-	session.LastPosition = projection.LastPosition
-	session.ExecutionTerminal = projection.ExecutionTerminal
-	session.Records = cloneWSRFT004Records(projection.Records)
-	store.snapshots[record.RecordingID] = snapshot
-	return nil
+	return store
 }
 
-func (store *wsrFT004RecordingStore) PersistWorkerRecordingFailure(
-	ctx context.Context,
-	failure recordings.WorkerRecordingFailure,
-) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	snapshot := cloneWSRFT004Snapshot(store.snapshots[failure.RecordingID])
-	snapshot.RecordingID = failure.RecordingID
-	session := findWSRFT004Session(&snapshot, failure.WorkerSessionID)
-	session.Topic = failure.Topic
-	session.Failure = failure.Code
-	session.ExecutionTerminal = failure.ExecutionTerminal
-	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:       snapshot.RecordingID,
-		WorkerSessionID:   session.WorkerSessionID,
-		Topic:             session.Topic,
-		Failure:           session.Failure,
-		ExecutionTerminal: session.ExecutionTerminal,
-		Records:           session.Records,
-	})
-	if err != nil {
-		return err
-	}
-	session.Topic = projection.Topic
-	session.Status = projection.Status
-	session.LastPosition = projection.LastPosition
-	session.ExecutionTerminal = projection.ExecutionTerminal
-	session.Records = cloneWSRFT004Records(projection.Records)
-	store.snapshots[failure.RecordingID] = snapshot
-	return nil
-}
-
-func (store *wsrFT004RecordingStore) LoadWorkerRecording(
-	ctx context.Context,
-	recordingID string,
-) (recordings.WorkerRecordingSnapshot, error) {
-	if err := ctx.Err(); err != nil {
-		return recordings.WorkerRecordingSnapshot{}, err
-	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	snapshot, ok := store.snapshots[recordingID]
-	if !ok {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("recording %q: %w", recordingID, os.ErrNotExist)
-	}
-	return cloneWSRFT004Snapshot(snapshot), nil
-}
-
-func findWSRFT004Session(
-	snapshot *recordings.WorkerRecordingSnapshot,
-	workerSessionID string,
-) *recordings.WorkerSessionRecordingSnapshot {
-	for index := range snapshot.Sessions {
-		if snapshot.Sessions[index].WorkerSessionID == workerSessionID {
-			return &snapshot.Sessions[index]
-		}
-	}
-	snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
-		WorkerSessionID: workerSessionID,
-	})
-	return &snapshot.Sessions[len(snapshot.Sessions)-1]
-}
-
-func cloneWSRFT004Snapshot(
-	snapshot recordings.WorkerRecordingSnapshot,
-) recordings.WorkerRecordingSnapshot {
-	clone := snapshot
-	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
-	for index, session := range snapshot.Sessions {
-		clone.Sessions[index] = session
-		clone.Sessions[index].Records = cloneWSRFT004Records(session.Records)
-	}
-	return clone
-}
-
-func cloneWSRFT004Records(records []events.Record) []events.Record {
-	clone := make([]events.Record, len(records))
-	for index, record := range records {
-		clone[index] = record.Detached()
-	}
-	return clone
+func newInferenceRecordingStore(root string) (recordings.WorkerRecordingStore, error) {
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	return recordingswire.NewWorkerRecordingFileWriter(storage, storage, storage, platformclock.Real{}, root, uuid.NewString())
 }
 
 func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
@@ -544,6 +437,18 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 	if err != nil {
 		probe.mu.Unlock()
 		return fmt.Errorf("reduce accepted Worker history: %w", err)
+	}
+	snapshot, err := probe.LoadWorkerRecording(ctx, record.RecordingID)
+	if err != nil {
+		probe.mu.Unlock()
+		return err
+	}
+	for _, session := range snapshot.Sessions {
+		if session.WorkerSessionID == record.WorkerSessionID {
+			live.RecordingGenerationID = session.RecordingGenerationID
+			live.OwnerEpoch = session.OwnerEpoch
+			live.CapturedAt = session.CapturedAt
+		}
 	}
 	probe.liveByWorker[record.WorkerSessionID] = live
 	probe.live = live
