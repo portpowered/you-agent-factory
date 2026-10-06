@@ -735,6 +735,7 @@ func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
 // workerScopeBinder accepts runtime-owned facts without replacing Workers.
 type workerScopeBinder interface {
 	BindWorkerScope(
+		string,
 		factoryruntime.ResourceCapacityLeaseAdmission,
 		string,
 		string,
@@ -762,7 +763,7 @@ func bindWorkerScope(
 	if !ok {
 		return fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	if err := binder.BindWorkerScope(admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter); err != nil {
+	if err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter); err != nil {
 		return fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}
 	return nil

@@ -56,6 +56,7 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 // handles atomically. Captured children retain these immutable handles across
 // later registrations. The Workers operation is fixed by construction.
 func (s *JavaScriptRuntimeService) BindWorkerScope(
+	factorySessionID string,
 	admission factory.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
@@ -65,12 +66,19 @@ func (s *JavaScriptRuntimeService) BindWorkerScope(
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" {
+		return errors.New("factory session ID is required")
+	}
 	s.invokerMu.Lock()
 	defer s.invokerMu.Unlock()
 	if s.workerExecution == nil || s.workerExecution.execute == nil {
 		return errors.New("Workers Execute capability is required")
 	}
-	s.workerExecution = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	if s.workerExecutionScopes == nil {
+		s.workerExecutionScopes = make(map[string]*childWorkerExecutionBinding)
+	}
+	s.workerExecutionScopes[factorySessionID] = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
 	return nil
 }
 
@@ -142,15 +150,18 @@ func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {
 }
 
 func (s *JavaScriptRuntimeService) workerExecutionBound() bool {
-	return s.workerExecutionBinding() != nil
+	return s.workerExecutionBinding("") != nil
 }
 
-func (s *JavaScriptRuntimeService) workerExecutionBinding() *childWorkerExecutionBinding {
+func (s *JavaScriptRuntimeService) workerExecutionBinding(sessionID string) *childWorkerExecutionBinding {
 	if s == nil {
 		return nil
 	}
 	s.invokerMu.RLock()
 	binding := s.workerExecution
+	if scoped := s.workerExecutionScopes[strings.TrimSpace(sessionID)]; scoped != nil {
+		binding = scoped
+	}
 	s.invokerMu.RUnlock()
 	if binding == nil || binding.execute == nil {
 		return nil

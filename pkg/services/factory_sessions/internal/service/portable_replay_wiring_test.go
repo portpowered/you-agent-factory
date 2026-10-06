@@ -604,6 +604,7 @@ func (owner *portableReplayRuntimeOwner) SetWorkerInvoker(runtime factoryruntime
 }
 
 func (owner *portableReplayRuntimeOwner) BindWorkerScope(
+	_ string,
 	_ factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,

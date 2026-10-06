@@ -254,9 +254,10 @@ type JavaScriptRuntimeService struct {
 	// workerInvokerService is guarded by its own lock, not the session lock. It
 	// is attached once after construction and read on paths that already hold the
 	// session lock; sharing one mutex between them deadlocks.
-	invokerMu            sync.RWMutex
-	workerInvokerService factory.Service
-	workerExecution      *childWorkerExecutionBinding
+	invokerMu             sync.RWMutex
+	workerInvokerService  factory.Service
+	workerExecution       *childWorkerExecutionBinding
+	workerExecutionScopes map[string]*childWorkerExecutionBinding
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
 	// knows only the dispatch it belongs to, so this is what routes a child's

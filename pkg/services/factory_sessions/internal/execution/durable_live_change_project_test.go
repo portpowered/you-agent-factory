@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -347,8 +348,104 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
 	t.Parallel()
 	service := &JavaScriptRuntimeService{}
-	if err := service.BindWorkerScope(nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
+	if err := service.BindWorkerScope("parent", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
 		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
+	}
+}
+
+func TestBindWorkerScopeRequiresSessionIdentity(t *testing.T) {
+	t.Parallel()
+	service := newProcessChildRuntime(&recordingWorkerExecution{})
+	if err := service.BindWorkerScope(" ", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "factory session ID is required") {
+		t.Fatalf("BindWorkerScope error = %v, want missing session identity", err)
+	}
+}
+
+type heldScopeWorkerExecution struct {
+	admitted chan workers.ExecuteRequest
+	release  map[string]chan struct{}
+	failure  error
+}
+
+func (worker *heldScopeWorkerExecution) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	worker.admitted <- request
+	request.Input.ProgressPublisher(workers.ProgressFragment{Correlation: request.Correlation, Kind: workers.ResponseFragmentKind, Payload: request.Target.WorkerName})
+	select {
+	case <-ctx.Done():
+		return workers.ExecuteResult{}, ctx.Err()
+	case <-worker.release[request.Correlation.FactorySessionID]:
+	}
+	if request.Correlation.FactorySessionID == "first-child" && worker.failure != nil {
+		return workers.ExecuteResult{}, worker.failure
+	}
+	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+}
+
+func TestBindWorkerScopeOverlappingChildrenKeepRoutesOnPeerFailureOrCancellation(t *testing.T) {
+	for _, cancelFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel=%t", cancelFirst), func(t *testing.T) {
+			t.Parallel()
+			worker := &heldScopeWorkerExecution{
+				admitted: make(chan workers.ExecuteRequest, 2),
+				release:  map[string]chan struct{}{"first-child": make(chan struct{}), "second-child": make(chan struct{})},
+				failure:  errors.New("first worker failed"),
+			}
+			service := newProcessChildRuntime(worker)
+			progress := map[string]chan workers.ProgressFragment{
+				"first": make(chan workers.ProgressFragment, 4), "second": make(chan workers.ProgressFragment, 4),
+			}
+			for _, scope := range []string{"first", "second"} {
+				if err := service.BindWorkerScope(scope+"-parent", nil, "runtime-"+scope, "generation-"+scope, nil, nil, nil, func(fragment workers.ProgressFragment) { progress[scope] <- fragment }, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			firstCtx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := map[string]chan error{"first": make(chan error, 1), "second": make(chan error, 1)}
+			for _, scope := range []string{"first", "second"} {
+				executor := service.childExecutorHooks(ChildExecutorModeLive, scope+"-parent").NewChildExecutor(scope+"-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+				ctx := t.Context()
+				if scope == "first" {
+					ctx = firstCtx
+				}
+				go func() {
+					_, err := executor.Execute(ctx, factory.JavaScriptChildExecutionRequest{Prompt: scope, Preset: "worker-" + scope})
+					done[scope] <- err
+				}()
+			}
+			// Both children must enter the fixed Workers boundary before either
+			// completes. Then complete the peer first and fail/cancel the first.
+			for range 2 {
+				request := <-worker.admitted
+				scope := strings.TrimSuffix(request.Correlation.FactorySessionID, "-child")
+				if request.Correlation.RuntimeID != "runtime-"+scope || request.Correlation.GenerationID != "generation-"+scope || request.Target.WorkerName != "worker-"+scope {
+					t.Fatalf("crossed child request: %#v", request)
+				}
+			}
+			close(worker.release["second-child"])
+			if err := <-done["second"]; err != nil {
+				t.Fatalf("peer completion: %v", err)
+			}
+			if cancelFirst {
+				cancel()
+			} else {
+				close(worker.release["first-child"])
+			}
+			err := <-done["first"]
+			want := worker.failure.Error()
+			if cancelFirst {
+				want = context.Canceled.Error()
+			}
+			if err == nil || err.Error() != want {
+				t.Fatalf("first completion: %v", err)
+			}
+			for _, scope := range []string{"first", "second"} {
+				fragment := <-progress[scope]
+				if fragment.Correlation.FactorySessionID != scope+"-child" || fragment.Payload != "worker-"+scope {
+					t.Fatalf("crossed %s progress: %#v", scope, fragment)
+				}
+			}
+		})
 	}
 }
 
@@ -376,20 +473,29 @@ func TestBindWorkerScopeRetainsCapturedChildIdentityAndObservationHandles(t *tes
 		}
 	}
 	service := newProcessChildRuntime(invocation)
-	if err := service.BindWorkerScope(nil, "runtime-first", "generation-first", nil, nil, nil, func(fragment workers.ProgressFragment) { firstProgress = append(firstProgress, fragment) }, starter(&firstAttempts, &firstCompletions)); err != nil {
+	if err := service.BindWorkerScope("first-parent", nil, "runtime-first", "generation-first", nil, nil, nil, func(fragment workers.ProgressFragment) { firstProgress = append(firstProgress, fragment) }, starter(&firstAttempts, &firstCompletions)); err != nil {
 		t.Fatal(err)
 	}
-	first := service.childExecutorHooks(ChildExecutorModeLive, "first-parent").NewChildExecutor("first-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
-	if err := service.BindWorkerScope(nil, "runtime-second", "generation-second", nil, nil, nil, func(fragment workers.ProgressFragment) { secondProgress = append(secondProgress, fragment) }, starter(&secondAttempts, &secondCompletions)); err != nil {
+	if err := service.BindWorkerScope("second-parent", nil, "runtime-second", "generation-second", nil, nil, nil, func(fragment workers.ProgressFragment) { secondProgress = append(secondProgress, fragment) }, starter(&secondAttempts, &secondCompletions)); err != nil {
 		t.Fatal(err)
 	}
+	firstHooks := service.childExecutorHooks(ChildExecutorModeLive, "first-parent")
 	second := service.childExecutorHooks(ChildExecutorModeLive, "second-parent").NewChildExecutor("second-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+	// A later generation must not retarget hooks retained by the prior opening,
+	// even when the child executor is created only after replacement.
+	if err := service.BindWorkerScope("first-parent", nil, "runtime-replacement", "generation-replacement", nil, nil, nil, func(workers.ProgressFragment) { t.Error("prior child reached replacement progress route") }, func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+		t.Error("prior child reached replacement attempt route")
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first := firstHooks.NewChildExecutor("first-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
 	for _, scenario := range []struct {
 		executor                     factory.JavaScriptChildExecutor
 		session, runtime, generation string
 	}{
-		{first, "first-child", "runtime-first", "generation-first"},
 		{second, "second-child", "runtime-second", "generation-second"},
+		{first, "first-child", "runtime-first", "generation-first"},
 	} {
 		if _, err := scenario.executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run", Preset: "worker-a"}); err != nil {
 			t.Fatal(err)

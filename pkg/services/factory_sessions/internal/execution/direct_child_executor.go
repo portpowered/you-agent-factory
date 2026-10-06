@@ -45,11 +45,13 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 	if mode != ChildExecutorModeLive {
 		return hooks
 	}
+	// Capture this opening's handles before any later opening or replacement.
+	binding := s.workerExecutionBinding(sessionID)
 	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
 		workingDir := s.projectRootForSession(sessionID)
 		// Runtime-backed and standalone children use the fixed Workers Execute
 		// operation. Request handles retain the owning session's policy and routes.
-		if binding := s.workerExecutionBinding(); binding != nil {
+		if binding != nil {
 			executor := newChildWorkerExecutor(
 				childSessionID,
 				binding.execute,
