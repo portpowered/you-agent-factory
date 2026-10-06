@@ -14,7 +14,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -116,7 +115,6 @@ func testFSCP01ActiveDispatchRead(t *testing.T) {
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       locations.Env,
-		BeforeStart:               initializeFSCP01DispatchHome,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
 		},
@@ -161,7 +159,6 @@ func testFSCP01TerminalDispatchRead(t *testing.T) {
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       locations.Env,
-		BeforeStart:               initializeFSCP01DispatchHome,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
 		},
@@ -199,11 +196,6 @@ func testFSCP01TerminalDispatchRead(t *testing.T) {
 	assertFSCP01DispatchListDetail(t, started.SessionId, secondSummary, secondDetail)
 
 	assertFSCP01DispatchNegativeReads(t, server.URL(), started.SessionId, summary.Id)
-}
-
-func initializeFSCP01DispatchHome(tb testing.TB, process support.Process, inputs root.Input) {
-	tb.Helper()
-	support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
 }
 
 func assertFSCP01DispatchNegativeReads(t *testing.T, serverURL, sessionID, dispatchID string) {

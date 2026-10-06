@@ -140,13 +140,8 @@ func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture
 			}
 
 			start := fixture.clock.Now()
-			timeoutMillis := int64(20)
-			status := postLoopInvocation(t, scenario, args, nil, &timeoutMillis)
-			if status != http.StatusOK {
-				t.Fatalf("duration %q status = %d, want 200", testCase.every, status)
-			}
 			observer := newLoopPhaseObserver(t)
-			submission := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
+			submission := invokeLoopUntilFirstScheduledWork(t, scenario, args, observer)
 			assertLoopSubmission(t, submission, "init", "SCHEDULED", "1", start, start)
 		})
 	}

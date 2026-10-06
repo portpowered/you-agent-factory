@@ -190,6 +190,14 @@ func TestCoverageBuildDiagnosticReportsObservedCompileWorkWithoutInferredHits(t 
 	}
 }
 
+func TestCoverageBuildDiagnosticDistinguishesLinkOnlyWork(t *testing.T) {
+	trace := coverageBuildTraceSummary{linkerCommands: 37, buildActions: 37}
+	got := classifyCoverageBuildTrace(trace, coverageActionCacheIdentity{}, nil, nil, nil)
+	if got != coverageBuildCacheReuseLinkWorkObserved {
+		t.Fatalf("zero compilers and 37 links classified as %q, want link-work-observed", got)
+	}
+}
+
 func TestCoverageBuildDiagnosticFailureDoesNotClaimExactReuse(t *testing.T) {
 	setActionCacheIdentity(t, "build-key", "build-key", "true")
 

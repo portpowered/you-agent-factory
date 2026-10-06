@@ -36,7 +36,7 @@ record() {
 record "functional-quarantine-evidence-run=$run_url"
 record "functional-quarantine-evidence-head-sha=$head_sha"
 record "functional-quarantine-validation-command=$go_bin run ./cmd/gocoveragecheck -suite functional -functional-quarantine $quarantine -validate-functional-quarantine -short=false -timeout=$test_timeout"
-record "functional-quarantine-evidence-command=go test -list=^Test -json -count=1 -short=false [-tags=functionallong] -timeout=$test_timeout <exact-package>"
+record "functional-quarantine-evidence-command=go test -vet=off -list=^Test -json -count=1 -short=false [-tags=functionallong] -timeout=$test_timeout <exact-package>"
 
 "$go_bin" run ./cmd/gocoveragecheck \
   -suite functional \
@@ -60,7 +60,8 @@ for tag_set in default functionallong; do
     package="${packages[$index]}"
     event_path="$temporary_root/${tag_set}-${index}.json"
     diagnostic_path="$temporary_root/${tag_set}-${index}.stderr"
-    command_line=(go test "${tag_args[@]}" -list='^Test' -json -count=1 -short=false "-timeout=$test_timeout" "$package")
+    # Backend Lint owns vet; this lane validates runtime package terminals.
+    command_line=(go test "${tag_args[@]}" -vet=off -list='^Test' -json -count=1 -short=false "-timeout=$test_timeout" "$package")
 
     set +e
     "${command_line[@]}" > "$event_path" 2> "$diagnostic_path"

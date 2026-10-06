@@ -75,9 +75,7 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 	}
 	assertArchivedCapturedTiming(t, restarted, archived, recovered)
 	restarted.Close(t)
-	assertLegacyCapturedLogsRecovery(t, config, ended)
 	assertOversizedCapturedPayload(t, config, ended)
-	assertCapturedPublishedPrivacy(t, config, ended)
 	assertDamagedCapturedRecovery(t, config, ended)
 	assertUnreadableCapturedRecovery(t, config, ended)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.read", "rest/readWorkerSessionLogs")

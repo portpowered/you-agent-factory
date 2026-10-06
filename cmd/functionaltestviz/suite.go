@@ -260,6 +260,9 @@ func coverageCommandArguments(cfg config) []string {
 		"-json-output", cfg.coverageSummaryPath,
 		"-timing-output", cfg.timingSummaryPath,
 	}
+	if cfg.functionalMonolith {
+		args = append(args, "-functional-monolith")
+	}
 	if strings.TrimSpace(cfg.coverageBuildDiagnosticsPath) != "" {
 		args = append(args, "-coverage-build-diagnostics-output", cfg.coverageBuildDiagnosticsPath)
 	}

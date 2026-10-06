@@ -115,6 +115,7 @@ endif
 endif
 
 FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+FUNCTIONAL_MONOLITH ?= true
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_TIMING_OUTPUT ?=
 UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v1.json
@@ -734,6 +735,7 @@ functional-test-viz:
 		-short=$(FUNCTIONAL_SHORT) \
 		-quarantine "$(FUNCTIONAL_QUARANTINE)" \
 		-jobs $(FUNCTIONAL_DEFAULT_JOBS) \
+		-functional-monolith=$(FUNCTIONAL_MONOLITH) \
 		-minimum $(GO_FUNCTIONAL_COVERAGE_MIN) \
 		-package-manifest "$(GO_FUNCTIONAL_COVERAGE_MANIFEST)" \
 		-package-floor-policy "$(GO_COVERAGE_FLOOR_POLICY)" \
@@ -966,7 +968,7 @@ test-unit-coverage:
 test-functional-coverage:
 	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
 	@set +e; \
-	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
+	$(GO) run ./cmd/gocoveragecheck -suite functional -functional-monolith=$(FUNCTIONAL_MONOLITH) -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
 	status=$$?; \
 	if [ -n "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" ]; then \
 		printf '%s\n' "$$status" > "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)"; \

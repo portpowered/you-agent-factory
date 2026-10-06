@@ -13,7 +13,7 @@ func TestCLIUnknownFlagFailsBeforeLifecycleStart(t *testing.T) {
 		"you", "init", "--does-not-exist", "legacy-factory",
 	})
 
-	executeErr := parameterProcesses.process.Execute(inputs.Input)
+	executeErr := parameterProcessesForTest(t).process.Execute(inputs.Input)
 	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --does-not-exist") {
 		t.Fatalf(
 			"unknown init flag error = %v, want unknown flag: --does-not-exist; stdout=%q stderr=%q",

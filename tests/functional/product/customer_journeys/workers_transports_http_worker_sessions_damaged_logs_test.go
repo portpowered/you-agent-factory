@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -35,7 +34,7 @@ func (storage *capturedReadFault) ReadFile(path string) ([]byte, error) {
 func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
 	t.Helper()
 	root := t.TempDir()
-	writeLegacyCapturedFixture(t, root, current)
+	copyCurrentCapturedJournal(t, config, root)
 	local := platformreplay.NewLocal(runtime.GOOS)
 	storage := &capturedReadFault{Local: local}
 	storage.unavailable.Store(true)
@@ -46,8 +45,8 @@ func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPI
 		assertUnavailableCapturedRead(t, server, current.WorkerSessionId)
 	}
 	storage.unavailable.Store(false)
-	page := assertLegacyLogsCLIHTTPParity(t, server, current.WorkerSessionId)
-	assertLegacyCapturedEvents(t, page, current)
+	page := assertRestoredLogsCLIHTTPParity(t, server, current.WorkerSessionId)
+	assertRestoredCapturedEvents(t, page, current)
 }
 
 // Recovery owns a fresh store with one healthy and one identifiable but
@@ -56,32 +55,30 @@ func assertUnreadableCapturedRecovery(t *testing.T, config support.FunctionalAPI
 func assertDamagedCapturedRecovery(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
 	t.Helper()
 	root := t.TempDir()
-	path := writeLegacyCapturedFixture(t, root, current)
-	data, err := os.ReadFile(path)
+	path, journal := copyCurrentCapturedJournal(t, config, root)
+	recordingID := journal[0]["recordingId"].(string)
+	for _, row := range journal {
+		row["recordingId"] = "damaged-recording"
+		row["workerSessionId"] = "damaged-worker"
+	}
+	journal[len(journal)-1]["record"].(map[string]any)["SchemaID"] = ""
+	digest := sha256.Sum256([]byte("damaged-recording"))
+	damagedPath := filepath.Join(filepath.Dir(path), hex.EncodeToString(digest[:])+".worker.jsonl")
+	writeCapturedJournal(t, damagedPath, journal)
+	data, err := os.ReadFile(damagedPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var damaged recordings.WorkerRecordingSnapshot
-	if err := json.Unmarshal(data, &damaged); err != nil {
-		t.Fatal(err)
-	}
-	damaged.RecordingID = "damaged-recording"
-	damaged.Sessions[0].WorkerSessionID = "damaged-worker"
-	damaged.Sessions[0].Records[len(damaged.Sessions[0].Records)-1].SchemaID = ""
-	data, err = json.Marshal(damaged)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256([]byte(damaged.RecordingID))
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), hex.EncodeToString(digest[:])+".worker.json"), data, 0o600); err != nil {
+	data = []byte(strings.ReplaceAll(strings.ReplaceAll(string(data), current.WorkerSessionId, "damaged-worker"), recordingID, "damaged-recording"))
+	if err := os.WriteFile(damagedPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
 	server := support.StartFunctionalAPIServer(t, config)
 	for range 2 {
 		assertDamagedCapturedRead(t, server)
-		page := assertLegacyLogsCLIHTTPParity(t, server, current.WorkerSessionId)
-		assertLegacyCapturedEvents(t, page, current)
+		page := assertRestoredLogsCLIHTTPParity(t, server, current.WorkerSessionId)
+		assertRestoredCapturedEvents(t, page, current)
 	}
 }
 

@@ -18,7 +18,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -156,9 +155,6 @@ func keyedRetentionServer(t *testing.T, runner *keyedRetentionRunner) (*identity
 	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Env: env,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: capture},
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, dir)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	for _, gate := range runner.gates {

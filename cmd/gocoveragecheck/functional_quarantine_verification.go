@@ -159,6 +159,16 @@ func (verification *functionalQuarantineSelectorVerification) waitRatchet() erro
 	return verification.ratchet.wait()
 }
 
+// Coverage selection depends on the static manifest and current test inventory.
+// With overlap enabled, the runtime ratchet can finish alongside coverage;
+// waitAll still joins it before the caller can publish a passing verdict.
+func (verification *functionalQuarantineSelectorVerification) waitRatchetBeforeSelection() error {
+	if verification == nil || verification.overlapCoverage {
+		return nil
+	}
+	return verification.waitRatchet()
+}
+
 func (verification *functionalQuarantineSelectorVerification) waitAll() error {
 	if verification == nil {
 		return nil

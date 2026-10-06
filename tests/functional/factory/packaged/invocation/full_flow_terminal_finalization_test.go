@@ -140,9 +140,7 @@ func testPackagedFullFlowDispatchTerminalFinalizationRoutesFailureToLead(
 		t.Fatalf("response = %#v, want failed project invocation", response)
 	}
 
-	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(
-		fixture.baseURL, scenario.sessionID, "/work?terminal=true&includeSuperseded=true",
-	))
+	works := waitForFullFlowFailedWorks(t, scenario)
 	assertFullFlowWorkStates(t, works.Results, "project", "failed", 1)
 	tasks := assertFullFlowWorkStates(t, works.Results, "delivery-task", "failed", 1)
 	for _, work := range works.Results {
@@ -427,4 +425,30 @@ func fullFlowAgentRunResponsesForDispatch(
 		responses = append(responses, payload)
 	}
 	return responses
+}
+
+// The invocation result and the public Work projection become visible through
+// separate requests. Observe the required terminal records before asserting
+// their cardinality, outcomes and worker-session lineage.
+func waitForFullFlowFailedWorks(t *testing.T, scenario *fullFlowScenario) factoryapi.ListWorkResponse {
+	t.Helper()
+	works, err := support.WaitForObservation(fullFlowSharedFixtureTimeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(
+				scenario.fixture.baseURL, scenario.sessionID, "/work?terminal=true&includeSuperseded=true",
+			)), nil
+		},
+		func(works factoryapi.ListWorkResponse) bool {
+			found := map[string]bool{}
+			for _, work := range works.Results {
+				if work.WorkTypeName != nil && work.State != nil && work.State.Name == "failed" {
+					found[*work.WorkTypeName] = true
+				}
+			}
+			return found["project"] && found["delivery-task"]
+		})
+	if err != nil {
+		t.Fatalf("observe failed project and delivery-task Work: %v; last response: %#v", err, works)
+	}
+	return works
 }

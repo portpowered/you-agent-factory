@@ -43,7 +43,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		t.Errorf("expected reviewer called 3 times, got %d", got)
 	}
 
-	assertWorkflowSessionPlaces(t, listed, map[string]int{
+	assertWorkflowWorkStates(t, listed, map[string]int{
 		"code-change:failed": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
 	})
 	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "code-change:failed")
@@ -72,7 +72,7 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
-	assertWorkflowSessionPlaces(t, listed, map[string]int{"code-change:failed": 1})
+	assertWorkflowWorkStates(t, listed, map[string]int{"code-change:failed": 1})
 
 	var rejectedOutputs []string
 	for _, event := range server.GetFactoryEvents(t) {
@@ -115,7 +115,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		t.Errorf("expected reviewer called 2 times, got %d", got)
 	}
 
-	assertWorkflowSessionPlaces(t, listed, map[string]int{
+	assertWorkflowWorkStates(t, listed, map[string]int{
 		"code-change:complete": 1, "code-change:failed": 0, "code-change:init": 0,
 	})
 }

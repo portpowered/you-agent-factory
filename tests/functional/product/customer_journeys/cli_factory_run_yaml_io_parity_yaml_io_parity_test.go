@@ -11,6 +11,7 @@ import (
 )
 
 func TestPublicMappingFailuresRetainJSONAndYAMLSourceContext(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		rootName string
 		body     string
@@ -44,6 +45,7 @@ func TestPublicMappingFailuresRetainJSONAndYAMLSourceContext(t *testing.T) {
 }
 
 func TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		rootName string
 		body     string
@@ -71,6 +73,7 @@ func TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext(t *testing.T) {
 }
 
 func TestRuntimeMappingFailureRetainsSelectedSourceContext(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sourcePath := writeFile(
 		t,

@@ -56,8 +56,7 @@ func assertSelectedWatcherTime(t *testing.T, url string, facts *platformclock.De
 		t.Fatal("close did not retire pending debounce")
 	}
 	writeWatcherIngressFile(t, dirB, interfaces.DefaultChannelName, "peer", "peer item")
-	scheduler.await(t, 100*time.Millisecond)
-	scheduler.advance(100 * time.Millisecond)
+	awaitSelectedWatcherRead(t, scheduler, files, selectedWatcherPath(dirB, "peer"))
 	assertWatcherIngressWork(t, readAutomationCompletedWork(t, url, idB, "complete", "peer"), map[string]string{"peer": "peer item"})
 	if files.count("watcher-pending") != 0 {
 		t.Fatal("stopped debounce admitted late Work")
@@ -90,8 +89,7 @@ func assertSelectedWatcherRetryStop(t *testing.T, url string, idA *string, idB, 
 		t.Fatal("close left a running callback's retry timer")
 	}
 	writeWatcherIngressFile(t, dirB, interfaces.DefaultChannelName, "peer-after-retry", "peer retry item")
-	scheduler.await(t, 100*time.Millisecond)
-	scheduler.advance(100 * time.Millisecond)
+	awaitSelectedWatcherRead(t, scheduler, files, selectedWatcherPath(dirB, "peer-after-retry"))
 	readAutomationCompletedWork(t, url, idB, "complete", "peer", "peer-after-retry")
 	selectedTimeAbsent(t, files.reads)
 	if files.count("watcher-cancel-retry") != 0 {

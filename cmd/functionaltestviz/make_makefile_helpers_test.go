@@ -1,6 +1,6 @@
 //go:build !windows
 
-package coverage
+package main
 
 import (
 	"bytes"

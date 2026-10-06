@@ -1,15 +1,14 @@
 package execution_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -157,9 +156,20 @@ func testSharedTemplateValidationDoesNotMutate(t *testing.T, fixture *sharedCurr
 	fixture.requireServerRunning(t)
 }
 
+// TestPromptRenderingJourneys observes rendered names, markdown and template
+// failures through terminal Work and the external provider command boundary.
+func TestPromptRenderingJourneys(t *testing.T) {
+	t.Parallel()
+	host := newFactorySessionHost(t)
+	t.Run("ProcessSubmissionTagsParameterizeWorkerDirectory", func(t *testing.T) { testProcessSubmissionTagsParameterizeWorkerDirectory(t, host) })
+	t.Run("ProcessWorkNameMapsIntoPromptTemplate", func(t *testing.T) { testProcessWorkNameMapsIntoPromptTemplate(t, host) })
+	t.Run("ProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate", func(t *testing.T) { testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t, host) })
+	t.Run("ProcessParameterizedTemplateFailureRoutesWorkToFailed", func(t *testing.T) { testProcessParameterizedTemplateFailureRoutesWorkToFailed(t, host) })
+}
+
 // TestProcessWorkNameMapsIntoPromptTemplate proves that a submitted Work name is
 // rendered into the workstation prompt template before provider invocation.
-func TestProcessWorkNameMapsIntoPromptTemplate(t *testing.T) {
+func testProcessWorkNameMapsIntoPromptTemplate(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -169,55 +179,41 @@ func TestProcessWorkNameMapsIntoPromptTemplate(t *testing.T) {
 		TraceID:    "trace-prompt-test",
 	})
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
-	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
+	provider := support.NewRecordingCommandRunner("Reviewed. COMPLETE")
+	_, listed, _ := host.Run(t, dir, provider, 10*time.Second)
 	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
 	})
 
-	providerCalls := provider.Calls()
+	providerCalls := provider.Requests()
 	if len(providerCalls) == 0 {
 		t.Fatal("provider calls = 0, want at least 1")
 	}
-	if userMessage := providerCalls[0].UserMessage; !strings.Contains(userMessage, "Task Name: design-doc-review") {
+	if userMessage := string(providerCalls[0].Stdin); !strings.Contains(userMessage, "Task Name: design-doc-review") {
 		t.Errorf("provider user message = %q, want Task Name: design-doc-review", userMessage)
 	}
 }
 
 // TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate proves that seeded
 // markdown Work name and payload content render into the workstation prompt.
-func TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T) {
+func testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
-	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
+	provider := support.NewRecordingCommandRunner("Reviewed. COMPLETE")
+	_, listed, _ := host.Run(t, dir, provider, 10*time.Second)
 	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
 		support.WorkCustomerLocation("task", "init"):     0,
 	})
 
-	providerCalls := provider.Calls()
+	providerCalls := provider.Requests()
 	if len(providerCalls) == 0 {
 		t.Fatal("provider calls = 0, want at least 1")
 	}
-	userMessage := providerCalls[0].UserMessage
+	userMessage := string(providerCalls[0].Stdin)
 	if !strings.Contains(userMessage, "Task Name: architecture-review") {
 		t.Errorf("provider user message = %q, want Task Name: architecture-review", userMessage)
 	}
@@ -227,9 +223,9 @@ func TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T) {
 	assertCompletedWorkName(t, listed, "task", "architecture-review")
 }
 
-// TestProcessSubmissionTagsReachDispatchInputTokens proves that submission tags
-// remain available on dispatch input tokens for parameterized workstation fields.
-func TestProcessSubmissionTagsReachDispatchInputTokens(t *testing.T) {
+// TestProcessSubmissionTagsParameterizeWorkerDirectory proves that submitted
+// tags select the customer-authored directory passed to the provider command.
+func testProcessSubmissionTagsParameterizeWorkerDirectory(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -238,54 +234,31 @@ func TestProcessSubmissionTagsReachDispatchInputTokens(t *testing.T) {
 		Tags:       map[string]string{"branch": "feature-abc"},
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-		"exec-worker":   {{Content: "done COMPLETE"}},
-		"finish-worker": {{Content: "done COMPLETE"}},
-	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
+	provider := support.NewRecordingCommandRunner("done COMPLETE")
+	_, listed, _ := host.Run(t, dir, provider, 10*time.Second)
 	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
 	})
 
-	calls := provider.Calls("exec-worker")
+	calls := provider.Requests()
 	if len(calls) == 0 {
-		t.Fatal("exec-worker provider calls = 0, want at least 1")
+		t.Fatal("provider command calls = 0")
 	}
-	call := calls[0]
-	if call.Dispatch.WorkstationName == "" {
-		t.Error("dispatch workstation name is empty, want populated workstation")
-	}
-	if len(call.Dispatch.InputTokens) == 0 {
-		t.Fatal("dispatch input tokens = 0, want at least 1")
-	}
-	tags := firstDispatchInputToken(call.Dispatch.InputTokens).Color.Tags
-	if tags["branch"] != "feature-abc" {
-		t.Errorf("dispatch input tag branch = %q, want feature-abc", tags["branch"])
+	if calls[0].WorkDir != filepath.Join(dir, "worktrees", "feature-abc") {
+		t.Fatalf("provider working directory = %q, want submitted branch directory", calls[0].WorkDir)
 	}
 }
 
 // TestProcessParameterizedTemplateFailureRoutesWorkToFailed proves that an
 // unresolved workstation prompt template routes Work to failed without invoking
 // the provider.
-func TestProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T) {
+func testProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "parameterized_failure"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "unresolved template test"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Should not reach COMPLETE"},
-	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
+	provider := support.NewRecordingCommandRunner("Should not reach COMPLETE")
+	_, listed, _ := host.Run(t, dir, provider, 10*time.Second)
 	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "failed"):   1,
 		support.WorkCustomerLocation("task", "complete"): 0,

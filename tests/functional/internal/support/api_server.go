@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -93,6 +94,17 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 	if cfg.ResponseEventRetentionLimits != nil {
 		edges.FactorySessionResponseEventRetentionLimits = cfg.ResponseEventRetentionLimits
+	}
+	// Each host owns durable storage in the invocation directory supplied below.
+	// Explicit recording/recovery edges keep their scenario-selected directory.
+	if edges.FactorySessionsWorkingDirectory == nil {
+		directory := cfg.WorkingDirectory
+		if directory == "" {
+			directory = cfg.FactoryDir
+		}
+		if directory != "" {
+			edges.FactorySessionsWorkingDirectory = platformfilesystem.Local{WorkingDirectory: directory}
+		}
 	}
 
 	api := NewProcessAPIServer()

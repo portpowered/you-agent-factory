@@ -105,6 +105,22 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	if cleanupPackagedReviewFixtures() != 0 {
+		code = 1
+	}
+	os.Exit(code)
+}
+
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if cleanupPackagedReviewFixtures() != 0 {
+		t.Error("customer fixture cleanup failed; see preceding diagnostic")
+	}
+}
+
+func cleanupPackagedReviewFixtures() int {
+	code := 0
+
 	var closeErr error
 	if packagedReviewFixture != nil {
 		closeErr = packagedReviewFixture.close()
@@ -115,7 +131,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(code)
+	return code
 }
 
 func sharedPackagedReviewFixture(t *testing.T) *packagedReviewSharedFixture {

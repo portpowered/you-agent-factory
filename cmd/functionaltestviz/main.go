@@ -12,6 +12,7 @@ import (
 )
 
 type config struct {
+	functionalMonolith           bool
 	runSuite                     bool
 	goBinary                     string
 	repositoryRoot               string
@@ -55,6 +56,7 @@ func main() {
 func parseConfig() config {
 	var cfg config
 	flag.BoolVar(&cfg.runSuite, "run-suite", false, "run functional coverage, generate artifacts, and print the compact console report")
+	flag.BoolVar(&cfg.functionalMonolith, "functional-monolith", false, "consolidate compatible functional test binaries")
 	flag.StringVar(&cfg.goBinary, "go", "go", "Go executable used by -run-suite")
 	flag.StringVar(&cfg.repositoryRoot, "root", ".", "repository root used to resolve golden manifests and default paths")
 	flag.StringVar(&cfg.functionalRoot, "functional-root", "", "functional test tree to inventory (default: <root>/tests/functional)")

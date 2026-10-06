@@ -59,6 +59,15 @@ func TestCoveragePhaseTimerEmitsStableLines(t *testing.T) {
 }
 
 func TestExecuteEmitsCoveragePhasesWhenTestFails(t *testing.T) {
+	assertExecuteEmitsCoveragePhasesWhenTestFails(t, unitCoverageSuite)
+}
+
+func TestFunctionalExecuteEmitsCoveragePhasesWhenTestFails(t *testing.T) {
+	assertExecuteEmitsCoveragePhasesWhenTestFails(t, functionalCoverageSuite)
+}
+
+func assertExecuteEmitsCoveragePhasesWhenTestFails(t *testing.T, suite string) {
+	t.Helper()
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
@@ -75,7 +84,7 @@ func TestExecuteEmitsCoveragePhasesWhenTestFails(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		suite:    unitCoverageSuite,
+		suite:    suite,
 		coverpkg: modulePath + "/pkg/config",
 		packages: "./pkg/config",
 	})

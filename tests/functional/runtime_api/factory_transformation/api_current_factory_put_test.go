@@ -63,24 +63,44 @@ type sharedFactoryTransformationFixture struct {
 	processStartLog sync.Once
 }
 
-var factoryTransformationFixture *sharedFactoryTransformationFixture
+var factoryTransformationState struct {
+	once    sync.Once
+	fixture *sharedFactoryTransformationFixture
+	err     error
+}
+
+func factoryTransformationForTest(t testing.TB) *sharedFactoryTransformationFixture {
+	t.Helper()
+	factoryTransformationState.once.Do(func() {
+		factoryTransformationState.fixture, factoryTransformationState.err = startSharedFactoryTransformationFixture()
+	})
+	if factoryTransformationState.err != nil {
+		t.Fatalf("start shared factory transformation server: %v", factoryTransformationState.err)
+	}
+	return factoryTransformationState.fixture
+}
 
 func TestMain(m *testing.M) {
-	fixture, err := startSharedFactoryTransformationFixture()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "start shared factory transformation server: %v\n", err)
-		os.Exit(1)
+	code := m.Run()
+	if err := closeFactoryTransformationFixture(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
 	}
-	factoryTransformationFixture = fixture
+	os.Exit(code)
+}
 
-	exitCode := m.Run()
-	if err := fixture.stop(); err != nil {
-		fmt.Fprintf(os.Stderr, "stop shared factory transformation fixture: %v\n", err)
-		if exitCode == 0 {
-			exitCode = 1
-		}
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeFactoryTransformationFixture(); err != nil {
+		t.Error(err)
 	}
-	os.Exit(exitCode)
+}
+
+func closeFactoryTransformationFixture() error {
+	if factoryTransformationState.fixture == nil {
+		return nil
+	}
+	return factoryTransformationState.fixture.stop()
 }
 
 func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixture, error) {
@@ -339,7 +359,7 @@ func startDocumentTransformationServer(
 	targetName string,
 ) *documentTransformationServer {
 	t.Helper()
-	fixture := factoryTransformationFixture
+	fixture := factoryTransformationForTest(t)
 	if fixture == nil {
 		t.Fatal("shared factory transformation fixture is unavailable")
 	}
@@ -415,7 +435,7 @@ func (server *documentTransformationServer) GetFactoryEvents(t testing.TB) []fac
 
 func seedDocumentNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	t.Helper()
-	fixture := factoryTransformationFixture
+	fixture := factoryTransformationForTest(t)
 	if fixture == nil {
 		t.Fatal("shared factory transformation fixture is unavailable")
 	}
@@ -1194,7 +1214,7 @@ func createNamedFactoryFixture(
 	payload []byte,
 ) string {
 	t.Helper()
-	fixture := factoryTransformationFixture
+	fixture := factoryTransformationForTest(t)
 	if fixture == nil {
 		t.Fatal("shared factory transformation fixture is unavailable")
 	}

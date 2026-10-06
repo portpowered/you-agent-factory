@@ -27,7 +27,7 @@ operator-authorized scope and history decision. Finish only the retained lane,
 do not implement work explicitly listed as forked/delegated, and do not claim a
 delegated story's acceptance evidence merely because its routing disposition is
 recorded as `passes:true`.
-3. If there is task items that are not yet complete, please implement the task as much as possible. Then update the progress.txt/prd.json.
+3. If there is task items that are not yet complete, please implement the task as much as possible. Then update minimal status under Bounded visit records.
 4. If all retained current-slice tasks are done, please submit a non-draft PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
 6. If the PR for this work item is already MERGED, the lane is DONE: return the
@@ -76,7 +76,8 @@ a valid decision.
   behavioral proof to a later test task or to final loopback.
 - Run the story's declared verification at its highest feasible scope and
   dependency fidelity. Record the exact procedure, artifact, observed result,
-  property proved, and remaining unproven edges. Do not claim a real edge from
+  property proved, and remaining unproven edges in PR comments only; retain
+  observations in session before a PR exists. Do not claim a real edge from
   substitute evidence.
 - Preserve the parent behavior lane's executable spine. If reality contradicts
   the task, a prerequisite or authority is missing, or the smallest correct fix
@@ -98,17 +99,11 @@ a valid decision.
   problems. The PR's package-level latency result is the primary performance
   verdict; if it does not improve, continue with the next bounded optimization.
   Actual behavior regressions caused by the diff remain blocking.
-- Commit frequently, locally. The worktree persists between visits, so local
-  commits are safe. Push in batches: at most once per process visit, at the end
-  of the visit, after the commits pass focused tests and applicable changed lint
-  checks. Do NOT push while CI for your previously pushed head is still running
-  (every push cancels that run), unless (a) the new commits fix a failure that
-  run already reported, (b) this is the final push of the lane (all stories
-  done), or (c) the visit is about to stop on a blocker or breaker and the
-  commits must be preserved.
-  Open its PR with `gh pr create` without `--draft`.
-  If its existing PR is a draft, run `gh pr ready <n>` at this first push.
-  After each push, run `gh pr merge <n> --squash` to arm merge or enqueue it.
+- Commit verified changes locally; the worktree persists between visits.
+  Push at most once per visit, at its end, after focused tests/lint; never during running previous-head CI, even final/blocker visits.
+  Retain local commits until eligible; no ACCEPTED with final push pending.
+  Create/ready a non-draft PR via `gh pr create`/`gh pr ready <n>`; arm `gh pr merge <n> --auto --squash`.
+  Stop with final head pushed, non-draft PR, CI started and blockers addressed; review owns terminal CI/conflicts/merge.
   Record unfinished independent stories as deferred to a successor.
   Name each story, remaining outcome, reason, and successor handoff.
   Never use unfinished stories as a reason to retain a draft.
@@ -121,9 +116,10 @@ a valid decision.
   does not change becomes a separate fix and never blocks the PR. Never run
   baselines or `go list ./...` in the repository ROOT checkout (untracked files
   there break package discovery); run them in your worktree. A lane that must
-  stop on a contract conflict still pushes its verified commits and opens a
-  non-draft PR naming the blocker; never claim an unresolved current-slice
-  blocker is ready for acceptance. Never end FAILED holding unpushed verified work.
+  stop on a contract conflict retains verified local commits until an eligible
+  push and opens a non-draft PR naming the blocker; never claim an unresolved current-slice
+  blocker is ready for acceptance. If previous-head CI is running, retain local commits and return CONTINUE
+  with the push pending; never bypass the push gate to preserve work.
 - Keep CI green: fix failures your diff caused. Untouched-package required-CI
   failures are review-owned recovery: review reruns failed jobs once, merges
   current origin/main if still red, pushes, and re-arms squash merge.
@@ -132,7 +128,7 @@ a valid decision.
   Finish once the final head is pushed, the PR is open and non-draft, CI has started, and
   all blocking review feedback is addressed. MERGED belongs to review.
 - This worker starts without the Playwright MCP, the Chrome DevTools MCP, or the computer-use tooling, to save host memory. When a story needs live browser evidence, run a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. It loads the full browser tooling for that step only. That nested session is the supported browser tool for the check below. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
-- Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record that exact result in progress.txt ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
+- Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record concise browser status in the single visit entry and the exact result in a PR comment ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
 
   When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other retained story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
 - NEVER commit CI results, audit notes, or verification records onto your
@@ -166,39 +162,32 @@ a valid decision.
   user-visible contract under test. Put repository-shape enforcement in a
   lint/static-check target instead.
 
-## Progress Report Format
+## Bounded visit records
 
-Keep each entry CONCISE: what changed, current blocker, next step — not CI
-transcripts or audit narratives. If progress.txt exceeds ~500 lines, compact
-it first: keep the `## Codebase Patterns` section, entries for the current
-story, and the last ~5 entries; delete the rest.
+Keep new prd.json below 20 KB (20,000 UTF-8 bytes); update minimal status/passes/blockers only.
+Preserve requirements/amendments; never falsely pass unproved/delegated criteria; escalate if minimal status cannot fit.
+Add at most one short four-line progress.txt entry per visit (visit/story, changed, blocker, next), even blocked/interrupted.
+Include concise patterns/browser status/deferred handoffs there; put deferred handoffs in the PR body too.
+Evidence/transcripts/audits/CI references go only in PR comments; retain in session before a PR exists.
+Never commit scaffolding/verification records. Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive; only new entries follow these rules.
 
-APPEND to progress.txt (never replace, always append):
+Measure UTF-8 bytes before writing a new PRD status update. Keep the complete
+contract, criterion IDs, source-plan alignment and later owning gates intact.
+If minimal status cannot fit, report a structured blocker to its authority;
+never shorten requirements to make room. Preserve oversized legacy PRD bytes
+without reserialization; keep its new status in PR comments instead.
+Append one entry only, using this template (no additional learnings entry):
 ```
 ## [Date/Time] - [Story ID]
-- What was implemented
-- Files changed
-- **Learnings for future iterations:**
-  - Patterns discovered (e.g., "this codebase uses X for Y")
-  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
-  - Useful context (e.g., "the evaluation panel is in component X")
----
+- Changed: implementation/files; concise reusable learning or handoff if needed
+- Blocker: none, or current blocker/browser availability status
+- Next: next action or review handoff
 ```
-
-The learnings section is critical - it helps future iterations avoid repeating mistakes and understand the codebase better.
-
-## Consolidate Patterns
-
-If you discover a **reusable pattern** that future iterations should know, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). This section should consolidate the most important learnings:
-
-```
-## Codebase Patterns
-- Example: Use `sql<number>` template for aggregations
-- Example: Always use `IF NOT EXISTS` for migrations
-- Example: Export types from actions.ts for UI components
-```
-
-Only add patterns that are **general and reusable**, not story-specific details.
+Keep existing Codebase Patterns intact; new patterns belong in the Changed line.
+If a PR comment fails or a visit is interrupted, retain observations in session,
+record the blocker in this same entry and leave unproved criteria unsatisfied.
+Never claim evidence was published when it was not. Retry publication through
+the existing route; do not dump evidence into either scaffolding file.
 
 ## Operator questions (mailbox)
 
@@ -240,7 +229,8 @@ continue.
    `## Options` (A recommended, then B...), `## What I will do with each answer`,
    `## What I will do if there is no answer`. Take the time from `date -u`.
 3. Temporary (AM-T0 stopgap, removed by AM-T11): do not poll in the visit.
-   Commit and push the unblocked work first, then end the visit with
+   Commit the unblocked work locally and push only if eligible under the push rule,
+   then end the visit with
    `CONTINUE` whose `feedback` STARTS with `AWAITING_OPERATOR_ANSWER`, followed
    by the request path and your stated no-answer path. That parks the task in
    `awaiting-answer`, where the `mailbox-wait` script waits up to 60 minutes

@@ -238,7 +238,7 @@ func (group *costsProcessGroup) start(t *testing.T, home, model, metricsRoot str
 		t.Fatalf("host did not bind: %s", inputs.Stderr())
 	}
 	fixture := costsSessionFixture{group: group, id: id, home: home, dir: dir, url: fmt.Sprintf("http://127.0.0.1:%d", port), clientEnv: costsHomeEnvironment(t.TempDir())}
-	support.InitializeCustomerHomeWithProcess(t, runtimeMetricsCLIProcess, fixture.clientEnv, dir)
+	support.InitializeCustomerHomeWithProcess(t, runtimeMetricsProcess(t), fixture.clientEnv, dir)
 	// A successful scoped status read establishes the public runtime boundary.
 	support.GetJSON[factoryapi.StatusResponse](t, fixture.url+"/factory-sessions/"+id+"/status")
 	return fixture
@@ -290,7 +290,7 @@ func (fixture costsSessionFixture) cli(t *testing.T, id string) (string, error) 
 	// Client setup uses its own readable profile; faults target only server data.
 	inputs.Env = fixture.clientEnv
 	inputs.WorkingDirectory = fixture.dir
-	err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+	err := runtimeMetricsProcess(t).Execute(inputs.Input)
 	return inputs.Stdout(), err
 }
 func (fixture costsSessionFixture) parity(t *testing.T) generatedclient.CostsReport {

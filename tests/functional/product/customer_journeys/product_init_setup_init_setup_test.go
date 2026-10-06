@@ -53,6 +53,7 @@ const ProductInitSetupExistingOperatorConfig = `{
 // root-built command accepts a registered provider and free-form model without
 // invoking the legacy Factory scaffold path.
 func TestInitSuppliedInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	var stdout bytes.Buffer
 
@@ -91,6 +92,7 @@ func TestInitSuppliedInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
 // selection installs through the public init command without mutating operator
 // configuration.
 func TestInitPackagedFactoryInstallDelegatesThroughDefinitions(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	targetRoot := filepath.Join(fixture.workingDir, "packaged-factories")
 	var stdout bytes.Buffer
@@ -117,6 +119,7 @@ func TestInitPackagedFactoryInstallDelegatesThroughDefinitions(t *testing.T) {
 // TestInitSuppliedInputFailuresDoNotWrite proves public validation and output
 // mode failures occur before the atomic operator-config commit.
 func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		args    []string
@@ -157,6 +160,7 @@ func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
 
 // TestRetiredInitializationPathsAreRejectedWithoutWrites proves retired setup surfaces cannot mutate customer state.
 func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		args    []string
@@ -277,6 +281,7 @@ func assertReusableHelpCommands(t *testing.T, fixture initFixture, process suppo
 // TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart proves a
 // pre-commit temporary-write failure is returned without replacing the file.
 func TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	tempFailure := errors.New("temporary target unavailable")
 	edges := serviceedges.Edges{
@@ -298,6 +303,7 @@ func TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart(t *testing.T
 // setup presents current defaults and commits complete prompted input through
 // the same atomic settings operation as supplied flags.
 func TestInitInteractiveInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	var stdout bytes.Buffer
 
@@ -336,6 +342,7 @@ func TestInitInteractiveInputsConfigureOnlyProviderModelDefaults(t *testing.T) {
 
 // TestInitInteractiveExistingDefaultsAreAccepted proves prompts can retain current provider and model defaults.
 func TestInitInteractiveExistingDefaultsAreAccepted(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	err := fixture.executeInteractive(
 		serviceedges.Edges{},
@@ -355,6 +362,7 @@ func TestInitInteractiveExistingDefaultsAreAccepted(t *testing.T) {
 
 // TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite proves abandoned prompts leave configuration unchanged.
 func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		ctx     context.Context
@@ -405,6 +413,7 @@ func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
 
 // TestInitInteractiveContextCancellationAtModelDoesNotWrite proves model-prompt cancellation is write-free.
 func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	release := make(chan struct{})
@@ -424,6 +433,7 @@ func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
 
 // TestInitInteractivePreCommitFailurePreservesConfig proves failed prompted commits preserve the original config.
 func TestInitInteractivePreCommitFailurePreservesConfig(t *testing.T) {
+	t.Parallel()
 	fixture := newInitFixture(t)
 	tempFailure := errors.New("prompted temporary target unavailable")
 	edges := serviceedges.Edges{
@@ -476,6 +486,7 @@ func (fixture initFixture) execute(
 	if err != nil {
 		return err
 	}
+	support.CleanupProcess(fixture.t, process)
 	return fixture.executeOn(process, stdout, args...)
 }
 
@@ -529,6 +540,7 @@ func (fixture initFixture) executeInteractive(
 	if err != nil {
 		return err
 	}
+	support.CleanupProcess(fixture.t, process)
 	isTTY := true
 	return process.Execute(root.Input{
 		Args: []string{"you", "init"},

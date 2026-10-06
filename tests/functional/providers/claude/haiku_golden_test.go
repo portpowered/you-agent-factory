@@ -2,10 +2,10 @@ package claude
 
 import (
 	"crypto/sha256"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,12 +17,9 @@ import (
 )
 
 const (
-	haikuGoldenRoot   = "testdata/haiku_stream_json"
+	haikuGoldenRoot   = "tests/functional/providers/claude/testdata/haiku_stream_json"
 	haikuGoldenResult = "HAIKU GOLDEN COMPLETE"
 )
-
-//go:embed testdata/haiku_stream_json/manifest.json testdata/haiku_stream_json/*.jsonl
-var haikuGoldenFiles embed.FS
 
 type haikuGoldenManifest struct {
 	SchemaVersion int               `json:"schemaVersion"`
@@ -215,7 +212,7 @@ func assertHaikuGoldenTopology(
 
 func loadHaikuGoldenManifest(t *testing.T) haikuGoldenManifest {
 	t.Helper()
-	raw, err := haikuGoldenFiles.ReadFile(haikuGoldenRoot + "/manifest.json")
+	raw, err := os.ReadFile(support.AgentFactoryPath(t, haikuGoldenRoot+"/manifest.json"))
 	if err != nil {
 		t.Fatalf("read Haiku golden manifest: %v", err)
 	}
@@ -242,7 +239,7 @@ func loadHaikuGoldenStdout(t *testing.T, golden haikuGoldenCase) []byte {
 	if err := validateHaikuGoldenCase(golden); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := haikuGoldenFiles.ReadFile(haikuGoldenRoot + "/" + golden.StdoutFile)
+	raw, err := os.ReadFile(support.AgentFactoryPath(t, haikuGoldenRoot+"/"+golden.StdoutFile))
 	if err != nil {
 		t.Fatalf("read Haiku golden %q: %v", golden.StdoutFile, err)
 	}

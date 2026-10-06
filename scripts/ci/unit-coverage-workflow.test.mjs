@@ -72,7 +72,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 		"      - uses: actions/checkout@v4\n        if: matrix.suite == 'functional'",
 		"      - uses: actions/setup-go@v5",
 	);
-	assert.match(functionalCheckout, /fetch-depth: 0/);
+	assert.match(functionalCheckout, /fetch-depth: 1/);
 
 	const moduleCache = stepSection(job, "      - name: Restore Go module cache", "      - name: Prefetch complete Go dependency graph");
 	const modulePrefetch = stepSection(job, "      - name: Prefetch complete Go dependency graph", "      - name: Restore unit coverage Go build and test cache");

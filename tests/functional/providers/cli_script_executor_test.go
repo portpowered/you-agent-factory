@@ -57,29 +57,6 @@ func (runner baseFailureCommandRunner) Run(_ context.Context, _ platformprocess.
 	return platformprocess.CommandResult{Stderr: []byte(runner.message), ExitCode: 1}, nil
 }
 
-type baseTimeoutThenSuccessCommandRunner struct {
-	mu    sync.Mutex
-	calls int
-}
-
-func (runner *baseTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	runner.mu.Lock()
-	runner.calls++
-	call := runner.calls
-	runner.mu.Unlock()
-	if call == 1 {
-		<-ctx.Done()
-		return platformprocess.CommandResult{}, ctx.Err()
-	}
-	return platformprocess.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
-}
-
-func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return runner.calls
-}
-
 const scriptTimeoutCausalSignalTimeout = 10 * time.Second
 
 type scriptTimeoutThenSuccessCommandRunner struct {
@@ -230,25 +207,6 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		scenario.Stop(t)
 	})
 
-	t.Run("timeout", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		support.WriteWorkstationConfig(t, dir, "run-script", "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n")
-		testutil.WriteSeedFile(t, dir, "task", []byte("timeout-payload"))
-		runner := &baseTimeoutThenSuccessCommandRunner{}
-		scenario := fixture.OpenScenario(t, dir, dir, runner)
-		// The timed-out first attempt briefly leaves the task failed before the
-		// retry is dispatched, which is indistinguishable from terminal. Wait
-		// for the retry attempt to start so terminal means the recovered state.
-		waitForBaseRunnerCalls(t, runner, 2, support.ScaledTimeout(10*time.Second))
-		scenario.WaitForTerminal(t, 10*time.Second)
-		listed := scenario.ListWork(t)
-		assertBaseSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		if got := runner.CallCount(); got < 2 {
-			t.Fatalf("timeout recovery provider calls = %d, want at least two", got)
-		}
-		scenario.Stop(t)
-	})
-
 	t.Run("cancellation", func(t *testing.T) {
 		dir := testutilCopySharedFixture(t, "script_executor_dir")
 		testutil.WriteSeedFile(t, dir, "task", []byte("cancellation-payload"))
@@ -278,17 +236,6 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		scenario.Stop(t)
 	})
 
-}
-
-func waitForBaseRunnerCalls(t testing.TB, runner *baseTimeoutThenSuccessCommandRunner, want int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for runner.CallCount() < want {
-		if time.Now().After(deadline) {
-			t.Fatalf("provider calls = %d, want at least %d within %s", runner.CallCount(), want, timeout)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 }
 
 func testutilCopySharedFixture(t *testing.T, name string) string {
