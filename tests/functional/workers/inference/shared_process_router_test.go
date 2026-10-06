@@ -83,9 +83,8 @@ type inferenceCommandRouter struct {
 
 // inferenceWorkerRecordingRouter keeps the root-built process's durable
 // recording port stable while allowing each explicit session to observe the
-// exact Worker records it produced. The fallback is a package-local durable
-// value store; production file persistence remains covered by the recording
-// service's own composition tests.
+// exact Worker records it produced. The fallback and routed delegates
+// use production journals for both replay and captured inspection.
 type inferenceWorkerRecordingRouter struct {
 	mu          sync.RWMutex
 	fallback    recordings.WorkerRecordingWriter
@@ -474,4 +473,60 @@ func overlayInferenceEnvironment(base, overlay []string) []string {
 		}
 	}
 	return append(result, overlay...)
+}
+
+// Catalog reads gather only the actual routed journals. This fixture deliberately
+// refuses oversized/paged catalogs rather than inventing cursor semantics; its
+// independently bounded scenarios remain below one production catalog page.
+func (router *inferenceWorkerRecordingRouter) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	if request.NextToken != "" {
+		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingPersistence
+	}
+	router.mu.RLock()
+	writers := []recordings.WorkerRecordingWriter{router.fallback}
+	for _, writer := range router.bySession {
+		writers = append(writers, writer)
+	}
+	router.mu.RUnlock()
+	result := recordings.WorkerCapturedCatalogPage{}
+	seen := make(map[string]bool)
+	for _, writer := range writers {
+		reader, ok := writer.(recordings.WorkerCapturedActivityReader)
+		if !ok {
+			return result, recordings.ErrMissingWorkerRecordingReader
+		}
+		page, err := reader.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{Limit: 1000})
+		if err != nil {
+			return result, err
+		}
+		if page.NextToken != "" {
+			return result, recordings.ErrWorkerRecordingPersistence
+		}
+		for _, item := range page.Items {
+			if !seen[item.Catalog.WorkerSessionID] {
+				result.Items = append(result.Items, item)
+				seen[item.Catalog.WorkerSessionID] = true
+			}
+		}
+	}
+	if request.Limit > 0 && len(result.Items) > request.Limit {
+		return result, recordings.ErrWorkerRecordingPersistence
+	}
+	return result, nil
+}
+
+func (router *inferenceWorkerRecordingRouter) LookupWorkerSessionCapture(ctx context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	reader, ok := router.routeIdentity("", id).(recordings.WorkerCapturedActivityReader)
+	if !ok {
+		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LookupWorkerSessionCapture(ctx, id)
+}
+
+func (router *inferenceWorkerRecordingRouter) ReadWorkerCapturedActivity(ctx context.Context, request recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	reader, ok := router.routeIdentity("", request.WorkerSessionID).(recordings.WorkerCapturedActivityReader)
+	if !ok {
+		return recordings.WorkerCapturedActivityPage{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.ReadWorkerCapturedActivity(ctx, request)
 }

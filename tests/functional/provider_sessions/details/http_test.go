@@ -2,7 +2,6 @@ package details
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,72 +15,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-// TestAPIProviderSessionDetailsUseGoldenExpectedMetadata proves HTTP/API Provider
-// Session detail activates through the public GET /provider-sessions/detail endpoint
-// after runtime lifecycle starts on a process composed only via
-// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
-// sanitized Codex success rollout and proves identity/provider/kind plus readable
-// transcript structurally match checked-in expected Provider Session metadata.
-// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
-func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "codex-message-tool-success" {
-		t.Fatalf("manifest.ID = %q, want codex-message-tool-success", loaded.Manifest.ID)
-	}
-
-	var request struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.SessionID == "" {
-		t.Fatal("request.session_id must be non-empty")
-	}
-
-	rolloutPath := filepath.Join(caseDir, codexGoldenRolloutFile)
-	rolloutContent, err := os.ReadFile(rolloutPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", codexGoldenRolloutFile, err)
-	}
-
-	homeDir := t.TempDir()
-	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(homeDir), request.SessionID, string(rolloutContent))
-
-	server := startAPIProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
-		t,
-		codexProviderSessionDetailURL(server.URL(), request.SessionID),
-	)
-	assertProviderSessionDetailIdentity(
-		t,
-		detail,
-		request.SessionID,
-		factoryapi.Codex,
-		factoryapi.LoadableProviderSessionKindSessionID,
-	)
-	if len(detail.Transcript) == 0 {
-		t.Fatal("provider session detail transcript is empty, want readable success-session content")
-	}
-
-	observed := observeCodexProviderSessionDetailGolden(detail)
-	if err := compareOrUpdateCodexProviderSessionDetailGolden(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("compareOrUpdateCodexProviderSessionDetailGolden: %v", err)
-	}
-}
 
 // TestAPIProviderSessionRejectsRawFilesystemPathInput proves the public HTTP/API
 // Provider Session detail endpoint rejects raw filesystem path input instead of

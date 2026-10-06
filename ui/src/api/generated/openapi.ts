@@ -4442,12 +4442,12 @@ export interface components {
       turnIndex?: number;
       /**
        * Format: date-time
-       * @description Provider event timestamp when present in the source session stream.
+       * @description Capture time for Codex; provider time for Cursor.
        */
       timestamp?: string;
-      /** @description One-based JSONL line number that produced this transcript entry when applicable. */
+      /** @description One-based source line; omitted when uncaptured. */
       lineNumber?: number;
-      /** @description Raw provider event or item type that produced this transcript entry. */
+      /** @description Captured event type for Codex when available; raw event type for Cursor. */
       sourceType?: string;
       /** @description Provider tool-call identifier when present. */
       callId?: string;

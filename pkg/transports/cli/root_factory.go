@@ -234,6 +234,7 @@ func configureRunFactoryOutput(
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.StartupRecoveryOutput = cmd.ErrOrStderr()
 	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
+	cfg.BoardAdoptionOutput = cmd.ErrOrStderr()
 	cfg.JSONOutput = globals.json
 	if !cleanInvocation && strings.TrimSpace(cfg.WorkFile) != "" {
 		// A finite --work run has a customer-facing result even when it uses

@@ -902,7 +902,7 @@ func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
 	}{
 		{"unique", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
 		{"canonical JSON", []factorydefinitions.FactoryEvent{reordered}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
-		{"stale prefix", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"stale": {a}, "board": {a, b}}, "board"},
+		{"stale prefix", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"stale": {a}, "board": {a, b}}, ""},
 		{"equal duplicate tie", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"copy": {a, b}, "board": {a, b}}, ""},
 		{"incomparable branch", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"branch": {a, c}, "board": {a, b}}, ""},
 		{"wrong payload", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {changed, b}}, ""},
@@ -918,7 +918,7 @@ func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
 					matching[path] = events
 				}
 			}
-			got, err := selectMaximalCurrentBoard(matching)
+			got, err := selectUniqueCurrentBoard(matching)
 			if got != tc.want || (err != nil) != (tc.want == "") {
 				t.Fatalf("selection=%q, %v; want %q", got, err, tc.want)
 			}
@@ -1008,4 +1008,70 @@ func TestCurrentBoardMissingSnapshotSkipsStaleHistory(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (owner *boardReferenceOwner) SaveCurrentBoardIfAbsent(ctx context.Context, factory, artifact string) error {
+	if owner.path != "" {
+		return nil
+	}
+	return owner.SaveCurrentBoard(ctx, factory, artifact)
+}
+
+func TestCurrentBoardReferenceExplicitRestoreEligibility(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"restored", "existing", "fresh", "foreign", "batch", "peer", "resume", "replay", "no record", "no server", "publication failure"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			directory, artifact := filepath.Join(t.TempDir(), "factory"), filepath.Join(t.TempDir(), "board.json")
+			identity, _ := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": directory}})
+			owner := &boardReferenceOwner{}
+			opening := &sessionRuntimeOpening{
+				sessionID:            "~default",
+				sessionSelection:     &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService, Host: factorysessions.RuntimeHostRequest{Port: 1234}, Recording: factorysessions.SessionRecordingSelection{RecordPath: artifact}},
+				configured:           preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: artifact}},
+				load:                 RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: directory}},
+				durableExecution:     DurableExecution{Service: owner},
+				restoredWorldState:   &factorydefinitions.FactoryWorldState{},
+				restoredEventHistory: []factorydefinitions.FactoryEvent{{Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: identity}},
+			}
+			wantSave := configureExplicitBoardPublication(name, owner, opening)
+			err := opening.publishCurrentBoardReference(t.Context())
+			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != 0 {
+				t.Fatalf("publication error=%v saves=%d loads=%d", err, owner.saves, owner.loads)
+			}
+			if wantSave && owner.savedArtifact != artifact {
+				t.Fatal("publication changed selected path")
+			}
+		})
+	}
+}
+
+func configureExplicitBoardPublication(name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) bool {
+	wantSave := false
+	switch name {
+	case "restored":
+		wantSave = true
+	case "existing":
+		owner.path = "existing invalid bytes"
+	case "fresh":
+		opening.restoredWorldState = nil
+	case "foreign":
+		opening.restoredEventHistory = nil
+	case "batch":
+		opening.sessionSelection.Mode = factorysessions.SessionRuntimeModeBatch
+	case "peer":
+		opening.sessionID = "peer"
+	case "resume":
+		opening.configured.Recordings.ResumePath = "resume.json"
+	case "replay":
+		opening.configured.Recordings.ReplayPath = "replay.json"
+	case "no record":
+		opening.sessionSelection.Recording.RecordPath = ""
+	case "no server":
+		opening.sessionSelection.Host.Port = 0
+	case "publication failure":
+		owner.failure = errors.New("controlled publication failure")
+		wantSave = true
+	}
+	return wantSave
 }

@@ -224,16 +224,18 @@ func newWSRFT009DurableWriter(
 		t.Fatalf("NewWorkerRecordingFileWriter(): %v", err)
 	}
 	return &wsrFT009DurableWriter{
-		WorkerControlOperationStore: delegate,
-		WorkerRestartInputStore:     delegate,
-		delegate:                    delegate,
-		reader:                      delegate,
-		failureWriter:               delegate,
-		openingPersisted:            make(chan struct{}),
+		WorkerControlOperationStore:  delegate,
+		WorkerRestartInputStore:      delegate,
+		delegate:                     delegate,
+		WorkerCapturedActivityReader: delegate,
+		reader:                       delegate,
+		failureWriter:                delegate,
+		openingPersisted:             make(chan struct{}),
 	}
 }
 
 type wsrFT009DurableWriter struct {
+	recordings.WorkerCapturedActivityReader
 	recordings.WorkerControlOperationStore
 	recordings.WorkerRestartInputStore
 	trace         *wsrFT009Trace

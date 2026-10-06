@@ -177,6 +177,7 @@ type SessionState struct {
 	StartupRecovery        *factorysessions.StartupRecovery
 	OperatorSettingsPath   string
 	Recordings             recordings.Service
+	SkippedBoardRecordings []string
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	OrderlyStop            func(context.Context) error

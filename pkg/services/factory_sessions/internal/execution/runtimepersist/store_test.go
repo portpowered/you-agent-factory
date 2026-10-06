@@ -549,3 +549,42 @@ func TestCurrentBoardReferenceClassifiesLocalDamageButRejectsForeignSelection(t 
 		})
 	}
 }
+
+func TestCurrentBoardReferenceAbsentOnlyPublication(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"absent", "existing invalid", "unreadable", "cancelled", "cancel during read", "write failure"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := &boardReferenceFiles{data: []byte("invalid § —"), readErr: fs.ErrNotExist}
+			store, root := newBoardReferenceStore(t, files)
+			publisher := store.(interface {
+				SaveCurrentBoardIfAbsent(context.Context, string, string) error
+			})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			switch name {
+			case "existing invalid":
+				files.readErr = nil
+			case "unreadable":
+				files.readErr = fs.ErrPermission
+			case "cancelled":
+				cancel()
+			case "cancel during read":
+				files.afterRead = cancel
+			case "write failure":
+				files.writeErr = fs.ErrPermission
+			}
+			err := publisher.SaveCurrentBoardIfAbsent(ctx, filepath.Join(root, "factory"), filepath.Join(root, "board.json"))
+			if (err != nil) != (name != "absent" && name != "existing invalid") {
+				t.Fatalf("publication: %v", err)
+			}
+			if name == "absent" {
+				if files.writes != 1 {
+					t.Fatal("absent reference was not published")
+				}
+			} else if string(files.data) != "invalid § —" || files.mkdirs != 0 && name != "write failure" {
+				t.Fatal("publication changed existing bytes")
+			}
+		})
+	}
+}

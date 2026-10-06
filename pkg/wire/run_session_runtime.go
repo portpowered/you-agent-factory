@@ -430,3 +430,8 @@ func runSessionStartRequest(cfg runcli.RunConfig, mocks *workers.MockWorkersConf
 		},
 	}
 }
+
+func (runner runSessionRunner) SkippedBoardRecordings() []string {
+	paths, _ := runner.root.ApplicationSkippedBoardRecordings(runner.process.ID())
+	return paths
+}

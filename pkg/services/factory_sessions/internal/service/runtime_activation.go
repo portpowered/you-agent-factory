@@ -125,6 +125,7 @@ func sessionRequestFromActivation(request factoryruntime.RuntimeActivationReques
 			Mode: factorysessions.SessionRuntimeMode(request.Runtime.Mode),
 			Recording: factorysessions.SessionRecordingSelection{
 				ImplicitCurrentBoard: request.Inputs.Session.ImplicitCurrentBoard,
+				RecordPath:           request.Inputs.Recordings.RecordPath,
 			},
 			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
 			BackendScopeID:     request.Inputs.Session.BackendScopeID,

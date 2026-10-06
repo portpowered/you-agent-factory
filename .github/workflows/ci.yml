@@ -432,7 +432,7 @@ jobs:
       - name: Race-check bounded Codex detail and shared HTTP fixture
         if: matrix.suite == 'unit'
         run: |
-          go test -race ./pkg/services/provider_sessions/internal/services/codex_reader/internal/service ./pkg/services/provider_sessions/transports/http -count=1 -p=1 -timeout=5m
+          go test -race ./pkg/services/provider_sessions/internal/service ./pkg/services/provider_sessions/transports/http -count=1 -p=1 -timeout=5m
           go test -race ./tests/functional/providers/codex -run '^TestCodexSharedTrustedWorkAndHistory$' -count=1 -p=1 -timeout=5m
       - name: Race-check selected Automations time and joined shutdown
         if: matrix.suite == 'unit'

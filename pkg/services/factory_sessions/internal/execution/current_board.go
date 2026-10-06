@@ -217,6 +217,22 @@ func (s *JavaScriptRuntimeService) QuarantineCurrentBoard(ctx context.Context, a
 	return paths.SnapshotPath("~default"), archive, nil
 }
 
+// SaveCurrentBoardIfAbsent uses the acquired local owner without decoding or
+// replacing an existing reference selected independently by the operator.
+func (s *JavaScriptRuntimeService) SaveCurrentBoardIfAbsent(ctx context.Context, factoryDirectory, artifact string) error {
+	store, err := s.currentBoardStore()
+	if err != nil {
+		return err
+	}
+	publisher, ok := store.(interface {
+		SaveCurrentBoardIfAbsent(context.Context, string, string) error
+	})
+	if !ok {
+		return errors.New("current board absent-reference persistence is unavailable")
+	}
+	return publisher.SaveCurrentBoardIfAbsent(ctx, factoryDirectory, artifact)
+}
+
 func (s *JavaScriptRuntimeService) currentBoardStore() (runtimepersist.CurrentBoardStore, error) {
 	if s == nil {
 		return nil, ErrSessionNotFound

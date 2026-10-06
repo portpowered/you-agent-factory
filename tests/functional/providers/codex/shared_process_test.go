@@ -109,15 +109,12 @@ func (constructor *codexProcessConstructor) count() int {
 }
 
 type codexSharedProcessFixture struct {
-	rootDir                  string
-	homeDir                  string
-	trustedFactoryDir        string
-	actionableFactoryDir     string
-	neutralFactoryDir        string
-	containmentOutsideDir    string
-	containmentAvailable     bool
-	containmentCapabilityErr error
-	baseURL                  string
+	rootDir              string
+	homeDir              string
+	trustedFactoryDir    string
+	actionableFactoryDir string
+	neutralFactoryDir    string
+	baseURL              string
 
 	process       support.ApplicationProcess
 	command       *support.ProcessCommand
@@ -142,7 +139,7 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 		t.Fatalf("create shared Codex home: %v", err)
 	}
 	paths := prepareCodexSharedFactoryPaths(t)
-	containment := prepareCodexSharedRolloutFixtures(t, homeDir)
+	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), codexFunctionalSessionID, `{ "type": "session_meta" }`+"\n")
 	runner := prepareCodexSharedRoutes(t, paths, rootDir)
 
 	api := newCodexSharedHTTPServer()
@@ -150,18 +147,14 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	process := constructor.build(t, serviceedges.Edges{
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
-		ProviderSessionFileSystem:           codexHistoryFaultFiles{},
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
 	})
 	fixture := &codexSharedProcessFixture{
 		rootDir: rootDir, homeDir: homeDir,
-		trustedFactoryDir:        paths.trusted,
-		actionableFactoryDir:     paths.actionable,
-		neutralFactoryDir:        paths.neutral,
-		containmentOutsideDir:    containment.outsideDir,
-		containmentAvailable:     containment.available,
-		containmentCapabilityErr: containment.err,
-		process:                  process, api: api, commandRunner: runner, constructor: constructor,
+		trustedFactoryDir:    paths.trusted,
+		actionableFactoryDir: paths.actionable,
+		neutralFactoryDir:    paths.neutral,
+		process:              process, api: api, commandRunner: runner, constructor: constructor,
 	}
 
 	inputs := support.FakeInputs(context.Background(), []string{
@@ -192,57 +185,6 @@ func prepareCodexSharedFactoryPaths(t *testing.T) codexSharedFactoryPaths {
 		actionable: scaffoldCodexSharedRefusalFactory(t),
 		neutral:    scaffoldCodexSharedRefusalFactory(t),
 	}
-}
-
-func prepareCodexSharedRolloutFixtures(
-	t *testing.T,
-	homeDir string,
-) codexSharedContainmentFixture {
-	t.Helper()
-	containment := prepareCodexSharedContainmentFixture(t, homeDir, codexFunctionalOutsideSessionID)
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalSessionID,
-		representativeCodexJSONL(),
-	)
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalDetachedSessionID,
-		representativeCodexJSONL(),
-	)
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalMalformedSessionID,
-		`{"type":"turn_context"}`+"\n"+
-			`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"partial`,
-	)
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalOversizedSessionID,
-		`{"type":"event_msg","payload":{"type":"agent_message","message":"before"}}`+"\n"+
-			strings.Repeat("x", 1<<20+1)+"\n"+
-			`{"type":"event_msg","payload":{"type":"agent_message","message":"after"}}`+"\n",
-	)
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-empty", "")
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-read-failure", `{"type":"session_meta"}`+"\n")
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), "session-diagnostic-budget",
-		`{"type":"event_msg","payload":{"type":"agent_message","message":"prefix"}}`+"\n"+
-			strings.Repeat(`{"type":"future"}`+"\n", 257)+
-			`{"type":"event_msg","payload":{"type":"agent_message","message":"uninspected"}}`+"\n")
-	for i := 0; i < 65; i++ {
-		writeCodexRolloutFixtureAt(
-			t,
-			codexSessionsRoot(homeDir),
-			fmt.Sprintf("2026/05/%02d", i),
-			codexFunctionalBoundedWalkSessionID,
-			`{"type":"session_meta"}`+"\n",
-		)
-	}
-	return containment
 }
 
 func prepareCodexSharedRoutes(
@@ -331,7 +273,6 @@ func (fixture *codexSharedProcessFixture) finalize(t testing.TB) {
 		removeCodexOwnedPath(t, fixture.trustedFactoryDir)
 		removeCodexOwnedPath(t, fixture.actionableFactoryDir)
 		removeCodexOwnedPath(t, fixture.neutralFactoryDir)
-		removeCodexOwnedPath(t, fixture.containmentOutsideDir)
 		removeCodexOwnedPath(t, fixture.rootDir)
 	})
 }
@@ -449,50 +390,11 @@ func TestCodexSharedTrustedWorkAndHistory(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	// Immutable history reads and the scenario-owned append fixture can overlap
-	// on the same ready HTTP process without sharing a mutable session file.
-	t.Run("history", func(t *testing.T) {
-		t.Run("empty_history", func(t *testing.T) { t.Parallel(); assertCodexSharedEmptyHistory(t, fixture) })
-		t.Run("storage_failure_history", func(t *testing.T) { t.Parallel(); assertCodexSharedStorageFailureHistory(t, fixture) })
-		t.Run("diagnostic_budget_history", func(t *testing.T) { t.Parallel(); assertCodexSharedDiagnosticBudgetHistory(t, fixture) })
-		t.Run("detached_repeated_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedDetachedHistory(t, fixture)
-		})
-		t.Run("missing_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedMissingHistory(t, fixture)
-		})
-		t.Run("malformed_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedMalformedHistory(t, fixture)
-		})
-		t.Run("append_tail_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedAppendHistory(t, fixture)
-		})
-		t.Run("oversized_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedOversizedHistory(t, fixture)
-		})
-		t.Run("bounded_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedBoundedHistory(t, fixture)
-		})
-		t.Run("containment_history", func(t *testing.T) {
-			t.Parallel()
-			assertCodexSharedContainmentHistory(t, fixture)
-		})
+	// Native-only discovery is retired. Captured success/damage/reload proof
+	// belongs to the API-owned detail matrix rather than native parser fixtures.
+	t.Run("native_only_history", func(t *testing.T) {
+		assertCodexSharedSuccessfulHistory(t, fixture)
 	})
-	if t.Failed() {
-		return
-	}
-	// Re-read a known-good rollout after every adverse history request. This
-	// proves the shared HTTP/process spine remains healthy after safe failures.
-	assertCodexSharedSuccessfulHistory(t, fixture)
-	if t.Failed() {
-		return
-	}
 	fixture.assertTopology(t)
 	fixture.finalize(t)
 }
@@ -563,25 +465,11 @@ func assertCodexSharedAcceptedDispatch(t testing.TB, events []factoryapi.Factory
 
 func assertCodexSharedSuccessfulHistory(t *testing.T, fixture *codexSharedProcessFixture) {
 	t.Helper()
-	detail := getCodexProviderSessionDetail(t, fixture.baseURL, codexFunctionalSessionID)
-	if detail.ProviderSession.Id != codexFunctionalSessionID ||
-		detail.ProviderSession.Provider != factoryapi.Codex ||
-		detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("shared provider session = %#v, want codex session_id %s", detail.ProviderSession, codexFunctionalSessionID)
+	body := getCodexProviderSessionDetailErrorBody(t, fixture.baseURL, codexFunctionalSessionID, http.StatusNotFound)
+	if !strings.Contains(body, `"code":"NOT_FOUND"`) || strings.Contains(body, `"transcript"`) {
+		t.Fatalf("native-only detail exposed content: %s", body)
 	}
-	if detail.Source.RelativePath != "2026/07/27/rollout-"+codexFunctionalSessionID+".jsonl" {
-		t.Fatalf("shared source path = %q, want contained rollout path", detail.Source.RelativePath)
-	}
-	if len(detail.Transcript) < 4 || len(detail.Parse.FunctionCalls) != 1 || len(detail.Parse.Reasoning) != 1 {
-		t.Fatalf("shared provider detail = %#v, want transcript, tool, and reasoning facts", detail)
-	}
-	if detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.TotalTokens == nil ||
-		*detail.Parse.TokenUsage.TotalTokens != 130 {
-		t.Fatalf("shared provider token usage = %#v, want total 130", detail.Parse.TokenUsage)
-	}
-	if detail.Transcript[0].Text == nil || !strings.Contains(*detail.Transcript[0].Text, "Inspect the failing run") {
-		t.Fatalf("shared provider transcript = %#v, want user message text", detail.Transcript)
-	}
+	assertCodexProviderSessionErrorBodySafe(t, "native-only", body, fixture.homeDir)
 }
 
 func (fixture *codexSharedProcessFixture) assertSessionTopology(t testing.TB) {

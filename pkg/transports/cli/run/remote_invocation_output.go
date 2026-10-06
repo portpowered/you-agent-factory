@@ -842,3 +842,13 @@ func stableHistoricalReplayTraceIDs(values []string) []string {
 	sort.Strings(result)
 	return result
 }
+
+// emitBoardAdoptionWarning renders only JSON-escaped artifact paths. Inventory
+// causes and recording contents never reach this customer diagnostic.
+func emitBoardAdoptionWarning(output io.Writer, paths []string) {
+	if output == nil || len(paths) == 0 {
+		return
+	}
+	quoted, _ := json.Marshal(paths)
+	_, _ = fmt.Fprintf(output, "Skipped %d unreadable recordings during legacy board adoption: %s\n", len(paths), quoted)
+}

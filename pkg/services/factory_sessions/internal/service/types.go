@@ -56,6 +56,7 @@ type runtimeProducts struct {
 	orderlyStop            func(context.Context) error
 	closeArtifacts         func() error
 	historicalReplay       *factorysessions.HistoricalReplayInspection
+	skippedBoardRecordings []string
 	replayMetadataWarnings []recordings.MetadataMismatchWarning
 	resumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	bindRuntime            func(factoryruntime.RuntimeBinding) error

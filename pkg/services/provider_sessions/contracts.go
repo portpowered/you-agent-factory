@@ -2,7 +2,6 @@ package providersessions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -229,16 +228,16 @@ type UnknownEvent struct {
 }
 
 var (
-	ErrAmbiguousSessionFile        = errors.New("ambiguous provider session file")
-	ErrInvalidIdentifier           = errors.New("invalid provider session identifier")
-	ErrOperationCanceled           = fmt.Errorf("provider session inspection canceled: %w", context.Canceled)
-	ErrResourceLimitExceeded       = errors.New("provider session inspection resource limit exceeded")
-	ErrSessionNotFound             = errors.New("provider session not found")
-	ErrSessionOutsideRoot          = errors.New("provider session resolves outside configured storage")
-	ErrSessionSourceNotRegularFile = errors.New("provider session source is not a regular file")
-	ErrSessionStorageUnavailable   = errors.New("provider session storage is unavailable")
-	ErrUnsupportedKind             = errors.New("unsupported provider session kind")
-	ErrUnsupportedProvider         = errors.New("unsupported provider session provider")
+	ErrAmbiguousSessionFile        error = &sessionFailure{kind: "ambiguous", message: "ambiguous provider session file"}
+	ErrInvalidIdentifier           error = &sessionFailure{kind: "invalid_identifier", message: "invalid provider session identifier"}
+	ErrOperationCanceled           error = &sessionFailure{kind: "canceled", message: "provider session inspection canceled"}
+	ErrResourceLimitExceeded       error = &sessionFailure{kind: "resource_limit", message: "provider session inspection resource limit exceeded"}
+	ErrSessionNotFound             error = &sessionFailure{kind: "not_found", message: "provider session not found"}
+	ErrSessionOutsideRoot          error = &sessionFailure{kind: "outside_root", message: "provider session resolves outside configured storage"}
+	ErrSessionSourceNotRegularFile error = &sessionFailure{kind: "not_regular", message: "provider session source is not a regular file"}
+	ErrSessionStorageUnavailable   error = &sessionFailure{kind: "storage_unavailable", message: "provider session storage is unavailable"}
+	ErrUnsupportedKind             error = &sessionFailure{kind: "unsupported_kind", message: "unsupported provider session kind"}
+	ErrUnsupportedProvider         error = &sessionFailure{kind: "unsupported_provider", message: "unsupported provider session provider"}
 )
 
 // LookupError retains normalized provider and session context. SessionID is
@@ -258,4 +257,37 @@ func (e *LookupError) Error() string {
 
 func (e *LookupError) Unwrap() error {
 	return e.Err
+}
+
+// ProviderSessionFailureKind identifies a contextual inspection failure.
+func (e *LookupError) ProviderSessionFailureKind() string { return "lookup" }
+
+// ProviderSessionFailureIdentity returns the validated continuation identity.
+func (e *LookupError) ProviderSessionFailureIdentity() (provider, kind, sessionID string) {
+	if e == nil {
+		return "", "", ""
+	}
+	return string(e.Provider), SessionIDKind, e.SessionID
+}
+
+type sessionFailure struct {
+	kind    string
+	message string
+}
+
+func (e *sessionFailure) Error() string {
+	if e.kind == "canceled" {
+		return e.message + ": " + context.Canceled.Error()
+	}
+	return e.message
+}
+
+// ProviderSessionFailureKind reports the typed inspection failure to consumers.
+func (e *sessionFailure) ProviderSessionFailureKind() string { return e.kind }
+
+func (e *sessionFailure) Unwrap() error {
+	if e.kind == "canceled" {
+		return context.Canceled
+	}
+	return nil
 }

@@ -91,6 +91,7 @@ type sessionRuntimeOpening struct {
 	restoredWorldState          *factorydefinitions.FactoryWorldState
 	restoredEventHistory        []factorydefinitions.FactoryEvent
 	boardHistoryOpening         currentBoardHistoryOpening
+	skippedBoardRecordings      []string
 	hasCurrentBoardReference    bool
 	emptyCurrentBoard           bool
 	startupRecovery             *currentBoardStartupRecovery
@@ -635,6 +636,7 @@ func (r *Root) bindSessionOpeningProducts(
 		opened.runtimeInstanceID,
 		opening.configured.Recordings.RecordPath,
 	)
+	opened.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
 	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
 	if recovery := opening.startupRecovery; recovery != nil {
 		opened.startupRecovery = &factorysessions.StartupRecovery{
