@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -26,19 +27,15 @@ import (
 // host processes using one isolated profile; no test process hydrates captures.
 func TestWorkerSessionHistoryRestart(t *testing.T) {
 	t.Parallel()
-	for _, legacy := range []bool{false, true} {
-		name := "originating-artifact"
-		if legacy {
-			name = "legacy-unavailable"
-		}
+	for _, name := range []string{"originating-artifact", "legacy-unavailable", "legacy-current-board"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runWorkerSessionHistoryRestart(t, legacy)
+			runWorkerSessionHistoryRestart(t, name)
 		})
 	}
 }
 
-func runWorkerSessionHistoryRestart(t *testing.T, legacy bool) {
+func runWorkerSessionHistoryRestart(t *testing.T, mode string) {
 	t.Helper()
 	binary := os.Getenv("INFINITE_YOU_PREBUILT_ARTIFACT")
 	if binary == "" {
@@ -75,7 +72,18 @@ func runWorkerSessionHistoryRestart(t *testing.T, legacy bool) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
-	historyCLI(t, ctx, binary, project, env, "run", "--dir", factory, "--quiet")
+	runArgs := []string{"run", "--dir", factory, "--quiet"}
+	var readerArgs []string
+	if mode == "legacy-current-board" {
+		board := filepath.Join(project, "board.json")
+		scope := uuid.NewString()
+		// Select the same scoped path as the configured-board lookup policy.
+		// Readers own a different scope so they inspect the closed execution
+		// without restoring its runtime observations as live handles.
+		runArgs = append(runArgs, "--session", scope, "--record", filepath.Join(project, "board."+scope+".json"))
+		readerArgs = []string{"--dir", factory, "--record", board, "--continuously"}
+	}
+	historyCLI(t, ctx, binary, project, env, runArgs...)
 	// Startup watches the Current Factory inputs. Consume this test-owned seed
 	// explicitly so restarting the host cannot submit another attempt.
 	removeHistorySeeds(t, factory)
@@ -87,14 +95,14 @@ func runWorkerSessionHistoryRestart(t *testing.T, legacy bool) {
 			t.Fatal(err)
 		}
 	}
-	if legacy {
+	if mode != "originating-artifact" {
 		removeHistoryOriginatingArtifact(t, project)
 	}
-	first := startHistoryHost(t, ctx, binary, project, env)
-	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url, legacy)
+	first := startHistoryHost(t, ctx, binary, project, env, readerArgs...)
+	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url, mode == "legacy-unavailable")
 	first.stop(t, ctx, binary, project, env)
-	second := startHistoryHost(t, ctx, binary, project, env)
-	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url, legacy)
+	second := startHistoryHost(t, ctx, binary, project, env, readerArgs...)
+	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url, mode == "legacy-unavailable")
 	second.stop(t, ctx, binary, project, env)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
@@ -158,8 +166,8 @@ func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project
 
 // Downgrade only the test-owned persisted capture to its pre-provenance shape.
 // All real admissions, canonical history, identities and captured logs survive.
-// A standalone reader has no configured board candidate, so this case protects
-// the authorized unavailable result rather than guessing an artifact.
+// Readers exercise both a validated configured-board candidate and the
+// authorized unavailable result when no candidate is configured.
 func removeHistoryOriginatingArtifact(t *testing.T, home string) {
 	t.Helper()
 	removed := 0
