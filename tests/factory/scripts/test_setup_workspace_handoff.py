@@ -578,7 +578,7 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
         sync_main.assert_not_called()
 
 
-def recovery_packet(worktree="C:/fixture/repo/.claude/worktrees/lane", head="a" * 40):
+def recovery_packet(worktree=".claude/worktrees/lane", head="a" * 40):
     return {"context": {"recovery": {
         "originalSessionId": "11111111-1111-4111-8111-111111111111",
         "originalLaneWorkId": "original-idea", "predecessorWorkId": "original-idea", "attempt": 1,
@@ -594,7 +594,7 @@ class RecoveryPacketValidationTest(unittest.TestCase):
 
     def setUp(self):
         self.module = load_setup_workspace_module()
-        self.path = str(Path.cwd() / ".claude" / "worktrees" / "fixture")
+        self.path = ".claude/worktrees/fixture"
         self.packet = recovery_packet(self.path)
 
     def test_ordinary_and_fresh_recovery_preserve_name_derived_setup(self):
@@ -611,6 +611,16 @@ class RecoveryPacketValidationTest(unittest.TestCase):
             packet = copy.deepcopy(self.packet)
             packet["context"]["recovery"]["diagnosis"]["classification"] = classification
             self.assertIs(self.module.validate_recovery_packet(packet, self.path), packet["context"]["recovery"])
+
+    def test_absolute_escaping_and_unnormalized_tags_refuse(self):
+        for path in ("C:/repo/.claude/worktrees/lane", "/repo/.claude/worktrees/lane",
+                     "C:lane", "\\\\host\\repo\\lane", ".claude/worktrees/../lane",
+                     ".claude/worktrees/lane/", ".claude//worktrees/lane",
+                     "./.claude/worktrees/lane", ".claude\\worktrees\\lane"):
+            packet = copy.deepcopy(self.packet)
+            packet["context"]["recovery"]["workspace"]["worktree"] = path
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "repo-relative"):
+                self.module.validate_recovery_packet(packet, path)
 
     def test_missing_lineage_diagnosis_and_bad_attempts_refuse(self):
         paths = [("originalSessionId",), ("originalLaneWorkId",), ("predecessorWorkId",),
@@ -739,9 +749,17 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             saved["change.txt"] = b"unstaged improvement\n"
             before = git(["status", "--porcelain=v1", "-z"], retained).stdout
             index_before = git(["diff", "--cached", "--binary"], retained).stdout
-            packet = recovery_packet(str(retained), head)
+            packet = recovery_packet(".claude/worktrees/lane", head)
             packet["branchName"] = "lane-r2"
             source = write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
+            # Invalid tags cannot change any retained file or Git identity.
+            snapshot = repository_snapshot(repo, (retained,))
+            for invalid in (str(retained), ".claude/worktrees/../lane"):
+                invalid_packet = copy.deepcopy(packet)
+                invalid_packet["context"]["recovery"]["workspace"]["worktree"] = invalid
+                with self.subTest(tag=invalid), self.assertRaisesRegex(ValueError, "repo-relative"):
+                    module.validate_recovery_packet(invalid_packet, invalid)
+                self.assertEqual(repository_snapshot(repo, (retained,)), snapshot)
             def external(command, cwd):
                 if command[:3] == ["gh", "repo", "view"]:
                     return {"url": "https://github.com/example/repository"}
@@ -756,7 +774,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
                 with self.subTest(visit=visit), mock.patch.object(module, "get_repo_root", return_value=repo), \
                      mock.patch.object(module, "recovery_command_json", side_effect=external), \
                      mock.patch.object(module, "sync_main") as sync, mock.patch.object(module, "prune_worktrees") as prune, \
-                     mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", str(retained)]):
+                     mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
                     stdout, stderr = io.StringIO(), io.StringIO()
                     with redirect_stdout(stdout), redirect_stderr(stderr):
                         module.main()
@@ -782,7 +800,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             snapshot = repository_snapshot(repo, (retained,))
             with mock.patch.object(module, "get_repo_root", return_value=repo), \
                  mock.patch.object(module, "recovery_command_json", side_effect=closed_pr), \
-                 mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", str(retained)]):
+                 mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
                 stdout, stderr = io.StringIO(), io.StringIO()
                 with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as refusal:
                     module.main()
@@ -796,7 +814,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             Path(result["prd_path"]).write_bytes(b"different successor")
             inventory = module.list_registered_worktrees(repo)
             with self.assertRaisesRegex(RuntimeError, "ambiguous PRD"):
-                module.select_prd_candidate(repo, "lane-r2", inventory, str(retained))
+                module.select_prd_candidate(repo, "lane-r2", inventory, ".claude/worktrees/lane")
 
 
 class RecoveryCheckoutValidationTest(unittest.TestCase):
@@ -837,7 +855,7 @@ class RecoveryCheckoutValidationTest(unittest.TestCase):
                     module.recovery_destination(root, workspace, "lane-r2")
                 retained = managed / "lane"
                 retained.mkdir()
-                workspace["worktree"] = str(retained)
+                workspace["worktree"] = ".claude/worktrees/lane"
                 with self.assertRaisesRegex(ValueError, "new successor name"):
                     module.recovery_destination(root, workspace, "lane")
                 validate.assert_not_called()

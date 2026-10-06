@@ -136,7 +136,8 @@ dry-run/submit/receipt path. Attach an optional payload.recovery object:
 workspace:null means fresh ordinary setup and no recovery-worktree tag. For
 useful unmerged work without an active owner, replace null with an object
 containing branch, worktree, prUrl and headSha strings. Use the registered
-absolute managed worktree path and exact local HEAD (40/64 hex); the matching
+normalized repo-relative managed path `.claude/worktrees/<original-lane>`
+(no absolute path or `..`) and exact local HEAD (40/64 hex); the matching
 same-repository PR must be OPEN and its remote head an ancestor of local HEAD.
 Set tags.recovery-worktree to that exact worktree string. Inspect live Work
 in all live Sessions and active Worker Sessions before claiming ownership.

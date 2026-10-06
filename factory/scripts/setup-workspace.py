@@ -29,7 +29,7 @@ import tempfile
 import threading
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import urlsplit
 
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -1318,7 +1318,7 @@ def select_prd_candidate(repo_root, prd_name, records, recovery_worktree=""):
             "the main checkout and all Git-registered worktrees"
         )
     if len(candidates) == 2 and recovery_worktree:
-        destination = normalized_absolute_path(recovery_worktree)
+        destination = normalized_absolute_path(repo_root / recovery_worktree)
         adopted = [c for c in candidates if normalized_absolute_path(c["worktree_path"]) == destination]
         source = [c for c in candidates if c not in adopted]
         if len(adopted) == len(source) == 1:
@@ -1348,7 +1348,7 @@ def select_prd_candidate(repo_root, prd_name, records, recovery_worktree=""):
 
     if not candidate["is_root"] and not (
         recovery_worktree and normalized_absolute_path(candidate["worktree_path"])
-        == normalized_absolute_path(recovery_worktree)
+        == normalized_absolute_path(repo_root / recovery_worktree)
     ):
         validate_nested_packet_freshness(repo_root, candidate, prd_name)
 
@@ -1361,6 +1361,16 @@ def select_prd_candidate(repo_root, prd_name, records, recovery_worktree=""):
     )
     candidate["prd_md_path"] = prd_md_path
     return candidate
+
+
+def validate_recovery_path(value):
+    """Require one canonical repo-relative managed path on every platform."""
+    parts = PurePosixPath(value).parts
+    if (PureWindowsPath(value).drive or value.startswith("/") or "\\" in value
+            or any(part in (".", "..") for part in value.split("/"))
+            or len(parts) != 3 or parts[:2] != (".claude", "worktrees")
+            or str(PurePosixPath(value)) != value or ":" in value or "\x00" in value):
+        raise ValueError("recovery worktree must be a normalized repo-relative managed path .claude/worktrees/<lane>")
 
 
 def validate_recovery_packet(prd, recovery_worktree):
@@ -1411,8 +1421,7 @@ def validate_recovery_packet(prd, recovery_worktree):
             raise ValueError(f"recovery workspace requires {key}")
     if not immutable_object_id(workspace["headSha"]):
         raise ValueError("recovery headSha must be a complete immutable object ID")
-    if not Path(workspace["worktree"]).is_absolute():
-        raise ValueError("recovery worktree must be absolute")
+    validate_recovery_path(workspace["worktree"])
     if recovery_worktree != workspace["worktree"]:
         raise ValueError("recovery-worktree tag must exactly match packet workspace")
     return recovery
@@ -1445,7 +1454,7 @@ def validate_recovery_pr(repo_root, workspace):
     # Use bounded read-only Git commands rather than the ordinary sync/retry
     # path. A local descendant retains unpublished commits; no fetch is needed.
     result = subprocess.run(["git", "merge-base", "--is-ancestor", pr["headRefOid"],
-                             workspace["headSha"]], cwd=workspace["worktree"],
+                             workspace["headSha"]], cwd=repo_root / workspace["worktree"],
                             capture_output=True, text=True, timeout=RECOVERY_CHECK_TIMEOUT)
     if result.returncode:
         raise ValueError("recovery PR remote head must be an ancestor of local HEAD")
@@ -1509,7 +1518,8 @@ def validate_recovery_ownership(repo_root, successor_name, workspace):
 
 def recovery_destination(repo_root, workspace, prd_name):
     """Refuse unmanaged, escaped, mismatched or unavailable retained checkouts."""
-    path = Path(workspace["worktree"])
+    validate_recovery_path(workspace["worktree"])
+    path = repo_root / workspace["worktree"]
     managed = (repo_root / ".claude" / "worktrees").resolve(strict=True)
     resolved = path.resolve(strict=True)
     if path.is_symlink() or not resolved.is_relative_to(managed) or resolved == managed:

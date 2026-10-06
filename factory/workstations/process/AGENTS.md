@@ -166,7 +166,8 @@ a valid decision.
 ## Corrected successor recovery
 
 When the input carries recovery-worktree, require it to match the retained
-working directory and context.recovery.workspace. Select tasks/todo/{{ (index .Inputs 0).Name }}.json
+directory resolved from the repository root and context.recovery.workspace.
+The tag is normalized repo-relative `.claude/worktrees/<original-lane>`, never absolute or escaping. Select tasks/todo/{{ (index .Inputs 0).Name }}.json
 as the current PRD; read its paired Markdown and retained progress.txt. In all
 instructions above/below, prd.json means this selected successor packet.
 Preserve root PRD/progress and all useful branch, commits and dirty files.

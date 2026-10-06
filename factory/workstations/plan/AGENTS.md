@@ -22,7 +22,9 @@ conflicting pattern from an older PRD or from this prompt.
 
 If the admitted payload has recovery, forward recovery exactly to context.recovery
 in the new-name JSON packet; do not rewrite lineage, diagnosis, workspace or
-attempt. Preserve the project and recovery-worktree tags on downstream Work.
+attempt. For retained adoption, require workspace.worktree and its tag to be the same normalized repo-relative
+`.claude/worktrees/<original-lane>` path; reject absolute paths and `..`.
+Preserve the project and recovery-worktree tags on downstream Work.
 Validate originalSessionId, originalLaneWorkId, predecessorWorkId, integer
 attempt 1/2 (not bool), supported classification visit_cap_with_progress,
 breaker_one_blocker or deterministic_failure, evidence, one blocker and concrete

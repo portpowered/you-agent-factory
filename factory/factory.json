@@ -1413,7 +1413,9 @@
     {
       "args": [
         "factory/scripts/setup-workspace.py",
-        "{{ (index .Inputs 0).Name }}"
+        "{{ (index .Inputs 0).Name }}",
+        "--recovery-worktree",
+        "{{ index (index .Inputs 0).Tags \"recovery-worktree\" }}"
       ],
       "command": "python",
       "id": "workspace-setup",
@@ -1772,6 +1774,9 @@
     },
     {
       "id": "plan",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "inputs": [
         {
           "state": "init",
@@ -1943,6 +1948,9 @@
     },
     {
       "id": "setup-workspace",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "inputs": [
         {
           "state": "init",
@@ -1971,6 +1979,9 @@
     },
     {
       "id": "ci-wait",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "inputs": [
         {
           "state": "awaiting-ci",
@@ -2066,6 +2077,9 @@
     {
       "behavior": "REPEATER",
       "id": "process",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "inputs": [
         {
           "state": "init",
@@ -2109,7 +2123,7 @@
       ],
       "type": "AGENT_RUN",
       "worker": "processor",
-      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
+      "workingDirectory": "{{ if index (index .Inputs 0).Tags \"recovery-worktree\" }}{{ index (index .Inputs 0).Tags \"recovery-worktree\" }}{{ else }}.claude/worktrees/{{ (index .Inputs 0).Name }}{{ end }}",
       "outcomeFormat": "decision-envelope",
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -2119,6 +2133,9 @@
     {
       "behavior": "REPEATER",
       "id": "review",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "inputs": [
         {
           "state": "in-review",
@@ -2180,7 +2197,7 @@
       ],
       "type": "AGENT_RUN",
       "worker": "reviewer",
-      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
+      "workingDirectory": "{{ if index (index .Inputs 0).Tags \"recovery-worktree\" }}{{ index (index .Inputs 0).Tags \"recovery-worktree\" }}{{ else }}.claude/worktrees/{{ (index .Inputs 0).Name }}{{ end }}",
       "outcomeFormat": "decision-envelope"
     },
     {

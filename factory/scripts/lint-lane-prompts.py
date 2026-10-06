@@ -68,6 +68,7 @@ RECOVERY_RULES = {
         ('budget', 'at most two accepted successors per original lineage'),
         ('idempotency', 'with the same request ID'),
         ('adoption', 'tags.recovery-worktree'),
+        ('relative-path', 'normalized repo-relative managed path'),
         ('binding', 'Bind replacements by targetWorkId'),
         ('closure', 'evidenced failed DEPENDS_ON closure'),
         ('no-controls', 'operatorOverride repair remain forbidden even after operator answers'),
@@ -88,6 +89,7 @@ RECOVERY_RULES = {
     'plan': (
         ('forward', 'forward recovery exactly to context.recovery'),
         ('tag', 'recovery-worktree tags'),
+        ('relative-path', 'same normalized repo-relative'),
         ('lineage', 'originalLaneWorkId'),
         ('attempt', 'attempt 1/2 (not bool)'),
     ),

@@ -42,7 +42,9 @@ A changed head requires fresh evidence; never infer merge from arming success.
 
 ## Corrected successor recovery
 
-When the task input has recovery-worktree, verify the retained directory and
+When the task input has recovery-worktree, resolve its normalized repo-relative
+`.claude/worktrees/<original-lane>` path from the repository root, reject
+absolute/escaping tags, and verify the retained directory and
 context.recovery.workspace, select tasks/todo/{{ (index .Inputs 0).Name }}.json
 and paired Markdown as the current packet, and read retained progress.txt.
 Every reference to prd.json below means this selected successor packet.
