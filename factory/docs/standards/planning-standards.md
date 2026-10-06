@@ -252,6 +252,28 @@ Quality gates are necessary when relevant but cannot be the only criteria.
 measures. Evidence about CI **MUST** come from the change's own PR and must be
 recorded in a PR comment, never a commit.
 
+### Criterion ownership and compatibility
+
+Every project and story criterion MUST carry an explicit `owner`: `process` or
+`review` in new planner output. Hosted/terminal CI results, merge, independent
+or post-merge validation, and reviewer judgment are review-owned. Direct
+implementation proof and the implementation-stage delivery criterion are
+process-owned. A composite immutable criterion requiring review evidence is
+review-owned as a whole; retain its implementation work and later gates.
+Preserve IDs, requirements, source-plan alignment and evidence gates. Never
+reassign ownership during execution to escape a failed obligation.
+
+Missing owner defaults to process, including legacy string criteria. Invalid
+explicit owners (unknown, null or non-string) are malformed metadata and never
+bypass a blocker; report the criterion and smallest metadata correction.
+Missing proof status remains unproved. Story passes reports retained process
+completion only, never review proof. Process never marks review-owned criteria
+true; unproved review-owned criteria remain false at handoff.
+
+Count only process-owned criteria toward the criterion cap, once by criterion ID.
+Review-owned obligations remain mapped and unproved; story, JSON-byte and PR-line
+caps still apply. Do not drop immutable requirements to fit any cap.
+
 ## 8. Failure modes and operational readiness
 
 Every plan **MUST** include a failure-mode matrix covering applicable bad input,
