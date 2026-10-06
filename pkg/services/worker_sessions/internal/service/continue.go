@@ -543,7 +543,6 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 	}
 	payload := workers.SessionPayload{
 		Status: string(source.State), WorkerSessionID: source.ID,
-		DispatchID: plan.lineage.PreviousDispatchID, AttemptID: plan.lineage.PreviousAttemptID,
 		Lineage: &workers.SessionLineage{SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID},
 	}
 	if association := source.ProviderSessionAssociation; association != nil {
@@ -552,6 +551,9 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 		payload.Continuation = &workers.SessionContinuation{
 			Provider: string(association.Reference.Provider), Kind: association.Reference.Kind, ID: association.Reference.ID,
 		}
+	}
+	if source.ProviderSessionAssociation == nil && plan.lineage != nil {
+		payload.DispatchID, payload.AttemptID = plan.lineage.PreviousDispatchID, plan.lineage.PreviousAttemptID
 	}
 	identity := events.AppendIdentity{
 		SourceType:     continuationLineageSourceType,

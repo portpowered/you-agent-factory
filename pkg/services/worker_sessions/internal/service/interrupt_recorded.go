@@ -66,9 +66,7 @@ func (r *registry) readInterruptContext(ctx context.Context, plan interruptPlan,
 	var head uint64
 	for {
 		page, err := r.logs.reader.ReadWorkerCapturedActivity(ctx, request)
-		if err != nil || page.Catalog.RecordingID != target.RecordingID || page.Catalog.WorkerSessionID != target.WorkerSessionID ||
-			page.Catalog.FactorySessionID != target.FactorySessionID || page.Catalog.RecordingGenerationID != target.RecordingGenerationID ||
-			page.Catalog.OwnerEpoch != target.OwnerEpoch || page.OwnerLost || page.Health == recordings.WorkerRecordingStatusDegraded {
+		if err != nil || !interruptContextPageMatches(page, target) {
 			return "", false, workersessions.ErrInterruptExecutionUnavailable
 		}
 		if head == 0 {
@@ -77,32 +75,48 @@ func (r *registry) readInterruptContext(ctx context.Context, plan interruptPlan,
 		if len(page.Records) == 0 {
 			return "", false, workersessions.ErrInterruptExecutionUnavailable
 		}
-		for _, captured := range page.Records {
-			if uint64(captured.Record.ID.Position) > head {
-				return contextText.String(), truncated, nil
-			}
-			var draft workers.Draft
-			if json.Unmarshal(captured.Record.Payload, &draft) != nil {
-				return "", false, workersessions.ErrInterruptExecutionUnavailable
-			}
-			if draft.Kind != workers.KindMessage && draft.Kind != workers.KindTool {
-				continue
-			}
-			// Captured summaries are data for a fresh prompt, never tool replay.
-			fragment := string(draft.Payload) + "\n"
-			remaining := interruptContextMaxBytes - contextText.Len()
-			bounded, cut := boundedInterruptContext(fragment, remaining)
-			contextText.WriteString(bounded)
-			truncated = truncated || cut || captured.Truncated
-			if cut || contextText.Len() == interruptContextMaxBytes {
-				return contextText.String(), true, nil
-			}
+		done, err := appendInterruptContextPage(&contextText, &truncated, page, head)
+		if err != nil {
+			return "", false, err
+		}
+		if done {
+			return contextText.String(), truncated, nil
 		}
 		if uint64(page.Records[len(page.Records)-1].Record.ID.Position) >= head || page.NextToken == "" {
 			return contextText.String(), truncated, nil
 		}
 		request.NextToken = page.NextToken
 	}
+}
+
+func interruptContextPageMatches(page recordings.WorkerCapturedActivityPage, target recordings.WorkerControlTarget) bool {
+	return page.Catalog.RecordingID == target.RecordingID && page.Catalog.WorkerSessionID == target.WorkerSessionID &&
+		page.Catalog.FactorySessionID == target.FactorySessionID && page.Catalog.RecordingGenerationID == target.RecordingGenerationID &&
+		page.Catalog.OwnerEpoch == target.OwnerEpoch && !page.OwnerLost && page.Health != recordings.WorkerRecordingStatusDegraded
+}
+
+func appendInterruptContextPage(text *strings.Builder, truncated *bool, page recordings.WorkerCapturedActivityPage, head uint64) (bool, error) {
+	for _, captured := range page.Records {
+		if uint64(captured.Record.ID.Position) > head {
+			return true, nil
+		}
+		var draft workers.Draft
+		if json.Unmarshal(captured.Record.Payload, &draft) != nil {
+			return false, workersessions.ErrInterruptExecutionUnavailable
+		}
+		if draft.Kind != workers.KindMessage && draft.Kind != workers.KindTool {
+			continue
+		}
+		// Captured summaries are data for a fresh prompt, never tool replay.
+		bounded, cut := boundedInterruptContext(string(draft.Payload)+"\n", interruptContextMaxBytes-text.Len())
+		text.WriteString(bounded)
+		*truncated = *truncated || cut || captured.Truncated
+		if cut || text.Len() == interruptContextMaxBytes {
+			*truncated = true
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func boundedInterruptContext(text string, limit int) (string, bool) {
@@ -142,11 +156,11 @@ func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.C
 	execution := interruptSuccessorExecution(plan)
 	if _, exists := r.sessions[req.SuccessorWorkerSessionID]; exists {
 		r.mu.Unlock()
-		return workersessions.ContinueResult{}, workersessions.ErrInterruptSourceConflict
+		return workersessions.ContinueResult{}, workersessions.ErrInterruptSuccessorAdmissionFailed
 	}
 	if _, exists := r.dispatchOwners[execution.Execution.Dispatch.DispatchID]; exists {
 		r.mu.Unlock()
-		return workersessions.ContinueResult{}, workersessions.ErrInterruptSourceConflict
+		return workersessions.ContinueResult{}, workersessions.ErrInterruptSuccessorAdmissionFailed
 	}
 	snapshot := continuationSourceSnapshot{session: source, execution: plan.execution, dispatchID: plan.dispatchID,
 		executor: plan.supervision.executor, clock: plan.supervision.clock, scheduler: plan.supervision.scheduler, turnID: plan.supervision.turnID}
