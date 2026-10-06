@@ -80,14 +80,14 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	if before["state"] != "RUNNING" || before["providerSessionAvailable"] != true {
 		t.Fatalf("streaming association not visible: %v", before)
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "source", "view": "transcript"}), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "source", "view": "transcript"}), "worker_session.conflict", false)
 	args := map[string]any{"workerSessionId": "source", "operation": "INTERRUPT", "successorWorkerSessionId": "successor", "replacementMessage": "replace the initial instruction"}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.invalid_request", false)
 	assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
 	args["requestId"] = "interrupt-request"
 	for _, invalid := range []any{"", "unknown", "Provider", nil, 1, true} {
 		args["resumeMode"] = invalid
-		assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+		assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.invalid_request", false)
 		assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
 		assertProviderCallCount(t, runner, 1)
 	}
@@ -107,7 +107,7 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	if mode == "recorded" {
 		args["resumeMode"] = "provider"
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	delete(args, "resumeMode")
 	if mode != "" {
 		args["resumeMode"] = mode
@@ -115,7 +115,7 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	args["replacementMessage"] = "changed immutable tuple"
 	// Changed accepted tuples retain their specific conflict meaning across
 	// transports rather than being classified as malformed requests.
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("changed immutable tuple", mode), http.StatusConflict)
 	// Live transcript compatibility still uses native readers until T8.
 	// Explicit-mode cells deny those readers and prove captured replay instead.
@@ -314,7 +314,7 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process, mode str
 	admitInterruptSource(t, ctx, host.URL(), dir, runner)
 	args := interruptModePayload("replace the initial instruction", mode)
 	args["workerSessionId"], args["operation"] = "source", "INTERRUPT"
-	first := callTool(t, ctx, session, "you.worker_session.control", args)
+	first := callAction(t, ctx, session, "CONTROL", args)
 	assertToolError(t, first, "worker_session.unavailable", true)
 	waitControlSignal(t, runner.sourceStopped)
 	encoded, err := json.Marshal(first.StructuredContent)
@@ -329,7 +329,7 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process, mode str
 	if details["phase"] != "SUCCESSOR_ADMISSION" || details["sourceWorkerSessionId"] != "source" || details["successorWorkerSessionId"] != "successor" || details["upstreamCode"] != "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED" {
 		t.Fatalf("partial interrupt identity/code: %v", details)
 	}
-	retry := callTool(t, ctx, session, "you.worker_session.control", args)
+	retry := callAction(t, ctx, session, "CONTROL", args)
 	assertToolError(t, retry, "worker_session.unavailable", true)
 	assertJSONEqual(t, first.StructuredContent, retry.StructuredContent)
 	httpFailure := postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("replace the initial instruction", mode), http.StatusServiceUnavailable).(map[string]any)

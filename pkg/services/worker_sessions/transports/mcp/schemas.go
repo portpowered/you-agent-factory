@@ -1,18 +1,17 @@
 package workersessionmcp
 
-// ToolDefinition describes one adapter-owned input contract.
-type ToolDefinition struct {
-	Name        string
-	InputSchema map[string]any
-}
-
-// DiscoverTools projects the three supported Worker Session input contracts.
-func DiscoverTools() []ToolDefinition {
-	return []ToolDefinition{
-		{Name: ToolList, InputSchema: listSchema()},
-		{Name: ToolRead, InputSchema: readSchema()},
-		{Name: ToolControl, InputSchema: controlSchema()},
+// ActionSchemas projects the Worker branches of the public subagent contract.
+func ActionSchemas() []any {
+	branches := []map[string]any{listSchema(), readSchema(), controlSchema()}
+	actions := []string{ActionList, ActionRead, ActionControl}
+	result := make([]any, len(branches))
+	for i, schema := range branches {
+		schema["properties"].(map[string]any)["action"] = map[string]any{"type": "string", "enum": []any{actions[i]}}
+		required, _ := schema["required"].([]any)
+		schema["required"] = append([]any{"action"}, required...)
+		result[i] = schema
 	}
+	return result
 }
 
 func listSchema() map[string]any {

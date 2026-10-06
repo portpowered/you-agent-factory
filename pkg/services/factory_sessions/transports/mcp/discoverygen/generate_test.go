@@ -13,7 +13,6 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
-	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 )
 
 type testFileSystem struct{}
@@ -394,9 +393,6 @@ func readGeneratedArtifact(t *testing.T, root, path string) []byte {
 func canonicalIdentities() []mcpfactorycatalog.CatalogToolIdentity {
 	var identities []mcpfactorycatalog.CatalogToolIdentity
 	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
-		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
-	}
-	for _, binding := range workersessionmcp.ProjectCanonicalToolHandlerBindings() {
 		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
 	}
 	return identities

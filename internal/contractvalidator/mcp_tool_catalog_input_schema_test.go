@@ -43,9 +43,9 @@ func TestWorkerSessionInputSchemaDriftIsRejected(t *testing.T) {
 		t.Fatalf("resolve catalog: %v", diagnostics)
 	}
 	tools := resolved.(map[string]any)["tools"].(map[string]any)
-	read := tools["mcp.tool.you.worker_session.read"].(map[string]any)
+	read := tools["mcp.tool.you.subagent"].(map[string]any)
 	schema := read["input"].(map[string]any)["schema"].(map[string]any)
-	schema["additionalProperties"] = true
+	schema["oneOf"].([]any)[2].(map[string]any)["additionalProperties"] = true
 	got := contractvalidator.MCPToolCatalogInputSchemaDiagnostics("contracts/mcp/tools.json", resolved)
 	if len(got) != 1 || got[0].Code != "catalog.input_schema.parity" {
 		t.Fatalf("Worker Session schema drift was accepted: %v", got)

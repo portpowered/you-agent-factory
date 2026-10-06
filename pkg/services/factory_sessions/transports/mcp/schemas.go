@@ -1,5 +1,7 @@
 package factorysession
 
+import workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
+
 func objectSchema(properties map[string]any, required ...string) map[string]any {
 	schema := map[string]any{
 		"type":                 "object",
@@ -151,7 +153,7 @@ func factorySessionExecutionRequestSchema() map[string]any {
 }
 
 func subagentInputSchema() map[string]any {
-	return objectSchema(map[string]any{
+	run := objectSchema(map[string]any{
 		"prompt":          stringProperty("Text request for the one-pass subagent."),
 		"provider":        stringProperty("Model provider. Omit to use operator defaults."),
 		"model":           stringProperty("Model name. Omit to use operator defaults."),
@@ -159,6 +161,12 @@ func subagentInputSchema() map[string]any {
 		"workingRoot":     stringProperty("Absolute workspace directory for the subagent. Omit to use the MCP server workspace."),
 		"timeoutMillis":   integerProperty("Optional maximum wait time for the subagent result."),
 	}, "prompt")
+	run["properties"].(map[string]any)["action"] = map[string]any{"type": "string", "enum": []any{"RUN"}}
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"action": map[string]any{"type": "string", "enum": []any{"RUN", "LIST", "READ", "CONTROL"}, "default": "RUN"}},
+		"oneOf":      append([]any{run}, workersessionmcp.ActionSchemas()...),
+	}
 }
 
 func factorySessionExecutionResponseSchema() map[string]any {

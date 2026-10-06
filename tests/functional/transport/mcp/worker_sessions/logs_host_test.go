@@ -36,8 +36,8 @@ func runCapturedLogsPolling(t *testing.T, process support.Process) {
 	if len(empty["events"].([]any)) != 0 || empty["committedPosition"] != page["committedPosition"] {
 		t.Fatalf("unchanged live head duplicated records: %v", empty)
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "sibling", "view": "logs", "nextToken": token}), "worker_session.invalid_request", false)
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "polled", "view": "logs", "nextToken": "invalid"}), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "sibling", "view": "logs", "nextToken": token}), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "polled", "view": "logs", "nextToken": "invalid"}), "worker_session.invalid_request", false)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "polled", "operation": "TERMINATE"})
 	waitControlSignal(t, stopped)
 	assertTerminalLogsPolling(t, ctx, session, host, token, firstPosition)
