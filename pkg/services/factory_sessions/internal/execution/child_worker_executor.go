@@ -73,7 +73,7 @@ func (s *JavaScriptRuntimeService) BindWorkerScope(
 	s.invokerMu.Lock()
 	defer s.invokerMu.Unlock()
 	if s.workerExecution == nil || s.workerExecution.execute == nil {
-		return errors.New("Workers Execute capability is required")
+		return errors.New("workers Execute capability is required")
 	}
 	if s.workerExecutionScopes == nil {
 		s.workerExecutionScopes = make(map[string]*childWorkerExecutionBinding)

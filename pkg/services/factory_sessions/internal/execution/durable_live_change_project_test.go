@@ -348,7 +348,7 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
 	t.Parallel()
 	service := &JavaScriptRuntimeService{}
-	if err := service.BindWorkerScope("parent", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
+	if err := service.BindWorkerScope("parent", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "workers Execute capability is required") {
 		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
 	}
 }
