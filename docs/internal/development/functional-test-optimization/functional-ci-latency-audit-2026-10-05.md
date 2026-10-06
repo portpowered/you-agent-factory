@@ -5478,3 +5478,48 @@ text, with no Go or functional source changes. Rebase this tested candidate to
 that live base before the next push. Evidence: output-home-paired/,
 output-home-paired-confirmation/, output-home-focused/, output-home-full/,
 workstation-text-hosted/ and workstation-text-hosted-ledger/.
+
+
+### October 6: eliminate discarded body rendering in the layout writer
+
+The authored-layout writer previously rendered worker/workstation body bytes
+before selecting structured frontmatter rendering, immediately discarding the
+body result for that branch. It now calls only the selected renderer. Existing
+file checks, structured rendering errors, prompt paths, directory creation,
+write operations, permissions and validators retain their original paths.
+No new cache or persistence bypass is introduced. Skipped existing workers no
+longer perform the discarded body allocation either.
+
+All authoring-layout component tests pass; both scoped linters report zero
+issues. The complete customer_journeys package is built separately for baseline
+and candidate from Windows archive 4720f2c38e, differing only in writer.go.
+Build time is excluded. Four pinned CPUs, GOGC=100, GOMAXPROCS=4 and fresh
+B/C/C/B executions with CPU profiles retain every existing customer scenario.
+No lint or other performance experiments overlap these executions. All pass.
+
+Baseline consumes 51.664002 CPU-seconds / 32.131229899s elapsed; candidate
+47.675854 / 30.755341631: observed 7.7% less CPU / 4.3% less elapsed. Baseline
+wall samples span 15.532-16.599s (24.382374-27.281628 CPU-seconds); candidate
+15.353-15.402s (23.613788-24.062066 CPU-seconds). Preserve this variability rather
+than extrapolating the point estimate to the complete hosted suite. Each
+corresponding baseline/candidate pair improves. Profiles are overlapping
+cumulative samples, not additive attribution.
+
+The complete warm-cache candidate functional measurement passes 67 selected
+packages / 766 results (764 pass, two skip), empty complete raw failures and no
+retry ledger. Supervisor wall is 92.15s; main capture 87.511s; CPU 246.90 seconds
+(185.84 user, 61.06 system). Three compiler commands consume 1.799002 CPU-seconds
+/ 0.911322 active wall; 15 links consume 17.817588 CPU-seconds / 12.493673 active
+wall. No other measurements overlap. This is a full local warm measurement,
+not a controlled comparison against the preceding 147.37s run and not proof
+that complete hosted CI meets the two-minute checkpoint.
+
+During measurement, main advanced to 903fce4694 (#2968), changing Factory Session
+board recovery, CLI/runtime wiring and its customer restart proof. The branch
+rebased cleanly to that source after the writer commit. The paired and full
+measurements above use the pre-rebase 4720f2 archive plus writer.go; private
+Linux Git identity is stale. Fresh hosted checks must verify the combined
+runtime/recovery source. The earlier af907 workflow 37511920959 is terminal
+canceled (functional job succeeded with its recorded retry); output-fixture
+workflow 37513430783 remained queued at this observation. No checkpoint merge
+is claimed. Evidence: writer-render-paired/ and writer-render-full/.
