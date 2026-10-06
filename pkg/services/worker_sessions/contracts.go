@@ -721,6 +721,12 @@ var (
 	// ErrInvalidControlRecord reports a malformed durable control request or
 	// outcome payload.
 	ErrInvalidControlRecord = errors.New("worker session: invalid control record")
+	// ErrInvalidForceControl reports a force request lacking its exact caller
+	// identities, or supplied to a control other than Terminate.
+	ErrInvalidForceControl = errors.New("worker session: invalid force control")
+	// ErrForceTerminationUnconfirmed reports a force effect whose owned tree
+	// or authoritative execution could not be confirmed stopped.
+	ErrForceTerminationUnconfirmed = errors.New("worker session: force termination unconfirmed")
 	// ErrSessionAlreadyExists reports Reserve called with an identity that is
 	// already registered.
 	ErrSessionAlreadyExists = errors.New("worker session: already exists")

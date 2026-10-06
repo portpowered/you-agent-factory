@@ -150,6 +150,9 @@ func TestForceControlDeclineAndFailureNeverCancelOrInventTerminality(t *testing.
 			}
 			got, err := r.Terminate(t.Context(), forceRequest())
 			assertUnsuccessfulForce(t, variant, got, err, s, cancelCalls)
+			if variant == "failed" && (!errors.Is(err, workersessions.ErrForceTerminationUnconfirmed) || strings.Contains(err.Error(), "private process detail")) {
+				t.Fatalf("force failure lacks safe public identity: %v", err)
+			}
 			if (variant == "unattached" || variant == "retired") && owned.calls.Load() != 0 {
 				t.Fatal("unavailable capability signaled")
 			}
@@ -240,6 +243,9 @@ func TestForceControlInjectedDeadlineDoesNotApplyLateSuccess(t *testing.T) {
 	got := awaitForceResponse(t, response)
 	close(release)
 	awaitStopSignal(t, returned)
+	if !errors.Is(got.err, workersessions.ErrForceTerminationUnconfirmed) || !errors.Is(got.err, context.DeadlineExceeded) {
+		t.Fatalf("force deadline lost typed failure or cause: %v", got.err)
+	}
 	if !errors.Is(got.err, errRuntimeAttemptControlUnavailable) || got.result.Outcome != workersessions.ControlOutcomeFailed || got.result.Session.State != workersessions.StateRunning || s.forceConfirmed || s.forcePending || s.controlActive {
 		t.Fatalf("deadline fabricated success = %#v, %v", got.result, got.err)
 	}
@@ -272,7 +278,7 @@ func TestForceControlRequiresValidTupleBeforeAnyJournalOrEffect(t *testing.T) {
 				control = r.Resume
 			}
 			_, err := control(t.Context(), req)
-			if !errors.Is(err, workersessions.ErrInvalidControlRecord) || len(store.records) != 0 || owned.calls.Load() != 0 {
+			if !errors.Is(err, workersessions.ErrInvalidControlRecord) || !errors.Is(err, workersessions.ErrInvalidForceControl) || len(store.records) != 0 || owned.calls.Load() != 0 {
 				t.Fatalf("invalid tuple reached effects: %v", err)
 			}
 		})
@@ -472,6 +478,9 @@ func TestForceControlWorkerJoinDeadlineNeverFabricatesTerminality(t *testing.T) 
 	awaitStopSignal(t, confirmed)
 	clock.SetTick(10)
 	got := awaitForceResponse(t, response)
+	if !errors.Is(got.err, workersessions.ErrForceTerminationUnconfirmed) || !errors.Is(got.err, context.DeadlineExceeded) {
+		t.Fatalf("force join deadline lost typed failure or cause: %v", got.err)
+	}
 	if !errors.Is(got.err, errRuntimeAttemptControlUnavailable) || got.result.Outcome != workersessions.ControlOutcomeFailed || got.result.Session.State != workersessions.StateRunning || len(store.records) != 2 || store.records[1].Operation.Phase != "FAILED" {
 		t.Fatalf("unjoined force = %#v, %v", got.result, got.err)
 	}
@@ -573,7 +582,7 @@ func TestForceControlRecoversOriginalOutcomeAfterReplacementOrRestart(t *testing
 				}
 				got, err := r.Terminate(t.Context(), forceRequest())
 				if !reflect.DeepEqual(got, want) || (outcome == workersessions.ControlOutcomeApplied && err != nil) ||
-					(outcome == workersessions.ControlOutcomeFailed && !errors.Is(err, errRuntimeAttemptControlUnavailable)) || owned.calls.Load() != 0 || len(store.records) != 2 {
+					(outcome == workersessions.ControlOutcomeFailed && (!errors.Is(err, errRuntimeAttemptControlUnavailable) || !errors.Is(err, workersessions.ErrForceTerminationUnconfirmed))) || owned.calls.Load() != 0 || len(store.records) != 2 {
 					t.Fatalf("recovered outcome = %#v, %v; want %#v", got, err, want)
 				}
 			})

@@ -88,6 +88,9 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 	}
 	r.logger.Info("worker session force intent", "sessionID", publicWorkerID(req.ID), "attemptID", target.attemptID, "action", "kill", "durable", journal && storeErr == nil)
 	result, stopErr := r.executeFrozenForce(ctx, req.ID, target)
+	if errors.Is(stopErr, errRuntimeAttemptControlUnavailable) {
+		stopErr = errors.Join(workersessions.ErrForceTerminationUnconfirmed, stopErr)
+	}
 	if journal && storeErr == nil {
 		// The effect deadline must not prevent saving its authoritative failure.
 		storeErr = r.commitStopResult(context.WithoutCancel(ctx), accepted, result, stopErr)
@@ -145,7 +148,7 @@ func recoveredForceResult(record, intent recordings.WorkerControlOperationRecord
 		if record.FailureCode != "STOP_FAILED" || result.Outcome != workersessions.ControlOutcomeFailed {
 			return failed, workersessions.ErrInvalidState
 		}
-		return result, errRuntimeAttemptControlUnavailable
+		return result, errors.Join(workersessions.ErrForceTerminationUnconfirmed, errRuntimeAttemptControlUnavailable)
 	}
 	if !validCompletedForceResult(record, result) {
 		return failed, workersessions.ErrInvalidState
@@ -225,7 +228,9 @@ func (r *registry) applyForceClaim(ctx context.Context, id string, target frozen
 	}
 	claim.resolve(effect.killed, effect.err)
 	if effect.err != nil {
-		return r.forceResult(id, target, workersessions.ControlOutcomeFailed), errRuntimeAttemptControlUnavailable
+		// Keep the service deadline inspectable without exposing runner errors
+		// containing host process details through customer control responses.
+		return r.forceResult(id, target, workersessions.ControlOutcomeFailed), errors.Join(errRuntimeAttemptControlUnavailable, context.Cause(ctx))
 	}
 	if !effect.killed {
 		return r.forceResult(id, target, workersessions.ControlOutcomeUnsupported), nil

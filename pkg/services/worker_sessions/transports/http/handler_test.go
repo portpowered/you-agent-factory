@@ -31,6 +31,36 @@ func TestInterruptUnavailableRecoveryIsNotInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestForceControlErrorsKeepFailureResponseBeforeContextSuppression(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"effect deadline", errors.Join(workersessions.ErrForceTerminationUnconfirmed, context.DeadlineExceeded), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"effect cancellation", errors.Join(workersessions.ErrForceTerminationUnconfirmed, context.Canceled), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"signal failure", errors.Join(workersessions.ErrForceTerminationUnconfirmed, errors.New("private process detail")), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"invalid force", errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl), http.StatusBadRequest, "WORKER_SESSION_CONTROL_INVALID"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			(&Handler{}).writeMappedControlError(response, test.err)
+			var body struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("control failure has no JSON error response: %v", err)
+			}
+			if response.Code != test.status || body.Code != test.code || strings.Contains(response.Body.String(), "private process detail") {
+				t.Fatalf("control failure response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func TestInterruptPersistenceErrorIsNotInvalidRequest(t *testing.T) {
 	t.Parallel()
 	cause := errors.Join(recordings.ErrWorkerRecordingPersistence, workersessions.ErrInterruptValidation, errors.New("private-storage-detail"))

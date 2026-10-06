@@ -21,7 +21,7 @@ import (
 // resumable session.
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	if req.Force {
-		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, workersessions.ErrInvalidControlRecord
+		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl)
 	}
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -321,7 +321,7 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
 	if req.Force {
-		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, workersessions.ErrInvalidControlRecord
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl)
 	}
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err

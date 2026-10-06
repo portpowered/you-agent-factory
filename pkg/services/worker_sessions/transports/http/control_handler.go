@@ -244,9 +244,11 @@ func interruptErrorResponse(err error) (int, string, string) {
 
 func (h *Handler) writeMappedControlError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrForceTerminationUnconfirmed):
+		writeError(w, http.StatusServiceUnavailable, "Workers could not apply the Worker Session control", "WORKER_SESSION_CONTROL_FAILED")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return
-	case errors.Is(err, workersessions.ErrInvalidSessionID):
+	case errors.Is(err, workersessions.ErrInvalidSessionID), errors.Is(err, workersessions.ErrInvalidForceControl):
 		writeError(w, http.StatusBadRequest, "invalid Worker Session control request", "WORKER_SESSION_CONTROL_INVALID")
 	case errors.Is(err, workersessions.ErrSessionNotFound):
 		writeError(w, http.StatusNotFound, "Worker Session not found", "NOT_FOUND")

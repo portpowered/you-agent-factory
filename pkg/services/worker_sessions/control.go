@@ -1,6 +1,7 @@
 package workersessions
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -57,7 +58,7 @@ func (req ControlRequest) Validate() error {
 	}
 	if (req.Force && (strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.ExpectedAttemptID) == "")) ||
 		(!req.Force && req.ExpectedAttemptID != "") {
-		return fmt.Errorf("%w: force requires request and physical attempt identities", ErrInvalidControlRecord)
+		return errors.Join(ErrInvalidControlRecord, ErrInvalidForceControl)
 	}
 	return nil
 }
