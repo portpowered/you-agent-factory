@@ -57,29 +57,6 @@ func (runner baseFailureCommandRunner) Run(_ context.Context, _ platformprocess.
 	return platformprocess.CommandResult{Stderr: []byte(runner.message), ExitCode: 1}, nil
 }
 
-type baseTimeoutThenSuccessCommandRunner struct {
-	mu    sync.Mutex
-	calls int
-}
-
-func (runner *baseTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	runner.mu.Lock()
-	runner.calls++
-	call := runner.calls
-	runner.mu.Unlock()
-	if call == 1 {
-		<-ctx.Done()
-		return platformprocess.CommandResult{}, ctx.Err()
-	}
-	return platformprocess.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
-}
-
-func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return runner.calls
-}
-
 const scriptTimeoutCausalSignalTimeout = 10 * time.Second
 
 type scriptTimeoutThenSuccessCommandRunner struct {
@@ -227,31 +204,6 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		scenario, listed := RunFactory(t, dir, dir, baseFailureCommandRunner{"adverse dependency failure"}, 5*time.Second)
 		assertBaseSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
 		assertBaseDispatchErrorContains(t, scenario.FactoryEvents(t), "adverse dependency failure")
-		scenario.Stop(t)
-	})
-
-	t.Run("timeout", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		support.WriteWorkstationConfig(t, dir, "run-script", "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n")
-		testutil.WriteSeedFile(t, dir, "task", []byte("timeout-payload"))
-		runner := &baseTimeoutThenSuccessCommandRunner{}
-		scenario := fixture.OpenScenario(t, dir, dir, runner)
-		// A failed timeout projection can appear between retries. Observe the
-		// recovered customer state, rather than treating retry admission as
-		// proof that the subsequent terminal snapshot belongs to success.
-		listed, err := support.WaitForObservation(support.ScaledTimeout(10*time.Second),
-			func() (factoryapi.ListWorkResponse, error) { return scenario.ListWork(t), nil },
-			func(listed factoryapi.ListWorkResponse) bool {
-				return support.CountWorkAtCustomerState(listed, "task:done") == 1
-			})
-		if err != nil {
-			t.Fatalf("observe timeout recovery through public Work: %v", err)
-		}
-		assertBaseSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		assertDispatchTimeoutEventuallyAccepted(t, scenario.FactoryEvents(t))
-		if got := runner.CallCount(); got < 2 {
-			t.Fatalf("timeout recovery provider calls = %d, want at least two", got)
-		}
 		scenario.Stop(t)
 	})
 

@@ -325,7 +325,7 @@ jobs:
         shell: bash
         run: |
           runner_cpus="$(nproc 2>/dev/null || true)"
-          functional_jobs=12
+          functional_jobs=8
           echo "Functional CI runner: logical_cpus=${runner_cpus:-unknown} jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
       - name: Restore Go module cache

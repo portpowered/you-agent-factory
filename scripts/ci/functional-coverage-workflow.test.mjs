@@ -35,7 +35,7 @@ test("functional coverage keeps module and dependency caches plus bounded compil
 
 	assert.match(functionalSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
 	assert.match(functionalSetup, /cache: false/);
-	assert.match(functionalParallelism, /functional_jobs=12/);
+	assert.match(functionalParallelism, /functional_jobs=8/);
 	assert.match(functionalParallelism, /jobs=\$functional_jobs/);
 
 	assert.match(moduleCache, /id: go-module-cache/);

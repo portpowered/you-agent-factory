@@ -486,6 +486,7 @@ func (fixture initFixture) execute(
 	if err != nil {
 		return err
 	}
+	support.CleanupProcess(fixture.t, process)
 	return fixture.executeOn(process, stdout, args...)
 }
 
@@ -539,6 +540,7 @@ func (fixture initFixture) executeInteractive(
 	if err != nil {
 		return err
 	}
+	support.CleanupProcess(fixture.t, process)
 	isTTY := true
 	return process.Execute(root.Input{
 		Args: []string{"you", "init"},
