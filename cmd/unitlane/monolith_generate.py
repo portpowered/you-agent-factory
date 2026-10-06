@@ -146,7 +146,15 @@ func processCPUSeconds() (float64, bool) {
  return float64(ticks)/1e7, true
 }
 ''')
-add_source(ROOT/'pkg/monolithpilot/cpu_other.go', '//go:build !windows\n\npackage monolithpilot\nfunc processCPUSeconds() (float64, bool) { return 0, false }\n')
+add_source(ROOT/'pkg/monolithpilot/cpu_linux.go',r'''package monolithpilot
+import "syscall"
+func processCPUSeconds() (float64, bool) {
+ var usage syscall.Rusage
+ if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil { return 0, false }
+ return float64(usage.Utime.Sec+usage.Stime.Sec) + float64(usage.Utime.Usec+usage.Stime.Usec)/1e6, true
+}
+''')
+add_source(ROOT/'pkg/monolithpilot/cpu_other.go', '//go:build !windows && !linux\n\npackage monolithpilot\nfunc processCPUSeconds() (float64, bool) { return 0, false }\n')
 imports=['"encoding/json"','"fmt"','"go.uber.org/goleak"','"github.com/spf13/cobra"','"os"','"sort"','"strings"','"testing"','"time"','s '+json.dumps(support_path)]
 imports.extend(f'b{i} '+json.dumps(root) for i,root in enumerate(roots))
 harness='package monolithpilot\nimport (\n'+'\n'.join(imports)+'\n)\n'+r'''

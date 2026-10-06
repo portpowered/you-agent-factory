@@ -5,15 +5,13 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `d5d14fe082`, passes hosted functional CI in
-**239s complete / 173.206s coverage**, with 68 packages / 744 results and no
-retries. It executes 369 compiler commands and 20 links after a prefix compiler
-archive restore. Backend lint also passes. Its preceding source, d3, passes an
-initial 228s run with one recovered cancellation failure and an identical-head
-270s rerun without retries; the exact archive hit still executes 363 compilers.
-An exact cache key does not imply a complete warm build. The two-minute
-checkpoint remains **unmet**; the previously merged warm three-minute
-checkpoint is historical.
+The latest published source, `e02e408d02`, passes the complete hosted workflow.
+Functional CI takes **241s complete / 169.801s coverage**, 68 packages / 743
+results, no retries, seven compiler commands and 20 links after a prefix archive
+restore. The two-minute complete-job checkpoint remains **unmet**. The earlier
+warm three-minute checkpoint is merged; this next checkpoint remains draft.
+The pending source consolidates Factory/session CLI journeys and isolates
+construction-time process stores; measurements appear below.
 
 The published candidate shares one host across lifecycle, dispatch and eligibility
 journeys, retaining all 31 journey selectors with isolated Factory Sessions,
@@ -25,7 +23,7 @@ These targeted comparisons exclude build time and do not predict hosted totals.
 A full local four-CPU validation passes 68 packages / 744 results without retries
 in **165.72s supervisor / 159.276s coverage**, using 556.32s aggregate CPU.
 
-The next candidate removes a service-only inventory probe, reuses an owned
+The published e02 candidate removes a service-only inventory probe, reuses an owned
 home for sequential JavaScript policy invocations, and releases the final-history
 read's unused live subscription before runtime teardown. The policy home change
 uses 42.3% less native execution CPU across six repetitions; separately, fixing
@@ -3494,3 +3492,129 @@ linker union elapsed activity is 31.365s. No other local CPU-heavy validation
 runs concurrently. This is changed-source local evidence; do not infer a
 hosted two-minute checkpoint or claim a matched whole-lane speedup. Evidence:
 .artifacts/latency-audit/policy-history-release-full.
+
+## Named Factory and session CLI fixture simplification
+
+Named Factory lifecycle and remote session commands have identical immutable
+process wiring. One parent TestFactoryAndSessionCLIJourneys now owns the process
+until both parallel groups join. Each scenario keeps its own home, working
+directory, HTTP target and command buffers; every current create/list/update/
+delete, packaged-install, profile-isolation, missing-home/help and selected-
+session command assertion remains. Rename the misleading composition-routing
+cell to SessionCommandsPreserveSelectedTargets. Remove only the standalone
+legacy submit --port rejection and the deprecated session-show --port tail;
+retain supported session-create port selection and default-session failure.
+
+Six native repetitions per version pass. CPU **4.132s → 4.228s** and wall
+**1.663s → 1.673s** show no measured performance gain. This is structural setup
+simplification and retired-flag cleanup, not a claimed latency optimization.
+Both scoped linters pass. Full Linux coverage passes 68 packages / 742 results,
+740 pass and two skip, no retries, in **222.48s supervisor / 214.107s coverage**,
+680.83s CPU (569.15 user / 111.68 kernel). Other WSL integration Go/Git work is
+observed concurrently; this whole-lane result is validation-only. The coordinator
+combines 35 packages / 547 top-level tests and preserves all native exclusions.
+Evidence: .artifacts/latency-audit/factory-session-cli-host-full and
+.artifacts/latency-audit/factory-session-cli-host-paired.
+
+Concurrent-cancellation investigation repeats the exact public CC-05 selector
+50 times using JSON results and verifies **50 leaf passes / zero failures**.
+This does not reproduce or fix the earlier hosted HTTP503; its customer assertion
+remains unchanged. An initial shell wrapper printed the passing Go result but
+failed to propagate its status; the corrected script records and verifies each
+selected leaf result explicitly. Evidence in private Linux:
+.artifacts/cc05-cancellation-stress.jsonl.
+
+## Hosted final-history release at e02e408d02
+
+Hosted job 112169220807 passes at 08:01:38–08:05:39 UTC on October 6:
+**241s complete / 169.801s coverage**, 68 packages / 743 results, 741 pass and
+two skip, no retries. It restores d5 compiler archives, executes **seven
+compiler commands and 20 links**. Entire workflow subsequently succeeds.
+This prefix archive recovers most compilation; execution and supervisor overhead
+now dominate this sample. Steps before the coverage supervisor total about
+33s. The coverage supervisor step lasts 189s, including tool startup and
+quarantine work beyond the measured 169.801s coverage invocation. Post-coverage
+capture/save/report/cleanup occupies the remaining roughly 19s. The complete
+two-minute target remains unmet. Evidence:
+.artifacts/latency-audit/pr2923-history-release-hosted.
+
+A private scheduling experiment now removes only coordinator-level package
+parallelism while preserving each original scenario's t.Parallel and the eight
+native build/run jobs. The current all-overlapping coordinator is observed at
+about 15.5 GiB resident memory late in execution; test-owned hosts remain alive
+while nested scenario children wait for shared Go test slots. This is a
+measurement hypothesis, not proof that sequential package groups improve CPU
+or elapsed time. Coverage, inventory, quarantine and native exclusions remain
+enabled for the experiment. Canonical generator source is unchanged pending
+evidence; the private source is restored after the experiment finishes.
+
+### Serialized-package experiment: rejected
+
+The private serialized-group variant passes all 68 packages / 742 results,
+740 pass and two skip, no retries, but takes **258.99s supervisor / 252.957s
+coverage** and **705.73s CPU** (603.47 user / 102.26 kernel). Peak process RSS is
+17,540,296 KiB. Twenty-three supervisor links use 32.652s CPU and 34.100s union
+elapsed activity. This does not justify changing default package scheduling;
+the canonical generator remains unchanged, and the private generator is verified
+byte-identical to it after restoration. Evidence:
+.artifacts/latency-audit/serial-functional-groups-full.
+
+A separate diagnostic-only repeat adds process CPU counters around each serial
+package epoch and writes a post-GC heap profile after all groups join. Original
+scenario parallelism, inventory and coverage gates remain enabled. Its purpose
+is attribution of retained memory and package CPU, not a candidate CI schedule.
+
+### Recording recovery attribution and default functional process isolation
+
+The diagnostic serialized-group run passed customer and coverage gates, but its
+post-GC heap retained **9,157.61 MB**. Pprof attributes **7,321.77 MB (79.95%)
+cumulative** to Worker capture `FileWriter.hydrate`, **7,422.64 MB (81.05%)** to
+`Local.ScanDirectory`, and **7,177.47 MB (78.38%)** to `recoverRecordingOwner`.
+These nested values overlap; do not sum them. Flat allocations include
+3,151.76 MB in `events.Record.Detached`, 1,916.09 MB in
+`recordingSession.acceptRecord`, and 1,370.77 MB in JSON literal decoding.
+This is retained memory, **not a CPU profile or hosted memory measurement**.
+
+Construction resolves Worker recordings through
+`FactorySessionsWorkingDirectory.Getwd()`, before CLI inputs provide Cwd/HOME.
+The functional helper previously retained the OS working directory. The private
+workspace contains **68 MB** of old Worker journals under
+`pkg/monolithpilot/.you-agent-factory/worker-recordings`, plus package-local
+journals. Many independent hosts repeatedly hydrate that store. Repeated private
+measurements amplify history; a fresh hosted job does not start with it, but
+can generate and reread peer journals within one suite. Do not extrapolate the
+entire private heap reduction to hosted CI.
+
+The pending helper supplies a unique real temporary working directory when a
+scenario has not supplied `FactorySessionsWorkingDirectory`. Real production
+composition, storage, recovery and public readers are retained. Explicit paths
+and writers are preserved for persistence/restart scenarios. The process removes
+its owned directory after successful Close and on construction failure. A Close
+failure retains it while resources may still be live. Invocation Cwd/HOME remain
+explicit. Existing shared journals are left untouched.
+
+The earlier diagnostic intended to collect package CPU deltas, but the generated
+counter only supported Windows; Linux returned unsupported, so **no package CPU
+measurements were produced**. The pending generator adds Linux Getrusage.
+Parallel group deltas include peers and must not be summed or presented as
+package CPU attribution. No sequential scheduling change is proposed.
+Rejected serialized repeats passed at 258.99s / 705.73s CPU and, with heap
+diagnostics, 278.75s / 781.13s CPU. Diagnostic overhead prevents using the
+latter as a candidate timing checkpoint.
+
+The owned-store candidate passes the complete four-CPU Linux supervisor at
+**143.70s overall / 137.174s coverage**, **470.78s aggregate CPU** (384.16 user /
+86.62 kernel), peak process RSS **6,447,928 KiB**. It retains 68 selected packages
+and 742 results (740 pass / two skip), no retries, all existing floors and holds.
+This changed source compiles 119 commands (51.887s CPU) and links 23 commands
+(37.138s CPU / 36.200s union active wall). Compared with published e02's local
+171.33s / 581.48s CPU, it is a promising sample; these are not controlled paired
+runs and compile state differs. The earlier pending CLI-only run was also
+contended, so its 222.48s sample is validation rather than a baseline speedup.
+Artifacts: `.artifacts/latency-audit/owned-recording-store-full`.
+
+Unitlane and coverage supervisor component suites pass. The generated Linux CPU
+counter is compiled by full verification; an isolated test of that exact generated
+source verifies Getrusage advances (0.008560 CPU seconds). The canonical manifest
+check confirms all 160 reviewed scenarios remain current. The helper's owned
+store does not replace real customer recording behavior with a mock.
