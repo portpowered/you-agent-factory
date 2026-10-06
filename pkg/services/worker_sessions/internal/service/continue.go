@@ -89,6 +89,7 @@ type continuePlan struct {
 	direct    bool
 	lineage   *workers.SessionLineage
 	archived  bool
+	interrupt bool
 }
 
 type continuationSourceSnapshot struct {
@@ -357,7 +358,7 @@ func (r *registry) storeContinuationReservationLocked(
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
 		State:                      workersessions.StateReserved,
-		ProviderSessionAssociation: continuationAssociation(req, continuation, snapshot.turnID, source.ProviderSessionAssociation.Reference),
+		ProviderSessionAssociation: interruptContinuationAssociation(req, continuation, snapshot),
 	}
 	if r.continuationSources == nil {
 		r.continuationSources = make(map[string]string)
@@ -473,7 +474,7 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 		invocationPreparationOptions{
 			serverOwned:      true,
 			direct:           plan.direct,
-			continuation:     true,
+			continuation:     plan.execution.Execution.Continuation != nil,
 			requestID:        plan.request.RequestID,
 			verifyTopicReady: true,
 			lineage:          plan.lineage,

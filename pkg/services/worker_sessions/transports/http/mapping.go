@@ -417,6 +417,9 @@ func WorkerSessionInterruptRequestFromAPI(
 		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
 		ReplacementMessage:       request.ReplacementMessage,
 	}
+	if request.ResumeMode != nil {
+		interrupt.ResumeMode = string(*request.ResumeMode)
+	}
 	interrupt = interrupt.Normalize()
 	if err := interrupt.Validate(); err != nil {
 		return workersessions.InterruptRequest{}, err

@@ -28,7 +28,7 @@ type durableContinuationInput struct {
 }
 
 func (r *registry) persistContinuationInput(plan continuePlan) error {
-	if !plan.direct || r.logs == nil {
+	if plan.interrupt || !plan.direct || r.logs == nil {
 		return nil
 	}
 	pub := r.publicationFor(plan.request.SourceWorkerSessionID)

@@ -22,3 +22,11 @@ properties:
     type: string
     minLength: 1
     description: Non-empty replacement input delivered to the admitted successor.
+  resumeMode:
+    type: string
+    enum: [provider, recorded]
+    default: provider
+    description: >-
+      provider continues the recorded Provider Session; recorded starts a fresh
+      provider execution from bounded recorded context and replacementMessage.
+      There is no automatic fallback between modes.

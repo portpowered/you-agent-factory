@@ -1488,6 +1488,12 @@ const (
 	WorkerSessionInterruptErrorPhaseWait               WorkerSessionInterruptErrorPhase = "WAIT"
 )
 
+// Defines values for WorkerSessionInterruptRequestResumeMode.
+const (
+	Provider WorkerSessionInterruptRequestResumeMode = "provider"
+	Recorded WorkerSessionInterruptRequestResumeMode = "recorded"
+)
+
 // Defines values for WorkerSessionInterruptResponsePhase.
 const (
 	WorkerSessionInterruptResponsePhaseSuccessorAdmission WorkerSessionInterruptResponsePhase = "SUCCESSOR_ADMISSION"
@@ -9090,9 +9096,15 @@ type WorkerSessionInterruptRequest struct {
 	// RequestId Required caller idempotency key for this interrupt.
 	RequestId string `json:"requestId"`
 
+	// ResumeMode provider continues the recorded Provider Session; recorded starts a fresh provider execution from bounded recorded context and replacementMessage. There is no automatic fallback between modes.
+	ResumeMode *WorkerSessionInterruptRequestResumeMode `json:"resumeMode,omitempty"`
+
 	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the replacement.
 	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
 }
+
+// WorkerSessionInterruptRequestResumeMode provider continues the recorded Provider Session; recorded starts a fresh provider execution from bounded recorded context and replacementMessage. There is no automatic fallback between modes.
+type WorkerSessionInterruptRequestResumeMode string
 
 // WorkerSessionInterruptResponse Admission acknowledgment for an interrupt-and-replace operation. A 202 response is returned only after source cancellation has reached the authoritative CANCELED state and the successor has crossed its admission barrier. Successor terminal output remains asynchronous.
 type WorkerSessionInterruptResponse struct {

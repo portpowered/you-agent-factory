@@ -370,7 +370,11 @@ func TestInterruptPreflightUsesCapturedRecipeBeforeIntent(t *testing.T) {
 			plan.execution.Execution.Model = "changed-live-model"
 			plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=private-live-credential"}
 			configureInterruptPreflightCell(cell, r, &plan, store, reader)
-			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			frozen, err := r.freezeInterruptInput(t.Context(), plan)
+			var operation *recordings.WorkerControlOperationRecord
+			if err == nil {
+				operation, err = r.beginInterruptIntent(t.Context(), frozen)
+			}
 			if cell != "captured" && cell != "scoped" {
 				if !errors.Is(err, workersessions.ErrInterruptExecutionUnavailable) || operation != nil || len(journal.input) != 0 || len(journal.records) != 0 {
 					t.Fatalf("invalid captured recipe committed intent: operation=%+v err=%v", operation, err)

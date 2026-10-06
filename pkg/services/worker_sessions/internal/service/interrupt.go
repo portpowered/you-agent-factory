@@ -21,6 +21,7 @@ type interruptTuple struct {
 	sourceID    string
 	successorID string
 	message     string
+	mode        string
 }
 
 type interruptPlan struct {
@@ -28,6 +29,8 @@ type interruptPlan struct {
 	execution   workers.WorkstationDispatchRequest
 	reference   providers.SessionRef
 	dispatchID  string
+	context     string
+	truncated   bool
 	supervision *supervision
 }
 
@@ -469,6 +472,7 @@ func (r *registry) reserveInterrupt(
 		sourceID:    req.SourceWorkerSessionID,
 		successorID: req.SuccessorWorkerSessionID,
 		message:     req.ReplacementMessage,
+		mode:        req.ResumeMode,
 	}
 
 	r.mu.Lock()
@@ -500,7 +504,11 @@ func (r *registry) prepareInterruptPlanLocked(
 	if err != nil {
 		return interruptPlan{}, err
 	}
-	association, err := interruptSourceAssociation(source)
+	association := workersessions.ProviderSessionAssociation{}
+	if req.ResumeMode == "recorded" {
+		return r.reserveInterruptSupervisionLocked(req, source, association)
+	}
+	association, err = interruptSourceAssociation(source)
 	if err != nil {
 		return interruptPlan{}, err
 	}
@@ -553,7 +561,7 @@ func (r *registry) reserveInterruptSupervisionLocked(
 		supervision.mu.Unlock()
 		return interruptPlan{}, workersessions.ErrInterruptSourceConflict
 	}
-	if association.DispatchID != supervision.dispatchID || association.AttemptID != supervision.dispatchID {
+	if req.ResumeMode != "recorded" && (association.DispatchID != supervision.dispatchID || association.AttemptID != supervision.dispatchID) {
 		supervision.mu.Unlock()
 		return interruptPlan{}, workersessions.ErrInterruptProviderSessionInvalid
 	}
@@ -666,18 +674,13 @@ func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordin
 		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
-	continued, continueErr := r.Continue(boundaryContext, workersessions.ContinueRequest{
-		RequestID:                interruptContinuationRequestID(plan.request.RequestID),
-		SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,
-		SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID,
-		FollowUpInput:            plan.request.ReplacementMessage,
-	})
+	continued, continueErr := r.admitInterruptSuccessor(plan)
 	result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, continueErr == nil)
 	if continueErr != nil {
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, errors.Join(workersessions.ErrInterruptSuccessorAdmissionFailed, continueErr))
 	}
 	result.Successor = continued.Session.Clone()
-	if !interruptSuccessorMatches(result.Successor, plan.reference, plan.execution.Execution.Dispatch.DispatchID) {
+	if plan.request.ResumeMode != "recorded" && !interruptSuccessorMatches(result.Successor, plan.reference, plan.dispatchID) {
 		cause := fmt.Errorf("%w: successor Provider Session reference does not match source", workersessions.ErrInterruptSuccessorAdmissionFailed)
 		result.Accepted = false
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, cause)

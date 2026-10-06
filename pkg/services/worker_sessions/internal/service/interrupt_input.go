@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -18,7 +19,10 @@ type durableInterruptInput struct {
 	Version            int                                `json:"version"`
 	ReplacementMessage string                             `json:"replacementMessage"`
 	Execution          workers.WorkstationDispatchRequest `json:"execution"`
-	ProviderReference  interruptInputReference            `json:"providerReference"`
+	ProviderReference  *interruptInputReference           `json:"providerReference,omitempty"`
+	ResumeMode         string                             `json:"resumeMode,omitempty"`
+	RecordedContext    *string                            `json:"recordedContext,omitempty"`
+	ContextTruncated   *bool                              `json:"contextTruncated,omitempty"`
 }
 
 type interruptInputReference struct {
@@ -34,10 +38,19 @@ func encodeInterruptInput(plan interruptPlan) ([]byte, error) {
 	if !interruptExecutionReplaySafe(execution) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
+	captured := cloneWorkstationDispatchRequest(plan.execution)
+	if captured.Execution.Dispatch.InputTokens == nil {
+		captured.Execution.Dispatch.InputTokens = []any{}
+	}
 	input := durableInterruptInput{
-		Version: 1, ReplacementMessage: plan.request.ReplacementMessage,
-		Execution:         plan.execution,
-		ProviderReference: interruptInputReference{Provider: plan.reference.Provider, Kind: plan.reference.Kind, ID: plan.reference.ID},
+		Version: 2, ResumeMode: plan.request.Normalize().ResumeMode, ReplacementMessage: plan.request.ReplacementMessage,
+		Execution:         captured,
+		ProviderReference: &interruptInputReference{Provider: plan.reference.Provider, Kind: plan.reference.Kind, ID: plan.reference.ID},
+	}
+	if input.ResumeMode == "recorded" {
+		input.ProviderReference = nil
+		input.RecordedContext = &plan.context
+		input.ContextTruncated = &plan.truncated
 	}
 	if !validInterruptInput(input, plan.request, plan.dispatchID) {
 		return nil, recordings.ErrWorkerRecordingPersistence
@@ -65,11 +78,34 @@ func interruptExecutionReplaySafe(execution workers.WorkstationExecutionRequest)
 }
 
 func validInterruptInput(input durableInterruptInput, req workersessions.InterruptRequest, attemptID string) bool {
-	reference := providers.SessionRef{Provider: input.ProviderReference.Provider, Kind: input.ProviderReference.Kind, ID: input.ProviderReference.ID}
+	req = req.Normalize()
+	if !validInterruptInputMode(input, req.ResumeMode) {
+		return false
+	}
 	start := workersessions.StartRequest{RequestID: req.RequestID, ID: req.SourceWorkerSessionID, Execution: input.Execution}
-	return input.Version == 1 && req.Validate() == nil && input.ReplacementMessage == req.ReplacementMessage &&
-		input.Execution.Execution.Dispatch.DispatchID == attemptID && reference.Validate() == nil && start.Validate() == nil &&
+	return req.Validate() == nil && input.ReplacementMessage == req.ReplacementMessage &&
+		input.Execution.Execution.Dispatch.DispatchID == attemptID && start.Validate() == nil &&
 		interruptExecutionReplaySafe(input.Execution.Execution)
+
+}
+
+func validInterruptInputMode(input durableInterruptInput, mode string) bool {
+	if input.Version == 1 {
+		if mode != "provider" || input.ResumeMode != "" {
+			return false
+		}
+	} else if input.Version != 2 || input.ResumeMode != mode {
+		return false
+	}
+	if mode == "recorded" {
+		return input.ProviderReference == nil && input.RecordedContext != nil && input.ContextTruncated != nil &&
+			utf8.ValidString(*input.RecordedContext) && len(*input.RecordedContext) <= interruptContextMaxBytes
+	}
+	if input.ProviderReference == nil || input.RecordedContext != nil || input.ContextTruncated != nil {
+		return false
+	}
+	reference := providers.SessionRef{Provider: input.ProviderReference.Provider, Kind: input.ProviderReference.Kind, ID: input.ProviderReference.ID}
+	return reference.Validate() == nil
 }
 
 // Inspect decoded string values, rather than encoded JSON, so escaping cannot
@@ -114,11 +150,14 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 	}
 	// Earlier request-only artifacts remain read-only replay evidence. They do
 	// not contain a recipe and cannot authorize pending replacement recovery.
-	if bytes.Equal(stored, legacyPayload) {
+	if bytes.Equal(stored, legacyPayload) && req.Normalize().ResumeMode == "provider" {
 		return nil
 	}
 	var legacy workersessions.InterruptRequest
 	if json.Unmarshal(stored, &legacy) == nil && legacy.RequestID != "" {
+		if legacy.ResumeMode == "" && legacy.Normalize() == req.Normalize() && canonicalInterruptJSONFields(stored, legacy) {
+			return nil
+		}
 		return workersessions.ErrInterruptRequestIDConflict
 	}
 	var input durableInterruptInput
@@ -132,10 +171,14 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 	}
 	accepted := req
 	accepted.ReplacementMessage = input.ReplacementMessage
+	accepted.ResumeMode = input.ResumeMode
+	if input.Version == 1 {
+		accepted.ResumeMode = "provider"
+	}
 	if !validInterruptInput(input, accepted, attemptID) {
 		return recordings.ErrWorkerRecordingPersistence
 	}
-	if input.ReplacementMessage != req.ReplacementMessage {
+	if input.ReplacementMessage != req.ReplacementMessage || accepted.ResumeMode != req.Normalize().ResumeMode {
 		return workersessions.ErrInterruptRequestIDConflict
 	}
 	return nil

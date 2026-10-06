@@ -223,7 +223,7 @@ func TestInterruptCallerDisconnectRetainsOneHostOwnedSuccessor(t *testing.T) {
 	defer disconnect()
 	callerDone := make(chan error, 1)
 	go func() {
-		_, _, _, err := sendS8InterruptHTTP(callerCtx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+		_, _, _, err := sendS8InterruptHTTP(callerCtx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage, "recorded")
 		callerDone <- err
 	}()
 	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
@@ -240,10 +240,10 @@ func TestInterruptCallerDisconnectRetainsOneHostOwnedSuccessor(t *testing.T) {
 		t.Fatal("successor admitted before source callback joined")
 	}
 	releaseCallback()
-	first := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	first := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage, "recorded")
 	assertS8APIInterruptAdmission(t, first, ids)
 	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, scenario.fixture.router.requests)
-	cli := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	cli := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, "recorded")
 	if !reflect.DeepEqual(cli, s8InterruptResultFromAPI(first)) || scenario.runner.CallCount() != 2 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 {
 		t.Fatalf("disconnected retry=%#v, want one cancellation and one successor matching %#v", cli, first)
 	}
@@ -488,9 +488,10 @@ func postS8Interrupt(
 	t *testing.T,
 	ctx context.Context,
 	serverURL, sourceID, requestID, successorID, replacement string,
+	modes ...string,
 ) factoryapi.WorkerSessionInterruptResponse {
 	t.Helper()
-	status, body, response, err := sendS8InterruptHTTP(ctx, serverURL, sourceID, requestID, successorID, replacement)
+	status, body, response, err := sendS8InterruptHTTP(ctx, serverURL, sourceID, requestID, successorID, replacement, modes...)
 	if err != nil {
 		t.Fatalf("HTTP interrupt: %v", err)
 	}
@@ -520,10 +521,14 @@ func postS8InterruptError(
 func sendS8InterruptHTTP(
 	ctx context.Context,
 	serverURL, sourceID, requestID, successorID, replacement string,
+	modes ...string,
 ) (int, string, factoryapi.WorkerSessionInterruptResponse, error) {
-	payload, err := json.Marshal(factoryapi.WorkerSessionInterruptRequest{
-		RequestId: requestID, SuccessorWorkerSessionId: successorID, ReplacementMessage: replacement,
-	})
+	input := factoryapi.WorkerSessionInterruptRequest{RequestId: requestID, SuccessorWorkerSessionId: successorID, ReplacementMessage: replacement}
+	if len(modes) != 0 {
+		mode := factoryapi.WorkerSessionInterruptRequestResumeMode(modes[0])
+		input.ResumeMode = &mode
+	}
+	payload, err := json.Marshal(input)
 	if err != nil {
 		return 0, "", factoryapi.WorkerSessionInterruptResponse{}, err
 	}

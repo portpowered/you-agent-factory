@@ -547,7 +547,15 @@ you --server http://localhost:7437 worker-sessions interrupt <source-worker-sess
   --async --output json "Stop and revise the plan"
 ```
 
-Before stopping the source, the server checks configured provider policy and
+Use `--resume-mode provider` to continue the captured Provider Session. This mode is the default.
+Use `--resume-mode recorded` to start a fresh execution from captured context and the replacement message.
+Recorded mode works before the source emits output or a native session identity.
+It preserves safe execution settings and sends no native resume identity.
+Context is bounded to 65,536 UTF-8 bytes. The saved input and successor prompt identify truncation.
+The complete replacement message is retained. Neither mode replays tools or restores hidden provider state.
+The HTTP interrupt request accepts the same `resumeMode` values. There is no automatic fallback between modes.
+
+Before stopping the source in provider mode, the server checks configured provider policy and
 already negotiated continuation capability. An unsupported provider returns
 `PROVIDER_UNSUPPORTED` in `VALIDATION`; the source keeps running and ordinary
 cancel and terminate remain available.
@@ -557,8 +565,8 @@ Interrupt failures include a stable phase: `VALIDATION`,
 default. `--remote` sends the complete request only to the configured
 `--server`; it never falls back to local state.
 
-Retry an interrupt with the same request ID, source, successor, and replacement
-message. A committed result preserves its phase and source/successor identity,
+Retry an interrupt with the same request ID, source, successor, mode, and replacement
+message. Changing the mode under the same request ID returns a conflict. A committed result preserves its phase and source/successor identity,
 state, and accepted predecessor/successor links without stopping or admitting
 another execution. Later continuations do not change these saved links. A recovered
 admission failure leaves the source stopped. Use session inspection for richer
@@ -574,8 +582,8 @@ Factory-origin Worker Session replacement returns `UNSUPPORTED` before any
 source control or successor admission. Factory Runtime owns replacement of
 those attempts. A direct invocation's Factory Session correlation preserves
 its eligibility for interruption.
-New interruptions capture the execution recipe and exact
-Provider Session reference before stopping the source. Inherited environment
+New interruptions capture the execution recipe and mode-specific input before stopping the source.
+Provider mode captures the exact Provider Session reference. Recorded mode captures the bounded context. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.

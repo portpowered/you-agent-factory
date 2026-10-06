@@ -470,7 +470,7 @@ func assertContinuationRestartResult(t *testing.T, stdout string, requests []pla
 	}
 }
 
-func awaitContinuationRestartLogs(t *testing.T, host invokeContinueStartedProcess, home, dir, id string) string {
+func awaitContinuationRestartLogs(t *testing.T, host invokeContinueStartedProcess, home, dir, id string, nativeIDs ...string) string {
 	t.Helper()
 	// Following the capture joins its durable terminal before host shutdown,
 	// rather than relying on a delay after the live session terminal result.
@@ -479,7 +479,11 @@ func awaitContinuationRestartLogs(t *testing.T, host invokeContinueStartedProces
 	if err := host.process.Execute(logs.Input); err != nil {
 		t.Fatalf("joined captured logs: %v %s", err, logs.Stderr())
 	}
-	if !strings.Contains(logs.Stdout(), "opaque-restart-thread") {
+	nativeID := "opaque-restart-thread"
+	if len(nativeIDs) != 0 {
+		nativeID = nativeIDs[0]
+	}
+	if !strings.Contains(logs.Stdout(), nativeID) {
 		t.Fatalf("captured logs omitted native identity: %s", logs.Stdout())
 	}
 	return logs.Stdout()

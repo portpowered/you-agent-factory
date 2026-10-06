@@ -47,6 +47,7 @@ type InterruptConfig struct {
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
 	ReplacementMessage       string
+	ResumeMode               string
 	Prompt                   []string
 	Stdin                    io.Reader
 	StdinIsTTY               bool
@@ -130,6 +131,9 @@ func validateInterruptConfig(config InterruptConfig) error {
 	if config.Output == nil {
 		return fmt.Errorf("output writer is required")
 	}
+	if config.ResumeMode != "" && config.ResumeMode != "provider" && config.ResumeMode != "recorded" {
+		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_INVALID", "resume mode must be provider or recorded", string(workersessions.InterruptPhaseValidation), nil)
+	}
 	if strings.TrimSpace(config.SourceWorkerSessionID) == "" {
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_INVALID", "source Worker Session identity is required", string(workersessions.InterruptPhaseValidation), nil)
 	}
@@ -158,7 +162,12 @@ func normalizeInterruptRequest(config InterruptConfig) (normalizedInterruptReque
 	if successorID == "" {
 		successorID = config.GenerateID()
 	}
+	mode := factoryapi.WorkerSessionInterruptRequestResumeMode(config.ResumeMode)
+	if mode == "" {
+		mode = factoryapi.WorkerSessionInterruptRequestResumeMode("provider")
+	}
 	apiRequest := factoryapi.WorkerSessionInterruptRequest{
+		ResumeMode:               &mode,
 		RequestId:                requestID,
 		SuccessorWorkerSessionId: successorID,
 		ReplacementMessage:       replacement,
