@@ -64,6 +64,36 @@ func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	if err := fresh.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), "restart-successor") {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())
 	}
+	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner)
+}
+
+func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+	if err := previous.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := previous.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	for _, message := range []string{"fresh host follow-up", "changed follow-up"} {
+		request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
+			"--request-id", "restart-continue-request", "--successor-worker-session-id", "restart-successor", "--user-message", message, "--async"})
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		err := fresh.process.Execute(request.Input)
+		if message == "fresh host follow-up" {
+			var result directWorkerSessionCLIResult
+			decodeDirectWorkerSessionResult(t, request.Stdout(), &result)
+			if err != nil || !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "restart-successor" {
+				t.Fatalf("completed replay: %v result=%#v stderr=%s", err, result, request.Stderr())
+			}
+		} else if err == nil || !strings.Contains(request.Stdout()+request.Stderr(), "CONFLICT") {
+			t.Fatalf("changed replay was not refused: %v stdout=%s stderr=%s", err, request.Stdout(), request.Stderr())
+		}
+		if runner.CallCount() != 2 {
+			t.Fatalf("replay repeated provider admission: calls=%d", runner.CallCount())
+		}
+	}
 }
 
 func assertContinuationRestartResult(t *testing.T, stdout string, requests []platformprocess.CommandRequest, dir string) {

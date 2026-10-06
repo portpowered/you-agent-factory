@@ -192,6 +192,11 @@ func (r *registry) reserveContinuation(
 	if err != nil {
 		return nil, false, err
 	}
+	if archived != nil {
+		if replay, err := r.readCompletedContinuationReplay(req, archived); replay != nil || err != nil {
+			return replay, false, err
+		}
+	}
 	tuple := continueTuple{
 		sourceID:    req.SourceWorkerSessionID,
 		successorID: req.SuccessorWorkerSessionID,

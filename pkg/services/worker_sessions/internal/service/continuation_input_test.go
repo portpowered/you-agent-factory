@@ -37,8 +37,8 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 			}}
 			r.logs = &LogReader{reader: reader}
 			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1"), reference: ref}
-			r.restart = store
 			want := configureArchivedContinuationCell(cell, reader, store)
+			r.restart = &retainedContinuationStore{restartRecipeStore: *store, readErr: os.ErrNotExist}
 			replay, owner, err := r.reserveContinuation(req)
 			if want != nil {
 				if !errors.Is(err, want) || replay != nil || owner || len(r.sessions) != 0 || len(r.supervisions) != 0 {
@@ -54,6 +54,59 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 				t.Fatal("historical source became a live registry session")
 			}
 		})
+	}
+}
+
+func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "opening-only", "incomplete", "scope", "attempt", "predecessor", "reference", "workspace", "model"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			_, plan, target := retainedContinuationFixture(t)
+			payload, err := encodeContinuationInput(plan, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input, err := decodeContinuationInput(payload, plan.request, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opening := openingSessionPayload(plan.request.SuccessorWorkerSessionID, plan.execution.Execution.Dispatch.DispatchID,
+				newContinuationSource(t, plan.request).clock.Now(), plan.execution.Execution, &workers.SessionLineage{
+					PredecessorWorkerSessionID: target.WorkerSessionID, PreviousAttemptID: target.ExpectedAttemptID, PreviousDispatchID: target.ExpectedAttemptID,
+				})
+			page := recordings.WorkerCapturedActivityPage{
+				Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: plan.request.SuccessorWorkerSessionID, FactorySessionID: target.FactorySessionID},
+				Health:  recordings.WorkerRecordingStatusComplete, Terminal: &recordings.WorkerRecordingTerminal{Status: "COMPLETED"},
+			}
+			configureCompletedContinuationEvidence(cell, &page, &opening)
+			draftPayload, _ := json.Marshal(opening)
+			page.Opening.Payload, _ = json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: draftPayload})
+			if got := completedContinuationMatches(page, input); got != (cell == "exact") {
+				t.Fatalf("completed capture match = %v", got)
+			}
+		})
+	}
+}
+
+func configureCompletedContinuationEvidence(cell string, page *recordings.WorkerCapturedActivityPage, opening *workers.SessionPayload) {
+	switch cell {
+	case "opening-only":
+		page.Terminal = nil
+	case "incomplete":
+		page.Health = recordings.WorkerRecordingStatusIncomplete
+	case "scope":
+		page.Catalog.FactorySessionID = "foreign"
+	case "attempt":
+		opening.AttemptID = "foreign-attempt"
+	case "predecessor":
+		opening.Lineage.PredecessorWorkerSessionID = "foreign-source"
+	case "reference":
+		opening.Continuation.ID = "foreign-reference"
+	case "workspace":
+		opening.WorkingDirectory = "foreign-workspace"
+	case "model":
+		opening.Model = "foreign-model"
 	}
 }
 
