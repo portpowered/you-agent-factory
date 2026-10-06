@@ -346,7 +346,7 @@ func newTestProvidersService(probe providerswire.CatalogProbeOperation, schedule
 		antigravity = providerswire.NewAgyCommandEffect((disabledNativeRunner{"Antigravity"}).commandEffect(), platformclock.Real{}, scheduler)
 	}
 	if codex == nil {
-		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{})
+		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{}, nil, nil)
 	}
 	if claude == nil {
 		claude = providerswire.NewClaudeEffect((disabledNativeRunner{"Claude"}).commandEffect(), platformclock.Real{})

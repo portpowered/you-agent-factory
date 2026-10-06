@@ -276,6 +276,8 @@ type Edges struct {
 	WorkersRetryRandomSource           platformrandom.Source
 	WorkersWorkstationFileSystem       platformfilesystem.ReadFileInspector
 	WorkersProviderTemporaryFileSystem platformfilesystem.TemporaryFileSystem
+	ProvidersCodexPromptFiles          providers.CodexPromptFileSystem
+	ProvidersCodexResolveHomeDirectory func() (string, error)
 
 	ScriptCommandRunner platformprocess.CommandRunner
 
@@ -765,6 +767,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkersWorkstationFileSystem != nil {
 		defaults.WorkersWorkstationFileSystem = replacements.WorkersWorkstationFileSystem
+	}
+	if replacements.ProvidersCodexPromptFiles != nil {
+		defaults.ProvidersCodexPromptFiles = replacements.ProvidersCodexPromptFiles
+	}
+	if replacements.ProvidersCodexResolveHomeDirectory != nil {
+		defaults.ProvidersCodexResolveHomeDirectory = replacements.ProvidersCodexResolveHomeDirectory
 	}
 	if replacements.WorkersProviderTemporaryFileSystem != nil {
 		defaults.WorkersProviderTemporaryFileSystem = replacements.WorkersProviderTemporaryFileSystem

@@ -73,8 +73,8 @@ type CodexEffect = executionwire.CodexEffect
 type ClaudeEffect = executionwire.ClaudeEffect
 
 // NewCodexEffect constructs one Codex command effect.
-func NewCodexEffect(runner CommandRunner, clock platformclock.Source) CodexEffect {
-	return executionwire.NewCodexEffect(runner, clock)
+func NewCodexEffect(runner CommandRunner, clock platformclock.Source, files providers.CodexPromptFileSystem, resolveHome func() (string, error)) CodexEffect {
+	return executionwire.NewCodexEffect(runner, clock, files, resolveHome)
 }
 
 // NewClaudeEffect constructs one Claude command effect.
