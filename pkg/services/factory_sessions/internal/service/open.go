@@ -327,8 +327,11 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
 	canonicalSessionIDWasProvided := opening.providedCanonicalSessionID != "" && !opening.canonicalSessionIDGenerated
+	// A JSONL header supplies the existing canonical identity, but that does
+	// not replace reconstruction of its board and retained event prefix.
+	jsonlRecording := strings.HasSuffix(strings.ToLower(opening.configured.Recordings.RecordPath), ".jsonl")
 	if opening.load.ReplayArtifact == nil && opening.resumeInput == nil &&
-		(!canonicalSessionIDWasProvided || opening.hasCurrentBoardReference) {
+		(!canonicalSessionIDWasProvided || opening.hasCurrentBoardReference || jsonlRecording) {
 		if strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" {
 			opening.boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,

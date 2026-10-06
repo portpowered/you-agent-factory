@@ -44,7 +44,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	support.WriteAgentConfig(t, boardDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
-	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	failureAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
@@ -104,7 +104,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 		invocations := 0
-		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[5:], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[5:8], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations == 1 {
 				// Simulate a pre-reference installation without altering its
 				// confirmed board or canonical recording. Future relaunches
@@ -119,6 +119,21 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			invocations++
 			return inputs
 		}, 0)
+	}) {
+		return
+	}
+	if !t.Run("PlainBoard same JSONL recording reopen", func(t *testing.T) {
+		runner.calls.Store(0)
+		dir := support.ScaffoldFactory(t, config)
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+		// Reuse the same process, public ~default identity, root and JSONL
+		// recording across three joined shutdowns, including terminal recovery.
+		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[8:11], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+			inputs := restartProbeInputs(t, dir)
+			inputs.Input.Args[len(inputs.Input.Args)-1] = filepath.Join(dir, "current-board.jsonl")
+			return inputs
+		}, 23201)
 	}) {
 		return
 	}
@@ -162,8 +177,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 11 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want eleven and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 14 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want fourteen and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }
