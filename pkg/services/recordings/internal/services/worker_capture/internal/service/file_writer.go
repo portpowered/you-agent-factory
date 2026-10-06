@@ -66,16 +66,18 @@ type recordingEntry struct {
 	operations      map[string][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
-	generation       string
-	ownerEpoch       string
-	capturedAt       map[string]time.Time
-	projection       recordings.WorkerRecordingProjection
-	records          []events.Record
-	identities       map[events.AppendIdentity]events.Record
-	summaryPositions [summaryFactCount]uint64
-	usagePositions   []uint64
+	originatingArtifact string
+	generation          string
+	ownerEpoch          string
+	capturedAt          map[string]time.Time
+	projection          recordings.WorkerRecordingProjection
+	records             []events.Record
+	identities          map[events.AppendIdentity]events.Record
+	summaryPositions    [summaryFactCount]uint64
+	usagePositions      []uint64
 }
 type workerJournalEntry struct {
+	OriginatingArtifact   string                                   `json:"originatingArtifact,omitempty"`
 	RecordingGenerationID string                                   `json:"recordingGenerationId,omitempty"`
 	OwnerEpoch            string                                   `json:"ownerEpoch,omitempty"`
 	CapturedAt            *time.Time                               `json:"capturedAt,omitempty"`
@@ -463,6 +465,7 @@ func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) erro
 
 func (session *recordingSession) acceptMetadata(delta workerJournalEntry) {
 	if len(session.records) == 1 {
+		session.originatingArtifact = delta.OriginatingArtifact
 		session.generation = delta.RecordingGenerationID
 		session.ownerEpoch = delta.OwnerEpoch
 		session.ensureLegacyIdentity()

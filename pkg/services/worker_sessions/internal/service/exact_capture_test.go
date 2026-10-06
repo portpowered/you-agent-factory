@@ -913,3 +913,29 @@ func TestT7ValidatedStructuredOutputSurvivesStreamedText(t *testing.T) {
 		})
 	}
 }
+
+type originatingArtifactRecorder struct {
+	recordings.WorkerSessionRecordingService
+	request recordings.WorkerSessionRecordingRequest
+}
+
+func (r *originatingArtifactRecorder) StartWorkerSessionRecording(_ context.Context, request recordings.WorkerSessionRecordingRequest) (recordings.WorkerSessionRecording, error) {
+	r.request = request
+	return nil, nil
+}
+
+func TestWorkerWorkAttributionCaptureRequestCarriesOriginatingArtifact(t *testing.T) {
+	t.Parallel()
+	recorder := &originatingArtifactRecorder{}
+	registry := &registry{recording: recorder}
+	request := workersessions.InvokeSessionRequest{ID: "worker-origin"}
+	request.Execution.Execution.RecordingID = "recording-origin"
+	request.Execution.Execution.FactorySessionID = "factory-origin"
+	request.Execution.Execution.OriginatingArtifact = "selected-factory.jsonl"
+	if _, err := registry.startWorkerRecording(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.request.OriginatingArtifact != request.Execution.Execution.OriginatingArtifact || recorder.request.RecordingID != "recording-origin" || recorder.request.FactorySessionID != "factory-origin" {
+		t.Fatalf("capture request = %+v", recorder.request)
+	}
+}

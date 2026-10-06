@@ -12,6 +12,7 @@ type WorkerSessionCatalogEntry struct {
 	Version               int    `json:"version"`
 	WorkerSessionID       string `json:"workerSessionId"`
 	RecordingID           string `json:"recordingId"`
+	OriginatingArtifact   string `json:"originatingArtifact,omitempty"`
 	RecordingGenerationID string `json:"recordingGenerationId"`
 	Origin                string `json:"origin"`
 	FactorySessionID      string `json:"factorySessionId,omitempty"`

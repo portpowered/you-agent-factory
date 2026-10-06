@@ -128,3 +128,7 @@ func provideRecordedSessionInventory(
 	}
 	return recordingswire.NewRecordedSessionInventory(readDir, replayInputs, logger)
 }
+
+func provideWorkerWorkAttributionReader(writer recordings.WorkerRecordingWriter, history recordingswire.HistoricalQueryOwner, root *factorysessionwire.Root) recordings.WorkerWorkAttributionReader {
+	return recordingswire.NewWorkerWorkAttributionReader(writer, history, root.CurrentBoardRecordingArtifact)
+}

@@ -336,7 +336,7 @@ func TestWorkerSessionControlRoutesPreserveActionAndIdentity(t *testing.T) {
 				Session: workersessions.Session{ID: "worker-1", State: testCase.state},
 				Action:  testCase.action, Outcome: workersessions.ControlOutcomeApplied, DispatchID: "dispatch-1",
 			}
-			handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+			handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}), zap.NewNop())
 			recorder := httptest.NewRecorder()
 			testCase.call(handler, recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker-1/"+testCase.name, nil), factoryapi.WorkerSessionID(" worker-1 "))
 
@@ -373,7 +373,7 @@ func TestWorkerSessionControlMapsStableFailures(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			service := &controlHTTPServiceFake{fakeObservationService: fakeObservationService{}, results: make(map[workersessions.ControlAction]workersessions.ControlResult), errors: make(map[workersessions.ControlAction]error)}
 			service.errors[workersessions.ControlActionCancel] = testCase.err
-			handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+			handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}), zap.NewNop())
 			recorder := httptest.NewRecorder()
 			handler.CancelWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker-1/cancel", nil), factoryapi.WorkerSessionID("worker-1"))
 			if recorder.Code != testCase.want {
@@ -403,7 +403,7 @@ func TestWorkerSessionCancelBoundaryFailureNeverReturnsApplied(t *testing.T) {
 			workersessions.ControlActionCancel: errors.New("injected cancel boundary failure"),
 		},
 	}
-	handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+	handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.CancelWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker-1/cancel", nil), factoryapi.WorkerSessionID("worker-1"))
 	if recorder.Code != http.StatusServiceUnavailable {

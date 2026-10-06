@@ -54,6 +54,7 @@ var servicesSet = wire.NewSet(
 	recordingswire.NewWorkerRestartInputStore,
 	recordingswire.NewWorkerOwnerRecoveryOperation,
 	provideWorkerRecordingReader,
+	provideWorkerWorkAttributionReader,
 	provideWorkerSessionsService,
 	provideWorkerHistorySnapshotBudget,
 	provideWorkerAttemptOpener,

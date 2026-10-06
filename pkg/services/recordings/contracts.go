@@ -563,6 +563,10 @@ type HistoricalRecordingIdentity struct {
 // HistoricalRecordingQueryRequest selects one immutable recording artifact.
 type HistoricalRecordingQueryRequest struct {
 	Recording HistoricalRecordingIdentity
+	// InferFactorySessionScope selects the source's recorded scope from this
+	// exact artifact. Captured attribution must still validate its exact Worker,
+	// dispatch and Work association before returning any name.
+	InferFactorySessionScope bool
 }
 
 // HistoricalDispatchWorkerSessionAssociation records the canonical event

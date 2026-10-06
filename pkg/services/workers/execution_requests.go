@@ -190,7 +190,9 @@ type WorkstationExecutionRequest struct {
 	FactorySessionID      string                `json:"factory_session_id,omitempty"`
 	RuntimeID             string                `json:"runtime_id,omitempty"`
 	RecordingID           string                `json:"recording_id,omitempty"`
-	GenerationID          string                `json:"generation_id,omitempty"`
+	// OriginatingArtifact is internal capture provenance, never provider input.
+	OriginatingArtifact string `json:"-"`
+	GenerationID        string `json:"generation_id,omitempty"`
 	// WorkflowContext carries the detached environment selected for this
 	// attempt when a compatibility workstation boundary forwards the request.
 	WorkflowContext             *Context                                 `json:"-"`
