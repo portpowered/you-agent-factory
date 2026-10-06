@@ -26,6 +26,16 @@ func (r *registry) forceTerminate(ctx context.Context, req workersessions.Contro
 	if ctx != nil && ctx.Err() != nil {
 		return failed, ctx.Err()
 	}
+	if err := req.Validate(); err != nil {
+		return failed, err
+	}
+	value, _ := r.stopOperations.LoadOrStore(req.RequestID, &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+	if result, found, err := r.replayForceResult(ctx, req); found {
+		return result, err
+	}
 	if err := r.validateControlTarget(req); err != nil {
 		return failed, err
 	}
@@ -39,10 +49,6 @@ func (r *registry) forceTerminate(ctx context.Context, req workersessions.Contro
 		return failed, staleControlTargetError()
 	}
 	intent := stopIntent(req, workersessions.ControlActionTerminate, target)
-	value, _ := r.stopOperations.LoadOrStore(req.RequestID, &sync.Mutex{})
-	lock := value.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
 	owned, cancel := context.WithCancelCause(controlContext(ctx))
 	timer := r.scheduler.NewTimer(forceJoinDeadline)
 	defer timer.Stop()
@@ -90,18 +96,36 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 func recoveredForceResult(record, intent recordings.WorkerControlOperationRecord, dispatchID string) (workersessions.ControlResult, error) {
 	failed := workersessions.ControlResult{Action: workersessions.ControlActionTerminate, Outcome: workersessions.ControlOutcomeFailed, DispatchID: dispatchID, Forced: true}
 	var result workersessions.ControlResult
-	if !record.SameIntent(intent) || !readCommittedStopResult(record.Result, &result) || !result.Forced ||
-		result.Action != workersessions.ControlActionTerminate || result.Session.ID != intent.Target.WorkerSessionID || result.DispatchID != dispatchID {
+	if record.Validate() != nil || !record.SameIntent(intent) || !readCommittedStopResult(record.Result, &result) || !result.Forced ||
+		result.Action != workersessions.ControlActionTerminate || result.Session.ID != intent.Target.WorkerSessionID || result.DispatchID != dispatchID || !result.Session.State.Valid() {
 		return failed, workersessions.ErrInvalidState
 	}
 	if record.Operation.Phase == "FAILED" {
-		return failed, errRuntimeAttemptControlUnavailable
+		if record.FailureCode != "STOP_FAILED" || result.Outcome != workersessions.ControlOutcomeFailed {
+			return failed, workersessions.ErrInvalidState
+		}
+		return result, errRuntimeAttemptControlUnavailable
 	}
-	if record.FailureCode != "" || (result.Outcome != workersessions.ControlOutcomeApplied && result.Outcome != workersessions.ControlOutcomeNoop && result.Outcome != workersessions.ControlOutcomeUnsupported) ||
-		(result.Outcome == workersessions.ControlOutcomeApplied && result.Session.State != workersessions.StateTerminated) {
+	if !validCompletedForceResult(record, result) {
 		return failed, workersessions.ErrInvalidState
 	}
 	return result, nil
+}
+
+func validCompletedForceResult(record recordings.WorkerControlOperationRecord, result workersessions.ControlResult) bool {
+	if record.Operation.Phase != "COMPLETED" || record.FailureCode != "" {
+		return false
+	}
+	switch result.Outcome {
+	case workersessions.ControlOutcomeApplied:
+		return result.Session.State == workersessions.StateTerminated
+	case workersessions.ControlOutcomeNoop:
+		return result.Session.Terminal()
+	case workersessions.ControlOutcomeUnsupported:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *registry) executeFrozenForce(ctx context.Context, id string, target frozenControlTarget) (workersessions.ControlResult, error) {

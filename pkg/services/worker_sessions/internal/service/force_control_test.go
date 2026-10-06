@@ -2,7 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"reflect"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -384,5 +389,200 @@ func TestForceControlFailurePreservesNaturalWorkerCompletion(t *testing.T) {
 	}
 	if len(store.records) != 2 || store.records[1].Operation.Phase != "FAILED" {
 		t.Fatal("failed kill became a committed causal success")
+	}
+}
+
+func saveForceResult(t *testing.T, r *registry, store *stopOperationStore, outcome workersessions.ControlOutcome) workersessions.ControlResult {
+	t.Helper()
+	target, err := r.freezeControlTarget("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := stopIntent(forceRequest(), workersessions.ControlActionTerminate, target)
+	if _, _, err := store.BeginWorkerControlOperation(t.Context(), intent); err != nil {
+		t.Fatal(err)
+	}
+	result := workersessions.ControlResult{Session: workersessions.Session{ID: "worker", State: workersessions.StateTerminated}, Action: workersessions.ControlActionTerminate, Forced: true, Outcome: outcome, DispatchID: "attempt"}
+	var stopErr error
+	if outcome == workersessions.ControlOutcomeFailed {
+		result.Session.State = workersessions.StateRunning
+		stopErr = errRuntimeAttemptControlUnavailable
+	}
+	if err := r.commitStopResult(t.Context(), intent, result, stopErr); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func archiveForceFixture(r *registry) *controlCaptureReader {
+	target := r.publications["worker"].capture
+	reader := &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, FactorySessionID: target.FactorySessionID,
+		RecordingGenerationID: target.RecordingGenerationID, OwnerEpoch: target.OwnerEpoch,
+	}}
+	r.logs = &LogReader{reader: reader}
+	delete(r.sessions, "worker")
+	delete(r.supervisions, "worker")
+	delete(r.publications, "worker")
+	return reader
+}
+
+func TestForceControlRecoversOriginalOutcomeAfterReplacementOrRestart(t *testing.T) {
+	t.Parallel()
+	for _, archived := range []bool{false, true} {
+		for _, outcome := range []workersessions.ControlOutcome{workersessions.ControlOutcomeApplied, workersessions.ControlOutcomeFailed} {
+			t.Run(string(outcome)+strconv.FormatBool(archived), func(t *testing.T) {
+				t.Parallel()
+				r, _, store := newDurableStopFixture(t)
+				want := saveForceResult(t, r, store, outcome)
+				replacement := newSupervision("replacement", "")
+				owned := installForceDouble(replacement, func(context.Context) (bool, error) { t.Error("replay signaled replacement"); return true, nil })
+				r.supervisions["worker"] = replacement
+				if archived {
+					archiveForceFixture(r)
+				}
+				got, err := r.Terminate(t.Context(), forceRequest())
+				if !reflect.DeepEqual(got, want) || (outcome == workersessions.ControlOutcomeApplied && err != nil) ||
+					(outcome == workersessions.ControlOutcomeFailed && !errors.Is(err, errRuntimeAttemptControlUnavailable)) || owned.calls.Load() != 0 || len(store.records) != 2 {
+					t.Fatalf("recovered outcome = %#v, %v; want %#v", got, err, want)
+				}
+			})
+		}
+	}
+}
+
+func TestForceControlRecoveryRejectsChangedTupleAndCorruptSavedResult(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"attempt", "epoch", "generation", "scope", "action", "digest", "request", "forced", "result-id", "result-state", "invalid-state", "failure", "unknown-field", "duplicate-id", "aliased-id"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			r, s, store := newDurableStopFixture(t)
+			want := saveForceResult(t, r, store, workersessions.ControlOutcomeApplied)
+			owned := installForceDouble(s, func(context.Context) (bool, error) { t.Error("corrupt replay reached effects"); return true, nil })
+			req := forceRequest()
+			corruptForceReplay(variant, &req, &want, &store.records[1])
+			got, err := r.Terminate(t.Context(), req)
+			if !errors.Is(err, workersessions.ErrInvalidState) || got.Outcome != workersessions.ControlOutcomeFailed || owned.calls.Load() != 0 || len(store.records) != 2 {
+				t.Fatalf("corrupt replay = %#v, %v", got, err)
+			}
+		})
+	}
+}
+
+func corruptForceReplay(variant string, req *workersessions.ControlRequest, result *workersessions.ControlResult, record *recordings.WorkerControlOperationRecord) {
+	switch variant {
+	case "attempt":
+		req.ExpectedAttemptID = "replacement"
+	case "epoch":
+		record.Target.OwnerEpoch = "replacement"
+	case "generation":
+		record.Target.RecordingGenerationID = "replacement"
+	case "scope":
+		record.Target.FactorySessionID = "another-factory"
+	case "action":
+		record.Operation.Action = "terminate"
+	case "digest":
+		record.Operation.InputDigest = strings.Repeat("0", 64)
+	case "request":
+		record.Operation.RequestID = "another-request"
+	case "failure":
+		record.FailureCode = "STOP_FAILED"
+	}
+	corruptForceReplayPayload(variant, result, record)
+}
+
+func corruptForceReplayPayload(variant string, result *workersessions.ControlResult, record *recordings.WorkerControlOperationRecord) {
+	switch variant {
+	case "forced":
+		result.Forced = false
+	case "result-id":
+		result.Session.ID = "another-worker"
+	case "result-state":
+		result.Session.State = workersessions.StateRunning
+	case "invalid-state":
+		result.Session.State = "PRIVATE_STATE"
+	}
+	if variant == "forced" || variant == "result-id" || variant == "result-state" || variant == "invalid-state" {
+		record.Result, _ = json.Marshal(result)
+	}
+	switch variant {
+	case "unknown-field":
+		record.Result = append([]byte(`{"private":"secret",`), record.Result[1:]...)
+	case "duplicate-id":
+		record.Result = []byte(strings.Replace(string(record.Result), `"ID":`, `"ID":"foreign","ID":`, 1))
+	case "aliased-id":
+		record.Result = []byte(strings.Replace(string(record.Result), `"ID":`, `"id":`, 1))
+	}
+}
+
+func TestForceControlPendingIntentNeedsItsOriginalLiveCapability(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"live", "replaced", "archived"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			r, s, store := newDurableStopFixture(t)
+			t.Cleanup(s.signalDone)
+			target, _ := r.freezeControlTarget("worker")
+			intent := stopIntent(forceRequest(), workersessions.ControlActionTerminate, target)
+			if _, _, err := store.BeginWorkerControlOperation(t.Context(), intent); err != nil {
+				t.Fatal(err)
+			}
+			owned := installForceDouble(s, func(ctx context.Context) (bool, error) {
+				go r.completeSupervision(context.WithoutCancel(ctx), "worker", s, failedForceDispatch(), errors.New("signal exit"))
+				return true, nil
+			})
+			switch variant {
+			case "replaced":
+				s.dispatchID = "replacement"
+			case "archived":
+				archiveForceFixture(r)
+			}
+			result, err := r.Terminate(t.Context(), forceRequest())
+			if variant == "live" {
+				if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || owned.calls.Load() != 1 || len(store.records) != 2 {
+					t.Fatalf("live pending force = %#v, %v", result, err)
+				}
+			} else if !errors.Is(err, workersessions.ErrInvalidState) || result.Outcome != workersessions.ControlOutcomeFailed || owned.calls.Load() != 0 || len(store.records) != 1 {
+				t.Fatalf("ownerless pending force = %#v, %v", result, err)
+			}
+		})
+	}
+}
+
+func TestForceControlArchivedRecoveryChecksSelectedCaptureAndScope(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"matching", "generation", "epoch", "scope", "missing", "unreadable"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			r, _, store := newDurableStopFixture(t)
+			r.publications["worker"].capture.FactorySessionID = "factory"
+			want := saveForceResult(t, r, store, workersessions.ControlOutcomeApplied)
+			reader := archiveForceFixture(r)
+			req := forceRequest()
+			req.FactorySessionID = "factory"
+			switch variant {
+			case "generation":
+				reader.entry.RecordingGenerationID = "new-generation"
+			case "epoch":
+				reader.entry.OwnerEpoch = "new-owner"
+			case "scope":
+				req.FactorySessionID = "other-factory"
+			case "missing":
+				reader.err = os.ErrNotExist
+			case "unreadable":
+				reader.err = errors.New("private-journal-path")
+			}
+			got, err := r.Terminate(t.Context(), req)
+			if variant == "matching" {
+				if err != nil || !reflect.DeepEqual(got, want) {
+					t.Fatalf("archived scoped result = %#v, %v", got, err)
+				}
+			} else if err == nil || got.Outcome != workersessions.ControlOutcomeFailed || strings.Contains(err.Error(), "private-journal-path") {
+				t.Fatalf("archived altered capture = %#v, %v", got, err)
+			}
+			if len(store.records) != 2 || len(r.sessions) != 0 {
+				t.Fatal("archived recovery mutated history or reconstructed execution")
+			}
+		})
 	}
 }

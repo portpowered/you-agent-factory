@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,17 @@ type stopOperationStore struct {
 	advanceErr error
 	records    []recordings.WorkerControlOperationRecord
 	failures   []recordings.WorkerRecordingFailure
+}
+
+func (s *stopOperationStore) LoadWorkerControlOperation(_ context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	if len(s.records) == 0 {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	record := s.records[len(s.records)-1]
+	if interruptOperationKey(record) != key {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	return record.Detached(), nil
 }
 
 func (s *stopOperationStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
