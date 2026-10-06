@@ -2647,3 +2647,22 @@ system), 68 packages, 742 results, 740 passes and two skips. Peak single-process
 RSS is 4,034,972 KiB (about 3.85 GiB). This is a successful changed-source local
 sample, not the hosted three-minute checkpoint; an identical-source warm repeat
 and a conflict-only rebase against current main follow.
+
+The identical-source archive-warm repeat also passes without retries, but takes
+**165.17s supervisor / 159.151s coverage invocation** and **486.04s aggregate CPU**
+(379.22 user + 106.82 system). It has no compiler actions and 28 links. Linking
+uses 48.734 CPU seconds with 47.818s active wall time; the previous successful
+sample uses 36.578 linker CPU seconds with 32.122s active wall time. Successful
+expanded-batch samples therefore range **129.01–165.17s**. This variance prevents
+claiming a consistent suite-wide speedup from one favorable local sample, even
+though four additional package binaries are eliminated and eighteen repeated
+customer host initializations are removed.
+
+GitHub subsequently reports a content conflict. The candidate is rebased against
+current main, preserving its additional explicit home/model-cache isolation in
+MCP Protocol and Worker Inference alongside the teardown hooks. The obsolete
+legacy-log helper remains removed; current-writer incomplete/damaged recovery
+helpers retain those customer outcomes. Current main also changes runtime
+construction/opening, so the older private measurements cannot establish the
+rebased candidate's latency. Scoped repository lint on the rebased tree reports
+zero issues; exact-source Linux validation and hosted checks are required next.
