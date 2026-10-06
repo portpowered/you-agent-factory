@@ -104,6 +104,40 @@ func TestCurrentBoardRecordingRequiresCanonicalRepositoryIdentity(t *testing.T) 
 	}
 }
 
+func TestCurrentBoardRecordingRejectsForeignContinuation(t *testing.T) {
+	t.Parallel()
+	directory := filepath.Join(t.TempDir(), "factory")
+	request := func(directory string) factorydefinitions.FactoryEvent {
+		payload, err := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": directory}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return factorydefinitions.FactoryEvent{Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: payload}
+	}
+	for _, tc := range []struct {
+		name   string
+		events []factorydefinitions.FactoryEvent
+		valid  bool
+	}{
+		{"same repository continuation", []factorydefinitions.FactoryEvent{request(directory), request(directory)}, true},
+		{"foreign continuation", []factorydefinitions.FactoryEvent{request(directory), request(directory + "-sibling")}, false},
+		{"foreign origin", []factorydefinitions.FactoryEvent{request(directory + "-sibling"), request(directory)}, false},
+		{"missing continuation identity", []factorydefinitions.FactoryEvent{request(directory), request("")}, false},
+		{"malformed continuation", []factorydefinitions.FactoryEvent{request(directory), {Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: json.RawMessage(`{"private":`)}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateCurrentBoardFactoryDirectory(tc.events, directory)
+			if (err == nil) != tc.valid {
+				t.Fatalf("continuation validation = %v, want valid=%v", err, tc.valid)
+			}
+			if err != nil && strings.Contains(err.Error(), "private") {
+				t.Fatal("repository diagnostic exposed event content")
+			}
+		})
+	}
+}
+
 func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"selected", "fresh", "legacy requires history", "read failure", "explicit", "batch", "peer", "resume", "replay"} {

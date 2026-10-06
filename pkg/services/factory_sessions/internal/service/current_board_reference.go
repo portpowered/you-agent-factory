@@ -20,6 +20,7 @@ type currentBoardReferencePersistence interface {
 // target. Validate the canonical recording's own repository identity before
 // any runtime or writer opens it.
 func validateCurrentBoardFactoryDirectory(events []factorydefinitions.FactoryEvent, directory string) error {
+	found := false
 	for _, event := range events {
 		if event.Type != factorydefinitions.FactoryEventTypeRunRequest {
 			continue
@@ -34,6 +35,9 @@ func validateCurrentBoardFactoryDirectory(events []factorydefinitions.FactoryEve
 			filepath.Clean(payload.Factory.Directory) != filepath.Clean(directory) {
 			return fmt.Errorf("selected recording belongs to another Factory directory or has no repository identity")
 		}
+		found = true
+	}
+	if found {
 		return nil
 	}
 	return fmt.Errorf("selected recording has no canonical Factory identity")
