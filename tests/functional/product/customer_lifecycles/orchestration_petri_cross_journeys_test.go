@@ -3,10 +3,8 @@ package customer_lifecycles_test
 import "testing"
 
 // TestFactorySessionLifecycleParityJourneys owns its immutable fixture until all customer scenarios finish.
-func TestFactorySessionLifecycleParityJourneys(t *testing.T) {
+func runFactorySessionLifecycleParityJourneys(t *testing.T) {
 	t.Parallel()
-	resetorchestrationpetricross2State()
-	initializeOrchestrationpetricrossFixture(t)
 	t.Run("TestCrossEmptyFactorySessionHasZeroWorkAndLeavesHostUsable", testOrchestrationpetricrossCrossEmptyFactorySessionHasZeroWorkAndLeavesHostUsable)
 	t.Run("TestCrossMalformedFactoryOpenReturnsValidationAndNoSessionRoute", testOrchestrationpetricrossCrossMalformedFactoryOpenReturnsValidationAndNoSessionRoute)
 	t.Run("TestCrossExplicitSessionsKeepKeyedLifecycleAndStatusState", testOrchestrationpetricrossCrossExplicitSessionsKeepKeyedLifecycleAndStatusState)

@@ -5,22 +5,24 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest completed same-source hosted measurements are **241s** with a prefix
-compiler-cache restore and **212s** with an exact cache hit. The exact-hit run
-uses **160.286s** for the coverage invocation, zero compiler commands and 21
-linker commands. Both pass all 68 packages and 752 results without retries.
-The previously merged warm three-minute checkpoint remains historical evidence;
-the current two-minute checkpoint is **unmet**.
+The latest published source, `d3b757b530`, passes the complete hosted job in
+**228s / 168.592s coverage** with one recovered exact-target cancellation
+failure. Its identical-head rerun passes without retries in **270s / 176.798s
+coverage**. The rerun restores an exact compiler archive but still executes
+**363 compiler commands and 21 links**; an exact cache key does not imply a
+complete warm build. Both cover 68 packages / 746 results. These are complete
+workflow successes, including backend lint. The two-minute checkpoint remains
+**unmet**; the previously merged warm three-minute checkpoint is historical.
 
-The next published candidate shares one Work submission host across three
-isolated Factory Sessions, retaining 13 customer cases. A paired native-binary
-comparison across ten repetitions per version reduces aggregate CPU from
-10.298s to 6.414s (**37.7%**). Aggregate wall time rises from 6.660s to 7.762s;
-this proves a compute reduction, not a latency improvement. Its changed-source hosted
-measurement passes in **229s** complete / **175.035s** coverage, with 110
-compiler commands, 21 links and no retries. Local full-lane validation passes 68 packages / 750
-results; overlapping native validation makes that run unsuitable for latency
-comparison.
+The next candidate shares one host across lifecycle, dispatch and eligibility
+journeys, retaining all 31 journey selectors with isolated Factory Sessions,
+command routes and owned home/model storage. Six native repetitions per version
+use **36.6% less CPU / 5.8% less wall**. Removing a test-framework subprocess
+probe permits concurrency to join the monolith without weakening its classifier;
+that package uses **41.7% less CPU / 14.1% less wall** across six repetitions.
+These targeted comparisons exclude build time and do not predict hosted totals.
+A full local four-CPU validation passes 68 packages / 744 results without retries
+in **165.72s supervisor / 159.276s coverage**, using 556.32s aggregate CPU.
 
 The current runtime CPU profile puts repeated system initialization on the
 critical optimization path: InitializeSystem accounts for 262.56s cumulative
@@ -3297,3 +3299,107 @@ Factory validation/flatten errors pass, as do retained localized metadata,
 canonical structured JSON/YAML examples, snapshot rejection and invocation-help
 component proofs. Hosted CI still must validate the new source and deadcode
 inventory. The last measured hosted source remains ce93 at 229s.
+
+## Share lifecycle, dispatch and eligibility hosts
+
+Three compatible customer journey groups now share one root-built host under
+TestFactorySessionRuntimeJourneys. Each group retains its own command router,
+scenario Factory directory, explicit Factory Session and causal gates. The
+parent owns host shutdown after all parallel groups and their children finish;
+group cleanup releases only its routes and sessions. Home, workflow storage,
+Factory Session storage and model cache belong to this host. Remove redundant
+bootstrap definitions and two separate process/start/stop implementations.
+All 31 existing journey selectors and their nested cases remain.
+
+Eligibility previously captured internal FactoryDispatchRecord values and
+compared joined Work IDs, ticks and counts. Its existing public Factory Event
+assertions already prove one joined dispatch with exactly the two requested
+Work IDs and causal producer/relationship/join order. Keep those assertions and
+remove the duplicate internal recorder. Validation rejects malformed definitions
+through HTTP 400 with diagnostics and no live session; internal recorder counts
+are unnecessary for those failures.
+
+Four-CPU native paired execution (baseline, candidate, candidate, baseline),
+three repetitions per command, all pass:
+
+| Scope | Baseline CPU | Candidate CPU | Baseline wall | Candidate wall |
+| --- | ---: | ---: | ---: | ---: |
+| Lifecycle + dispatch, six repetitions each | 15.200s | 10.676s | 28.381s | 26.011s |
+| Lifecycle + dispatch + eligibility, six repetitions each | 29.506s | 18.700s | 32.162s | 30.288s |
+
+The final three-group candidate uses **36.6% less aggregate CPU** and **5.8%
+less aggregate elapsed time** in this targeted comparison. Compilation is
+excluded; no other local CPU-heavy validation overlapped these measurements.
+This is not coverage-instrumented whole-job evidence. The two-group intermediate
+also saved 29.8% CPU / 8.4% wall; it does not establish a stronger final gain.
+Evidence: .artifacts/latency-audit/runtime-session-host-three-groups.
+
+## Remove test-framework forced-cleanup subprocess
+
+Remove the concurrency CC-14 cell which deliberately fails a subprocess of the
+test executable and asserts harness process/port/root cleanup. It does not
+invoke a customer CLI, REST or MCP operation. Retain customer capacity,
+concurrency, exact-target cancellation, peer isolation, recovery, timeout,
+idempotency and ordering scenarios and their test-owned cleanup. The causal
+channel helper used by admitted-Work cancellation stays with the controlled
+runner. The assertion ledger records the classification/removal.
+
+Paired native execution, six repetitions per version, all pass. CPU falls from
+**7.207s to 4.200s (41.7%)**, and wall from **9.629s to 8.275s (14.1%)**. No
+local CPU-heavy validation overlaps the timed commands. Removing executable
+self-inspection also permits this package to join the existing monolith through
+its unchanged classifier; do not relax native-binary exclusions.
+Evidence: .artifacts/latency-audit/concurrency-customer-only-paired.
+
+## Hosted cleanup measurement at d3b757b530
+
+Hosted job 112154415136 passes **746 results / 68 packages** in
+07:18:51–07:22:39 UTC on 2026-10-06, **228s complete / 168.592s coverage**.
+It restores the preceding ce93 compiler archive, executes 186 compiler commands
+and 41 links, and records one same-head retry for
+TestConcurrencySharedProcess/Cancel/CC-05. The first run returns HTTP 503 for
+one concurrent exact-target cancel; retry passes. The customer assertion remains
+in place. This is a real defect to investigate, not a no-retry checkpoint or
+proof that adding a wait fixes cancellation. Both paired concurrency versions
+above pass without retries, so they do not reproduce or resolve this defect.
+The two-minute target remains unmet. The entire workflow, including hosted lint, subsequently passes.
+Evidence: .artifacts/latency-audit/pr2923-customer-cleanup-hosted.
+
+## Exact-head hosted cleanup rerun and full shared-host validation
+
+The same d3 source rerun, job 112160465716, finishes successfully at
+07:35:52–07:40:22 UTC on October 6: **270s complete / 176.798s coverage**.
+It accounts for 68 packages / 746 results, 744 pass and two skip, with no raw
+failures or retries. Despite an exact primary compiler archive hit, the coverage
+invocation executes **363 compiler commands and 21 links**. Setup lasts about
+72s before coverage starts; distinguish that overhead from test execution.
+This result does not validate the unpublished shared runtime host. Evidence:
+.artifacts/latency-audit/pr2923-customer-cleanup-warm-hosted.
+
+The combined shared-host and concurrency-cleanup candidate passes the full
+four-CPU Linux supervisor in **165.72s / 159.276s coverage**, 68 packages / 744
+results, 742 pass and two skip, without retries. All existing coverage gates,
+scenario decisions and quarantine checks remain enabled. Aggregate CPU is
+**556.32s** (458.95s user / 97.37s kernel). Tooltimer records six compiler
+commands and 23 supervisor-wide links, including tool builds; linker CPU totals
+34.38s, with 29.65s union elapsed activity. Do not sum overlapping link elapsed
+times into critical-path wall. No other local CPU-heavy work overlaps this run.
+Evidence: .artifacts/latency-audit/shared-runtime-host-customer-only.
+
+Factory definition flatten/expand now reuses one test-owned environment across
+its three CLI calls instead of constructing three isolated homes for one
+customer journey. Model storage remains owned by the test. Three focused Linux
+repetitions pass; the scoped repository linter reports zero issues. The earlier
+full 165.72s run precedes this final environment simplification.
+
+The final source, including the flatten/expand environment simplification,
+passes a second full four-CPU run: **185.36s supervisor / 178.845s coverage**,
+68 packages / 744 results, 742 pass and two skip, no retries. CPU totals
+**620.79s** (513.95s user / 106.84s kernel). It executes two compiler commands
+and 23 supervisor-wide links, 34.94s linker CPU / 35.28s union linker activity.
+The unchanged classifier now combines **35 packages / 549 original tests**,
+with 19 native exclusions. The 160 reviewed scenario decisions remain current.
+This full-run variability (165.72s versus 185.36s) prevents a claim of consistent
+whole-job latency reduction from these targeted changes. Keep the paired
+package measurements separate from complete-lane observations. Evidence:
+.artifacts/latency-audit/shared-runtime-host-final.

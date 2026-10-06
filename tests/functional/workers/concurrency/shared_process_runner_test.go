@@ -442,3 +442,12 @@ func (generator *concurrencyIdentityGenerator) nextSessionID() string {
 func (generator *concurrencyIdentityGenerator) nextResponseEventID() string {
 	return fmt.Sprintf("concurrency-shared-response-event-%d", generator.responseEvent.Add(1))
 }
+
+func channelClosed(channel <-chan struct{}) bool {
+	select {
+	case <-channel:
+		return true
+	default:
+		return false
+	}
+}
