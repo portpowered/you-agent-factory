@@ -12,13 +12,17 @@ passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
 below. The three- and two-minute hosted merge checkpoints remain outstanding.
 
-Latest head `ec85aae468` passes all 68 packages / 760 results with no retries.
-The changed-source hosted job takes **246s complete / 194.783s supervisor /
-184.590s coverage invocation**, with 110 compiler actions and 25 links. Its
-identical-head rerun hits the archive cache exactly: **223s complete / 185.458s
-supervisor / 167.054s coverage invocation**, zero compiler actions and 25 links.
-The three-minute complete-job checkpoint remains outstanding. These current
-runtime results supersede pre-rebase latency for the merge decision.
+Latest measured head `f5d203cad5` passes all 68 packages / 758 results with
+no retries. The [hosted functional job](https://github.com/portpowered/you-agent-factory/actions/runs/37416481644/job/112116898954)
+takes **226s complete / 161.028s coverage invocation**, with 64 compiler actions
+and 22 links. It combines 33 compatible package groups / 491 tests. Its identical-head warm-cache rerun passes in **155s complete / 111.277s
+coverage**, zero compiler actions and 22 links, with all 758 results and no
+retries. This demonstrates the three-minute checkpoint on a warm cache; the
+changed-source 226s sample remains material. The earlier identical
+`ec85aae468` archive-cache rerun took 223s complete / 167.054s coverage, zero
+compiler actions and 25 links. Changing candidates and runner variability do
+not establish a consistent total-job speedup from the last three links removed.
+These current-runtime results supersede pre-rebase latency for merging.
 
 The last pre-rebase hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
 
@@ -2827,3 +2831,68 @@ also resolves through that helper. Both packages pass three native repetitions
 (37.731s and 10.947s), and repository lint is clean. Their cwd/embed exclusions
 can therefore be removed by ordinary source discovery without loosening any
 consolidation classifier. The next combined lane verifies those cases together.
+
+## Current-runtime CPU profile and admission consolidation
+
+A successful full private Linux diagnostic run at `f5d203cad5` takes 173.17s
+elapsed and 527.62 aggregate CPU seconds (413.37 user / 114.25 system), including
+profiling overhead. The combined binary takes 112.91s elapsed / 325.76 CPU;
+its profile contains 318.15 sampled CPU seconds. All 68 packages / 758 selected
+results pass with no retries. This is diagnostic evidence, not an unprofiled
+hosted checkpoint. Labels cover 289.32s (90.94%) of sampled CPU; long-lived
+fixture goroutines inherit the creator's label, so individual test attribution
+can include shared background work.
+
+| Combined package | Sampled CPU seconds |
+| --- | ---: |
+| Product customer journeys | 56.37 |
+| Product customer lifecycles | 55.80 |
+| Work admission | 24.82 |
+| Product CLI/REST journeys | 23.66 |
+| Factory execution | 16.93 |
+| CLI customer commands | 14.61 |
+| Runtime metrics | 11.46 |
+| CLI invocation | 9.69 |
+| MCP Worker Sessions | 8.71 |
+| Session isolation and recovery | 8.10 |
+
+System initialization has 193.30 cumulative sampled CPU seconds (60.76% of the
+combined binary); packaged installation has 192.50, managed Factory creation
+169.55, layout preparation 116.76, JSON unmarshalling 122.05, and configuration
+expansion 86.94. These nested cumulative values overlap and must not be summed.
+Repeated fresh-home installation and definition expansion are the primary next
+CPU targets. Sharing already initialized hosts with explicit sessions preserves
+customer behavior without substituting internal initialization implementations.
+
+The unprofiled 33-group private sample takes 207.52s complete / 196.623s
+coverage, 662.78 CPU seconds, six compiler actions and 25 timed linker processes
+(56.834 CPU seconds / 49.684s active intervals). The preceding 31-group sample
+takes 147.18s complete. Fewer binaries did not yield a consistent measured wall
+improvement on this loaded local host. Claude and Restart contribute only 5.50
+sampled CPU seconds together; their inclusion alone does not explain the
+observed total-run variance.
+
+The next change groups four batch admission journeys behind one initialized
+host: duplicate-name rejection, explicit Work-ID conflicts and exact replay,
+payload-limit diagnostics across file/stdin/inline/dry-run inputs, and relation
+endpoint validation. Every child opens and closes its own explicit Factory
+Session and factory directory. CLI submissions, Work lists and retained events
+all name that session. No public assertion is removed. Three native repetitions
+pass in 7.755s; full-suite and hosted measurements follow separately. Four
+former top-level tests become four named children of one parent, reducing the
+selected top-level inventory by three without removing scenarios.
+
+The same-head hosted warm-cache rerun of `f5d203cad5` completes successfully in
+155s (05:18:26–05:21:01 UTC), with 111.277s coverage, zero compiler actions,
+22 links and an exact archive-cache hit. All 68 packages / 758 results pass with
+no retries. PR #2905 is queued for merge at this validated head. This meets the
+180s complete-job checkpoint for a warm cache; it does not establish a cold
+build guarantee or the 120s checkpoint.
+
+The admission consolidation passes the full private Linux supervisor in
+179.56s. Its selected inventory is 755 results (four former parents become one
+parent), with every customer scenario retained. The source still combines 33
+compatible packages; their top-level registration count becomes 488. Host-load
+variance remains substantial, so this one run is validation rather than a
+claimed throughput improvement. Focused native repetitions and repository lint
+also pass.

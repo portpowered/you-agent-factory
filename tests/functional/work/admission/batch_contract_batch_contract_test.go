@@ -55,13 +55,12 @@ func TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation(t *testing.T) {
 // live structured mode, and topology-independent dry-run validation. The
 // invalid live requests are rejected before the Factory Session creates any
 // Work, while dry-run never contacts its unreachable server.
-func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T) {
+func runCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, duplicateSubmitBatchFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-	})
-	defer server.Stop(t)
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
 
 	process := buildBatchContractProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
@@ -82,9 +81,9 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 		{name: "structured", json: true, requestID: "batch-duplicate-structured"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"you", "--server", server.URL(), "submit", "batch"}
+			args := []string{"you", "--server", server.URL(), "submit", "batch", "--session", sessionID}
 			if test.json {
-				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch"}
+				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch", "--session", sessionID}
 			}
 			args = append(args, duplicateBatchJSON(test.requestID))
 			stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, args)
@@ -101,7 +100,7 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 				t.Fatalf("duplicate-name submission emitted success stdout: %q", stdout)
 			}
 
-			listed := support.ListDefaultSessionWork(t, server.URL())
+			listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(server.URL(), sessionID, "/work"))
 			if len(listed.Results) != 0 {
 				t.Fatalf("duplicate-name submission admitted partial Work: %#v", listed.Results)
 			}
@@ -110,7 +109,7 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 
 	stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, []string{
 		"you", "--server", "http://127.0.0.1:1", "--json",
-		"submit", "batch", "--dry-run", duplicateBatchJSON("batch-duplicate-dry-run"),
+		"submit", "batch", "--session", sessionID, "--dry-run", duplicateBatchJSON("batch-duplicate-dry-run"),
 	})
 	if err == nil {
 		t.Fatal("duplicate-name dry-run succeeded")
@@ -131,17 +130,13 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 // rejected through both the public HTTP and CLI admission boundaries. The
 // Work list and retained Factory Event stream remain value-equivalent
 // after each conflict attempt.
-func TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *testing.T) {
+func runCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
 
 	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
 	sessionID := opened.Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
 	const (
 		workID         = "work-explicit-session-conflict"
 		firstRequestID = "request-explicit-session-first"
@@ -189,14 +184,12 @@ func TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *te
 // public batch input path preserves the Work-owned size diagnostic, including
 // the local dry-run path. A rejected batch emits no success acknowledgement and
 // does not admit partial Work into the Factory Session.
-func TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T) {
+func runCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
 
 	process := buildBatchContractProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
@@ -225,7 +218,7 @@ func TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T) 
 			if test.json {
 				args = append(args, "--json")
 			}
-			args = append(args, "submit", "batch")
+			args = append(args, "submit", "batch", "--session", sessionID)
 
 			stdin := ""
 			stdinIsTTY := true
@@ -277,7 +270,7 @@ func TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T) 
 		})
 	}
 
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(server.URL(), sessionID, "/work"))
 	if len(listed.Results) != 0 {
 		t.Fatalf("oversized batch submissions admitted Work: %#v", listed.Results)
 	}
@@ -354,36 +347,33 @@ func TestCLISubmitBatchAtAndBelowLimitDispatchThroughProviderCommandRunner(t *te
 // valid batch preserves both supported relation types; missing source/target
 // endpoints are rejected during live admission, while dry-run accepts the
 // shape because board lookup is only available to the live session.
-func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T) {
+func runCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
-	runner := testutil.NewProviderCommandRunner()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-		Edges:      serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	defer server.Stop(t)
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
 
 	process := buildBatchContractProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 
 	validStdout := executeSubmitBatchCLI(t, process, []string{
 		"you", "--server", server.URL(),
-		"submit", "batch", validRelationsBatchJSON(),
+		"submit", "batch", "--session", sessionID, validRelationsBatchJSON(),
 	})
 	if !strings.Contains(validStdout, "work count: 3") {
 		t.Fatalf("valid relation batch output missing work count:\n%s", validStdout)
 	}
 
-	runRelationEndpointCases(t, process, server.URL())
+	runRelationEndpointCases(t, process, server.URL(), sessionID)
 
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(server.URL(), sessionID, "/work"))
 	if len(listed.Results) != 3 {
 		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
 	}
 }
 
-func runRelationEndpointCases(t *testing.T, process support.Process, serverURL string) {
+func runRelationEndpointCases(t *testing.T, process support.Process, serverURL, sessionID string) {
 	t.Helper()
 	for _, test := range []struct {
 		name        string
@@ -429,12 +419,12 @@ func runRelationEndpointCases(t *testing.T, process support.Process, serverURL s
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"you", "--server", serverURL, "submit", "batch"}
+			args := []string{"you", "--server", serverURL, "submit", "batch", "--session", sessionID}
 			if test.json {
-				args = []string{"you", "--server", serverURL, "--json", "submit", "batch"}
+				args = []string{"you", "--server", serverURL, "--json", "submit", "batch", "--session", sessionID}
 			}
 			if test.dryRun {
-				args = []string{"you", "--server", "http://127.0.0.1:1", "--json", "submit", "batch", "--dry-run"}
+				args = []string{"you", "--server", "http://127.0.0.1:1", "--json", "submit", "batch", "--session", sessionID, "--dry-run"}
 			}
 			args = append(args, test.batch)
 			stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, args)
@@ -593,4 +583,18 @@ func TestCLISubmitBatchAcceptsInputsAndRejectsInvalidRequests(t *testing.T) {
 			t.Fatalf("submit batch dry-run output missing %q: %q", marker, stdout)
 		}
 	}
+}
+
+// TestCLISubmitBatchAdmissionJourneys shares one initialized host. Each case
+// owns an explicit Factory Session and checks its own Work and retained events.
+func TestCLISubmitBatchAdmissionJourneys(t *testing.T) {
+	t.Parallel()
+	idle := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: idle, WaitForServiceModeRuntime: true,
+	})
+	t.Run("DuplicateNames", func(t *testing.T) { runCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t, server) })
+	t.Run("ExplicitWorkIDConflict", func(t *testing.T) { runCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t, server) })
+	t.Run("OversizedPayload", func(t *testing.T) { runCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t, server) })
+	t.Run("RelationEndpoints", func(t *testing.T) { runCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t, server) })
 }
