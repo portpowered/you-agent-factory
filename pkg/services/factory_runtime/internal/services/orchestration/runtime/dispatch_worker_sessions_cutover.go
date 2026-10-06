@@ -311,6 +311,12 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 			continue
 		}
 		observation := recordedObservationFromFact(fact, s.clock)
+		if observation.State == workersessions.StateCanceled {
+			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+			if err != nil {
+				return nil, false, err
+			}
+		}
 		if fact.provider != nil {
 			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
 			if err != nil {

@@ -3,8 +3,12 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -15,6 +19,15 @@ func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx contex
 	observation.TokenUsage = nil
 	if s.factorySessionID != "" {
 		observation.FactorySessionID = s.factorySessionID
+	}
+	if observation.State == workersessions.StateCanceled && s.Service != nil {
+		archived, found, err := archivedFactoryWorker(ctx, s.Service, observation.FactorySessionID, observation.WorkerSessionID)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		if found && archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
+			observation = archived
+		}
 	}
 	if s.recordingReader == nil || s.recordingID == "" {
 		return observation, nil
@@ -63,4 +76,39 @@ func capturedFactoryWorkerUsage(snapshot recordings.WorkerRecordingSnapshot, id 
 		break
 	}
 	return usage
+}
+
+// Replay never reacquires the recorded owner. Recover only the exact committed
+// kill disposition from Worker Sessions' archived observation boundary.
+func (cfg *runtimeConfig) recoverReplayForce(ctx context.Context, dispatch work.WorkDispatch) error {
+	resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver)
+	if !ok || cfg.workerSessions == nil {
+		return nil
+	}
+	id, found := resolver.WorkerSessionIDForDispatch(dispatch)
+	if !found {
+		return nil
+	}
+	observation, found, err := archivedFactoryWorker(ctx, cfg.workerSessions, canonicalSessionIDFromFactoryConfig(cfg), id)
+	if err != nil {
+		return fmt.Errorf("recover recorded force disposition for dispatch %s: %w", dispatch.DispatchID, err)
+	}
+	if found && observation.State == workersessions.StateTerminated && observation.TerminalCause != nil && *observation.TerminalCause == "OPERATOR_KILL" {
+		cfg.attempts.recordConfirmedForce(dispatch.DispatchID)
+	}
+	return nil
+}
+
+func archivedFactoryWorker(ctx context.Context, service workersessions.Service, sessionID, workerID string) (workersessions.Observation, bool, error) {
+	observation, err := service.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID, FactorySessionID: sessionID})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return workersessions.Observation{}, false, nil
+	}
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	if observation.WorkerSessionID != workerID || observation.FactorySessionID != sessionID {
+		return workersessions.Observation{}, false, workersessions.ErrObservationProjectionUnavailable
+	}
+	return observation.Clone(), true, nil
 }

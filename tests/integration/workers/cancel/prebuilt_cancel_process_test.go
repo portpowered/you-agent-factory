@@ -714,6 +714,57 @@ func TestPrebuiltWorkerSessionForceFactoryWorkRemainsFailed(t *testing.T) {
 	t.Log("PASS: Factory force joined the tree, left input Work at FAILED despite onFailure:init, and launched no retry")
 }
 
+func TestPrebuiltWorkerSessionForceTreeAndReplay(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("owned force capability requires Windows Job or Linux retained leader")
+	}
+	t.Parallel()
+	binary := resolveCancelArtifact(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 110*time.Second)
+	defer cancel()
+	fixture := writeNativeForceFixture(t, "codex")
+	writeNativeForceFactory(t, fixture)
+	hash, err := fileSHA256(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("artifact=%s sha256=%s OS=%s/%s fixture=factory-force-disposition-v1", binary, hash, runtime.GOOS, runtime.GOARCH)
+	daemon := startCancelDaemon(t, ctx, binary, fixture)
+	session := waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
+	workID := submitCancelWork(t, ctx, fixture.serverURL, session, "source")
+	source := waitForRunningWorkerSession(t, ctx, fixture.serverURL, session, workID, daemon)
+	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "source")
+	registerFailedTreeCleanup(t, tree)
+	assertObservedTreeAncestry(t, tree)
+	result := forceNativeFixture(t, ctx, binary, fixture, source)
+	if present, err := processPIDsPresent(tree.PIDs); err != nil || len(present) != 0 {
+		t.Fatalf("Factory force returned before tree join: present=%v error=%v", present, err)
+	}
+	assertForcedNativeArchive(t, ctx, fixture, source)
+	assertFactoryForceDispatch(t, ctx, fixture, session, source)
+	boardWork := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	if boardWork.State == nil || boardWork.State.Name != "failed" || boardWork.State.Type != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("forced Work state = %+v, want inspectable FAILED disposition", boardWork.State)
+	}
+	assertNativeLaunchCount(t, fixture, 1)
+	stopCancelDaemon(t, binary, fixture, daemon)
+	daemon = startCancelDaemon(t, ctx, binary, fixture, session)
+	// Replay hosts the recorded session, rather than admitting a new default.
+	// Its retained response is the readiness gate for that exact session.
+	assertFactoryForceDispatch(t, ctx, fixture, session, source)
+	assertForcedNativeArchive(t, ctx, fixture, source)
+	replayedWork := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	if replayedWork.State == nil || replayedWork.State.Name != "failed" || replayedWork.State.Type != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("replayed forced Work state = %+v, want inspectable FAILED disposition", replayedWork.State)
+	}
+	if retry := forceNativeFixture(t, ctx, binary, fixture, source); !reflect.DeepEqual(result, retry) {
+		t.Fatalf("Factory replay retry changed: original=%+v retry=%+v", result, retry)
+	}
+	stopCancelDaemon(t, binary, fixture, daemon)
+	assertNativeLaunchCount(t, fixture, 1)
+	t.Log("PASS: Factory force joined the tree; FAILED Work, archive, dispatch and committed retry survived replay without provider execution")
+}
+
 func writeNativeForceFactory(t *testing.T, fixture cancelFixture) {
 	writeNativeForceFactoryWithFailedState(t, fixture, true)
 }

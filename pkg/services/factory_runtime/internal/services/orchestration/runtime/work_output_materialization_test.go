@@ -47,6 +47,7 @@ func TestAcceptWorkersResultMaterializesDetachedProposalOnce(t *testing.T) {
 		workService,
 		func() string { return "proposal-id" },
 		"session-1",
+		nil,
 	)
 	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-proposal",
@@ -139,6 +140,7 @@ func TestAcceptWorkersResultUsesRecordedReplayOutputBeforeMaterialization(t *tes
 		workService,
 		func() string { return "generated-work-must-not-be-used" },
 		"session-replay-output",
+		nil,
 	)
 	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-replay-output",
@@ -242,6 +244,7 @@ func TestWorkMaterializationRejectionDoesNotPublishOutput(t *testing.T) {
 		workService,
 		func() string { return "proposal-rejected" },
 		"session-rejected",
+		nil,
 	)
 	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-rejected",
@@ -322,6 +325,7 @@ func TestCanceledAttemptDoesNotMaterializeCompletedOutput(t *testing.T) {
 		workService,
 		func() string { return "work-cancel-id" },
 		"session-cancel",
+		nil,
 	)
 	dispatch := work.WorkDispatch{
 		DispatchID: "dispatch-cancel-output", TransitionID: "t-process", WorkerType: "mock",

@@ -191,13 +191,18 @@ func resolveCancelArtifact(t *testing.T) string {
 	return abs
 }
 
-func startCancelDaemon(t *testing.T, ctx context.Context, binaryPath string, fixture cancelFixture) *cancelDaemon {
+func startCancelDaemon(t *testing.T, ctx context.Context, binaryPath string, fixture cancelFixture, replaySession ...string) *cancelDaemon {
 	t.Helper()
-	command := exec.CommandContext(ctx, binaryPath,
+	args := []string{
 		"run", "--dir", fixture.factoryDir, "--continuously", "--with-server",
 		"--listen", net.JoinHostPort("127.0.0.1", strconv.Itoa(fixture.port)),
-		"--record", fixture.recordPath,
-	)
+	}
+	if len(replaySession) == 0 {
+		args = append(args, "--record", fixture.recordPath)
+	} else {
+		args = append(args, "--replay", fixture.recordPath, "--session", replaySession[0], "--no-record")
+	}
+	command := exec.CommandContext(ctx, binaryPath, args...)
 	command.Dir = fixture.factoryDir
 	command.Env = append([]string(nil), fixture.environment...)
 	stdout, stderr := &cancelSafeBuffer{}, &cancelSafeBuffer{}
