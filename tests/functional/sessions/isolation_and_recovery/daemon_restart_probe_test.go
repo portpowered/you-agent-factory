@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,6 +22,7 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -431,8 +433,10 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	files := &unreadableOpeningFiles{storage: platformreplay.NewLocal(runtime.GOOS)}
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
+		ProviderCommandRunner:                      runner,
+		FactorySessionRuntimePersistenceFileSystem: files,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return apis[starts.Add(1)-1].Start(ctx, request)
 		},
@@ -495,7 +499,103 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 		t.Fatal("clean restart repeated the recovery warning")
 	}
 	testUnreadableOversizedBoard(t, process, repo, home, snapshot, apis[4])
+	testUnreadableOpeningFailures(t, process, repo, home, files, &starts, runner)
+}
 
+func testUnreadableOpeningFailures(t *testing.T, process support.Process, repo, home string, files *unreadableOpeningFiles, starts *atomic.Int32, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	// These attempts reopen the same default board after its joined shutdown.
+	// Serial execution protects the customer-visible single-writer invariant.
+	for _, cell := range []string{"F7 preservation denied", "F12 cancel before quarantine", "F12 cancel before publication"} {
+		t.Run(cell, func(t *testing.T) {
+			snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+			reference := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+			damaged := []byte(`{"secret":"fixture-private-prompt",`)
+			writeRestartProbeFile(t, snapshot, damaged)
+			oldReference := mustReadSeededReplayArtifact(t, reference)
+			history := plainBoardSelectedRecording(t, repo)
+			oldHistory := mustReadSeededReplayArtifact(t, history)
+			beforeStarts, beforeCalls := starts.Load(), runner.calls.Load()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			fault := &unreadableOpeningFault{path: snapshot, operation: "rename"}
+			if strings.Contains(cell, "cancel") {
+				fault.cancel = cancel
+			}
+			publication := strings.Contains(cell, "publication")
+			if publication {
+				fault.path, fault.operation = reference, "write"
+			}
+			files.fault.Store(fault)
+			defer files.fault.Store(nil)
+			inputs := support.FakeInputs(ctx, []string{"you", "run", "--continuously", "--with-server"})
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = repo
+			err := process.Execute(inputs.Input)
+			if !fault.observed.Load() || err == nil || starts.Load() != beforeStarts || runner.calls.Load() != beforeCalls {
+				t.Fatalf("fault observed=%v error=%v; failed opening became ready or dispatched", fault.observed.Load(), err)
+			}
+			if fault.cancel != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("startup lost cancellation: %v", err)
+			}
+			if fault.cancel == nil {
+				var diagnostic interface{ CLIErrorCode() string }
+				if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "DURABLE_SESSION_PERSISTENCE_FAILED" {
+					t.Fatalf("preservation failure lost its safe typed diagnostic: %v", err)
+				}
+			}
+			if publication {
+				assertUnreadableArchive(t, snapshot, damaged, 4)
+				assertUnreadableArchive(t, reference, oldReference, 4)
+			} else if !bytes.Equal(damaged, mustReadSeededReplayArtifact(t, snapshot)) || !bytes.Equal(oldReference, mustReadSeededReplayArtifact(t, reference)) {
+				t.Fatal("failed preservation changed original evidence")
+			}
+			if !bytes.Equal(oldHistory, mustReadSeededReplayArtifact(t, history)) {
+				t.Fatal("failed opening changed retained history")
+			}
+			if output := inputs.Stdout() + inputs.Stderr(); strings.Contains(output, "fixture-private-prompt") || strings.Contains(output, "Started an empty board.") {
+				t.Fatal("failed opening leaked content or claimed recovered success")
+			}
+		})
+	}
+}
+
+type unreadableOpeningFault struct {
+	path, operation string
+	cancel          context.CancelFunc
+	observed        atomic.Bool
+}
+
+type unreadableOpeningFiles struct {
+	restartProbeFiles
+	storage platformreplay.Storage
+	fault   atomic.Pointer[unreadableOpeningFault]
+}
+
+func (files *unreadableOpeningFiles) fail(path, operation string) error {
+	if fault := files.fault.Load(); fault != nil && fault.path == path && fault.operation == operation {
+		fault.observed.Store(true)
+		if fault.cancel != nil {
+			fault.cancel()
+			return context.Canceled
+		}
+		return fs.ErrPermission
+	}
+	return nil
+}
+
+func (files *unreadableOpeningFiles) RenameNoReplace(source, destination string) error {
+	if err := files.fail(source, "rename"); err != nil {
+		return err
+	}
+	return files.Local.RenameNoReplace(source, destination)
+}
+
+func (files *unreadableOpeningFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	if err := files.fail(path, "write"); err != nil {
+		return err
+	}
+	return files.storage.WriteFile(path, data)
 }
 
 func scaffoldUnreadableBoard(t *testing.T, repo string) {
