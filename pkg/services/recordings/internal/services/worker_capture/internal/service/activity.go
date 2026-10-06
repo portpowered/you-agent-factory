@@ -42,7 +42,8 @@ func (writer *FileWriter) catalogEntry(session *recordingSession) recordings.Wor
 		Version: 1, WorkerSessionID: session.projection.WorkerSessionID,
 		RecordingID: session.projection.RecordingID, RecordingGenerationID: session.generation,
 		Origin: origin, FactorySessionID: opening.FactorySessionID, OwnerEpoch: session.ownerEpoch,
-		CommittedPosition: uint64(session.projection.LastPosition),
+		OriginatingArtifact: session.originatingArtifact,
+		CommittedPosition:   uint64(session.projection.LastPosition),
 	}
 }
 

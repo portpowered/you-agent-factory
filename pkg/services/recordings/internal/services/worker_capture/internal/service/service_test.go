@@ -46,10 +46,11 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := recordings.WorkerSessionRecordingRequest{
-		RecordingID:      "recording-1",
-		FactorySessionID: "factory-session-1",
-		WorkerSessionID:  "worker-1",
-		Topic:            events.Topic("worker-session/worker-1/events"),
+		RecordingID:         "recording-1",
+		OriginatingArtifact: "selected-factory.jsonl",
+		FactorySessionID:    "factory-session-1",
+		WorkerSessionID:     "worker-1",
+		Topic:               events.Topic("worker-session/worker-1/events"),
 	}
 	handle, err := service.StartWorkerSessionRecording(context.Background(), request)
 	if err != nil {
@@ -98,6 +99,9 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assertPersistedWorkerHistory(t, persisted, request.FactorySessionID)
+	if persisted[0].OriginatingArtifact != request.OriginatingArtifact {
+		t.Fatalf("opening capture lost originating artifact: %q", persisted[0].OriginatingArtifact)
+	}
 }
 
 // Done signals that AwaitOpening evaluated its wait while persistence is

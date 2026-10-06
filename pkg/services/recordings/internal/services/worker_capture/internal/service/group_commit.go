@@ -152,6 +152,7 @@ func (writer *FileWriter) stagePendingRecords(entry *recordingEntry, group []*pe
 			ownerEpoch := writer.captureOwnerEpoch()
 			identity, _ := json.Marshal([]string{ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
 			generation := sha256.Sum256(identity)
+			delta.OriginatingArtifact = record.OriginatingArtifact
 			delta.RecordingGenerationID = hex.EncodeToString(generation[:])
 			delta.OwnerEpoch = ownerEpoch
 		}
