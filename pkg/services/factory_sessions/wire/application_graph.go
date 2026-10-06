@@ -2,6 +2,7 @@ package wire
 
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -19,6 +20,12 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	webhooks "github.com/portpowered/infinite-you/pkg/services/webhooks"
+	work "github.com/portpowered/infinite-you/pkg/services/work"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -67,18 +74,7 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProviderSessionsPorts                  = service.ProviderSessionsPorts
 	ProviderOverrideService                = service.ProviderOverrideService
-	FactoryRuntimePorts                    = service.FactoryRuntimePorts
-	FactoryDefinitionsPorts                = service.FactoryDefinitionsPorts
-	FactorySessionsPorts                   = service.FactorySessionsPorts
-	WorkPorts                              = service.WorkPorts
-	AutomationsPorts                       = service.AutomationsPorts
-	ModelsPorts                            = service.ModelsPorts
-	RecordingsPorts                        = service.RecordingsPorts
-	WebhooksPorts                          = service.WebhooksPorts
-	WorkersPorts                           = service.WorkersPorts
-	OperatorSettingsPorts                  = service.OperatorSettingsPorts
 	WorkFactory                            = service.WorkFactory
 	FactorySessionExecutionFactory         = service.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = service.ConductorInvocationWithProgressFactory
@@ -114,37 +110,95 @@ var (
 )
 
 func NewRoot(
-	providerSessions *ProviderSessionsPorts,
-	factoryRuntime *FactoryRuntimePorts,
-	factoryDefinitions *FactoryDefinitionsPorts,
-	factorySessions *FactorySessionsPorts,
-	workPorts *WorkPorts,
-	automations *AutomationsPorts,
-	modelsPorts *ModelsPorts,
-	recordingsPorts *RecordingsPorts,
-	webhooksPorts *WebhooksPorts,
-	workersPorts *WorkersPorts,
-	operatorSettings *OperatorSettingsPorts,
+	providerSessions providersessions.Service,
+	logger *zap.Logger,
+	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
+	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
+	runtimeRoot FactoryRuntimeRoot,
+	resolveClock factoryruntime.ClockResolver,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+	clock factoryruntime.Clock,
+	providerOverride ProviderOverrideService,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	validator factorydefinitions.Validator,
+	namedPaths factorydefinitions.NamedPathResolver,
+	definitions factorydefinitions.Service,
+	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	assembly RuntimeAssembly,
+	durableExecutionFactory DurableExecutionFactory,
+	factorySessionExecutionFactory FactorySessionExecutionFactory,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	processRuntimeFactory ProcessRuntimeFactory,
+	generateSessionID factorysessions.SessionIDGenerator,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+	invocationMetricsRecorder InvocationMetricsRecorder,
+	workService work.Service,
+	automationService automations.Service,
+	webhooksService webhooks.Service,
+	modelService models.Service,
+	recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService,
+	workerService workers.Service,
+	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
+	providerCommandRunner ProviderCommandRunner,
+	scriptCommandRunner ScriptCommandRunner,
+	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 ) (*Root, error) {
-	root, err := service.NewRoot(
+	return service.NewRoot(
 		providerSessions,
-		factoryRuntime,
-		factoryDefinitions,
-		factorySessions,
-		workPorts,
-		automations,
-		modelsPorts,
-		recordingsPorts,
-		webhooksPorts,
-		workersPorts,
-		operatorSettings,
+		logger,
+		factoryWorkflows,
+		workflowPreview,
+		workersMockCommandRunnerFactory,
+		runtimeRoot,
+		resolveClock,
+		newSessionLogger,
+		clock,
+		providerOverride,
+		submissionRecorder,
+		dispatchRecorder,
+		validator,
+		namedPaths,
+		definitions,
+		runtimeRouter,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		captureLoadedFactorySnapshot,
+		assembly,
+		durableExecutionFactory,
+		factorySessionExecutionFactory,
+		factoryScaffoldInitializer,
+		editableFactoryValidator,
+		processRuntimeFactory,
+		generateSessionID,
+		generateRuntimeInstanceID,
+		resolveHome,
+		providerIdentities,
+		invocationMetricsRecorder,
+		workService,
+		automationService,
+		webhooksService,
+		modelService,
+		recordingsService,
+		recordingsRuntime,
+		workerService,
+		providerFromCommandRunnerFactory,
+		providerCommandRunner,
+		scriptCommandRunner,
+		ensureBackendScope,
 		initialActivation,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return root, nil
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
