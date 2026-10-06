@@ -474,6 +474,23 @@ you --server http://localhost:7437 worker-sessions continue <source-worker-sessi
   --async --output json "Review the result"
 ```
 
+Continuation uses the captured Provider Session ID, workspace, model, and
+execution settings. A terminal direct source can continue after a server restart
+when its complete capture and saved execution input remain available in the
+same profile. Portos does not read native provider logs for this operation.
+
+Retry with the same request ID, source, successor, and follow-up input. A
+completed, durably admitted successor returns its recorded outcome and output
+after restart, without another provider execution. Changing the successor or
+follow-up input conflicts. A saved input or opening alone cannot prove admission;
+an uncertain retry fails without starting another execution.
+
+The server confirms saved input before admitting a successor. If storage loses
+the write acknowledgement, exact committed readback can confirm that first
+request. Missing, corrupt, or mismatched readback prevents admission. Missing
+provider identity, unavailable execution input, or unsupported continuation
+also fails explicitly. A provider rejection never starts a fresh conversation.
+
 To replace an active direct Worker Session, interrupt its admitted dispatch and
 provide a distinct successor identity and replacement input. The server first
 records the source as canceled, then admits the successor against the same

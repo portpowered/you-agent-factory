@@ -72,11 +72,11 @@ func (r *registry) syncContinuationInput(ctx context.Context, key recordings.Wor
 	if errors.Is(err, recordings.ErrWorkerControlConflict) {
 		return workersessions.ErrContinuationRequestIDConflict
 	}
-	if err != nil {
-		r.logger.Info("worker session continuation input unavailable", "sourceWorkerSessionID", target.WorkerSessionID,
-			"requestID", req.RequestID, "outcome", "persistence_failed")
-		return recordings.ErrWorkerRecordingPersistence
-	}
+	// A lost write acknowledgement is recoverable only during this first
+	// reservation, before opening or provider admission. Exact committed
+	// readback proves the sync barrier; a tuple found by a later request still
+	// requires successor reconciliation in requireNewContinuationInput.
+	writeErr := err
 	stored, err := r.restart.ReadWorkerContinuationInput(ctx, key)
 	if err == nil {
 		_, err = decodeContinuationInput(stored, req, target)
@@ -85,6 +85,10 @@ func (r *registry) syncContinuationInput(ctx context.Context, key recordings.Wor
 		r.logger.Info("worker session continuation input unavailable", "sourceWorkerSessionID", target.WorkerSessionID,
 			"requestID", req.RequestID, "outcome", "read_failed")
 		return recordings.ErrWorkerRecordingPersistence
+	}
+	if writeErr != nil {
+		r.logger.Info("worker session continuation input reconciled", "sourceWorkerSessionID", target.WorkerSessionID,
+			"successorWorkerSessionID", req.SuccessorWorkerSessionID, "requestID", req.RequestID, "outcome", "committed")
 	}
 	return nil
 }

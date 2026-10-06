@@ -19,6 +19,62 @@ type retainedContinuationStore struct {
 	readErr error
 }
 
+// The storage collaborator has committed the bytes but lost its response.
+// Readback stays independent so disputed or unavailable facts fail closed.
+func TestContinuationInputLostAcknowledgementRequiresExactReadback(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "missing", "corrupt", "changed", "read-failure", "conflict"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			r, plan, target := retainedContinuationFixture(t)
+			payload, err := encodeContinuationInput(plan, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := &retainedContinuationStore{payload: payload}
+			writer := &interruptInputStore{writeErr: errors.New("private-write-acknowledgement")}
+			switch cell {
+			case "missing":
+				store.readErr = os.ErrNotExist
+			case "corrupt":
+				store.payload = json.RawMessage(`{}`)
+			case "changed":
+				changed := plan
+				changed.request.FollowUpInput = "different"
+				changed.execution.Execution.UserMessage = "different"
+				store.payload, err = encodeContinuationInput(changed, target)
+				if err != nil {
+					t.Fatal(err)
+				}
+			case "read-failure":
+				store.readErr = errors.New("private-read-detail")
+			case "conflict":
+				writer.writeErr = recordings.ErrWorkerControlConflict
+			}
+			r.operations, r.restart = writer, store
+			key := recordings.WorkerControlOperationKey{RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
+				FactorySessionID: target.FactorySessionID, RequestID: "continue/" + plan.request.RequestID}
+			err = r.syncContinuationInput(t.Context(), key, plan.request, target, payload)
+			if cell == "exact" {
+				if err != nil {
+					t.Fatalf("exact committed readback refused: %v", err)
+				}
+				if err := r.requireNewContinuationInput(t.Context(), key, plan.request, target); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+					t.Fatalf("later retry reused input as admission authority: %v", err)
+				}
+				return
+			}
+			want := recordings.ErrWorkerRecordingPersistence
+			if cell == "conflict" {
+				want = workersessions.ErrContinuationRequestIDConflict
+			}
+			if !errors.Is(err, want) || strings.Contains(err.Error(), "private") {
+				t.Fatalf("disputed readback was accepted or leaked diagnostics: %v", err)
+			}
+		})
+	}
+}
+
 // The archive reader's collaborators supply detached capture facts; these
 // cells prove reservation and refusal without an executor or application graph.
 func TestContinuationArchivedSourceReservation(t *testing.T) {

@@ -14,16 +14,14 @@ import (
 // store. No native provider files exist; only the command edge is substituted.
 func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	t.Parallel()
-	for _, failed := range []bool{false, true} {
-		name := "completed"
-		if failed {
-			name = "failed"
-		}
-		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, failed) })
+	for _, name := range []string{"completed", "failed", "lost-input-ack"} {
+		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, name) })
 	}
 }
 
-func runCapturedProviderContinueAfterHostRestart(t *testing.T, failed bool) {
+func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
+	failed := name == "failed"
+	requestID := continuationRestartRequestID(name)
 	dir, root := t.TempDir(), t.TempDir()
 	host, home, err := prepareInvokeContinuePackageRoot(t, root)
 	if err != nil {
@@ -63,7 +61,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, failed bool) {
 	}
 	fresh := startContinuationRestartHost(t, root, host, home, route)
 	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
-		"--request-id", "restart-continue-request", "--successor-worker-session-id", "restart-successor", "--user-message", "fresh host follow-up"})
+		"--request-id", requestID, "--successor-worker-session-id", "restart-successor", "--user-message", "fresh host follow-up"})
 	continued.Input.Env, continued.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 	if err := fresh.process.Execute(continued.Input); !failed && err != nil {
 		t.Fatalf("fresh-host continuation: %v stdout=%s stderr=%s", err, continued.Stdout(), continued.Stderr())
@@ -82,10 +80,17 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, failed bool) {
 	if err := fresh.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), "restart-successor") {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())
 	}
-	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner, failed)
+	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner, failed, requestID)
 }
 
-func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner, failed bool) {
+func continuationRestartRequestID(name string) string {
+	if name == "lost-input-ack" {
+		return "continuation-input-ack-lost-restart"
+	}
+	return "restart-continue-request"
+}
+
+func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner, failed bool, requestID string) {
 	t.Helper()
 	if err := previous.command.stop(); err != nil {
 		t.Fatal(err)
@@ -105,7 +110,7 @@ func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invoke
 		{"fresh host follow-up", "changed-successor", []string{"--async"}},
 	} {
 		args := []string{"you", "--json", "worker-sessions", "continue", "restart-source",
-			"--request-id", "restart-continue-request", "--successor-worker-session-id", cell.successor, "--user-message", cell.message}
+			"--request-id", requestID, "--successor-worker-session-id", cell.successor, "--user-message", cell.message}
 		request := support.FakeInputs(t.Context(), append(args, cell.flags...))
 		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 		err := fresh.process.Execute(request.Input)

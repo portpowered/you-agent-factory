@@ -35,7 +35,47 @@ func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Conte
 	if strings.Contains(key.RequestID, "interrupt-input-write-failure") {
 		return "", errors.New("private-input-write-detail")
 	}
-	return store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+	ref, err := store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+	if err == nil && strings.HasPrefix(key.RequestID, "continue/continuation-input-ack-lost") {
+		return "", errors.New("private-continuation-acknowledgement-detail")
+	}
+	return ref, err
+}
+
+// F7-C10: the actual Recordings store syncs the tuple, but the storage edge
+// loses the response. Public continuation still admits exactly one successor.
+func TestContinuationInputLostAcknowledgementAdmitsOneSuccessor(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "continuation-input-ack-lost")
+	t.Cleanup(func() { scenario.close(t) })
+	path := filepath.Join(scenario.workingDirectory, "execution.json")
+	writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{
+		requestID: "continuation-input-ack-lost-start", workerSessionID: "continuation-input-ack-lost-source", dispatchID: "continuation-input-ack-lost-attempt",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial input",
+	})
+	invoke := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
+	invoke.Input.Env, invoke.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("source invocation: %v %s %s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	for range 2 {
+		request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "continuation-input-ack-lost-source",
+			"--request-id", "continuation-input-ack-lost-request", "--successor-worker-session-id", "continuation-input-ack-lost-successor", "--user-message", "follow up"})
+		request.Input.Env, request.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+		if err := fixture.process.Execute(request.Input); err != nil {
+			t.Fatalf("committed input acknowledgement: %v %s %s", err, request.Stdout(), request.Stderr())
+		}
+		var result directWorkerSessionCLIResult
+		decodeDirectWorkerSessionResult(t, request.Stdout(), &result)
+		if !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "continuation-input-ack-lost-successor" ||
+			!strings.Contains(result.Output, "continued COMPLETE") || scenario.providerRunner.CallCount() != 2 {
+			t.Fatalf("lost acknowledgement repeated admission or lost output: %#v calls=%d", result, scenario.providerRunner.CallCount())
+		}
+		if strings.Contains(request.Stdout()+request.Stderr(), "private-continuation") {
+			t.Fatal("storage diagnostic leaked")
+		}
+	}
 }
 
 // The direct source completes normally; only its continuation-input sync is
