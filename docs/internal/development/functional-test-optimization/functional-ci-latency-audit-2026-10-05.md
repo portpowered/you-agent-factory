@@ -5571,3 +5571,42 @@ Commit this cleanup locally and let verification of the already-pushed source
 finish before superseding it again. Complete hosted two-minute evidence and
 required-check success remain missing; PR #2923 remains draft. Evidence:
 fixture-census-full/ and fixture-census-baseline/.
+
+
+### October 6: live interrupt reservation can race durable recovery lookup
+
+The unchanged public TestInterruptRace passes 30 Windows repetitions in 21.240s;
+this does not reproduce or dismiss the recorded hosted 503. Inspection reveals
+a concrete interleaving: replayDurableInterrupt checks the live reservation map,
+then reads a durable control record. Another caller can reserve the same request
+and persist its pending intent during that read. The second caller previously
+treated that pending record as owner-loss recovery and returned execution
+unavailable instead of joining the live operation.
+
+A component test controls that interleaving at the injected journal store. Both
+matching and conflicting request cells fail before the fix with found=true and
+InterruptPhaseValidation / ErrInterruptExecutionUnavailable. Recheck the live
+reservation after the journal load and delegate to normal admission when it now
+exists. The matching request then joins the same replay; the conflicting tuple
+still returns ErrInterruptRequestIDConflict. Existing owner-loss recovery,
+pending-phase and durable failure tests remain. No timeout, retry count,
+functional assertion or provider behavior is weakened.
+
+All Worker Sessions registry component tests pass in 0.120s; both scoped linters
+report zero issues. Thirty unchanged public race repetitions pass after the fix
+in 23.951s, and the entire invoke_continue customer package passes in 25.866s.
+These native Windows correctness runs are not controlled latency comparisons;
+no speedup or elimination of every possible hosted failure is claimed. This
+deterministic error matches the recorded failure classification but does not
+prove it was the only cause of the earlier CI 503. Hosted replay/race verification
+is still required. Evidence: interrupt-interleaving-before.log,
+interrupt-interleaving-after.log, interrupt-race-reproduction.log,
+interrupt-race-fixed-repetition.log and interrupt-fixed-package.log.
+
+Superseded workflow 37513430783 is now confirmed terminal canceled. Current
+f5e796 workflow 37514240019 has started its functional job at 19:02:17Z, so keep
+that specific run alive to obtain complete hosted timing. Main has advanced to
+f79408d2bf (#2959), changing captured Codex detail projection, provider/session
+fixtures, generated clients, recordings and workflow coverage selection. Rebase
+the local cleanup and interrupt fix to that source and verify the affected
+fixtures before the next push; measurements above precede that rebase.
