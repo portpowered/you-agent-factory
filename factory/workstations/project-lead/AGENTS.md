@@ -93,6 +93,82 @@ Return the normal non-FAILED decision for this nonfatal operator dependency.
 Do not perform the control yourself, even after an operator answers.
 For a deterministic failure, submit a corrected successor or hold with its exact release event.
 
+## Corrected successor recovery
+
+On every escalated/failed child report, wake and check-in, recovery is the
+default when a concrete correction is supported; never blindly retry. Inspect
+exact idea/plan/task Work IDs, Worker Sessions, Factory Events, retained request
+payloads, PR/head, and progress.txt. Record one classification:
+`visit_cap_with_progress`, `breaker_one_blocker`, or `deterministic_failure`,
+with evidence references, one blocker, and a concrete correction. Hold an
+uncorrected or unsupported failure with its release event; a nonfatal operator
+hold must not fail the Project.
+
+Reconstruct lineage across Sessions, wakes, check-ins and generations before
+admission. Count accepted successors by originalSessionId/originalLaneWorkId,
+not visits or names: at most two accepted successors per original lineage
+(r2 then r3). Preserve the original identity when recovering a successor; set
+predecessorWorkId to the failed predecessor and attempt to integer 1 or 2.
+Reconcile uncertain/duplicate submission with the same request ID against
+retained requests and admitted Work before any retry. Never spend another
+attempt or invent a new request ID to resolve uncertainty. Exhausted or
+unverifiable lineage or ownership takes a nonfatal operator hold.
+
+Admit a new-name same-Project idea:init through the ordinary explicit-session
+dry-run/submit/receipt path. Attach an optional payload.recovery object:
+
+```json
+{
+  "originalSessionId": "11111111-1111-4111-8111-111111111111",
+  "originalLaneWorkId": "original-idea-id",
+  "predecessorWorkId": "failed-predecessor-id",
+  "attempt": 1,
+  "diagnosis": {
+    "classification": "visit_cap_with_progress",
+    "evidence": ["worker-session:exact-id", "progress.txt:retained-blocker"],
+    "blocker": "One evidenced remaining blocker",
+    "correction": "Concrete changed action for the retained slice"
+  },
+  "workspace": null
+}
+```
+
+workspace:null means fresh ordinary setup and no recovery-worktree tag. For
+useful unmerged work without an active owner, replace null with an object
+containing branch, worktree, prUrl and headSha strings. Use the registered
+absolute managed worktree path and exact local HEAD (40/64 hex); the matching
+same-repository PR must be OPEN and its remote head an ancestor of local HEAD.
+Set tags.recovery-worktree to that exact worktree string. Inspect live Work
+in all live Sessions and active Worker Sessions before claiming ownership.
+Invalid/escaped/locked/detached/mismatched/owned adoption or a closed/merged PR
+must refuse without retained mutation. Keep branch, commits, dirty files,
+root PRD/progress and the same PR; never reset, rebase, stash, clean, replace
+the scaffold or create a second PR. Setup installs only the new-name packet.
+
+Recover only the evidenced failed DEPENDS_ON closure. Page Work and relations
+and inspect retained requests to identify prerequisites, failed cascaded
+dependents and an existing loopback. Re-admit evidenced dependents and that
+existing loopback only under new names; never duplicate healthy, active,
+parked or unrelated Work and never add per-cycle joins. Preserve every real
+prerequisite. Bind replacements by targetWorkId to verified current-Session
+successors after their receipts; never bind a prior-Session ID or a same-name
+guess. A not-yet-admitted prerequisite remains an explicit hold. Each recovered
+lineage has its own two-successor budget; do not reset it for a cascade.
+This existing-loopback exception does not authorize new speculative joins.
+
+For oversized recovery, retain the independently mergeable PR slice with at
+most 2 stories, about 8 criteria total, about 2,000 changed lines (added plus
+deleted), and JSON below 20 KB (20,000 UTF-8 bytes) with status headroom.
+Preserve immutable criterion IDs, source-plan alignment and later proof gates.
+Preserve old oversized artifacts unchanged. Remaining slices are Markdown
+names/outcomes/requirements only; lead/operator admits them after retained
+merge. Escalate inseparable scope; never weaken acceptance to meet a cap.
+
+Work move/reset/restore, equivalent APIs, canonical state edits and
+operatorOverride repair remain forbidden even after operator answers.
+Record diagnosis, lineage, stable request ID, receipt Work IDs, retained PR/head,
+replacement targetWorkId bindings and holds in Project state.md/progress.md.
+
 ## Mailbox-parked lanes
 
 An idea or task in `awaiting-answer` may be waiting for an operator decision.

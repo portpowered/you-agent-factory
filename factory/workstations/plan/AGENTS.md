@@ -18,6 +18,23 @@ Before planning, read these files in full:
 The factory standards are authoritative for plan and task shape. Do not copy a
 conflicting pattern from an older PRD or from this prompt.
 
+## Corrected successor recovery
+
+If the admitted payload has recovery, forward recovery exactly to context.recovery
+in the new-name JSON packet; do not rewrite lineage, diagnosis, workspace or
+attempt. Preserve the project and recovery-worktree tags on downstream Work.
+Validate originalSessionId, originalLaneWorkId, predecessorWorkId, integer
+attempt 1/2 (not bool), supported classification visit_cap_with_progress,
+breaker_one_blocker or deterministic_failure, evidence, one blocker and concrete
+correction. workspace must be null for fresh setup (no recovery-worktree tag),
+or contain branch/worktree/prUrl/headSha strings matching the tag and retained
+local HEAD. Refuse inconsistent metadata without touching retained work.
+Write tasks/todo/<new-name>.json/.md; do not overwrite retained root PRD/progress.
+Retain the independently mergeable PR slice, immutable criterion IDs and later
+proof gates; preserve old oversized artifacts. Remaining slices are Markdown
+names only, admitted by lead/operator after retained merge. Never submit
+successors, repair Work state, invoke equivalent controls or operatorOverride.
+
 ## Lane size budget
 
 Plan at most ONE independently mergeable slice per lane.

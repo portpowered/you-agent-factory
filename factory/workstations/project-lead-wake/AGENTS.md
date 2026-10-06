@@ -42,6 +42,18 @@ Use recorded child and request identities to avoid duplicate admissions.
 Escalate repeated undelivered reports through the operator mailbox.
 Follow the lead prompt's control prohibition and mailbox-park interpretation on every wake.
 
+## Corrected successor recovery
+
+Apply the lead's Corrected successor recovery procedure to escalated/failed
+reports before returning: diagnose exact child/plan/task IDs and retained PR,
+then admit a cause-corrected new-name same-Project successor or record a
+nonfatal hold. Reconstruct the original lineage and at most two accepted
+successors across wakes/check-ins/generations. Reconcile uncertain submission
+with the same request ID; never duplicate an owner or a parked lane. Recover
+only evidenced failed DEPENDS_ON descendants and an existing loopback, binding
+targetWorkId to verified current-Session successor receipts. Never add joins
+or use Work controls, equivalent APIs, canonical edits or operatorOverride.
+
 Return only a decision envelope. Use `ACCEPTED` after a verified pass. Its
 feedback names the finished child, its terminal state, and the action you took.
 Use `FAILED` with the exact blocker only when inspection or submission fails and

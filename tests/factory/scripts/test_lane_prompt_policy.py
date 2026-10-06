@@ -86,6 +86,23 @@ class LanePromptPolicyTest(unittest.TestCase):
         self.assertTrue(any(r.startswith('plan:slice:') for r in results))
         self.assertTrue(any(r.startswith('process:entry:') for r in results))
 
+    def test_recovery_diagnostics_require_each_owned_policy(self):
+        prompts = {owner: '\n'.join(clause for _, clause in rules)
+                   for owner, rules in policy.RECOVERY_RULES.items()}
+        self.assertEqual(policy.check_recovery_policy(prompts), [])
+        for owner, rules in policy.RECOVERY_RULES.items():
+            for name, clause in rules:
+                with self.subTest(owner=owner, rule=name):
+                    changed = dict(prompts)
+                    changed[owner] = changed[owner].replace(clause, '')
+                    self.assertTrue(any(result.startswith(f'{owner}:recovery-{name}:')
+                                        for result in policy.check_recovery_policy(changed)))
+
+    def test_wrapped_recovery_policy_keeps_diagnosis_budget_and_binding(self):
+        prompts = {owner: '\n'.join(clause for _, clause in rules).replace(' ', '\n')
+                   for owner, rules in policy.RECOVERY_RULES.items()}
+        self.assertEqual(policy.check_recovery_policy(prompts), [])
+
 
 if __name__ == '__main__':
     unittest.main()

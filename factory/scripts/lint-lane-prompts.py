@@ -60,6 +60,62 @@ CONFLICTS = (
     ('scaffold-evidence', r'record (?:that )?exact result in progress\.txt'),
 )
 
+RECOVERY_RULES = {
+    'project-lead': (
+        ('diagnosis', 'visit_cap_with_progress'),
+        ('breaker', 'breaker_one_blocker'),
+        ('deterministic', 'deterministic_failure'),
+        ('budget', 'at most two accepted successors per original lineage'),
+        ('idempotency', 'with the same request ID'),
+        ('adoption', 'tags.recovery-worktree'),
+        ('binding', 'Bind replacements by targetWorkId'),
+        ('closure', 'evidenced failed DEPENDS_ON closure'),
+        ('no-controls', 'operatorOverride repair remain forbidden even after operator answers'),
+        ('size', 'about 2,000 changed lines (added plus deleted)'),
+    ),
+    'project-lead-wake': (
+        ('recovery', "lead's Corrected successor recovery procedure"),
+        ('budget', 'at most two accepted successors'),
+        ('binding', 'targetWorkId'),
+        ('idempotency', 'with the same request ID'),
+    ),
+    'project-lead-checkin': (
+        ('recovery', "lead's Corrected successor recovery procedure"),
+        ('budget', 'At most two accepted successors per original lineage'),
+        ('binding', 'targetWorkId'),
+        ('idempotency', 'with the same request ID'),
+    ),
+    'plan': (
+        ('forward', 'forward recovery exactly to context.recovery'),
+        ('tag', 'recovery-worktree tags'),
+        ('lineage', 'originalLaneWorkId'),
+        ('attempt', 'attempt 1/2 (not bool)'),
+    ),
+    'process': (
+        ('packet', 'Select tasks/todo/'),
+        ('adoption', 'context.recovery.workspace'),
+        ('same-pr', 'never create a second PR'),
+        ('ordinary', 'without the tag continues to use root prd.json'),
+    ),
+    'review': (
+        ('packet', 'select tasks/todo/'),
+        ('adoption', 'context.recovery.workspace'),
+        ('same-pr', 'never create a second PR'),
+        ('ordinary', 'without this tag keeps root prd.json'),
+    ),
+}
+
+
+def check_recovery_policy(prompts):
+    """Diagnose controlled recovery text; runtime/lead judgment is separate."""
+    diagnostics = []
+    for owner, rules in RECOVERY_RULES.items():
+        normalized = ' '.join(prompts.get(owner, '').split())
+        for name, clause in rules:
+            if clause not in normalized:
+                diagnostics.append(f'{owner}:recovery-{name}: missing policy clause: {clause}')
+    return diagnostics
+
 
 def check_policy(plan, process):
     """Return actionable diagnostics for supplied prompt strings, without I/O."""
@@ -86,10 +142,14 @@ def main(argv=None):
             (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
             for owner in ('plan', 'process')
         ]
+        recovery = {
+            owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
+            for owner in RECOVERY_RULES
+        }
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
-    diagnostics = check_policy(*texts)
+    diagnostics = check_policy(*texts) + check_recovery_policy(recovery)
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1
