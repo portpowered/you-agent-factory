@@ -56,7 +56,7 @@ type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
-	durableExecutionFactory        DurableExecutionFactory
+	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	workerService                  workers.Service
 	modelService                   models.Service
@@ -121,7 +121,7 @@ func NewRoot(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly roles.RuntimeAssembly,
-	durableExecutionFactory DurableExecutionFactory,
+	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
@@ -153,7 +153,7 @@ func NewRoot(
 		liveChangeCoordinator:          liveChangeCoordinator,
 		initialActivation:              initialActivation,
 		modelInvocation:                modelInvocation,
-		durableExecutionFactory:        durableExecutionFactory,
+		durableOpening:                 durableOpening,
 		workerService:                  workerService,
 		modelService:                   modelService,
 		automationService:              automationService,

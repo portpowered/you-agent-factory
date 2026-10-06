@@ -106,7 +106,7 @@ var servicesSet = wire.NewSet(
 	provideSystemInitializationInspectPath,
 	provideOperatorConfigLoader,
 	provideOperatorBackendScopeEnsurer,
-	provideDurableExecutionFactory,
+	provideDurableOpening,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,

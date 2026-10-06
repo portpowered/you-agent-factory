@@ -433,14 +433,14 @@ func providePackagedFactoryInstallation(
 	}
 }
 
-// provideDurableExecutionFactory binds the execution opener and provider identity
+// provideDurableOpening binds the execution opener and provider identity
 // policy once; live and replay requests cannot substitute these collaborators.
-func provideDurableExecutionFactory(
+func provideDurableOpening(
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	factory factorysessionwire.FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-) factorysessionwire.DurableExecutionFactory {
-	return factorysessionwire.NewDurableOpening(loadOperatorConfig, factory, providerIdentities).Open
+) *factorysessionwire.DurableOpening {
+	return factorysessionwire.NewDurableOpening(loadOperatorConfig, factory, providerIdentities)
 }
 
 func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {

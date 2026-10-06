@@ -238,11 +238,11 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if opening.recordingProjections == nil {
 		return fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
 	}
-	if r.durableExecutionFactory == nil {
+	if r.durableOpening == nil {
 		return fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
 	opening.providerForDurable = r.providerOverride
-	opening.durableExecution, err = r.durableExecutionFactory(
+	opening.durableExecution, err = r.durableOpening.Open(
 		opening.configured.Definition,
 		opening.configured.Session.Persistence,
 		opening.sessionSelection.SystemConfigHome,

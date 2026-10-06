@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -46,15 +45,3 @@ type DurableExecution struct {
 	ACPIntegrations []operatorsettings.ACPIntegration
 	OperatorModels  map[string]models.ModelOverlay
 }
-
-type DurableExecutionFactory func(
-	factorydefinitions.RuntimeSelection,
-	factorysessions.PersistencePolicy,
-	string,
-	string,
-	operatorsettings.ResolvedDefaults,
-	RuntimeRoot,
-	factoryruntime.Clock,
-	providers.Service,
-	*workers.MockWorkersConfig,
-) (DurableExecution, error)

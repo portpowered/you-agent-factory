@@ -77,7 +77,7 @@ type (
 
 	ProviderOverrideService        = service.ProviderOverrideService
 	FactorySessionExecutionFactory = service.FactorySessionExecutionFactory
-	DurableExecutionFactory        = service.DurableExecutionFactory
+	DurableOpening                 = service.DurableOpening
 	DurableExecution               = service.DurableExecution
 	WorkerCommandRunnerAdapter     = service.WorkerCommandRunnerAdapter
 	ProviderCommandRunner          = service.ProviderCommandRunner
@@ -131,7 +131,7 @@ func NewRoot(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly RuntimeAssembly,
-	durableExecutionFactory DurableExecutionFactory,
+	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory ProcessRuntimeFactory,
@@ -175,7 +175,7 @@ func NewRoot(
 		decodeReplayConfig,
 		captureLoadedFactorySnapshot,
 		assembly,
-		durableExecutionFactory,
+		durableOpening,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		processRuntimeFactory,

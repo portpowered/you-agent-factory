@@ -289,7 +289,7 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		newSessionLogger:  func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger },
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
-		durableExecutionFactory: opening.Open,
+		durableOpening: opening,
 	}
 }
 

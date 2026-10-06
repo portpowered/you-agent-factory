@@ -171,14 +171,14 @@ func (r *Root) openPortableReplayDurableOwner(
 	configured preparedRuntime,
 	root RuntimeRoot,
 ) (durableexecution.Service, func() error, error) {
-	if r.durableExecutionFactory == nil {
+	if r.durableOpening == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
 	}
 	clock, err := clockForReplay(r.clock, nil, nil, r.resolveClock)
 	if err != nil {
 		return nil, nil, err
 	}
-	durable, err := r.durableExecutionFactory(
+	durable, err := r.durableOpening.Open(
 		configured.Definition,
 		configured.Session.Persistence,
 		runtimeSelectionForStart(configured.Session).SystemConfigHome,

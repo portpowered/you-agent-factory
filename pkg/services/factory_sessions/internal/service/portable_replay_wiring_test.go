@@ -148,19 +148,19 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			failedOwner := &portableReplayRuntimeOwner{events: &events, closeErr: closeErr}
 			retryOwner := &portableReplayRuntimeOwner{}
 			factory := newPortableCheckpointRuntimeOpeningFactory(t, retryOwner)
-			acquire := factory.durableExecutionFactory
+			acquire := factory.durableOpening.executionFactory
 			attempts := 0
-			factory.durableExecutionFactory = func(definition factorydefinitions.RuntimeSelection,
-				policy factorysessions.PersistencePolicy, home, path string,
-				defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
-				provider providers.Service, mocks *workers.MockWorkersConfig,
-			) (DurableExecution, error) {
+			factory.durableOpening = durableOpeningFixture(func(projectRoot string,
+				policy factorysessions.PersistencePolicy, provider providers.Service, clock factoryruntime.Clock,
+				presets map[string]struct{}, settings factoryruntime.JavaScriptWorkerSettings,
+				mocks *workers.MockWorkersConfig, integrations []operatorconfig.ACPIntegration, logger *zap.Logger,
+			) (durableexecution.Service, error) {
 				attempts++
 				if attempts == 1 {
-					return DurableExecution{Service: failedOwner}, failure
+					return failedOwner, failure
 				}
-				return acquire(definition, policy, home, path, defaults, root, clock, provider, mocks)
-			}
+				return acquire(projectRoot, policy, provider, clock, presets, settings, mocks, integrations, logger)
+			})
 			request := portableCheckpointOwnerFixture(t).startRequest()
 			failed, err := factory.openForRequest(t.Context(), request)
 			assertFailedReplayAcquisition(t, failed, err, failure, closeErr, events)
@@ -454,6 +454,7 @@ func assertPortableReplayControlWalled(t *testing.T, execution factorysessions.D
 func portableCheckpointOwnerFixture(t *testing.T) *runtimeOwnerFixture {
 	t.Helper()
 	return &runtimeOwnerFixture{
+		FactorySession:    sessionOwnerFixture{SystemConfigHome: "/controlled-home"},
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
 		Recordings:        recordings.RuntimeSelection{ReplayPath: "checkpoint.json"},
 	}
@@ -506,19 +507,13 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	}
 	dependencies.WorkerService = &portableReplayWorkerService{}
 	owner.workerExecution = dependencies.WorkerService
-	dependencies.DurableExecutionFactory = func(
-		_ factorydefinitions.RuntimeSelection,
-		_ factorysessions.PersistencePolicy,
-		_ string,
-		_ string,
-		_ operatorconfig.ResolvedDefaults,
-		_ RuntimeRoot,
-		_ factoryruntime.Clock,
-		_ providers.Service,
-		_ *workers.MockWorkersConfig,
-	) (DurableExecution, error) {
-		return DurableExecution{Service: owner}, nil
-	}
+	dependencies.DurableOpening = durableOpeningFixture(func(
+		_ string, _ factorysessions.PersistencePolicy, _ providers.Service, _ factoryruntime.Clock,
+		_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, _ *workers.MockWorkersConfig,
+		_ []operatorconfig.ACPIntegration, _ *zap.Logger,
+	) (durableexecution.Service, error) {
+		return owner, nil
+	})
 	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
@@ -859,13 +854,13 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 	}{{name: "inherit"}, {name: "explicit", provider: selected}, {name: "acquisition failure", provider: selected, failure: failure}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			configured := preparedRuntime{}
+			configured := preparedRuntime{Session: factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigHome: "/controlled-home"}}}
 			configured.Workers.MockWorkers = &workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough}
 			owner := &portableReplayRuntimeOwner{}
-			acquire := func(_ factorydefinitions.RuntimeSelection, _ factorysessions.PersistencePolicy,
-				_, _ string, _ operatorconfig.ResolvedDefaults, _ RuntimeRoot, _ factoryruntime.Clock,
-				provider providers.Service, mocks *workers.MockWorkersConfig,
-			) (DurableExecution, error) {
+			acquire := func(_ string, _ factorysessions.PersistencePolicy, provider providers.Service, _ factoryruntime.Clock,
+				_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, mocks *workers.MockWorkersConfig,
+				_ []operatorconfig.ACPIntegration, _ *zap.Logger,
+			) (durableexecution.Service, error) {
 				if provider != tc.provider {
 					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
 				}
@@ -873,13 +868,13 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 					t.Fatal("request mock policy was lost")
 				}
 				if tc.failure != nil {
-					return DurableExecution{}, tc.failure
+					return nil, tc.failure
 				}
-				return DurableExecution{Service: owner}, nil
+				return owner, nil
 			}
 			factory := &Root{
 				clock: openingCoordinatorClock{}, providerOverride: tc.provider,
-				durableExecutionFactory: acquire,
+				durableOpening: durableOpeningFixture(acquire),
 			}
 			durable, closeOwner, err := factory.openPortableReplayDurableOwner(configured, RuntimeRoot{})
 			if !errors.Is(err, tc.failure) {

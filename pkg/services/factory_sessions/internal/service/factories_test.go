@@ -61,7 +61,7 @@ type runtimeOpeningFixture struct {
 	DecodeReplayConfig           factorydefinitions.ReplayRuntimeConfigDecoder
 	CaptureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
 	Assembly                     roles.RuntimeAssembly
-	DurableExecutionFactory      DurableExecutionFactory
+	DurableOpening               *DurableOpening
 	FactoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
 	EditableFactoryValidator     factorysessions.EditableFactoryValidator
 	ProcessRuntimeFactory        roles.ProcessRuntimeFactory
@@ -105,7 +105,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.DecodeReplayConfig,
 		fixture.CaptureLoadedFactorySnapshot,
 		fixture.Assembly,
-		fixture.DurableExecutionFactory,
+		fixture.DurableOpening,
 		fixture.FactoryScaffoldInitializer,
 		fixture.EditableFactoryValidator,
 		fixture.ProcessRuntimeFactory,
@@ -224,7 +224,7 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		DecodeReplayConfig:           inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
 		CaptureLoadedFactorySnapshot: inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		Assembly:                     factorySessionsRoot,
-		DurableExecutionFactory:      inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
+		DurableOpening:               durableOpeningFixture(inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls)),
 		FactoryScaffoldInitializer:   inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
 		EditableFactoryValidator:     inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
 		ProcessRuntimeFactory:        processRuntimeFactoryConstructionStub{},
@@ -341,4 +341,14 @@ func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context
 	materializer.calls++
 	materializer.input = rawURL
 	return "/tmp/identity.png", func() {}, nil
+}
+
+// durableOpeningFixture controls the configuration and acquisition effects of
+// the fixed opening owner used by live and replay component fixtures.
+func durableOpeningFixture(acquire FactorySessionExecutionFactory) *DurableOpening {
+	return NewDurableOpening(
+		func(string) (operatorsettings.Config, error) { return operatorsettings.Config{}, nil },
+		acquire,
+		func(identity string) (string, error) { return identity, nil },
+	)
 }

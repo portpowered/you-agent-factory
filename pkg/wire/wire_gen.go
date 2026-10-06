@@ -434,7 +434,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v112 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v51, v49, v50, v41, responseEventIDGenerator, v39, v97, v98, v16, liveChangeCoordinator, workersService)
 	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(service)
-	v113 := provideDurableExecutionFactory(configLoader, v112, providerIdentityResolver)
+	v113 := provideDurableOpening(configLoader, v112, providerIdentityResolver)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v114, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
@@ -938,7 +938,7 @@ var servicesSet = wire11.NewSet(
 	provideSystemInitializationInspectPath,
 	provideOperatorConfigLoader,
 	provideOperatorBackendScopeEnsurer,
-	provideDurableExecutionFactory,
+	provideDurableOpening,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory, wire5.NewLifecyclePlanOperation, provideFactoryVisualizationFactory,
