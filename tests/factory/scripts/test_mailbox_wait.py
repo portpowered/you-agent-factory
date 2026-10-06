@@ -13,7 +13,6 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,31 +55,139 @@ class MailboxWaitScriptTest(unittest.TestCase):
         (self.mailbox / "responses").mkdir()
         self.request = self.mailbox / "requests" / f"{LANE}.md"
         self.response = self.mailbox / "responses" / f"{LANE}.md"
-        env = patch.dict(
-            os.environ,
-            {
-                "YOU_OPERATOR_MAILBOX_DIR": str(self.mailbox),
-                "MAILBOX_WAIT_WINDOW_SECONDS": "",
-                "MAILBOX_WAIT_POLL_SECONDS": "",
-            },
-        )
-        env.start()
-        self.addCleanup(env.stop)
 
     def write(self, path, mtime):
         path.write_text("x", encoding="utf-8")
         os.utime(path, (mtime, mtime))
 
-    def run_script(self, work_type, feedback, clock=None):
+    def run_script(self, work_type, feedback, clock=None, identity=(), http=None):
         clock = clock or FakeClock(10_000)
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = self.script.run(
-                ["mailbox-wait.py", LANE, work_type, feedback],
+                ["mailbox-wait.py", LANE, work_type, feedback, *identity],
                 now=clock.now,
                 sleep=clock.sleep,
+                mailbox=self.mailbox,
+                settings=(3600, 30),
+                http=http or self.no_http,
             )
         return code, out.getvalue(), err.getvalue(), clock
+
+    def no_http(self, *args):
+        self.fail("unexpected notification")
+
+    def notice_http(self, calls, failure=None):
+        def http(method, url, body, timeout):
+            calls.append((method, url, body, timeout))
+            if failure:
+                raise failure
+            if method == "PUT":
+                return {"requestId": body["requestId"], "works": [
+                    {"name": body["works"][0]["name"], "workTypeName": "project-report", "workId": "report-id"}]}
+            return dict(calls[0][2]["works"][0], workId="report-id")
+        return http
+
+    def test_tagged_notification_then_fresh_lead_answer_for_both_types(self):
+        identity = ("project-a", "work-a", "session-a", "http://127.0.0.1:1234")
+        for kind in ("task", "idea"):
+            with self.subTest(kind=kind):
+                self.write(self.request, 10000)
+                self.response.unlink(missing_ok=True)
+                calls = []
+                clock = FakeClock(10000, lambda c: self.write(self.response, c.value))
+                code, out, err, _ = self.run_script(kind, MARKED, clock, identity, self.notice_http(calls))
+                self.assertEqual(code, 0)
+                self.assertIn("lead notified", err)
+                self.assertIn("response present", out)
+                self.assertEqual([c[0] for c in calls], ["PUT", "GET"])
+                body = calls[0][2]
+                self.assertEqual(body["works"][0]["tags"], {"project": "project-a"})
+                payload = body["works"][0]["payload"]
+                self.assertEqual(payload["laneWorkId"], "work-a")
+                self.assertEqual(payload["sessionId"], "session-a")
+                self.assertEqual(payload["laneWorkType"], kind)
+                self.assertEqual(payload["requestPath"], str(self.request.resolve()))
+                self.assertNotIn("relations", body)
+                self.assertTrue(all(0 < c[3] <= 10 for c in calls))
+
+    def test_outage_and_uncertain_receipt_keep_wait_and_stable_replay_identity(self):
+        self.write(self.request, 10000)
+        identity = ("project-a", "work-a", "session-a", "http://localhost:1234")
+        bodies = []
+        for failure in (TimeoutError("outage"), ValueError("lost receipt")):
+            calls = []
+            code, _, err, clock = self.run_script("task", MARKED, FakeClock(10000), identity,
+                                                  self.notice_http(calls, failure))
+            self.assertEqual(code, 0)
+            self.assertEqual(clock.value, 13600)
+            self.assertEqual(len(calls), 1)
+            self.assertIn("lead notification failed", err)
+            for field in ("session=session-a", "work=work-a", "version=", "request=mailbox-"):
+                self.assertIn(field, err)
+            self.assertFalse(self.response.exists())
+            bodies.append(calls[0][2])
+        self.assertEqual(bodies[0], bodies[1])
+
+    def test_identity_changes_only_with_session_work_or_request_version(self):
+        self.write(self.request, 10000)
+        ids = []
+        for session, work, stamp in (("s1", "w1", 10000), ("s1", "w1", 10000),
+                                     ("s2", "w1", 10000), ("s1", "w2", 10000), ("s1", "w1", 11000)):
+            self.write(self.request, stamp)
+            calls = []
+            self.run_script("task", MARKED, FakeClock(stamp),
+                            ("project-a", work, session, "http://localhost"), self.notice_http(calls))
+            ids.append(calls[0][2]["requestId"])
+        self.assertEqual(ids[0], ids[1])
+        self.assertEqual(len(set(ids)), 4)
+
+    def test_incomplete_identity_or_remote_endpoint_never_submits_or_answers(self):
+        self.write(self.request, 10000)
+        for identity in (("project-a",), ("project-a", "w", "s", "https://example.com")):
+            code, _, err, _ = self.run_script("task", MARKED, identity=identity)
+            self.assertEqual(code, 0)
+            self.assertIn("lead notification failed", err)
+            self.assertFalse(self.response.exists())
+
+    def test_stale_undelivered_answer_cannot_release_rewritten_request(self):
+        self.write(self.request, 10000)
+        self.write(self.response, 9999)
+        code, out, _, clock = self.run_script("task", MARKED)
+        self.assertEqual(code, 0)
+        self.assertIn("no answer within", out)
+        self.assertEqual(clock.value, 13600)
+
+    def test_tagged_skips_notice_on_response_missing_request_unmarked_and_expiry(self):
+        identity = ("project-a", "w", "s", "http://localhost")
+        self.write(self.request, 10000)
+        self.write(self.response, 10001)
+        self.assertEqual(self.run_script("idea", MARKED, identity=identity)[0], 0)
+        self.assertEqual(self.run_script("idea", MARKED, identity=identity)[0], 1)
+        self.response.unlink()
+        self.assertEqual(self.run_script("task", "ordinary CONTINUE", identity=identity)[0], 0)
+        self.assertEqual(self.run_script("idea", MARKED, FakeClock(13600), identity)[0], 1)
+        self.request.unlink()
+        self.assertEqual(self.run_script("task", MARKED, identity=identity)[0], 0)
+
+    def test_receipt_and_admitted_identity_mismatches_do_not_claim_notification(self):
+        identity = ("project-a", "w", "s", "http://localhost")
+        self.write(self.request, 10000)
+        for mismatch in ("requestId", "workId", "tags", "payload"):
+            with self.subTest(mismatch=mismatch):
+                calls = []
+                good_http = self.notice_http(calls)
+                def http(method, url, body, timeout):
+                    result = good_http(method, url, body, timeout)
+                    if (method == "PUT") == (mismatch == "requestId"):
+                        result[mismatch] = "wrong"
+                    return result
+                code, _, err, clock = self.run_script("task", MARKED, FakeClock(10000), identity, http)
+                self.assertEqual(code, 0)
+                self.assertIn("lead notification failed", err)
+                self.assertNotIn("lead notified", err)
+                self.assertEqual(clock.value, 13600)
+                self.assertFalse(self.response.exists())
 
     def test_unmarked_task_continue_returns_to_init_at_once(self):
         self.write(self.request, 10_000)
@@ -177,7 +284,7 @@ class MailboxWaitScriptTest(unittest.TestCase):
         self.assertEqual(self.run_script("review", MARKED)[0], 1)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
-            code = self.script.run(["mailbox-wait.py", "../x", "task", MARKED])
+            code = self.script.run(["mailbox-wait.py", "../x", "task", MARKED], mailbox=self.mailbox)
         self.assertEqual(code, 0)
         self.assertIn("unsafe lane name", out.getvalue())
 
