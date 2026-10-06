@@ -67,7 +67,7 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	writer.catalogMu.Lock()
 	unproven := writer.catalogDamaged || len(writer.ambiguous) != 0
 	writer.catalogMu.Unlock()
-	if unproven {
+	if request.RequireCompleteMembership && unproven {
 		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingReplay
 	}
 	entries := writer.catalogEntries()

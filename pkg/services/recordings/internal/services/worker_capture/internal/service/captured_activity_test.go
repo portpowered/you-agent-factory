@@ -889,7 +889,7 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, store := range []recordings.WorkerCapturedActivityReader{writer, reopened} {
-		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(page.Items) != 0 {
 			t.Fatalf("ambiguous enumeration = %+v, %v", page, err)
 		}
@@ -942,7 +942,7 @@ func TestFileWriterTornCatalogCannotProveAssociations(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		catalog, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+		catalog, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(catalog.Items) != 0 {
 			t.Fatalf("torn membership presented as complete: %+v, %v", catalog, err)
 		}
@@ -955,7 +955,16 @@ func TestFileWriterTornCatalogCannotProveAssociations(t *testing.T) {
 
 func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecordingStore) {
 	t.Helper()
-	catalog, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+	page, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("default enumeration lost healthy histories beside damage: %+v, %v", page, err)
+	}
+	for _, item := range page.Items {
+		if item.Catalog.WorkerSessionID != "healthy-worker" && item.Catalog.WorkerSessionID != "torn-worker" {
+			t.Fatalf("default enumeration exposed damaged identity: %+v", item)
+		}
+	}
+	catalog, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 	if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(catalog.Items) != 0 {
 		t.Fatalf("damaged enumeration claimed complete membership: %+v %v", catalog, err)
 	}
@@ -1025,7 +1034,7 @@ func TestFileWriterCatalogReadFailureDoesNotCacheAbsence(t *testing.T) {
 	}
 	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID}
 	for range 2 {
-		catalog, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+		catalog, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || strings.Contains(err.Error(), "sentinel-secret") || len(catalog.Items) != 0 {
 			t.Fatalf("unreadable catalog claimed absence or disclosed error: page=%+v error=%v", catalog, err)
 		}
@@ -1250,7 +1259,7 @@ func TestFileWriterCatalogDiscoversLegacyAndPreservesHealthySibling(t *testing.T
 		t.Fatalf("legacy generation changed on reconstruction: %v", err)
 	}
 	for range 2 {
-		catalog, err := reopened.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{})
+		catalog, err := reopened.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(catalog.Items) != 0 {
 			t.Fatalf("unidentified damage claimed complete catalog: %+v, %v", catalog, err)
 		}

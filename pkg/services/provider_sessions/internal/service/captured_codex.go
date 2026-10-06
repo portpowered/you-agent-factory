@@ -51,7 +51,7 @@ func (s *capturedCodex) Details(ctx context.Context, ref providers.SessionRef) (
 }
 
 func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.SessionRef) (recordings.WorkerSessionCatalogEntry, error) {
-	request := recordings.WorkerCapturedCatalogRequest{Limit: capturedPageLimit}
+	request := recordings.WorkerCapturedCatalogRequest{Limit: capturedPageLimit, RequireCompleteMembership: true}
 	var selected recordings.WorkerSessionCatalogEntry
 	generation := ""
 	seen := make(map[string]bool)

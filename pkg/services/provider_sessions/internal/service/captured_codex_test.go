@@ -25,7 +25,7 @@ type capturedCodexFake struct {
 
 func (f *capturedCodexFake) ListWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	f.calls++
-	if req.Limit != capturedPageLimit {
+	if req.Limit != capturedPageLimit || !req.RequireCompleteMembership {
 		panic("unbounded catalog request")
 	}
 	if err := ctx.Err(); err != nil {
