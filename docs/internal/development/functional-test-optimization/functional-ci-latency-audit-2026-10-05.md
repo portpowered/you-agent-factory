@@ -12,6 +12,14 @@ passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
 below. The three- and two-minute hosted merge checkpoints remain outstanding.
 
+The first hosted next-phase run, at `0878fd26d0`, passes in **316.816s** full
+supervisor / **287.224s** coverage invocation. Its trace reports 1,355 compiler
+commands and 73 linker commands, and one MCP ACP permission case passes on a
+same-head retry. The existing 67 MB dependency cache leaves repository packages
+cold; the warm local result below does not predict this cold hosted run. The
+next change tests a bounded compiler-archive cache instead of the previously
+removed whole build-cache restore, which cost roughly four minutes for 7 GB.
+
 The next candidate's full four-CPU Linux supervisor passes in **111.55s**, with
 **103.120s coverage invocation**, all **758 selected tests** accounted for,
 756 passes, two skips and no retries. Coverage floors, the selected inventory,
@@ -2182,3 +2190,40 @@ baseline's 208.424s full supervisor failed a batch Work visibility race, so it
 is disclosed as a failed reference rather than a passing comparison. The earlier
 private 427-test prototype was partial and cannot establish a full checkpoint.
 Hosted confirmation and merge remain required for the three-minute milestone.
+
+### Hosted cold-build gap and bounded compiler archives
+
+Run `37390711081` at `0878fd26d0` passes in 316.816s supervisor wall, with
+287.224s invocation wall, 1,355 compiler/73 linker trace commands and one
+recovered MCP ACP permission case. Run `37391871366` after merging main
+(`daf8e9afc6`) passes in 316.715s supervisor / 291.821s invocation, with
+679 compiler/37 linker trace commands. Neither meets three minutes. The existing
+67 MB dependency-cache hit does not retain compiled repository packages.
+
+The new compiler-archive tier retains recently used Go archives and action
+metadata only, with a hard 1 GiB bound. It excludes executable/test-result
+payloads and cached executable directories, avoiding the former whole build
+cache's 7 GB/four-minute restore. Keys include platform, Go version, module
+inputs and source head, with a same-module fallback; Go checks source and tool
+identities before accepting each artifact. Functional runs explicitly use
+`-count=1`. The transfer reports retained bytes/files and omitted entries, and
+the existing build diagnostic reports exact/fallback action-cache identity.
+
+A real coverage-instrumented Go build proof restores only these artifacts into
+an empty cache: the repeat performs zero compiler invocations and produces the
+original output; changing source recompiles the affected packages and produces
+the changed output. Filtering and byte-budget checks also pass, and this proof
+now runs in Workflow Lint. Hosted cold-fill, restored-cache timing, transfer
+cost and retained size still need measurement; a first cold fill is not claimed
+as a three-minute checkpoint.
+
+The private dispatch-concurrency experiment passes at 113.65s versus 111.55s
+for the retained candidate, so its increase from two to four is not adopted.
+It records 40 links across tests/tools, 61.181s linker CPU, 57.764s overlapping
+active linker wall and 186.654s summed linker wall. Largest links are Product
+customer journeys (8.829s), Product CLI/REST journeys (8.210s), Providers ACP
+(7.311s), Runtime API Factory transformation (7.094s), and Providers (7.030s).
+Their intervals overlap and cannot be added to supervisor time. Removing two
+Git-file diagnostic helpers privately allows 21 merged groups/320 tests, but
+that full sample takes 115.06s and raises peak RSS to 3.86 GiB; it is not adopted
+as a latency improvement.

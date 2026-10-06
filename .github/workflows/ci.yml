@@ -92,6 +92,8 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Test workflow lint failure behavior
         run: node --test scripts/ci/workflow-lint.test.mjs
+      - name: Test bounded compiler cache and source invalidation
+        run: python3 scripts/ci/functional-compile-cache.test.py
       - name: Run schema-aware lint across all workflows
         run: node scripts/ci/workflow-lint.mjs
 
@@ -347,9 +349,9 @@ jobs:
             unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
       # Deps-only functional build cache: compiled std and third-party
       # packages only. Coverage instruments just pkg/..., so these objects are
-      # reusable by every instrumented test binary, while module packages stay
-      # cold (they change on every commit; caching them cost a ~4 min restore of
-      # a ~7 GB cache and failed to save). The key is exact, with no
+      # reusable by every instrumented test binary. The separate bounded archive
+      # tier below retains recently used compiler outputs, avoiding the former
+      # ~4 min restore of a ~7 GB whole build cache. The deps key is exact, with no
       # restore-keys, so a go.mod/go.sum or Go version change refills it.
       # Only pushes to main save it; every other run restores read-only.
       - name: Restore functional dependency build cache
@@ -374,6 +376,18 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: ${{ steps.functional-deps-cache.outputs.cache-primary-key }}
+      - name: Restore bounded functional compiler archives
+        if: matrix.suite == 'functional'
+        id: functional-compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .artifacts/functional-compiler-cache/cache
+          key: functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          restore-keys: |
+            functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
+      - name: Apply bounded functional compiler archives
+        if: matrix.suite == 'functional'
+        run: python3 scripts/ci/functional-compile-cache.py restore "$(go env GOCACHE)" .artifacts/functional-compiler-cache/cache
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
@@ -554,6 +568,22 @@ jobs:
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
           FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
+          FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY: ${{ steps.functional-compiler-cache.outputs.cache-primary-key }}
+          FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-compiler-cache.outputs.cache-matched-key }}
+          FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-compiler-cache.outputs.cache-hit }}
+      - name: Capture bounded functional compiler archives
+        if: always() && !cancelled() && matrix.suite == 'functional'
+        id: functional-compiler-capture
+        run: |
+          python3 scripts/ci/functional-compile-cache.py capture "$(go env GOCACHE)" .artifacts/functional-compiler-cache/next --job-start "$JOB_START" --max-bytes 1073741824
+          rm -rf -- .artifacts/functional-compiler-cache/cache
+          mv -- .artifacts/functional-compiler-cache/next .artifacts/functional-compiler-cache/cache
+      - name: Save bounded functional compiler archives
+        if: always() && !cancelled() && matrix.suite == 'functional' && steps.functional-compiler-capture.outcome == 'success' && steps.functional-compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .artifacts/functional-compiler-cache/cache
+          key: ${{ steps.functional-compiler-cache.outputs.cache-primary-key }}
       - name: Upload Linux quarantine package evidence
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
