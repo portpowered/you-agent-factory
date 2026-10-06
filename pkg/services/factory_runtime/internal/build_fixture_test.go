@@ -268,6 +268,10 @@ func (runtimeScopes *testRuntimeScopeServiceStub) OpenRuntime(
 
 func (*testRuntimeScopeServiceStub) Projection() recordings.ProjectionService { return nil }
 
+func (*testRuntimeScopeServiceStub) PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+	return recordings.LiveRecordingTarget{}, nil
+}
+
 func (*testRuntimeScopeServiceStub) ReconstructCanonicalFactoryWorldState(
 	[]interfaces.FactoryEvent,
 	int,

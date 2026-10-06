@@ -27,7 +27,7 @@ func TestServerRunConfigUsesOwnedNonBootstrappingLifecycle(t *testing.T) {
 	defaults := runcli.RunConfig{}
 	server := ServerRunConfig(defaults)
 	if server.Dir != FactoryDir || server.Port != FactoryPort || !server.AutoPort ||
-		!server.Continuously || server.Bootstrap || !server.OpenDashboard {
+		!server.Continuously || server.Bootstrap || !server.OpenDashboard || !server.FreshCurrentBoard {
 		t.Fatalf("ServerRunConfig() = %+v", server)
 	}
 }

@@ -264,6 +264,9 @@ type ResumeRecoveryMetadata struct {
 // and Factory Sessions while opening a runtime. It keeps replay construction,
 // projection selection, and live scope acquisition on the one process root.
 type RuntimeScopeService interface {
+	// PlanLiveRecordingTarget reserves a fresh target after Sessions has ruled
+	// out a retained board, before opening the recording writer.
+	PlanLiveRecordingTarget(LiveRecordingTargetRequest) (LiveRecordingTarget, error)
 	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 	// ReconstructCanonicalFactoryWorldState reduces detached canonical Factory

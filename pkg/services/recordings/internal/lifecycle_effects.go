@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -75,6 +76,9 @@ func newReplayRecordingSnapshotWriter(
 				state = &replayV2SnapshotState{}
 				v2States[target] = state
 			}
+			if state.terminalEmitted && redacted.Status.FinalizedAt == nil {
+				return reopenReplayV2Snapshot(target, redacted, write, state)
+			}
 			return writeReplayV2Snapshot(target, redacted, appendFile, prepareAppend, state)
 		}
 
@@ -87,6 +91,35 @@ type replayV2SnapshotState struct {
 	headerEmitted   bool
 	persistedEvents int
 	terminalEmitted bool
+	persistedLines  [][]byte
+}
+
+// A terminal frame closes one writer generation. Reopening replaces only that
+// framing, retaining the exact canonical prefix; events never follow a terminal.
+// Publish the new writer boundary only after replacement succeeds.
+func reopenReplayV2Snapshot(target string, snapshot recordings.RecordingSnapshot, write func(string, []byte) error, state *replayV2SnapshotState) error {
+	if len(snapshot.Events) < state.persistedEvents {
+		return fmt.Errorf("%w at %q: reopened snapshot lost retained events", recordings.ErrRecordingSnapshotWrite, target)
+	}
+	for index, retained := range state.persistedLines {
+		line, err := replayimpl.MarshalReplayV2Event(canonical.FactoryEventFromCanonical(snapshot.Events[index]))
+		if err != nil || !bytes.Equal(line, retained) {
+			return fmt.Errorf("%w at %q: reopened snapshot changed retained event %d", recordings.ErrRecordingSnapshotWrite, target, index)
+		}
+	}
+	var data []byte
+	next := &replayV2SnapshotState{targetPrepared: true}
+	if err := writeReplayV2Snapshot(target, snapshot, func(_ string, line []byte) error {
+		data = append(data, line...)
+		return nil
+	}, nil, next); err != nil {
+		return err
+	}
+	if err := write(target, data); err != nil {
+		return fmt.Errorf("%w at %q: reopen replay v2 target: %w", recordings.ErrRecordingSnapshotWrite, target, err)
+	}
+	*state = *next
+	return nil
 }
 
 func writeReplayV1Snapshot(
@@ -239,6 +272,7 @@ func writeReplayV2Events(
 			return err
 		}
 		state.persistedEvents++
+		state.persistedLines = append(state.persistedLines, line)
 	}
 	return nil
 }

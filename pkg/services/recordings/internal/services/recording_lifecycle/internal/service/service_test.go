@@ -21,6 +21,59 @@ type namedTargetReserver struct {
 	calls int
 }
 
+func TestLifecyclePlanLiveRecordingTargetForwardsRequestAndResult(t *testing.T) {
+	t.Parallel()
+	request := recordings.LiveRecordingTargetRequest{
+		HomeDir: "home/operator", CanonicalSessionID: "canonical-session", ReportedSessionID: "~default",
+	}
+	want := recordings.LiveRecordingTarget{ServicePath: "private-target", ReportedPath: "reported-target"}
+	calls := 0
+	planner := recordings.LiveRecordingTargetPlannerFunc(func(got recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+		calls++
+		if got != request {
+			t.Fatalf("planner request = %#v, want %#v", got, request)
+		}
+		return want, nil
+	})
+	owner := lifecycleservice.New(planner, nil, nil, fixedRecordingClock{})
+	got, err := owner.PlanLiveRecordingTarget(request)
+	if err != nil || got != want || calls != 1 {
+		t.Fatalf("plan = (%#v, %v), calls=%d; want (%#v, nil), one call", got, err, calls, want)
+	}
+}
+
+func TestLifecyclePlanLiveRecordingTargetPropagatesPlannerError(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("target reservation unavailable")
+	planner := recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+		return recordings.LiveRecordingTarget{}, wantErr
+	})
+	owner := lifecycleservice.New(planner, nil, nil, fixedRecordingClock{})
+	got, err := owner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{HomeDir: "home/operator"})
+	if !errors.Is(err, wantErr) || got != (recordings.LiveRecordingTarget{}) {
+		t.Fatalf("plan = (%#v, %v), want empty target and planner error", got, err)
+	}
+}
+
+func TestLifecyclePlanLiveRecordingTargetRejectsMissingPlanner(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		owner *lifecycleservice.Service
+	}{
+		{name: "nil service"},
+		{name: "missing planner", owner: lifecycleservice.New(nil, nil, nil, fixedRecordingClock{})},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := test.owner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{HomeDir: "home/operator"})
+			if !errors.Is(err, recordings.ErrMissingRecordingTarget) || got != (recordings.LiveRecordingTarget{}) {
+				t.Fatalf("plan = (%#v, %v), want empty target and ErrMissingRecordingTarget", got, err)
+			}
+		})
+	}
+}
+
 func TestLifecycleSnapshotReportsPublicReferenceWhileWriterUsesPrivateTarget(t *testing.T) {
 	t.Parallel()
 	const privatePath = "/private/ledger/storage/recording-internal.json"

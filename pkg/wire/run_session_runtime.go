@@ -410,7 +410,8 @@ func runSessionStartRequest(cfg runcli.RunConfig, mocks *workers.MockWorkersConf
 				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 			},
 			Recording: factorysessions.SessionRecordingSelection{
-				RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath,
+				ImplicitCurrentBoard: cfg.ImplicitCurrentBoard,
+				RecordPath:           cfg.RecordPath, ReplayPath: cfg.ReplayPath,
 				ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
 			},
 			OperatorDefaults: cfg.OperatorDefaults,

@@ -317,6 +317,72 @@ func TestNewReplayRecordingSnapshotWriterDoesNotAdvanceAfterAppendFailure(t *tes
 	}
 }
 
+func TestReplayRecordingSnapshotWriterReopensFinalizedPrefix(t *testing.T) {
+	t.Parallel()
+	var data []byte
+	failReplacement := false
+	writer := NewReplayRecordingSnapshotWriter(func(_ string, payload []byte) error {
+		if failReplacement {
+			return errors.New("injected replacement failure")
+		}
+		data = append([]byte(nil), payload...)
+		return nil
+	}, func(_ string, payload []byte) error {
+		data = append(data, payload...)
+		return nil
+	}, nil)
+	startedAt := time.Date(2026, 8, 23, 14, 30, 0, 0, time.UTC)
+	if err := writer("reopened.jsonl", v2LifecycleSnapshot(startedAt, 2, true)); err != nil {
+		t.Fatal(err)
+	}
+	original := append([]byte(nil), data...)
+	assertReopenedPrefixRejections(t, writer, startedAt, &data, original)
+	failReplacement = true
+	if err := writer("reopened.jsonl", v2LifecycleSnapshot(startedAt, 3, false)); !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
+		t.Fatalf("replacement error = %v", err)
+	}
+	if !bytes.Equal(data, original) {
+		t.Fatal("failed replacement changed retained artifact")
+	}
+	failReplacement = false
+	assertReopenedGenerations(t, writer, startedAt, &data)
+}
+
+func assertReopenedPrefixRejections(t *testing.T, writer recordings.RecordingSnapshotWriter, startedAt time.Time, data *[]byte, original []byte) {
+	t.Helper()
+	for _, snapshot := range []recordings.RecordingSnapshot{
+		v2LifecycleSnapshot(startedAt, 1, false),
+		v2LifecycleSnapshot(startedAt.Add(time.Second), 3, false),
+	} {
+		if err := writer("reopened.jsonl", snapshot); !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
+			t.Fatalf("incompatible prefix error = %v", err)
+		}
+		if !bytes.Equal(*data, original) {
+			t.Fatal("rejected prefix changed retained artifact")
+		}
+	}
+}
+
+func assertReopenedGenerations(t *testing.T, writer recordings.RecordingSnapshotWriter, startedAt time.Time, data *[]byte) {
+	t.Helper()
+	for count := 3; count <= 4; count++ {
+		for _, finalized := range []bool{false, true} {
+			if err := writer("reopened.jsonl", v2LifecycleSnapshot(startedAt, count, finalized)); err != nil {
+				t.Fatalf("reopen count=%d finalized=%t: %v", count, finalized, err)
+			}
+			stream, err := replayimpl.ParseReplayV2(*data)
+			if err != nil || len(stream.Events) != count || (stream.Terminal != nil) != finalized {
+				t.Fatalf("reopened artifact count=%d finalized=%t: stream=%#v err=%v", count, finalized, stream, err)
+			}
+			for index, event := range stream.Events {
+				if event.Id != "event-v2-"+string(rune('0'+index)) {
+					t.Fatalf("retained event identity = %q at %d", event.Id, index)
+				}
+			}
+		}
+	}
+}
+
 func TestReplayRecordingSnapshotWriterRejectsNonEmptyV2Target(t *testing.T) {
 	var data []byte
 	appendFile := func(_ string, payload []byte) error {

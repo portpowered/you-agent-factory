@@ -462,3 +462,125 @@ func assertFailedDurableAcquisition(t *testing.T, release func(context.Context) 
 		t.Fatal(err)
 	}
 }
+
+func TestCurrentBoardAcquiredScopesIsolateReferenceReadsAndWrites(t *testing.T) {
+	t.Parallel()
+	firstStore := &currentBoardScopeStore{artifact: "first-recording"}
+	peerStore := &currentBoardScopeStore{artifact: "peer-recording"}
+	globalStore := &currentBoardScopeStore{artifact: "global-recording"}
+	stores := map[string]*currentBoardScopeStore{"/first": firstStore, "/peer": peerStore}
+	owner := &JavaScriptRuntimeService{
+		persistence: globalStore,
+		scopePersistence: NewScopePersistence(func(root string) (runtimepersist.Store, error) {
+			return stores[root], nil
+		}),
+		durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{},
+	}
+	acquire := func(root string) (*JavaScriptRuntimeService, func(context.Context) error) {
+		t.Helper()
+		service, release, err := owner.Acquire(t.Context(), durableexecution.ScopeFacts{
+			FactorySessionID: "~default", RuntimeID: root, ProjectRoot: root,
+			Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake,
+		}, durableFixedClock{}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cleanupDurableScope(t, release)
+		return service.(*JavaScriptRuntimeService), release
+	}
+	first, releaseFirst := acquire("/first")
+	peer, _ := acquire("/peer")
+	assertScopedBoardReference(t, first, "/first/factory", "first-recording", "first-next")
+	assertScopedBoardReference(t, peer, "/peer/factory", "peer-recording", "peer-next")
+	assertBoardScopeStore(t, firstStore, "/first/factory", "first-next", 1, 1)
+	assertBoardScopeStore(t, peerStore, "/peer/factory", "peer-next", 1, 1)
+	assertBoardScopeStore(t, globalStore, "", "global-recording", 0, 0)
+	if err := releaseFirst(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.LoadCurrentBoard(t.Context(), "/first/factory"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("released scope read = %v", err)
+	}
+	if err := first.SaveCurrentBoard(t.Context(), "/first/factory", "unowned"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("released scope write = %v", err)
+	}
+	assertScopedBoardReference(t, peer, "/peer/factory", "peer-next", "peer-retained")
+	assertBoardScopeStore(t, firstStore, "/first/factory", "first-next", 1, 1)
+	assertBoardScopeStore(t, peerStore, "/peer/factory", "peer-retained", 2, 2)
+	assertBoardScopeStore(t, globalStore, "", "global-recording", 0, 0)
+}
+
+func assertBoardScopeStore(t *testing.T, store *currentBoardScopeStore, factoryDirectory, artifact string, reads, writes int) {
+	t.Helper()
+	if store.factory != factoryDirectory || store.artifact != artifact || store.reads != reads || store.writes != writes {
+		t.Fatalf("reference operations crossed scoped routes: got %+v; want factory=%q artifact=%q reads=%d writes=%d", store, factoryDirectory, artifact, reads, writes)
+	}
+}
+
+func assertScopedBoardReference(t *testing.T, service *JavaScriptRuntimeService, factoryDirectory, previous, next string) {
+	t.Helper()
+	got, err := service.LoadCurrentBoard(t.Context(), factoryDirectory)
+	if err != nil || got != previous {
+		t.Fatalf("scoped read = %q, %v; want %q", got, err, previous)
+	}
+	if err := service.SaveCurrentBoard(t.Context(), factoryDirectory, next); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCurrentBoardUnavailableScopeDoesNotUsePeerStore(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"missing default", "retiring default", "disabled persistence", "unsupported store"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			peer := &currentBoardScopeStore{artifact: "peer-recording"}
+			router := NewScopePersistence(nil)
+			router.scopes["peer"] = &durableScope{store: peer}
+			switch name {
+			case "retiring default":
+				router.scopes["~default"] = &durableScope{store: peer, retiring: true}
+			case "disabled persistence":
+				router.scopes["~default"] = &durableScope{}
+			case "unsupported store":
+				router.scopes["~default"] = &durableScope{store: &durableProbeStore{}}
+			}
+			service := &JavaScriptRuntimeService{persistence: router}
+			if got, err := service.LoadCurrentBoard(t.Context(), "/factory"); err == nil || got != "" {
+				t.Fatalf("unavailable scoped read = %q, %v", got, err)
+			}
+			if err := service.SaveCurrentBoard(t.Context(), "/factory", "replacement"); err == nil {
+				t.Fatal("unavailable scoped write succeeded")
+			}
+			if peer.reads != 0 || peer.writes != 0 || peer.artifact != "peer-recording" {
+				t.Fatal("unavailable scope touched peer reference")
+			}
+		})
+	}
+}
+
+type currentBoardScopeStore struct {
+	durableProbeStore
+	artifact string
+	factory  string
+	reads    int
+	writes   int
+}
+
+func (store *currentBoardScopeStore) LoadCurrentBoard(ctx context.Context, factoryDirectory string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	store.factory = factoryDirectory
+	store.reads++
+	return store.artifact, nil
+}
+
+func (store *currentBoardScopeStore) SaveCurrentBoard(ctx context.Context, factoryDirectory, artifact string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store.factory = factoryDirectory
+	store.writes++
+	store.artifact = artifact
+	return nil
+}

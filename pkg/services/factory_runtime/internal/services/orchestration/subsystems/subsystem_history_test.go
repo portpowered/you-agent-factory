@@ -11,8 +11,34 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRecoverWorkHistoriesRetainsVisitsAndResetsFailedMoves(t *testing.T) {
+	t.Parallel()
+	net := &state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task", States: []state.StateDefinition{{Value: "failed", Category: state.StateCategoryFailed}}}}}
+	base := time.Unix(100, 0)
+	completion := func(id string, start int, outcome, outputState string) interfaces.FactoryWorldDispatchCompletion {
+		item := work.FactoryWorkItem{ID: "work", WorkTypeID: "task", State: outputState}
+		return interfaces.FactoryWorldDispatchCompletion{DispatchID: id, TransitionID: "process", StartedAt: base.Add(time.Duration(start) * time.Second), CompletedAt: base.Add(time.Duration(start+1) * time.Second), WorkItemIDs: []string{"work"}, OutputWorkItems: []work.FactoryWorkItem{item}, Result: workerexecution.WorkstationResult{Outcome: outcome, Error: "controlled failure"}}
+	}
+	world := &interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{completion("one", 0, "ACCEPTED", "waiting"), completion("two", 2, "FAILED", "failed")}}
+	h := RecoverWorkHistories(world, net)["work"]
+	if h.TotalVisits["process"] != 2 || h.ConsecutiveFailures["process"] != 1 || len(h.FailureLog) != 1 {
+		t.Fatalf("restored history = %#v", h)
+	}
+	world.WorkStateChangesByWorkID = map[string][]interfaces.FactoryWorldWorkStateChangeRecord{"work": {{WorkID: "work", WorkTypeName: "task", FromState: "failed", ToState: "init", Source: work.WorkStateChangeSourceAPI, EventTime: base.Add(4 * time.Second)}}}
+	world.CompletedDispatches = append(world.CompletedDispatches, completion("three", 5, "ACCEPTED", "waiting"))
+	h = RecoverWorkHistories(world, net)["work"]
+	if h.TotalVisits["process"] != 1 || h.ConsecutiveFailures["process"] != 0 || len(h.FailureLog) != 1 {
+		t.Fatalf("history after operator reset = %#v", h)
+	}
+	h.TotalVisits["process"] = 99
+	if next := RecoverWorkHistories(world, net)["work"]; next.TotalVisits["process"] != 1 {
+		t.Fatal("reconstruction shares mutable counters")
+	}
+}
 
 func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *testing.T) {
 	timestamp := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)

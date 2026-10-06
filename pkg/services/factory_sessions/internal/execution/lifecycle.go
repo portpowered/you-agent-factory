@@ -66,6 +66,9 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 	}
 
 	snapshot, err := persistence.Load(id)
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return false, cancelErr
+	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -77,8 +80,11 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		}
 	}
 
-	persistedSessionID, err := inspectDurableSnapshot(snapshot)
+	persistedSessionID, err := inspectDurableSnapshot(ctx, snapshot)
 	if err != nil {
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return false, cancelErr
+		}
 		return false, &ResumeError{
 			Outcome:   ResumeOutcomeCorruptedPersistence,
 			SessionID: id,

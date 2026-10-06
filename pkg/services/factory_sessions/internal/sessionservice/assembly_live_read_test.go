@@ -1073,3 +1073,14 @@ func assertHostLogicalRemapping(t *testing.T, reader sessionIdentityReader) {
 		t.Fatalf("production host routing without gateway = %#v, %v", got, err)
 	}
 }
+
+func TestRecordedHistoryOpeningUsesExplicitProfile(t *testing.T) {
+	t.Parallel()
+	inventory := &recordedInventoryStub{}
+	history := NewRecordedHistory(func() (string, error) { t.Fatal("opening consulted process-global home"); return "", nil }, inventory)
+	assembly := &Assembly{recordedHistory: history}
+	_, err := assembly.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: "invocation-profile"})
+	if err != nil || inventory.root != "invocation-profile" {
+		t.Fatalf("scoped inventory root=%q, error=%v", inventory.root, err)
+	}
+}
