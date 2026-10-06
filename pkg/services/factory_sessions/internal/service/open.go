@@ -48,7 +48,7 @@ func (r *Root) openRuntimeWithOptions(
 		return runtimeProducts{}, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		return r.openHistoricalSessionRuntime(opening)
+		return r.openHistoricalSessionRuntime(ctx, opening)
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	defer func() {
@@ -193,13 +193,18 @@ func applyRuntimeWorkerReasoningEffort(configured preparedRuntime, load RuntimeL
 	return nil
 }
 
-func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (runtimeProducts, error) {
+func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (runtimeProducts, error) {
 	var err error
 	var liveOwner durableexecution.Service
 	var replayClose func() error
 	if opening.load.HistoricalReplay.Checkpoint != nil {
+		// Portable history owns the resume identity, independently of the CLI
+		// inspection host selection (which can be ~default).
+		configured := opening.configured
+		configured.Session.SessionID = opening.load.HistoricalReplay.Session.SessionID
 		liveOwner, replayClose, err = r.openPortableReplayDurableOwner(
-			opening.configured,
+			ctx,
+			configured,
 			opening.root,
 		)
 		if err != nil {
@@ -242,6 +247,7 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	}
 	opening.providerForDurable = r.providerOverride
 	opening.durableExecution, err = r.durableOpening.Open(
+		ctx, opening.sessionID,
 		opening.configured.Definition,
 		opening.configured.Session.Persistence,
 		opening.sessionSelection.SystemConfigHome,
@@ -252,10 +258,10 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 		opening.providerForDurable,
 		opening.configured.Workers.MockWorkers,
 	)
-	if closer, ok := opening.durableExecution.Service.(interface{ Close() error }); ok {
+	if release := opening.durableExecution.Release; release != nil {
 		cleanup.Add(func() error {
-			if err := closer.Close(); err != nil {
-				return fmt.Errorf("close durable Factory Session execution: %w", err)
+			if err := release(context.WithoutCancel(ctx)); err != nil {
+				return fmt.Errorf("release durable Factory Session execution: %w", err)
 			}
 			return nil
 		})

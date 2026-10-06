@@ -136,8 +136,8 @@ func TestChildWorkerExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 	}
 	sink := newChildRecordSink()
 	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
+		projectRoot:         "/project",
+		durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{childValues: childTestValues{}},
 	}
 	service.workerExecution = service.newChildWorkerExecutionBinding(involver, nil, "", "", nil, nil, nil, nil, nil)
 	policy := factory.DefaultJavaScriptPolicy()

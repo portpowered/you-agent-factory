@@ -1009,10 +1009,6 @@
       "minimum": 59.37
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service",
-      "minimum": 47.82
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/internal/service",
       "minimum": 54.28
     },

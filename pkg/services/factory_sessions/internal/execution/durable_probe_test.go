@@ -43,7 +43,7 @@ func TestDurableProbeCanonicalValidation(t *testing.T) {
 			decodeErr := json.Unmarshal([]byte(snapshot), &canonical)
 			want := decodeErr == nil && strings.TrimSpace(canonical.Session.SessionID) == "~default"
 			store := &durableProbeStore{snapshot: []byte(snapshot)}
-			service := &JavaScriptRuntimeService{persistence: store}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 			got, err := service.HasDurableState(t.Context(), "~default")
 			if got != want || (err == nil) != want {
 				t.Fatalf("probe = %v, %v; canonical acceptance = %v (%v)", got, err, want, decodeErr)
@@ -114,7 +114,7 @@ func TestHasDurableStateStorageAndCancellation(t *testing.T) {
 	t.Parallel()
 	for _, failure := range []error{fs.ErrNotExist, errors.New("secret read failure")} {
 		store := &durableProbeStore{failure: failure}
-		service := &JavaScriptRuntimeService{persistence: store}
+		service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 		got, err := service.HasDurableState(t.Context(), "~default")
 		if got || (err == nil) != errors.Is(failure, fs.ErrNotExist) {
 			t.Fatalf("storage failure = %v, %v", got, err)

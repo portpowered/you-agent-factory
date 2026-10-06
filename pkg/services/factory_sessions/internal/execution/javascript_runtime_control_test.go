@@ -71,8 +71,8 @@ func TestJavaScriptRuntimeService_ChildPolicySetsNarrowerWorkerTimeout(t *testin
 		Outcome: workers.ExecutionOutcomeAccepted,
 	}}
 	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
+		projectRoot:         "/project",
+		durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{childValues: childTestValues{}},
 	}
 	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil, nil, nil)
 
@@ -971,7 +971,7 @@ func TestLegacyInterruptedSnapshot_RemainsLosslessOnSuccessfulSave(t *testing.T)
 	const sessionID = "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	store := &runtimeRecordingStore{}
 	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusInterrupted, OrchestratorKind: interfaces.OrchestratorKindPetri}, petriMutations: legacyTerminalTokenMutations(8)}
-	if err := (&JavaScriptRuntimeService{persistence: store}).persistSessionSnapshot(state); err != nil {
+	if err := (&JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}).persistSessionSnapshot(state); err != nil {
 		t.Fatalf("persist interrupted legacy snapshot: %v", err)
 	}
 	var persisted PersistedRuntimeSessionState

@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/operatordefaults"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -163,19 +164,23 @@ func (r *Root) prepareRuntime(
 // Each Open call retains only its request's settings and acquired resource owner.
 type DurableOpening struct {
 	loadOperatorConfig operatorconfig.ConfigLoader
-	executionFactory   FactorySessionExecutionFactory
+	acquire            durableexecution.ScopeAcquisition
+	providerReachable  bool
 	providerIdentities factorysessions.ProviderIdentityResolver
 }
 
 func NewDurableOpening(
 	loadOperatorConfig operatorconfig.ConfigLoader,
-	executionFactory FactorySessionExecutionFactory,
+	acquire durableexecution.ScopeAcquisition,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	providerReachable bool,
 ) *DurableOpening {
-	return &DurableOpening{loadOperatorConfig: loadOperatorConfig, executionFactory: executionFactory, providerIdentities: providerIdentities}
+	return &DurableOpening{loadOperatorConfig: loadOperatorConfig, acquire: acquire, providerIdentities: providerIdentities, providerReachable: providerReachable}
 }
 
 func (opening *DurableOpening) Open(
+	ctx context.Context,
+	sessionID string,
 	definitionRequest factorydefinitions.RuntimeSelection,
 	persistence factorysessions.PersistencePolicy,
 	systemConfigHome string,
@@ -186,9 +191,6 @@ func (opening *DurableOpening) Open(
 	providerOverride providers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) (DurableExecution, error) {
-	if opening.executionFactory == nil {
-		return DurableExecution{}, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
-	}
 	projectRoot := firstNonEmpty(definitionRequest.ExecutionBaseDir, definitionRequest.Directory, root.FactoryRootDir)
 	configPath, err := operatorConfigPath(systemConfigPath, systemConfigHome)
 	if err != nil {
@@ -202,25 +204,25 @@ func (opening *DurableOpening) Open(
 	if err != nil {
 		return DurableExecution{}, err
 	}
-	execution, err := opening.executionFactory(
-		projectRoot,
-		persistence,
-		providerOverride,
-		clock,
-		workerPresetIDs,
-		workerSettings,
-		mockWorkersConfig,
-		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
-		root.BaseLogger,
-	)
+	mode := factorysessions.ChildExecutorModeFake
+	mockAllowsLive := mockWorkersConfig == nil || mockWorkersConfig.UnmatchedDispatchPolicy.PassthroughUnmatched()
+	if providerOverride != nil || (mockAllowsLive && opening.providerReachable) {
+		mode = factorysessions.ChildExecutorModeLive
+	}
+	execution, release, err := opening.acquire(ctx, durableexecution.ScopeFacts{
+		FactorySessionID: sessionID, RuntimeID: root.RuntimeInstanceID,
+		ProjectRoot: projectRoot, Persistence: persistence, ChildExecutorMode: mode,
+		WorkerPresetIDs: workerPresetIDs, WorkerSettings: workerSettings,
+	}, clock, root.BaseLogger)
 	if err != nil {
 		// The opener can acquire an owner before failing. Sessions registers
 		// its cleanup before checking this error, so preserve that partial
 		// ownership without publishing successful execution settings.
-		return DurableExecution{Service: execution}, fmt.Errorf("compose durable session persistence: %w", err)
+		return DurableExecution{Release: release}, fmt.Errorf("compose durable session persistence: %w", err)
 	}
 	return DurableExecution{
 		Service:         execution,
+		Release:         release,
 		WorkerSettings:  workersettings.Clone(&workerSettings),
 		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
 		OperatorModels:  projectOperatorModelOverlays(operatorConfig.Models),
