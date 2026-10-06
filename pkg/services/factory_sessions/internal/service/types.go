@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
@@ -15,11 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -43,15 +39,8 @@ type runtimeProducts struct {
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
 	modelInvocation        modelinvocation.RuntimeModelInvocation
 	factoryRuntime         factoryruntime.Service
-	factoryDefinitions     factorydefinitions.Service
-	workflowPreview        factoryruntime.WorkflowPreviewOperation
-	work                   work.Service
-	models                 models.Service
 	modelsScope            models.RuntimeScopeRef
-	workers                workers.Service
-	providerSessions       providersessions.Service
 	workerSessions         workersessions.ObservationService
-	workerPrompts          workers.PromptTemplates
 	reader                 roles.RuntimeReader
 	projections            recordings.ProjectionService
 	recordings             recordings.Service
@@ -102,15 +91,9 @@ func historicalReplayRuntimeProducts(
 
 func assembleRuntimeProducts(
 	ctx context.Context,
-	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway roles.SessionGateway,
 	factoryRuntime factoryruntime.Service,
-	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workService work.Service,
-	workerService workers.Service,
-	modelsBind modelsRuntimeBind,
-	providerSessions providersessions.Service,
+	modelsScope models.RuntimeScopeRef,
 	startup runtimeports.RuntimeInstance,
 	lifecycle roles.LifecycleRuntime,
 	process roles.ProcessRuntime,
@@ -131,11 +114,10 @@ func assembleRuntimeProducts(
 	}
 	bindRuntime := runtimeBindingForSession(factoryRuntime, factorySessionID)
 	effectiveFactorySessionID := resolveOpenedFactorySessionID(ctx, factorySessionGateway, factorySessionID)
-	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	modelInvocation := modelinvocation.RuntimeModelInvocation{
-		FactorySessionID: effectiveFactorySessionID, Scope: modelsBind.Scope,
+		FactorySessionID: effectiveFactorySessionID, Scope: modelsScope,
 		RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
 		FactoryDirectory: directory, WorkingDirectory: directory,
 	}
@@ -145,12 +127,10 @@ func assembleRuntimeProducts(
 		process:     process, lifecycle: lifecycle,
 		sessions: factorySessionGateway, liveControl: liveControl, execution: factorySessionGateway,
 		modelInvocation: modelInvocation,
-		factoryRuntime:  factoryRuntime, factoryDefinitions: factoryDefinitions,
-		workflowPreview: workflowPreview, work: workService,
-		models: modelsBind.Root, modelsScope: modelsBind.Scope,
-		workers: workerService, providerSessions: providerSessions,
-		workerSessions: workerSessions, workerPrompts: workerPrompts,
-		reader: reader, projections: projections,
+		factoryRuntime:  factoryRuntime,
+		modelsScope:     modelsScope,
+		workerSessions:  workerSessions,
+		reader:          reader, projections: projections,
 		logger: startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
 		directory: directory, runtimeInstanceID: runtimeInstanceID, backendScopeID: backendScopeID,
 		closeArtifacts: closeResources,

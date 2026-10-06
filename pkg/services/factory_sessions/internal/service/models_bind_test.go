@@ -511,10 +511,9 @@ func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 	}
 }
 
-func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *testing.T) {
+func TestAssembleRuntimeProductsCarriesModelsScopeIntoOpenedRuntime(t *testing.T) {
 	t.Parallel()
 
-	root := &recordingModelsService{}
 	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:assembled")
 	if err != nil {
 		t.Fatalf("parse Models scope: %v", err)
@@ -524,13 +523,7 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		context.Background(),
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		modelsRuntimeBind{Root: root, Scope: scope},
-		nil,
+		scope,
 		inertHostedInstance{},
 		nil,
 		nil,
@@ -542,9 +535,6 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		func() error { return nil },
 	)
 
-	if opened.models != root {
-		t.Fatal("opened application runtime did not retain the process-scoped Models root")
-	}
 	if opened.modelsScope != scope {
 		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope, scope)
 	}
@@ -560,15 +550,9 @@ func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicati
 	}}
 	opened := assembleRuntimeProducts(
 		context.Background(),
-		nil,
 		gateway,
 		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		modelsRuntimeBind{},
-		nil,
+		models.RuntimeScopeRef{},
 		inertHostedInstance{},
 		nil,
 		nil,
@@ -614,13 +598,7 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 		context.Background(),
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		modelsRuntimeBind{},
-		nil,
+		models.RuntimeScopeRef{},
 		inertHostedInstance{},
 		nil,
 		nil,
