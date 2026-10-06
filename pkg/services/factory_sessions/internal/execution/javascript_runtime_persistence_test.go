@@ -1200,3 +1200,93 @@ func TestDurableScopeReleaseKeepsTerminalPersistenceUntilRunJoins(t *testing.T) 
 		t.Fatal("terminal snapshot lost or duplicated")
 	}
 }
+
+// The acquired owner, rather than public Invoke's independent T13 owner,
+// applies the opening's persistence policy to child results.
+func TestDurableScopeChildResultsReloadOnlyFromEnabledRoot(t *testing.T) {
+	t.Parallel()
+	roots := []string{t.TempDir(), t.TempDir()}
+	ids := []string{"dur-sess-00000000000040008000000000000001", "dur-sess-00000000000040008000000000000002"}
+	generated := 0
+	router := NewScopePersistence(testRuntimePersistenceStoreFactory)
+	worker := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome:          workers.ExecutionOutcomeAccepted,
+		Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "owned child result"}}},
+		StructuredResult: map[string]any{"text": "owned child result"}, StructuredResultPresent: true,
+	}}
+	var service *JavaScriptRuntimeService
+	service = newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		Persistence: router,
+		Workflows: scriptedRuntimeWorkflows(func(ctx context.Context, request factory.JavaScriptRuntimeRequest, hooks factory.JavaScriptRuntimeHooks) (factory.JavaScriptRuntimeOutcome, error) {
+			sink := newChildRecordSink()
+			child, err := newChildWorkerExecutor(request.SessionID, worker, sink, childTestValues{}, nil, service.projectRootForSession(request.SessionID), 0).Execute(ctx, factory.JavaScriptChildExecutionRequest{Prompt: "selected child", ModelProvider: "codex"})
+			outcome := successfulRuntimeOutcome(sink.records)
+			outcome.Value.JSON, _ = json.Marshal(child.Output)
+			return outcome, err
+		}),
+	})
+	service.generateSessionID = func() string {
+		id := []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"}[generated]
+		generated++
+		return id
+	}
+	for index, policy := range []PersistencePolicy{PersistencePolicyEnabled, PersistencePolicyDisabled} {
+		release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+			FactorySessionID: ids[index], RuntimeID: "runtime-" + ids[index], ProjectRoot: roots[index],
+			Persistence: policy, ChildExecutorMode: ChildExecutorModeLive,
+		}, durableFixedClock{now: time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := release(context.Background()); err != nil {
+				t.Error(err)
+			}
+		})
+		request := inlineWorkflowStartRequest("scope-child-"+ids[index], "selected child", nil, nil)
+		request.ProjectRoot = roots[index]
+		started, err := service.StartSync(t.Context(), request)
+		if err != nil || started.SessionID != ids[index] {
+			t.Fatalf("selected start = %#v, %v", started, err)
+		}
+		dispatches, err := service.ListDispatches(t.Context(), ids[index])
+		if err != nil || len(dispatches.Dispatches) != 1 {
+			t.Fatalf("selected child dispatches = %#v, %v", dispatches, err)
+		}
+		if worker.request.Target.Environment.WorkingDirectory != roots[index] {
+			t.Fatalf("child root = %q, want %q", worker.request.Target.Environment.WorkingDirectory, roots[index])
+		}
+		if err := release(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(runtimepersist.SnapshotPathForProjectRoot(roots[1], ids[1])); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("disabled child snapshot = %v, want absent", err)
+	}
+	encoded, err := os.ReadFile(runtimepersist.SnapshotPathForProjectRoot(roots[0], ids[0]))
+	if err != nil || !bytes.Contains(encoded, []byte("owned child result")) {
+		t.Fatalf("enabled snapshot lost child output: %v", err)
+	}
+	release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+		FactorySessionID: ids[0], ProjectRoot: roots[0], Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeLive,
+	}, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := release(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	dispatches, err := service.ListDispatches(t.Context(), ids[0])
+	if err != nil || len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].Status != "COMPLETED" {
+		t.Fatalf("reloaded child dispatches = %#v, %v", dispatches, err)
+	}
+	result, err := service.GetResult(t.Context(), ids[0], ResultRequest{Mode: ResultModeFinal})
+	if err != nil || !bytes.Contains(result.PrimaryResult, []byte("owned child result")) {
+		t.Fatalf("reloaded child result = %#v, %v", result, err)
+	}
+	if _, err := service.GetSession(t.Context(), ids[1]); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("disabled peer reloaded = %v, want absent", err)
+	}
+}
