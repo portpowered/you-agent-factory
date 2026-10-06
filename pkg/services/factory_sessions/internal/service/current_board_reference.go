@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type currentBoardReferencePersistence interface {
@@ -100,4 +101,30 @@ func (opening *sessionRuntimeOpening) publishCurrentBoardReference(ctx context.C
 		return err
 	}
 	return store.SaveCurrentBoard(ctx, opening.load.LoadedFactoryCfg.FactoryDir(), opening.configured.Recordings.RecordPath)
+}
+
+func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) error {
+	if !opening.usesImplicitCurrentBoard() || strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if r.recordingsRuntime == nil {
+		return fmt.Errorf("current board recording target planner is unavailable")
+	}
+	selection := opening.sessionSelection
+	target, err := r.recordingsRuntime.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir: selection.SystemConfigHome, CanonicalSessionID: selection.CanonicalSessionID,
+		ReportedSessionID: opening.sessionID,
+	})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(target.ServicePath) == "" {
+		return fmt.Errorf("current board recording target planner returned an empty path")
+	}
+	opening.configured.Recordings.RecordPath = target.ServicePath
+	selection.Recording.RecordPath = target.ServicePath
+	return nil
 }

@@ -53,6 +53,15 @@ type Service struct {
 var _ recordinglifecycle.Service = (*Service)(nil)
 var _ recordinglifecycle.CompletedFlushWatermarkReader = (*Service)(nil)
 
+// PlanLiveRecordingTarget retains the same exclusive dated-path policy for
+// callers that must validate retained history before reserving a new target.
+func (service *Service) PlanLiveRecordingTarget(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+	if service == nil || service.targets == nil {
+		return recordings.LiveRecordingTarget{}, recordings.ErrMissingRecordingTarget
+	}
+	return service.targets.PlanLiveRecordingTarget(request)
+}
+
 // New constructs one private recording-lifecycle owner.
 func New(
 	targets recordings.LiveRecordingTargetPlanner,

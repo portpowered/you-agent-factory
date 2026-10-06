@@ -207,6 +207,68 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 	}
 }
 
+type currentBoardTargetPlanner struct {
+	recordings.RuntimeScopeService
+	target  recordings.LiveRecordingTarget
+	err     error
+	calls   int
+	request recordings.LiveRecordingTargetRequest
+}
+
+func (planner *currentBoardTargetPlanner) PlanLiveRecordingTarget(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+	planner.calls++
+	planner.request = request
+	return planner.target, planner.err
+}
+
+func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"fresh", "retained", "explicit", "cancelled", "reservation failure", "empty target"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "fresh.json"}}
+			selection := &factorysessions.SessionRuntimeSelection{
+				Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+				Mode:      factorysessions.SessionRuntimeModeService, Host: factorysessions.RuntimeHostRequest{Port: 1234},
+				SystemConfigHome: "profile", CanonicalSessionID: "canonical-id",
+			}
+			opening := &sessionRuntimeOpening{sessionID: "~default", sessionSelection: selection}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			wantCalls, wantError, wantPath := 1, false, "fresh.json"
+			switch name {
+			case "retained":
+				opening.configured.Recordings.RecordPath = "retained.json"
+				selection.Recording.RecordPath = "retained.json"
+				wantCalls, wantPath = 0, "retained.json"
+			case "explicit":
+				selection.Recording.ImplicitCurrentBoard = false
+				wantCalls, wantPath = 0, ""
+			case "cancelled":
+				cancel()
+				wantCalls, wantError, wantPath = 0, true, ""
+			case "reservation failure":
+				planner.err = errors.New("controlled reservation failure")
+				wantError, wantPath = true, ""
+			case "empty target":
+				planner.target = recordings.LiveRecordingTarget{}
+				wantError, wantPath = true, ""
+			}
+			root := &Root{recordingsRuntime: planner}
+			err := root.reserveFreshCurrentBoard(ctx, opening)
+			if (err != nil) != wantError || planner.calls != wantCalls {
+				t.Fatalf("reservation error/calls = %v/%d, want error=%v calls=%d", err, planner.calls, wantError, wantCalls)
+			}
+			if opening.configured.Recordings.RecordPath != wantPath || selection.Recording.RecordPath != wantPath {
+				t.Fatal("reservation did not preserve or publish the selected target")
+			}
+			if planner.calls > 0 && (planner.request.HomeDir != "profile" || planner.request.CanonicalSessionID != "canonical-id" || planner.request.ReportedSessionID != "~default") {
+				t.Fatalf("reservation lost invocation identity: %#v", planner.request)
+			}
+		})
+	}
+}
+
 func TestReplayRequestsHistoricalInspectionUsesEffectiveListenerPort(t *testing.T) {
 	t.Parallel()
 

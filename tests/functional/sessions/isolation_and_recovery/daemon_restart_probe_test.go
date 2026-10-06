@@ -181,6 +181,23 @@ func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name
 	} else if _, err := os.Stat(recording); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("rejected opening created selected recording: %v", err)
 	}
+	// This profile started with no dated recordings. Rejection must occur
+	// before the automatic target's exclusive reservation creates an artifact.
+	err = filepath.WalkDir(filepath.Join(home, ".you-agent-factory", "recordings"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if errors.Is(walkErr, fs.ErrNotExist) {
+			return nil
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() {
+			t.Errorf("rejected opening reserved a fresh recording: %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir string, api *support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {

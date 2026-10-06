@@ -441,12 +441,17 @@ func TestPrepareRunConfigSelectsOnlyImplicitContinuousDefaultBoard(t *testing.T)
 			t.Parallel()
 			cfg := ensureTestRecordingsCLI(test.config)
 			cfg.HomeDir = t.TempDir()
+			plannerCalls := 0
 			cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				plannerCalls++
 				return recordings.LiveRecordingTarget{ServicePath: "automatic.json", ReportedPath: "automatic.json"}, nil
 			})
 			prepared, _, _, _, err := prepareRunConfig(cfg, nil)
 			if err != nil || prepared.ImplicitCurrentBoard != test.want {
 				t.Fatalf("implicit board selection = %v/%v, want %v", prepared.ImplicitCurrentBoard, err, test.want)
+			}
+			if test.want && (plannerCalls != 0 || prepared.RecordPath != "") {
+				t.Fatal("implicit board reserved a recording before Sessions selection")
 			}
 		})
 	}

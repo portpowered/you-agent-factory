@@ -17,6 +17,7 @@ type Snapshot struct {
 // Service owns target selection, binding, and mutable recording lifecycle
 // state behind the Recordings root.
 type Service interface {
+	PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error)
 	StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error)
 	BindRecording(recordings.BindRecordingRequest) (recordings.BindRecordingResult, error)
 	RecordRecordingEvent(recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error)

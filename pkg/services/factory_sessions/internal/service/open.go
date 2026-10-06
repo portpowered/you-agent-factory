@@ -373,6 +373,9 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
+	if err := r.reserveFreshCurrentBoard(ctx, opening); err != nil {
+		return err
+	}
 
 	initial, err := r.openInitialSessionEngine(ctx, opening)
 	if initial != nil {
