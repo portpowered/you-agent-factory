@@ -529,7 +529,6 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		nil,
 		nil,
 		nil,
-		nil,
 		modelsRuntimeBind{Root: root, Scope: scope},
 		nil,
 		inertHostedInstance{},
@@ -563,7 +562,6 @@ func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicati
 		context.Background(),
 		nil,
 		gateway,
-		nil,
 		nil,
 		nil,
 		nil,
@@ -614,7 +612,6 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 
 	opened := assembleRuntimeProducts(
 		context.Background(),
-		nil,
 		nil,
 		nil,
 		nil,

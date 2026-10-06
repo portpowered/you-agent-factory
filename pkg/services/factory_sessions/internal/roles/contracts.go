@@ -187,7 +187,7 @@ type RuntimeAssembly interface {
 		backendScopeID string,
 		workFile string,
 		workflowID string,
-	) (ApplicationRuntime, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
+	) (ApplicationRuntime, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }
 
 // SessionGateway exposes bound session operations; live startup belongs to Root.
