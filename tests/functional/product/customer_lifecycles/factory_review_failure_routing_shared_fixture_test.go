@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -100,9 +101,13 @@ func newReviewFailureProcessFixture(t testing.TB) (*reviewFailureProcessFixture,
 	api := support.NewProcessAPIServer()
 	router := newReviewFailureCommandRouter()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      api.Start,
-		ProviderCommandRunner: router,
-		ScriptCommandRunner:   router,
+		APIServerStarter:          api.Start,
+		ProviderCommandRunner:     router,
+		ScriptCommandRunner:       router,
+		ProvidersCodexPromptFiles: reviewFailurePromptFiles{router: router},
+		ProvidersCodexResolveHomeDirectory: func() (string, error) {
+			return filepath.Join(rootDir, "home"), nil
+		},
 	})
 	if err != nil {
 		cleanupRoot()
@@ -246,6 +251,28 @@ type reviewFailureCommandRouter struct {
 	mu      sync.Mutex
 	routes  map[string]*reviewFailureCommandRoute
 	history map[string]reviewFailureCommandRoute
+}
+
+// Workspace setup is a controlled script effect in these journeys. Materialize
+// only the selected scenario's workspace when Codex inspects it; other file
+// effects stay real so private profile writing and cleanup are exercised.
+type reviewFailurePromptFiles struct {
+	platformfilesystem.Local
+	router *reviewFailureCommandRouter
+}
+
+func (files reviewFailurePromptFiles) EvalSymlinks(path string) (string, error) {
+	files.router.mu.Lock()
+	route := files.router.routeForRequest(platformprocess.CommandRequest{WorkDir: path})
+	owned := route != nil && reviewFailurePathBelongsTo(route.factoryDir, path)
+	files.router.mu.Unlock()
+	if !owned {
+		return "", fmt.Errorf("workspace is not owned by a review-failure scenario")
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(path)
 }
 
 func newReviewFailureCommandRouter() *reviewFailureCommandRouter {

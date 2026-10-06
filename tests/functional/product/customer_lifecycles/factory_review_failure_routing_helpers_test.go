@@ -64,6 +64,7 @@ func openReviewFailureScenario(
 	if err := os.CopyFS(factoryDir, os.DirFS(fixture.sourceFactory)); err != nil {
 		t.Fatalf("copy authored Factory for review-failure scenario: %v", err)
 	}
+	prepareReviewFailurePromptHome(t, factoryDir)
 	if err := fixture.router.register(factoryDir, config); err != nil {
 		_ = os.RemoveAll(rootDir)
 		t.Fatalf("register review-failure route: %v", err)
@@ -97,12 +98,53 @@ func (scenario *reviewFailureScenario) close(t testing.TB) {
 		return
 	}
 	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	profiles, err := filepath.Glob(filepath.Join(scenario.factoryDir, ".codex-home", "you-prompt-*.config.toml"))
+	if err != nil || len(profiles) != 0 {
+		t.Errorf("scenario instruction profiles remain after session close: %v (%v)", profiles, err)
+	}
 	scenario.fixture.router.unregister(scenario.factoryDir)
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("remove review-failure scenario root: %v", err)
 	}
 	if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
 		t.Errorf("review-failure scenario root remains after cleanup: %v", err)
+	}
+}
+
+func prepareReviewFailurePromptHome(t *testing.T, factoryDir string) {
+	t.Helper()
+	home := filepath.Join(factoryDir, ".codex-home")
+	for _, dir := range []string{home, filepath.Join(factoryDir, ".git")} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(factoryDir, "factory.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	// Preserve every authored prompt and route; only the controlled provider's
+	// home is scenario-owned, without mutating process-wide environment.
+	for _, value := range config["workstations"].([]any) {
+		station := value.(map[string]any)
+		env, _ := station["env"].(map[string]any)
+		if env == nil {
+			env = make(map[string]any)
+		}
+		env["CODEX_HOME"] = home
+		station["env"] = env
+	}
+	raw, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
