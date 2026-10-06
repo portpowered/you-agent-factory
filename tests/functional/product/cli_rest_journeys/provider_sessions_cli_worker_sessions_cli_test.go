@@ -445,8 +445,8 @@ func assertSuccessfulWorkerSessionWithProvider(t *testing.T, ctx context.Context
 	}
 	if session.TokenUsage == nil || session.TokenUsage.InputTokens == nil || *session.TokenUsage.InputTokens != 8 ||
 		session.TokenUsage.OutputTokens == nil || *session.TokenUsage.OutputTokens != 12 ||
-		session.TokenUsage.TotalTokens == nil || *session.TokenUsage.TotalTokens != 20 {
-		t.Fatalf("successful token usage = %#v, want 8 input, 12 output, 20 total", session.TokenUsage)
+		(session.TokenUsage.TotalTokens != nil && *session.TokenUsage.TotalTokens != 0) {
+		t.Fatalf("successful token usage = %#v, want captured 8 input, 12 output, and no fabricated unreported total", session.TokenUsage)
 	}
 
 	showInputs := executeCLI(t, ctx, process, env, factoryDir,
@@ -454,8 +454,8 @@ func assertSuccessfulWorkerSessionWithProvider(t *testing.T, ctx context.Context
 	var shown workerSessionJSON
 	decodeCLIJSON(t, showInputs, &shown)
 	assertWorkerSessionIdentity(t, shown, sessionID, providerID, workID)
-	// Captured command output reports input/output only. The native transcript
-	// above reports a total, but canonical show must not copy that optional fact.
+	// Captured command output reports input/output only. The compatibility
+	// projection may represent absent totals as zero; canonical show omits them.
 	if shown.DurationMillis == nil || shown.TokenUsage == nil || shown.TokenUsage.InputTokens == nil || *shown.TokenUsage.InputTokens != 8 ||
 		shown.TokenUsage.OutputTokens == nil || *shown.TokenUsage.OutputTokens != 12 || shown.TokenUsage.TotalTokens != nil {
 		t.Fatalf("successful show omitted duration or token usage: %#v", shown)

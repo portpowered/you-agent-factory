@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -8,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -17,73 +17,8 @@ import (
 	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
-
-func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
-	root := writeCodexSessionFixture(t, "session-123")
-
-	detail, err := newServiceForRoots(t, root, "").Details("codex", "session_id", "session-123")
-	if err != nil {
-		t.Fatalf("Details: %v", err)
-	}
-	if detail.ProviderSession.Provider != providersessions.ProviderCodex ||
-		detail.ProviderSession.ID != "session-123" {
-		t.Fatalf("provider session = %#v, want codex session-123", detail.ProviderSession)
-	}
-}
-
-func TestDetailsReconstructsNormalizedCodexJSONLThroughRoot(t *testing.T) {
-	root := writeRichCodexSessionFixture(t, "session-reconstruct-root")
-	svc := newServiceForRoots(t, root, "")
-
-	first, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
-	if err != nil {
-		t.Fatalf("Details: %v", err)
-	}
-	second, err := svc.Details("codex", providersessions.SessionIDKind, "session-reconstruct-root")
-	if err != nil {
-		t.Fatalf("Details repeat: %v", err)
-	}
-	if first.ProviderSession.ID != "session-reconstruct-root" ||
-		first.Source.RelativePath != "2026/07/27/rollout-session-reconstruct-root.jsonl" {
-		t.Fatalf("detail identity = %#v, want normalized codex session and source", first)
-	}
-	if len(first.Transcript) < 4 || len(first.Parse.FunctionCalls) != 1 || len(first.Parse.Reasoning) != 1 {
-		t.Fatalf("detail = %#v, want transcript, tool, and reasoning facts", first)
-	}
-	if first.Parse.TokenUsage == nil || first.Parse.TokenUsage.TotalTokens == nil ||
-		*first.Parse.TokenUsage.TotalTokens != 130 {
-		t.Fatalf("token usage = %#v, want total 130", first.Parse.TokenUsage)
-	}
-	if first.Transcript[0].Text == nil || !strings.Contains(*first.Transcript[0].Text, "Inspect the failing run") {
-		t.Fatalf("transcript = %#v, want user message text", first.Transcript)
-	}
-	*first.Transcript[0].Text = "mutated"
-	if *second.Transcript[0].Text == "mutated" {
-		t.Fatalf("mutating first inspection affected second inspection transcript")
-	}
-}
-
-func TestInspectLoadsTypedSessionRefThroughService(t *testing.T) {
-	root := writeCodexSessionFixture(t, "session-inspect-1")
-	svc := newServiceForRoots(t, root, "")
-	ref := providersessions.SessionRef{
-		Provider: providers.IDCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "session-inspect-1",
-	}
-
-	result, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Inspect: %v", err)
-	}
-	if result.Session != ref {
-		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
-	}
-	if strings.TrimSpace(result.Source.RelativePath) == "" {
-		t.Fatalf("InspectResult.Source.RelativePath empty")
-	}
-}
 
 func TestInspectLoadsCanonicalCursorProvidersRefThroughService(t *testing.T) {
 	root, sessionID := writeCursorSessionFixture(t)
@@ -175,11 +110,9 @@ func TestInspectValidatesCanonicalProviderSessionRefBeforeOpeningNativeContent(t
 		files,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		t.TempDir(),
-		t.TempDir(),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewForRoots: %v", err)
@@ -241,28 +174,6 @@ func TestInspectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T)
 		ID:       "session-1",
 	}}); !errors.Is(err, providersessions.ErrUnsupportedKind) {
 		t.Fatalf("kind err = %v, want ErrUnsupportedKind", err)
-	}
-}
-
-func TestProjectLoadsNormalizedDetailThroughService(t *testing.T) {
-	root := writeCodexSessionFixture(t, "session-project-1")
-	svc := newServiceForRoots(t, root, "")
-	ref := providersessions.SessionRef{
-		Provider: providers.IDCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "session-project-1",
-	}
-
-	result, err := svc.Project(providersessions.ProjectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Project: %v", err)
-	}
-	if result.Session != ref {
-		t.Fatalf("ProjectResult.Session = %#v, want %#v", result.Session, ref)
-	}
-	if result.Detail.ProviderSession.Provider != providersessions.ProviderCodex ||
-		result.Detail.ProviderSession.ID != ref.ID {
-		t.Fatalf("ProjectResult.Detail.ProviderSession = %#v", result.Detail.ProviderSession)
 	}
 }
 
@@ -402,25 +313,21 @@ func TestNewRejectsMissingProcessEdges(t *testing.T) {
 		name                  string
 		files                 providersessionsinternal.FileSystem
 		home                  providersessionsinternal.ResolveHomeDirectory
-		codexWalk             providersessionsinternal.CodexWalkDirectory
-		codexSymlinks         providersessionsinternal.CodexResolveSymlinks
 		cursorWalk            providersessionsinternal.CursorWalkDirectory
 		cursorSymlinks        providersessionsinternal.CursorResolveSymlinks
 		cursorDatabase        providersessionsinternal.CursorOpenSQLDatabase
 		cursorOperatingSystem providersessionsinternal.OperatingSystem
 	}{
-		{name: "filesystem", home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "home resolver", files: platformfilesystem.Local{}, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Codex walker", files: platformfilesystem.Local{}, home: resolveHome, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Codex symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "operating system", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
+		{name: "filesystem", home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "home resolver", files: platformfilesystem.Local{}, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "operating system", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := providersessionswire.NewService(test.files, test.home, test.codexWalk, test.codexSymlinks, test.cursorWalk, test.cursorSymlinks, test.cursorDatabase, test.cursorOperatingSystem)
+			_, err := providersessionswire.NewService(test.files, test.home, test.cursorWalk, test.cursorSymlinks, test.cursorDatabase, test.cursorOperatingSystem, emptyCapturedReader{})
 			if err == nil {
 				t.Fatalf("New() error = nil, want missing %s dependency", test.name)
 			}
@@ -434,10 +341,9 @@ func TestNewPropagatesHomeResolverFailure(t *testing.T) {
 		func() (string, error) { return "", errors.New("home unavailable") },
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		providersessionsinternal.OperatingSystem(runtime.GOOS),
+		emptyCapturedReader{},
 	)
 	if err == nil {
 		t.Fatal("New() error = nil, want home resolver failure")
@@ -450,31 +356,12 @@ func TestNewRejectsEmptyHomeDirectory(t *testing.T) {
 		func() (string, error) { return "   ", nil },
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		providersessionsinternal.OperatingSystem(runtime.GOOS),
+		emptyCapturedReader{},
 	)
 	if err == nil {
 		t.Fatal("New() error = nil, want empty home rejection")
-	}
-}
-
-func TestInspectSucceedsWithNilRequestContext(t *testing.T) {
-	root := writeCodexSessionFixture(t, "session-nil-ctx")
-	svc := newServiceForRoots(t, root, "")
-	ref := providersessions.SessionRef{
-		Provider: providers.IDCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "session-nil-ctx",
-	}
-
-	result, err := svc.Inspect(providersessions.InspectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Inspect: %v", err)
-	}
-	if result.Session != ref {
-		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
 	}
 }
 
@@ -489,10 +376,9 @@ func TestNewConstructsServiceWithValidDependencies(t *testing.T) {
 		resolveHome,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		providersessionsinternal.OperatingSystem(runtime.GOOS),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -514,29 +400,13 @@ func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
 		nil,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		t.TempDir(),
-		t.TempDir(),
+		emptyCapturedReader{},
 	)
 	if err == nil {
 		t.Fatal("NewForRoots() error = nil, want missing filesystem dependency")
 	}
-}
-
-func writeCodexSessionFixture(t *testing.T, sessionID string) string {
-	t.Helper()
-	root := t.TempDir()
-	sessionDir := filepath.Join(root, "2026", "07", "16")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir session fixture: %v", err)
-	}
-	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
-	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\"}\n"), 0o600); err != nil {
-		t.Fatalf("write session fixture: %v", err)
-	}
-	return root
 }
 
 func writeCursorSessionFixture(t *testing.T) (string, string) {
@@ -565,40 +435,15 @@ INSERT INTO meta (key, value) VALUES ('usage', '{"usage":{"inputTokens":4,"outpu
 	return root, sessionID
 }
 
-func writeRichCodexSessionFixture(t *testing.T, sessionID string) string {
-	t.Helper()
-	root := t.TempDir()
-	sessionDir := filepath.Join(root, "2026", "07", "27")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir session fixture: %v", err)
-	}
-	content := strings.Join([]string{
-		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the failing run."}]}}`,
-		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":["Checking tool output"]}}`,
-		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":"go test ./pkg/api"}}`,
-		`{"timestamp":"2026-05-18T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
-		`{"timestamp":"2026-05-18T10:00:05Z","type":"event_msg","payload":{"type":"agent_message","message":"The package tests passed."}}`,
-		`{"timestamp":"2026-05-18T10:00:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
-	}, "\n") + "\n"
-	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write session fixture: %v", err)
-	}
-	return root
-}
-
 func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {
 	t.Helper()
 	service, err := providersessionswire.NewForRoots(
 		platformfilesystem.Local{},
-		providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
-		providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
 		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
 		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
 		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
-		codexRoot,
 		cursorRoot,
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewForRoots: %v", err)
@@ -618,4 +463,16 @@ func (f *openRecordingFileSystem) Open(path string) (io.ReadCloser, error) {
 
 func (f *openRecordingFileSystem) Stat(path string) (fs.FileInfo, error) {
 	return f.base.Stat(path)
+}
+
+type emptyCapturedReader struct{}
+
+func (emptyCapturedReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return recordings.WorkerCapturedCatalogPage{}, nil
+}
+func (emptyCapturedReader) ReadWorkerCapturedActivity(context.Context, recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	panic("unexpected activity read")
+}
+func (emptyCapturedReader) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
+	panic("unexpected lookup")
 }

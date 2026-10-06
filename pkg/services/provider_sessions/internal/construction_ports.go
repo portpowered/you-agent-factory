@@ -24,16 +24,6 @@ type FileSystem interface {
 // not pass this through Service method signatures.
 type ResolveHomeDirectory func() (string, error)
 
-// CodexWalkDirectory is a construction/process-edge port that traverses the
-// configured Codex session tree. It is not part of the peer-facing root
-// contract surface.
-type CodexWalkDirectory func(string, fs.WalkDirFunc) error
-
-// CodexResolveSymlinks is a construction/process-edge port that resolves Codex
-// session paths before containment checks. It is not part of the peer-facing
-// root contract surface.
-type CodexResolveSymlinks func(string) (string, error)
-
 // CursorWalkDirectory is a construction/process-edge port that traverses the
 // configured Cursor session storage tree. It is not part of the peer-facing
 // root contract surface.

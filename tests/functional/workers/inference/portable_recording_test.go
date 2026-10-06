@@ -325,6 +325,9 @@ func assertWSRFT006PortableRoundTrip(
 	if err != nil {
 		t.Fatalf("ReplayWorkerPortableRecording() error = %v", err)
 	}
+	// Portable v1 preserves source records and capture stamps, but omits
+	// local journal generation and host ownership.
+	live.RecordingGenerationID, live.OwnerEpoch = "", ""
 	if !reflect.DeepEqual(live, replayed.Projection) {
 		t.Fatalf("live projection differs from portable replay:\nlive=%#v\nreplay=%#v", live, replayed.Projection)
 	}

@@ -205,8 +205,6 @@ type Edges struct {
 		Stat(string) (fs.FileInfo, error)
 	}
 	ProviderSessionResolveHomeDirectory  func() (string, error)
-	ProviderSessionCodexWalkDirectory    func(string, fs.WalkDirFunc) error
-	ProviderSessionCodexResolveSymlinks  func(string) (string, error)
 	ProviderSessionCursorWalkDirectory   func(string, fs.WalkDirFunc) error
 	ProviderSessionCursorResolveSymlinks func(string) (string, error)
 	ProviderSessionCursorOpenDatabase    func(string, string) (*sql.DB, error)
@@ -612,12 +610,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ProviderSessionResolveHomeDirectory != nil {
 		defaults.ProviderSessionResolveHomeDirectory = replacements.ProviderSessionResolveHomeDirectory
-	}
-	if replacements.ProviderSessionCodexWalkDirectory != nil {
-		defaults.ProviderSessionCodexWalkDirectory = replacements.ProviderSessionCodexWalkDirectory
-	}
-	if replacements.ProviderSessionCodexResolveSymlinks != nil {
-		defaults.ProviderSessionCodexResolveSymlinks = replacements.ProviderSessionCodexResolveSymlinks
 	}
 	if replacements.ProviderSessionCursorWalkDirectory != nil {
 		defaults.ProviderSessionCursorWalkDirectory = replacements.ProviderSessionCursorWalkDirectory
