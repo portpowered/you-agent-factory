@@ -236,6 +236,38 @@ def check_mailbox_policy(plan, process, lead):
     return diagnostics
 
 
+LOOPBACK_RULES = {
+    'ideafy': (
+        ('stable-path', 'docs/temp/projects/<project>/proposals/<loopback-name>.json in the main checkout.'),
+        ('handoff', 'Dry-run the saved proposal in the explicit Factory Session; submit no Project children.'),
+        ('ownership', 'Return ACCEPTED with the proposal path in output; admission ownership alone never causes FAILED.'),
+        ('errors', 'Write or dry-run errors remain FAILED with truthful evidence and the saved proposal path when available.'),
+        ('untagged', 'For untagged loopbacks, retain dry-run, self-submission and verified receipt or accepted hold.'),
+    ),
+    'project-lead': (
+        ('authority', 'Review tagged loopback proposals against immutable authority and live ownership before admission.'),
+        ('dedup', 'Deduplicate proposals by stable request ID and origin Work ID across wakes and check-ins.'),
+        ('resolution', 'Admit ready fixes with explicit-session dry-run, submission and verified receipt; otherwise record reason and release event in progress.md.'),
+        ('controls', 'Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.'),
+    ),
+    'project-lead-wake': (
+        ('origin', 'For a thoughts loopback proposal, inspect the exact origin Work ID, retained payload, _last_output and failure Events.'),
+        ('resolution', "Apply the lead's Loopback proposals admit-or-record policy in this same pass,"),
+    ),
+}
+
+
+def check_loopback_policy(prompts):
+    """Diagnose supplied handoff/resolution text; no routing or agent proof."""
+    diagnostics = []
+    for owner, rules in LOOPBACK_RULES.items():
+        normalized = ' '.join(prompts.get(owner, '').split())
+        for name, clause in rules:
+            if clause not in normalized:
+                diagnostics.append(f'{owner}:loopback-{name}: missing policy clause: {clause}')
+    return diagnostics
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', nargs='?', type=Path, default=Path('.'))
@@ -249,12 +281,17 @@ def main(argv=None):
             owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
             for owner in RECOVERY_RULES
         }
+        loopback = {
+            owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
+            for owner in LOOPBACK_RULES
+        }
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
     diagnostics = (check_policy(*texts[:2]) + check_mailbox_policy(*texts)
                    + check_recovery_policy(recovery)
-                   + check_ownership_policy(texts[0], texts[1], recovery['review']))
+                   + check_ownership_policy(texts[0], texts[1], recovery['review'])
+                   + check_loopback_policy(loopback))
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1
