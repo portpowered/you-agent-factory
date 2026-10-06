@@ -72,6 +72,8 @@ type nativeAttemptControl struct {
 	attached       bool
 	process        platformprocess.OwnedProcessControl
 	claimedProcess platformprocess.OwnedProcessControl
+	killResolved   chan struct{}
+	killConfirmed  bool
 }
 
 var _ liveAttemptControl = (*nativeAttemptControl)(nil)
@@ -90,6 +92,7 @@ func (control *nativeAttemptControl) supports(action providers.ControlAction) bo
 			return false
 		}
 		control.claimedProcess = control.process
+		control.killResolved = make(chan struct{})
 		return true
 	default:
 		return false
@@ -143,11 +146,17 @@ func (control *nativeAttemptControl) attachProcess(process platformprocess.Owned
 	}
 }
 
-func (control *nativeAttemptControl) killAndJoin(ctx context.Context, process platformprocess.OwnedProcessControl) (bool, error) {
+func (control *nativeAttemptControl) killAndJoin(ctx context.Context, process platformprocess.OwnedProcessControl) (accepted bool, err error) {
+	defer func() {
+		control.mu.Lock()
+		defer control.mu.Unlock()
+		control.killConfirmed = accepted && err == nil
+		close(control.killResolved)
+	}()
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	accepted, err := process.ForceKill(ctx)
+	accepted, err = process.ForceKill(ctx)
 	if err != nil {
 		return false, fmt.Errorf("%w: %w", providers.ErrControlSignalFailed, err)
 	}
@@ -168,6 +177,29 @@ func (control *nativeAttemptControl) killAndJoin(ctx context.Context, process pl
 	case <-ctx.Done():
 		return false, ctx.Err()
 	}
+}
+
+// finishExecution publishes the adapter join before waiting for a claimed kill
+// to resolve. This lets killAndJoin observe completion without releasing a
+// retryable adapter error to Workers while exact-tree confirmation is pending.
+// Only a confirmed kill changes the error; refusals and failures retain the
+// adapter's natural outcome.
+func (control *nativeAttemptControl) finishExecution(err error) error {
+	control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+	control.mu.Lock()
+	resolved := control.killResolved
+	control.mu.Unlock()
+	if resolved == nil {
+		return err
+	}
+	<-resolved
+	control.mu.Lock()
+	confirmed := control.killConfirmed
+	control.mu.Unlock()
+	if confirmed {
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled, Message: "owned provider execution force terminated"}
+	}
+	return err
 }
 
 // liveAttemptEntry is the value held for one live identity. control is nil

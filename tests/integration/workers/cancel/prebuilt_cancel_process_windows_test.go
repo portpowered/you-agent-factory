@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -26,10 +27,20 @@ import (
 // This Windows spine proves direct native force and archived recovery. Factory
 // dispatch replay and the Linux witness remain distinct retained requirements.
 func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			proveNativeForceTreeAndArchive(t, provider)
+		})
+	}
+}
+
+func proveNativeForceTreeAndArchive(t *testing.T, provider string) {
+	t.Helper()
 	binary := resolveCancelArtifact(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 110*time.Second)
 	defer cancel()
-	fixture := writeNativeForceFixture(t)
+	fixture := writeNativeForceFixture(t, provider)
 	hash, err := fileSHA256(binary)
 	if err != nil {
 		t.Fatal(err)
@@ -42,11 +53,11 @@ func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
 		}
 	})
 	session := waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
-	source := invokeNativeForceFixture(t, ctx, binary, fixture, session, "source")
+	source := invokeNativeForceFixture(t, ctx, binary, fixture, session, provider, "source")
 	sourceTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "source")
 	registerFailedTreeCleanup(t, sourceTree)
 	assertObservedTreeAncestry(t, sourceTree)
-	invokeNativeForceFixture(t, ctx, binary, fixture, session, "sibling")
+	invokeNativeForceFixture(t, ctx, binary, fixture, session, provider, "sibling")
 	siblingTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "sibling")
 	registerFailedTreeCleanup(t, siblingTree)
 	assertObservedTreeAncestry(t, siblingTree)
@@ -70,6 +81,7 @@ func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
 	}
 	assertNativeTerminalForceNoop(t, ctx, binary, fixture, source)
 	assertNativeTreesLive(t, siblingTree)
+	assertNativeLaunchCount(t, fixture, 2)
 	stopCancelDaemon(t, binary, fixture, daemon)
 	daemon = startCancelDaemon(t, ctx, binary, fixture)
 	waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
@@ -77,11 +89,12 @@ func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
 	if retry := forceNativeFixture(t, ctx, binary, fixture, source); !reflect.DeepEqual(result, retry) {
 		t.Fatalf("restart retry changed: original=%+v retry=%+v", result, retry)
 	}
+	assertNativeLaunchCount(t, fixture, 2)
 	stopCancelDaemon(t, binary, fixture, daemon)
 	t.Log("PASS: direct force joined native launcher/root/child/grandchild before APPLIED; sibling survived; archive and committed retry survived joined host restart")
 }
 
-func writeNativeForceFixture(t *testing.T) cancelFixture {
+func writeNativeForceFixture(t *testing.T, adapter string) cancelFixture {
 	t.Helper()
 	fixture, err := writeCancelFixture(t)
 	if err != nil {
@@ -94,11 +107,26 @@ func writeNativeForceFixture(t *testing.T) cancelFixture {
 $state = $env:FACTORY_RELIABILITY_CANCEL_STATE
 $name = "source"
 if (Test-Path -LiteralPath (Join-Path $state "source")) { $name = "sibling" }
+[System.IO.File]::AppendAllText((Join-Path $state "native-launches"), $name + [Environment]::NewLine)
 $null = [Console]::In.ReadToEnd()
 [Console]::WriteLine('{"type":"item.completed","item":{"id":"progress","type":"agent_message","text":"force fixture ready"}}')
 [Console]::Out.Flush()
 & (Join-Path $PSScriptRoot "cancel-worker.ps1") -WorkID $name -StateRoot $state
 `,
+	}
+	if adapter == "claude" {
+		files = map[string]string{
+			"claude.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0claude.ps1\"\r\nexit /b %errorlevel%\r\n",
+			"claude.ps1": `$ErrorActionPreference = "Stop"
+$state = $env:FACTORY_RELIABILITY_CANCEL_STATE
+$name = "source"
+if (Test-Path -LiteralPath (Join-Path $state "source")) { $name = "sibling" }
+[System.IO.File]::AppendAllText((Join-Path $state "native-launches"), $name + [Environment]::NewLine)
+[Console]::WriteLine('{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"force fixture ready"}]}}')
+[Console]::Out.Flush()
+& (Join-Path $PSScriptRoot "cancel-worker.ps1") -WorkID $name -StateRoot $state
+`,
+		}
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(provider, name), []byte(content), 0o700); err != nil {
@@ -109,13 +137,21 @@ $null = [Console]::In.ReadToEnd()
 	return fixture
 }
 
-func invokeNativeForceFixture(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, session, name string) factoryapi.WorkerSessionObservation {
+func assertNativeLaunchCount(t *testing.T, fixture cancelFixture, want int) {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join(fixture.stateDir, "native-launches"))
+	if err != nil || len(strings.Fields(string(content))) != want {
+		t.Fatalf("provider launches = %q, error=%v; want exactly %d with no force/restart retry", content, err, want)
+	}
+}
+
+func invokeNativeForceFixture(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, session, provider, name string) factoryapi.WorkerSessionObservation {
 	t.Helper()
 	id := "force-" + name
 	document := map[string]any{"execution": map[string]any{
 		"factorySessionId": session, "workstationName": "__provider_invocation__",
 		"dispatch":   map[string]any{"dispatchId": id + "-dispatch", "workstationName": "__provider_invocation__", "workerType": "process-worker"},
-		"workerType": "process-worker", "runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "force-fixture",
+		"workerType": "process-worker", "runnerId": provider, "executorProvider": provider, "modelProvider": provider, "model": "force-fixture",
 		"workingDirectory": fixture.factoryDir, "workingDirectoryAuthored": true, "userMessage": name,
 	}}
 	encoded, err := json.Marshal(document)
@@ -133,17 +169,6 @@ func invokeNativeForceFixture(t *testing.T, ctx context.Context, binary string, 
 		t.Fatalf("native fixture before force: observation=%+v error=%v", observation, err)
 	}
 	return observation
-}
-
-func forceNativeFixture(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, observation factoryapi.WorkerSessionObservation) factoryapi.WorkerSessionControlResponse {
-	t.Helper()
-	result := runCancelCLI(ctx, binary, fixture, "--remote", "--server", fixture.serverURL, "--json", "worker-sessions", "terminate", observation.WorkerSessionId,
-		"--force", "--request-id", observation.WorkerSessionId+"-kill", "--expected-attempt-id", observation.AttemptId)
-	var response factoryapi.WorkerSessionControlResponse
-	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != "APPLIED" || string(response.State) != "TERMINATED" || response.Forced == nil || !*response.Forced {
-		t.Fatalf("native force: result=%+v response=%+v", result, response)
-	}
-	return response
 }
 
 func assertNativeTreesLive(t *testing.T, trees ...workerProcessTree) {
@@ -177,6 +202,19 @@ func assertNativeTerminalForceNoop(t *testing.T, ctx context.Context, binary str
 		t.Fatalf("terminal force must be a no-op: result=%+v response=%+v", result, response)
 	}
 	assertForcedNativeArchive(t, ctx, fixture, observation)
+}
+
+func forceNativeFixture(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, observation factoryapi.WorkerSessionObservation) factoryapi.WorkerSessionControlResponse {
+	t.Helper()
+	result := runCancelCLI(ctx, binary, fixture, "--remote", "--server", fixture.serverURL, "--json", "worker-sessions", "terminate", observation.WorkerSessionId,
+		"--force", "--request-id", observation.WorkerSessionId+"-kill", "--expected-attempt-id", observation.AttemptId)
+	var response factoryapi.WorkerSessionControlResponse
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != "APPLIED" || string(response.State) != "TERMINATED" || response.Forced == nil || !*response.Forced {
+		current, readErr := getJSON[factoryapi.WorkerSessionObservation](ctx, http.DefaultClient, fixture.serverURL+"/worker-sessions/"+observation.WorkerSessionId)
+		t.Logf("force failure observation=%+v error=%v", current, readErr)
+		t.Fatalf("native force: result=%+v response=%+v", result, response)
+	}
+	return response
 }
 
 func assertForcedNativeArchive(t *testing.T, ctx context.Context, fixture cancelFixture, original factoryapi.WorkerSessionObservation) {
