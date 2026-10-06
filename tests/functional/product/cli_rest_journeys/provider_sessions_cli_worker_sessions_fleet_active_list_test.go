@@ -146,10 +146,10 @@ func (a activeFleetFixture) assertWorkReads(t *testing.T, ctx context.Context) {
 		if len(scoped.Sessions) != 1 {
 			t.Fatalf("Work-scoped list=%#v, want single owned attempt", scoped)
 		}
-		assertActiveFleetObservation(t, scoped.Sessions[0], works, sessions, expectedIDs, "AVAILABLE")
+		assertActiveFleetObservation(t, scoped.Sessions[0], works, sessions, expectedIDs, "UNAVAILABLE")
 		httpScoped := support.GetJSON[workerSessionListJSON](t, f.baseURL+"/factory-sessions/"+sessions[workID]+"/worker-sessions?workId="+url.QueryEscape(workID))
 		for _, row := range httpScoped.Sessions {
-			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
+			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 		}
 		left, _ := json.Marshal(scoped)
 		right, _ := json.Marshal(httpScoped)
@@ -237,7 +237,7 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 		if selected.WorkerSessionID != expectedIDs[workID] || selected.FactorySessionID == nil || *selected.FactorySessionID != sessions[workID] || selected.State != "RUNNING" || selected.Transcript != "UNAVAILABLE" || !selected.ProviderSessionAvailable || !containsString(selected.WorkIDs, workID) {
 			t.Fatalf("denied selected show lost captured identity: %#v", selected)
 		}
-		assertActiveFleetUsage(t, selected, "UNAVAILABLE")
+		assertActiveFleetUsage(t, selected)
 	}
 	// The terminal sibling's transcript uses capture even when its native file
 	// is denied; preserve ordered content and exact association.
@@ -311,7 +311,7 @@ func (a activeFleetFixture) assertCanceledRead(t *testing.T, ctx context.Context
 	}
 	for workID := range works {
 		row := waitForWorkerSessionState(t, ctx, f.process, env, c.factoryDir, f.baseURL, sessions[workID], workID, "RUNNING")
-		assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
+		assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 	}
 }
 
@@ -334,7 +334,7 @@ func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, se
 		if row.Transcript != alphaTranscript {
 			t.Fatalf("active provider transcript=%q, want %q: %#v", row.Transcript, alphaTranscript, row)
 		}
-		assertActiveFleetUsage(t, row, alphaTranscript)
+		assertActiveFleetUsage(t, row)
 		return
 	}
 	if row.ProviderSession != nil || row.ProviderSessionAvailable || row.TokenUsage != nil || row.EndedAt != nil {
@@ -342,19 +342,14 @@ func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, se
 	}
 }
 
-func assertActiveFleetUsage(t *testing.T, row workerSessionJSON, alphaTranscript string) {
+func assertActiveFleetUsage(t *testing.T, row workerSessionJSON) {
 	t.Helper()
-	// Captured turn.completed usage survives unavailable native transcripts.
-	// Codex captures input/output, but no total_tokens. The optional native
-	// transcript supplies total 20 only on the compatibility Work-scoped read.
+	// Captured turn.completed usage survives unavailable complete transcripts.
+	// Codex captures input/output, but no total_tokens.
 	if row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 8 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != 12 || *row.TokenUsage.InputTokens+*row.TokenUsage.OutputTokens != 20 {
 		t.Fatalf("captured provider usage changed or disappeared: %#v", row.TokenUsage)
 	}
-	if alphaTranscript == "AVAILABLE" {
-		if row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != 20 {
-			t.Fatalf("native compatibility total changed: %#v", row.TokenUsage)
-		}
-	} else if row.TokenUsage.TotalTokens != nil {
+	if row.TokenUsage.TotalTokens != nil {
 		t.Fatalf("capture invented an unreported total: %#v", row.TokenUsage)
 	}
 }

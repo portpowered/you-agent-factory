@@ -1,7 +1,9 @@
 package workers
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -226,5 +228,90 @@ func TestFailureDecisionFromMetadata_ClassifiesStructuredSchemaViolationAsTermin
 	})
 	if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("FailureDecisionFromMetadata() = %#v, want terminal non-retryable non-throttle", decision)
+	}
+}
+
+// Each inspection sentinel must retain its safe mapping without a production
+// dependency on Provider Sessions. Real errors prove the structural contract.
+func TestProviderSessionFailureContractMappings(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err     error
+		kind    string
+		failure WorkFailureType
+		message string
+	}{
+		{providersessions.ErrResourceLimitExceeded, "resource_limit", WorkFailureTypeUnknown, "provider session inspection reached its configured limit"},
+		{providersessions.ErrSessionStorageUnavailable, "storage_unavailable", WorkFailureTypeInternalServerError, "provider session storage was unavailable"},
+		{providersessions.ErrSessionNotFound, "not_found", WorkFailureTypePermanentBadRequest, "provider session could not be found"},
+		{providersessions.ErrOperationCanceled, "canceled", WorkFailureTypeUnknown, "provider session inspection was canceled"},
+		{providersessions.ErrInvalidIdentifier, "invalid_identifier", WorkFailureTypePermanentBadRequest, "provider session request was invalid"},
+		{providersessions.ErrUnsupportedKind, "unsupported_kind", WorkFailureTypePermanentBadRequest, "provider session request was invalid"},
+		{providersessions.ErrUnsupportedProvider, "unsupported_provider", WorkFailureTypePermanentBadRequest, "provider session request was invalid"},
+		{providersessions.ErrAmbiguousSessionFile, "ambiguous", WorkFailureTypeUnknown, "provider session ingestion failed"},
+		{providersessions.ErrSessionOutsideRoot, "outside_root", WorkFailureTypeUnknown, "provider session ingestion failed"},
+		{providersessions.ErrSessionSourceNotRegularFile, "not_regular", WorkFailureTypeUnknown, "provider session ingestion failed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind, func(t *testing.T) {
+			t.Parallel()
+			var contract providerSessionFailure
+			if !errors.As(tc.err, &contract) || contract.ProviderSessionFailureKind() != tc.kind {
+				t.Fatalf("failure kind = %#v", contract)
+			}
+			for _, err := range []error{tc.err, fmt.Errorf("wrapped: %w", tc.err), &providersessions.LookupError{Provider: providersessions.ProviderCodex, SessionID: " validated-id ", Err: tc.err}} {
+				got := NormalizeProviderExecutionError(err)
+				if got == nil || got.Type != tc.failure || got.Message != tc.message || got.Family != providerFailureFamily(tc.failure) {
+					t.Fatalf("mapping = %#v", got)
+				}
+				if !errors.Is(got, tc.err) {
+					t.Fatal("lost sentinel cause")
+				}
+				assertProviderSessionFailureIdentity(t, err, got)
+			}
+		})
+	}
+}
+
+func TestProviderSessionFailureContractPrecedence(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err     error
+		message string
+		failure WorkFailureType
+	}{
+		{errors.Join(context.Canceled, providersessions.ErrSessionNotFound), "provider session could not be found", WorkFailureTypePermanentBadRequest},
+		{errors.Join(providersessions.ErrInvalidIdentifier, context.Canceled), "provider session inspection was canceled", WorkFailureTypeUnknown},
+		{errors.Join(context.DeadlineExceeded, providersessions.ErrOperationCanceled), "provider session inspection was canceled", WorkFailureTypeUnknown},
+		{errors.Join(providersessions.ErrSessionNotFound, providersessions.ErrResourceLimitExceeded), "provider session inspection reached its configured limit", WorkFailureTypeUnknown},
+		{errors.Join(providersessions.ErrResourceLimitExceeded, providersessions.ErrSessionStorageUnavailable), "provider session inspection reached its configured limit", WorkFailureTypeUnknown},
+		{&providersessions.LookupError{Err: context.DeadlineExceeded}, "provider session ingestion failed", WorkFailureTypeUnknown},
+		{context.DeadlineExceeded, "execution timeout", WorkFailureTypeTimeout},
+	}
+	for _, tc := range cases {
+		got := NormalizeProviderExecutionError(fmt.Errorf("wrapper: %w", tc.err))
+		if got == nil || got.Message != tc.message || got.Type != tc.failure || !errors.Is(got, tc.err) {
+			t.Fatalf("mapping = %#v", got)
+		}
+	}
+	if got := NormalizeProviderExecutionError(context.Canceled); got != nil {
+		t.Fatalf("bare context cancellation = %#v", got)
+	}
+	if !errors.Is(providersessions.ErrOperationCanceled, context.Canceled) {
+		t.Fatal("inspection cancellation lost context identity")
+	}
+}
+
+func assertProviderSessionFailureIdentity(t *testing.T, err error, got *ProviderError) {
+	t.Helper()
+	var lookup *providersessions.LookupError
+	if errors.As(err, &lookup) {
+		var retained *providersessions.LookupError
+		if !errors.As(got, &retained) || retained != lookup {
+			t.Fatal("lost contextual cause")
+		}
+		if got.Continuation == nil || got.Continuation.Provider != "codex" || got.Continuation.Kind != providersessions.SessionIDKind || got.Continuation.ProviderSessionID != "validated-id" {
+			t.Fatalf("continuation = %#v", got.Continuation)
+		}
 	}
 }

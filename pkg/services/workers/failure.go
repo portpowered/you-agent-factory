@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure"
 )
@@ -168,44 +167,47 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 }
 
 func normalizeProviderSessionError(err error) *ProviderError {
-	var lookupErr *providersessions.LookupError
-	if !errors.As(err, &lookupErr) && !isProviderSessionFailure(err) {
+	var sessionErr providerSessionFailure
+	if !errors.As(err, &sessionErr) {
 		return nil
 	}
 	failureType := WorkFailureTypeUnknown
 	classification := "storage"
 	message := "provider session ingestion failed"
 	switch {
-	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+	case hasProviderSessionFailureKind(err, "resource_limit"):
 		classification = "resource_limit"
 		message = "provider session inspection reached its configured limit"
-	case errors.Is(err, providersessions.ErrSessionStorageUnavailable):
+	case hasProviderSessionFailureKind(err, "storage_unavailable"):
 		failureType = WorkFailureTypeInternalServerError
 		message = "provider session storage was unavailable"
-	case errors.Is(err, providersessions.ErrSessionNotFound):
+	case hasProviderSessionFailureKind(err, "not_found"):
 		failureType = WorkFailureTypePermanentBadRequest
 		message = "provider session could not be found"
-	case errors.Is(err, providersessions.ErrOperationCanceled),
+	case hasProviderSessionFailureKind(err, "canceled"),
 		errors.Is(err, context.Canceled):
 		classification = "canceled"
 		message = "provider session inspection was canceled"
-	case errors.Is(err, providersessions.ErrInvalidIdentifier),
-		errors.Is(err, providersessions.ErrUnsupportedKind),
-		errors.Is(err, providersessions.ErrUnsupportedProvider):
+	case hasProviderSessionFailureKind(err, "invalid_identifier"),
+		hasProviderSessionFailureKind(err, "unsupported_kind"),
+		hasProviderSessionFailureKind(err, "unsupported_provider"):
 		failureType = WorkFailureTypePermanentBadRequest
 		message = "provider session request was invalid"
 	}
 	provider := ""
 	sessionID := ""
-	if lookupErr != nil {
-		provider = strings.TrimSpace(string(lookupErr.Provider))
-		sessionID = strings.TrimSpace(lookupErr.SessionID)
+	kind := "session_id"
+	var identity providerSessionFailureIdentity
+	if errors.As(err, &identity) {
+		provider, kind, sessionID = identity.ProviderSessionFailureIdentity()
+		provider = strings.TrimSpace(provider)
+		sessionID = strings.TrimSpace(sessionID)
 	}
 	var continuation *ProviderContinuationRef
 	if sessionID != "" {
 		continuation = &ProviderContinuationRef{
 			Provider:          provider,
-			Kind:              providersessions.SessionIDKind,
+			Kind:              kind,
 			ProviderSessionID: sessionID,
 			ExternalRef:       sessionID,
 		}
@@ -235,22 +237,32 @@ func normalizeProviderSessionError(err error) *ProviderError {
 	}
 }
 
-func isProviderSessionFailure(err error) bool {
-	for _, candidate := range []error{
-		providersessions.ErrAmbiguousSessionFile,
-		providersessions.ErrInvalidIdentifier,
-		providersessions.ErrOperationCanceled,
-		providersessions.ErrResourceLimitExceeded,
-		providersessions.ErrSessionNotFound,
-		providersessions.ErrSessionOutsideRoot,
-		providersessions.ErrSessionSourceNotRegularFile,
-		providersessions.ErrSessionStorageUnavailable,
-		providersessions.ErrUnsupportedKind,
-		providersessions.ErrUnsupportedProvider,
-	} {
-		if errors.Is(err, candidate) {
-			return true
+// These structural contracts avoid a dependency on the inspection service.
+type providerSessionFailure interface {
+	error
+	ProviderSessionFailureKind() string
+}
+
+type providerSessionFailureIdentity interface {
+	ProviderSessionFailureIdentity() (provider, kind, sessionID string)
+}
+
+// Search the entire cause tree so joined failures keep the classifier's priority.
+func hasProviderSessionFailureKind(err error, kind string) bool {
+	var failure providerSessionFailure
+	if errors.As(err, &failure) && failure.ProviderSessionFailureKind() == kind {
+		return true
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, cause := range joined.Unwrap() {
+			if hasProviderSessionFailureKind(cause, kind) {
+				return true
+			}
 		}
+		return false
+	}
+	if cause := errors.Unwrap(err); cause != nil {
+		return hasProviderSessionFailureKind(cause, kind)
 	}
 	return false
 }
