@@ -49,23 +49,17 @@ func (r sessionLifecycleReader) StopLiveSession(sessionID string) error {
 
 func (r sessionLifecycleReader) cleanupFacts(session *livesession.LiveSession) (*runtimebinding.State, func(string)) {
 	active, release := r.active, r.releaseAdmission
-	// The process host has no opening-time state. Until T15/T17 retire the
-	// per-record owner, take its cleanup facts from the captured generation.
+	// The process host captures scoped state and generation-owned retirement
+	// from the fixed owner before stopping can publish a successor.
 	if bound := runtimebinding.SessionStateFrom(session); bound != nil {
 		if owner, ok := bound.Owner.(*SessionRuntime); ok && owner != nil {
 			if active == nil {
 				active = &owner.runtimeState
 			}
 			if release == nil {
-				release = owner.releaseWorkAdmissionProjection
-				if owner.retireWorkAdmissionProjection != nil && bound.Handle != nil {
-					// The owner shares Assembly's ID-wide release with replacements.
-					// Capture the generation before stopping can publish its successor.
-					runtime, record := session.Runtime, bound.Handle.RuntimeInstance()
-					retire := owner.retireWorkAdmissionProjection
-					release = func(id string) {
-						retire(id, runtime, record)
-					}
+				runtime, record := session.Runtime, runtimebinding.BundleFromSession(session)
+				release = func(id string) {
+					owner.owner.retireWorkAdmissionProjection(id, runtime, record)
 				}
 			}
 		}

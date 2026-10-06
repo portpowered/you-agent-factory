@@ -13,13 +13,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 
 	"go.uber.org/zap"
@@ -44,78 +41,56 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 	return mode
 }
 
-func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance runtimeports.RuntimeInstance) error {
+func (a *Assembly) scopedPreseedRuntimeInputs(fs *SessionRuntime, ctx context.Context, instance runtimeports.RuntimeInstance) error {
 	if fs == nil || fs.runtimeSidecars == nil {
 		return fmt.Errorf("runtime sidecar service is required")
 	}
 	return fs.runtimeSidecars.Preseed(ctx, instance)
 }
 
-// SessionRuntime owns live-session routing, runtime replacement, and the
-// callbacks required by independently provided application services.
-//
-// Extracted domains are composed explicitly: Factory Sessions owns the live
-// session registry, Models owns managed runtime wiring, Workers owns hosted
-// pollers, and Automations owns cron and poller supervision.
+// SessionRuntime is the scoped lifecycle handle used by the process and
+// Definition compatibility edges. Reusable operations and collaborators stay
+// on its fixed owner; this handle holds only selected facts and acquired state.
 type SessionRuntime struct {
+	runtimeID        string
+	generationID     string
+	owner            *Assembly
+	releaseMu        sync.Mutex
+	releaseDone      bool
 	runtimeMu        sync.RWMutex
 	runtimeState     runtimebinding.State
-	sessionState     *sessionruntime.Service
-	scopeControl     SessionScopeControl
-	scopeActivation  SessionScopeActivation
 	openingSession   *livesession.LiveSession
-	sessionGateway   roles.SessionGateway
 	runtimeBuild     runtimeports.RuntimeReplacementBuilder
 	modelsScope      models.RuntimeScopeRef
 	runtimeLifecycle runtimeports.RuntimeLifecycle
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
 	// startupBundle holds the built default runtime before Run registers ~default.
-	startupSessionID               string
-	dir                            string
-	executionBaseDir               string
-	runtimeMode                    interfaces.RuntimeMode
-	backendScopeID                 string
-	workFile                       string
-	startupWorkOnce                sync.Once
-	startupWorkErr                 error
-	workflowID                     string
-	workstationLoader              interfaces.WorkstationLoader
-	editableFactoryValidator       factorysessions.EditableFactoryValidator
-	reconnectCursorValidator       factorysessions.ReconnectCursorValidator
-	worldStateProjector            factory.WorldStateProjector
-	invocationMetricsRecorder      roles.InvocationMetricsRecorder
-	logger                         *zap.Logger
-	callerContext                  context.Context
-	startTime                      time.Time
-	clock                          factory.Clock
-	definitions                    interfaces.Service
-	newJavaScriptCheckpointStore   factory.JavaScriptCheckpointStoreFactory
-	sessionResultProjection        factory.SessionResultProjectionOperation
-	directoryInspection            roles.DirectoryInspection
-	sessionIDs                     factorysessions.SessionIDGenerator
-	resolveHome                    factorysessions.HomeDirectoryResolver
-	namedPaths                     interfaces.NamedPathResolver
-	initialWorkFiles               fileeffects.InitialWorkReader
-	identity                       identity.Service
-	releaseWorkAdmissionProjection func(string)
-	retireWorkAdmissionProjection  func(string, *factorysessions.LiveRuntime, factory.RuntimeRecord)
+	startupSessionID string
+	dir              string
+	executionBaseDir string
+	runtimeMode      interfaces.RuntimeMode
+	backendScopeID   string
+	workFile         string
+	startupWorkOnce  sync.Once
+	startupWorkErr   error
+	workflowID       string
+	logger           *zap.Logger
+	callerContext    context.Context
+	startTime        time.Time
+	clock            factory.Clock
 }
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named
 // factory directory and swaps it in only after the current runtime is idle.
-func (fs *SessionRuntime) ActivateNamedFactory(ctx context.Context, name string) error {
+func (a *Assembly) scopedActivateNamedFactory(fs *SessionRuntime, ctx context.Context, name string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	svc := fs.requireDefinitions()
-	if svc == nil {
-		return fmt.Errorf("factory definition service is required")
-	}
-	return svc.ActivateNamedFactory(ctx, name)
+	return a.factoryDefinitions.ActivateNamedFactory(ctx, name)
 }
 
-func (fs *SessionRuntime) buildReplacementFactoryRuntime(
+func (a *Assembly) scopeBuildReplacementFactoryRuntime(fs *SessionRuntime,
 	ctx context.Context,
 	folderPath string,
 	factoryDir string,
@@ -130,7 +105,7 @@ func (fs *SessionRuntime) buildReplacementFactoryRuntime(
 		factoryDir,
 		sessionID,
 		runtimebinding.ReplacementExecutionBaseDir(
-			fs.sessionState, folderPath, factoryDir, sessionID, fs.executionBaseDir,
+			a.state, folderPath, factoryDir, sessionID, fs.executionBaseDir,
 		),
 	)
 	if err != nil {
@@ -143,7 +118,7 @@ func (fs *SessionRuntime) buildReplacementFactoryRuntime(
 	return bundle, nil
 }
 
-func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInstance) error {
+func (a *Assembly) scopeBindModelsRuntimeScope(fs *SessionRuntime, bundle runtimeports.RuntimeInstance) error {
 	if fs == nil || fs.modelsScope.IsZero() {
 		return nil
 	}
@@ -162,7 +137,7 @@ func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInst
 	return nil
 }
 
-func (fs *SessionRuntime) StartDefaultRuntime(
+func (a *Assembly) scopedStartDefaultRuntime(fs *SessionRuntime,
 	ctx context.Context,
 	runCtx context.Context,
 ) (liveRuntimeHandle, error) {
@@ -175,7 +150,7 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		sessionID = factorysessions.DefaultSessionID
 	}
 	target := sessionruntime.DefaultTarget(runtimeBundle.Directory(), runtimeBundle.FolderDirectory(), fs.factoryRootDir)
-	if session := fs.sessionState.Resolve(sessionID); session != nil {
+	if session := a.state.Resolve(sessionID); session != nil {
 		placement := session.Placement()
 		target.Ref = placement.Target
 		target.FactoryDir = session.FactoryDir
@@ -185,7 +160,7 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 	return runtimebinding.StartInitial(
 		ctx,
 		runCtx,
-		fs.sessionState,
+		a.state,
 		&fs.runtimeState,
 		sessionID,
 		fs.factoryRootDir,
@@ -194,13 +169,13 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		fs.runtimeMode,
 		fs.runtimeLifecycle,
 		fs.StopLiveRuntime,
-		fs.releaseWorkAdmissionProjection,
+		a.releaseWorkAdmissionProjection,
 	)
 }
 
-func (fs *SessionRuntime) requireIdleRuntime(ctx context.Context) error {
+func (a *Assembly) scopeRequireIdleRuntime(fs *SessionRuntime, ctx context.Context) error {
 	sessionID := fs.runSessionID()
-	if session := fs.sessionState.Resolve(sessionID); session != nil && runtimebinding.HandleFromSession(session) != nil {
+	if session := a.state.Resolve(sessionID); session != nil && runtimebinding.HandleFromSession(session) != nil {
 		return fs.requireIdleRuntimeForSession(ctx, sessionID)
 	}
 
@@ -217,33 +192,33 @@ func (fs *SessionRuntime) requireIdleRuntime(ctx context.Context) error {
 	return factory.RequireIdleRuntimeFromObservation(observationResult.Observation)
 }
 
-func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {
+func (a *Assembly) scopeCurrentRuntimeBundle(fs *SessionRuntime) factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
-	return runtimebinding.CurrentBundle(fs.sessionState, &fs.runtimeState)
+	return runtimebinding.CurrentBundle(a.state, &fs.runtimeState)
 }
 
 // CurrentRuntimeBundle returns the active Factory Runtime bundle for
 // initializer-owned startup diagnostics.
-func (fs *SessionRuntime) CurrentRuntimeBundle() runtimeports.RuntimeInstance {
+func (a *Assembly) scopedCurrentRuntimeBundle(fs *SessionRuntime) runtimeports.RuntimeInstance {
 	return fs.currentRuntimeBundle()
 }
 
-func (fs *SessionRuntime) StartLiveRuntimeSidecars(ctx context.Context, handle liveRuntimeHandle) error {
+func (a *Assembly) scopedStartLiveRuntimeSidecars(fs *SessionRuntime, ctx context.Context, handle liveRuntimeHandle) error {
 	if fs == nil || fs.runtimeSidecars == nil {
 		return fmt.Errorf("runtime sidecar service is required")
 	}
 	return fs.runtimeSidecars.Start(ctx, handle)
 }
 
-func (fs *SessionRuntime) StopLiveRuntimeSidecars(handle liveRuntimeHandle) {
+func (a *Assembly) scopedStopLiveRuntimeSidecars(fs *SessionRuntime, handle liveRuntimeHandle) {
 	if fs != nil && fs.runtimeSidecars != nil {
 		fs.runtimeSidecars.Stop(handle)
 	}
 }
 
-func (fs *SessionRuntime) StopLiveRuntime(handle liveRuntimeHandle) error {
+func (a *Assembly) scopedStopLiveRuntime(fs *SessionRuntime, handle liveRuntimeHandle) error {
 	if handle == nil {
 		return nil
 	}
@@ -264,21 +239,123 @@ func (fs *SessionRuntime) StopLiveRuntime(handle liveRuntimeHandle) error {
 	return fs.runtimeLifecycle.Stop(handle)
 }
 
-func (fs *SessionRuntime) ShutdownOtherLiveSessions(except liveRuntimeHandle) error {
+func (a *Assembly) scopedShutdownOtherLiveSessions(fs *SessionRuntime, except liveRuntimeHandle) error {
 	if fs == nil {
 		return nil
 	}
 	var sessionIDs []string
-	if fs.sessionState != nil && fs.sessionState.Registry() != nil {
-		sessionIDs = fs.sessionState.Registry().IDs()
+	if a.state != nil && a.state.Registry() != nil {
+		sessionIDs = a.state.Registry().IDs()
 	}
-	err := runtimebinding.ShutdownOtherLiveSessions(fs.sessionState, except, fs.StopLiveRuntime)
-	if fs.releaseWorkAdmissionProjection != nil {
-		for _, sessionID := range sessionIDs {
-			if fs.sessionState.Resolve(sessionID) == nil {
-				fs.releaseWorkAdmissionProjection(sessionID)
-			}
+	err := runtimebinding.ShutdownOtherLiveSessions(a.state, except, fs.StopLiveRuntime)
+	for _, sessionID := range sessionIDs {
+		if a.state.Resolve(sessionID) == nil {
+			a.releaseWorkAdmissionProjection(sessionID)
 		}
 	}
 	return err
+}
+
+func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance runtimeports.RuntimeInstance) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedPreseedRuntimeInputs(fs, ctx, instance)
+}
+
+func (fs *SessionRuntime) ActivateNamedFactory(ctx context.Context, name string) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedActivateNamedFactory(fs, ctx, name)
+}
+
+func (fs *SessionRuntime) buildReplacementFactoryRuntime(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+) (factoryRuntimeBundle, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeBuildReplacementFactoryRuntime(fs, ctx, folderPath, factoryDir, sessionID)
+}
+
+func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInstance) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeBindModelsRuntimeScope(fs, bundle)
+}
+
+func (fs *SessionRuntime) StartDefaultRuntime(
+	ctx context.Context,
+	runCtx context.Context,
+) (liveRuntimeHandle, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedStartDefaultRuntime(fs, ctx, runCtx)
+}
+
+func (fs *SessionRuntime) requireIdleRuntime(ctx context.Context) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeRequireIdleRuntime(fs, ctx)
+}
+
+func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeCurrentRuntimeBundle(fs)
+}
+
+func (fs *SessionRuntime) CurrentRuntimeBundle() runtimeports.RuntimeInstance {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedCurrentRuntimeBundle(fs)
+}
+
+func (fs *SessionRuntime) StartLiveRuntimeSidecars(ctx context.Context, handle liveRuntimeHandle) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedStartLiveRuntimeSidecars(fs, ctx, handle)
+}
+
+func (fs *SessionRuntime) StopLiveRuntimeSidecars(handle liveRuntimeHandle) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	a.scopedStopLiveRuntimeSidecars(fs, handle)
+}
+
+func (fs *SessionRuntime) StopLiveRuntime(handle liveRuntimeHandle) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedStopLiveRuntime(fs, handle)
+}
+
+func (fs *SessionRuntime) ShutdownOtherLiveSessions(except liveRuntimeHandle) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedShutdownOtherLiveSessions(fs, except)
 }

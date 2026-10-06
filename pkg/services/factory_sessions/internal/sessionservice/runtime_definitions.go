@@ -3,122 +3,20 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 )
 
-type DefinitionHostCallbacks struct {
-	PersistRootDir                          func() string
-	WorkstationLoader                       func() interfaces.WorkstationLoader
-	CurrentRuntimeConfig                    func() interfaces.LoadedFactorySource
-	WorkflowID                              func() string
-	RequireSession                          func(string) (*livesession.LiveSession, error)
-	SessionRuntimeConfig                    func(string) (interfaces.LoadedFactorySource, error)
-	SessionFactoryPersistRoot               func(*livesession.LiveSession) string
-	ValidateEditableFactorySnapshot         func(context.Context, *interfaces.FactorySnapshot) error
-	GetCurrentFactorySnapshotForSession     func(context.Context, string) (*interfaces.FactorySnapshot, error)
-	WithActivationLock                      func(func() error) error
-	RequireIdleRuntimeForSession            func(context.Context, string) error
-	ActivateSessionEditableFactory          func(context.Context, *livesession.LiveSession, string, string, string, string, string) error
-	ReplaceFactoryLayoutAtDir               func(string, *interfaces.PreparedFactoryLayoutPayload) (*interfaces.FactorySplitLayoutReplaceResult, error)
-	SaveNow                                 func() time.Time
-	RunSessionID                            func() string
-	SessionForActivation                    func(string) *livesession.LiveSession
-	NamedFactoryActivationPaths             func(*livesession.LiveSession) (string, string)
-	RequireIdleBeforeNamedFactoryActivation func(context.Context, string, *livesession.LiveSession) error
-	SwapPersistedNamedFactoryRuntime        func(context.Context, string, *livesession.LiveSession, string, string, string, string) error
-}
-
-// DefinitionCallbacks exposes bounded Factory Session callbacks for composition
-// with a Factory Definition implementation at the initializer boundary.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
-	dependencies := DefinitionHostCallbacks{}
-	if runtime == nil {
-		return dependencies
-	}
-	dependencies.PersistRootDir = func() string {
-		rootDir := runtime.factoryRootDir
-		if rootDir == "" {
-			rootDir = runtime.dir
-		}
-		return rootDir
-	}
-	dependencies.WorkstationLoader = func() interfaces.WorkstationLoader {
-		return runtime.workstationLoader
-	}
-	dependencies.CurrentRuntimeConfig = runtime.currentRuntimeConfig
-	dependencies.WorkflowID = func() string { return runtime.workflowID }
-	dependencies.RequireSession = func(sessionID string) (*livesession.LiveSession, error) {
-		return runtimebinding.RequireLiveSession(runtime.sessionState, sessionID)
-	}
-	dependencies.SessionRuntimeConfig = func(sessionID string) (interfaces.LoadedFactorySource, error) {
-		return runtimebinding.RuntimeConfigForSession(runtime.sessionState, sessionID)
-	}
-	dependencies.SessionFactoryPersistRoot = func(session *livesession.LiveSession) string {
-		return logicaltarget.SessionFactoryPersistRoot(runtime.factoryRootDir, session)
-	}
-	dependencies.ValidateEditableFactorySnapshot = func(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
-		if runtime.editableFactoryValidator == nil {
-			return fmt.Errorf("editable Factory validator is required")
-		}
-		return runtime.editableFactoryValidator(ctx, snapshot, dependencies.WorkstationLoader())
-	}
-	dependencies.GetCurrentFactorySnapshotForSession = func(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
-		definitions := runtime.requireDefinitions()
-		if definitions == nil {
-			return nil, fmt.Errorf("factory definition service is required")
-		}
-		current, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
-		if err != nil {
-			return nil, err
-		}
-		if current.Snapshot == nil {
-			return nil, fmt.Errorf("current factory snapshot is unavailable")
-		}
-		return current.Snapshot, nil
-	}
-	dependencies.WithActivationLock = runtime.sessionState.WithActivationLock
-	dependencies.RequireIdleRuntimeForSession = runtime.requireIdleRuntimeForSession
-	dependencies.ActivateSessionEditableFactory = runtime.activateSessionEditableFactory
-	dependencies.SaveNow = func() time.Time {
-		return runtime.clock.Now().UTC()
-	}
-	dependencies.RunSessionID = runtime.runSessionID
-	dependencies.SessionForActivation = runtime.sessionState.Resolve
-	dependencies.NamedFactoryActivationPaths = func(session *livesession.LiveSession) (string, string) {
-		return NamedFactoryActivationPaths(runtime.factoryRootDir, runtime.dir, session)
-	}
-	dependencies.RequireIdleBeforeNamedFactoryActivation = func(ctx context.Context, sessionID string, session *livesession.LiveSession) error {
-		return RequireIdleBeforeNamedActivation(
-			ctx, sessionID, session, runtimebinding.HandleFromSession(session) != nil,
-			runtime.requireIdleRuntimeForSession, runtime.requireIdleRuntime,
-		)
-	}
-	dependencies.SwapPersistedNamedFactoryRuntime = runtime.swapPersistedNamedFactoryRuntime
-	return dependencies
-}
-
-func (h *SessionRuntime) requireDefinitions() interfaces.Service {
-	if h == nil {
-		return nil
-	}
-	return h.definitions
-}
-
 // These addressed legacy operations remain the T17 opening compatibility bridge.
-func (fs *SessionRuntime) activateSessionEditableFactory(ctx context.Context, session *livesession.LiveSession, sessionID, sessionRootDir, factoryDir, name, runtimeName string) error {
+func (a *Assembly) scopeActivateSessionEditableFactory(fs *SessionRuntime, ctx context.Context, session *livesession.LiveSession, sessionID, sessionRootDir, factoryDir, name, runtimeName string) error {
 	return ActivateSessionRuntime(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName,
 		fs.buildReplacementFactoryRuntime, fs.requireIdleRuntimeForSession, fs.ReplaceSessionRuntime)
 }
 
-func (fs *SessionRuntime) swapPersistedNamedFactoryRuntime(ctx context.Context, sessionID string, session *livesession.LiveSession, persistRoot, folderPath, factoryDir, name string) error {
+func (a *Assembly) scopeSwapPersistedNamedFactoryRuntime(fs *SessionRuntime, ctx context.Context, sessionID string, session *livesession.LiveSession, persistRoot, folderPath, factoryDir, name string) error {
 	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
 	if err != nil {
 		return fmt.Errorf("%w: build replacement factory %q: %w", interfaces.ErrInvalidNamedFactory, name, err)
@@ -137,9 +35,25 @@ func (fs *SessionRuntime) swapPersistedNamedFactoryRuntime(ctx context.Context, 
 		func(rootDir, name string, replacement runtimeports.RuntimeInstance) error {
 			return ActivateStartupRuntime(
 				rootDir, name, replacement, &fs.runtimeState, fs.syncActiveSessionDir,
-				fs.namedPaths.WriteCurrentPointer,
+				a.namedPaths.WriteCurrentPointer,
 			)
 		},
-		fs.namedPaths.WriteCurrentPointer,
+		a.namedPaths.WriteCurrentPointer,
 	)
+}
+
+func (fs *SessionRuntime) activateSessionEditableFactory(ctx context.Context, session *livesession.LiveSession, sessionID, sessionRootDir, factoryDir, name, runtimeName string) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActivateSessionEditableFactory(fs, ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+}
+
+func (fs *SessionRuntime) swapPersistedNamedFactoryRuntime(ctx context.Context, sessionID string, session *livesession.LiveSession, persistRoot, folderPath, factoryDir, name string) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeSwapPersistedNamedFactoryRuntime(fs, ctx, sessionID, session, persistRoot, folderPath, factoryDir, name)
 }

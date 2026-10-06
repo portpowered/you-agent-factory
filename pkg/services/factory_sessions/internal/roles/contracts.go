@@ -162,6 +162,21 @@ type ApplicationRuntime interface {
 	LifecycleRuntime
 }
 
+// SessionOpeningFacts contains detached selections for one acquired opening.
+type SessionOpeningFacts struct {
+	FactorySessionID string
+	RuntimeID        string
+	GenerationID     string
+	FactoryRootDir   string
+	Directory        string
+	ExecutionBaseDir string
+	RuntimeMode      factorydefinitions.RuntimeMode
+	BackendScopeID   string
+	WorkFile         string
+	WorkflowID       string
+	ModelsScope      models.RuntimeScopeRef
+}
+
 type RuntimeAssembly interface {
 	FactoryConfigForSession(context.Context, string) (*factorydefinitions.FactoryConfig, error)
 	CurrentRuntimeResolver
@@ -170,24 +185,9 @@ type RuntimeAssembly interface {
 	work.RuntimeResolver
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 	DispatchCompletionObserverFactory() func(string) func(string)
-	Complete(
-		factoryRootDir string,
-		clock factoryruntime.Clock,
-		logger *zap.Logger,
-		runtimeBuild runtimeports.RuntimeReplacementBuilder,
-		startupRuntime runtimeports.RuntimeInstance,
-		modelsScope models.RuntimeScopeRef,
-		completion factoryruntime.RuntimeInitialCompletion,
-		runtimeLifecycle runtimeports.RuntimeLifecycle,
-		runtimeSidecars factorysessions.RuntimeSidecars,
-		factorySessionID string,
-		dir string,
-		executionBaseDir string,
-		runtimeMode factorydefinitions.RuntimeMode,
-		backendScopeID string,
-		workFile string,
-		workflowID string,
-	) (ApplicationRuntime, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
+	RegisterOpening(context.Context, SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
+		factoryruntime.Clock, *zap.Logger) (ApplicationRuntime, factorydefinitions.SessionHost,
+		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 }
 
 // SessionGateway exposes bound session operations; live startup belongs to Root.

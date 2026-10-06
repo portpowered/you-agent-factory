@@ -116,7 +116,7 @@ func (adapter runtimeReadMetricsAdapter) record(metric recordings.RuntimeReadMet
 	})
 }
 
-func (fs *SessionRuntime) bindRuntimeReadMetrics(bundle factoryRuntimeBundle) {
+func (a *Assembly) scopeBindRuntimeReadMetrics(fs *SessionRuntime, bundle factoryRuntimeBundle) {
 	if fs == nil || bundle == nil {
 		return
 	}
@@ -128,7 +128,7 @@ func (fs *SessionRuntime) bindRuntimeReadMetrics(bundle factoryRuntimeBundle) {
 		return
 	}
 	binder.SetRuntimeReadMetricsRecorder(runtimeReadMetricsAdapter{
-		recorder: fs.invocationMetricsRecorder,
+		recorder: a.invocationMetricsRecorder,
 	}.record)
 }
 
@@ -141,4 +141,12 @@ func runtimeLedgerForReadMetrics(bundle factoryRuntimeBundle) (ledger recordings
 		}
 	}()
 	return bundle.RecordingLedger()
+}
+
+func (fs *SessionRuntime) bindRuntimeReadMetrics(bundle factoryRuntimeBundle) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	a.scopeBindRuntimeReadMetrics(fs, bundle)
 }

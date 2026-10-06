@@ -324,7 +324,7 @@ func liveChangeLifecycleFromFactoryState(factoryState string) factorysessions.Li
 // runtime. Durable JavaScript children invoke this Factory Sessions façade, so
 // forwarding the ports keeps their resource leases on the same admission gate
 // used by live capacity changes and ordinary Factory dispatches.
-func (fs *SessionRuntime) activeResourceCapacityService() factoryruntime.ResourceCapacityService {
+func (a *Assembly) scopeActiveResourceCapacityService(fs *SessionRuntime) factoryruntime.ResourceCapacityService {
 	if fs == nil {
 		return nil
 	}
@@ -332,7 +332,7 @@ func (fs *SessionRuntime) activeResourceCapacityService() factoryruntime.Resourc
 	return service
 }
 
-func (fs *SessionRuntime) activeAdmittedResourceCapacityService() factoryruntime.AdmittedResourceCapacityService {
+func (a *Assembly) scopeActiveAdmittedResourceCapacityService(fs *SessionRuntime) factoryruntime.AdmittedResourceCapacityService {
 	if fs == nil {
 		return nil
 	}
@@ -340,7 +340,7 @@ func (fs *SessionRuntime) activeAdmittedResourceCapacityService() factoryruntime
 	return service
 }
 
-func (fs *SessionRuntime) activeResourceCapacityAdmission() factoryruntime.ResourceCapacityAdmission {
+func (a *Assembly) scopeActiveResourceCapacityAdmission(fs *SessionRuntime) factoryruntime.ResourceCapacityAdmission {
 	if fs == nil {
 		return nil
 	}
@@ -348,7 +348,7 @@ func (fs *SessionRuntime) activeResourceCapacityAdmission() factoryruntime.Resou
 	return service
 }
 
-func (fs *SessionRuntime) activeResourceCapacityLeaseAdmission() factoryruntime.ResourceCapacityLeaseAdmission {
+func (a *Assembly) scopeActiveResourceCapacityLeaseAdmission(fs *SessionRuntime) factoryruntime.ResourceCapacityLeaseAdmission {
 	if fs == nil {
 		return nil
 	}
@@ -356,7 +356,7 @@ func (fs *SessionRuntime) activeResourceCapacityLeaseAdmission() factoryruntime.
 	return service
 }
 
-func (fs *SessionRuntime) activeResourceCapacityRevisionService() factoryruntime.ResourceCapacityRevisionService {
+func (a *Assembly) scopeActiveResourceCapacityRevisionService(fs *SessionRuntime) factoryruntime.ResourceCapacityRevisionService {
 	if fs == nil {
 		return nil
 	}
@@ -364,7 +364,7 @@ func (fs *SessionRuntime) activeResourceCapacityRevisionService() factoryruntime
 	return service
 }
 
-func (fs *SessionRuntime) PreviewResourceCapacity(
+func (a *Assembly) scopedPreviewResourceCapacity(fs *SessionRuntime,
 	ctx context.Context,
 	request factoryruntime.ResourceCapacityRequest,
 ) (factoryruntime.ResourceCapacityResult, error) {
@@ -375,7 +375,7 @@ func (fs *SessionRuntime) PreviewResourceCapacity(
 	return service.PreviewResourceCapacity(ctx, request)
 }
 
-func (fs *SessionRuntime) SetResourceCapacity(
+func (a *Assembly) scopedSetResourceCapacity(fs *SessionRuntime,
 	ctx context.Context,
 	request factoryruntime.ResourceCapacityRequest,
 ) (factoryruntime.ResourceCapacityResult, error) {
@@ -386,7 +386,7 @@ func (fs *SessionRuntime) SetResourceCapacity(
 	return service.SetResourceCapacity(ctx, request)
 }
 
-func (fs *SessionRuntime) PreviewResourceCapacityAdmitted(
+func (a *Assembly) scopedPreviewResourceCapacityAdmitted(fs *SessionRuntime,
 	ctx context.Context,
 	request factoryruntime.ResourceCapacityRequest,
 ) (factoryruntime.ResourceCapacityResult, error) {
@@ -397,7 +397,7 @@ func (fs *SessionRuntime) PreviewResourceCapacityAdmitted(
 	return service.PreviewResourceCapacityAdmitted(ctx, request)
 }
 
-func (fs *SessionRuntime) SetResourceCapacityAdmitted(
+func (a *Assembly) scopedSetResourceCapacityAdmitted(fs *SessionRuntime,
 	ctx context.Context,
 	request factoryruntime.ResourceCapacityRequest,
 ) (factoryruntime.ResourceCapacityResult, error) {
@@ -408,7 +408,7 @@ func (fs *SessionRuntime) SetResourceCapacityAdmitted(
 	return service.SetResourceCapacityAdmitted(ctx, request)
 }
 
-func (fs *SessionRuntime) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
+func (a *Assembly) scopedAcquireResourceCapacityAdmission(fs *SessionRuntime, ctx context.Context) (func(), error) {
 	service := fs.activeResourceCapacityAdmission()
 	if service == nil {
 		return nil, fmt.Errorf("Factory Runtime resource admission is unavailable")
@@ -416,7 +416,7 @@ func (fs *SessionRuntime) AcquireResourceCapacityAdmission(ctx context.Context) 
 	return service.AcquireResourceCapacityAdmission(ctx)
 }
 
-func (fs *SessionRuntime) AcquireResourceCapacityLease(
+func (a *Assembly) scopedAcquireResourceCapacityLease(fs *SessionRuntime,
 	ctx context.Context,
 	request factoryruntime.ResourceCapacityLeaseRequest,
 ) (*factoryruntime.ResourceCapacityLease, error) {
@@ -427,7 +427,7 @@ func (fs *SessionRuntime) AcquireResourceCapacityLease(
 	return service.AcquireResourceCapacityLease(ctx, request)
 }
 
-func (fs *SessionRuntime) CurrentFactoryRevision() int {
+func (a *Assembly) scopedCurrentFactoryRevision(fs *SessionRuntime) int {
 	service := fs.activeResourceCapacityRevisionService()
 	if service == nil {
 		return 0
@@ -435,9 +435,128 @@ func (fs *SessionRuntime) CurrentFactoryRevision() int {
 	return service.CurrentFactoryRevision()
 }
 
-func (fs *SessionRuntime) SetFactoryRevision(revision int) {
+func (a *Assembly) scopedSetFactoryRevision(fs *SessionRuntime, revision int) {
 	service := fs.activeResourceCapacityRevisionService()
 	if service != nil {
 		service.SetFactoryRevision(revision)
 	}
+}
+
+func (fs *SessionRuntime) activeResourceCapacityService() factoryruntime.ResourceCapacityService {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActiveResourceCapacityService(fs)
+}
+
+func (fs *SessionRuntime) activeAdmittedResourceCapacityService() factoryruntime.AdmittedResourceCapacityService {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActiveAdmittedResourceCapacityService(fs)
+}
+
+func (fs *SessionRuntime) activeResourceCapacityAdmission() factoryruntime.ResourceCapacityAdmission {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActiveResourceCapacityAdmission(fs)
+}
+
+func (fs *SessionRuntime) activeResourceCapacityLeaseAdmission() factoryruntime.ResourceCapacityLeaseAdmission {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActiveResourceCapacityLeaseAdmission(fs)
+}
+
+func (fs *SessionRuntime) activeResourceCapacityRevisionService() factoryruntime.ResourceCapacityRevisionService {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeActiveResourceCapacityRevisionService(fs)
+}
+
+func (fs *SessionRuntime) PreviewResourceCapacity(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedPreviewResourceCapacity(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) SetResourceCapacity(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSetResourceCapacity(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) PreviewResourceCapacityAdmitted(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedPreviewResourceCapacityAdmitted(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) SetResourceCapacityAdmitted(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSetResourceCapacityAdmitted(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedAcquireResourceCapacityAdmission(fs, ctx)
+}
+
+func (fs *SessionRuntime) AcquireResourceCapacityLease(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityLeaseRequest,
+) (*factoryruntime.ResourceCapacityLease, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedAcquireResourceCapacityLease(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) CurrentFactoryRevision() int {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedCurrentFactoryRevision(fs)
+}
+
+func (fs *SessionRuntime) SetFactoryRevision(revision int) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	a.scopedSetFactoryRevision(fs, revision)
 }

@@ -196,18 +196,20 @@ func TestSessionHostLifecycleDiagnosticsStayOnAddressedRecord(t *testing.T) {
 func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	t.Parallel()
 	state := newWorkResolverSessionState()
-	var released, replacementReleased bool
-	owner := &SessionRuntime{releaseWorkAdmissionProjection: func(string) { released = true }}
+	owner := &SessionRuntime{owner: &Assembly{}}
 	active := &owner.runtimeState
 	newSession := func() *livesession.LiveSession {
-		return &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{
+		return &livesession.LiveSession{ID: "selected", Runtime: &factorysessions.LiveRuntime{}, Handle: &runtimebinding.SessionState{
 			Handle: invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}},
 		}}
 	}
 	previous, replacement := newSession(), newSession()
+	previousProjection := newWorkAdmissionProjectionForGeneration("selected", previous.Runtime, nil, state.Clock())
+	replacementProjection := newWorkAdmissionProjectionForGeneration("selected", replacement.Runtime, nil, state.Clock())
+	owner.owner.workAdmissions = map[string][]*workAdmissionProjection{"selected": {previousProjection, replacementProjection}}
 	runtimebinding.SessionStateFrom(previous).Owner = owner
 	runtimebinding.SessionStateFrom(replacement).Owner = &SessionRuntime{
-		releaseWorkAdmissionProjection: func(string) { replacementReleased = true },
+		owner: owner.owner,
 	}
 	state.Registry().Upsert(previous, true)
 	active.SetActive(context.Background(), previous.ID, runtimebinding.HandleFromSession(previous))
@@ -225,7 +227,7 @@ func TestSessionHostStopKeepsReplacementGenerationReadable(t *testing.T) {
 	if lifecycle.stopped != runtimebinding.HandleFromSession(previous) || active.ActiveHandle() != runtimebinding.HandleFromSession(replacement) {
 		t.Fatal("stop or active selection crossed replacement generations")
 	}
-	if !released || replacementReleased {
+	if !previousProjection.closed || replacementProjection.closed {
 		t.Fatal("cleanup did not stay on the captured generation's owner")
 	}
 }

@@ -46,7 +46,7 @@ func newWorkResolverSessionState() *sessionruntime.Service {
 func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 	t.Parallel()
 
-	runtime := &SessionRuntime{workFile: "work.json"}
+	runtime := &SessionRuntime{owner: &Assembly{}, workFile: "work.json"}
 	err := runtime.submitWorkFile(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "initial Work file reader is required") {
 		t.Fatalf("submitWorkFile missing reader error = %v", err)
@@ -83,7 +83,7 @@ func TestBuildReplacementBindsModelsScopeForLocalModelRuntime(t *testing.T) {
 		t.Fatalf("parse Models scope: %v", err)
 	}
 	replacement := &replacementRuntimeRecord{}
-	runtime := &SessionRuntime{
+	runtime := &SessionRuntime{owner: &Assembly{},
 		modelsScope: scope,
 		runtimeBuild: replacementRuntimeBuilderFunc(func(
 			context.Context, string, string, string, string,
@@ -152,7 +152,7 @@ func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
 		},
 	})
 
-	runtime := &SessionRuntime{sessionState: state, scopeActivation: NewScopeActivation(state), openingSession: state.Resolve("session-bound")}
+	runtime := &SessionRuntime{owner: &Assembly{state: state, scopeActivation: NewScopeActivation(state)}, openingSession: state.Resolve("session-bound")}
 	binding := factory.RuntimeBinding{}.New("runtime-bound", bound)
 	if err := runtime.BindRuntime("session-bound", binding); err != nil {
 		t.Fatalf("BindRuntime: %v", err)
@@ -213,7 +213,7 @@ func TestSessionScopeActivationPreservesReplacementAndRetriesFailedPublication(t
 	assertStatus(peer, "PAUSED")
 	// The opening owner's bridge retains its original generation throughout
 	// Runtime activation and cannot reselect the replacement by public ID.
-	owner := &SessionRuntime{sessionState: state, scopeActivation: activation, openingSession: old}
+	owner := &SessionRuntime{owner: &Assembly{state: state, scopeActivation: activation}, openingSession: old}
 	if err := owner.BindRuntime("a", oldScope.Binding); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
 		t.Fatalf("stale opening-owner publication = %v", err)
 	}

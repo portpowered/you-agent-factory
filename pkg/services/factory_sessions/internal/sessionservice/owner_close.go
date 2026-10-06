@@ -12,7 +12,7 @@ import (
 
 // PrepareOwnedSessionClose terminates the session without removing its record.
 // The record remains available when later cleanup needs a retry.
-func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, session *livesession.LiveSession) error {
+func (a *Assembly) scopedPrepareOwnedSessionClose(fs *SessionRuntime, ctx context.Context, session *livesession.LiveSession) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
@@ -40,26 +40,40 @@ func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, session 
 
 // RetireOwnedSession removes the canonical record only after all other
 // shutdown effects have succeeded.
-func (fs *SessionRuntime) RetireOwnedSession(ctx context.Context, session *livesession.LiveSession) error {
+func (a *Assembly) scopedRetireOwnedSession(fs *SessionRuntime, ctx context.Context, session *livesession.LiveSession) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
 	err := runtimebinding.CleanupSessionGeneration(session, func(runtimebinding.RuntimeHandle) error {
-		return fs.scopeControl.StopLiveGeneration(ctx, session)
+		return a.scopeControl.StopLiveGeneration(ctx, session)
 	})
 	if err != nil {
 		return err
 	}
-	if err := fs.scopeActivation.Retire(ctx, SessionScope{Session: session}); err != nil {
+	if err := a.scopeActivation.Retire(ctx, SessionScope{Session: session}); err != nil {
 		return err
 	}
-	successor := fs.sessionState.Resolve(session.ID)
+	successor := a.state.Resolve(session.ID)
 	if successor == nil {
-		successor = runtimebinding.NextLiveSession(fs.sessionState, session.ID)
+		successor = runtimebinding.NextLiveSession(a.state, session.ID)
 	}
 	fs.runtimeState.RetireActive(session.ID, runtimebinding.HandleFromSession(session), successor)
-	if fs.retireWorkAdmissionProjection != nil {
-		fs.retireWorkAdmissionProjection(session.ID, session.Runtime, runtimebinding.BundleFromSession(session))
-	}
+	a.retireWorkAdmissionProjection(session.ID, session.Runtime, runtimebinding.BundleFromSession(session))
 	return nil
+}
+
+func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, session *livesession.LiveSession) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedPrepareOwnedSessionClose(fs, ctx, session)
+}
+
+func (fs *SessionRuntime) RetireOwnedSession(ctx context.Context, session *livesession.LiveSession) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedRetireOwnedSession(fs, ctx, session)
 }

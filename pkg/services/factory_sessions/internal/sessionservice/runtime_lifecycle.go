@@ -40,7 +40,7 @@ func (a *Assembly) Close(ctx context.Context) error {
 // StartLifecycle starts the runtime phase selected by the Factory
 // Sessions-owned process lifecycle plan. Initializer only executes that
 // already-declared neutral plan.
-func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error {
+func (a *Assembly) scopedStartLifecycle(runtime *SessionRuntime, ctx, runCtx context.Context) error {
 	if runtime == nil {
 		return errors.New("start runtime: Factory Session runtime is required")
 	}
@@ -78,7 +78,7 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 }
 
 // StartWorkerLifecycle activates the runtime's worker-side automation.
-func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (RuntimeStop, error) {
+func (a *Assembly) scopedStartWorkerLifecycle(runtime *SessionRuntime, ctx context.Context) (RuntimeStop, error) {
 	if runtime == nil {
 		return nil, errors.New("start runtime automation: Factory Session runtime is required")
 	}
@@ -109,7 +109,7 @@ func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (Runtim
 
 // CompleteStartup submits service-mode startup work after the process
 // transport is readable.
-func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
+func (a *Assembly) scopedCompleteStartup(runtime *SessionRuntime, ctx context.Context) error {
 	if runtime == nil {
 		return errors.New("complete runtime startup: Factory Session runtime is required")
 	}
@@ -121,12 +121,10 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 			if err := runtime.submitWorkFile(ctx); err != nil {
 				sessionID := runtime.runSessionID()
 				runtime.startupWorkErr = runtimebinding.FailStartup(
-					runtime.sessionState, &runtime.runtimeState, sessionID,
+					a.state, &runtime.runtimeState, sessionID,
 					runtime.runtimeState.ActiveHandle(), runtime.StopLiveRuntime, err,
 				)
-				if runtime.releaseWorkAdmissionProjection != nil {
-					runtime.releaseWorkAdmissionProjection(sessionID)
-				}
+				a.releaseWorkAdmissionProjection(sessionID)
 			}
 		})
 		return runtime.startupWorkErr
@@ -136,7 +134,7 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 
 // WaitForRuntime waits for the currently active runtime, following a
 // replacement handle when a session swap occurs.
-func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
+func (a *Assembly) scopedWaitForRuntime(runtime *SessionRuntime, ctx context.Context) error {
 	if runtime == nil {
 		return errors.New("wait for runtime: Factory Session runtime is required")
 	}
@@ -160,7 +158,7 @@ func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
 		}
 		active := runtime.runtimeState.Active()
 		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService &&
-			active != nil && runtime.sessionState.Resolve(active.SessionID) != nil {
+			active != nil && a.state.Resolve(active.SessionID) != nil {
 			continue
 		}
 		return current.Result()
@@ -170,7 +168,7 @@ func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
 // StopLifecycle stops only the runtime admitted by this lifecycle. Other live
 // sessions can belong to concurrent invocations in the same process graph and
 // must not be treated as children of this invocation.
-func (runtime *SessionRuntime) StopLifecycle(_ context.Context) error {
+func (a *Assembly) scopedStopLifecycle(runtime *SessionRuntime, unused context.Context) error {
 	if runtime == nil {
 		return nil
 	}
@@ -179,7 +177,7 @@ func (runtime *SessionRuntime) StopLifecycle(_ context.Context) error {
 		sessionID = DefaultFactorySessionID
 	}
 	var result error
-	if runtime.sessionState.Resolve(sessionID) != nil {
+	if a.state.Resolve(sessionID) != nil {
 		if err := runtime.StopLiveRuntime(runtime.runtimeState.ActiveHandle()); err != nil &&
 			!errors.Is(err, context.Canceled) &&
 			!errors.Is(err, factorysessions.ErrSessionNotFound) &&
@@ -192,18 +190,64 @@ func (runtime *SessionRuntime) StopLifecycle(_ context.Context) error {
 }
 
 // FailStartup records a process-startup failure on the default Factory Session.
-func (runtime *SessionRuntime) FailStartup(err error) error {
+func (a *Assembly) scopedFailStartup(runtime *SessionRuntime, err error) error {
 	if runtime == nil {
 		return err
 	}
 	current := runtime.runtimeState.ActiveHandle()
 	sessionID := runtime.runSessionID()
 	failure := runtimebinding.FailStartup(
-		runtime.sessionState, &runtime.runtimeState, sessionID,
+		a.state, &runtime.runtimeState, sessionID,
 		current, runtime.StopLiveRuntime, err,
 	)
-	if runtime.releaseWorkAdmissionProjection != nil {
-		runtime.releaseWorkAdmissionProjection(sessionID)
-	}
+	a.releaseWorkAdmissionProjection(sessionID)
 	return failure
+}
+
+func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedStartLifecycle(runtime, ctx, runCtx)
+}
+
+func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (RuntimeStop, error) {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedStartWorkerLifecycle(runtime, ctx)
+}
+
+func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedCompleteStartup(runtime, ctx)
+}
+
+func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedWaitForRuntime(runtime, ctx)
+}
+
+func (runtime *SessionRuntime) StopLifecycle(unused context.Context) error {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedStopLifecycle(runtime, unused)
+}
+
+func (runtime *SessionRuntime) FailStartup(err error) error {
+	var a *Assembly
+	if runtime != nil {
+		a = runtime.owner
+	}
+	return a.scopedFailStartup(runtime, err)
 }
