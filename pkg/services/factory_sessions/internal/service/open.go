@@ -476,7 +476,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if r.definitionRuntimeRouter == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
 	}
-	sessionRuntime, invocationDomain, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
+	sessionRuntime, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
 		opening.root.FactoryRootDir,
 		opening.clock,
 		opening.startupRuntime.RuntimeLogger(),
@@ -534,7 +534,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, invocationDomain, processRuntime)
+	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, processRuntime)
 }
 
 func (r *Root) bindSessionOpeningProducts(
@@ -542,7 +542,6 @@ func (r *Root) bindSessionOpeningProducts(
 	opening *sessionRuntimeOpening,
 	cleanup *runtimeOpeningCleanup,
 	sessionRuntime roles.ApplicationRuntime,
-	invocationDomain roles.SessionInvoker,
 	processRuntime roles.ProcessRuntime,
 ) (runtimeProducts, error) {
 	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
@@ -579,7 +578,6 @@ func (r *Root) bindSessionOpeningProducts(
 		ctx,
 		r.factoryDefinitions,
 		r.SessionGateway,
-		invocationDomain,
 		rootRuntime,
 		r.factoryWorkflows,
 		r.workflowPreview,

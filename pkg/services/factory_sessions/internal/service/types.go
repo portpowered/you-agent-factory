@@ -41,7 +41,6 @@ type runtimeProducts struct {
 	liveControl            factorysessions.LiveControlService
 	execution              durableexecution.Service
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
-	inputResolver          roles.InvocationInputResolver
 	modelInvocation        modelinvocation.RuntimeModelInvocation
 	factoryRuntime         factoryruntime.Service
 	factoryDefinitions     factorydefinitions.Service
@@ -105,7 +104,6 @@ func assembleRuntimeProducts(
 	ctx context.Context,
 	factoryDefinitions factorydefinitions.Service,
 	factorySessionGateway roles.SessionGateway,
-	sessionInvocation roles.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
@@ -136,7 +134,6 @@ func assembleRuntimeProducts(
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
-	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
 	modelInvocation := modelinvocation.RuntimeModelInvocation{
 		FactorySessionID: effectiveFactorySessionID, Scope: modelsBind.Scope,
 		RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
@@ -147,8 +144,8 @@ func assembleRuntimeProducts(
 		bindRuntime: bindRuntime,
 		process:     process, lifecycle: lifecycle,
 		sessions: factorySessionGateway, liveControl: liveControl, execution: factorySessionGateway,
-		inputResolver: inputResolver, modelInvocation: modelInvocation,
-		factoryRuntime: factoryRuntime, factoryDefinitions: factoryDefinitions,
+		modelInvocation: modelInvocation,
+		factoryRuntime:  factoryRuntime, factoryDefinitions: factoryDefinitions,
 		workflowPreview: workflowPreview, work: workService,
 		models: modelsBind.Root, modelsScope: modelsBind.Scope,
 		workers: workerService, providerSessions: providerSessions,
