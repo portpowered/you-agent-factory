@@ -5,18 +5,19 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `f0af373fba`, passes hosted Functional Coverage in
-**220s complete / 167.250s coverage**, 68 packages / 740 results, no retries,
-110 compiler commands and 19 links after a prefix 781 archive restore. Its
-workflow fails Backend Lint on two new unreachable support declarations and
-Frontend Browser on an Add workstation dialog timeout. The pending support
-correction reuses existing cursor helpers with an explicit session argument;
-no deadcode allowance is added. The complete hosted two-minute checkpoint
+The latest measured published source, `e243441e58`, passes hosted Functional
+Coverage in **247s complete / 169.073s coverage**, 68 packages / 738 results,
+no retries, 110 compiler commands and 17 links after a prefix f0 archive
+restore. Frontend Browser also passes, including the earlier Add workstation
+dialog failure. The complete workflow, including Backend Lint, passes. This source
+corrects the preceding head's two new unreachable support declarations by
+reusing existing cursor helpers with explicit session arguments; no deadcode
+allowance is added. The complete hosted two-minute checkpoint
 remains **unmet** and the PR stays draft. The earlier warm three-minute
 checkpoint is merged. Keep prior complete 146s, 198s and 207s samples and their
 cache/retry differences; 146 seconds is not a reliable ceiling.
 
-The current worker CLI home and native-join candidate passes full local coverage
+The published worker CLI home and native-join change passes full local coverage
 with **38 monolith groups / 569 registrations**, all **68 packages / 738 results**,
 no retries, unchanged coverage floors and quarantine. Finite worker CLI pairs
 use **32.1% less CPU / 11.7% less wall**; removing the invoke/continue framework
@@ -3967,3 +3968,59 @@ alone accounts for 30.79 sampled CPU-seconds, including actual session opening
 and Work admission that cannot be removed as fixture overhead.
 
 Raw diagnostic evidence: `.artifacts/latency-audit/worker-joined-source-cpu/`.
+
+## Packaged Factory preparation cache experiment and causal cancellation
+
+The existing installer memoizes publication fingerprints by install root,
+Factory name, authored root filename and payload digest. New homes still
+perform preparation and actual materialization. The current monolith profile
+attributes 121.45 cumulative sampled CPU-seconds (34.52%) to
+PreparePackagedFactoryLayout; generated-boundary mapping accounts for 91.97
+(26.14%). These costs overlap initialization and JSON decoding; do not sum
+them or promise equivalent elapsed-time savings.
+
+A bounded, persistence-service-owned prototype cached validated prepared
+layouts by Factory name and payload SHA-256, cloning configuration and
+canonical bytes before use. It retained fresh filesystem reconciliation,
+atomic writes and customer-edit handling. Six repetitions per version of the
+native CLI process journey, in baseline/candidate/candidate/baseline blocks,
+all pass. Baseline consumes 29.892559 CPU-seconds and 15.823867484 seconds wall;
+candidate consumes 30.900592 CPU-seconds and 16.974246406 seconds wall. User CPU
+falls from 22.939407 to 19.661966, but kernel CPU rises from 6.953152 to
+11.238626. Total CPU is 3.4% higher and wall is 7.3% higher. Reject and remove
+this prototype; the measurement does not establish that pre-rendered caching
+is ineffective. It measures only this service-scoped cloned-layout design in
+this customer group, without coverage instrumentation.
+
+A separate initialized-home experiment for the two CLI worker-outcome cases
+also passes six repetitions per version but raises CPU from 32.131414 to
+34.530866 and wall from 16.481528131 to 17.739607701. Remove it. Help/version
+and validation cases retain their clean homes and filesystem-effect assertions.
+
+The next cache design should reuse immutable generated, pre-rendered packaged
+files across roots, keyed by packaged payload digest and rendering policy.
+Materialize them into each owned home through the existing filesystem boundary,
+and keep current stamp/customer-edit detection, refresh backups, cancellation
+and atomic publication. Validate identical JSON/YAML, Worker/Workstation
+prompts, portable files and inbox sentinels, payload invalidation, detached
+session state and cross-process ownership before claiming a gain. This design
+is a follow-up hypothesis; no pre-rendered production cache is shipped here.
+
+Replace the partial-result provider's 5ms cancellation polling loop with the
+provider's own cancellation acknowledgement channel. Keep the existing 5s
+failure ceiling and the customer HTTP interrupt/durable-status assertions.
+Three focused native journey repetitions pass in 1.178 seconds. Remove the
+exact now-stale sleep baseline entry rather than add any allowance.
+
+Hosted current consolidation head e243441e58 passes functional CI in 247s
+complete (09:58:31–10:02:38 UTC), with 169.073s coverage, 68 packages and 738
+final results. Diagnostics record 110 compiler commands and 17 links, compared
+with the preceding head's 19 hosted links. The complete hosted two-minute
+checkpoint remains unmet. Its previously failing Add workstation browser
+journey passes on this run without a UI change. Backend lint remains pending
+at the initial observation. Its workflow subsequently completes successfully,
+including Backend Lint, confirming the duplicate helper correction.
+
+Raw evidence: `.artifacts/latency-audit/packaged-preparation-cache-paired/`,
+`.artifacts/latency-audit/cli-outcome-home-paired/` and
+`.artifacts/latency-audit/pr2923-worker-home-joins-hosted/`.

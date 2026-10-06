@@ -2305,7 +2305,6 @@ testsleep-sleep-test|tests/functional/runtime_api|tests/functional/runtime_api/r
 testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_controls_helpers_test.go::waitForDurableFactorySessionStatus::sleep::1
 testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_controls_helpers_test.go::waitForDurableFactorySessionTerminal::sleep::1
 testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_controls_helpers_test.go::waitForSessionWorkIDsAtCustomerState::sleep::1
-testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/sessions_execution_helpers_test.go::partialResultBlockingProvider.waitForCanceledExecute::sleep::1
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::logicalIdentityResumeBlockingProvider.waitForCanceledExecute::sleep::1
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForDurableFactorySessionStatus::sleep::1
 testsleep-sleep-test|tests/functional/sessions/restart_test|tests/functional/sessions/restart/logical_identity_test.go::waitForFactorySessionDispatchStatus::sleep::1

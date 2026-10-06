@@ -42,15 +42,16 @@ type partialResultBlockingProvider struct {
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
-	contextCanceled int
+	executeCanceled chan struct{}
 	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
 	provider := &partialResultBlockingProvider{
-		executeBlocked: make(chan struct{}),
-		workflowName:   workflowName,
+		executeBlocked:  make(chan struct{}),
+		executeCanceled: make(chan struct{}),
+		workflowName:    workflowName,
 	}
 	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
@@ -71,17 +72,13 @@ func (p *partialResultBlockingProvider) waitForExecuteBlocked(t *testing.T, time
 func (p *partialResultBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.executeCanceled:
+	case <-timer.C:
+		t.Fatal("provider Execute did not observe canceled workflow context")
 	}
-	t.Fatal("provider Execute did not observe canceled workflow context")
 }
 
 func (p *partialResultBlockingProvider) Execute(
@@ -112,9 +109,7 @@ func (p *partialResultBlockingProvider) Execute(
 		p.mu.Unlock()
 
 		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
+		close(p.executeCanceled)
 		return providers.ExecuteResult{}, ctx.Err()
 	}
 
