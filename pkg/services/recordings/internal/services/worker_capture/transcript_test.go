@@ -32,7 +32,7 @@ func TestProjectWorkerTranscriptNormalizesSnapshotsDeltasAndPublicSummaries(t *t
 		transcriptRecord(9, workers.KindReasoning, workers.PhaseCompleted, "summary", "turn", `{"summary":"public summary","privateReasoning":"secret"}`),
 		transcriptRecord(10, workers.KindMessage, workers.PhaseCompleted, "user", "turn", `{"role":"user","contentBlocks":[{"kind":"TEXT","text":"follow-up"},{"kind":"STRUCTURED_OUTPUT","structuredOutput":{"secret":"never display"}}]}`),
 	}
-	got, err := ProjectWorkerTranscript(records)
+	got, err := (WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestProjectWorkerTranscriptNormalizesSnapshotsDeltasAndPublicSummaries(t *t
 	}
 	*got[0].Text = "mutated"
 	*got[0].Timestamp = time.Time{}
-	again, err := ProjectWorkerTranscript(records)
+	again, err := (WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
 	if err != nil || *again[0].Text != "hello" || again[0].Timestamp.IsZero() {
 		t.Fatal("projection aliases captured data")
 	}
@@ -77,7 +77,7 @@ func TestProjectWorkerTranscriptSeparatesTurnsSourcesAndAnonymousItems(t *testin
 		transcriptRecord(5, workers.KindMessage, workers.PhaseCompleted, "", "two", payload),
 	}
 	records[2].Record.SourceID = "other-provider"
-	got, err := ProjectWorkerTranscript(records)
+	got, err := (WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
 	if err != nil || len(got) != 5 {
 		t.Fatalf("identities merged: %+v %v", got, err)
 	}
@@ -88,7 +88,7 @@ func TestProjectWorkerTranscriptSeparatesTurnsSourcesAndAnonymousItems(t *testin
 	}
 	// A finished snapshot with identical identity replaces rather than appends.
 	records = append(records, transcriptRecord(6, workers.KindMessage, workers.PhaseCompleted, "same", "one", payload))
-	again, err := ProjectWorkerTranscript(records)
+	again, err := (WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
 	if err != nil || !reflect.DeepEqual(got, again) {
 		t.Fatalf("snapshot repeated: %+v %v", again, err)
 	}
@@ -101,7 +101,7 @@ func TestProjectWorkerTranscriptRejectsMalformedContentAndGaps(t *testing.T) {
 		transcriptRecord(1, workers.KindMessage, workers.PhaseCompleted, "message", "", `{"contentBlocks":"broken"}`),
 		transcriptRecord(1, workers.KindStreamGap, workers.PhaseUpdated, "", "", `{}`),
 	} {
-		if _, err := ProjectWorkerTranscript([]WorkerCapturedRecord{record}); err == nil {
+		if _, err := (WorkerCapturedActivityPage{Records: []WorkerCapturedRecord{record}}).ProjectTranscript(); err == nil {
 			t.Fatal("damaged history presented as complete")
 		}
 	}

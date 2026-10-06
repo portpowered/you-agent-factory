@@ -101,7 +101,7 @@ func capturedTranscriptResult(page recordings.WorkerCapturedActivityPage, record
 	if ref.Validate() != nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
 	}
-	projected, err := recordings.ProjectWorkerTranscript(records)
+	projected, err := (recordings.WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
 	if err != nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
 	}

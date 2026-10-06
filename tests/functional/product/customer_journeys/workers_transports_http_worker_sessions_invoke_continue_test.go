@@ -36,7 +36,6 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	providerOutput := readRemoteProviderFixture(t, "codex", "success", "stdout.jsonl")
 	gate := make(chan struct{})
 	runner := newRemoteInvokeContinueRunner(gate, providerOutput)
-	recordingWriter := newRemoteWorkerRecordingStore()
 
 	factoryDir := support.ScaffoldSingleStepFactory(t, "remote-worker-session-invoke-continue")
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
@@ -48,7 +47,6 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		Args:                      []string{"--record", filepath.Join(t.TempDir(), "wsr-006-runtime-recording.json")},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
-			WorkerRecordingWriter: recordingWriter,
 			FactorySessionRuntimeInstanceIDGenerator: func() string {
 				return "wsr-006-runtime-instance"
 			},
@@ -556,9 +554,7 @@ func assertRemoteWorkerRecordingParity(
 		if err != nil {
 			t.Fatalf("replay portable Worker Session %q: %v", session.WorkerSessionID, err)
 		}
-		if !reflect.DeepEqual(durableReplay.Projection, portableReplay.Projection) {
-			t.Fatalf("durable and portable Worker Session %q projections differ:\ndurable=%#v\nportable=%#v", session.WorkerSessionID, durableReplay.Projection, portableReplay.Projection)
-		}
+		assertRemotePortableProjectionParity(t, durableReplay.Projection, portableReplay.Projection)
 		if !portableReplay.Projection.Complete || portableReplay.Projection.Terminal == nil {
 			t.Fatalf("portable Worker Session %q replay = %#v, want complete terminal history", session.WorkerSessionID, portableReplay.Projection)
 		}
@@ -579,6 +575,22 @@ func assertRemoteWorkerRecordingParity(
 	}
 	if providerCallsAfter := len(runner.requestsSnapshot()); providerCallsAfter != providerCallsBefore {
 		t.Fatalf("portable Worker recording replay changed provider calls from %d to %d", providerCallsBefore, providerCallsAfter)
+	}
+}
+
+func assertRemotePortableProjectionParity(t *testing.T, durable, portable recordings.WorkerRecordingProjection) {
+	t.Helper()
+	if durable.RecordingGenerationID == "" || durable.OwnerEpoch == "" || len(durable.CapturedAt) == 0 {
+		t.Fatal("real journal omitted capture identity, ownership or timestamps")
+	}
+	if portable.RecordingGenerationID != "" || portable.OwnerEpoch != "" {
+		t.Fatal("portable replay restored host-specific recording ownership")
+	}
+	// The portable contract carries captured timestamps and all public facts,
+	// but excludes the originating host's generation and ownership authority.
+	durable.RecordingGenerationID, durable.OwnerEpoch = "", ""
+	if !reflect.DeepEqual(durable, portable) {
+		t.Fatalf("durable and portable public projections differ:\ndurable=%#v\nportable=%#v", durable, portable)
 	}
 }
 

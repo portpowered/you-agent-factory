@@ -30,12 +30,13 @@ type transcriptSlot struct {
 	entry WorkerTranscriptEntry
 }
 
-// ProjectWorkerTranscript reduces snapshots and deltas from a committed journal.
+// ProjectTranscript reduces the page's captured snapshots and deltas.
 // Snapshot replacement preserves the item's first-observed chronological order.
 // This pure projection depends only on detached capture data, never a registry.
-func ProjectWorkerTranscript(records []WorkerCapturedRecord) ([]WorkerTranscriptEntry, error) {
+// Callers collect all committed pages before projecting a complete transcript.
+func (page WorkerCapturedActivityPage) ProjectTranscript() ([]WorkerTranscriptEntry, error) {
 	projection := transcriptProjection{slots: make(map[transcriptItem]int)}
-	for _, record := range records {
+	for _, record := range page.Records {
 		var draft workers.Draft
 		if json.Unmarshal(record.Record.Payload, &draft) != nil {
 			return nil, fmt.Errorf("decode captured Worker draft")

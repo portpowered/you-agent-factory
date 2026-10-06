@@ -509,7 +509,7 @@ func (a *Adapter) transcriptSourceForScope(ctx context.Context, sessionID string
 		observations = a.logs
 	}
 	if observations == nil {
-		return scope, nil, errors.New("Worker Sessions service is required")
+		return scope, nil, errors.New("worker sessions service is required")
 	}
 	return scope, observations, nil
 }

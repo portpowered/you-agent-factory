@@ -78,11 +78,6 @@ type (
 	WorkerRecordingService                   = workerrecording.Service
 )
 
-// ProjectWorkerTranscript presents committed public capture without native reads.
-func ProjectWorkerTranscript(records []WorkerCapturedRecord) ([]WorkerTranscriptEntry, error) {
-	return workerrecording.ProjectWorkerTranscript(records)
-}
-
 const (
 	WorkerRecordingStatusComplete             = workerrecording.WorkerRecordingStatusComplete
 	WorkerRecordingStatusDegraded             = workerrecording.WorkerRecordingStatusDegraded
