@@ -230,6 +230,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		t.Fatal(err)
 	}
 	factory := provideFactorySessionExecutionFactory(
+		factoryruntimewire.NewJavaScriptCheckpointSummaries(),
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(mapper, workflows)),
 		writer,

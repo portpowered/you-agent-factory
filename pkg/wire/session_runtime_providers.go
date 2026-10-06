@@ -699,6 +699,7 @@ func provideOrchestrationCompilation(service factoryruntimewire.Orchestration) f
 }
 
 func provideFactorySessionExecutionFactory(
+	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordings.PortableRecordingWriter,
@@ -746,7 +747,7 @@ func provideFactorySessionExecutionFactory(
 			childExecutorMode,
 			clock,
 			syncWaits,
-			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
+			checkpointSummaries,
 			workflows,
 			orchestration,
 			workerPresetIDs,
@@ -767,6 +768,7 @@ func provideProcessDurableExecution(
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionwire.SyncWaitScheduler,
+	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	writer recordings.PortableRecordingWriter,
@@ -787,7 +789,7 @@ func provideProcessDurableExecution(
 	}
 	return factorysessionwire.NewProcessDurableExecution(
 		resolveHome, mode, stores, clock, syncWaits,
-		factoryruntimewire.NewJavaScriptCheckpointSummaries(), workflows, orchestration,
+		checkpointSummaries, workflows, orchestration,
 		writer, sessionIDs, responseIDs, responses, liveChange, scope, workerService,
 		providerOverride, logger,
 	)

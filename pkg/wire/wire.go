@@ -273,6 +273,7 @@ var servicesSet = wire.NewSet(
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
+	factoryruntimewire.NewJavaScriptCheckpointSummaries,
 	provideFactorySessionExecutionFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingClock,
