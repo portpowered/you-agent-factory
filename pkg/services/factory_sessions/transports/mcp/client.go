@@ -102,6 +102,22 @@ func callSubagentJSON(input json.RawMessage, handler func(SubagentInput) ToolRes
 	return json.Marshal(handler(request))
 }
 
+// ValidateSubagentArguments applies RUN decoding before provider configuration.
+// A nil response means validation succeeded; failures retain Factory errors.
+func ValidateSubagentArguments(input json.RawMessage) (json.RawMessage, error) {
+	response, err := callSubagentJSON(input, func(request SubagentInput) ToolResponse[SubagentResult] {
+		if err := validateSubagentValues(request); err != nil {
+			envelope := requestValidationErrorEnvelope(err)
+			return ToolResponse[SubagentResult]{Error: &envelope}
+		}
+		return ToolResponse[SubagentResult]{}
+	})
+	if err != nil || string(response) != "{}" {
+		return response, err
+	}
+	return nil, nil
+}
+
 type canonicalToolHandler func(
 	context.Context,
 	RequestPreparation,

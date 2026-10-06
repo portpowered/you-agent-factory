@@ -13,7 +13,6 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/discoverygen"
-	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 )
 
 type testFileSystem struct{}
@@ -36,7 +35,7 @@ func testArtifactStore() generatedartifacts.LocalStore {
 	return store
 }
 
-const canonicalToolCount = 14
+const canonicalToolCount = 11
 
 func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
@@ -59,7 +58,7 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 		if tool.ID != id {
 			t.Errorf("tool map key %q does not match stable id %q", id, tool.ID)
 		}
-		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent && !strings.HasPrefix(tool.Name, "you.worker_session.") {
+		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent {
 			t.Errorf("tool %q name = %q, want canonical Factory Session name", id, tool.Name)
 		}
 		if strings.TrimSpace(tool.Description) == "" {
@@ -394,9 +393,6 @@ func readGeneratedArtifact(t *testing.T, root, path string) []byte {
 func canonicalIdentities() []mcpfactorycatalog.CatalogToolIdentity {
 	var identities []mcpfactorycatalog.CatalogToolIdentity
 	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
-		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
-	}
-	for _, binding := range workersessionmcp.ProjectCanonicalToolHandlerBindings() {
 		identities = append(identities, mcpfactorycatalog.CatalogToolIdentity{ID: binding.ToolID, Name: strings.TrimPrefix(binding.ToolID, "mcp.tool.")})
 	}
 	return identities

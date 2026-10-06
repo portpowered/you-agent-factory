@@ -5,7 +5,6 @@ import (
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog"
-	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 )
 
 // MCPToolCatalogInputSchemaDiagnostics applies authored-catalog input-schema parity
@@ -20,9 +19,6 @@ func MCPToolCatalogInputSchemaDiagnostics(document string, value any) []Diagnost
 	}
 	var discovered []mcpfactorycatalog.CatalogInputSchema
 	for _, tool := range mcpfactorysession.DiscoverTools() {
-		discovered = append(discovered, mcpfactorycatalog.CatalogInputSchema{Name: tool.Name, Schema: tool.InputSchema})
-	}
-	for _, tool := range workersessionmcp.DiscoverTools() {
 		discovered = append(discovered, mcpfactorycatalog.CatalogInputSchema{Name: tool.Name, Schema: tool.InputSchema})
 	}
 	if err := mcpfactorycatalog.VerifyCatalogInputSchemas(schemas, discovered); err != nil {

@@ -22,17 +22,17 @@ func TestPublicToolInventoryIncludesCompleteUnion(t *testing.T) {
 	if len(inventory.Tools) != len(inputs.Discovery) {
 		t.Fatalf("inventory count = %d, discovery = %d", len(inventory.Tools), len(inputs.Discovery))
 	}
-	workers := 0
+	subagents := 0
 	for _, tool := range inventory.Tools {
-		if strings.HasPrefix(tool.Name, "you.worker_session.") {
-			workers++
+		if tool.Name == "you.subagent" {
+			subagents++
 			if !tool.HandlerRegistered {
 				t.Fatalf("unregistered Worker tool %s", tool.Name)
 			}
 		}
 	}
-	if workers != 3 {
-		t.Fatalf("Worker tool count = %d, want 3", workers)
+	if subagents != 1 || len(inventory.Tools) != 11 {
+		t.Fatalf("subagent count = %d, want 1 (11 total tools)", subagents)
 	}
 	artifacts, err := mcpcontractcheck.GenerateInventoryArtifacts()
 	if err != nil {
@@ -133,7 +133,7 @@ func TestCompleteRegistryUnionRejectsWorkerBindingDrift(t *testing.T) {
 			}
 			index := -1
 			for i, binding := range inputs.Registry {
-				if binding.ToolID == "mcp.tool.you.worker_session.read" {
+				if binding.ToolID == "mcp.tool.you.subagent" {
 					index = i
 				}
 			}
@@ -146,10 +146,10 @@ func TestCompleteRegistryUnionRejectsWorkerBindingDrift(t *testing.T) {
 			case "duplicate":
 				inputs.Registry = append(inputs.Registry, inputs.Registry[index])
 			case "extra":
-				inputs.Registry = append(inputs.Registry, mcpcontractcheck.HandlerBinding{ToolID: "mcp.tool.you.worker_session.extra", HandlerID: "mcp.handler.you.worker_session.extra"})
+				inputs.Registry = append(inputs.Registry, mcpcontractcheck.HandlerBinding{ToolID: "mcp.tool.you.subagent.extra", HandlerID: "mcp.handler.you.subagent.extra"})
 			}
 			diagnostics := mcpcontractcheck.Validate(inputs)
-			if len(diagnostics) == 0 || !strings.Contains(diagnosticText(diagnostics), "worker_session.") {
+			if len(diagnostics) == 0 || !strings.Contains(diagnosticText(diagnostics), "subagent") {
 				t.Fatalf("%s binding was accepted: %v", mutation, diagnostics)
 			}
 		})

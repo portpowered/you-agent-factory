@@ -20,7 +20,7 @@ you server mcp
 
 The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
 protocol messages; process diagnostics use stderr. HTTP and SSE MCP transports
-are not supported. Worker Session tools connect to the HTTP host selected by
+are not supported. LIST, READ and CONTROL actions connect to the HTTP host selected by
 `--server`. Factory Session tools use the local process.
 
 To inspect Worker Sessions on a selected host, start the stdio server with:
@@ -29,8 +29,8 @@ To inspect Worker Sessions on a selected host, start the stdio server with:
 you --server http://127.0.0.1:8080 server mcp
 ```
 
-Call `you.worker_session.list` with optional `scope`, `state`, `limit`, and
-`nextToken` filters. Call `you.worker_session.read` with `workerSessionId` and
+Call `you.subagent` with `action: "LIST"` with optional `scope`, `state`, `limit`, and
+`nextToken` filters. Call `you.subagent` with `action: "READ"` with `workerSessionId` and
 `view`: `summary` (default), `transcript`, `events`, or `logs`. The events view returns
 retained frames only, with a default limit of 100 and a maximum of 1000.
 `truncated` is true when another retained frame exists.
@@ -42,7 +42,7 @@ the session is terminal and `committedPosition` stops advancing. Check `health`
 before treating the capture as complete. `nextToken` is accepted only with
 `view: logs`; `limit` is accepted with `events` and `logs`.
 
-Call `you.worker_session.control` with `workerSessionId` and `operation`:
+Call `you.subagent` with `action: "CONTROL"` with `workerSessionId` and `operation`:
 `CANCEL`, `TERMINATE`, `KILL`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
 `successorWorkerSessionId`, and `replacementMessage`. Use the same values when
 retrying an interrupted request. Optional `resumeMode` accepts `provider` (default)
@@ -57,7 +57,7 @@ Other operations reject `expectedAttemptId`. Read the physical attempt identity
 from the Worker Session observation before submitting this request:
 
 ```json
-{"workerSessionId":"direct-worker-001","operation":"KILL","requestId":"kill-001","expectedAttemptId":"attempt-001"}
+{"action":"CONTROL","workerSessionId":"direct-worker-001","operation":"KILL","requestId":"kill-001","expectedAttemptId":"attempt-001"}
 ```
 
 `KILL` sends `force: true` to the selected host's existing terminate route.
@@ -71,7 +71,7 @@ Confirmed force preserves that Work at FAILED without automatic retry.
 Reuse the same request and attempt identities when recovering a disconnected request.
 
 A failed host connection returns retryable `worker_session.host_unavailable`.
-Worker Session tools use the selected host for every request.
+LIST, READ and CONTROL use the selected host for every request.
 
 Configure these three host fields explicitly:
 
@@ -113,7 +113,12 @@ child from that workspace.
 
 ## Run A Subagent
 
-Call `you.subagent` with a short `prompt`:
+Call `you.subagent` with a short `prompt`. Omitted `action` defaults to `RUN`:
+
+Explicit `action: "RUN"` uses the same inputs and results. RUN uses the local
+process; the other actions use the selected host. Each action accepts only its
+own fields. Unknown actions return nonretryable `worker_session.invalid_request`
+before configuration or execution. RUN errors retain Factory Session codes.
 
 ```json
 {"prompt":"Summarize the purpose of this repository in one sentence."}
@@ -182,7 +187,7 @@ resources, and skill available from the server.
 
 ## Discover Worker Sessions
 
-Call `you.worker_session.list` with `history: "active"` for owned nonterminal Worker Sessions.
+Call `you.subagent` with `action: "LIST"` with `history: "active"` for owned nonterminal Worker Sessions.
 Use `history: "archived"` for retained ended or owner-lost sessions.
 Omit `history` or set it to `"all"` to combine both views.
 
@@ -206,7 +211,7 @@ Workflow sources resolve from `cwd`. To use a different source root, add
 
 ## Use Canonical Factory Session Tools
 
-Tool discovery exposes `you.subagent` and this Factory Session catalog:
+Tool discovery exposes exactly 11 tools: `you.subagent` and this Factory Session catalog:
 
 | Tool | Task |
 |------|------|
@@ -297,3 +302,10 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 - `you docs orchestrators` — Factory Session, dispatch, artifact, and event
   vocabulary
 - `you docs sessions` — inspect live Factory Sessions from the CLI
+
+## Migrate Worker Session Calls
+
+Replace `you.worker_session.list`, `you.worker_session.read`, and
+`you.worker_session.control` with `you.subagent`. Set `action` to `LIST`,
+`READ`, or `CONTROL`, respectively. Keep the existing action fields and results.
+The old tool names are removed. MESSAGE and REVIVE remain future capabilities.

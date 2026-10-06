@@ -350,10 +350,10 @@ func TestResultPolicyBaselineFixtureMatchesProjectedInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	owned.Fixtures = slices.DeleteFunc(owned.Fixtures, func(fixture mcpfactorysession.ResultPolicyFixture) bool {
-		return strings.HasPrefix(fixture.ToolName, "you.worker_session.")
+		return strings.HasPrefix(fixture.Name, "worker_")
 	})
 	owned.DomainErrorFixtures = slices.DeleteFunc(owned.DomainErrorFixtures, func(fixture mcpfactorysession.DomainErrorFixture) bool {
-		return strings.HasPrefix(fixture.ToolName, "you.worker_session.")
+		return strings.HasPrefix(fixture.Name, "worker_")
 	})
 	baseline, err = mcpfactorysession.MarshalResultPolicyInventoryJSON(owned)
 	if err != nil {
