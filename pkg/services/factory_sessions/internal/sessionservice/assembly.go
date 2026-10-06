@@ -22,8 +22,6 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
-	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -86,7 +84,6 @@ func NewAssembly(
 	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -95,11 +92,8 @@ func NewAssembly(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
-	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
-	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
