@@ -429,11 +429,14 @@ type LocalControlBoundary interface {
 // is selected by the manifest command and is never accepted from a request
 // body or remote fallback path.
 type ControlConfig struct {
-	Context         context.Context
-	Server          string
-	Remote          bool
-	WorkerSessionID string
-	Action          workersessions.ControlAction
+	Context           context.Context
+	Server            string
+	Remote            bool
+	WorkerSessionID   string
+	Action            workersessions.ControlAction
+	Force             bool
+	RequestID         string
+	ExpectedAttemptID string
 
 	OutputFormat string
 	JSON         bool
@@ -513,6 +516,9 @@ func validateControlConfig(config ControlConfig) error {
 	if !validControlAction(config.Action) {
 		return newCLIError("WORKER_SESSION_CONTROL_INVALID", "Worker Session control action is invalid", nil)
 	}
+	if err := validateForceConfig(config); err != nil {
+		return err
+	}
 	if config.Remote && config.HTTP == nil {
 		return newCLIError("WORKER_SESSION_HTTP_UNAVAILABLE", "remote Worker Session control requires a CLI HTTP protocol", nil)
 	}
@@ -581,7 +587,10 @@ func controlLocal(config ControlConfig, jsonOutput bool) error {
 }
 
 func applyLocalControl(config ControlConfig) (workersessions.ControlResult, error) {
-	request := workersessions.ControlRequest{ID: strings.TrimSpace(config.WorkerSessionID)}
+	request := workersessions.ControlRequest{
+		ID: strings.TrimSpace(config.WorkerSessionID), Force: config.Force,
+		RequestID: strings.TrimSpace(config.RequestID), ExpectedAttemptID: strings.TrimSpace(config.ExpectedAttemptID),
+	}
 	switch config.Action {
 	case workersessions.ControlActionPause:
 		return config.Local.Pause(config.Context, request)
@@ -616,7 +625,7 @@ func requestRemoteControl(config ControlConfig) (factoryapi.WorkerSessionControl
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
 		"worker sessions control request placement=remote action=%s endpointPath=%s workerSessionID=%s",
 		config.Action, endpoint.Path, config.WorkerSessionID)
-	request, err := http.NewRequestWithContext(config.Context, http.MethodPost, endpoint.String(), nil)
+	request, err := newControlHTTPRequest(config, endpoint.String())
 	if err != nil {
 		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_ENDPOINT_INVALID", "failed to build remote Worker Session control request", err)
 	}
@@ -639,6 +648,9 @@ func requestRemoteControl(config ControlConfig) (factoryapi.WorkerSessionControl
 	}
 	if err := validateRemoteControlResult(apiResult, config.WorkerSessionID, config.Action); err != nil {
 		return factoryapi.WorkerSessionControlResponse{}, err
+	}
+	if config.Force && (apiResult.Forced == nil || !*apiResult.Forced) {
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_CONTROL_FAILED", "remote host did not confirm force mode", nil)
 	}
 	return apiResult, nil
 }
@@ -689,7 +701,12 @@ func validControlOutcome(outcome workersessions.ControlOutcome) bool {
 }
 
 func controlResultFromService(result workersessions.ControlResult) factoryapi.WorkerSessionControlResponse {
+	var forced *bool
+	if result.Forced {
+		forced = &result.Forced
+	}
 	return factoryapi.WorkerSessionControlResponse{
+		Forced:          forced,
 		WorkerSessionId: result.Session.ID,
 		Action:          factoryapi.WorkerSessionControlResponseAction(result.Action),
 		Outcome:         factoryapi.WorkerSessionControlResponseOutcome(result.Outcome),
@@ -699,6 +716,12 @@ func controlResultFromService(result workersessions.ControlResult) factoryapi.Wo
 }
 
 func mapControlServiceError(err error) error {
+	if errors.Is(err, workersessions.ErrForceTerminationUnconfirmed) {
+		return newCLIError("WORKER_SESSION_CONTROL_FAILED", "force termination was not confirmed", err)
+	}
+	if errors.Is(err, workersessions.ErrInvalidForceControl) {
+		return newCLIError("WORKER_SESSION_CONTROL_INVALID", "invalid force control tuple", err)
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return newCLIError("WORKER_SESSION_CONTROL_INTERRUPTED", "Worker Session control was interrupted", err)
 	}
@@ -767,6 +790,11 @@ func writeControlResult(config ControlConfig, jsonOutput bool, result factoryapi
 		strings.ToLower(string(result.Outcome)), strings.ToLower(string(result.Action)),
 		result.WorkerSessionId, result.Action, result.Outcome, result.State, result.DispatchId); err != nil {
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session control result", err)
+	}
+	if result.Forced != nil && *result.Forced {
+		if _, err := fmt.Fprintln(config.Output, "Forced:\ttrue"); err != nil {
+			return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session control result", err)
+		}
 	}
 	return nil
 }
