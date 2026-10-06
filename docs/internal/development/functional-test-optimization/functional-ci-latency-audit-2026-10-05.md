@@ -5,12 +5,14 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `f7e138ae4e`, passes hosted Functional
-Coverage in **222s complete / 154.403s coverage**, 68 packages / 738 results,
-six compiler commands and 33 links, including one recovered Agent cancellation
-failure. Its workflow fails Backend Integration on a released probe-port race;
-the correction uses server-owned port binding and passes three focused Linux
-repetitions and both scoped linters. The preceding `e243441e58` workflow passes
+The latest measured published source, `69eaa32820`, passes hosted Functional
+Coverage in **210s complete / 150.914s coverage**, 68 packages / 738 results,
+including recovered interrupt-admission and script cancellation failures.
+Backend Integration passes the server-owned port-binding correction. Its
+remaining workflow checks were still active at capture. The preceding
+`f7e138ae4e` functional job takes 222s complete / 154.403s coverage, with one
+recovered Agent cancellation failure, and its integration job fails the
+released probe-port race. The preceding `e243441e58` workflow passes
 all checks, with Functional Coverage taking **247s complete / 169.073s coverage**,
 no retries, 110 compiler commands and 17 links after a prefix f0 archive restore.
 The complete hosted two-minute checkpoint
@@ -4110,3 +4112,54 @@ Evidence: `.artifacts/latency-audit/rendered-layout-spike-paired/`,
 `.artifacts/latency-audit/rendered-layout-formats-matched-candidate/`,
 `.artifacts/latency-audit/pr2923-causal-hosted/` and
 `.artifacts/latency-audit/pr2923-causal-flakes/`.
+
+
+## Agent customer cleanup and one additional shared-binary package
+
+Remove the Agent package's constructor-only provider inventory child and its
+deliberately failing test-executable cleanup census. The latter constructs a
+second host, installs packaged Factories again and reports internal fixture
+counts and paths. It does not prove a customer operation. Keep actual process,
+listener, stream and Factory Session cleanup, public session deletion, provider
+selection, Work/output/event identity, failure, timeout, cancellation and later
+recovery assertions. Let testing's owned temporary directories manage their own
+removal rather than manually deleting and rechecking them.
+
+The Agent journey runs in parallel with other packages. Its cases remain
+sequential because Recovery must observe the same host after adverse cases.
+Every operation filters inherited home and model-cache overrides and uses an
+owned home/model cache. Before cancellation, wait for the public Work query to
+show the exact admitted Work in init/PROCESSING. Provider command entry does not
+acknowledge publication of that projection. Preserve the same stopped-runtime,
+terminal response stream, canceled edge and post-cancellation Work assertions;
+no timeout, retry or accepted-state allowance is increased.
+
+Six fresh native processes per version, in baseline/candidate/candidate/baseline
+blocks of three, all pass. Baseline uses 9.508912 CPU-seconds / 16.692884793s
+elapsed; candidate uses 6.344212 / 13.631833126s: 33.3% less aggregate execution
+CPU and 18.3% less elapsed time for this journey. Build time is excluded. Both
+scoped linters pass, and all 160 reviewed scenario decisions remain current.
+Twenty additional focused cancellation repetitions pass with the processing
+observation in place. This is local evidence, not proof that every hosted
+cancellation race has been eliminated.
+
+The unchanged classifier now joins Agent automatically: 39 package groups /
+570 top-level registrations. Full four-CPU validation passes all 68 packages /
+738 selected results, 736 pass and two skip, without retries and with unchanged
+coverage gates and quarantine. It takes 209.95s supervisor / 200.927s coverage /
+679.97 CPU-seconds (519.06 user, 160.91 kernel). Four compiler commands consume
+0.718873 CPU-seconds. Nineteen links consume 39.862169 CPU-seconds over 39.309s
+active link wall, one fewer supervisor link than the preceding 20-link local
+layout-cache comparison. This slower full sample does not establish a complete
+lane speedup or the two-minute checkpoint.
+
+Parent 69eaa32820 passes hosted functional coverage in 210s complete / 150.914s
+coverage. Integration passes the port-binding correction. Preserve its recovered
+TestInterruptRace admission failure and Script Cancellation init/INITIAL failure,
+including the extra routed-call observation; neither is claimed fixed by the
+Agent change. These are recorded in the same-head flake ledger.
+
+Evidence: `.artifacts/latency-audit/agent-customer-cleanup-paired/`,
+`.artifacts/latency-audit/agent-customer-cleanup-full/`,
+`.artifacts/latency-audit/pr2923-server-port-hosted/` and
+`.artifacts/latency-audit/pr2923-server-port-flakes/`.

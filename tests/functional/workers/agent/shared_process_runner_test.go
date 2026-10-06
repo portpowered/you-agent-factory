@@ -92,12 +92,6 @@ func (router *agentSharedCommandRouter) callCount() int {
 	return len(router.calls)
 }
 
-func (router *agentSharedCommandRouter) routeCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.routes)
-}
-
 func (router *agentSharedCommandRouter) clearRoutes() {
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -207,12 +201,6 @@ func (runner *agentSharedScenarioRunner) waitFinished(t testing.TB, timeout time
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting for agent command finish within %s", timeout)
 	}
-}
-
-func (runner *agentSharedScenarioRunner) callCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return len(runner.requests)
 }
 
 func (runner *agentSharedScenarioRunner) canceledCount() int {
