@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -362,8 +363,8 @@ func testRuntimeModelBindingHelpers(t *testing.T) {
 	if len(workerBindings) != 1 || workerBindings[0].Slot != "input" || workerBindings[0].Source != workers.ModelOperationBindingSourceInput {
 		t.Fatalf("runtimeWorkerBindings() = %#v, want mapped input binding", workerBindings)
 	}
-	if runtimeWorkerBindings(nil) != nil || firstRuntimeModelValue("  ", "fallback") != "fallback" || firstRuntimeModelValue("value", "fallback") != "value" {
-		t.Fatal("empty binding/value helper behavior was incorrect")
+	if runtimeWorkerBindings(nil) != nil {
+		t.Fatal("empty bindings were not preserved")
 	}
 	if got := runtimeModelUserMessage("invoke", []work.WorkContentPart{{Metadata: map[string]any{"unsupported": func() {}}}}, nil); got != "invoke" {
 		t.Fatalf("runtimeModelUserMessage(unmarshalable) = %q, want operation fallback", got)
@@ -388,7 +389,7 @@ func TestRuntimeModelInvokerUsesSharedWorkersForManagedModel(t *testing.T) {
 		Output:  workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "local answer"}}},
 	}}
 	sessions := &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: config}}}
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	invoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: modelsService, Scope: scope, Sessions: sessions,
 		Workers:   workersService,
 		RuntimeID: "runtime-local", GenerationID: "generation-local",
@@ -408,7 +409,7 @@ func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing
 	scope := mustRuntimeModelScope(t, "factory-session:models:effective-builtin")
 	modelsService := newEffectiveBuiltinModelsStub(t)
 	workersService := effectiveBuiltinWorkersStub()
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	invoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
 		Workers: workersService,
 	})
@@ -526,7 +527,7 @@ func TestRuntimeModelInvokerPreservesEffectiveBuiltinUnsupportedOperation(t *tes
 	modelsService := &runtimeInvokerModelsStub{resolution: models.ResolveModelReferenceResult{
 		Resolved: models.ResolvedModelReference{Definition: definition},
 	}}
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	invoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
 		Workers: &runtimeInvokerWorkersStub{},
 	})
@@ -606,7 +607,7 @@ func TestRuntimeModelInvokerUsesSharedWorkersForRemoteModel(t *testing.T) {
 		Outcome: workers.ExecutionOutcomeAccepted,
 		Output:  workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "remote answer"}}},
 	}}
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	invoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: &runtimeInvokerModelsStub{readiness: models.GetModelReadinessResult{Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady}}},
 		Scope:  scope, Sessions: &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: config}}},
 		Workers: workersService, RuntimeID: "runtime-remote", GenerationID: "generation-remote", FactoryDirectory: "/factory", WorkingDirectory: "/factory/work",
@@ -646,7 +647,7 @@ func TestRuntimeModelInvokerRejectsUnhandledAndFailedExecution(t *testing.T) {
 		Outcome: workers.ExecutionOutcomeFailed,
 		Failure: &workers.ExecutionFailure{Message: "local inference failed"},
 	}}
-	localInvoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	localInvoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: baseModels, Scope: scope,
 		Sessions: &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: config}}},
 		Workers:  localWorkers,
@@ -660,7 +661,7 @@ func TestRuntimeModelInvokerRejectsUnhandledAndFailedExecution(t *testing.T) {
 		Operations: []factorydefinitions.ModelOperation{{Name: "invoke"}},
 	}}}
 	failedWorkers := &runtimeInvokerWorkersStub{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed, Failure: &workers.ExecutionFailure{Message: "provider failed"}}}
-	remoteInvoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	remoteInvoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: baseModels, Scope: scope, Sessions: &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: remoteConfig}}}, Workers: failedWorkers,
 	})
 	if _, err := remoteInvoker.InvokeModel(context.Background(), "remote-model", models.Request{Operation: "invoke"}); err == nil || !strings.Contains(err.Error(), "provider failed") {
@@ -677,7 +678,7 @@ func TestRuntimeModelInvokerPreservesWorkersCancellation(t *testing.T) {
 		Model: "local-model", ModelLocality: factorydefinitions.ModelLocalityLocal,
 		Operations: []factorydefinitions.ModelOperation{{Name: "invoke"}},
 	}}}
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	invoker := newTestModelInvocation(testModelInvocationConfig{
 		Models: &runtimeInvokerModelsStub{
 			readiness: models.GetModelReadinessResult{Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady}},
 		},
@@ -716,16 +717,16 @@ func assertRuntimeModelInvokerBaseUnavailable(
 ) {
 	t.Helper()
 	var nilInvoker *runtimeModelInvoker
-	if _, err := nilInvoker.InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
+	if _, err := nilInvoker.InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
 		t.Fatalf("nil invoker error = %v, want Models unavailable", err)
 	}
-	if _, err := (&runtimeModelInvoker{}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
+	if _, err := (&runtimeModelInvoker{}).InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
 		t.Fatalf("nil Models error = %v, want Models unavailable", err)
 	}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Factory Session service is not available") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Factory Session service is not available") {
 		t.Fatalf("nil Sessions error = %v, want Factory Session unavailable", err)
 	}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
 		t.Fatalf("zero scope error = %v, want ErrRuntimeScopeInvalid", err)
 	}
 }
@@ -740,7 +741,7 @@ func assertRuntimeModelInvokerLookupFailures(
 ) {
 	t.Helper()
 	sessions.err = errors.New("session lookup failed")
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "session lookup failed") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "session lookup failed") {
 		t.Fatalf("session lookup error = %v, want lookup failure", err)
 	}
 	sessions.err = nil
@@ -748,7 +749,7 @@ func assertRuntimeModelInvokerLookupFailures(
 	configWithoutModel := &factorydefinitions.FactoryConfig{}
 	missingWorkerSessions := &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: configWithoutModel}}}
 	missingWorkerErr := func() error {
-		_, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: missingWorkerSessions}).InvokeModel(context.Background(), "missing-model", request)
+		_, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: missingWorkerSessions}).InvokeModel(context.Background(), "missing-model", request)
 		return err
 	}()
 	var missingModelFailure *models.InvocationFailure
@@ -757,11 +758,11 @@ func assertRuntimeModelInvokerLookupFailures(
 	}
 
 	readinessErrorModels := &runtimeInvokerModelsStub{readinessErr: errors.New("readiness lookup failed")}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readinessErrorModels, Scope: scope, Sessions: sessionsWithConfig(localConfig)}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "readiness lookup failed") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readinessErrorModels, Scope: scope, Sessions: sessionsWithConfig(localConfig)}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "readiness lookup failed") {
 		t.Fatalf("readiness lookup error = %v, want lookup failure", err)
 	}
 	blockedModels := &runtimeInvokerModelsStub{readiness: models.GetModelReadinessResult{Readiness: models.Runtime{ReadinessState: models.ReadinessStateMissing}}}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: blockedModels, Scope: scope, Sessions: sessionsWithConfig(localConfig)}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrMissing) {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: blockedModels, Scope: scope, Sessions: sessionsWithConfig(localConfig)}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrMissing) {
 		t.Fatalf("blocked readiness error = %v, want ErrMissing", err)
 	}
 
@@ -769,7 +770,7 @@ func assertRuntimeModelInvokerLookupFailures(
 		Name: "local-worker", Type: factorydefinitions.WorkerTypeModel, Model: "local-model", ModelLocality: factorydefinitions.ModelLocalityLocal,
 		Operations: []factorydefinitions.ModelOperation{{Name: "invoke", Inputs: []factorydefinitions.ModelOperationSlot{{Name: "required", Required: true}}}},
 	}}}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: sessionsWithConfig(requiredConfig)}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "required slot") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: sessionsWithConfig(requiredConfig)}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "required slot") {
 		t.Fatalf("required binding error = %v, want required-slot failure", err)
 	}
 }
@@ -783,7 +784,7 @@ func assertRuntimeModelInvokerLocalFailures(
 ) {
 	t.Helper()
 	localErrorWorkers := &runtimeInvokerWorkersStub{err: errors.New("local Workers execution failed")}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+	if _, err := newTestModelInvocation(testModelInvocationConfig{
 		Models: readyModels, Scope: scope, Sessions: sessions, Workers: localErrorWorkers,
 	}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "local Workers execution failed") {
 		t.Fatalf("local Workers execution error = %v, want local failure", err)
@@ -802,15 +803,15 @@ func assertRuntimeModelInvokerRemoteFailures(
 		Operations: []factorydefinitions.ModelOperation{{Name: "invoke", Outputs: []factorydefinitions.ModelOperationSlot{{Name: "result", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON}}}}},
 	}}}
 	remoteSessions := sessionsWithConfig(remoteConfig)
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "Workers service is not available") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "Workers service is not available") {
 		t.Fatalf("nil Workers error = %v, want Workers unavailable", err)
 	}
 	workersError := &runtimeInvokerWorkersStub{err: errors.New("Workers execution failed")}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions, Workers: workersError}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "Workers execution failed") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions, Workers: workersError}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "Workers execution failed") {
 		t.Fatalf("Workers execution error = %v, want execution failure", err)
 	}
 	invalidOutput := &runtimeInvokerWorkersStub{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted, Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "not JSON"}}}}}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions, Workers: invalidOutput}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "not valid WorkContent JSON") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Scope: scope, Sessions: remoteSessions, Workers: invalidOutput}).InvokeModel(context.Background(), "remote-model", request); err == nil || !strings.Contains(err.Error(), "not valid WorkContent JSON") {
 		t.Fatalf("invalid structured output error = %v, want content validation failure", err)
 	}
 }
@@ -845,8 +846,8 @@ type runtimeInvokerSessionsStub struct {
 	err        error
 }
 
-func (stub *runtimeInvokerSessionsStub) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
-	return stub.projection, stub.err
+func (stub *runtimeInvokerSessionsStub) FactoryConfigForSession(context.Context, string) (*factorydefinitions.FactoryConfig, error) {
+	return stub.projection.Context.FactoryCfg, stub.err
 }
 
 type runtimeInvokerWorkersStub struct {
@@ -868,4 +869,188 @@ func mustRuntimeModelScope(t *testing.T, value string) models.RuntimeScopeRef {
 		t.Fatalf("parse runtime Models scope %q: %v", value, err)
 	}
 	return scope
+}
+
+// testModelInvocation carries fixture selections for existing component cases.
+// Production injects the operation once and passes these facts per call.
+type testModelInvocationConfig struct {
+	Models           models.Service
+	Sessions         FactoryConfigReader
+	Workers          workers.Service
+	Scope            models.RuntimeScopeRef
+	RuntimeID        string
+	GenerationID     string
+	FactoryDirectory string
+	WorkingDirectory string
+}
+
+type testModelInvocation struct {
+	operation RuntimeModelInvocationOperation
+	facts     RuntimeModelInvocation
+}
+
+func newTestModelInvocation(config testModelInvocationConfig) testModelInvocation {
+	if config.RuntimeID == "" {
+		config.RuntimeID = "fixture-runtime"
+	}
+	if config.GenerationID == "" {
+		config.GenerationID = "fixture-generation"
+	}
+	return testModelInvocation{
+		operation: NewRuntimeModelInvocation(config.Models, config.Sessions, config.Workers),
+		facts: RuntimeModelInvocation{FactorySessionID: factorysessions.DefaultSessionID, Scope: config.Scope,
+			RuntimeID: config.RuntimeID, GenerationID: config.GenerationID,
+			FactoryDirectory: config.FactoryDirectory, WorkingDirectory: config.WorkingDirectory},
+	}
+}
+
+func (fixture testModelInvocation) InvokeModel(ctx context.Context, name string, request models.Request) (models.Result, error) {
+	return fixture.operation.InvokeRuntimeModel(ctx, fixture.facts, name, request)
+}
+
+func TestRuntimeModelInvocationKeepsConcurrentSessionSelectionsAndCancellationIsolated(t *testing.T) {
+	t.Parallel()
+	ctx, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stop()
+	canceledCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sessions := scopedModelSessions{configs: map[string]*factorydefinitions.FactoryConfig{}}
+	facts := make(map[string]RuntimeModelInvocation)
+	for _, id := range []string{"selected", "peer"} {
+		sessions.configs[id] = &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: id + "-worker", Type: factorydefinitions.WorkerTypeModel, Model: "shared-model",
+			ModelLocality: factorydefinitions.ModelLocalityLocal, ModelProvider: "mock",
+			Operations: []factorydefinitions.ModelOperation{{Name: "invoke"}},
+		}}}
+		facts[id] = RuntimeModelInvocation{FactorySessionID: id, Scope: mustRuntimeModelScope(t, "factory-session:models:"+id),
+			RuntimeID: id + "-runtime", GenerationID: id + "-generation", FactoryDirectory: "/" + id, WorkingDirectory: "/" + id + "/work"}
+	}
+	readiness := make(chan models.GetModelReadinessRequest, 2)
+	execution := &scopedModelWorkers{observed: make(chan workers.ExecuteRequest, 2), release: make(chan struct{})}
+	operation := NewRuntimeModelInvocation(scopedReadyModels{requests: readiness}, sessions, execution)
+	type outcome struct {
+		result models.Result
+		err    error
+	}
+	selected, peer := make(chan outcome, 1), make(chan outcome, 1)
+	invoke := func(ctx context.Context, id string, results chan<- outcome) {
+		result, err := operation.InvokeRuntimeModel(ctx, facts[id], "shared-model", models.Request{Operation: "invoke"})
+		results <- outcome{result, err}
+	}
+	go invoke(canceledCtx, "selected", selected)
+	go invoke(ctx, "peer", peer)
+	// Both requests must reach the controlled edge before either completes.
+	for range 2 {
+		select {
+		case request := <-execution.observed:
+			id := request.Correlation.FactorySessionID
+			scoped, ok := facts[id]
+			if !ok || request.Target.WorkerName != id+"-worker" || request.Correlation.RuntimeID != scoped.RuntimeID ||
+				request.Correlation.GenerationID != scoped.GenerationID || request.Input.WorkflowContext.SessionID != id ||
+				request.Target.Workspace.FactoryDirectory != scoped.FactoryDirectory || request.Target.Environment.WorkingDirectory != scoped.WorkingDirectory ||
+				(request.Input.ModelRuntime == nil || request.Input.ModelRuntime.Scope != scoped.Scope) {
+				t.Fatalf("misattributed Workers request: %#v", request)
+			}
+		case <-ctx.Done():
+			t.Fatal("concurrent model requests did not both reach Workers")
+		}
+	}
+	for range 2 {
+		select {
+		case request := <-readiness:
+			if request.Scope != facts["selected"].Scope && request.Scope != facts["peer"].Scope {
+				t.Fatalf("unexpected readiness scope: %#v", request)
+			}
+		case <-ctx.Done():
+			t.Fatal("missing readiness request")
+		}
+	}
+	cancel()
+	select {
+	case result := <-selected:
+		if !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("selected cancellation = %v", result.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("selected request did not acknowledge cancellation")
+	}
+	close(execution.release)
+	select {
+	case result := <-peer:
+		if result.err != nil || result.result.Worker != "peer-worker" || result.result.Content[0].Text != "peer answer" {
+			t.Fatalf("peer outcome = %#v, %v", result.result, result.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("peer did not complete after selected cancellation")
+	}
+}
+
+type scopedModelSessions struct {
+	configs map[string]*factorydefinitions.FactoryConfig
+}
+
+func (s scopedModelSessions) FactoryConfigForSession(_ context.Context, id string) (*factorydefinitions.FactoryConfig, error) {
+	config, ok := s.configs[id]
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return config, nil
+}
+
+type scopedReadyModels struct {
+	models.Service
+	requests chan<- models.GetModelReadinessRequest
+}
+
+func (s scopedReadyModels) GetModelReadiness(_ context.Context, request models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
+	s.requests <- request
+	return models.GetModelReadinessResult{Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady}}, nil
+}
+
+type scopedModelWorkers struct {
+	workers.Service
+	observed chan workers.ExecuteRequest
+	release  chan struct{}
+}
+
+func (s *scopedModelWorkers) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	s.observed <- request
+	select {
+	case <-ctx.Done():
+		return workers.ExecuteResult{}, ctx.Err()
+	case <-s.release:
+		return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted, Output: workers.ProposedOutput{
+			Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: request.Correlation.FactorySessionID + " answer"}},
+		}}, nil
+	}
+}
+
+func TestRuntimeModelInvocationRejectsMissingSessionAndGenerationFacts(t *testing.T) {
+	t.Parallel()
+	scope := mustRuntimeModelScope(t, "factory-session:models:missing-facts")
+	for _, missing := range []string{"session", "runtime", "generation", "scope"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			facts := RuntimeModelInvocation{FactorySessionID: "session", RuntimeID: "runtime", GenerationID: "generation", Scope: scope}
+			switch missing {
+			case "session":
+				facts.FactorySessionID = ""
+			case "runtime":
+				facts.RuntimeID = ""
+			case "generation":
+				facts.GenerationID = ""
+			case "scope":
+				facts.Scope = models.RuntimeScopeRef{}
+			}
+			execution := &runtimeInvokerWorkersStub{}
+			ready := &runtimeInvokerModelsStub{}
+			operation := NewRuntimeModelInvocation(ready, scopedModelSessions{}, execution)
+			if _, err := operation.InvokeRuntimeModel(t.Context(), facts, "model", models.Request{Operation: "invoke"}); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+				t.Fatalf("missing %s error = %v", missing, err)
+			}
+			if len(execution.requests) != 0 || len(ready.readinessRequests) != 0 || len(ready.resolutionRequests) != 0 {
+				t.Fatal("invalid facts reached Models or Workers")
+			}
+		})
+	}
 }

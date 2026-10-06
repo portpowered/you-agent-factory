@@ -896,3 +896,39 @@ func asInvocationFailure(err error, target **models.InvocationFailure) bool {
 func stringPointer(value string) *string {
 	return &value
 }
+
+func TestAdapterModelInvocationUsesTheHostingSessionSelection(t *testing.T) {
+	t.Parallel()
+	for _, sessionID := range []string{"selected-session", "peer-session"} {
+		t.Run(sessionID, func(t *testing.T) {
+			t.Parallel()
+			var observedID string
+			invoker := addressedModelInvokerFake{invoke: func(_ context.Context, id, name string, request models.Request) (models.Result, error) {
+				observedID = id
+				return models.Result{ModelName: name, Worker: id + "-worker", Operation: request.Operation}, nil
+			}}
+			adapter := NewSessionAdapter(&rootFake{}, invoker, passthroughContentPreparation{}, models.RuntimeScopeRef{}, sessionID)
+			handler := NewHandler(adapter, zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.InvokeModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`)), "voice")
+			if observedID != sessionID || recorder.Code != http.StatusOK {
+				t.Fatalf("session=%q status=%d body=%s", observedID, recorder.Code, recorder.Body.String())
+			}
+			var response factoryapi.ModelInvocationResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Worker != sessionID+"-worker" {
+				t.Fatalf("worker=%q", response.Worker)
+			}
+		})
+	}
+}
+
+type addressedModelInvokerFake struct {
+	invoke func(context.Context, string, string, models.Request) (models.Result, error)
+}
+
+func (s addressedModelInvokerFake) InvokeModelForSession(ctx context.Context, id, name string, request models.Request) (models.Result, error) {
+	return s.invoke(ctx, id, name, request)
+}

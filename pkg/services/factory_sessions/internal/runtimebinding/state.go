@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -151,13 +152,14 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
-	Instance      RuntimeInstance
-	Handle        RuntimeHandle
-	Spec          any
-	Owner         SessionProjectionOwner
-	Invoker       roles.CanonicalSessionInvoker
-	ModelInvoker  workers.ModelInvoker
-	InputResolver roles.InvocationInputResolver
+	Instance        RuntimeInstance
+	Handle          RuntimeHandle
+	Spec            any
+	Owner           SessionProjectionOwner
+	Invoker         roles.CanonicalSessionInvoker
+	ModelInvoker    workers.ModelInvoker
+	ModelInvocation modelinvocation.RuntimeModelInvocation
+	InputResolver   roles.InvocationInputResolver
 	// Process and Diagnostics are application lifecycle values owned by this
 	// canonical session record. The process root routes transport commands by
 	// session ID instead of retaining another runtime-opening graph.
@@ -201,6 +203,7 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	}
 	s.FactoryRuntime = previous.FactoryRuntime
 	s.ModelsScope = previous.ModelsScope
+	s.ModelInvocation = previous.ModelInvocation
 	s.SetWorkerSessions(previous.WorkerSessionsObservation())
 	s.SetMockWorkers(previous.MockWorkersConfig())
 	s.SetOperatorDefaults(previous.OperatorDefaults())

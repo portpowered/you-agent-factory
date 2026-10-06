@@ -841,3 +841,12 @@ func provideRecordingFilesystemEffects(
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
 	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
 }
+
+// Narrow the already-composed peers without allocating another service.
+func provideRuntimeModelFactoryConfigReader(assembly factorysessionwire.RuntimeAssembly) factorysessionwire.RuntimeModelFactoryConfigReader {
+	return assembly
+}
+
+func provideRuntimeModelWorkerExecution(workerService workers.Service) factorysessionwire.RuntimeModelWorkerExecution {
+	return workerService
+}

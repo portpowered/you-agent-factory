@@ -140,6 +140,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.ScriptCommandRunner,
 		fixture.EnsureBackendScope,
 		fixture.InitialActivation,
+		nil,
 	)
 }
 func TestNewFactoryRemainsInert(t *testing.T) {

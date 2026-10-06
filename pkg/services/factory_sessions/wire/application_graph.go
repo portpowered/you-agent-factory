@@ -11,6 +11,7 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
@@ -90,7 +91,10 @@ type (
 	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
-	Root = factorysessionroot.Root
+	RuntimeModelInvocationOperation = modelinvocation.RuntimeModelInvocationOperation
+	RuntimeModelFactoryConfigReader = modelinvocation.FactoryConfigReader
+	RuntimeModelWorkerExecution     = modelinvocation.WorkerExecution
+	Root                            = factorysessionroot.Root
 )
 
 // NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
@@ -153,6 +157,7 @@ func NewRoot(
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	modelInvocation RuntimeModelInvocationOperation,
 ) (*Root, error) {
 	return service.NewRoot(
 		providerSessions,
@@ -198,6 +203,7 @@ func NewRoot(
 		scriptCommandRunner,
 		ensureBackendScope,
 		initialActivation,
+		modelInvocation,
 	)
 }
 
@@ -229,4 +235,9 @@ func NewInvocationOperation(
 		logger,
 		presentations,
 	)
+}
+
+// NewRuntimeModelInvocation injects fixed peers into the session-scoped operation.
+func NewRuntimeModelInvocation(modelService models.Service, gateway RuntimeModelFactoryConfigReader, workerService RuntimeModelWorkerExecution) RuntimeModelInvocationOperation {
+	return modelinvocation.NewRuntimeModelInvocation(modelService, gateway, workerService)
 }

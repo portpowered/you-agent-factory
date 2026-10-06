@@ -164,6 +164,7 @@ type ApplicationRuntime interface {
 }
 
 type RuntimeAssembly interface {
+	FactoryConfigForSession(context.Context, string) (*factorydefinitions.FactoryConfig, error)
 	CurrentRuntimeResolver
 	RuntimeResolver
 	RuntimeReader

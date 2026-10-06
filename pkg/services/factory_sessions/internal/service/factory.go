@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
@@ -56,6 +57,7 @@ type Root struct {
 	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
 	durableExecutionFactory          DurableExecutionFactory
+	modelInvocation                  modelinvocation.RuntimeModelInvocationOperation
 	workerService                    workers.Service
 	modelService                     models.Service
 	automationService                automations.Service
@@ -145,9 +147,11 @@ func NewRoot(
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 ) (*Root, error) {
 	root := &Root{
 		initialActivation:                initialActivation,
+		modelInvocation:                  modelInvocation,
 		durableExecutionFactory:          durableExecutionFactory,
 		workerService:                    workerService,
 		modelService:                     modelService,

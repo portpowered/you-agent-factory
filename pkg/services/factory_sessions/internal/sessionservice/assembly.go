@@ -705,3 +705,12 @@ func workSessionAliases(session *livesession.LiveSession) []string {
 	}
 	return aliases
 }
+
+// FactoryConfigForSession narrows the existing selected projection for model invocation.
+func (a *Assembly) FactoryConfigForSession(ctx context.Context, sessionID string) (*factorydefinitions.FactoryConfig, error) {
+	projection, err := a.GetFactorySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return projection.Context.FactoryCfg, nil
+}
