@@ -242,6 +242,7 @@ func (r *registry) prepareContinuation(
 	continuationRef := reference.ContinuationRef()
 	continuation.Execution.Continuation = &continuationRef
 	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
+	supervision.providerAttempt = &providerAttemptControl{}
 	delete(r.dispatchOwners, previousDispatchID)
 	r.dispatchOwners[supervision.dispatchID] = id
 	supervision.publishing = true
@@ -656,6 +657,7 @@ type supervision struct {
 	err                error
 	cancel             context.CancelFunc
 	cancelFailure      func() error
+	providerAttempt    *providerAttemptControl
 
 	// retryBudget is the total attempt allowance for this supervision and
 	// attemptsMade counts the attempts actually published. retryPending records
@@ -703,15 +705,16 @@ func newSupervision(dispatchID, turnID string, executions ...workers.Workstation
 		execution = executions[0]
 	}
 	return &supervision{
-		dispatchID:  dispatchID,
-		turnID:      turnID,
-		execution:   cloneWorkstationDispatchRequest(execution),
-		retryBudget: 1,
-		published:   make(chan struct{}),
-		paused:      make(chan struct{}),
-		admitted:    make(chan struct{}),
-		done:        make(chan struct{}),
-		driverDone:  make(chan struct{}),
+		providerAttempt: &providerAttemptControl{},
+		dispatchID:      dispatchID,
+		turnID:          turnID,
+		execution:       cloneWorkstationDispatchRequest(execution),
+		retryBudget:     1,
+		published:       make(chan struct{}),
+		paused:          make(chan struct{}),
+		admitted:        make(chan struct{}),
+		done:            make(chan struct{}),
+		driverDone:      make(chan struct{}),
 	}
 }
 

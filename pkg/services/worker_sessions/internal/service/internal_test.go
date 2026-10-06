@@ -7680,6 +7680,115 @@ type projectedAttemptControl struct{ identity string }
 
 func (*projectedAttemptControl) ForceKill(context.Context) (bool, error) { return false, nil }
 
+func TestWorkerExecutionHandoff_RetainsAndRetiresExactProviderControl(t *testing.T) {
+	t.Parallel()
+	for _, ending := range []string{"success", "failure", "panic"} {
+		t.Run(ending, func(t *testing.T) {
+			t.Parallel()
+			request := dispatchHandoff("owned-dispatch")
+			s := newSupervision("owned-dispatch", "")
+			setCoverageAccepted(s, true)
+			owned := &projectedAttemptControl{identity: "owned"}
+			var late providers.AttemptControlObserver
+			observerCalls := 0
+			request.Execution.AttemptControlObserver = func(control providers.AttemptControl) {
+				// Reading under this lock also proves the external callback is
+				// invoked after retention and without holding the lock itself.
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				if control != owned || s.providerAttempt.control != owned {
+					t.Fatal("observer did not receive the retained owned capability")
+				}
+				observerCalls++
+			}
+			_, err := executeWithService(t.Context(), coverageExecution{
+				execute: func(_ context.Context, req workers.ExecuteRequest) (workers.ExecuteResult, error) {
+					late = req.Input.AttemptControlObserver
+					late(nil)
+					late(owned)
+					late(&projectedAttemptControl{identity: "substitute"})
+					if ending == "panic" {
+						panic("controlled executor failure")
+					}
+					if ending == "failure" {
+						return workers.ExecuteResult{}, errors.New("controlled executor failure")
+					}
+					return coverageExecutionResult(req, workers.ExecutionOutcomeAccepted), nil
+				},
+			}, request, s, func() {}, nil)
+			if (err != nil) != (ending != "success") || observerCalls != 1 {
+				t.Fatalf("execution ending %s: error %v, observer calls %d", ending, err, observerCalls)
+			}
+			if !s.providerAttempt.retired || s.providerAttempt.control != nil {
+				t.Fatal("execution return retained force authority")
+			}
+			late(owned)
+			if observerCalls != 1 || s.providerAttempt.control != nil {
+				t.Fatal("late callback revived the completed generation")
+			}
+		})
+	}
+}
+
+func TestWorkerSupervision_ProviderControlGenerationCannotRetargetReplacement(t *testing.T) {
+	t.Parallel()
+	s := newSupervision("reused-attempt", "")
+	oldRequest := workers.ExecuteRequest{}
+	retireOld := s.bindProviderAttemptControl(&oldRequest)
+	old := &projectedAttemptControl{identity: "old"}
+	oldRequest.Input.AttemptControlObserver(old)
+	oldSlot := s.providerAttempt
+
+	// A retry/continuation replaces the slot under the same mutex as its
+	// dispatch identity. Exercise reuse of that identity as well as pointer
+	// replacement, so an identity-only comparison would fail this assertion.
+	s.mu.Lock()
+	s.providerAttempt = &providerAttemptControl{}
+	s.mu.Unlock()
+	newRequest := workers.ExecuteRequest{}
+	retireNew := s.bindProviderAttemptControl(&newRequest)
+	defer retireNew()
+	current := &projectedAttemptControl{identity: "replacement"}
+	newRequest.Input.AttemptControlObserver(current)
+	oldRequest.Input.AttemptControlObserver(old)
+	retireOld()
+	if s.providerAttempt.control != current || s.providerAttempt.retired || !oldSlot.retired || oldSlot.control != nil {
+		t.Fatal("old observer or retirement changed replacement authority")
+	}
+}
+
+func TestWorkerSupervision_ReplacementAdmissionInstallsFreshProviderGeneration(t *testing.T) {
+	t.Parallel()
+	for _, replacement := range []string{"retry", "continuation"} {
+		t.Run(replacement, func(t *testing.T) {
+			t.Parallel()
+			r, s, reference := newPausedContinuationRegistry(t)
+			request := workers.ExecuteRequest{}
+			retire := s.bindProviderAttemptControl(&request)
+			defer retire()
+			old := &projectedAttemptControl{identity: "old"}
+			request.Input.AttemptControlObserver(old)
+			original := s.providerAttempt
+			if replacement == "retry" {
+				if _, ready := r.prepareRetryAttempt("worker-1", s); !ready {
+					t.Fatal("retry was not admitted")
+				}
+			} else {
+				if _, _, ready := r.prepareContinuation("worker-1", s, reference); !ready {
+					t.Fatal("continuation was not admitted")
+				}
+			}
+			if s.providerAttempt == original || s.providerAttempt.control != nil || s.providerAttempt.retired {
+				t.Fatal("replacement retained the previous execution's capability")
+			}
+			request.Input.AttemptControlObserver(old)
+			if s.providerAttempt.control != nil {
+				t.Fatal("old execution callback attached to the replacement")
+			}
+		})
+	}
+}
+
 func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(t *testing.T) {
 	t.Run("maps worker outcomes", testWorkerExecutionHandoffMapsWorkerOutcomes)
 	t.Run("detaches process-gone results", testWorkerExecutionHandoffDetachesProcessGoneResults)

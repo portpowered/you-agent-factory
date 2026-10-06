@@ -170,6 +170,8 @@ func executeWithService(
 			progress(correlation, fragment)
 		}
 	}
+	retireControl := supervision.bindProviderAttemptControl(&executeRequest)
+	defer retireControl()
 	executeResult, executeErr := execution.Execute(ctx, executeRequest)
 	if supervision.processGoneObserved() {
 		executeResult = processGoneExecuteResult(executeRequest, executeResult)

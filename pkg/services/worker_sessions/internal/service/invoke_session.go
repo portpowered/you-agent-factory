@@ -670,6 +670,7 @@ func (r *registry) prepareRetryAttempt(id string, supervision *supervision) (wor
 	next := cloneWorkstationDispatchRequest(supervision.execution)
 	next.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", supervision.baseDispatchID(), supervision.attemptsMade+1)
 	supervision.dispatchID = next.Execution.Dispatch.DispatchID
+	supervision.providerAttempt = &providerAttemptControl{}
 	if supervision.runtimeKey.RuntimeID == "" {
 		delete(r.dispatchOwners, previousDispatchID)
 		r.dispatchOwners[supervision.dispatchID] = id
