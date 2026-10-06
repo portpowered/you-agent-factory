@@ -111,7 +111,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 	request := detachedTargetRequest()
 
-	terminal, err := f.BeginWorkerAttempt(nil, request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
 	if err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
@@ -153,8 +153,14 @@ func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
+	observerCalls := 0
+	request.Input.AttemptControlObserver = func(providers.AttemptControl) { observerCalls++ }
 
-	terminal, err := f.BeginWorkerAttempt(nil, request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	request.Input.AttemptControlObserver(&projectedAttemptControl{})
+	if observerCalls != 1 {
+		t.Fatal("failed admission replaced the original observer")
+	}
 	if !errors.Is(err, beginErr) {
 		t.Fatalf("BeginWorkerAttempt() error = %v, want %v", err, beginErr)
 	}
@@ -210,7 +216,8 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 				eventHistory: ledger,
 			}
 
-			terminal, err := f.BeginWorkerAttempt(nil, detachedTargetRequest())
+			request := detachedTargetRequest()
+			terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
 			if err != nil {
 				t.Fatalf("BeginWorkerAttempt() error = %v", err)
 			}
@@ -246,7 +253,7 @@ func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *
 	}
 	request := detachedTargetRequest()
 
-	if _, err := f.BeginWorkerAttempt(nil, request); err != nil {
+	if _, err := f.BeginWorkerAttempt(context.Background(), &request); err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
 	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
@@ -951,5 +958,46 @@ func TestRecordedWorkerSessionObservationReplayUsesWatermarkForConfirmation(t *t
 	}
 	if show.ConfirmationState != workersessions.ConfirmationStateConfirmed || show.StateSequence != 3 || show.StreamGenerationID != generationID {
 		t.Fatalf("replay observation = %#v, want CONFIRMED at generation sequence 3", show)
+	}
+}
+
+func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *testing.T) {
+	t.Parallel()
+	owned := &projectedAttemptControl{identity: "attempt-begin"}
+	var retained, forwarded providers.AttemptControl
+	sessions := &beginRuntimeAttemptService{
+		Service:         &fakeWorkerSessionsService{},
+		controlObserver: func(control providers.AttemptControl) { retained = control },
+	}
+	f := &factoryImpl{
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
+		eventHistory: &recordingfixtures.ScriptedRuntimeLedger{},
+	}
+	request := detachedTargetRequest()
+	request.Input.AttemptControlObserver = func(control providers.AttemptControl) { forwarded = control }
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Input.AttemptControlObserver(owned)
+	if retained != owned || forwarded != owned {
+		t.Fatalf("retained = %v, forwarded = %v; want exact executing handle", retained, forwarded)
+	}
+	request.Correlation.DispatchID = "replacement-dispatch"
+	request.Correlation.AttemptID = "replacement-attempt"
+	if err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if sessions.completed == nil || sessions.completed.DispatchID != "dispatch-begin" {
+		t.Fatalf("terminal = %#v; want admitted dispatch identity", sessions.completed)
+	}
+}
+
+func TestBeginWorkerAttemptRejectsNilRequest(t *testing.T) {
+	t.Parallel()
+	f := &factoryImpl{}
+	terminal, err := f.BeginWorkerAttempt(context.Background(), nil)
+	if terminal != nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("terminal present = %v, error = %v; want invalid request", terminal != nil, err)
 	}
 }

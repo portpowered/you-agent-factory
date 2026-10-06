@@ -480,7 +480,7 @@ type portableReplayRuntimeOwner struct {
 		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 	}
 	progressPublisher   workers.ProgressPublisher
-	attemptStarter      func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
+	attemptStarter      func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
 	workerRuntimeID     string
 	workerGenerationID  string
 	childExecutionCalls int
@@ -539,7 +539,7 @@ func (owner *portableReplayRuntimeOwner) Resume(
 		var terminal func(context.Context, workers.ExecuteResult, error) error
 		var err error
 		if owner.attemptStarter != nil {
-			terminal, err = owner.attemptStarter(ctx, executionRequest)
+			terminal, err = owner.attemptStarter(ctx, &executionRequest)
 			if err != nil {
 				return factorysessions.LifecycleControlResult{}, err
 			}
@@ -622,7 +622,7 @@ func (owner *portableReplayRuntimeOwner) SetWorkerProgressPublisher(publisher wo
 }
 
 func (owner *portableReplayRuntimeOwner) SetWorkerAttemptStarter(
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) {
 	owner.attemptStarter = starter
 }
@@ -668,7 +668,7 @@ func (record *portableReplayRuntimeRecord) CloseArtifacts() error {
 
 func (*portableReplayRuntimeRecord) BeginWorkerAttempt(
 	context.Context,
-	workers.ExecuteRequest,
+	*workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error) {
 	return func(context.Context, workers.ExecuteResult, error) error { return nil }, nil
 }

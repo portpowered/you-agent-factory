@@ -22,33 +22,39 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// BeginWorkerAttempt prepares a direct-child Worker Session terminal callback.
+// BeginWorkerAttempt binds the admitted observer into the direct-child request
+// and prepares its terminal callback before Workers starts execution.
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
-	executeRequest workers.ExecuteRequest,
+	executeRequest *workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if executeRequest == nil {
+		return nil, workers.ErrInvalidExecuteRequest
+	}
 	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
 		return nil, factory.ErrNotRunning
 	}
 	if err := executeRequest.Validate(); err != nil {
 		return nil, err
 	}
-	request := workstationDispatchRequestFromExecute(executeRequest)
+	request := workstationDispatchRequestFromExecute(*executeRequest)
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
+	initialSessionID := runtimeWorkerSessionID(f.cfg, request, *executeRequest, false)
 	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID, executeRequest.Correlation.FactorySessionID)
-	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
-	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
+	sessionID := runtimeWorkerSessionID(f.cfg, request, *executeRequest, allowRetry)
+	prepare := runtimeAttemptPreparation(f.cfg, request, *executeRequest, allowRetry)
 	if prepare == nil {
 		return nil, factory.ErrNotRunning
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
+	terminal, err := prepare(context.WithoutCancel(ctx), executeRequest)
 	if err != nil {
 		return nil, err
 	}
+	// Freeze terminal normalization facts independently of subsequent caller edits.
+	admittedRequest := executeRequest.Clone()
 	// Publish the association only after setup returns a terminal callback;
 	// failed setup must not strand a response bridge on a Worker topic.
 	recordDispatchWorkerSessionAssociation(
@@ -74,7 +80,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 				callbackCtx = context.Background()
 			}
 			if terminal != nil {
-				terminal(callbackCtx, executeRequest, result, executeErr)
+				terminal(callbackCtx, admittedRequest, result, executeErr)
 			}
 		})
 		return nil

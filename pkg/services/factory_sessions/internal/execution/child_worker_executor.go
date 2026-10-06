@@ -38,7 +38,7 @@ type childWorkerExecutionBinding struct {
 
 type childWorkerAttemptStarter func(
 	context.Context,
-	workers.ExecuteRequest,
+	*workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error)
 
 // SetWorkerInvoker attaches the Runtime capability used by durable live-change
@@ -175,7 +175,7 @@ func (s *JavaScriptRuntimeService) SetWorkerProgressPublisher(
 // admission and execution; the returned completion callback only commits the
 // durable Worker Session observation after Execute returns.
 func (s *JavaScriptRuntimeService) SetWorkerAttemptStarter(
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) {
 	if s == nil {
 		return
@@ -346,26 +346,25 @@ func (e *childWorkerExecutor) Execute(
 	if e.publish != nil {
 		progress = newChildWorkerProgressBridge(e.publish, workerDispatchID)
 	}
-	var completeAttempt func(context.Context, workers.ExecuteResult, error) error
 	for attemptNumber := 1; attemptNumber <= e.maxAttempts; attemptNumber++ {
 		request := e.executeRequest(req, base, workerDispatchID, attemptNumber, progress)
 		base.Attempt = request.Attempt.Number
-		var preStartResult workers.ExecuteResult
-		if attemptNumber == 1 {
-			completeAttempt, preStartResult, err = e.beginChildWorkerAttempt(ctx, request, progress)
-			if err != nil {
-				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
-			}
+		completeAttempt, preStartResult, beginErr := e.beginChildWorkerAttempt(ctx, &request, progress)
+		if beginErr != nil {
+			return e.failedChild(base, req, dispatchID, childIndex, preStartResult, beginErr)
 		}
 		invoked, err := executeChildAttempt(ctx, e.execute, request)
 		invoked = normalizeChildStructuredResult(req, invoked)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
+			// Retire this physical attempt before a retry admits a new observer.
+			// Logical dispatch identity stays stable across the child retry.
+			finishChildWorkerAttempt(ctx, completeAttempt, progress, invoked, err)
 			if progress != nil {
 				progress.resetAttempt()
 			}
 			continue
 		}
-		finishChildWorkerAttempt(completeAttempt, progress, invoked, err)
+		finishChildWorkerAttempt(ctx, completeAttempt, progress, invoked, err)
 		if err != nil || !childExecutionSucceeded(invoked.Outcome) {
 			return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
 		}
@@ -376,7 +375,7 @@ func (e *childWorkerExecutor) Execute(
 
 func (e *childWorkerExecutor) beginChildWorkerAttempt(
 	ctx context.Context,
-	request workers.ExecuteRequest,
+	request *workers.ExecuteRequest,
 	progress *childWorkerProgressBridge,
 ) (func(context.Context, workers.ExecuteResult, error) error, workers.ExecuteResult, error) {
 	if e == nil || e.attemptStarter == nil {
@@ -386,13 +385,13 @@ func (e *childWorkerExecutor) beginChildWorkerAttempt(
 	if err == nil {
 		return complete, workers.ExecuteResult{}, nil
 	}
-	result := failedChildWorkerExecuteResult(request, err)
+	result := failedChildWorkerExecuteResult(*request, err)
 	// A producer may have opened its lifecycle window before discovering a
 	// preparation failure. If it returned a completion handle alongside that
 	// error, close the window before returning the child error; dropping the
 	// handle recreates the response-bridge wait with no terminal record.
 	if complete != nil {
-		_ = complete(context.Background(), result, err)
+		_ = complete(context.WithoutCancel(ctx), result, err)
 	}
 	if progress != nil {
 		progress.publishTerminal(result, err)
@@ -541,6 +540,7 @@ func childAttemptTimeout(
 }
 
 func finishChildWorkerAttempt(
+	ctx context.Context,
 	complete func(context.Context, workers.ExecuteResult, error) error,
 	progress *childWorkerProgressBridge,
 	result workers.ExecuteResult,
@@ -550,7 +550,7 @@ func finishChildWorkerAttempt(
 		progress.publishResultContent(result)
 	}
 	if complete != nil {
-		_ = complete(context.Background(), result, err)
+		_ = complete(context.WithoutCancel(ctx), result, err)
 	}
 	if progress != nil {
 		progress.publishTerminal(result, err)

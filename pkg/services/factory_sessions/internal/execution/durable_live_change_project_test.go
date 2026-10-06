@@ -145,7 +145,7 @@ func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
 
 func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
 	service := newProcessChildRuntime(&recordingWorkerExecution{})
-	starter := factorysessions.WorkerAttemptStarter(func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	starter := factorysessions.WorkerAttemptStarter(func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
 		return nil, nil
 	})
 	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, starter, nil, nil).

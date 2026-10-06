@@ -136,7 +136,7 @@ func (r *Bundle) RuntimeProgressPublisher() workers.ProgressPublisher {
 // opening capability through the hosted runtime record.
 func (r *Bundle) BeginWorkerAttempt(
 	ctx context.Context,
-	request workers.ExecuteRequest,
+	request *workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error) {
 	if r == nil || r.Factory == nil {
 		return nil, factory.ErrNotRunning
@@ -144,7 +144,7 @@ func (r *Bundle) BeginWorkerAttempt(
 	provider, _ := r.Factory.(interface {
 		BeginWorkerAttempt(
 			context.Context,
-			workers.ExecuteRequest,
+			*workers.ExecuteRequest,
 		) (func(context.Context, workers.ExecuteResult, error) error, error)
 	})
 	if provider == nil {

@@ -895,7 +895,7 @@ type resumeScopeRuntime struct {
 	failure  error
 }
 
-func (r *resumeScopeRuntime) BeginWorkerAttempt(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+func (r *resumeScopeRuntime) BeginWorkerAttempt(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
 	r.attempts++
 	return nil, r.failure
 }
@@ -945,7 +945,7 @@ func TestProcessDurableScopeRetainsSelectedCapabilitiesAndDetachedSettings(t *te
 				t.Fatal(err)
 			}
 			assertDetachedResumeSettings(t, again.WorkerSettings, again.MockWorkers)
-			if _, err := got.WorkerAttemptStarter(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, failure) {
+			if _, err := got.WorkerAttemptStarter(context.Background(), &workers.ExecuteRequest{}); !errors.Is(err, failure) {
 				t.Fatalf("selected worker error = %v", err)
 			}
 			got.WorkerProgressPublisher(workers.ProgressFragment{})
