@@ -14,14 +14,28 @@ import (
 // store. No native provider files exist; only the command edge is substituted.
 func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	t.Parallel()
+	for _, failed := range []bool{false, true} {
+		name := "completed"
+		if failed {
+			name = "failed"
+		}
+		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, failed) })
+	}
+}
+
+func runCapturedProviderContinueAfterHostRestart(t *testing.T, failed bool) {
 	dir, root := t.TempDir(), t.TempDir()
 	host, home, err := prepareInvokeContinuePackageRoot(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
+	successorResult := platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "continued COMPLETE")}
+	if failed {
+		successorResult = platformprocess.CommandResult{Stderr: []byte("Error: thread/resume failed: no rollout found for thread id opaque-restart-thread"), ExitCode: 1}
+	}
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")},
-		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "continued COMPLETE")},
+		successorResult,
 	)
 	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 	first := startContinuationRestartHost(t, root, host, home, route)
@@ -51,10 +65,14 @@ func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
 		"--request-id", "restart-continue-request", "--successor-worker-session-id", "restart-successor", "--user-message", "fresh host follow-up"})
 	continued.Input.Env, continued.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
-	if err := fresh.process.Execute(continued.Input); err != nil {
+	if err := fresh.process.Execute(continued.Input); !failed && err != nil {
 		t.Fatalf("fresh-host continuation: %v stdout=%s stderr=%s", err, continued.Stdout(), continued.Stderr())
 	}
-	assertContinuationRestartResult(t, continued.Stdout(), runner.Requests(), dir)
+	if failed {
+		assertDirectWorkerSessionCLIError(t, continued, "WORKER_SESSION_FAILED")
+	} else {
+		assertContinuationRestartResult(t, continued.Stdout(), runner.Requests(), dir)
+	}
 	logs := awaitContinuationRestartLogs(t, fresh, home, dir, "restart-successor")
 	if !strings.Contains(logs, "restart-source") {
 		t.Fatalf("successor logs omitted predecessor: %s", logs)
@@ -64,10 +82,10 @@ func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	if err := fresh.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), "restart-successor") {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())
 	}
-	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner)
+	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner, failed)
 }
 
-func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner) {
+func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invokeContinueStartedProcess, root, host, home, dir string, route *invokeContinueStaticCommandRoute, runner *testutil.ProviderCommandRunner, failed bool) {
 	t.Helper()
 	if err := previous.command.stop(); err != nil {
 		t.Fatal(err)
@@ -92,7 +110,11 @@ func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invoke
 		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 		err := fresh.process.Execute(request.Input)
 		if cell.message == "fresh host follow-up" && cell.successor == "restart-successor" {
-			assertCompletedContinuationReplayResult(t, err, request.Stdout(), request.Stderr(), cell.flags)
+			if failed {
+				assertFailedContinuationReplayResult(t, err, request.Stdout(), request.Stderr(), cell.flags)
+			} else {
+				assertCompletedContinuationReplayResult(t, err, request.Stdout(), request.Stderr(), cell.flags)
+			}
 		} else if err == nil || !strings.Contains(request.Stdout()+request.Stderr(), "CONFLICT") {
 			t.Fatalf("changed replay was not refused: %v stdout=%s stderr=%s", err, request.Stdout(), request.Stderr())
 		}
@@ -161,4 +183,17 @@ func startContinuationRestartHost(t *testing.T, root, host, home string, route *
 		}
 	})
 	return started
+}
+
+func assertFailedContinuationReplayResult(t *testing.T, err error, stdout, stderr string, flags []string) {
+	t.Helper()
+	if len(flags) == 1 && flags[0] == "--async" {
+		var result directWorkerSessionCLIResult
+		decodeDirectWorkerSessionResult(t, stdout, &result)
+		if err != nil || !result.Accepted || result.State != "FAILED" || result.SuccessorWorkerSessionID != "restart-successor" {
+			t.Fatalf("failed async replay: err=%v result=%#v stderr=%s", err, result, stderr)
+		}
+	} else if err == nil || !strings.Contains(stdout+stderr, "WORKER_SESSION_FAILED") {
+		t.Fatalf("failed sync replay lost failure: err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
 }

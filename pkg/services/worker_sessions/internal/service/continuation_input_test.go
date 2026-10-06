@@ -59,7 +59,7 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 
 func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"exact", "opening-only", "incomplete", "scope", "attempt", "predecessor", "reference", "workspace", "model"} {
+	for _, cell := range []string{"exact", "failed", "canceled", "terminated", "active", "opening-only", "incomplete", "scope", "attempt", "predecessor", "reference", "workspace", "model"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			_, plan, target := retainedContinuationFixture(t)
@@ -82,7 +82,7 @@ func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
 			configureCompletedContinuationEvidence(cell, &page, &opening)
 			draftPayload, _ := json.Marshal(opening)
 			page.Opening.Payload, _ = json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: draftPayload})
-			if got := completedContinuationMatches(page, input); got != (cell == "exact") {
+			if got := completedContinuationMatches(page, input); got != (cell == "exact" || cell == "failed" || cell == "canceled" || cell == "terminated") {
 				t.Fatalf("completed capture match = %v", got)
 			}
 		})
@@ -91,6 +91,8 @@ func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
 
 func configureCompletedContinuationEvidence(cell string, page *recordings.WorkerCapturedActivityPage, opening *workers.SessionPayload) {
 	switch cell {
+	case "failed", "canceled", "terminated", "active":
+		page.Terminal.Status = map[string]string{"failed": "FAILED", "canceled": "CANCELED", "terminated": "TERMINATED", "active": "RUNNING"}[cell]
 	case "opening-only":
 		page.Terminal = nil
 	case "incomplete":
@@ -209,4 +211,88 @@ func retainedContinuationFixture(t *testing.T) (*registry, continuePlan, recordi
 			continuationDispatchID(target.ExpectedAttemptID, req.SuccessorWorkerSessionID), req.FollowUpInput, ref),
 	}
 	return r, plan, target
+}
+
+func TestContinuationTerminalResultPreservesOutcomeAndRejectsCorruption(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"completed", "failed", "canceled", "terminated", "attempt", "phase", "status", "missing-cause", "unknown-cause", "corrupt"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			state, result, encoded := continuationTerminalFixture(t, cell)
+			got, err := continuationTerminalResult(encoded, string(state), "successor-attempt")
+			assertContinuationTerminalResult(t, cell, state, result, got, err)
+		})
+	}
+}
+
+func continuationTerminalFixture(t *testing.T, cell string) (workersessions.State, workersessions.TerminalResult, json.RawMessage) {
+	t.Helper()
+	state := workersessions.StateFailed
+	switch cell {
+	case "completed":
+		state = workersessions.StateCompleted
+	case "canceled":
+		state = workersessions.StateCanceled
+	case "terminated":
+		state = workersessions.StateTerminated
+	}
+	result := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	if state == workersessions.StateFailed {
+		result = workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed,
+			Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "recorded failure"}}
+	}
+	draft, err := terminalDraft(state, result, "successor-attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terminal terminalSessionPayload
+	_ = json.Unmarshal(draft.Payload, &terminal)
+	switch cell {
+	case "attempt":
+		draft.DispatchID = "foreign-attempt"
+	case "phase":
+		draft.Phase = workers.PhaseCompleted
+	case "status":
+		terminal.Status = "COMPLETED"
+	case "missing-cause":
+		terminal.FailureCause = ""
+	case "unknown-cause":
+		terminal.FailureCause = "UNKNOWN"
+	}
+	draft.Payload, _ = json.Marshal(terminal)
+	encoded, _ := json.Marshal(draft)
+	if cell == "corrupt" {
+		encoded = []byte(`{`)
+	}
+	return state, result, encoded
+}
+
+func assertContinuationTerminalResult(t *testing.T, cell string, state workersessions.State, want workersessions.TerminalResult, got *workersessions.TerminalResult, err error) {
+	t.Helper()
+	valid := false
+	switch cell {
+	case "completed", "failed", "canceled", "terminated":
+		valid = true
+	}
+	if !valid {
+		if got != nil || !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+			t.Fatalf("unsafe terminal: result=%+v err=%v", got, err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == workersessions.StateCanceled || state == workersessions.StateTerminated {
+		if got != nil {
+			t.Fatalf("control outcome invented a result: %+v", got)
+		}
+		return
+	}
+	if got == nil || got.Outcome != want.Outcome || got.Validate() != nil {
+		t.Fatalf("terminal outcome lost: %+v", got)
+	}
+	if cell == "failed" && (got.Cause.Kind != want.Cause.Kind || got.Cause.Detail != want.Cause.Detail) {
+		t.Fatalf("terminal failure lost: %+v", got)
+	}
 }

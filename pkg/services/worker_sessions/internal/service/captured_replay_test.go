@@ -113,7 +113,7 @@ func continuationStreamPages(t *testing.T) *continuationPageReader {
 
 func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"foreign-scope", "foreign-worker", "incomplete", "non-completed", "missing-opening", "cursor"} {
+	for _, cell := range []string{"foreign-scope", "foreign-worker", "incomplete", "non-terminal", "missing-opening", "cursor"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			reader := continuationStreamPages(t)
@@ -127,8 +127,8 @@ func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.
 				reader.page.Catalog.WorkerSessionID = "foreign"
 			case "incomplete":
 				reader.page.Health = recordings.WorkerRecordingStatusIncomplete
-			case "non-completed":
-				reader.page.Terminal.Status = "FAILED"
+			case "non-terminal":
+				reader.page.Terminal.Status = "RUNNING"
 			case "missing-opening":
 				reader.page.Opening.Payload = nil
 			case "cursor":

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -12,8 +13,8 @@ import (
 
 // Recovery returns detached data only. Neither a saved input nor an opening
 // authorizes another execution; the committed source admission link and exact
-// completed successor must both agree with the immutable request.
-func (r *registry) readCompletedContinuationReplay(req workersessions.ContinueRequest, source *archivedContinuationSource) (*continueReplay, error) {
+// terminal successor must both agree with the immutable request.
+func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueRequest, source *archivedContinuationSource) (*continueReplay, error) {
 	target := source.target
 	ctx := r.serverOwnedContext()
 	stored, err := r.restart.ReadWorkerContinuationInput(ctx, recordings.WorkerControlOperationKey{
@@ -43,9 +44,13 @@ func (r *registry) readCompletedContinuationReplay(req workersessions.ContinueRe
 	if err != nil || !completedContinuationMatches(page, input) {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
+	result, err := r.readContinuationTerminalResult(ctx, page, input)
+	if err != nil {
+		return nil, err
+	}
 	session := workersessions.Session{
-		ID: req.SuccessorWorkerSessionID, State: workersessions.StateCompleted,
-		Result:                     &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+		ID: req.SuccessorWorkerSessionID, State: workersessions.State(page.Terminal.Status),
+		Result:                     result,
 		PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 		SuccessorWorkerSessionID:   page.SuccessorWorkerSessionID,
 		ProviderSessionAssociation: continuationAssociation(req, input.Execution, source.snapshot.turnID, reference),
@@ -62,7 +67,7 @@ func (r *registry) readCompletedContinuationReplay(req workersessions.ContinueRe
 
 func completedContinuationMatches(page recordings.WorkerCapturedActivityPage, input durableContinuationInput) bool {
 	if page.Catalog.WorkerSessionID != input.SuccessorWorkerSessionID || page.Catalog.FactorySessionID != input.Target.FactorySessionID ||
-		page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil || page.Terminal.Status != string(workersessions.StateCompleted) {
+		page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil || !workersessions.State(page.Terminal.Status).Terminal() {
 		return false
 	}
 	opening, ok := completedContinuationOpening(page.Opening.Payload)
@@ -92,4 +97,46 @@ func completedContinuationIdentityMatches(opening workers.SessionPayload, input 
 		opening.Lineage.PreviousAttemptID == input.Target.ExpectedAttemptID && opening.Lineage.PreviousDispatchID == input.Target.ExpectedAttemptID &&
 		opening.Continuation.Provider == string(input.ProviderReference.Provider) && opening.Continuation.Kind == input.ProviderReference.Kind &&
 		opening.Continuation.ID == input.ProviderReference.ID
+}
+
+// Drain the committed capture so replay preserves the original failure rather
+// than synthesizing success from admission lineage. This creates no live owner.
+func (r *registry) readContinuationTerminalResult(ctx context.Context, page recordings.WorkerCapturedActivityPage, input durableContinuationInput) (*workersessions.TerminalResult, error) {
+	stream := &continuationCaptureStream{reader: r.logs.reader,
+		request: recordings.WorkerCapturedActivityRequest{WorkerSessionID: input.SuccessorWorkerSessionID, Limit: 1},
+		page:    page, catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status}
+	defer stream.Close()
+	for {
+		delivery := stream.Next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord {
+			continue
+		}
+		if delivery.Kind != workersessions.ObservationDeliveryTerminalReplay || delivery.Event.Position != uint64(page.Terminal.Position) {
+			return nil, workersessions.ErrContinuationExecutionUnavailable
+		}
+		return continuationTerminalResult(delivery.Event.Payload, page.Terminal.Status, input.Execution.Execution.Dispatch.DispatchID)
+	}
+}
+
+func continuationTerminalResult(payload json.RawMessage, status, attemptID string) (*workersessions.TerminalResult, error) {
+	var draft workers.Draft
+	var terminal terminalSessionPayload
+	state := workersessions.State(status)
+	phase, err := terminalPhase(state)
+	if err != nil || readPendingInterruptOpeningJSON(payload, &draft) != nil || draft.Kind != workers.KindSession || draft.Phase != phase ||
+		draft.DispatchID != attemptID || readPendingInterruptOpeningJSON(draft.Payload, &terminal) != nil || terminal.Status != status {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if state == workersessions.StateCanceled || state == workersessions.StateTerminated {
+		return nil, nil
+	}
+	result := &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	if state == workersessions.StateFailed {
+		result.Outcome = workersessions.TerminalOutcomeFailed
+		result.Cause = &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(terminal.FailureCause), Detail: terminal.FailureDetail, AgentRunFailureClass: terminal.AgentRunFailureClass}
+	}
+	if result.Validate() != nil {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	return result, nil
 }

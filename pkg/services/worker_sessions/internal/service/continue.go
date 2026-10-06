@@ -193,7 +193,7 @@ func (r *registry) reserveContinuation(
 		return nil, false, err
 	}
 	if archived != nil {
-		if replay, err := r.readCompletedContinuationReplay(req, archived); replay != nil || err != nil {
+		if replay, err := r.readTerminalContinuationReplay(req, archived); replay != nil || err != nil {
 			return replay, false, err
 		}
 	}

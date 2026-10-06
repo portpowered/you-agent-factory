@@ -8,7 +8,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
-// An archived completed continuation has no live Events topic. Drain its
+// An archived terminal continuation has no live Events topic. Drain its
 // committed capture without registering a session or restoring supervision.
 // Cursor-based history remains owned by the public captured logs boundary.
 func (r *registry) completedContinuationStream(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
@@ -28,11 +28,11 @@ func (r *registry) completedContinuationStream(ctx context.Context, req workerse
 		(req.FactorySessionID != "" && page.Catalog.FactorySessionID != req.FactorySessionID) ||
 		opening.FactorySessionID != page.Catalog.FactorySessionID ||
 		page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil ||
-		page.Terminal.Status != string(workersessions.StateCompleted) || page.Terminal.Position == 0 {
+		!workersessions.State(page.Terminal.Status).Terminal() || page.Terminal.Position == 0 {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
 	}
 	s := &continuationCaptureStream{reader: r.logs.reader, request: request, page: page,
-		catalog: page.Catalog, terminal: uint64(page.Terminal.Position)}
+		catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status}
 	r.logger.Info("worker session completed continuation stream", "workerSessionID", req.WorkerSessionID, "outcome", "captured_replay")
 	return workersessions.ObservationSubscription{NextFunc: s.Next, CloseFunc: s.Close}, nil
 }
@@ -44,6 +44,7 @@ type continuationCaptureStream struct {
 	page     recordings.WorkerCapturedActivityPage
 	catalog  recordings.WorkerSessionCatalogEntry
 	terminal uint64
+	state    string
 	position uint64
 	closed   bool
 }
@@ -97,7 +98,7 @@ func (s *continuationCaptureStream) advance(ctx context.Context) bool {
 	page, err := s.reader.ReadWorkerCapturedActivity(ctx, s.request)
 	if err != nil || page.Catalog != s.catalog || page.Health != recordings.WorkerRecordingStatusComplete ||
 		page.Terminal == nil || uint64(page.Terminal.Position) != s.terminal ||
-		page.Terminal.Status != string(workersessions.StateCompleted) || len(page.Records) == 0 {
+		page.Terminal.Status != s.state || len(page.Records) == 0 {
 		return false
 	}
 	s.page = page
