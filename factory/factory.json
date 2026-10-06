@@ -1854,6 +1854,46 @@
       "worker": ""
     },
     {
+      "id": "retire-pending-review-after-task-complete",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "review"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "guards": [
+        {
+          "matchConfig": {
+            "inputKey": ".Name"
+          },
+          "type": "MATCHES_FIELDS"
+        },
+        {
+          "matchConfig": {
+            "inputKey": ".TraceID"
+          },
+          "type": "MATCHES_FIELDS"
+        }
+      ],
+      "name": "retire-pending-review-after-task-complete",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "review"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
       "id": "complete-reviewed-task-after-failed-idea",
       "inputs": [
         {
