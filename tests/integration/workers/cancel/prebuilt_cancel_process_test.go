@@ -748,12 +748,41 @@ func assertNativeTerminalForceNoop(t *testing.T, ctx context.Context, binary str
 	assertForcedNativeArchive(t, ctx, fixture, observation)
 }
 
+// Print only the failed control's internal diagnostic, preserving the sanitized
+// customer response and avoiding unrelated runtime/provider payloads in CI logs.
+func logNativeForceFailure(t *testing.T, fixture cancelFixture) {
+	t.Helper()
+	logRoot := filepath.Join(fixture.homeDir, ".you-agent-factory", "logs")
+	err := filepath.WalkDir(logRoot, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".log") {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(content), "\n") {
+			if strings.Contains(line, "worker session force effect failed") || strings.Contains(line, "worker session force join failed") {
+				t.Logf("native force internal diagnostic: %s", line)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Logf("read native force failure diagnostics: %v", err)
+	}
+}
+
 func forceNativeFixture(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, observation factoryapi.WorkerSessionObservation) factoryapi.WorkerSessionControlResponse {
 	t.Helper()
 	result := runCancelCLI(ctx, binary, fixture, "--remote", "--server", fixture.serverURL, "--json", "worker-sessions", "terminate", observation.WorkerSessionId,
 		"--force", "--request-id", observation.WorkerSessionId+"-kill", "--expected-attempt-id", observation.AttemptId)
 	var response factoryapi.WorkerSessionControlResponse
 	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != "APPLIED" || string(response.State) != "TERMINATED" || response.Forced == nil || !*response.Forced {
+		logNativeForceFailure(t, fixture)
 		current, readErr := getJSON[factoryapi.WorkerSessionObservation](ctx, http.DefaultClient, fixture.serverURL+"/worker-sessions/"+observation.WorkerSessionId)
 		t.Logf("force failure observation=%+v error=%v", current, readErr)
 		t.Fatalf("native force: result=%+v response=%+v", result, response)
