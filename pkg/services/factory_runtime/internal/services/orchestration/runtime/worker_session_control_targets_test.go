@@ -14,6 +14,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -265,8 +266,18 @@ func TestWorkstationDispatchRequestFromExecutePreservesDetachedSelection(t *test
 	request.Target.Provider.Alias = "provider-alias"
 	request.Target.Workspace.WorkingDirectory = "/workspace"
 	request.Input.WorkflowContext = &workers.Context{ProjectID: "project-1"}
+	owned := &projectedAttemptControl{identity: "owned-attempt"}
+	var captured providers.AttemptControl
+	request.Input.AttemptControlObserver = func(control providers.AttemptControl) { captured = control }
 
 	converted := workstationDispatchRequestFromExecute(request)
+	if converted.Execution.AttemptControlObserver == nil {
+		t.Fatal("dispatch projection dropped the attempt observer")
+	}
+	converted.Execution.AttemptControlObserver(owned)
+	if captured != owned {
+		t.Fatal("dispatch observer did not receive the original attempt handle")
+	}
 	if converted.WorkstationName != "authored-workstation" {
 		t.Fatalf("workstation name = %q, want authored-workstation", converted.WorkstationName)
 	}

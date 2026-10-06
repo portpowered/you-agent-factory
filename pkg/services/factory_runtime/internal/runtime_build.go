@@ -55,6 +55,7 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	correlation := request.Correlation
 	progress := request.Input.ProgressPublisher
 	observer := request.Input.ProcessLifecycleObserver
+	attemptObserver := request.Input.AttemptControlObserver
 	if service.workstationResolver != nil && targetNeedsRuntimeResolution(request.Target) {
 		resolved, err := service.workstationResolver.ResolveExecutionRequest(
 			workstationExecutionRequestFromExecute(
@@ -77,6 +78,7 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 			request.Input.ProgressPublisher = progress
 		}
 		request.Input.ProcessLifecycleObserver = observer
+		request.Input.AttemptControlObserver = attemptObserver
 	}
 	if service.providerOverride != nil {
 		request.Input.ProviderOverride = service.providerOverride
@@ -167,6 +169,7 @@ func workstationExecutionRequestFromExecute(
 		Timeout:                     target.Timeout,
 		EnvVars:                     target.Environment.Vars,
 		ProcessEnvironment:          append([]string(nil), target.Environment.ProcessEnvironment...),
+		AttemptControlObserver:      request.Input.AttemptControlObserver,
 		Worktree:                    target.Workspace.Worktree,
 		WorkingDirectory:            target.Environment.WorkingDirectory,
 		WorkingDirectoryAuthored:    target.Environment.WorkingDirectorySet,

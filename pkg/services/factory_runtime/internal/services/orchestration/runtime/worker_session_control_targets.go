@@ -176,6 +176,7 @@ func workstationDispatchRequestFromExecute(
 			EnvVars:                     target.Environment.Vars,
 			ProcessEnvironment:          append([]string(nil), target.Environment.ProcessEnvironment...),
 			ProcessLifecycleObserver:    request.Input.ProcessLifecycleObserver,
+			AttemptControlObserver:      request.Input.AttemptControlObserver,
 			Worktree:                    target.Workspace.Worktree,
 			WorkingDirectory:            workingDirectory,
 			WorkingDirectoryAuthored:    target.Environment.WorkingDirectorySet,

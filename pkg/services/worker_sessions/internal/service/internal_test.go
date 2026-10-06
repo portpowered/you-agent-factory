@@ -7651,6 +7651,9 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 	customObserver := &coverageProcessObserver{}
 	customRequest := request
 	customRequest.Execution.ProcessLifecycleObserver = customObserver
+	owned := &projectedAttemptControl{identity: "owned-attempt"}
+	var captured providers.AttemptControl
+	customRequest.Execution.AttemptControlObserver = func(control providers.AttemptControl) { captured = control }
 	supervision := newSupervision("handoff-dispatch", "")
 	setCoverageAccepted(supervision, true)
 	_, err := executeWithService(context.Background(), coverageExecution{
@@ -7658,13 +7661,24 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 			if request.Input.ProcessLifecycleObserver != customObserver {
 				t.Fatalf("Execute replaced a caller-provided process observer")
 			}
+			if request.Input.AttemptControlObserver == nil {
+				t.Fatal("execution handoff dropped the attempt observer")
+			}
+			request.Input.AttemptControlObserver(owned)
 			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 		},
 	}, customRequest, supervision, func() {}, nil)
 	if err != nil || customObserver.started != 0 || customObserver.exited != 0 {
 		t.Fatalf("executeWithService(custom observer) = %v, observer=%#v, want success without replacement", err, customObserver)
 	}
+	if captured != owned {
+		t.Fatal("Worker Session observer did not receive the executing attempt's handle")
+	}
 }
+
+type projectedAttemptControl struct{ identity string }
+
+func (*projectedAttemptControl) ForceKill(context.Context) (bool, error) { return false, nil }
 
 func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(t *testing.T) {
 	t.Run("maps worker outcomes", testWorkerExecutionHandoffMapsWorkerOutcomes)

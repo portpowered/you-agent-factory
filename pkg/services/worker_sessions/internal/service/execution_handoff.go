@@ -302,6 +302,7 @@ func executeRequestFromSessionDispatch(
 			Resume:                   cloneSessionContinuation(execution.Continuation),
 			WorkflowContext:          execution.WorkflowContext.Clone(),
 			ProcessLifecycleObserver: execution.ProcessLifecycleObserver,
+			AttemptControlObserver:   execution.AttemptControlObserver,
 		},
 	}, nil
 }
