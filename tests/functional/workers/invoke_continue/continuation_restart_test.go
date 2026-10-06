@@ -76,23 +76,44 @@ func assertCompletedContinuationReplayAfterRestart(t *testing.T, previous invoke
 		t.Fatal(err)
 	}
 	fresh := startContinuationRestartHost(t, root, host, home, route)
-	for _, message := range []string{"fresh host follow-up", "changed follow-up"} {
-		request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
-			"--request-id", "restart-continue-request", "--successor-worker-session-id", "restart-successor", "--user-message", message, "--async"})
+	for _, cell := range []struct {
+		message, successor string
+		flags              []string
+	}{
+		{"fresh host follow-up", "restart-successor", []string{"--async"}},
+		{"fresh host follow-up", "restart-successor", nil},
+		{"fresh host follow-up", "restart-successor", []string{"--remote", "--server", fresh.baseURL}},
+		{"changed follow-up", "restart-successor", []string{"--async"}},
+		{"fresh host follow-up", "changed-successor", []string{"--async"}},
+	} {
+		args := []string{"you", "--json", "worker-sessions", "continue", "restart-source",
+			"--request-id", "restart-continue-request", "--successor-worker-session-id", cell.successor, "--user-message", cell.message}
+		request := support.FakeInputs(t.Context(), append(args, cell.flags...))
 		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 		err := fresh.process.Execute(request.Input)
-		if message == "fresh host follow-up" {
-			var result directWorkerSessionCLIResult
-			decodeDirectWorkerSessionResult(t, request.Stdout(), &result)
-			if err != nil || !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "restart-successor" {
-				t.Fatalf("completed replay: %v result=%#v stderr=%s", err, result, request.Stderr())
-			}
+		if cell.message == "fresh host follow-up" && cell.successor == "restart-successor" {
+			assertCompletedContinuationReplayResult(t, err, request.Stdout(), request.Stderr(), cell.flags)
 		} else if err == nil || !strings.Contains(request.Stdout()+request.Stderr(), "CONFLICT") {
 			t.Fatalf("changed replay was not refused: %v stdout=%s stderr=%s", err, request.Stdout(), request.Stderr())
 		}
 		if runner.CallCount() != 2 {
 			t.Fatalf("replay repeated provider admission: calls=%d", runner.CallCount())
 		}
+	}
+}
+
+func assertCompletedContinuationReplayResult(t *testing.T, err error, stdout, stderr string, flags []string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("completed replay flags=%v: %v stdout=%s stderr=%s", flags, err, stdout, stderr)
+	}
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, stdout, &result)
+	if !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "restart-successor" {
+		t.Fatalf("completed replay: result=%#v stderr=%s", result, stderr)
+	}
+	if (len(flags) == 0 || flags[0] == "--remote") && !strings.Contains(result.Output, "continued COMPLETE") {
+		t.Fatalf("synchronous replay lost captured output: %#v", result)
 	}
 }
 

@@ -829,6 +829,9 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 		return workersessions.ObservationSubscription{}, err
 	}
 	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID, req.FactorySessionID)
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return r.completedContinuationStream(ctx, req)
+	}
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
