@@ -1,14 +1,178 @@
 package acceptance
 
 import (
+	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// F7-C1/C2 cross the real joined stop boundary through one shared production
+// process. Direct admissions carry scenario-owned Factory Session correlation;
+// a Factory-origin execution would change continuation eligibility.
+func TestCapturedNativeProviderStopThenContinue(t *testing.T) {
+	fixture := ensureInvokeContinuePackageFixture(t)
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			runCapturedNativeProviderStopThenContinue(t, fixture, provider)
+		})
+	}
+}
+
+func runCapturedNativeProviderStopThenContinue(t *testing.T, fixture *invokeContinuePackageFixture, provider string) {
+	scenario := fixture.scenario(t, "native-stop-continue-"+provider)
+	runner := scenario.providerRunner.(*nativeContinuationRunner)
+	source, sibling, successor := scenarioScopedID(scenario, "source"), scenarioScopedID(scenario, "sibling"), scenarioScopedID(scenario, "successor")
+	invokeNativeContinuationWorker(t, scenario, provider, source, "native source", runner.sourceReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, source, true) })
+	invokeNativeContinuationWorker(t, scenario, provider, sibling, "native sibling", runner.siblingReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, sibling, true) })
+	stopNativeContinuationWorker(t, scenario, source, provider == "claude")
+	assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", "")
+	assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
+	args := []string{"worker-sessions", "continue", source, "--request-id", scenarioScopedID(scenario, "continue"),
+		"--successor-worker-session-id", successor, "--user-message", "native follow-up"}
+	result := raceNativeContinuationCLI(t, scenario, args)
+	var continued directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, result.Stdout(), &continued)
+	if !continued.Accepted || continued.State != "COMPLETED" || continued.SuccessorWorkerSessionID != successor || !strings.Contains(continued.Output, "native continued COMPLETE") {
+		t.Fatalf("native continuation result: %#v", continued)
+	}
+	// The exact tuple crosses the other placement boundary without readmission.
+	_ = executeNativeContinuationCLI(t, scenario, args, provider != "claude")
+	assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", successor)
+	assertNativeContinuationObservation(t, scenario, successor, "COMPLETED", "opaque-native-source", source, "")
+	assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
+	assertNativeContinuationCommand(t, runner.Requests(), provider, scenario.workingDirectory)
+}
+
+func invokeNativeContinuationWorker(t *testing.T, scenario *invokeContinueScenario, provider, id, message string, ready <-chan struct{}) {
+	t.Helper()
+	path := filepath.Join(scenario.workingDirectory, id+".json")
+	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+		requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", factorySessionID: scenario.session.id,
+		workingDirectory: scenario.workingDirectory, userMessage: message,
+	})
+	execution := document["execution"].(map[string]any)
+	execution["runnerId"], execution["executorProvider"], execution["modelProvider"] = provider, provider, provider
+	execution["reasoningEffort"] = "high"
+	writeInvokeContinueJSON(t, path, document)
+	_ = executeNativeContinuationCLI(t, scenario, []string{"worker-sessions", "invoke", "--execution", path, "--async"}, true)
+	select {
+	case <-ready:
+	case <-t.Context().Done():
+		t.Fatal("native source did not publish its provider identity")
+	}
+}
+
+func executeNativeContinuationCLI(t *testing.T, scenario *invokeContinueScenario, args []string, remote bool) *support.CapturedInputs {
+	t.Helper()
+	flags := []string{"you", "--json"}
+	if remote {
+		flags = append(flags, "--remote", "--server", scenario.fixture.baseURL)
+	}
+	request := support.FakeInputs(t.Context(), append(flags, args...))
+	request.Input.Env, request.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(request.Input); err != nil {
+		t.Fatalf("native command %v: %v stdout=%s stderr=%s", args, err, request.Stdout(), request.Stderr())
+	}
+	return request
+}
+
+// F7-C8: local and HTTP-backed CLI callers overlap on one immutable tuple;
+// both receive the same successor while the command edge admits it once.
+func raceNativeContinuationCLI(t *testing.T, scenario *invokeContinueScenario, args []string) *support.CapturedInputs {
+	t.Helper()
+	start, done := make(chan struct{}), make(chan error, 2)
+	requests := make([]*support.CapturedInputs, 0, 2)
+	for _, flags := range [][]string{{"you", "--json"}, {"you", "--json", "--remote", "--server", scenario.fixture.baseURL}} {
+		request := support.FakeInputs(t.Context(), append(flags, args...))
+		request.Input.Env, request.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+		requests = append(requests, request)
+		go func() { <-start; done <- scenario.fixture.process.Execute(request.Input) }()
+	}
+	close(start)
+	for range requests {
+		if err := <-done; err != nil {
+			t.Fatalf("concurrent native continuation: %v", err)
+		}
+	}
+	var local, remote directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, requests[0].Stdout(), &local)
+	decodeDirectWorkerSessionResult(t, requests[1].Stdout(), &remote)
+	if local != remote {
+		t.Fatalf("concurrent placements disagreed: local=%#v remote=%#v", local, remote)
+	}
+	return requests[0]
+}
+
+func stopNativeContinuationWorker(t *testing.T, scenario *invokeContinueScenario, id string, remote bool) {
+	t.Helper()
+	// Go cancels t.Context before cleanup. The scenario still owns both Workers
+	// until these joined stops complete, including on an earlier assertion failure.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	flags := []string{"you", "--json"}
+	if remote {
+		flags = append(flags, "--remote", "--server", scenario.fixture.baseURL)
+	}
+	result := support.FakeInputs(ctx, append(flags, "worker-sessions", "terminate", id))
+	result.Input.Env, result.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(result.Input); err != nil {
+		t.Fatalf("native stop: %v stdout=%s stderr=%s", err, result.Stdout(), result.Stderr())
+	}
+	var stopped struct {
+		State   string `json:"state"`
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout()), &stopped); err != nil || stopped.State != "TERMINATED" {
+		t.Fatalf("native stop did not join: %v result=%#v stdout=%s", err, stopped, result.Stdout())
+	}
+}
+
+func assertNativeContinuationObservation(t *testing.T, scenario *invokeContinueScenario, id, state, nativeID, predecessor, successor string) {
+	t.Helper()
+	result := executeNativeContinuationCLI(t, scenario, []string{"worker-sessions", "show", "--worker-session-id", id}, true)
+	var observation factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(result.Stdout()), &observation); err != nil {
+		t.Fatal(err)
+	}
+	if string(observation.State) != state || observation.ProviderSession == nil || observation.ProviderSession.Id != nativeID {
+		t.Fatalf("native observation %s: %#v", id, observation)
+	}
+	if predecessor != "" && (observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != predecessor) {
+		t.Fatalf("successor lost predecessor: %#v", observation)
+	}
+	if successor != "" && (observation.SuccessorWorkerSessionId == nil || *observation.SuccessorWorkerSessionId != successor) {
+		t.Fatalf("source lost successor: %#v", observation)
+	}
+}
+
+func assertNativeContinuationCommand(t *testing.T, requests []platformprocess.CommandRequest, provider, dir string) {
+	t.Helper()
+	if len(requests) != 3 {
+		t.Fatalf("native continuation admitted duplicate: requests=%#v", requests)
+	}
+	request := requests[2]
+	resume := "resume"
+	if provider == "claude" {
+		resume = "--resume"
+	}
+	args := strings.Join(request.Args, " ")
+	if request.Command != provider || request.WorkDir != dir || !strings.Contains(args, resume+" opaque-native-source") ||
+		!strings.Contains(args, "functional-model") || !strings.Contains(args, "high") ||
+		!strings.Contains(args+string(request.Stdin), "native follow-up") {
+		t.Fatalf("native continuation lost captured identity/settings/input: %#v", request)
+	}
+}
 
 // F7-C3 uses sequential production root processes over one scenario-owned
 // store. No native provider files exist; only the command edge is substituted.
