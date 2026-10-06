@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,6 +40,15 @@ func TestMain(m *testing.M) {
 
 func buildServerBindingBinary(t testing.TB, ctx context.Context, repoRoot string) string {
 	t.Helper()
+	if prebuilt := strings.TrimSpace(os.Getenv("INFINITE_YOU_PREBUILT_ARTIFACT")); prebuilt != "" {
+		if info, err := os.Stat(prebuilt); err != nil || !info.Mode().IsRegular() {
+			t.Fatalf("invalid prebuilt server-binding CLI %q: %v", prebuilt, err)
+		}
+		return prebuilt
+	}
+	if os.Getenv("INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT") == "1" {
+		t.Fatal("server-binding integration requires INFINITE_YOU_PREBUILT_ARTIFACT")
+	}
 	serverBindingCLIBinary.once.Do(func() {
 		serverBindingCLIBinary.tempDir, serverBindingCLIBinary.err = os.MkdirTemp("", "you-server-binding-")
 		if serverBindingCLIBinary.err != nil {
