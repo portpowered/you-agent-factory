@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -284,6 +285,12 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		t.Fatalf("source was not joined: %#v calls=%d", source, runner.CallCount())
 	}
 	awaitContinuationRestartLogs(t, first, home, dir, "restart-source")
+	var transcript *factoryapi.WorkerSessionTranscriptResponse
+	if name == "completed" {
+		captured := readCapturedRestartTranscript(t, first, home, dir)
+		transcript = &captured
+	}
+
 	if err := first.command.stop(); err != nil {
 		t.Fatal(err)
 	}
@@ -291,6 +298,14 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		t.Fatal(err)
 	}
 	fresh := startContinuationRestartHost(t, root, host, home, route)
+	if transcript != nil {
+		captured := readCapturedRestartTranscript(t, fresh, home, dir)
+		if !reflect.DeepEqual(*transcript, captured) {
+			t.Fatalf("restart changed committed transcript: %+v / %+v", *transcript, captured)
+		}
+		assertCapturedRestartScopeDenial(t, fresh)
+	}
+
 	if successor := continuationRestartUnadmittedSuccessor(name); successor != "" {
 		assertUncertainContinuationAfterRestart(t, fresh, root, host, home, dir, route, runner, successor)
 		return

@@ -3797,7 +3797,7 @@
     },
     "mcp.tool.you.subagent": {
       "annotations": {
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
@@ -3805,7 +3805,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+            "canonicalEnglish": "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. RUN uses the packaged @you/subagent Factory and operator/provider defaults; Worker actions preserve selected-host results and typed errors. Poll READ logs with nextToken and inspect capture health.",
             "id": "mcp.tool.you.subagent.description"
           },
           "title": {
@@ -3885,7 +3885,7 @@
             ],
             "id": "mcp.arg.you.subagent.prompt",
             "name": "prompt",
-            "required": true,
+            "required": false,
             "sensitivity": "public"
           },
           "mcp.arg.you.subagent.provider": {
@@ -3999,41 +3999,347 @@
             "name": "workingRoot",
             "required": false,
             "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.action": {
+            "id": "mcp.arg.you.subagent.action",
+            "name": "action",
+            "required": false,
+            "default": "RUN",
+            "constraints": {
+              "enum": [
+                "RUN",
+                "LIST",
+                "READ",
+                "CONTROL"
+              ]
+            }
+          },
+          "mcp.arg.you.subagent.limit": {
+            "constraints": {
+              "maximum": 1000,
+              "minimum": 1
+            },
+            "default": 100,
+            "id": "mcp.arg.you.subagent.limit",
+            "name": "limit",
+            "required": false
+          },
+          "mcp.arg.you.subagent.next_token": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.next_token",
+            "name": "nextToken",
+            "required": false
+          },
+          "mcp.arg.you.subagent.scope": {
+            "constraints": {
+              "enum": [
+                "direct",
+                "factory",
+                "all"
+              ]
+            },
+            "id": "mcp.arg.you.subagent.scope",
+            "name": "scope",
+            "required": false
+          },
+          "mcp.arg.you.subagent.state": {
+            "id": "mcp.arg.you.subagent.state",
+            "name": "state",
+            "required": false
+          },
+          "mcp.arg.you.subagent.history": {
+            "constraints": {
+              "enum": [
+                "active",
+                "all",
+                "archived"
+              ]
+            },
+            "id": "mcp.arg.you.subagent.history",
+            "name": "history",
+            "required": false
+          },
+          "mcp.arg.you.subagent.view": {
+            "constraints": {
+              "enum": [
+                "summary",
+                "transcript",
+                "events",
+                "logs"
+              ]
+            },
+            "default": "summary",
+            "id": "mcp.arg.you.subagent.view",
+            "name": "view",
+            "required": false
+          },
+          "mcp.arg.you.subagent.worker_session_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.worker_session_id",
+            "name": "workerSessionId",
+            "required": false
+          },
+          "mcp.arg.you.subagent.operation": {
+            "constraints": {
+              "enum": [
+                "CANCEL",
+                "TERMINATE",
+                "INTERRUPT",
+                "KILL"
+              ]
+            },
+            "id": "mcp.arg.you.subagent.operation",
+            "name": "operation",
+            "required": false
+          },
+          "mcp.arg.you.subagent.replacement_message": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.replacement_message",
+            "name": "replacementMessage",
+            "required": false
+          },
+          "mcp.arg.you.subagent.request_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.request_id",
+            "name": "requestId",
+            "required": false
+          },
+          "mcp.arg.you.subagent.successor_worker_session_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.successor_worker_session_id",
+            "name": "successorWorkerSessionId",
+            "required": false
+          },
+          "mcp.arg.you.subagent.expected_attempt_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.subagent.expected_attempt_id",
+            "name": "expectedAttemptId",
+            "required": false
+          },
+          "mcp.arg.you.subagent.resume_mode": {
+            "id": "mcp.arg.you.subagent.resume_mode",
+            "name": "resumeMode",
+            "required": false,
+            "constraints": {
+              "enum": [
+                "provider",
+                "recorded"
+              ]
+            }
           }
         },
         "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "additionalProperties": false,
+          "type": "object",
           "properties": {
-            "model": {
-              "description": "Model name; omitted values use operator defaults.",
-              "type": "string"
-            },
-            "prompt": {
-              "description": "Text request for the one-pass subagent.",
-              "type": "string"
-            },
-            "provider": {
-              "description": "Model provider; omitted values use operator defaults.",
-              "type": "string"
-            },
-            "reasoningEffort": {
-              "description": "Reasoning effort; omitted values use the provider default.",
-              "type": "string"
-            },
-            "timeoutMillis": {
-              "description": "Optional maximum wait time in milliseconds.",
-              "type": "integer"
-            },
-            "workingRoot": {
-              "description": "Absolute workspace directory for the subagent. Omit to use the MCP server workspace.",
-              "type": "string"
+            "action": {
+              "type": "string",
+              "enum": [
+                "RUN",
+                "LIST",
+                "READ",
+                "CONTROL"
+              ],
+              "default": "RUN"
             }
           },
-          "required": [
-            "prompt"
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "reasoningEffort": {
+                  "type": "string"
+                },
+                "timeoutMillis": {
+                  "type": "integer"
+                },
+                "workingRoot": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "RUN"
+                  ]
+                }
+              },
+              "required": [
+                "prompt"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "nextToken": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "scope": {
+                  "enum": [
+                    "direct",
+                    "factory",
+                    "all"
+                  ],
+                  "type": "string"
+                },
+                "state": {
+                  "items": {
+                    "enum": [
+                      "RESERVED",
+                      "STARTING",
+                      "RUNNING",
+                      "PAUSED",
+                      "COMPLETED",
+                      "FAILED",
+                      "CANCELED",
+                      "TERMINATED"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "history": {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "all",
+                    "archived"
+                  ],
+                  "default": "all"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "LIST"
+                  ]
+                }
+              },
+              "type": "object",
+              "required": [
+                "action"
+              ]
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "limit": {
+                  "default": 100,
+                  "maximum": 1000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "view": {
+                  "default": "summary",
+                  "enum": [
+                    "summary",
+                    "transcript",
+                    "events",
+                    "logs"
+                  ],
+                  "type": "string"
+                },
+                "workerSessionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "nextToken": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "READ"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "workerSessionId"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "operation": {
+                  "enum": [
+                    "CANCEL",
+                    "TERMINATE",
+                    "INTERRUPT",
+                    "KILL"
+                  ],
+                  "type": "string"
+                },
+                "replacementMessage": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "requestId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "successorWorkerSessionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "workerSessionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "expectedAttemptId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "resumeMode": {
+                  "type": "string",
+                  "enum": [
+                    "provider",
+                    "recorded"
+                  ],
+                  "default": "provider"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "CONTROL"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "workerSessionId",
+                "operation"
+              ],
+              "type": "object"
+            }
           ],
-          "type": "object"
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },
       "lifecycle": {
@@ -4104,23 +4410,139 @@
               }
             ],
             "schema": {
-              "$schema": "https://json-schema.org/draft/2020-12/schema",
-              "additionalProperties": false,
-              "properties": {
-                "sessionId": {
-                  "type": "string"
+              "oneOf": [
+                {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "additionalProperties": false,
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "status"
+                  ],
+                  "type": "object",
+                  "description": "RUN result. The live Factory Session is closed before return."
                 },
-                "status": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "required": [
+                    "workerSessions"
+                  ],
+                  "properties": {
+                    "workerSessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "nextToken": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
                 },
-                "text": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "required": [
+                    "session"
+                  ],
+                  "properties": {
+                    "session": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "logs": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "transcript": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "events": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "workerSessionId"
+                  ],
+                  "properties": {
+                    "workerSessionId": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "forced": {
+                      "type": "boolean"
+                    },
+                    "dispatchId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "accepted"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "sourceWorkerSessionId": {
+                      "type": "string"
+                    },
+                    "successorWorkerSessionId": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "successor": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
                 }
-              },
-              "required": [
-                "sessionId",
-                "status"
               ],
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
               "type": "object"
             }
           }
@@ -4134,353 +4556,7 @@
               }
             ],
             "isError": false
-          }
-        ],
-        "transport": {
-          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
-        }
-      },
-      "transports": {
-        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
-      }
-    },
-    "mcp.tool.you.worker_session.control": {
-      "annotations": {
-        "destructiveHint": true,
-        "idempotentHint": true,
-        "readOnlyHint": false
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}.",
-            "id": "mcp.tool.you.worker_session.control.description"
           },
-          "title": {
-            "canonicalEnglish": "Worker Session control",
-            "id": "mcp.tool.you.worker_session.control.title"
-          }
-        },
-        "examples": [
-          {
-            "operation": "INTERRUPT",
-            "replacementMessage": "Inspect the failing test.",
-            "requestId": "redirect-001",
-            "successorWorkerSessionId": "direct-worker-002",
-            "workerSessionId": "direct-worker-001"
-          },
-          {
-            "workerSessionId": "direct-worker-001",
-            "operation": "KILL",
-            "requestId": "kill-001",
-            "expectedAttemptId": "attempt-001"
-          }
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.control",
-        "sourceHash": "6b0cbb4be380cd24655ff8f4811ae37a7c686d5ea002bb30e61016637f4ad290",
-        "visibility": "public"
-      },
-      "execution": {
-        "mode": "tools-call"
-      },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.control"
-      },
-      "id": "mcp.tool.you.worker_session.control",
-      "input": {
-        "arguments": {
-          "mcp.arg.you.worker_session.control.operation": {
-            "constraints": {
-              "enum": [
-                "CANCEL",
-                "TERMINATE",
-                "INTERRUPT",
-                "KILL"
-              ]
-            },
-            "id": "mcp.arg.you.worker_session.control.operation",
-            "name": "operation",
-            "required": true
-          },
-          "mcp.arg.you.worker_session.control.replacement_message": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.control.replacement_message",
-            "name": "replacementMessage",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.control.request_id": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.control.request_id",
-            "name": "requestId",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.control.successor_worker_session_id": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.control.successor_worker_session_id",
-            "name": "successorWorkerSessionId",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.control.worker_session_id": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.control.worker_session_id",
-            "name": "workerSessionId",
-            "required": true
-          },
-          "mcp.arg.you.worker_session.control.expected_attempt_id": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.control.expected_attempt_id",
-            "name": "expectedAttemptId",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.control.resume_mode": {
-            "id": "mcp.arg.you.worker_session.control.resume_mode",
-            "name": "resumeMode",
-            "required": false,
-            "constraints": {
-              "enum": [
-                "provider",
-                "recorded"
-              ]
-            }
-          }
-        },
-        "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "additionalProperties": false,
-          "properties": {
-            "operation": {
-              "enum": [
-                "CANCEL",
-                "TERMINATE",
-                "INTERRUPT",
-                "KILL"
-              ],
-              "type": "string"
-            },
-            "replacementMessage": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "requestId": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "successorWorkerSessionId": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "workerSessionId": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "expectedAttemptId": {
-              "type": "string",
-              "minLength": 1
-            },
-            "resumeMode": {
-              "type": "string",
-              "enum": [
-                "provider",
-                "recorded"
-              ],
-              "default": "provider"
-            }
-          },
-          "required": [
-            "workerSessionId",
-            "operation"
-          ],
-          "type": "object"
-        }
-      },
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.control",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "you.worker_session.control",
-      "result": {
-        "examples": [
-          {
-            "content": [
-              {
-                "text": "{\"result\":{\"workerSessionId\":\"direct-worker-001\",\"outcome\":\"NOOP\"}}",
-                "type": "text"
-              }
-            ],
-            "isError": false
-          }
-        ],
-        "transport": {
-          "allowsOutputSchema": false,
-          "allowsStructuredContent": false,
-          "contentTypes": [
-            "text"
-          ],
-          "textEncoding": "serialized-json"
-        }
-      },
-      "transports": [
-        "stdio-json-rpc"
-      ]
-    },
-    "mcp.tool.you.worker_session.list": {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "readOnlyHint": true
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "List Worker Session observations on the selected host. Maps to GET /worker-sessions. History defaults to all retained sessions.",
-            "id": "mcp.tool.you.worker_session.list.description"
-          },
-          "title": {
-            "canonicalEnglish": "Worker Session list",
-            "id": "mcp.tool.you.worker_session.list.title"
-          }
-        },
-        "examples": [
-          {
-            "limit": 2,
-            "scope": "all"
-          },
-          {
-            "history": "archived",
-            "limit": 2
-          }
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.list",
-        "sourceHash": "617be2c030ae4dc83c52bf8034086f1fe8b6a3b0f144446f34c778d57d62bc5f",
-        "visibility": "public"
-      },
-      "execution": {
-        "mode": "tools-call"
-      },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.list"
-      },
-      "id": "mcp.tool.you.worker_session.list",
-      "input": {
-        "arguments": {
-          "mcp.arg.you.worker_session.list.limit": {
-            "constraints": {
-              "minimum": 1
-            },
-            "id": "mcp.arg.you.worker_session.list.limit",
-            "name": "limit",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.list.next_token": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.list.next_token",
-            "name": "nextToken",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.list.scope": {
-            "constraints": {
-              "enum": [
-                "direct",
-                "factory",
-                "all"
-              ]
-            },
-            "id": "mcp.arg.you.worker_session.list.scope",
-            "name": "scope",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.list.state": {
-            "id": "mcp.arg.you.worker_session.list.state",
-            "name": "state",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.list.history": {
-            "constraints": {
-              "enum": [
-                "active",
-                "all",
-                "archived"
-              ]
-            },
-            "id": "mcp.arg.you.worker_session.list.history",
-            "name": "history",
-            "required": false
-          }
-        },
-        "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "additionalProperties": false,
-          "properties": {
-            "limit": {
-              "minimum": 1,
-              "type": "integer"
-            },
-            "nextToken": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "scope": {
-              "enum": [
-                "direct",
-                "factory",
-                "all"
-              ],
-              "type": "string"
-            },
-            "state": {
-              "items": {
-                "enum": [
-                  "RESERVED",
-                  "STARTING",
-                  "RUNNING",
-                  "PAUSED",
-                  "COMPLETED",
-                  "FAILED",
-                  "CANCELED",
-                  "TERMINATED"
-                ],
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "history": {
-              "type": "string",
-              "enum": [
-                "active",
-                "all",
-                "archived"
-              ],
-              "default": "all"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.list",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "you.worker_session.list",
-      "result": {
-        "examples": [
           {
             "content": [
               {
@@ -4489,148 +4565,7 @@
               }
             ],
             "isError": false
-          }
-        ],
-        "transport": {
-          "allowsOutputSchema": false,
-          "allowsStructuredContent": false,
-          "contentTypes": [
-            "text"
-          ],
-          "textEncoding": "serialized-json"
-        }
-      },
-      "transports": [
-        "stdio-json-rpc"
-      ]
-    },
-    "mcp.tool.you.worker_session.read": {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "readOnlyHint": true
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "Read one Worker Session: its observation plus an optional transcript, retained-event view or captured logs page. Maps to GET /worker-sessions/{worker_session_id} and, by view, /transcript, /events?replayOnly=true or /logs. Poll logs with nextToken until the session is terminal and committedPosition stops advancing; inspect capture health before treating history as complete.",
-            "id": "mcp.tool.you.worker_session.read.description"
           },
-          "title": {
-            "canonicalEnglish": "Worker Session read",
-            "id": "mcp.tool.you.worker_session.read.title"
-          }
-        },
-        "examples": [
-          {
-            "view": "summary",
-            "workerSessionId": "direct-worker-001"
-          },
-          {
-            "workerSessionId": "direct-worker-001",
-            "view": "logs",
-            "limit": 100
-          }
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.read",
-        "sourceHash": "dcb718a56cb155c2d39be8710212966d4896196c4e3ac541196fa845fb0eaf73",
-        "visibility": "public"
-      },
-      "execution": {
-        "mode": "tools-call"
-      },
-      "handler": {
-        "id": "mcp.handler.you.worker_session.read"
-      },
-      "id": "mcp.tool.you.worker_session.read",
-      "input": {
-        "arguments": {
-          "mcp.arg.you.worker_session.read.limit": {
-            "constraints": {
-              "maximum": 1000,
-              "minimum": 1
-            },
-            "default": 100,
-            "id": "mcp.arg.you.worker_session.read.limit",
-            "name": "limit",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.read.view": {
-            "constraints": {
-              "enum": [
-                "summary",
-                "transcript",
-                "events",
-                "logs"
-              ]
-            },
-            "default": "summary",
-            "id": "mcp.arg.you.worker_session.read.view",
-            "name": "view",
-            "required": false
-          },
-          "mcp.arg.you.worker_session.read.worker_session_id": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.read.worker_session_id",
-            "name": "workerSessionId",
-            "required": true
-          },
-          "mcp.arg.you.worker_session.read.next_token": {
-            "constraints": {
-              "minLength": 1
-            },
-            "id": "mcp.arg.you.worker_session.read.next_token",
-            "name": "nextToken",
-            "required": false
-          }
-        },
-        "schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "additionalProperties": false,
-          "properties": {
-            "limit": {
-              "default": 100,
-              "maximum": 1000,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "view": {
-              "default": "summary",
-              "enum": [
-                "summary",
-                "transcript",
-                "events",
-                "logs"
-              ],
-              "type": "string"
-            },
-            "workerSessionId": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "nextToken": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "workerSessionId"
-          ],
-          "type": "object"
-        }
-      },
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.worker_session.read",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "you.worker_session.read",
-      "result": {
-        "examples": [
           {
             "content": [
               {
@@ -4648,20 +4583,24 @@
               }
             ],
             "isError": false
+          },
+          {
+            "content": [
+              {
+                "text": "{\"result\":{\"workerSessionId\":\"direct-worker-001\",\"outcome\":\"NOOP\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
           }
         ],
         "transport": {
-          "allowsOutputSchema": false,
-          "allowsStructuredContent": false,
-          "contentTypes": [
-            "text"
-          ],
-          "textEncoding": "serialized-json"
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
         }
       },
-      "transports": [
-        "stdio-json-rpc"
-      ]
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      }
     }
   }
 }

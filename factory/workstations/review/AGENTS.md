@@ -216,6 +216,18 @@ repository code failure or test failure.
 
 ### Step 3 — Verify project acceptance criteria
 
+Read criterion ownership at both project and story levels. Missing owner defaults
+to process, including legacy string criteria. Invalid explicit owners never
+bypass a blocker. Independently evaluate review-owned criteria using current-PR
+and current-head evidence; a process story passes flag is not review proof.
+Recheck process claims too: ownership changes the handoff gate, never review's
+checks. Record each criterion ID, owner, gate, PASS/FAIL/BLOCKED and evidence in
+PR conversation comments. For actionable failures, return REJECTED naming the
+specific failing criterion ID, evidence and smallest correction. Pending external
+proof uses existing holds and later gates, not fabricated proof or executor
+rework solely for waiting. Post-merge or integrated Project validation stays with
+its named later gate; preserve the merged-PR short-circuit and merge boundary.
+
 Go through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: 
 - State the criterion
 - Check whether the code diff satisfies it

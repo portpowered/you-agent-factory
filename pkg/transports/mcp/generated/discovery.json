@@ -376,186 +376,213 @@
       }
     },
     "mcp.tool.you.subagent": {
-      "id": "mcp.tool.you.subagent",
-      "name": "you.subagent",
-      "description": "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "model": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "reasoningEffort": {
-            "type": "string"
-          },
-          "timeoutMillis": {
-            "type": "integer"
-          },
-          "workingRoot": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt"
-        ],
-        "type": "object"
-      }
-    },
-    "mcp.tool.you.worker_session.control": {
       "annotations": {
         "destructiveHint": true,
-        "idempotentHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
         "readOnlyHint": false
       },
-      "id": "mcp.tool.you.worker_session.control",
-      "name": "you.worker_session.control",
-      "description": "Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}.",
+      "id": "mcp.tool.you.subagent",
+      "name": "you.subagent",
+      "description": "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. RUN uses the packaged @you/subagent Factory and operator/provider defaults; Worker actions preserve selected-host results and typed errors. Poll READ logs with nextToken and inspect capture health.",
       "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "expectedAttemptId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "operation": {
-            "enum": [
-              "CANCEL",
-              "TERMINATE",
-              "INTERRUPT",
-              "KILL"
-            ],
-            "type": "string"
-          },
-          "replacementMessage": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "requestId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "resumeMode": {
-            "default": "provider",
-            "enum": [
-              "provider",
-              "recorded"
-            ],
-            "type": "string"
-          },
-          "successorWorkerSessionId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "workerSessionId": {
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "workerSessionId",
-          "operation"
-        ],
-        "type": "object"
-      }
-    },
-    "mcp.tool.you.worker_session.list": {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "readOnlyHint": true
-      },
-      "id": "mcp.tool.you.worker_session.list",
-      "name": "you.worker_session.list",
-      "description": "List Worker Session observations on the selected host. Maps to GET /worker-sessions. History defaults to all retained sessions.",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "history": {
-            "default": "all",
-            "enum": [
-              "active",
-              "all",
-              "archived"
-            ],
-            "type": "string"
-          },
-          "limit": {
-            "minimum": 1,
-            "type": "integer"
-          },
-          "nextToken": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "scope": {
-            "enum": [
-              "direct",
-              "factory",
-              "all"
-            ],
-            "type": "string"
-          },
-          "state": {
-            "items": {
-              "enum": [
-                "RESERVED",
-                "STARTING",
-                "RUNNING",
-                "PAUSED",
-                "COMPLETED",
-                "FAILED",
-                "CANCELED",
-                "TERMINATED"
-              ],
-              "type": "string"
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "RUN"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "reasoningEffort": {
+                "type": "string"
+              },
+              "timeoutMillis": {
+                "type": "integer"
+              },
+              "workingRoot": {
+                "type": "string"
+              }
             },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      }
-    },
-    "mcp.tool.you.worker_session.read": {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "readOnlyHint": true
-      },
-      "id": "mcp.tool.you.worker_session.read",
-      "name": "you.worker_session.read",
-      "description": "Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET /worker-sessions/{worker_session_id}/transcript or GET /worker-sessions/{worker_session_id}/events?replayOnly=true.",
-      "inputSchema": {
-        "additionalProperties": false,
-        "properties": {
-          "limit": {
-            "default": 100,
-            "maximum": 1000,
-            "minimum": 1,
-            "type": "integer"
+            "required": [
+              "prompt"
+            ],
+            "type": "object"
           },
-          "view": {
-            "default": "summary",
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "LIST"
+                ],
+                "type": "string"
+              },
+              "history": {
+                "default": "all",
+                "enum": [
+                  "active",
+                  "all",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "limit": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "nextToken": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "direct",
+                  "factory",
+                  "all"
+                ],
+                "type": "string"
+              },
+              "state": {
+                "items": {
+                  "enum": [
+                    "RESERVED",
+                    "STARTING",
+                    "RUNNING",
+                    "PAUSED",
+                    "COMPLETED",
+                    "FAILED",
+                    "CANCELED",
+                    "TERMINATED"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "READ"
+                ],
+                "type": "string"
+              },
+              "limit": {
+                "default": 100,
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "nextToken": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "view": {
+                "default": "summary",
+                "enum": [
+                  "summary",
+                  "transcript",
+                  "events",
+                  "logs"
+                ],
+                "type": "string"
+              },
+              "workerSessionId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "workerSessionId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "CONTROL"
+                ],
+                "type": "string"
+              },
+              "expectedAttemptId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "operation": {
+                "enum": [
+                  "CANCEL",
+                  "TERMINATE",
+                  "INTERRUPT",
+                  "KILL"
+                ],
+                "type": "string"
+              },
+              "replacementMessage": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "requestId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "resumeMode": {
+                "default": "provider",
+                "enum": [
+                  "provider",
+                  "recorded"
+                ],
+                "type": "string"
+              },
+              "successorWorkerSessionId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "workerSessionId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "workerSessionId",
+              "operation"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "action": {
+            "default": "RUN",
             "enum": [
-              "summary",
-              "transcript",
-              "events"
+              "RUN",
+              "LIST",
+              "READ",
+              "CONTROL"
             ],
             "type": "string"
-          },
-          "workerSessionId": {
-            "minLength": 1,
-            "type": "string"
           }
         },
-        "required": [
-          "workerSessionId"
-        ],
         "type": "object"
       }
     }

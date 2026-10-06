@@ -42,6 +42,7 @@ type (
 	WorkerCapturedCatalogPage                = workerrecording.WorkerCapturedCatalogPage
 	WorkerCapturedCatalogItem                = workerrecording.WorkerCapturedCatalogItem
 	WorkerCapturedRecord                     = workerrecording.WorkerCapturedRecord
+	WorkerTranscriptEntry                    = workerrecording.WorkerTranscriptEntry
 	WorkerCapturedActivityRequest            = workerrecording.WorkerCapturedActivityRequest
 	WorkerCapturedActivityPage               = workerrecording.WorkerCapturedActivityPage
 	WorkerSessionRecordingService            = recordingcontracts.WorkerSessionRecordingService

@@ -11,8 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	factorymcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workermcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
-	generated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 // GenerateInventoryArtifacts projects the complete public tool union and its
@@ -22,25 +20,7 @@ func GenerateInventoryArtifacts() ([]generatedartifacts.Artifact, error) {
 	for _, tool := range factorymcp.DiscoverTools() {
 		inputs.Discovery = append(inputs.Discovery, ToolRecord{ID: "mcp.tool." + tool.Name, Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema})
 	}
-	for _, tool := range generated.PrimaryDiscovery() {
-		if !strings.HasPrefix(tool.Name, "you.worker_session.") {
-			continue
-		}
-		var schema any
-		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
-			return nil, err
-		}
-		for _, owned := range workermcp.DiscoverTools() {
-			if owned.Name == tool.Name {
-				schema = owned.InputSchema
-			}
-		}
-		inputs.Discovery = append(inputs.Discovery, ToolRecord{ID: tool.ID, Name: tool.Name, Description: tool.Description, InputSchema: schema})
-	}
 	for _, binding := range factorymcp.ProjectCanonicalToolHandlerBindings() {
-		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
-	}
-	for _, binding := range workermcp.ProjectCanonicalToolHandlerBindings() {
 		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
 	}
 	inventory, err := ProjectToolInventory(inputs.Discovery, inputs.Registry)
@@ -107,9 +87,9 @@ func projectResultPolicy() (factorymcp.ResultPolicyInventory, error) {
 		return policy, err
 	}
 	for _, fixture := range []struct{ name, tool, response string }{
-		{"worker_list_empty", workermcp.ToolList, `{"result":{"sessions":[],"paginationContext":{"maxResults":50}}}`},
-		{"worker_read_events_empty", workermcp.ToolRead, `{"result":{"session":{"workerSessionId":"fixture-worker"},"events":{"events":[],"truncated":false}}}`},
-		{"worker_control_noop", workermcp.ToolControl, `{"result":{"workerSessionId":"fixture-worker","dispatchId":"fixture-attempt","action":"CANCEL","outcome":"NOOP","state":"CANCELED"}}`},
+		{"worker_list_empty", factorymcp.ToolSubagent, `{"result":{"sessions":[],"paginationContext":{"maxResults":50}}}`},
+		{"worker_read_events_empty", factorymcp.ToolSubagent, `{"result":{"session":{"workerSessionId":"fixture-worker"},"events":{"events":[],"truncated":false}}}`},
+		{"worker_control_noop", factorymcp.ToolSubagent, `{"result":{"workerSessionId":"fixture-worker","dispatchId":"fixture-attempt","action":"CANCEL","outcome":"NOOP","state":"CANCELED"}}`},
 	} {
 		response := json.RawMessage(fixture.response)
 		encoded, err := factorymcp.MarshalSuccessCallToolResultJSON(response)
@@ -124,8 +104,8 @@ func projectResultPolicy() (factorymcp.ResultPolicyInventory, error) {
 		return policy, err
 	}
 	policy.DomainErrorFixtures = append(policy.DomainErrorFixtures, factorymcp.DomainErrorFixture{
-		Name: "worker_read_not_found", Description: "Worker Session typed error identity is preserved in structuredContent.", ToolName: workermcp.ToolRead,
-		ToolArguments: json.RawMessage(`{"workerSessionId":"fixture-worker"}`), ToolResponse: response, CallToolResult: encoded,
+		Name: "worker_read_not_found", Description: "Worker Session typed error identity is preserved in structuredContent.", ToolName: factorymcp.ToolSubagent,
+		ToolArguments: json.RawMessage(`{"action":"READ","workerSessionId":"fixture-worker"}`), ToolResponse: response, CallToolResult: encoded,
 	})
 	return policy, factorymcp.VerifyResultPolicyInventory(policy)
 }

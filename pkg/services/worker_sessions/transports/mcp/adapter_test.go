@@ -15,6 +15,52 @@ import (
 
 type requestDoer func(*http.Request) (*http.Response, error)
 
+func TestSubagentActionValidationBeforeEffects(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("invalid action reached HTTP")
+		return nil, nil
+	})
+	run := func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		t.Fatal("invalid action reached RUN/configuration")
+		return nil, nil
+	}
+	for _, input := range []string{
+		`null`, `[]`, `{}`, `{"action":"UNKNOWN"}`, `{"action":"run"}`, `{"action":""}`, `{"action":null}`, `{"action":1}`, `{"action":true}`,
+		`{"Action":"LIST"}`, `{"action":"LIST","action":"RUN"}`, `{"action":"LIST","\u0061ction":"RUN"}`,
+		`{"action":"LIST","scope":"all","Scope":"factory"}`, `{"action":"LIST","prompt":"cross-action"}`,
+		`{"action":"READ"}`, `{"action":"READ","workerSessionId":null}`, `{"action":"CONTROL","workerSessionId":"w"}`,
+		`{"action":"LIST"} {}`, `{"action":"LIST","scope":"direct","scope":"factory"}`,
+	} {
+		if input == `{}` { // Omitted RUN belongs to the existing Factory decoder.
+			continue
+		}
+		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), run)
+		if err != nil || !strings.Contains(string(response), `"code":"worker_session.invalid_request"`) {
+			t.Fatalf("input=%s response=%s err=%v", input, response, err)
+		}
+	}
+}
+
+func TestSubagentDefaultAndExplicitRunPreserveArguments(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("RUN reached selected host")
+		return nil, nil
+	})
+	for _, input := range []string{`{"prompt":"hello"}`, `{"action":"RUN","prompt":"hello"}`} {
+		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+			if string(raw) != `{"prompt":"hello"}` {
+				t.Fatalf("RUN arguments=%s", raw)
+			}
+			return json.RawMessage(`{"result":{"text":"answer"}}`), nil
+		})
+		if err != nil || string(response) != `{"result":{"text":"answer"}}` {
+			t.Fatalf("RUN result=%s err=%v", response, err)
+		}
+	}
+}
+
 func (do requestDoer) Do(request *http.Request) (*http.Response, error) { return do(request) }
 
 type trackedBody struct {
@@ -57,9 +103,9 @@ func TestWorkerSessionValidationRejectsBeforeHTTP(t *testing.T) {
 		return nil, nil
 	})
 	cases := map[string][]string{
-		ToolList:                     {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"history":null}`, `{"history":""}`, `{"history":"recent"}`, `{"history":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
-		ToolRead:                     {`{}`, `{"workerSessionId":" "}`, `{"workerSessionId":"w","view":"unknown"}`, `{"workerSessionId":"w","limit":1}`, `{"workerSessionId":"w","view":"transcript","limit":1}`, `{"workerSessionId":"w","view":"events","limit":0}`, `{"workerSessionId":"w","view":"events","limit":1001}`, `{"workerSessionId":"w","view":null}`, `{"workerSessionId":"w","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"events","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"transcript","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"logs","nextToken":" "}`, `{"workerSessionId":"w","view":"logs","nextToken":null}`, `{"workerSessionId":"w","view":"logs","limit":1001}`, `{"workerSessionId":"w","view":"logs","extra":true}`},
-		ToolControl:                  {`{}`, `{"workerSessionId":"w","operation":"KILL"}`, `{"workerSessionId":"w","operation":"CANCEL","requestId":"r"}`, `{"workerSessionId":"w","operation":"TERMINATE","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"CANCEL","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","successorWorkerSessionId":"s","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":" ","successorWorkerSessionId":"s","replacementMessage":"m"}`},
+		ActionList:                   {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"history":null}`, `{"history":""}`, `{"history":"recent"}`, `{"history":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
+		ActionRead:                   {`{}`, `{"workerSessionId":" "}`, `{"workerSessionId":"w","view":"unknown"}`, `{"workerSessionId":"w","limit":1}`, `{"workerSessionId":"w","view":"transcript","limit":1}`, `{"workerSessionId":"w","view":"events","limit":0}`, `{"workerSessionId":"w","view":"events","limit":1001}`, `{"workerSessionId":"w","view":null}`, `{"workerSessionId":"w","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"events","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"transcript","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"logs","nextToken":" "}`, `{"workerSessionId":"w","view":"logs","nextToken":null}`, `{"workerSessionId":"w","view":"logs","limit":1001}`, `{"workerSessionId":"w","view":"logs","extra":true}`},
+		ActionControl:                {`{}`, `{"workerSessionId":"w","operation":"KILL"}`, `{"workerSessionId":"w","operation":"CANCEL","requestId":"r"}`, `{"workerSessionId":"w","operation":"TERMINATE","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"CANCEL","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","successorWorkerSessionId":"s","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":" ","successorWorkerSessionId":"s","replacementMessage":"m"}`},
 		"you.worker_session.unknown": {`{}`},
 	}
 	for tool, inputs := range cases {
@@ -80,11 +126,11 @@ func TestWorkerSessionGeneratedRequestsAndResults(t *testing.T) {
 	cases := []struct {
 		name, tool, input, method, path, body string
 	}{
-		{"list", ToolList, `{"scope":"factory","state":["RUNNING","PAUSED"],"limit":2,"nextToken":"opaque"}`, "GET", "/worker-sessions", `{"workerSessions":[],"nextToken":null}`},
-		{"summary", ToolRead, `{"workerSessionId":"target"}`, "GET", "/worker-sessions/target", `{"workerSessionId":"target","state":"RUNNING"}`},
-		{"cancel", ToolControl, `{"workerSessionId":"target","operation":"CANCEL"}`, "POST", "/worker-sessions/target/cancel", `{"workerSessionId":"target","outcome":"APPLIED"}`},
-		{"terminate", ToolControl, `{"workerSessionId":"target","operation":"TERMINATE"}`, "POST", "/worker-sessions/target/terminate", `{"workerSessionId":"target","outcome":"NOOP"}`},
-		{"interrupt", ToolControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`, "POST", "/worker-sessions/target/interrupt", `{"sourceWorkerSessionId":"target","successorWorkerSessionId":"successor","outcome":"APPLIED"}`},
+		{"list", ActionList, `{"scope":"factory","state":["RUNNING","PAUSED"],"limit":2,"nextToken":"opaque"}`, "GET", "/worker-sessions", `{"workerSessions":[],"nextToken":null}`},
+		{"summary", ActionRead, `{"workerSessionId":"target"}`, "GET", "/worker-sessions/target", `{"workerSessionId":"target","state":"RUNNING"}`},
+		{"cancel", ActionControl, `{"workerSessionId":"target","operation":"CANCEL"}`, "POST", "/worker-sessions/target/cancel", `{"workerSessionId":"target","outcome":"APPLIED"}`},
+		{"terminate", ActionControl, `{"workerSessionId":"target","operation":"TERMINATE"}`, "POST", "/worker-sessions/target/terminate", `{"workerSessionId":"target","outcome":"NOOP"}`},
+		{"interrupt", ActionControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`, "POST", "/worker-sessions/target/interrupt", `{"sourceWorkerSessionId":"target","successorWorkerSessionId":"successor","outcome":"APPLIED"}`},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -153,7 +199,7 @@ func TestWorkerSessionLogsPageForwardingAndCleanup(t *testing.T) {
 				}
 				return response, nil
 			})
-			value := workerCall(t, adapter, ToolRead, test.input)
+			value := workerCall(t, adapter, ActionRead, test.input)
 			if test.code == "" {
 				assertLogsViewResult(t, value, page)
 			} else if value["error"].(map[string]any)["code"] != "worker_session."+test.code || value["result"] != nil {
@@ -208,7 +254,7 @@ func TestWorkerSessionReplayIsBoundedAndCloses(t *testing.T) {
 				replayContext = request.Context()
 				return &http.Response{StatusCode: 200, Body: body}, nil
 			})
-			value := workerCall(t, adapter, ToolRead, `{"workerSessionId":"target","view":"events","limit":2}`)
+			value := workerCall(t, adapter, ActionRead, `{"workerSessionId":"target","view":"events","limit":2}`)
 			result := value["result"].(map[string]any)
 			page := result["events"].(map[string]any)
 			events := page["events"].([]any)
@@ -245,7 +291,7 @@ func TestWorkerSessionErrorsAreTypedAndSafe(t *testing.T) {
 				}
 				return &http.Response{StatusCode: test.status, Body: body}, nil
 			})
-			value := workerCall(t, adapter, ToolControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`)
+			value := workerCall(t, adapter, ActionControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`)
 			failure := value["error"].(map[string]any)
 			if failure["code"] != "worker_session."+test.code || failure["retryable"] != test.retry || failure["workerSessionId"] != "target" {
 				t.Fatalf("error = %v", value)
@@ -273,7 +319,7 @@ func TestWorkerSessionCancellationReachesSelectedHost(t *testing.T) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	})
-	raw, err := adapter.Call(ctx, ToolList, json.RawMessage(`{}`))
+	raw, err := adapter.Call(ctx, ActionList, json.RawMessage(`{}`))
 	if err != nil || !strings.Contains(string(raw), `"worker_session.host_unavailable"`) {
 		t.Fatalf("canceled call = %s, %v", raw, err)
 	}
@@ -324,7 +370,7 @@ func TestWorkerSessionHistorySelection(t *testing.T) {
 			if history != "" {
 				input = `{"history":"` + history + `"}`
 			}
-			result := workerCall(t, adapter, ToolList, input)
+			result := workerCall(t, adapter, ActionList, input)
 			if result["error"] != nil {
 				t.Fatalf("history result = %v", result)
 			}
@@ -365,7 +411,7 @@ func TestWorkerSessionKillRejectsInvalidTupleBeforeHTTP(t *testing.T) {
 				t.Fatal("invalid kill tuple reached selected host")
 				return nil, nil
 			})
-			value := workerCall(t, adapter, ToolControl, input)
+			value := workerCall(t, adapter, ActionControl, input)
 			if value["result"] != nil || value["error"].(map[string]any)["code"] != "worker_session.invalid_request" {
 				t.Fatalf("invalid tuple = %v", value)
 			}
@@ -409,7 +455,7 @@ func TestWorkerSessionKillSelectedHostResults(t *testing.T) {
 				}
 				return response, nil
 			})
-			value := workerCall(t, adapter, ToolControl, `{"workerSessionId":"target","operation":"KILL","requestId":"request","expectedAttemptId":"physical-attempt"}`)
+			value := workerCall(t, adapter, ActionControl, `{"workerSessionId":"target","operation":"KILL","requestId":"request","expectedAttemptId":"physical-attempt"}`)
 			assertKillResult(t, value, test.body, test.code, test.retryable)
 			if calls != 1 || !body.closed {
 				t.Fatalf("kill calls=%d body closed=%v", calls, body.closed)
@@ -478,7 +524,7 @@ func assertWorkerSessionUnsupportedPreflight(t *testing.T, code string) {
 		}
 		return &http.Response{StatusCode: http.StatusConflict, Body: body}, nil
 	})
-	value := workerCall(t, adapter, ToolControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`)
+	value := workerCall(t, adapter, ActionControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`)
 	failure := value["error"].(map[string]any)
 	details := failure["details"].(map[string]any)
 	if failure["code"] != "worker_session.conflict" || failure["retryable"] != false || details["upstreamCode"] != code || details["phase"] != "VALIDATION" || calls != 1 || !body.closed {
@@ -498,13 +544,13 @@ func TestWorkerSessionValidationResumeModeBeforeHTTP(t *testing.T) {
 	})
 	prefix := `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s","replacementMessage":"m",`
 	for _, field := range []string{`"resumeMode":""`, `"resumeMode":" "`, `"resumeMode":"invalid"`, `"resumeMode":"Provider"`, `"resumeMode":null`, `"resumeMode":1`, `"resumeMode":true`, `"resumeMode":[]`, `"resumeMode":"provider","resumeMode":"recorded"`, `"ResumeMode":"recorded"`} {
-		failure := workerCall(t, adapter, ToolControl, prefix+field+"}")["error"].(map[string]any)
+		failure := workerCall(t, adapter, ActionControl, prefix+field+"}")["error"].(map[string]any)
 		if failure["code"] != "worker_session.invalid_request" || failure["retryable"] != false {
 			t.Fatalf("invalid mode: %v", failure)
 		}
 	}
 	for _, op := range []string{"CANCEL", "TERMINATE", "KILL"} {
-		failure := workerCall(t, adapter, ToolControl, `{"workerSessionId":"w","operation":"`+op+`","resumeMode":"recorded"}`)["error"].(map[string]any)
+		failure := workerCall(t, adapter, ActionControl, `{"workerSessionId":"w","operation":"`+op+`","resumeMode":"recorded"}`)["error"].(map[string]any)
 		if failure["code"] != "worker_session.invalid_request" || failure["retryable"] != false {
 			t.Fatalf("inapplicable mode: %v", failure)
 		}
@@ -530,7 +576,7 @@ func TestWorkerSessionInterruptForwardsResumeMode(t *testing.T) {
 			if mode != "" {
 				input += `,"resumeMode":"` + mode + `"`
 			}
-			if value := workerCall(t, adapter, ToolControl, input+"}"); value["error"] != nil {
+			if value := workerCall(t, adapter, ActionControl, input+"}"); value["error"] != nil {
 				t.Fatalf("forwarding: %v", value)
 			}
 		})

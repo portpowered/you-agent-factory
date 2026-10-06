@@ -204,45 +204,6 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 	assertCorrelatedObservationProjection(t, result, projection, firstRef, secondRef)
 }
 
-func TestReadTranscript_ReturnsFinishedNormalizedEntriesAndCorrelation(t *testing.T) {
-	ref := sessionRef("provider-session-transcript")
-	text := "assistant answer"
-	toolName := "search"
-	arguments := `{"query":"factory"}`
-	output := "tool result"
-	encrypted := true
-	encryptedContent := "encrypted reasoning"
-	projection := &observationProjectionStub{results: map[providers.SessionRef]providersessions.ProjectResult{
-		ref: {
-			Session: ref,
-			Detail: providersessions.Detail{Transcript: []providersessions.TranscriptEntry{
-				{Order: 1, Type: providersessions.TranscriptUserMessage, Text: stringPtr("operator request")},
-				{Order: 2, Type: providersessions.TranscriptToolCall, Name: &toolName, Arguments: &arguments},
-				{Order: 3, Type: providersessions.TranscriptToolOutput, Output: &output},
-				{Order: 4, Type: providersessions.TranscriptReasoning, Encrypted: &encrypted, EncryptedContent: &encryptedContent},
-				{Order: 5, Type: providersessions.TranscriptAssistantMessage, Text: &text},
-			}},
-		},
-	}}
-	registry := newObservationService(t, executionBoundary{execution: executionFor(&ref, workers.OutcomeAccepted, nil, nil)}, newEventsAppender(), platformclock.Real{}, projection)
-	mustInvokeObservationSession(t, registry, startRequest("worker-transcript", "dispatch-transcript", "work-transcript"))
-
-	result := mustReadTranscript(t, registry, ref)
-	assertTranscriptProjection(t, result, projection, ref, toolName, arguments)
-	byWorker, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: "worker-transcript"})
-	if err != nil {
-		t.Fatalf("ReadTranscript(WorkerSessionID) error = %v", err)
-	}
-	if byWorker.WorkerSessionID != result.WorkerSessionID || byWorker.ProviderSession != ref || len(byWorker.Entries) != len(result.Entries) || byWorker.Entries[4].Text == nil || *byWorker.Entries[4].Text != text {
-		t.Fatalf("ReadTranscript(WorkerSessionID) = %#v, want same normalized terminal transcript", byWorker)
-	}
-	result.Entries[0].Text = stringPtr("mutated")
-	again := mustReadTranscript(t, registry, ref)
-	if again.Entries[0].Text == nil || *again.Entries[0].Text != "operator request" {
-		t.Fatalf("detached transcript entry = %#v, want provider projection unchanged", again.Entries[0])
-	}
-}
-
 func mustInvokeObservationSession(t *testing.T, registry workersessions.Service, request workersessions.InvokeSessionRequest) {
 	t.Helper()
 	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
@@ -255,15 +216,6 @@ func mustListObservations(t *testing.T, registry workersessions.Service, workID 
 	result, err := registry.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
 		t.Fatalf("ListObservations() error = %v", err)
-	}
-	return result
-}
-
-func mustReadTranscript(t *testing.T, registry workersessions.Service, ref providers.SessionRef) workersessions.ReadTranscriptResult {
-	t.Helper()
-	result, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
-	if err != nil {
-		t.Fatalf("ReadTranscript() error = %v", err)
 	}
 	return result
 }
@@ -329,35 +281,6 @@ func assertSecondObservationProjection(t *testing.T, observation workersessions.
 	}
 }
 
-func assertTranscriptProjection(t *testing.T, result workersessions.ReadTranscriptResult, projection *observationProjectionStub, ref providers.SessionRef, toolName, arguments string) {
-	t.Helper()
-	if result.WorkerSessionID != "worker-transcript" || result.AttemptID != "dispatch-transcript" || result.TurnID != "turn-worker-transcript" || result.State != workersessions.StateCompleted {
-		t.Fatalf("correlation = %#v, want terminal Worker Session envelope", result)
-	}
-	if len(result.WorkIDs) != 1 || result.WorkIDs[0] != "work-transcript" || len(result.Entries) != 5 {
-		t.Fatalf("work/entries = %#v/%d, want work-transcript and five entries", result.WorkIDs, len(result.Entries))
-	}
-	assertTranscriptToolCall(t, result.Entries[1], toolName, arguments)
-	assertTranscriptReasoning(t, result.Entries[3])
-	if len(projection.requested) != 1 || projection.requested[0] != ref {
-		t.Fatalf("projection requests = %#v, want one exact Provider Session request", projection.requested)
-	}
-}
-
-func assertTranscriptToolCall(t *testing.T, entry workersessions.TranscriptEntry, toolName, arguments string) {
-	t.Helper()
-	if entry.Type != workersessions.TranscriptToolCall || entry.Name == nil || *entry.Name != toolName || entry.Arguments == nil || *entry.Arguments != arguments {
-		t.Fatalf("tool-call entry = %#v, want normalized tool fields", entry)
-	}
-}
-
-func assertTranscriptReasoning(t *testing.T, entry workersessions.TranscriptEntry) {
-	t.Helper()
-	if entry.Type != workersessions.TranscriptReasoning || entry.Encrypted == nil || !*entry.Encrypted || entry.EncryptedContent == nil {
-		t.Fatalf("encrypted reasoning entry = %#v, want explicit encrypted fields", entry)
-	}
-}
-
 func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *testing.T) {
 	ref := sessionRef("provider-session-active")
 	started := make(chan struct{})
@@ -399,7 +322,7 @@ func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *test
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for terminal Worker Session")
 	}
-	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
 		t.Fatalf("ReadTranscript(unavailable) error = %v, want ErrObservationTranscriptUnavailable", err)
 	}
 	projection.projectErr = errors.New("normalized transcript parser failed")

@@ -605,13 +605,16 @@ func provideMCPServerBuilder(
 			Skills:    skills,
 			Resources: resources,
 			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-				if strings.HasPrefix(name, "you.worker_session.") {
-					return workerTools.Call(ctx, name, raw)
-				}
 				if name == factorysessionmcp.ToolSubagent {
-					if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
-						return nil, err
-					}
+					return workerTools.Subagent(ctx, raw, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+						if failure, err := factorysessionmcp.ValidateSubagentArguments(input); failure != nil || err != nil {
+							return failure, err
+						}
+						if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+							return nil, err
+						}
+						return toolOperation(ctx, name, input)
+					})
 				}
 				return toolOperation(ctx, name, raw)
 			},

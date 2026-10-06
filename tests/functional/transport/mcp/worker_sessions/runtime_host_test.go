@@ -50,13 +50,13 @@ func runRealHostFactory(t *testing.T, process support.Process) {
 	read := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)
 	assertRuntimeObservationParity(t, read["session"], getHost(t, endpoint))
 	assertFactoryCLIParity(t, host, id, getHost(t, endpoint))
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": id, "view": "transcript"}), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"}), "worker_session.conflict", false)
 	args := map[string]any{"workerSessionId": id, "operation": "INTERRUPT", "requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}
 	// Runtime owns Factory replacement. Preserve the explicit unsupported
 	// refusal and prove it has no provider effect through both transports.
 	for _, mode := range []string{"provider", "recorded"} {
 		args["resumeMode"] = mode
-		refusal := callTool(t, ctx, session, "you.worker_session.control", args)
+		refusal := callAction(t, ctx, session, "CONTROL", args)
 		assertToolError(t, refusal, "worker_session.conflict", false)
 		details := refusal.StructuredContent.(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
 		if details["upstreamCode"] != "UNSUPPORTED" || details["phase"] != "VALIDATION" {
@@ -157,9 +157,9 @@ func runRealHostControls(t *testing.T, process support.Process) {
 			t.Fatalf("sibling state: %v", peer)
 		}
 	}
-	unknown := callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "missing-runtime-worker"})
+	unknown := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "missing-runtime-worker"})
 	assertToolError(t, unknown, "worker_session.not_found", false)
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", map[string]any{"workerSessionId": "missing-runtime-worker", "operation": "CANCEL"}), "worker_session.not_found", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", map[string]any{"workerSessionId": "missing-runtime-worker", "operation": "CANCEL"}), "worker_session.not_found", false)
 	assertFleetPages(t, ctx, session, host)
 	assertFactoryWithoutReference(t, ctx, session, host, dir, runner)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "sibling", "operation": "TERMINATE"})
@@ -447,7 +447,7 @@ func runRealHostHistory(t *testing.T, process support.Process) {
 	if len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != "history-b" || workers[0].(map[string]any)["state"] != "RUNNING" {
 		t.Fatalf("frozen continuation = %v", frozen)
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.list", map[string]any{"history": "archived", "scope": "direct", "nextToken": token}), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "LIST", map[string]any{"history": "archived", "scope": "direct", "nextToken": token}), "worker_session.invalid_request", false)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "history-c", "operation": "TERMINATE"})
 	waitControlSignal(t, laterDone)
 }
@@ -553,12 +553,12 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	// This epoch-only opening has no affirmative OS death witness. It cannot
 	// acquire stop authority or the witnessed OWNER_LOST refusal semantics.
 	for _, action := range []string{"cancel", "terminate"} {
-		assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.control", map[string]any{"workerSessionId": "lost-worker", "operation": strings.ToUpper(action)}), "worker_session.not_found", false)
+		assertToolError(t, callAction(t, recoveredCtx, recoveredSession, "CONTROL", map[string]any{"workerSessionId": "lost-worker", "operation": strings.ToUpper(action)}), "worker_session.not_found", false)
 		assertUnwitnessedHistoryControlRefused(t, reopened, "lost-worker", action)
 	}
 	assertJSONEqual(t, selected, getHost(t, reopened.URL()+"/worker-sessions/lost-worker"))
 	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
-	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.read", map[string]any{"workerSessionId": "damaged-worker"}), "worker_session.internal_error", false)
+	assertToolError(t, callAction(t, recoveredCtx, recoveredSession, "READ", map[string]any{"workerSessionId": "damaged-worker"}), "worker_session.internal_error", false)
 	assertHistoryReadFailure(t, reopened, "damaged-worker", http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
 	// An independent profile has no captured identity and cannot consume either
 	// a fleet snapshot or log cursor belonging to the recovered profile.
@@ -566,10 +566,10 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	foreign := support.StartFunctionalAPIServer(t, cfg)
 	foreignSession, foreignCtx := startMCP(t, process, foreign.URL())
 	assertHistoryReadFailure(t, foreign, "lost-worker", http.StatusNotFound, "NOT_FOUND")
-	assertToolError(t, callTool(t, foreignCtx, foreignSession, "you.worker_session.read", map[string]any{"workerSessionId": "lost-worker"}), "worker_session.not_found", false)
+	assertToolError(t, callAction(t, foreignCtx, foreignSession, "READ", map[string]any{"workerSessionId": "lost-worker"}), "worker_session.not_found", false)
 	page := callWorker(t, recoveredCtx, recoveredSession, "list", map[string]any{"history": "archived", "limit": 1})["result"].(map[string]any)
 	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
-	assertToolError(t, callTool(t, foreignCtx, foreignSession, "you.worker_session.list", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, foreignCtx, foreignSession, "LIST", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
 }
 
 func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPIServer, ctx context.Context, session *mcp.ClientSession, page map[string]any) {

@@ -12,7 +12,7 @@ import sys
 PLAN_RULES = (
     ('slice', 'Plan at most ONE independently mergeable slice per lane.'),
     ('stories', 'at most 2 stories'),
-    ('criteria', 'about 8 criteria total'),
+    ('criteria', 'about 8 unique process-owned criteria total'),
     ('lines', 'about 2,000 changed lines (added plus deleted)'),
     ('bytes', 'below 20 KB (20,000 UTF-8 bytes)'),
     ('first-slice', 'retain the first correct slice'),
@@ -145,6 +145,67 @@ LEAD_RULES = (
     ('atomic', 'rename atomically'),
 )
 
+OWNERSHIP_RULES = {
+    'plan': (
+        ('explicit', 'Every project and story criterion MUST carry an explicit `owner`: `process` or `review` in new planner output'),
+        ('categories', 'Hosted/terminal CI results, merge, independent or post-merge validation, and reviewer judgment are review-owned'),
+        ('direct-proof', 'Direct implementation proof and the implementation-stage delivery criterion are process-owned'),
+        ('composite', 'A composite immutable criterion requiring review evidence is review-owned as a whole; retain its implementation work and later gates'),
+        ('default', 'Missing owner defaults to process, including legacy string criteria'),
+        ('invalid', 'Invalid explicit owners (unknown, null or non-string) are malformed metadata and never bypass a blocker'),
+        ('cap', 'Count only process-owned criteria toward the criterion cap, once by criterion ID'),
+    ),
+    'process': (
+        ('gate', 'Set `decision` to `ACCEPTED` only when every retained process-owned criterion is passes:true'),
+        ('default', 'Missing owner defaults to process, including legacy string criteria'),
+        ('invalid', 'Invalid explicit owners never bypass a blocker'),
+        ('false-process', 'A false process-owned criterion prevents ACCEPTED'),
+        ('no-review-pass', 'Process never marks review-owned criteria true'),
+        ('false-review', 'Unproved review-owned criteria remain false and do not block process ACCEPTED'),
+        ('handoff', 'List their IDs and later gate IDs in envelope feedback and the PR handoff as "owned by review"'),
+        ('story', 'Story passes reports retained process completion only, never review proof'),
+        ('empty', 'Empty or all-review criterion sets still require complete retained implementation, a pushed final head, an open non-draft PR, CI started, auto-merge armed and blocking feedback addressed'),
+        ('blockers', 'An unresolved blocker or pending final push prevents ACCEPTED'),
+    ),
+    'review': (
+        ('default', 'Missing owner defaults to process, including legacy string criteria'),
+        ('invalid', 'Invalid explicit owners never bypass a blocker'),
+        ('independent', 'Independently evaluate review-owned criteria using current-PR and current-head evidence'),
+        ('story', 'a process story passes flag is not review proof'),
+        ('checks', "ownership changes the handoff gate, never review's checks"),
+        ('reject-id', 'For actionable failures, return REJECTED naming the specific failing criterion ID, evidence and smallest correction'),
+        ('holds', 'Pending external proof uses existing holds and later gates'),
+        ('later', 'Post-merge or integrated Project validation stays with its named later gate'),
+    ),
+}
+
+# Reject known contradictory gates even when the correct clause also appears.
+# This is a bounded text diagnostic, not a semantic classifier or PRD evaluator.
+OWNERSHIP_CONFLICTS = {
+    'plan': (
+        ('all-criteria-cap', r'about 8 criteria total'),
+    ),
+    'process': (
+        ('all-criteria-gate', r'(?:all|every)(?: other)? retained (?:current-slice items|(?:story and )?acceptance criteri(?:a|on)|criteri(?:a|on))(?: in the PRD)? (?:have been marked as passes:true|(?:is |are )?pass(?:ing|es|es:true)|must (?:pass|be (?:true|satisfied)))'),
+        ('all-criteria-gate', r'Every retained criterion and blocker still requires completion'),
+        ('review-pass', r'(?:must|always) mark review-owned criteria (?:true|passes:true)'),
+    ),
+}
+
+
+def check_ownership_policy(plan, process, review):
+    """Diagnose owner clauses in controlled text; never compute PRD status."""
+    diagnostics = []
+    for role, source in (('plan', plan), ('process', process), ('review', review)):
+        normalized = ' '.join(source.split())
+        for name, clause in OWNERSHIP_RULES[role]:
+            if clause not in normalized:
+                diagnostics.append(f'{role}:owner-{name}: missing policy clause: {clause}')
+        for name, pattern in OWNERSHIP_CONFLICTS.get(role, ()):
+            if re.search(pattern, normalized, re.IGNORECASE):
+                diagnostics.append(f'{role}:owner-{name}: conflicting ownership instruction; remove or reconcile it')
+    return diagnostics
+
 
 def check_policy(plan, process):
     """Return actionable diagnostics for supplied prompt strings, without I/O."""
@@ -175,6 +236,38 @@ def check_mailbox_policy(plan, process, lead):
     return diagnostics
 
 
+LOOPBACK_RULES = {
+    'ideafy': (
+        ('stable-path', 'docs/temp/projects/<project>/proposals/<loopback-name>.json in the main checkout.'),
+        ('handoff', 'Dry-run the saved proposal in the explicit Factory Session; submit no Project children.'),
+        ('ownership', 'Return ACCEPTED with the proposal path in output; admission ownership alone never causes FAILED.'),
+        ('errors', 'Write or dry-run errors remain FAILED with truthful evidence and the saved proposal path when available.'),
+        ('untagged', 'For untagged loopbacks, retain dry-run, self-submission and verified receipt or accepted hold.'),
+    ),
+    'project-lead': (
+        ('authority', 'Review tagged loopback proposals against immutable authority and live ownership before admission.'),
+        ('dedup', 'Deduplicate proposals by stable request ID and origin Work ID across wakes and check-ins.'),
+        ('resolution', 'Admit ready fixes with explicit-session dry-run, submission and verified receipt; otherwise record reason and release event in progress.md.'),
+        ('controls', 'Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.'),
+    ),
+    'project-lead-wake': (
+        ('origin', 'For a thoughts loopback proposal, inspect the exact origin Work ID, retained payload, _last_output and failure Events.'),
+        ('resolution', "Apply the lead's Loopback proposals admit-or-record policy in this same pass,"),
+    ),
+}
+
+
+def check_loopback_policy(prompts):
+    """Diagnose supplied handoff/resolution text; no routing or agent proof."""
+    diagnostics = []
+    for owner, rules in LOOPBACK_RULES.items():
+        normalized = ' '.join(prompts.get(owner, '').split())
+        for name, clause in rules:
+            if clause not in normalized:
+                diagnostics.append(f'{owner}:loopback-{name}: missing policy clause: {clause}')
+    return diagnostics
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', nargs='?', type=Path, default=Path('.'))
@@ -188,11 +281,17 @@ def main(argv=None):
             owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
             for owner in RECOVERY_RULES
         }
+        loopback = {
+            owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
+            for owner in LOOPBACK_RULES
+        }
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
     diagnostics = (check_policy(*texts[:2]) + check_mailbox_policy(*texts)
-                   + check_recovery_policy(recovery))
+                   + check_recovery_policy(recovery)
+                   + check_ownership_policy(texts[0], texts[1], recovery['review'])
+                   + check_loopback_policy(loopback))
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1

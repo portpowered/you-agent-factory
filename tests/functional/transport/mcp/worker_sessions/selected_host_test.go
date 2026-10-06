@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -33,12 +32,43 @@ const interruptJSON = `{"accepted":true,"phase":"SUCCESSOR_ADMISSION","requestId
 
 func TestWorkerSessionMCPParity(t *testing.T) {
 	t.Run("parity", runSelectedHostScenarios)
-	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control",
+	functionalevidence.Covers(t, "mcp/mcp.tool.you.subagent",
 		"cli/you.worker-sessions.terminate", "rest/terminateWorkerSession")
 }
 
 func runSelectedHostScenarios(t *testing.T) {
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: subagentScenarioRunner{t: t}})
+	t.Run("run subagent", func(t *testing.T) {
+		t.Parallel()
+		workDir := filepath.Join(t.TempDir(), "run-subagent")
+		home := filepath.Join(workDir, "home")
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+		source := support.InstallPackagedFactoryWithProcess(t, process, env, workDir, "@you/subagent")
+		support.CreateNamedFactoryAtRootWithProcess(t, process, env, workDir, filepath.Join(workDir, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
+		session, ctx, _ := startCancellableMCP(t, process, "http://127.0.0.1:1", workDir)
+		for _, action := range []string{"", "RUN"} {
+			args := map[string]any{"prompt": "Return the controlled answer", "provider": "codex", "model": "test-model", "workingRoot": workDir}
+			if action != "" {
+				args["action"] = action
+			}
+			result := callTool(t, ctx, session, "you.subagent", args)
+			if result.IsError || len(result.Content) != 1 || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "controlled subagent answer") {
+				t.Fatalf("RUN action=%q result=%#v", action, result)
+			}
+		}
+	})
+	t.Run("unknown action has no effects", func(t *testing.T) {
+		t.Parallel()
+		host := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Error("unknown action reached selected host")
+		}))
+		t.Cleanup(host.Close)
+		session, ctx := startMCP(t, process, host.URL)
+		assertToolError(t, callTool(t, ctx, session, "you.subagent", map[string]any{"action": "UNKNOWN", "prompt": "must not run"}), "worker_session.invalid_request", false)
+	})
 	t.Run("real host exact target controls", func(t *testing.T) {
 		t.Parallel()
 		runRealHostControls(t, process)
@@ -107,12 +137,40 @@ func runSelectedHostScenarios(t *testing.T) {
 	})
 	t.Run("discovery and reads", func(t *testing.T) {
 		t.Parallel()
-		host := httptest.NewServer(http.HandlerFunc(readHost))
+		queries := make(chan string, 2)
+		host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/worker-sessions" && r.URL.Query().Has("history") {
+				if r.Method != http.MethodGet || r.URL.Query().Get("scope") != "all" {
+					t.Errorf("documented LIST request = %s %s", r.Method, r.URL)
+				}
+				queries <- r.URL.Query().Get("history")
+			}
+			readHost(w, r)
+		}))
 		t.Cleanup(host.Close)
+		args := packagedOperationsListInput(t, process)
 		session, ctx := startMCP(t, process, host.URL)
 		assertWorkerDiscovery(t, ctx, session)
-		listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "all"})
-		assertJSONEqual(t, listed["result"], getHost(t, host.URL+"/worker-sessions"))
+		for _, history := range []string{"archived", "all"} {
+			result := callTool(t, ctx, session, "you.subagent", args)
+			if result.IsError || len(result.Content) != 1 {
+				t.Fatalf("packaged LIST history=%s: %#v", history, result)
+			}
+			var listed map[string]any
+			if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &listed); err != nil {
+				t.Fatal(err)
+			}
+			assertJSONEqual(t, listed["result"], getHost(t, host.URL+"/worker-sessions"))
+			select {
+			case got := <-queries:
+				if got != history {
+					t.Fatalf("selected host history=%q, want %q", got, history)
+				}
+			default:
+				t.Fatal("documented LIST did not query the selected host")
+			}
+			delete(args, "history")
+		}
 		for _, view := range []string{"summary", "transcript", "events"} {
 			result := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "host-worker", "view": view})["result"].(map[string]any)
 			assertJSONEqual(t, result["session"], getHost(t, host.URL+"/worker-sessions/host-worker"))
@@ -159,10 +217,10 @@ func runSelectedHostScenarios(t *testing.T) {
 		for _, mode := range []any{"", "unknown", "Provider", nil, 1, true} {
 			args := interruptPayload("replacement")
 			args["workerSessionId"], args["operation"], args["resumeMode"] = "source", "INTERRUPT", mode
-			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+			assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.invalid_request", false)
 		}
 		for _, op := range []string{"CANCEL", "TERMINATE", "KILL"} {
-			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", map[string]any{"workerSessionId": "source", "operation": op, "resumeMode": "recorded"}), "worker_session.invalid_request", false)
+			assertToolError(t, callAction(t, ctx, session, "CONTROL", map[string]any{"workerSessionId": "source", "operation": op, "resumeMode": "recorded"}), "worker_session.invalid_request", false)
 		}
 	})
 	t.Run("typed errors and unavailable host", func(t *testing.T) {
@@ -180,20 +238,20 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Cleanup(host.Close)
 		session, ctx := startMCP(t, process, host.URL)
 		for id, code := range map[string]string{"missing": "worker_session.not_found", "denied": "worker_session.permission_denied"} {
-			result := callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": id})
+			result := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id})
 			assertToolError(t, result, code, false)
 		}
-		assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "unavailable"}), "worker_session.unavailable", true)
+		assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "unavailable"}), "worker_session.unavailable", true)
 		for _, mode := range []string{"", "provider", "recorded"} {
 			args := interruptModePayload("replacement", mode)
 			args["workerSessionId"], args["operation"] = "missing", "INTERRUPT"
-			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+			assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.not_found", false)
 		}
 		host.Close()
 		for _, mode := range []string{"", "provider", "recorded"} {
 			args := interruptModePayload("replacement", mode)
 			args["workerSessionId"], args["operation"] = "host-worker", "INTERRUPT"
-			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.host_unavailable", true)
+			assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.host_unavailable", true)
 		}
 		for _, tool := range []string{"list", "read", "control"} {
 			args := map[string]any{}
@@ -203,12 +261,21 @@ func runSelectedHostScenarios(t *testing.T) {
 			if tool == "control" {
 				args["operation"] = "CANCEL"
 			}
-			assertToolError(t, callTool(t, ctx, session, "you.worker_session."+tool, args), "worker_session.host_unavailable", true)
+			assertToolError(t, callAction(t, ctx, session, strings.ToUpper(tool), args), "worker_session.host_unavailable", true)
 		}
 	})
 }
 
 type rejectLocalProvider struct{ t *testing.T }
+
+type subagentScenarioRunner struct{ t *testing.T }
+
+func (r subagentScenarioRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if strings.Contains(filepath.ToSlash(req.WorkDir)+"/", "/run-subagent/") {
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("controlled subagent answer")}, nil
+	}
+	return (rejectLocalProvider{t: r.t}).Run(ctx, req)
+}
 
 func (r rejectLocalProvider) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.t.Error("selected-host MCP executed a local provider")
@@ -221,7 +288,7 @@ func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSe
 	return session, ctx
 }
 
-func startCancellableMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
+func startCancellableMCP(t *testing.T, process support.Process, host string, workspace ...string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
 	t.Helper()
 	// The session spans host shutdown/recovery and independent profile setup.
 	// Bound individual protocol operations, rather than expiring the transport
@@ -231,6 +298,9 @@ func startCancellableMCP(t *testing.T, process support.Process, host string) (*m
 	stdoutRead, stdoutWrite := io.Pipe()
 	done := make(chan error, 1)
 	workDir := t.TempDir()
+	if len(workspace) > 0 {
+		workDir = workspace[0]
+	}
 	homeDir := filepath.Join(workDir, "home")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -268,6 +338,34 @@ func startCancellableMCP(t *testing.T, process support.Process, host string) (*m
 	return session, ctx, cancel
 }
 
+func packagedOperationsListInput(t *testing.T, process support.Process) map[string]any {
+	t.Helper()
+	workDir := t.TempDir()
+	home := filepath.Join(workDir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := process.Execute(root.Input{
+		Args: []string{"you", "docs", "operations"}, Context: context.Background(),
+		Env: append(os.Environ(), "HOME="+home, "USERPROFILE="+home), WorkingDirectory: workDir,
+		Stdin: strings.NewReader(""), Stdout: &output, Stderr: io.Discard,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range strings.Split(output.String(), "```json\n")[1:] {
+		var args map[string]any
+		if err := json.Unmarshal([]byte(strings.SplitN(block, "```", 2)[0]), &args); err == nil && args["action"] == "LIST" {
+			if args["history"] != "archived" || args["scope"] != "all" {
+				t.Fatalf("packaged archived LIST input = %v", args)
+			}
+			return args
+		}
+	}
+	t.Fatal("packaged operations has no JSON LIST example")
+	return nil
+}
+
 func readHost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
@@ -300,9 +398,19 @@ func callTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, nam
 	return result
 }
 
+func callAction(t *testing.T, ctx context.Context, session *mcp.ClientSession, action string, args map[string]any) *mcp.CallToolResult {
+	t.Helper()
+	input := make(map[string]any, len(args)+1)
+	for key, value := range args {
+		input[key] = value
+	}
+	input["action"] = action
+	return callTool(t, ctx, session, "you.subagent", input)
+}
+
 func callWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, tool string, args map[string]any) map[string]any {
 	t.Helper()
-	result := callTool(t, ctx, session, "you.worker_session."+tool, args)
+	result := callAction(t, ctx, session, strings.ToUpper(tool), args)
 	if result.IsError || len(result.Content) != 1 {
 		t.Fatalf("%s result: %#v", tool, result)
 	}
@@ -397,17 +505,20 @@ func assertWorkerDiscovery(t *testing.T, ctx context.Context, session *mcp.Clien
 	if err != nil {
 		t.Fatal(err)
 	}
-	var names []string
+	found := false
 	for _, tool := range result.Tools {
 		if strings.HasPrefix(tool.Name, "you.worker_session.") {
-			names = append(names, tool.Name)
+			t.Fatalf("retired tool remains discoverable: %s", tool.Name)
+		}
+		if tool.Name == "you.subagent" {
+			found = true
 			if tool.Annotations == nil {
 				t.Fatalf("missing hints: %s", tool.Name)
 			}
 		}
 	}
-	if !reflect.DeepEqual(names, []string{"you.worker_session.control", "you.worker_session.list", "you.worker_session.read"}) {
-		t.Fatalf("Worker Session discovery: %v", names)
+	if !found || len(result.Tools) != 11 {
+		t.Fatalf("subagent discovery: found=%v tools=%d", found, len(result.Tools))
 	}
 }
 
@@ -423,7 +534,7 @@ func runHostCancellation(t *testing.T, process support.Process) {
 	session, ctx, cancel := startCancellableMCP(t, process, host.URL)
 	done := make(chan error, 1)
 	go func() {
-		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.worker_session.list", Arguments: map[string]any{}})
+		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "LIST"}})
 		done <- err
 	}()
 	waitControlSignal(t, started)

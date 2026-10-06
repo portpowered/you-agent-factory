@@ -213,7 +213,13 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 	for _, topic := range docsSmokeTopics {
 		topic := topic
 		t.Run(topic.name, func(t *testing.T) {
+			if topic.name == "operations" {
+				t.Parallel()
+			}
 			output := executeDocsSmokeCommand(t, workingDir, "docs", topic.name)
+			if topic.name == "operations" {
+				assertOperationsHistoryGuidance(t, output)
+			}
 			if !strings.Contains(output, topic.heading) {
 				t.Fatalf("you-agent-factory docs %s missing heading %q", topic.name, topic.heading)
 			}
@@ -238,6 +244,28 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 				}
 			}
 		})
+	}
+}
+
+func assertOperationsHistoryGuidance(t *testing.T, output string) {
+	t.Helper()
+	for _, marker := range []string{
+		"MCP `you.subagent` tool with `action: \"LIST\"`",
+		"The LIST action defaults `history` to `all`.",
+		"you --server http://localhost:7437 server mcp",
+		`{"action":"LIST","history":"archived","scope":"all"}`,
+		"worker-sessions list --history active",
+		"`--history archived`", "`--history all`",
+		"Omission preserves the process-local compatibility view.",
+		"History filters require fleet-wide listing without `--work-id`.",
+		"Restart from the first page when a cursor expires.",
+	} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("packaged operations missing history guidance %q", marker)
+		}
+	}
+	if strings.Contains(output, "The MCP `you.worker_session.list` tool") {
+		t.Fatal("packaged operations still instructs use of the retired MCP tool")
 	}
 }
 
@@ -276,6 +304,10 @@ func executeDocsSmokeCommandResult(
 		append([]string{"you"}, args...),
 	)
 	inputs.WorkingDirectory = workingDir
+	if len(args) == 2 && args[0] == "docs" && args[1] == "operations" {
+		home := t.TempDir()
+		inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	}
 	err := process.Execute(inputs.Input)
 	return inputs.Stdout(), err
 }

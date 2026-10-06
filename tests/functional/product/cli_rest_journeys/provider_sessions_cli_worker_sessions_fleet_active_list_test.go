@@ -239,9 +239,8 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 		}
 		assertActiveFleetUsage(t, selected, "UNAVAILABLE")
 	}
-	// The terminal sibling retains captured usage and the associated transcript
-	// envelope. Explicit transcript reads still cross the optional native edge
-	// during the compatibility interval; prove the fault on that boundary.
+	// The terminal sibling's transcript uses capture even when its native file
+	// is denied; preserve ordered content and exact association.
 	f.providerFiles.mu.Lock()
 	if f.providerFiles.blockedCalls != 0 {
 		f.providerFiles.mu.Unlock()
@@ -249,18 +248,21 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 	}
 	f.providerFiles.blockedPath = filepath.Clean(filepath.Join(f.homeDir, ".codex", "sessions", "2026", "07", "27", "rollout-"+workerSessionsCodexSuccessID+".jsonl"))
 	f.providerFiles.mu.Unlock()
-	inputs, err := executeCLIExpectError(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
+	inputs := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
 		"worker-sessions", "read", "--session", terminalOwner, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
-	if err == nil || !strings.Contains(inputs.Stderr()+inputs.Stdout(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
-		t.Fatalf("denied associated transcript = %v %s %s", err, inputs.Stdout(), inputs.Stderr())
+	var transcript transcriptJSON
+	decodeCLIJSON(t, inputs, &transcript)
+	if transcript.ProviderSession.ID != workerSessionsCodexSuccessID || transcript.State != "COMPLETED" || len(transcript.Entries) != 2 ||
+		transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Type != "assistant_message" || transcript.Entries[1].Text != "Codex fixture answer COMPLETE" {
+		t.Fatalf("denied native file changed captured transcript: %#v", transcript)
 	}
 	f.providerFiles.mu.Lock()
 	blockedCalls := f.providerFiles.blockedCalls
 	f.providerFiles.blockedPath = ""
 	f.providerFiles.mu.Unlock()
 	assertSuccessfulWorkerSession(t, ctx, f.process, env, c.factoryDir, f.baseURL, terminalOwner, terminalWork)
-	if blockedCalls == 0 {
-		t.Fatal("optional-loss scenario never reached the exact owned filesystem fault")
+	if blockedCalls != 0 {
+		t.Fatalf("captured transcript attempted denied native storage %d times", blockedCalls)
 	}
 }
 

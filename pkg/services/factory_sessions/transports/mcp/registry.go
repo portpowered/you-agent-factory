@@ -117,7 +117,8 @@ func DiscoverTools() []ToolDefinition {
 func subagentTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolSubagent,
-		Description: "Run one bounded subagent using the packaged @you/subagent Factory. " +
+		Description: "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. " +
+			"RUN uses the packaged @you/subagent Factory. " +
 			"Omitted provider, model, and reasoning effort use operator and provider defaults. " +
 			"On success, the live Factory Session is closed before return; the sessionId is for log correlation, not you.factory_session.get.",
 		InputSchema: subagentInputSchema(),
