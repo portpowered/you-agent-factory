@@ -115,13 +115,25 @@ terminal CI, resolving a conflict that has not been reported, or merging.
 
 Implementation is ready to hand off only when:
 
-- every task criterion is satisfied or has an explicitly permitted waiver;
+- every retained process-owned criterion is satisfied or has an explicitly
+  permitted waiver (missing owner defaults to process, including legacy strings);
+- retained implementation work is complete; invalid explicit owners, unresolved
+  blockers and pending final pushes never bypass the gate;
 - the behavioral witness has been exercised at the declared level;
 - affected focused tests and quality gates have passed;
 - generated artifacts are synchronized;
 - the final implementation head is pushed;
-- the PR is open and CI has started on that head; and
+- the PR is open and non-draft, CI has started on that head, and auto-merge is armed; and
 - all currently known blocking review feedback has been addressed.
+
+Process **MUST NOT** mark review-owned criteria true or reassign owners to escape
+an obligation. Unproved review criteria stay false and are listed by ID and later
+gate as "owned by review" in the PR handoff and decision feedback. Story `passes`
+reports retained process completion only, not independent review proof. Empty or
+all-review criterion sets still require all delivery prerequisites above.
+Review-owned evidence alone is not a reason for another process visit. The only
+evidence waiver remains the supported unavailable-browser rule; review retains
+waiver judgment. Independent validation, terminal CI and merge remain review-owned.
 
 After that point, implementation **MUST** stop and must not poll or re-check CI.
 CI-run evidence belongs in a PR conversation comment and never in a commit.

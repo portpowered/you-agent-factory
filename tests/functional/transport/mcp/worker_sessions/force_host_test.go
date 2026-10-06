@@ -107,7 +107,7 @@ func assertForcePersistenceError(t *testing.T, host *support.FunctionalAPIServer
 	case "cli":
 		assertForceCLIError(t, host, id, attempt)
 	case "mcp":
-		result := callTool(t, ctx, session, "you.worker_session.control",
+		result := callAction(t, ctx, session, "CONTROL",
 			map[string]any{"operation": "KILL", "workerSessionId": id, "requestId": "kill-" + id, "expectedAttemptId": attempt})
 		assertToolError(t, result, "worker_session.unavailable", true)
 		assertNoForceSecret(t, result)
@@ -412,7 +412,7 @@ func assertForeignForceRefused(t *testing.T, process support.Process, source *su
 		}
 		assertForceCLIErrorCode(t, foreign, id, "NOT_FOUND", "--force", "--request-id", "kill-"+id, "--expected-attempt-id", attempt)
 		args := map[string]any{"operation": "KILL", "workerSessionId": id, "requestId": "kill-" + id, "expectedAttemptId": attempt}
-		assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+		assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.not_found", false)
 	}
 	after := getHost(t, source.URL()+"/worker-sessions/force-sibling").(map[string]any)
 	for _, field := range []string{"workerSessionId", "attemptId", "state", "terminalCause", "endedAt"} {
@@ -465,13 +465,13 @@ func (saved completedForceControl) assertRecovered(t *testing.T, host *support.F
 	payload["expectedAttemptId"] = "changed-attempt"
 	postHostJSON(t, ctx, endpoint, payload, http.StatusConflict)
 	args["expectedAttemptId"] = "changed-attempt"
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	assertForceCLIErrorCode(t, host, saved.id, "WORKER_SESSION_CONTROL_CONFLICT",
 		"--force", "--request-id", "kill-"+saved.id, "--expected-attempt-id", "changed-attempt")
 	payload["expectedAttemptId"], payload["requestId"] = saved.attempt, "fresh-"+saved.id
 	postHostJSON(t, ctx, endpoint, payload, http.StatusNotFound)
 	args["expectedAttemptId"], args["requestId"] = saved.attempt, "fresh-"+saved.id
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.not_found", false)
 	assertForceCLIErrorCode(t, host, saved.id, "NOT_FOUND",
 		"--force", "--request-id", "fresh-"+saved.id, "--expected-attempt-id", saved.attempt)
 }
@@ -597,7 +597,7 @@ func (f forceFailureFixture) control(t *testing.T, transport, id, attempt string
 		result = executeForceCLI(t, f.host, id, attempt).(map[string]any)
 	case "mcp":
 		if failed {
-			failure := callTool(t, f.ctx, f.session, "you.worker_session.control", args)
+			failure := callAction(t, f.ctx, f.session, "CONTROL", args)
 			assertToolError(t, failure, "worker_session.unavailable", true)
 			return
 		}
@@ -633,11 +633,11 @@ func assertForceInputsRejected(t *testing.T, host *support.FunctionalAPIServer, 
 	assertForceCLIErrorCode(t, host, id, "WORKER_SESSION_CONTROL_CONFLICT",
 		"--force", "--request-id", "stale-"+id, "--expected-attempt-id", "stale")
 	stale := map[string]any{"operation": "KILL", "workerSessionId": id, "requestId": "stale-" + id, "expectedAttemptId": "stale"}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", stale), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", stale), "worker_session.conflict", false)
 	postHostJSON(t, ctx, endpoint, map[string]any{"force": true, "requestId": "invalid-" + id}, http.StatusBadRequest)
 	assertForceCLIErrorCode(t, host, id, "WORKER_SESSION_CONTROL_INVALID", "--request-id", "invalid-"+id)
 	invalid := map[string]any{"operation": "KILL", "workerSessionId": id, "expectedAttemptId": "stale"}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", invalid), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", invalid), "worker_session.invalid_request", false)
 }
 
 func assertNoForceSecret(t *testing.T, result any) {

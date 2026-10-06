@@ -12,7 +12,7 @@ spec.loader.exec_module(policy)
 
 PLAN = '''
 Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 criteria total, and a PR under about 2,000 changed lines (added plus deleted).
+Use at most 2 stories, about 8 unique process-owned criteria total, and a PR under about 2,000 changed lines (added plus deleted).
 Keep JSON below 20 KB (20,000 UTF-8 bytes), including status updates.
 For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
@@ -54,8 +54,112 @@ reconcile outstanding forwarded requests and operator responses on every visit.
 Recheck the live Session, lane Work ID, project tag and request mtime_ns; rename atomically.
 '''
 
+# Explicit controlled fixtures: tests do not read authored prompt files or
+# synthesize a process decision engine from criterion dictionaries.
+OWNER_PLAN = '''
+Every project and story criterion MUST carry an explicit `owner`: `process` or
+`review` in new planner output. Hosted/terminal CI results, merge, independent
+or post-merge validation, and reviewer judgment are review-owned.
+Direct implementation proof and the implementation-stage delivery criterion are process-owned.
+A composite immutable criterion requiring review evidence is review-owned as a whole;
+retain its implementation work and later gates.
+Missing owner defaults to process, including legacy string criteria.
+Invalid explicit owners (unknown, null or non-string) are malformed metadata and never bypass a blocker.
+Count only process-owned criteria toward the criterion cap, once by criterion ID.
+'''
+OWNER_PROCESS = '''
+Set `decision` to `ACCEPTED` only when every retained process-owned criterion is passes:true.
+Missing owner defaults to process, including legacy string criteria.
+Invalid explicit owners never bypass a blocker.
+A false process-owned criterion prevents ACCEPTED.
+Process never marks review-owned criteria true.
+Unproved review-owned criteria remain false and do not block process ACCEPTED.
+List their IDs and later gate IDs in envelope feedback and the PR handoff as "owned by review".
+Story passes reports retained process completion only, never review proof.
+Empty or all-review criterion sets still require complete retained implementation,
+a pushed final head, an open non-draft PR, CI started, auto-merge armed and blocking feedback addressed.
+An unresolved blocker or pending final push prevents ACCEPTED.
+'''
+OWNER_REVIEW = '''
+Missing owner defaults to process, including legacy string criteria.
+Invalid explicit owners never bypass a blocker.
+Independently evaluate review-owned criteria using current-PR and current-head evidence;
+a process story passes flag is not review proof.
+Recheck process claims: ownership changes the handoff gate, never review's checks.
+For actionable failures, return REJECTED naming the specific failing criterion ID,
+evidence and smallest correction.
+Pending external proof uses existing holds and later gates.
+Post-merge or integrated Project validation stays with its named later gate.
+'''
+
 
 class LanePromptPolicyTest(unittest.TestCase):
+    def test_p1_p3_complete_ownership_and_false_review_handoff_clauses(self):
+        self.assertEqual(policy.check_ownership_policy(OWNER_PLAN, OWNER_PROCESS, OWNER_REVIEW), [])
+
+    def test_p2_each_planner_ownership_clause_has_specific_diagnostic(self):
+        source = ' '.join(OWNER_PLAN.split())
+        for name, clause in policy.OWNERSHIP_RULES['plan']:
+            with self.subTest(name=name):
+                self.assertIn(clause, source)
+                results = policy.check_ownership_policy(source.replace(clause, ''), OWNER_PROCESS, OWNER_REVIEW)
+                self.assertEqual(len(results), 1, results)
+                self.assertTrue(results[0].startswith(f'plan:owner-{name}: missing policy clause:'), results)
+
+    def test_p4_each_process_gate_clause_has_specific_diagnostic(self):
+        source = ' '.join(OWNER_PROCESS.split())
+        for name, clause in policy.OWNERSHIP_RULES['process']:
+            with self.subTest(name=name):
+                self.assertIn(clause, source)
+                results = policy.check_ownership_policy(OWNER_PLAN, source.replace(clause, ''), OWNER_REVIEW)
+                self.assertEqual(len(results), 1, results)
+                self.assertTrue(results[0].startswith(f'process:owner-{name}: missing policy clause:'), results)
+
+    def test_p4_universal_gates_conflict_even_beside_correct_gate(self):
+        cases = (
+            ('all retained current-slice items in the PRD have been marked as passes:true', 'all-criteria-gate'),
+            ('Every retained criterion and blocker still requires completion.', 'all-criteria-gate'),
+            ('every retained story and acceptance criterion is passing', 'all-criteria-gate'),
+            ('all retained criteria must pass', 'all-criteria-gate'),
+            ('every other retained story and acceptance criterion is passing', 'all-criteria-gate'),
+            ('You must mark review-owned criteria true.', 'review-pass'),
+        )
+        for clause, name in cases:
+            with self.subTest(clause=clause):
+                results = policy.check_ownership_policy(OWNER_PLAN, OWNER_PROCESS + clause, OWNER_REVIEW)
+                self.assertEqual(results, [f'process:owner-{name}: conflicting ownership instruction; remove or reconcile it'])
+
+    def test_p5_each_independent_review_clause_has_specific_diagnostic(self):
+        source = ' '.join(OWNER_REVIEW.split())
+        for name, clause in policy.OWNERSHIP_RULES['review']:
+            with self.subTest(name=name):
+                self.assertIn(clause, source)
+                results = policy.check_ownership_policy(OWNER_PLAN, OWNER_PROCESS, source.replace(clause, ''))
+                self.assertEqual(len(results), 1, results)
+                self.assertTrue(results[0].startswith(f'review:owner-{name}: missing policy clause:'), results)
+
+    def test_p6_legacy_and_empty_sets_do_not_exempt_delivery(self):
+        for clause, diagnostic in (
+            ('Missing owner defaults to process, including legacy string criteria', 'default'),
+            ('a pushed final head', 'empty'),
+            ('auto-merge armed', 'empty'),
+            ('blocking feedback addressed', 'empty'),
+        ):
+            with self.subTest(clause=clause):
+                source = ' '.join(OWNER_PROCESS.split()).replace(clause, '')
+                results = policy.check_ownership_policy(OWNER_PLAN, source, OWNER_REVIEW)
+                self.assertEqual(len(results), 1, results)
+                self.assertTrue(results[0].startswith(f'process:owner-{diagnostic}:'), results)
+
+    def test_p7_wrapped_ownership_clauses_are_accepted(self):
+        self.assertEqual(policy.check_ownership_policy(
+            OWNER_PLAN.replace(' ', '\n'), OWNER_PROCESS.replace(' ', '\n'),
+            OWNER_REVIEW.replace(' ', '\n')), [])
+
+    def test_p8_process_cap_rejects_legacy_universal_cap(self):
+        results = policy.check_ownership_policy(OWNER_PLAN + 'about 8 criteria total', OWNER_PROCESS, OWNER_REVIEW)
+        self.assertEqual(results, ['plan:owner-all-criteria-cap: conflicting ownership instruction; remove or reconcile it'])
+
     def test_mailbox_answer_forward_and_wrapped_policy(self):
         self.assertEqual(policy.check_mailbox_policy(MAILBOX, MAILBOX, LEAD), [])
         self.assertEqual(policy.check_mailbox_policy(MAILBOX.replace(' ', '\n'), MAILBOX, LEAD), [])
@@ -82,7 +186,7 @@ class LanePromptPolicyTest(unittest.TestCase):
     def test_missing_budgets_and_authority_have_specific_diagnostics(self):
         cases = (
             ('plan', 'at most 2 stories', 'stories'),
-            ('plan', 'about 8 criteria total', 'criteria'),
+            ('plan', 'about 8 unique process-owned criteria total', 'criteria'),
             ('plan', 'about 2,000 changed lines (added plus deleted)', 'lines'),
             ('plan', '20,000 UTF-8 bytes', 'bytes'),
             ('plan', 'only lead/operator admits them through existing routes', 'admission'),

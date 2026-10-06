@@ -659,6 +659,13 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 		return errors.New("Factory Session target execution service is unavailable")
 	case generateID == nil:
 		return errors.New("subagent request ID generator is unavailable")
+	default:
+		return validateSubagentValues(input)
+	}
+}
+
+func validateSubagentValues(input SubagentInput) error {
+	switch {
 	case strings.TrimSpace(input.Prompt) == "":
 		return fmt.Errorf("prompt is required")
 	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:

@@ -160,10 +160,11 @@ func TestKeyedRuntimeObservationReadsRetainSelectedScopeAndDirectCompatibility(t
 			metadata := observationMetadata()
 			metadata.factorySessionID = "recording-session"
 			registry.observations["recorded-worker"] = metadata
+			attachTranscriptCapture(registry, "recorded-worker", "recording-session", "hello")
 			result, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{
 				WorkerSessionID: "recorded-worker", FactorySessionID: scope,
 			})
-			if err != nil || result.WorkerSessionID != "recorded-worker" || projector.calls != 1 || projector.request.Session != observationProviderRef() {
+			if err != nil || result.WorkerSessionID != "recorded-worker" || projector.calls != 0 {
 				t.Fatalf("selected transcript = %+v, %v; provider calls=%d request=%+v", result, err, projector.calls, projector.request)
 			}
 		})
@@ -271,6 +272,7 @@ func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testin
 				metadata.factorySessionID = scope
 				registry.observations[id] = metadata
 			}
+			attachTranscriptCapture(registry, "worker-"+owner, owner, "hello")
 			ctx := context.Background()
 			got, err := registry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner})
 			if err != nil || got.WorkerSessionID != "worker-"+owner || got.FactorySessionID != owner {

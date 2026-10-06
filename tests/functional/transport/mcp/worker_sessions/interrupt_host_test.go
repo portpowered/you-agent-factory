@@ -62,6 +62,7 @@ func (r *interruptHostRunner) RunStreaming(ctx context.Context, req platformproc
 	if observer != nil {
 		end := bytes.IndexByte(r.output, '\n') + 1
 		observer(platformprocess.OutputStreamStdout, r.output[:end])
+		observer(platformprocess.OutputStreamStdout, []byte(`{"type":"item.completed","item":{"id":"captured-message","type":"agent_message","text":"captured public answer"}}`+"\n"))
 	}
 	r.started <- req
 	<-ctx.Done()
@@ -80,14 +81,14 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	if before["state"] != "RUNNING" || before["providerSessionAvailable"] != true {
 		t.Fatalf("streaming association not visible: %v", before)
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "source", "view": "transcript"}), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "source", "view": "transcript"}), "worker_session.conflict", false)
 	args := map[string]any{"workerSessionId": "source", "operation": "INTERRUPT", "successorWorkerSessionId": "successor", "replacementMessage": "replace the initial instruction"}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.invalid_request", false)
 	assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
 	args["requestId"] = "interrupt-request"
 	for _, invalid := range []any{"", "unknown", "Provider", nil, 1, true} {
 		args["resumeMode"] = invalid
-		assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+		assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.invalid_request", false)
 		assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
 		assertProviderCallCount(t, runner, 1)
 	}
@@ -107,7 +108,7 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	if mode == "recorded" {
 		args["resumeMode"] = "provider"
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	delete(args, "resumeMode")
 	if mode != "" {
 		args["resumeMode"] = mode
@@ -115,13 +116,10 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	args["replacementMessage"] = "changed immutable tuple"
 	// Changed accepted tuples retain their specific conflict meaning across
 	// transports rather than being classified as malformed requests.
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("changed immutable tuple", mode), http.StatusConflict)
-	// Live transcript compatibility still uses native readers until T8.
-	// Explicit-mode cells deny those readers and prove captured replay instead.
-	if mode == "" {
-		assertTerminalTranscriptParity(t, ctx, session, host)
-	}
+	// All modes read the committed public message with no native roots.
+	assertTerminalTranscriptParity(t, ctx, session, host)
 	assertTerminalReplayParity(t, ctx, session, host, "source")
 	listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"].(map[string]any)
 	workers := listed["sessions"].([]any)
@@ -181,6 +179,8 @@ func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host
 		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 		assertFactoryCLIParity(t, reopened, id, selected)
 		assertArchivedHostTiming(t, reopened, id)
+		transcript := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "transcript"})["result"].(map[string]any)["transcript"]
+		assertTranscriptEqual(t, transcript, getHost(t, reopened.URL()+"/worker-sessions/"+id+"/transcript"))
 	}
 	assertProviderCallCount(t, runner, 2)
 	if native.calls.Load() != 0 {
@@ -251,7 +251,7 @@ func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.
 func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter, denyNative ...bool) (*support.FunctionalAPIServer, *interruptHostRunner, string) {
 	t.Helper()
 	home := t.TempDir()
-	output := installNativeTranscript(t, home)
+	output := capturedProviderFixtureOutput(t)
 	runner := &interruptHostRunner{output: output, started: make(chan platformprocess.CommandRequest, 3), sourceStopped: make(chan struct{})}
 	dir := support.ScaffoldSingleStepFactory(t, "mcp-interrupt-host")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
@@ -314,7 +314,7 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process, mode str
 	admitInterruptSource(t, ctx, host.URL(), dir, runner)
 	args := interruptModePayload("replace the initial instruction", mode)
 	args["workerSessionId"], args["operation"] = "source", "INTERRUPT"
-	first := callTool(t, ctx, session, "you.worker_session.control", args)
+	first := callAction(t, ctx, session, "CONTROL", args)
 	assertToolError(t, first, "worker_session.unavailable", true)
 	waitControlSignal(t, runner.sourceStopped)
 	encoded, err := json.Marshal(first.StructuredContent)
@@ -329,7 +329,7 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process, mode str
 	if details["phase"] != "SUCCESSOR_ADMISSION" || details["sourceWorkerSessionId"] != "source" || details["successorWorkerSessionId"] != "successor" || details["upstreamCode"] != "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED" {
 		t.Fatalf("partial interrupt identity/code: %v", details)
 	}
-	retry := callTool(t, ctx, session, "you.worker_session.control", args)
+	retry := callAction(t, ctx, session, "CONTROL", args)
 	assertToolError(t, retry, "worker_session.unavailable", true)
 	assertJSONEqual(t, first.StructuredContent, retry.StructuredContent)
 	httpFailure := postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("replace the initial instruction", mode), http.StatusServiceUnavailable).(map[string]any)
@@ -359,20 +359,9 @@ func (s *failingSuccessorStore) PersistWorkerRecord(ctx context.Context, record 
 	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-func installNativeTranscript(t *testing.T, home string) []byte {
+func capturedProviderFixtureOutput(t *testing.T) []byte {
 	t.Helper()
 	fixture := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-	rollout, err := os.ReadFile(filepath.Join(fixture, "rollout.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join(home, ".codex", "sessions", "2026", "07", "27")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "rollout-"+interruptProviderID+".jsonl"), rollout, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	output, err := os.ReadFile(filepath.Join(fixture, "stdout.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -457,7 +446,7 @@ func assertTerminalTranscriptParity(t *testing.T, ctx context.Context, session *
 	result := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "source", "view": "transcript"})["result"].(map[string]any)
 	assertJSONEqual(t, result["session"], getHost(t, host.URL()+"/worker-sessions/source"))
 	transcript := result["transcript"].(map[string]any)
-	if transcript["workerSessionId"] != "source" || len(transcript["entries"].([]any)) == 0 {
+	if transcript["workerSessionId"] != "source" || len(transcript["entries"].([]any)) != 1 || transcript["entries"].([]any)[0].(map[string]any)["text"] != "captured public answer" {
 		t.Fatalf("terminal transcript omitted correlated entries: %v", transcript)
 	}
 	assertTranscriptEqual(t, transcript, getHost(t, host.URL()+"/worker-sessions/source/transcript"))

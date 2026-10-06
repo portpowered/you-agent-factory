@@ -233,8 +233,8 @@ func TestProviderTupleObservationPreservesLiveIdentityWithoutTranscript(t *testi
 				!reflect.DeepEqual(got.WorkIDs, []string{"work-1"}) || got.AttemptID != "attempt-1" {
 				t.Fatalf("show = %#v, %v; want retained live identity with unavailable transcript", got, err)
 			}
-			if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: request.ProviderSession}); !errors.Is(err, test.wantErr) {
-				t.Fatalf("read error = %v, want %v", err, test.wantErr)
+			if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: request.ProviderSession}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+				t.Fatalf("read without capture error = %v", err)
 			}
 		})
 	}
@@ -361,15 +361,6 @@ func TestInvokeObservationDiagnosticsAndTranscriptHelpers(t *testing.T) {
 }
 
 func TestInvokeObservationTranscriptHelpers(t *testing.T) {
-	boolean, line, text, timestamp, turn := true, 4, "text", time.Unix(10, 0), 2
-	entries := transcriptEntries([]providersessions.TranscriptEntry{{
-		Arguments: &text, CallID: &text, Encrypted: &boolean, EncryptedContent: &text, LineNumber: &line, Name: &text, Order: 1,
-		Output: &text, SourceType: &text, Status: &text, Summary: &text, Text: &text, Timestamp: &timestamp, TurnIndex: &turn,
-		Type: providersessions.TranscriptToolOutput,
-	}, {Type: providersessions.TranscriptAssistantMessage}})
-	if len(entries) != 2 || entries[0].Text == nil || entries[1].Text != nil {
-		t.Fatalf("transcriptEntries() = %#v", entries)
-	}
 	event := projectObservationEvent(events.Record{
 		ID: events.RecordID{Topic: "worker-session/worker-1", Position: 2}, SourceType: "worker_session_lifecycle", SourceID: "worker-1", SourceSequence: 2,
 		SourceEventID: "terminal", SchemaID: "workers.draft.v1", Payload: []byte(`{"status":"COMPLETED"}`),
@@ -558,11 +549,12 @@ func TestReadTranscriptByWorkerSessionIDResolvesRecordedAssociationAndLifecycle(
 	registry := newObservationRegistry(projector, nil)
 	registry.sessions["direct-1"] = observationSession("direct-1", workersessions.StateCompleted)
 	registry.observations["direct-1"] = observationMetadata()
+	attachTranscriptCapture(registry, "direct-1", "", text)
 	result, err := registry.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "direct-1"})
 	if err != nil || result.WorkerSessionID != "direct-1" || len(result.Entries) != 1 || result.Entries[0].Text == nil || *result.Entries[0].Text != text {
 		t.Fatalf("identity transcript = %#v, %v, want normalized entry", result, err)
 	}
-	if projector.request.Session != observationProviderRef() {
+	if projector.calls != 0 {
 		t.Fatalf("projector reference = %#v, want recorded association %v", projector.request.Session, observationProviderRef())
 	}
 	active := newObservationRegistry(projector, nil)
@@ -587,6 +579,7 @@ func TestInvokeTranscriptProjectionOutcomes(t *testing.T) {
 	terminalRegistry := newObservationRegistry(provider, nil)
 	terminalRegistry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	terminalRegistry.observations["worker-1"] = observationMetadata()
+	attachTranscriptCapture(terminalRegistry, "worker-1", "", text)
 	read, err := terminalRegistry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
 	if err != nil || len(read.Entries) != 1 || read.Entries[0].Text == nil || *read.Entries[0].Text != "hello" {
 		t.Fatalf("ReadTranscript() = %#v, %v", read, err)

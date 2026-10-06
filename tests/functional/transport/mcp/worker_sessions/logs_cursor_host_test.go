@@ -83,7 +83,7 @@ func assertLogsCursorRejected(t *testing.T, ctx context.Context, session *mcp.Cl
 	if response.StatusCode != http.StatusBadRequest || body["code"] != "BAD_REQUEST" || body["events"] != nil {
 		t.Fatalf("HTTP cursor rejection leaked a page or changed meaning: status=%d body=%v", response.StatusCode, body)
 	}
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "updated", "view": "logs", "nextToken": token}), "worker_session.invalid_request", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "updated", "view": "logs", "nextToken": token}), "worker_session.invalid_request", false)
 	for _, follow := range []bool{false, true} {
 		args := []string{"you", "--server", host.URL(), "worker-sessions", "read", "--worker-session-id", "updated", "--view", "logs", "--next-token", token, "--output", "json"}
 		if follow {

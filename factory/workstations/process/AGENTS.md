@@ -38,24 +38,34 @@ belong to new work items filed by the operator, never to this lane. Do not push
 new commits to a merged branch.
 
 17. Respond finally with the canonical raw JSON decision envelope defined below.
-17.1. Set `decision` to `ACCEPTED` only when all retained current-slice items in the PRD have been
-marked as passes:true. Explicitly deferred independent stories remain
+17.1. Set `decision` to `ACCEPTED` only when every retained process-owned criterion
+is passes:true (subject only to the browser waiver below), retained process work
+is complete, and the delivery prerequisites below are satisfied.
+Missing owner defaults to process, including legacy string criteria. Invalid
+explicit owners never bypass a blocker; report malformed metadata without
+reassigning owners. A false process-owned criterion prevents ACCEPTED.
+Process never marks review-owned criteria true. Unproved review-owned criteria
+remain false and do not block process ACCEPTED. List their IDs and later gate
+IDs in envelope feedback and the PR handoff as "owned by review".
+Story passes reports retained process completion only, never review proof.
+Review ownership does not defer implementation work needed for the slice.
+Explicitly deferred independent stories remain
 unsatisfied and owned by their named successor; they do not block this
-retained slice. Every retained criterion and blocker still requires completion.
+retained slice. Every retained process obligation and current blocker still requires completion.
 The only evidence waiver is that a browser criterion may remain recorded as
 unavailable after the one supported browser availability check when every
-retained non-browser story and acceptance criterion passes and no code change or
+retained non-browser process obligation passes and no code change or
 blocking feedback remains. For that browser limitation, the final head must be
 pushed, a pull request must be open or opened in that session, and required CI
 must have started before returning the envelope. All relevant PR conversation
-comments must be addressed, and the PR must be updated to the latest commits so
+comments must be addressed, auto-merge must be armed, and the PR must be updated to the latest commits so
 the task is ready to move into review. READY FOR REVIEW means: final head
 pushed, PR open and non-draft, required CI STARTED on that head. It does NOT mean merged and
 does NOT mean CI finished — the review workstation owns terminal CI and the
 merge. If the PRD's acceptance criteria mention "merged", that is the overall
 work item's finish line owned by review, never a reason for you to keep looping.
 17.2. Set `decision` to `CONTINUE` when you completed this iteration but the
-task still has remaining retained story work, unresolved feedback, or PR follow-up; this
+task still has remaining retained process work, unresolved feedback, or delivery follow-up; this
 is ordinary partial progress and stays on the process continue path.
 17.3. Set `decision` to `REJECTED` only when the owning workflow gives an
 explicit rejection, such as a review-owned correction or an invalid plan
@@ -64,6 +74,12 @@ work remains; use `CONTINUE` while this lane has actionable story work.
 17.4. Set `decision` to `FAILED` when execution cannot complete, a required
 prerequisite is absent, or an unresolved authority/plan contradiction prevents
 a valid decision.
+
+Empty or all-review criterion sets still require complete retained implementation,
+a pushed final head, an open non-draft PR, CI started, auto-merge armed and
+blocking feedback addressed. An unresolved blocker or pending final push prevents
+ACCEPTED. Do not return CONTINUE solely for pending review-owned evidence; review
+owns its independent checks, terminal CI, conflicts, merge and later validation.
 
 ## Important
 
@@ -131,7 +147,7 @@ a valid decision.
 - This worker starts without the Playwright MCP, the Chrome DevTools MCP, or the computer-use tooling, to save host memory. When a story needs live browser evidence, run a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. It loads the full browser tooling for that step only. That nested session is the supported browser tool for the check below. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 - Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record concise browser status in the single visit entry and the exact result in a PR comment ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
 
-  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other retained story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
+  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other retained process obligation is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
 - NEVER commit CI results, audit notes, or verification records onto your
   branch: each such commit creates a new head, invalidates the CI run it
   describes, and restarts CI. Evidence about a CI run belongs in a PR comment.

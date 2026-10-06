@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	ToolList    = "you.worker_session.list"
-	ToolRead    = "you.worker_session.read"
-	ToolControl = "you.worker_session.control"
+	ActionList    = "LIST"
+	ActionRead    = "READ"
+	ActionControl = "CONTROL"
 )
 
 // HostClient is the exact generated-client boundary consumed by the adapter.
@@ -45,21 +45,21 @@ func (a *Adapter) Call(ctx context.Context, name string, raw json.RawMessage) (j
 	var result any
 	var failure *toolError
 	switch name {
-	case ToolList:
+	case ActionList:
 		input, err := decodeList(raw)
 		if err != nil {
 			failure = invalidRequest(err)
 		} else {
 			result, failure = a.list(ctx, input)
 		}
-	case ToolRead:
+	case ActionRead:
 		input, err := decodeRead(raw)
 		if err != nil {
 			failure = invalidRequest(err)
 		} else {
 			result, failure = a.read(ctx, input)
 		}
-	case ToolControl:
+	case ActionControl:
 		input, err := decodeControl(raw)
 		if err != nil {
 			failure = invalidRequest(err)

@@ -53,10 +53,29 @@ verify.>
 
 **Acceptance criteria:**
 
-- [ ] Given <state>, when <action>, then <observable result>.
-- [ ] Given <relevant failure>, when <action>, then <defined error and state
+Every criterion has a stable ID, explicit `owner=process` or `owner=review`,
+proof status and evidence/later gate. Use the planning standard's ownership
+categories: terminal/hosted CI, merge, independent/post-merge validation and
+reviewer judgment belong to review; direct implementation and its delivery
+criterion belong to process. Legacy absent-owner objects and strings default
+to process; invalid explicit owners never bypass obligations. Preserve immutable
+IDs, requirements and gates. Story `passes` means retained process completion,
+not review proof. Process leaves unproved review criteria false and lists their
+IDs/gates as "owned by review"; all delivery prerequisites still apply.
+
+Structured criterion example (also use these owners in the project mapping):
+
+```json
+{"acceptanceCriteria":[
+  {"id":"C-1","requirement":"Focused behavior proof","owner":"process","passes":false,"gateIds":["U-1"]},
+  {"id":"C-2","requirement":"Independent current-head review and terminal CI","owner":"review","passes":false,"gateIds":["R-1"]}
+]}
+```
+
+- [ ] <Criterion ID | owner=process | gate ID> Given <state>, when <action>, then <observable result>.
+- [ ] <Criterion ID | owner=process | gate ID> Given <relevant failure>, when <action>, then <defined error and state
   outcome>.
-- [ ] <Named quality gate reports the property it measures.>
+- [ ] <Criterion ID | owner=process or review | gate ID> <Named quality gate reports the property it measures.>
 
 **Verification:**
 

@@ -33,6 +33,6 @@ properties:
     description: Terminal Worker Session lifecycle state at transcript read time.
   entries:
     type: array
-    description: Ordered normalized transcript entries projected by Provider Sessions.
+    description: Ordered normalized transcript entries projected from Portos-captured Worker records.
     items:
       $ref: './ProviderSessionTranscriptEntry.yaml'

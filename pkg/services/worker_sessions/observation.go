@@ -749,8 +749,8 @@ func (r ReadTranscriptRequest) Validate() error {
 }
 
 // ReadTranscriptResult is the detached Worker Session envelope and ordered
-// normalized transcript returned for a finished Worker Session with readable
-// provider-native transcript detail. A Worker without that detail receives
+// normalized transcript returned for a finished Worker Session with complete
+// Portos-captured history. A Worker without that history receives
 // ErrObservationTranscriptUnavailable while canonical history remains
 // available through the Worker-ID event read.
 type ReadTranscriptResult struct {
@@ -815,7 +815,7 @@ const (
 )
 
 // TranscriptEntry is one normalized, bounded transcript item. Optional
-// fields remain nil when the Provider Sessions projection cannot supply them.
+// fields remain nil when the captured records cannot supply them.
 type TranscriptEntry struct {
 	Arguments        *string
 	CallID           *string

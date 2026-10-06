@@ -1,6 +1,6 @@
 # Worker Session visibility and controls plan
 
-Status: Proposed. Source inspection: October 2, 2026. This plan specifies future work; it does not claim that proposed behavior or validation has been delivered.
+Status: Proposed. Binding MCP fold amendment: owner 2026-10-06T09:59Z; one `you.subagent` action tool replaces the three Worker Session tool names, preserving their capabilities and existing RUN behavior. Source inspection: October 2, 2026. This plan specifies future work; it does not claim that proposed behavior or validation has been delivered.
 
 ## 1. Problem and desired outcome
 
@@ -14,7 +14,7 @@ There is already a substantial Worker Session implementation. `you worker-sessio
 
 The fleet enumeration in `worker_sessions/internal/service/observations.go` collects IDs from process-local observations and sessions. Its transcript projection rejects active sessions, requires a Provider Session association, and calls `provider_sessions.Project`. Existing durable identity/event inspection is therefore a foundation to extend, not proof of a complete durable fleet catalog or provider-independent transcript experience. Existing controls route to the owning execution; `Terminate` is cancellation plus joining the callback, which does not establish a portable force-kill guarantee. Direct interruption already cancels the source and creates a distinct successor, using its exact Provider Session.
 
-MCP exposes none of this. `you server mcp` registers only the generated discovery in `pkg/transports/mcp/generated/discovery.json` (ten `you.factory_session.*` tools plus `you.subagent`), and the production tool operation in `pkg/wire/profiles.go:617-630` dispatches every name to `factorysessionmcp.BindToolOperation`. No `worker_sessions/transports/mcp` adapter exists, and `docs/reference/mcp.md:22-24` states the stdio server does not connect to a live HTTP server. The stdio process composes its own in-process services (`contracts/cli/commands.json` places `you.server.mcp` as `local-only`), so an MCP tool bound to in-process Worker Sessions would see none of the daemon's live Workers. The operator agent that drives this project acts mostly through MCP, so MCP parity is a delivery requirement, not polish.
+Historical source finding (October 2, before T9 and T6c): MCP exposed none of this. `you server mcp` registers only the generated discovery in `pkg/transports/mcp/generated/discovery.json` (ten `you.factory_session.*` tools plus `you.subagent`), and the production tool operation in `pkg/wire/profiles.go:617-630` dispatches every name to `factorysessionmcp.BindToolOperation`. No `worker_sessions/transports/mcp` adapter exists, and `docs/reference/mcp.md:22-24` states the stdio server does not connect to a live HTTP server. The stdio process composes its own in-process services (`contracts/cli/commands.json` places `you.server.mcp` as `local-only`), so an MCP tool bound to in-process Worker Sessions would see none of the daemon's live Workers. The operator agent that drives this project acts mostly through MCP, so MCP parity is a delivery requirement, not polish.
 
 These are source findings, not runtime reproductions. Architecture notes describe process-local Worker Session ownership; implementation now also consumes Recordings. Update those notes to reflect the resulting durable read architecture.
 
@@ -29,7 +29,7 @@ Release evidence must show:
 - Acknowledged durable positions replay in order without duplication or silent gaps.
 - Stop, termination, force kill, and interruption affect only the observed admitted attempt; no successor overlaps an unconfirmed predecessor.
 - Direct provider invocation preserves requested supported parameters, returns the stable Worker Session ID, and is inspectable through the same commands.
-- An agent operator reaches the bootstrap capabilities (list/history, summary, transcript, logs page and polling follow, capture health, cancel, terminate, kill, interrupt with resume mode) through exactly three MCP tools (`you.worker_session.list`, `read` and `control`) against the selected host, with functional parity evidence against the matching CLI/HTTP outcome. Continue, pause/resume and start stay CLI/HTTP-only until a follow-up extends `control`.
+- An agent operator reaches the bootstrap capabilities (list/history, summary, transcript, logs page and polling follow, capture health, cancel, terminate, kill, interrupt with resume mode) through `you.subagent` actions LIST, READ and CONTROL against the selected host, with functional parity evidence against the matching CLI/HTTP outcome. Continue, pause/resume and start stay CLI/HTTP-only until a follow-up extends `control`.
 - Observations and log records carry enough facts for later experiment metrics: start/end/duration, per-record capture time, token usage, provider/model/reasoning effort, attempt/dispatch/Work/Factory Session lineage, predecessor/successor links and a terminal cause that distinguishes operator stops from natural outcomes.
 - The latency, capacity, privacy, and failure thresholds in section 7 pass their owning gates.
 
@@ -65,10 +65,10 @@ Each row is the binding default for task packets. An operator or Project Lead ma
 | Can native provider continuation survive host restart? | Preserve the captured reference and sanitized recipe; claim continuation only for adapters with controlled-runner tests (Codex `resume`, Claude `--resume`) and label real-provider behavior unproven without I2. | I2 authorized. |
 | How much history predates usable Worker recordings? | No backfill from provider files. Older recordings are listed when decodable and otherwise classified INCOMPLETE/unsupported. T1 reports counts from a sample profile. | — |
 | What retention applies? | No new retention mechanism or configuration in this project. Existing recording retention (T1 records what exists) applies to catalog entries; the 30-day / 5 GiB figures are L1 sizing targets only. | Retention enforcement is a follow-up plan. |
-| How does MCP reach live Workers? | Worker Session MCP tools call the HTTP API of the host selected by the inherited `--server` flag (default `http://localhost:7437`), exactly like the `remote-only` CLI read commands. An unreachable host is a typed retryable error; there is no in-process fallback. Existing `you.factory_session.*` and `you.subagent` tools keep their in-process behavior. | — |
-| How large is the new public surface? | MCP has three tools: `list`, `read` (a `view` selector) and `control` (an `operation` enum). Later tasks add enum values, view kinds or optional fields, never tools. Continue, pause/resume and start through MCP are deferred. CLI and HTTP fold the same way: logs is `read --view logs`, and kill is `terminate --force`, an optional body on the existing terminate route. The only new route is `/logs`. | The operator needs a deferred capability through MCP. Add it as a `control` operation in a follow-up (START would carry the start request fields). |
-| How does MCP follow live output? | Cursor polling: `you.worker_session.read` with `view: logs` and `nextToken` until state is terminal and `committedPosition` stops advancing. No MCP notifications or long-poll in this project. | Measured polling cost in V1 exceeds the section 7 targets. |
-| Default for omitted `--history`? | Unchanged compatibility view (section 5); MCP `you.worker_session.list` defaults `history` to `all` because it is a new surface with no compatibility burden. | Separate breaking-release plan. |
+| How does MCP reach live Workers? | Worker Session MCP tools call the HTTP API of the host selected by the inherited `--server` flag (default `http://localhost:7437`), exactly like the `remote-only` CLI read commands. An unreachable host is a typed retryable error; there is no in-process fallback. Existing `you.factory_session.*` tools and `you.subagent` RUN keep their in-process behavior. | — |
+| How large is the new public surface? | MCP has one `you.subagent` tool with RUN (default), LIST, READ (a `view` selector) and CONTROL (an `operation` enum); ten Factory Session tools remain unchanged. Later tasks add enum values, view kinds or optional fields, never tools. Continue, pause/resume and start through MCP are deferred. CLI and HTTP fold the same way: logs is `read --view logs`, and kill is `terminate --force`, an optional body on the existing terminate route. The only new route is `/logs`. | The operator needs a deferred capability through MCP. Add it as a `control` operation in a follow-up (START would carry the start request fields). |
+| How does MCP follow live output? | Cursor polling: `you.subagent` READ with `view: logs` and `nextToken` until state is terminal and `committedPosition` stops advancing. No MCP notifications or long-poll in this project. | Measured polling cost in V1 exceeds the section 7 targets. |
+| Default for omitted `--history`? | Unchanged compatibility view (section 5); MCP `you.subagent` LIST defaults `history` to `all` because it is a new surface with no compatibility burden. | Separate breaking-release plan. |
 
 ### Replanning triggers
 
@@ -118,12 +118,12 @@ you --server http://localhost:7437 worker-sessions interrupt WS_ID --remote --re
 The same journeys through MCP (host started as `you --server http://localhost:7437 server mcp`):
 
 ```text
-you.worker_session.list     {"history":"active","scope":"all"}
-you.worker_session.read     {"workerSessionId":"WS_ID"}
-you.worker_session.read     {"workerSessionId":"WS_ID","view":"logs","limit":100,"nextToken":"TOKEN"}
-you.worker_session.control  {"workerSessionId":"WS_ID","operation":"TERMINATE"}
-you.worker_session.control  {"workerSessionId":"WS_ID","operation":"KILL","requestId":"KILL_ID","expectedAttemptId":"ATTEMPT_ID"}
-you.worker_session.control  {"workerSessionId":"WS_ID","operation":"INTERRUPT","requestId":"INTERRUPT_ID","successorWorkerSessionId":"NEXT_ID","replacementMessage":"...","resumeMode":"recorded"}
+you.subagent {"action":"LIST","history":"active","scope":"all"}
+you.subagent {"action":"READ","workerSessionId":"WS_ID"}
+you.subagent {"action":"READ","workerSessionId":"WS_ID","view":"logs","limit":100,"nextToken":"TOKEN"}
+you.subagent {"action":"CONTROL","workerSessionId":"WS_ID","operation":"TERMINATE"}
+you.subagent {"action":"CONTROL","workerSessionId":"WS_ID","operation":"KILL","requestId":"KILL_ID","expectedAttemptId":"ATTEMPT_ID"}
+you.subagent {"action":"CONTROL","workerSessionId":"WS_ID","operation":"INTERRUPT","requestId":"INTERRUPT_ID","successorWorkerSessionId":"NEXT_ID","replacementMessage":"...","resumeMode":"recorded"}
 ```
 
 Provider invocation uses the existing `invoke` command, supported `--provider`, `--model`, `--reasoning-effort`, prompts, retry budget, and `--execution FILE` contract. Characterize its actual required route arguments before publishing minimal copy-paste examples. Additional supported parameters already represented in `WorkerSessionResolvedExecution`, such as working directory, output schema, and environment variables, remain in the execution document. Provider secrets resolve through existing provider configuration; never put credential values in a persistent execution recipe. Reject unsupported parameters before admission.
@@ -704,79 +704,270 @@ Proposed (all optional, additive):
 
 `tokenUsage`, `turnUsage` and `model` keep their schema. Today `tokenUsage`, `turnUsage` and `parse` for sessions with a Provider Session reference come from `provider_sessions.Project` (`pkg/services/worker_sessions/internal/service/observations.go:637-657`), that is, from the native readers T8 deletes. T2 must project `tokenUsage` from captured `KindUsage`/`PhaseUpdated` records (already decoded by `pkg/services/recordings/internal/services/worker_capture/portable_decode.go`) for durable reads; T8 must keep `tokenUsage` populated from capture and may leave `turnUsage`/`parse` absent only when no captured equivalent exists, documenting that loss.
 
-### MCP Worker Session tools (T9, extended by T3, T5, T6)
+### MCP subagent actions (T9, extended by T3, T5, T6; owner fold amendment)
 
-Authored sources: `contracts/mcp/tools.json` (catalog with documentation, examples and annotations) and `contracts/mcp/manifest.json` (tool id, name, description, inputSchema, handler). Generated: `pkg/transports/mcp/generated/discovery.{json,gen.go}` via `make mcp-discovery-generate`, `packages/api/generated/mcp/manifest.json` via `make contracts-generate`, and `contracts/testdata/baseline/mcp-tools.json` / `mcp-result-policy.json` baselines. Naming follows the existing singular service prefix (`you.factory_session.*`, `you.recording.*`, `you.provider.*`).
+The owner decision of 2026-10-06T09:59Z replaces the three historical Worker
+Session tool registrations with `you.subagent` actions. Exactly 11 public tools
+remain: `you.subagent` and ten unchanged `you.factory_session.*` tools. Old
+Worker Session names are removed; clients keep their fields/results and add
+LIST, READ or CONTROL as `action`. RUN defaults when `action` is omitted.
+MESSAGE and REVIVE remain future-only; Worker start, continue and pause/resume
+remain CLI/HTTP-only.
 
-Surface rule: exactly three `you.worker_session.*` tools. Later tasks extend them only with enum values, `view` kinds or optional input fields; no task adds a tool. `control` follows the existing `you.factory_session.control` convention: one tool whose uppercase `operation` enum fans out to several POST routes. Factory Session reads use one tool per resource (`get`, `get_result`, `list_artifacts`, `list_dispatches`, `read_events`). `read` deliberately deviates from that with a lowercase `view` selector, following the `mode` selector of `you.factory_session.get_result`, because every view targets the same Worker Session and the operator asked for the smallest bootstrap surface.
-
-Current:
+Authored sources: `contracts/mcp/manifest.json` and `contracts/mcp/tools.json`.
+The catalog mirrors this complete manifest input schema:
 
 ```json
-{"$comment": "# Not present: no you.worker_session.* entries in contracts/mcp/manifest.json or tools.json"}
-```
-
-Proposed `manifest.json` entries at T9 (descriptions abbreviated here; each must end with its `Maps to ...` sentence as the existing entries do):
-
-```json
-[
-  {"id":"mcp.tool.you.worker_session.list","name":"you.worker_session.list","handler":"mcp.handler.you.worker_session.list",
-   "description":"List Worker Session observations on the selected host. Maps to GET /worker-sessions.",
-   "inputSchema":{"type":"object","additionalProperties":false,"properties":{
-     "scope":{"type":"string","enum":["direct","factory","all"]},
-     "state":{"type":"array","items":{"type":"string","enum":["RESERVED","STARTING","RUNNING","PAUSED","COMPLETED","FAILED","CANCELED","TERMINATED"]}},
-     "limit":{"type":"integer","minimum":1},
-     "nextToken":{"type":"string","minLength":1}}}},
-  {"id":"mcp.tool.you.worker_session.read","name":"you.worker_session.read","handler":"mcp.handler.you.worker_session.read",
-   "description":"Read one Worker Session: its observation plus an optional transcript or retained-event view. Maps to GET /worker-sessions/{worker_session_id} and, by view, GET .../transcript or GET .../events?replayOnly=true.",
-   "inputSchema":{"type":"object","additionalProperties":false,"required":["workerSessionId"],"properties":{
-     "workerSessionId":{"type":"string","minLength":1},
-     "view":{"type":"string","enum":["summary","transcript","events"],"default":"summary"},
-     "limit":{"type":"integer","minimum":1,"maximum":1000,"default":100}}}},
-  {"id":"mcp.tool.you.worker_session.control","name":"you.worker_session.control","handler":"mcp.handler.you.worker_session.control",
-   "description":"Apply one Worker Session control. Maps to POST /worker-sessions/{worker_session_id}/{cancel|terminate|interrupt}.",
-   "inputSchema":{"type":"object","additionalProperties":false,"required":["workerSessionId","operation"],"properties":{
-     "workerSessionId":{"type":"string","minLength":1},
-     "operation":{"type":"string","enum":["CANCEL","TERMINATE","INTERRUPT"]},
-     "requestId":{"type":"string","minLength":1},
-     "successorWorkerSessionId":{"type":"string","minLength":1},
-     "replacementMessage":{"type":"string","minLength":1}}}}
-]
-```
-
-Conditional input rules, checked by the adapter before any HTTP call (violations are `worker_session.invalid_request`): INTERRUPT requires `requestId`, `successorWorkerSessionId` and `replacementMessage`; CANCEL and TERMINATE reject those fields; `limit` applies only to the `events` view and later `logs`. Results: `list` returns ListWorkerSessionsResponse. `read` returns `{"session": WorkerSessionObservation}` plus exactly the member its view names: `transcript` (WorkerSessionTranscriptResponse) or `events` (`{"events":[WorkerSessionEvent],"truncated":boolean}`). It fetches `session` first, so a poller can stop once `session.state` is terminal and the page stops advancing. `control` returns the mapped operation's 200/202 schema: WorkerSessionControlResponse or WorkerSessionInterruptResponse. Errors use the shared typed envelope (`error.code`, `error.message`, `error.retryable`, `error.workerSessionId`, `error.details`) so `pkg/transports/mcp/server/server.go:150-181` maps them to `isError=true` with `structuredContent`. HTTP status maps to `error.code` as `worker_session.invalid_request` (400), `worker_session.not_found` (404), `worker_session.conflict` (409, including a transcript read of an active session), `worker_session.unavailable` (503, retryable) and `worker_session.host_unavailable` (transport failure, retryable). Annotations in `tools.json`: `list` and `read` are `readOnlyHint:true, idempotentHint:true`. `control` is `destructiveHint:true, idempotentHint:true`: CANCEL and TERMINATE are idempotent on the server, and the operations that create effects beyond stopping (INTERRUPT, later KILL) require `requestId`.
-
-Later extensions, each in its owning task's PR. None adds a tool:
-
-| Task | Change |
-| --- | --- |
-| T3 | `list` gains `"history":{"type":"string","enum":["active","all","archived"],"default":"all"}`. `read.view` gains `logs`, plus `"nextToken":{"type":"string","minLength":1}` (logs only), mapping to GET /worker-sessions/{worker_session_id}/logs and returning WorkerSessionLogPage as the `logs` member. |
-| T5 | `control.operation` gains `KILL`, plus `"expectedAttemptId":{"type":"string","minLength":1}`. KILL requires `requestId` and `expectedAttemptId` and maps to POST .../terminate with `{"force":true,...}`. |
-| T6 | `control` gains `"resumeMode":{"type":"string","enum":["provider","recorded"],"default":"provider"}`, accepted only with INTERRUPT. |
-| Deferred | CONTINUE, PAUSE and RESUME operations and Worker start through MCP (T7 makes no MCP change). A follow-up adds them as `control.operation` values; START would carry the WorkerSessionStartRequest fields, which already include a caller-chosen `workerSessionId`. Agents can already run bounded work through `you.subagent`. |
-
-Host routing contract (Go, `pkg/initializer/process/contracts.go:76-80`):
-
-```go
-// Current
-type MCPIntent struct {
-	ProjectRoot string
-	Stdin       io.Reader
-	Stdout      io.Writer
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "RUN",
+        "LIST",
+        "READ",
+        "CONTROL"
+      ],
+      "default": "RUN"
+    }
+  },
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "type": "string"
+        },
+        "timeoutMillis": {
+          "type": "integer"
+        },
+        "workingRoot": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "RUN"
+          ]
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "nextToken": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "direct",
+            "factory",
+            "all"
+          ],
+          "type": "string"
+        },
+        "state": {
+          "items": {
+            "enum": [
+              "RESERVED",
+              "STARTING",
+              "RUNNING",
+              "PAUSED",
+              "COMPLETED",
+              "FAILED",
+              "CANCELED",
+              "TERMINATED"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "history": {
+          "type": "string",
+          "enum": [
+            "active",
+            "all",
+            "archived"
+          ],
+          "default": "all"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "LIST"
+          ]
+        }
+      },
+      "type": "object",
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "view": {
+          "default": "summary",
+          "enum": [
+            "summary",
+            "transcript",
+            "events",
+            "logs"
+          ],
+          "type": "string"
+        },
+        "workerSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "nextToken": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "READ"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "workerSessionId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "enum": [
+            "CANCEL",
+            "TERMINATE",
+            "INTERRUPT",
+            "KILL"
+          ],
+          "type": "string"
+        },
+        "replacementMessage": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requestId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "successorWorkerSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "workerSessionId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expectedAttemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resumeMode": {
+          "type": "string",
+          "enum": [
+            "provider",
+            "recorded"
+          ],
+          "default": "provider"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "CONTROL"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "workerSessionId",
+        "operation"
+      ],
+      "type": "object"
+    }
+  ]
 }
-
-// Proposed
-type MCPIntent struct {
-	ProjectRoot string
-	// ServerURL is the resolved inherited --server value. Only
-	// you.worker_session.* tools use it; they call that host's HTTP API.
-	ServerURL string
-	Stdin     io.Reader
-	Stdout    io.Writer
-}
 ```
 
-`pkg/transports/cli/mcp/serve.go` reads the inherited server input into `ServerURL`. `pkg/wire/profiles.go` passes it to the MCP server builder, binds `workersessionmcp.ToolOperation` from a wire-supplied host-client constructor (fixed dependency, no fallback), and routes tool names with prefix `you.worker_session.` to it; all other names keep routing to `factorysessionmcp`. The shared contract check (`internal/mcpcontractcheck/repository.go:63`, which reads only `factorysessionmcp.ProjectCanonicalToolHandlerBindings()`) and discovery verifier (`pkg/services/factory_sessions/transports/mcp/discoverygen/verify.go:69`, keyed on Factory Session `ToolDefinition`s) must accept handler bindings from the Worker Session adapter too; T9 owns that generalization. Add the consumed operation IDs to `api/codegen_config/client.yaml` `include-operation-ids` so the adapter uses the generated Go client. The existing `streamWorkerSessionEventsByWorkerSessionId` entry is the Factory-scoped events route; the top-level route is `streamWorkerSessionEventsByTopLevelWorkerSessionId`.
+Validate canonical spelling, duplicate members, action type/value and branch
+fields before configuration, HTTP or execution. Only the RUN branch accepts
+omitted action and requires prompt; it preserves provider/model/reasoning,
+workingRoot, timeout, cleanup, text results and Factory Session error codes.
+LIST defaults history to all, composes scope/state/history before paging, and
+preserves snapshot membership. READ defaults summary, fetches observation first,
+and retains transcript, finite events and captured logs results. Limit is
+accepted only with events/logs; nextToken only with logs. Poll until terminal
+state and committedPosition stop advancing; inspect capture health.
+
+CONTROL retains CANCEL, TERMINATE, KILL and INTERRUPT. INTERRUPT requires
+requestId, successorWorkerSessionId and replacementMessage; resumeMode is
+provider by default or recorded, and is accepted only for INTERRUPT. KILL
+requires requestId and expectedAttemptId and rejects replacement fields. Other
+operations reject those fields. Preserve exact target fencing, idempotent
+request tuples, source join before successor, lineage and partial recovery.
+Factory interruption remains unsupported before cancellation.
+
+Results are unchanged: LIST returns ListWorkerSessionsResponse; READ returns
+session plus its requested transcript/events/logs member; CONTROL returns the
+existing control or interruption response. No action wrapper or new output
+modality is introduced. Unknown action returns nonretryable
+worker_session.invalid_request with isError=true before effects. Selected-host
+errors retain invalid_request, not_found, permission_denied, conflict,
+unavailable and retryable host_unavailable meanings and safe structuredContent.
+There is no in-process fallback. RUN failures retain their Factory namespace.
+
+The consolidated catalog uses destructiveHint=true, idempotentHint=false,
+openWorldHint=true and readOnlyHint=false. Globally optional argument metadata
+uses branch requirements; success documentation distinguishes RUN and Worker
+results. Schema defaults do not inject branch-only fields into other actions.
+
+Wire supplies the fixed generated HTTP host client from inherited --server
+(default http://localhost:7437). MCP composition validates action before
+provider configuration, routes RUN to existing packaged Factory execution,
+and routes LIST/READ/CONTROL to existing Worker Session adapter operations.
+The canonical public handler identity is mcp.handler.you.subagent. Checker,
+discovery and legacy catalog projections must delete old Worker tool bindings.
+The host API, HTTP client, MCPIntent.ServerURL and all service/ledger ownership
+remain unchanged. T3/T5/T6 extend these action branches rather than adding tools.
+
+Regenerate discovery.json/discovery.gen.go with make mcp-discovery-generate,
+package manifests with make contracts-generate and inventories with
+`go run ./cmd/mcptoolinventorygen`. Migrate all functional parity assertions to
+these actions and record one covered mcp/mcp.tool.you.subagent scenario,
+including omitted RUN text and unknown action/no-effect witnesses. FOLD-V1
+independently validates the delivered artifact after the fold merges; WSV-V1
+retains project acceptance ownership.
 
 ### Persistence, migration, retention and generated artifacts
 
@@ -786,7 +977,7 @@ Use existing storage paths and recording codecs. Never use filenames or PID alon
 
 After API changes run `make generate-api`; for publishable contracts run `make interfaces-all`. Refresh `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, `ui/src/api/generated/openapi.ts`, and affected publishable API/UI package clients. Update service-owned HTTP adapters and shared mapping where applicable. The Go client only contains operations listed in `api/codegen_config/client.yaml` `include-operation-ids`; add each new or newly consumed operation there or it will not be generated. Existing UI behavior must not regress; ensure generated type consumers compile and `make ui-test` passes.
 
-After MCP contract changes run `make contracts-generate` and `make mcp-discovery-generate`, refresh `contracts/testdata/baseline/mcp-tools.json` and `mcp-result-policy.json` through their owning generators/tests, and verify with `make mcp-contract-smoke`. Every new REST operation and MCP tool adds a `contracts/functional-scenarios.json` entry with `status: covered` and a `test` pointer, verified by `make contracts-check`. This plan adds one REST operation and three MCP tools; new CLI flags and views add test pointers to existing command entries. New Go packages register in `docs/internal/baselines/go-unit-coverage-package-minimums.json`, `go-functional-coverage-package-minimums.json` and `backend-package-file-count.json` as their gates require.
+After MCP contract changes run `make contracts-generate` and `make mcp-discovery-generate`, refresh `contracts/testdata/baseline/mcp-tools.json` and `mcp-result-policy.json` through their owning generators/tests, and verify with `make mcp-contract-smoke`. Every new REST operation and MCP tool adds a `contracts/functional-scenarios.json` entry with `status: covered` and a `test` pointer, verified by `make contracts-check`. This plan adds one REST operation and folds Worker capabilities into the existing subagent tool; new CLI flags and views add test pointers to existing command entries. New Go packages register in `docs/internal/baselines/go-unit-coverage-package-minimums.json`, `go-functional-coverage-package-minimums.json` and `backend-package-file-count.json` as their gates require.
 
 No operator configuration shape changes are currently specified. Retention and resource targets are proposals implemented through existing policies where supported; any new configurable fields require a source-plan amendment with concrete schema defaults and validation.
 
@@ -803,7 +994,7 @@ Dependency graph (an arrow means the left component consumes the right component
 ```mermaid
 flowchart LR
   CLI[CLI and HTTP] --> WS[Worker Sessions]
-  MCP[MCP worker_session tools] --> HTTPAPI[Selected host HTTP API]
+  MCP[MCP subagent Worker actions] --> HTTPAPI[Selected host HTTP API]
   HTTPAPI --> WS
   F[Factory Runtime] --> WS
   WS --> W[Workers]
@@ -943,7 +1134,7 @@ The first customer increment is a controlled provider emitting progress, discove
 - BEH-2: Stop the exact Worker execution and redirect a supported direct session safely.
 - BEH-3: Invoke a configured provider and use the same durable inspection/control surface.
 
-T1 is a justified bounded characterization enabler because current behavior and compatibility must be established before replacing read/control semantics; its output is a merged amendment to this plan (see T1 loopback). T9 exposes the existing operations through three MCP tools against the selected host so the operator agent gains BEH-1/BEH-2 reach early; every later capability extends those tools in its own PR. T2 establishes BEH-1's spine; T3 extends it. T4 protects BEH-2 control intent and ownership; T5 adds force kill; T6 adds recorded restart; T7 promotes BEH-3; T8 removes native-log readers and closes the final captured-only inspection journey.
+T1 is a justified bounded characterization enabler because current behavior and compatibility must be established before replacing read/control semantics; its output is a merged amendment to this plan (see T1 loopback). T9 exposes the existing operations through LIST/READ/CONTROL actions of `you.subagent` against the selected host so the operator agent gains BEH-1/BEH-2 reach early; every later capability extends those action branches in its own PR. T2 establishes BEH-1's spine; T3 extends it. T4 protects BEH-2 control intent and ownership; T5 adds force kill; T6 adds recorded restart; T7 promotes BEH-3; T8 removes native-log readers and closes the final captured-only inspection journey.
 
 ### Shared ownership
 
@@ -957,7 +1148,7 @@ T2 owns catalog/storage schema, the logs route and CLI view, and `capturedAt`. T
 | U2 capture/recovery | Unit and contract | Controlled; local filesystem for storage-owned unit tests | Per change | Bounded disk | Truncated tail, versions, redaction, catalog rebuilding | OS worker death |
 | U3 controls | Unit | Controlled | Per change | Free | Attempt fencing, intent replay and terminal races | Actual force kill |
 | F1-F11 matrix | Functional | Controlled provider effects | Per PR | Free, isolated temp files | Public customer outcomes, including MCP-to-HTTP parity | Real provider protocols and OS signals |
-| M1 MCP contract | Contract/static | None | Per PR touching MCP | Free | Manifest/catalog/discovery/handler alignment, exactly three `you.worker_session.*` tools, baselines, functional-scenario coverage entries | Runtime behavior |
+| M1 MCP contract | Contract/static | None | Per PR touching MCP | Free | Manifest/catalog/discovery/handler alignment, exactly 11 public tools with the four-action `you.subagent` contract, baselines, functional-scenario coverage entries | Runtime behavior |
 | I1 process controls | Integration | Local real | Risk-triggered and PR for kill changes | <=2 minutes per OS, no remote calls | Prebuilt CLI/fixture, owned child termination, no unrelated kill; extends the existing `tests/integration/workers/cancel` prebuilt pattern | Remote provider cancellation; Windows unless run there |
 | I2 provider continuation | Integration | Remote paid only if authorized | Adapter/protocol changes | Budget below | Exact supported provider resume and decoding | Exhaustive failures |
 | L1 capacity | Load/stress | Local real storage, controlled provider | Risk-triggered/release | <=5 GiB, <=10 minutes | Section 7 bounds | Internet/provider latency |
@@ -977,7 +1168,7 @@ T2 owns catalog/storage schema, the logs route and CLI view, and `capturedAt`. T
 | F8 | Boundary/unhappy | Multiple pages, changing fleet, replay cursor, cross-session/expired token | Filter/page/reconnect/follow | Snapshot/filter scope preserved, ordered durable backfill, explicit invalid/expired cursor | T3 |
 | F9 | Unhappy | Secret fixtures and profile/remote permission mismatch | Logs/list/control | Redaction and existing denial policy; no sibling leakage/effects | T2/T4 |
 | F10 | Unhappy | Accepted remote operation; caller disconnect or host unavailable | Detach/retry same key | Remote ownership retained, no local fallback, recoverable authoritative operation result | T4/T6 |
-| F11 | Happy/unhappy | Running host with a controlled direct Worker and a Factory Worker; `you server mcp` started against that host's `--server` URL | Call each `you.worker_session.*` tool, then the matching CLI command/HTTP route | Same IDs, states, outcomes and error codes as CLI/HTTP; unknown ID -> `worker_session.not_found` with `isError=true`; unreachable host -> retryable `worker_session.host_unavailable`, no in-process result; `tools/list` has exactly three Worker Session tools. Cases: T9 `list`; `read` views summary/transcript/events; `control` CANCEL, TERMINATE and INTERRUPT, plus INTERRUPT without `requestId` rejected before any HTTP call; T3 `list` history and `read` view logs paged to terminal; T5 `control` KILL applied/stale-conflict/unsupported; T6 INTERRUPT `resumeMode` recorded and invalid mode | T9 then T3/T5/T6 |
+| F11 | Happy/unhappy | Running host with a controlled direct Worker and a Factory Worker; `you server mcp` started against that host's `--server` URL | Call each Worker action of `you.subagent`, then the matching CLI command/HTTP route | Same IDs, states, outcomes and error codes as CLI/HTTP; unknown ID -> `worker_session.not_found` with `isError=true`; unreachable host -> retryable `worker_session.host_unavailable`, no in-process result; `tools/list` has exactly 11 tools with the four-action subagent schema. Cases: T9 `list`; `read` views summary/transcript/events; `control` CANCEL, TERMINATE and INTERRUPT, plus INTERRUPT without `requestId` rejected before any HTTP call; T3 `list` history and `read` view logs paged to terminal; T5 `control` KILL applied/stale-conflict/unsupported; T6 INTERRUPT `resumeMode` recorded and invalid mode | T9 then T3/T5/T6 |
 
 Pure enum/input validation branches belong to U1, not additional functional inventory cases. OS termination and PID reuse are I1, not helper executables inside functional tests. Load thresholds belong to L1. Real provider resume and remote kill require adapter-specific I2 gates; unsupported adapters are excluded explicitly.
 
@@ -1502,11 +1693,11 @@ T3 implements `predecessorWorkerSessionId`, `successorWorkerSessionId` and `prov
 MCP additions (T3), applied to the tools T9 created; conventions in section 5 "MCP Worker Session tools". No new tool:
 
 ```json
-{"tool":"you.worker_session.list","addProperty":{"history":{"type":"string","enum":["active","all","archived"],"default":"all"}}}
-{"tool":"you.worker_session.read","extendEnum":{"view":["logs"]},"addProperty":{"nextToken":{"type":"string","minLength":1}}}
+{"tool":"you.subagent","action":"LIST","addProperty":{"history":{"type":"string","enum":["active","all","archived"],"default":"all"}}}
+{"tool":"you.subagent","action":"READ","extendEnum":{"view":["logs"]},"addProperty":{"nextToken":{"type":"string","minLength":1}}}
 ```
 
-`view: logs` maps to GET /worker-sessions/{worker_session_id}/logs with `limit` and `nextToken`, and returns WorkerSessionLogPage as the result's `logs` member next to `session`. Follow is repeated reads with the returned `nextToken` until `session.state` is terminal and `logs.committedPosition` stops advancing. `nextToken` with any other view is `worker_session.invalid_request`. Add `readWorkerSessionLogs` to the client include list if not already present. In `contracts/functional-scenarios.json`, add test pointers for `history` and the logs view to the existing `rest/listWorkerSessions`, `cli/you.worker-sessions.list`, `cli/you.worker-sessions.read`, `mcp/mcp.tool.you.worker_session.list` and `mcp/mcp.tool.you.worker_session.read` entries.
+`view: logs` maps to GET /worker-sessions/{worker_session_id}/logs with `limit` and `nextToken`, and returns WorkerSessionLogPage as the result's `logs` member next to `session`. Follow is repeated reads with the returned `nextToken` until `session.state` is terminal and `logs.committedPosition` stops advancing. `nextToken` with any other view is `worker_session.invalid_request`. Add `readWorkerSessionLogs` to the client include list if not already present. In `contracts/functional-scenarios.json`, add test pointers for `history` and the logs view to the existing `rest/listWorkerSessions`, `cli/you.worker-sessions.list`, `cli/you.worker-sessions.read`, `mcp/mcp.tool.you.subagent` and `mcp/mcp.tool.you.subagent` entries.
 
 **Generated outputs and consumers:** Regenerate affected HTTP Go server/client, dashboard OpenAPI types and publishable clients from authored sources; refresh CLI manifest/help when command grammar changes. Consumers are listed in section 5.
 
@@ -1669,7 +1860,7 @@ Proposed (all optional, additive):
 
 `tokenUsage`, `turnUsage` and `model` keep their schema. Today `tokenUsage`, `turnUsage` and `parse` for sessions with a Provider Session reference come from `provider_sessions.Project` (`pkg/services/worker_sessions/internal/service/observations.go:637-657`), that is, from the native readers T8 deletes. T2 must project `tokenUsage` from captured `KindUsage`/`PhaseUpdated` records (already decoded by `pkg/services/recordings/internal/services/worker_capture/portable_decode.go`) for durable reads; T8 must keep `tokenUsage` populated from capture and may leave `turnUsage`/`parse` absent only when no captured equivalent exists, documenting that loss.
 
-T4 implements only `terminalCause` (all enum values defined now so later writers do not widen a published enum); it is set from the committed control operation for the exact attempt, else from the natural terminal outcome, else OWNER_LOST on recovery. MCP `you.worker_session.control` (T9) needs no schema change; T4 adds F11 cases proving MCP CANCEL/TERMINATE retries return the same authoritative outcome as HTTP.
+T4 implements only `terminalCause` (all enum values defined now so later writers do not widen a published enum); it is set from the committed control operation for the exact attempt, else from the natural terminal outcome, else OWNER_LOST on recovery. MCP `you.subagent` CONTROL (T9) needs no schema change; T4 adds F11 cases proving MCP CANCEL/TERMINATE retries return the same authoritative outcome as HTTP.
 
 **Generated outputs and consumers:** Regenerate affected HTTP Go server/client, dashboard OpenAPI types and publishable clients from authored sources; refresh CLI manifest/help when command grammar changes. Consumers are listed in section 5.
 
@@ -1778,13 +1969,13 @@ requestBody:
 A request with no body, or with `force: false` and no other fields, keeps today's joined terminate unchanged. `force: true` without both `requestId` and `expectedAttemptId` is 400, and so are those fields without `force: true`. The action enum is not widened. Force mode keeps the existing outcome and state vocabulary and the existing error responses. UNSUPPORTED must be an honest existing control outcome and perform no mutation. A stale attempt returns conflict before effects; an unavailable termination boundary returns failure rather than success. A request interrupted while waiting remains recoverable with the same key; the force join deadline is a service policy, initially 10 seconds. Unknown termination after deadline is not APPLIED. The generated Go and TypeScript terminate signatures gain an optional body; HTTP callers that send none are unaffected. The internal control-operation record keeps action `kill`. Internal capability extensions need their exact Go Current/Proposed signatures in T5's implementation packet after T1 identifies the real boundary.
 
 
-MCP addition (T5), applied to `you.worker_session.control`; conventions in section 5 "MCP Worker Session tools". No new tool:
+MCP addition (T5), applied to `you.subagent` CONTROL; conventions in section 5 "MCP Worker Session tools". No new tool:
 
 ```json
-{"tool":"you.worker_session.control","extendEnum":{"operation":["KILL"]},"addProperty":{"expectedAttemptId":{"type":"string","minLength":1}}}
+{"tool":"you.subagent","action":"CONTROL","extendEnum":{"operation":["KILL"]},"addProperty":{"expectedAttemptId":{"type":"string","minLength":1}}}
 ```
 
-KILL requires `requestId` and `expectedAttemptId` (otherwise `worker_session.invalid_request` before any HTTP call) and maps to POST /worker-sessions/{worker_session_id}/terminate with `{"force":true,"requestId":...,"expectedAttemptId":...}`. Result: WorkerSessionControlResponse with `forced:true`; 409 maps to `worker_session.conflict`. Also: `terminateWorkerSession` is already in `api/codegen_config/client.yaml` from T9; set `terminalCause: OPERATOR_KILL`; add force-mode test pointers to the existing `cli/you.worker-sessions.terminate`, `rest/terminateWorkerSession` and `mcp/mcp.tool.you.worker_session.control` entries in `contracts/functional-scenarios.json` (no new entries). I1 either extends `tests/integration/workers/cancel` (preferred; it already samples two OS process trees from a prebuilt CLI) or adds `tests/integration/workers/kill` and appends it to the `test-integration` package list in `Makefile:592`. Linux evidence comes from the CI `backend-integration` job; Windows support is claimed only with a recorded Windows run (section 2 Decisions).
+KILL requires `requestId` and `expectedAttemptId` (otherwise `worker_session.invalid_request` before any HTTP call) and maps to POST /worker-sessions/{worker_session_id}/terminate with `{"force":true,"requestId":...,"expectedAttemptId":...}`. Result: WorkerSessionControlResponse with `forced:true`; 409 maps to `worker_session.conflict`. Also: `terminateWorkerSession` is already in `api/codegen_config/client.yaml` from T9; set `terminalCause: OPERATOR_KILL`; add force-mode test pointers to the existing `cli/you.worker-sessions.terminate`, `rest/terminateWorkerSession` and `mcp/mcp.tool.you.subagent` entries in `contracts/functional-scenarios.json` (no new entries). I1 either extends `tests/integration/workers/cancel` (preferred; it already samples two OS process trees from a prebuilt CLI) or adds `tests/integration/workers/kill` and appends it to the `test-integration` package list in `Makefile:592`. Linux evidence comes from the CI `backend-integration` job; Windows support is claimed only with a recorded Windows run (section 2 Decisions).
 
 **Generated outputs and consumers:** Regenerate affected HTTP Go server/client, dashboard OpenAPI types and publishable clients from authored sources; refresh CLI manifest/help when command grammar changes. Consumers are listed in section 5.
 
@@ -1915,7 +2106,7 @@ Existing response/error snapshots and phases remain unchanged. Validate mode and
 The durable operation stores the chosen mode and normalized tuple. Reusing a key with changed mode or message is a conflict. Existing clients omit mode and retain provider behavior. Factory-originated interruption is unsupported until Runtime owns a replacement operation; visibility and stopping do not depend on that extension.
 
 
-MCP addition (T6): `you.worker_session.control` gains `"resumeMode":{"type":"string","enum":["provider","recorded"],"default":"provider"}`, accepted only with `operation: INTERRUPT` and passed through unchanged to the HTTP request. No new tool. F11 adds an MCP recorded-mode interrupt and an invalid-mode rejection with no source cancellation.
+MCP addition (T6): `you.subagent` CONTROL gains `"resumeMode":{"type":"string","enum":["provider","recorded"],"default":"provider"}`, accepted only with `operation: INTERRUPT` and passed through unchanged to the HTTP request. No new tool. F11 adds an MCP recorded-mode interrupt and an invalid-mode rejection with no source cancellation.
 
 **Generated outputs and consumers:** Regenerate affected HTTP Go server/client, dashboard OpenAPI types and publishable clients from authored sources; refresh CLI manifest/help when command grammar changes. Consumers are listed in section 5.
 
@@ -1972,7 +2163,7 @@ MCP addition (T6): `you.worker_session.control` gains `"resumeMode":{"type":"str
 
 HTTP, CLI and configuration shapes are unchanged; T7 consumes existing invoke/start/configuration shapes. Any proposed mutation requires concrete Current/Proposed excerpts in this plan before coding.
 
-MCP: no change in this project. Starting a Worker through MCP is deferred to a follow-up, because the observer bootstrap only needs to find, read and control sessions. When it is needed, it becomes a `START` operation on `you.worker_session.control` that carries the WorkerSessionStartRequest fields, not a new tool. Agents can already run bounded work through the existing `you.subagent` tool.
+MCP: no change in this project. Starting a Worker through MCP is deferred to a follow-up, because the observer bootstrap only needs to find, read and control sessions. When it is needed, it becomes a `START` operation on `you.subagent` CONTROL that carries the WorkerSessionStartRequest fields, not a new tool. Agents can already run bounded work through the existing `you.subagent` tool.
 
 **Generated outputs and consumers:** Refreshed reference docs only; no OpenAPI, CLI grammar or MCP change.
 
@@ -2158,29 +2349,29 @@ Wire shape remains unchanged; regenerate affected documentation/types and migrat
 
 **Plan reference:** `docs/internal/development/plans/backlog/worker-session-visibility-and-controls.md`, sections 2 Decisions, 4 MCP journey, 5 "MCP Worker Session tools", 9, 10 F11. Derived task JSON carries this path in `context.sourcePlan` and these sections in `sourcePlanRef`.
 
-**Actor and trigger:** Agent operator calls `you.worker_session.*` tools over stdio MCP.
+**Actor and trigger:** Agent operator calls `you.subagent` Worker actions over stdio MCP.
 
 **Dependencies:** T1 (merged amendment). Runs in parallel with T2.
 
-**Parallel and shared-surface ownership:** Owns `pkg/services/worker_sessions/transports/mcp/` (new package `workersessionmcp`), its wire constructor, `MCPIntent.ServerURL`, the name-prefix routing in `pkg/wire/profiles.go`, generalizing `internal/mcpcontractcheck` and `pkg/services/factory_sessions/transports/mcp/discoverygen` to multiple handler registries, the MCP parity harness `tests/functional/transport/mcp/worker_sessions/`, and the Worker Session content of `docs/reference/mcp.md`. T3, T5 and T6 extend its three tools with enum values, view kinds and optional fields; none adds a tool. Shares `contracts/mcp/*.json`, `api/codegen_config/client.yaml` and `contracts/functional-scenarios.json` with all lanes (rebase and regenerate).
+**Parallel and shared-surface ownership:** Owns `pkg/services/worker_sessions/transports/mcp/` (new package `workersessionmcp`), its wire constructor, `MCPIntent.ServerURL`, the action routing in `pkg/wire/profiles.go`, generalizing `internal/mcpcontractcheck` and `pkg/services/factory_sessions/transports/mcp/discoverygen` to multiple handler registries, the MCP parity harness `tests/functional/transport/mcp/worker_sessions/`, and the Worker Session content of `docs/reference/mcp.md`. T3, T5 and T6 extend its action branches with enum values, view kinds and optional fields; none adds a tool. Shares `contracts/mcp/*.json`, `api/codegen_config/client.yaml` and `contracts/functional-scenarios.json` with all lanes (rebase and regenerate).
 
 **Scope:**
 
-- In: Tools `list`, `read` (views summary, transcript, events) and `control` (CANCEL, TERMINATE, INTERRUPT) exactly as section 5 defines. Host client from the generated Go client: add `listWorkerSessions`, `cancelWorkerSession`, `terminateWorkerSession`, `interruptWorkerSession` and `streamWorkerSessionEventsByTopLevelWorkerSessionId` to `include-operation-ids` (`getWorkerSessionObservationByWorkerSessionId` and `readWorkerSessionTranscriptByWorkerSessionId` are already there; the existing `streamWorkerSessionEventsByWorkerSessionId` is the Factory-scoped route). Conditional input rules and HTTP status to typed error mapping; tool catalog/manifest, generated discovery, baselines and coverage manifest entries; reference docs.
-- Out: New HTTP operations, any fourth tool, continue/pause/resume/start through MCP (deferred), MCP streaming notifications or subscriptions, in-process fallback when the host is unreachable, `you.factory_session.*` behavior changes, ACP.
+- In: Actions LIST, READ (views summary, transcript, events) and CONTROL (CANCEL, TERMINATE, INTERRUPT) exactly as section 5 defines. Host client from the generated Go client: add `listWorkerSessions`, `cancelWorkerSession`, `terminateWorkerSession`, `interruptWorkerSession` and `streamWorkerSessionEventsByTopLevelWorkerSessionId` to `include-operation-ids` (`getWorkerSessionObservationByWorkerSessionId` and `readWorkerSessionTranscriptByWorkerSessionId` are already there; the existing `streamWorkerSessionEventsByWorkerSessionId` is the Factory-scoped route). Conditional input rules and HTTP status to typed error mapping; tool catalog/manifest, generated discovery, baselines and coverage manifest entries; reference docs.
+- Out: New HTTP operations, any additional tool, continue/pause/resume/start through MCP (deferred), MCP streaming notifications or subscriptions, in-process fallback when the host is unreachable, `you.factory_session.*` behavior changes, ACP.
 
 **Implementation constraints:** Flat injection: the adapter receives one fixed host-client dependency through `pkg/services/worker_sessions/wire`; no fallbacks, setters, getters, nil-default branches or service locators. The adapter imports only the generated client and its own schemas, never `worker_sessions/internal`. Every tool rejects unknown input properties before any HTTP call. `read` fetches the observation first; its `events` view uses `replayOnly=true`, stops at `limit` and sets `truncated`.
 
 **Contract and configuration excerpts:** Section 5 "MCP Worker Session tools" (three manifest entries, conditional input rules, result and error envelope, annotations) and the `MCPIntent` Current/Proposed excerpt; copy them verbatim into the PR description. CLI grammar is unchanged because `--server` is already a persistent root flag.
 
-**Generated outputs and consumers:** `make contracts-generate`, `make mcp-discovery-generate` (refreshes `pkg/transports/mcp/generated/discovery.{json,gen.go}` and `packages/api/generated/mcp/manifest.json`), `make generate-api` for the Go client, refreshed `contracts/testdata/baseline/mcp-tools.json` and `mcp-result-policy.json`, three `mcp/mcp.tool.you.worker_session.*` entries `covered` in `contracts/functional-scenarios.json`, and new package rows in coverage and file-count baselines.
+**Generated outputs and consumers:** `make contracts-generate`, `make mcp-discovery-generate` (refreshes `pkg/transports/mcp/generated/discovery.{json,gen.go}` and `packages/api/generated/mcp/manifest.json`), `make generate-api` for the Go client, refreshed `contracts/testdata/baseline/mcp-tools.json` and `mcp-result-policy.json`, one `mcp/mcp.tool.you.subagent` entry `covered` in `contracts/functional-scenarios.json`, and new package rows in coverage and file-count baselines.
 
 **Acceptance criteria:**
 
-- [ ] Given a host running one direct and one Factory Worker, when `you.worker_session.list` and `read` (view `summary`) are called through `you --server <url> server mcp`, then results equal `GET /worker-sessions` and `GET /worker-sessions/{id}` on the same host. Evidence: F11.
+- [ ] Given a host running one direct and one Factory Worker, when `you.subagent` LIST and `read` (view `summary`) are called through `you --server <url> server mcp`, then results equal `GET /worker-sessions` and `GET /worker-sessions/{id}` on the same host. Evidence: F11.
 - [ ] Given each control operation, when called through MCP, then the outcome equals the HTTP outcome for the same input, and an INTERRUPT without `requestId` is rejected as `worker_session.invalid_request` before any HTTP call. Evidence: F11.
 - [ ] Given an unknown ID or an unreachable host, when any tool runs, then `isError=true` with `worker_session.not_found` or retryable `worker_session.host_unavailable`, and no in-process result is returned. Evidence: F11.
-- [ ] `tools/list` contains exactly three `you.worker_session.*` tools with the section 5 schemas; manifest, catalog, discovery, handler bindings and baselines agree. Evidence: M1 (`make mcp-contract-smoke`, `make contracts-check`).
+- [ ] `tools/list` contains exactly 11 public tools with the four-action `you.subagent` contract with the section 5 schemas; manifest, catalog, discovery, handler bindings and baselines agree. Evidence: M1 (`make mcp-contract-smoke`, `make contracts-check`).
 - [ ] Existing `you.factory_session.*` tools and `tests/functional/transport/mcp/{stdio,protocol,resume}` are unchanged and pass. Evidence: `make test-functional`.
 
 **Verification:**
@@ -2195,7 +2386,7 @@ Wire shape remains unchanged; regenerate affected documentation/types and migrat
 
 **Paid validation:** None.
 
-**Operational and rollout notes:** Amend `docs/reference/mcp.md` lines 22-24: the stdio server stays local, but `you.worker_session.*` tools call the HTTP API of the `--server` host. Rollback removes the tools; no state is involved.
+**Operational and rollout notes:** Amend `docs/reference/mcp.md` lines 22-24: the stdio server stays local, but LIST/READ/CONTROL actions call the HTTP API of the `--server` host. Rollback removes the tools; no state is involved.
 
 **Escalation:** If `mcpcontractcheck` or `discoverygen` cannot accept a second registry without changing Factory Session adapter contracts, return the exact Current/Proposed Go excerpt as a plan delta before coding.
 
@@ -2203,7 +2394,7 @@ Wire shape remains unchanged; regenerate affected documentation/types and migrat
 
 ### V1 Independent validation loopback
 
-Use a clean test-owned profile and prebuilt CLI/host/provider fixture. Exercise invoke with supported parameters, active discovery across direct/Factory origins, progress logs, reconnect/backfill, graceful stop, supported kill, direct interruption in both modes, partial admission failure, host restart, archived discovery and replay with provider rollout access unavailable. Repeat list, read (summary and logs paging) and control (stop, KILL, INTERRUPT) through the three tools of `you --server <host URL> server mcp` and confirm results match the CLI for the same IDs. Inspect docs discoverability, redaction, permission/errors, `terminalCause`, `capturedAt`, lineage fields, and L1 measurements. Unsupported real-provider capabilities must remain explicit.
+Use a clean test-owned profile and prebuilt CLI/host/provider fixture. Exercise invoke with supported parameters, active discovery across direct/Factory origins, progress logs, reconnect/backfill, graceful stop, supported kill, direct interruption in both modes, partial admission failure, host restart, archived discovery and replay with provider rollout access unavailable. Repeat list, read (summary and logs paging) and control (stop, KILL, INTERRUPT) through LIST/READ/CONTROL actions of `you --server <host URL> server mcp` and confirm results match the CLI for the same IDs. Inspect docs discoverability, redaction, permission/errors, `terminalCause`, `capturedAt`, lineage fields, and L1 measurements. Unsupported real-provider capabilities must remain explicit.
 
 The validator is read-only toward the implementation and must not silently fix defects. Emit the exact report structure from `factory/docs/standards/validation-loopback-template.md`: environment/build, criteria PASS/FAIL/BLOCKED with evidence and unproven edges, exact journey commands/output/exit status, integration/usability findings, severity/reproduction, verdict, and delta-plan request for FAIL/BLOCKED. The report is validation evidence, not an extra production artifact. Review owns resulting corrections and convergence.
 
@@ -2217,7 +2408,7 @@ The validator is read-only toward the implementation and must not silently fix d
 - [ ] BEH-2: Interrupt preserves input/mode/lineage, stops source before one successor, and exposes recoverable partial failure. Factory replacement is explicitly unsupported until Runtime owns it. Evidence: F7/F10.
 - [ ] BEH-3: Supported provider parameters reach the execution boundary and invocation uses the same inspect/control path. Evidence: F6/V1; I2 limits real-provider claims.
 - [ ] Opening storage failure prevents external admission; mid-run failure exposes captured prefix/health while live stopping stays available. Evidence: F4.
-- [ ] Every bootstrap capability (list, history, show, transcript, logs page, follow, capture health, cancel, terminate, kill, interrupt with resumeMode) is reachable through CLI, HTTP and exactly three MCP tools with equal outcomes and error meanings; follow over MCP is cursor polling with `read` `view: logs`. The plan adds one HTTP route (`/logs`), no CLI commands and no MCP tools beyond the three. Continue, pause/resume and start stay CLI/HTTP-only. Evidence: F11, M1 and V1.
+- [ ] Every bootstrap capability (list, history, show, transcript, logs page, follow, capture health, cancel, terminate, kill, interrupt with resumeMode) is reachable through CLI, HTTP and `you.subagent` actions LIST, READ and CONTROL with equal outcomes and error meanings; follow over MCP is cursor polling with `read` `view: logs`. The plan adds one HTTP route (`/logs`), no CLI commands and exactly 11 public MCP tools: `you.subagent` plus ten Factory Session tools. Continue, pause/resume and start stay CLI/HTTP-only. Evidence: F11, M1 and V1.
 - [ ] Observations and records expose start/end/duration, `capturedAt`, `tokenUsage`, provider/model/reasoning effort, predecessor/successor lineage and `terminalCause` for durable sessions, so an experiment observer needs no provider files. Evidence: F1/F3/F5 assertions and V1.
 - [ ] Secrets and cross-profile content do not leak; unauthorized or stale controls have no effects. Evidence: F9/U3.
 - [ ] Section 7 latency, scale, backlog, record-size and retention constraints pass with hardware and honest sample ranges recorded. Evidence: L1.

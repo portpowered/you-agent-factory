@@ -81,9 +81,6 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 	source.WriteString("\n// LegacyDiscovery returns the internal Factory Session adapter catalog. It is not registered as public MCP discovery.\nfunc LegacyDiscovery() []DiscoveryTool {\n\treturn []DiscoveryTool{\n")
 	legacyIDs := make([]string, 0, len(legacyMetadata.Tools))
 	for id := range legacyMetadata.Tools {
-		if strings.HasPrefix(id, "mcp.tool.you.worker_session.") {
-			continue
-		}
 		legacyIDs = append(legacyIDs, id)
 	}
 	slices.Sort(legacyIDs)
@@ -150,7 +147,7 @@ func discoveryMetadata(repositoryRoot string) (DiscoveryMetadata, error) {
 		return DiscoveryMetadata{}, err
 	}
 	for id, tool := range metadata.Tools {
-		if strings.HasPrefix(id, "mcp.tool.you.worker_session.") {
+		if id == "mcp.tool.you.subagent" {
 			tool.Annotations = catalogMetadata.Tools[id].Annotations
 		}
 		metadata.Tools[id] = tool

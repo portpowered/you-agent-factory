@@ -11,13 +11,13 @@ import (
 )
 
 type providerSessionReadCase struct {
-	name, provider, id, text, errorCode string
+	name, provider, id, text string
 }
 
 var providerSessionReadCases = []providerSessionReadCase{
-	{"F11-U1 Codex missing", "codex", "session_fixture_codex_missing_read", "", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"},
-	{"F11-U3 Codex truncated", "codex", "session_fixture_codex_truncated_read", "retained fixture answer", ""},
-	{"F11-U5 Codex open fault", "codex", "session_fixture_codex_open_fault_read", "", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"},
+	{"F11-U1 Codex missing", "codex", "session_fixture_codex_missing_read", "Codex fixture answer COMPLETE"},
+	{"F11-U3 Codex truncated", "codex", "session_fixture_codex_truncated_read", "Codex fixture answer COMPLETE"},
+	{"F11-U5 Codex open fault", "codex", "session_fixture_codex_open_fault_read", "Codex fixture answer COMPLETE"},
 }
 
 // Reads require a terminal Worker Session, not merely a Provider Session ID.
@@ -67,21 +67,9 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 		if shown.Transcript != "UNAVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || len(shown.Parse.Errors) != 0 {
 			t.Fatalf("canonical show copied optional native transcript diagnostics: %#v", shown)
 		}
-		if test.errorCode != "" {
-			inputs, err := executeCLIExpectError(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
-			if err == nil {
-				t.Fatal("unavailable transcript returned success")
-			}
-			assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), test.errorCode, test.name)
-			if strings.TrimSpace(inputs.Stdout()) != "" {
-				t.Fatalf("unavailable transcript fabricated stdout: %s", inputs.Stdout())
-			}
-			assertProviderSessionReadSafe(t, err.Error()+inputs.Stderr(), fixture.homeDir)
-			continue
-		}
 		// The Work-scoped compatibility list retains native diagnostics, while
 		// canonical show and captured usage remain independent of that file.
-		if test.provider == "codex" && (terminal.Parse.MalformedLineCount != 1 || len(terminal.Parse.Errors) != 1 || terminal.Parse.Errors[0].Message != "truncated JSON event record") {
+		if test.id == "session_fixture_codex_truncated_read" && (terminal.Parse.MalformedLineCount != 1 || len(terminal.Parse.Errors) != 1 || terminal.Parse.Errors[0].Message != "truncated JSON event record") {
 			t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", terminal.Parse)
 		}
 		inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
@@ -96,12 +84,12 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 		if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || transcript.State != "COMPLETED" || len(transcript.WorkIDs) != 1 || transcript.WorkIDs[0] != workID {
 			t.Fatalf("read changed terminal association: %#v", transcript)
 		}
-		if len(transcript.Entries) != 1 || transcript.Entries[0].Text != test.text || transcript.Entries[0].Type != "assistant_message" {
-			t.Fatalf("mixed rollout transcript = %#v, want only the retained valid entry", transcript.Entries)
+		if len(transcript.Entries) != 2 || transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Text != test.text || transcript.Entries[1].Type != "assistant_message" {
+			t.Fatalf("captured transcript = %#v, want ordered tool call and captured answer", transcript.Entries)
 		}
 		assertProviderSessionReadSafe(t, inputs.Stdout()+shownInputs.Stdout(), fixture.homeDir)
 	}
-	// Read failures and successful reads must both leave the terminal association intact.
+	// Captured reads leave the terminal association intact despite native faults.
 	finalInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
 	var final workerSessionJSON
 	decodeCLIJSON(t, finalInputs, &final)
@@ -130,9 +118,9 @@ func assertProviderSessionReadSafe(t *testing.T, output, home string) {
 }
 func resetprovidersessionscli3State() {
 	var freshProviderSessionReadCases = []providerSessionReadCase{
-		{"F11-U1 Codex missing", "codex", "session_fixture_codex_missing_read", "", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"},
-		{"F11-U3 Codex truncated", "codex", "session_fixture_codex_truncated_read", "retained fixture answer", ""},
-		{"F11-U5 Codex open fault", "codex", "session_fixture_codex_open_fault_read", "", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"},
+		{"F11-U1 Codex missing", "codex", "session_fixture_codex_missing_read", "Codex fixture answer COMPLETE"},
+		{"F11-U3 Codex truncated", "codex", "session_fixture_codex_truncated_read", "Codex fixture answer COMPLETE"},
+		{"F11-U5 Codex open fault", "codex", "session_fixture_codex_open_fault_read", "Codex fixture answer COMPLETE"},
 	}
 	providerSessionReadCases = freshProviderSessionReadCases
 }
