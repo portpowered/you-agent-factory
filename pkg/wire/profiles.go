@@ -440,32 +440,7 @@ func provideDurableExecutionFactory(
 	factory factorysessionwire.FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) factorysessionwire.DurableExecutionFactory {
-	return func(
-		definition factorydefinitions.RuntimeSelection,
-		persistence factorysessions.PersistencePolicy,
-		systemConfigHome string,
-		systemConfigPath string,
-		defaults operatorsettings.ResolvedDefaults,
-		root factorysessionwire.RuntimeRoot,
-		clock factoryruntime.Clock,
-		provider providers.Service,
-		mockWorkersConfig *workers.MockWorkersConfig,
-	) (factorysessionwire.DurableExecution, error) {
-		return factorysessionwire.NewDurableExecutionRuntime(
-			loadOperatorConfig,
-			definition,
-			persistence,
-			systemConfigHome,
-			systemConfigPath,
-			defaults,
-			root,
-			clock,
-			provider,
-			mockWorkersConfig,
-			factory,
-			providerIdentities,
-		)
-	}
+	return factorysessionwire.NewDurableOpening(loadOperatorConfig, factory, providerIdentities).Open
 }
 
 func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {

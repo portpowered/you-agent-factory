@@ -105,7 +105,7 @@ var (
 	NewRuntimeProjectStore     = runtimepersist.NewLazyProjectStore
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
-	NewDurableExecutionRuntime = service.NewDurableExecution
+	NewDurableOpening          = service.NewDurableOpening
 	ModelHostDiagnosticLogger  = service.ModelHostDiagnosticLogger
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 )

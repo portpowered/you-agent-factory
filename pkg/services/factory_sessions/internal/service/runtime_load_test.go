@@ -891,7 +891,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		selectedLogger = logger
 		return nil, nil
 	}
-	opened, err := NewDurableExecution(
+	opened, err := NewDurableOpening(
 		func(string) (operatorconfig.Config, error) {
 			return operatorconfig.Config{
 				Defaults: operatorconfig.Defaults{WorkerModelProvider: "customer"},
@@ -900,15 +900,6 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 				}},
 			}, nil
 		},
-		factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
-		factorysessions.PersistencePolicyDisabled,
-		t.TempDir(),
-		"",
-		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
-		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: logger},
-		nil,
-		nil,
-		nil,
 		executionFactory,
 		factorysessions.ProviderIdentityResolver(func(identity string) (string, error) {
 			switch identity {
@@ -922,6 +913,16 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 				return "", errors.New("unexpected provider")
 			}
 		}),
+	).Open(
+		factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
+		factorysessions.PersistencePolicyDisabled,
+		t.TempDir(),
+		"",
+		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: logger},
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewDurableExecution: %v", err)
@@ -1020,17 +1021,24 @@ func TestNewDurableExecutionPreservesPartialOwnerOnAcquisitionFailure(t *testing
 	t.Parallel()
 	owner := &portableReplayRuntimeOwner{}
 	failure := errors.New("resource acquisition failed")
-	opened, err := NewDurableExecution(
+	opened, err := NewDurableOpening(
 		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
-		factorydefinitions.RuntimeSelection{Directory: "/selected"},
-		factorysessions.PersistencePolicyDisabled, "/operator", "", operatorconfig.ResolvedDefaults{},
-		RuntimeRoot{FactoryRootDir: "/selected", BaseLogger: zap.NewNop()}, nil, nil, nil,
 		func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
 			map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
 			[]operatorconfig.ACPIntegration, *zap.Logger) (durableexecution.Service, error) {
 			return owner, failure
 		},
 		func(identity string) (string, error) { return identity, nil },
+	).Open(
+		factorydefinitions.RuntimeSelection{Directory: "/selected"},
+		factorysessions.PersistencePolicyDisabled,
+		"/operator",
+		"",
+		operatorconfig.ResolvedDefaults{},
+		RuntimeRoot{FactoryRootDir: "/selected", BaseLogger: zap.NewNop()},
+		nil,
+		nil,
+		nil,
 	)
 	if !errors.Is(err, failure) {
 		t.Fatalf("opening error = %v, want acquisition failure", err)
@@ -1040,5 +1048,47 @@ func TestNewDurableExecutionPreservesPartialOwnerOnAcquisitionFailure(t *testing
 	}
 	if opened.WorkerSettings != nil || opened.ACPIntegrations != nil || opened.OperatorModels != nil {
 		t.Fatal("failed opening published successful execution settings")
+	}
+}
+
+func TestDurableOpeningKeepsRequestSettingsIndependent(t *testing.T) {
+	t.Parallel()
+	configured := operatorconfig.Config{WorkerPresets: []operatorconfig.WorkerPreset{{ID: "review", ModelProvider: "codex", Model: "first"}}}
+	var roots []string
+	opening := NewDurableOpening(
+		func(string) (operatorconfig.Config, error) { return configured, nil },
+		func(root string, _ factorysessions.PersistencePolicy, _ providers.Service, _ factoryruntime.Clock,
+			_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, _ *workers.MockWorkersConfig,
+			_ []operatorconfig.ACPIntegration, _ *zap.Logger) (durableexecution.Service, error) {
+			roots = append(roots, root)
+			return nil, nil
+		},
+		func(identity string) (string, error) { return identity, nil },
+	)
+	first, err := opening.Open(factorydefinitions.RuntimeSelection{Directory: "/first"},
+		factorysessions.PersistencePolicyDisabled, "/operator", "", operatorconfig.ResolvedDefaults{WorkerModel: "first-default"},
+		RuntimeRoot{}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured.WorkerPresets[0].Model = "second"
+	second, err := opening.Open(factorydefinitions.RuntimeSelection{Directory: "/second"},
+		factorysessions.PersistencePolicyDisabled, "/operator", "", operatorconfig.ResolvedDefaults{WorkerModel: "second-default"},
+		RuntimeRoot{}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 2 || roots[0] != "/first" || roots[1] != "/second" {
+		t.Fatalf("acquired roots = %v", roots)
+	}
+	if first.WorkerSettings.Presets["review"].Model != "first" || first.WorkerSettings.DefaultModel != "first-default" {
+		t.Fatalf("first opening settings changed: %#v", first.WorkerSettings)
+	}
+	if second.WorkerSettings.Presets["review"].Model != "second" || second.WorkerSettings.DefaultModel != "second-default" {
+		t.Fatalf("second opening settings = %#v", second.WorkerSettings)
+	}
+	second.WorkerSettings.Presets["review"] = factoryruntime.JavaScriptWorkerPreset{Model: "mutated"}
+	if first.WorkerSettings.Presets["review"].Model != "first" {
+		t.Fatal("second result mutation changed the first opening")
 	}
 }

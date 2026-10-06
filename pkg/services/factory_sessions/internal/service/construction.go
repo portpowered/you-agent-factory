@@ -159,8 +159,23 @@ func (r *Root) prepareRuntime(
 		nil
 }
 
-func NewDurableExecution(
+// DurableOpening owns the fixed collaborators used by live and replay acquisition.
+// Each Open call retains only its request's settings and acquired resource owner.
+type DurableOpening struct {
+	loadOperatorConfig operatorconfig.ConfigLoader
+	executionFactory   FactorySessionExecutionFactory
+	providerIdentities factorysessions.ProviderIdentityResolver
+}
+
+func NewDurableOpening(
 	loadOperatorConfig operatorconfig.ConfigLoader,
+	executionFactory FactorySessionExecutionFactory,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+) *DurableOpening {
+	return &DurableOpening{loadOperatorConfig: loadOperatorConfig, executionFactory: executionFactory, providerIdentities: providerIdentities}
+}
+
+func (opening *DurableOpening) Open(
 	definitionRequest factorydefinitions.RuntimeSelection,
 	persistence factorysessions.PersistencePolicy,
 	systemConfigHome string,
@@ -170,10 +185,8 @@ func NewDurableExecution(
 	clock factoryruntime.Clock,
 	providerOverride providers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
-	executionFactory FactorySessionExecutionFactory,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, error) {
-	if executionFactory == nil {
+	if opening.executionFactory == nil {
 		return DurableExecution{}, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
 	}
 	projectRoot := firstNonEmpty(definitionRequest.ExecutionBaseDir, definitionRequest.Directory, root.FactoryRootDir)
@@ -181,19 +194,52 @@ func NewDurableExecution(
 	if err != nil {
 		return DurableExecution{}, err
 	}
-	operatorConfig, err := loadOperatorConfig(configPath)
+	operatorConfig, err := opening.loadOperatorConfig(configPath)
 	if err != nil {
 		return DurableExecution{}, fmt.Errorf("compose durable session worker presets: %w", err)
 	}
-	if providerIdentities == nil {
-		return DurableExecution{}, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
+	workerPresetIDs, workerSettings, err := opening.resolveWorkerSettings(operatorConfig, resolvedDefaults)
+	if err != nil {
+		return DurableExecution{}, err
+	}
+	execution, err := opening.executionFactory(
+		projectRoot,
+		persistence,
+		providerOverride,
+		clock,
+		workerPresetIDs,
+		workerSettings,
+		mockWorkersConfig,
+		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
+		root.BaseLogger,
+	)
+	if err != nil {
+		// The opener can acquire an owner before failing. Sessions registers
+		// its cleanup before checking this error, so preserve that partial
+		// ownership without publishing successful execution settings.
+		return DurableExecution{Service: execution}, fmt.Errorf("compose durable session persistence: %w", err)
+	}
+	return DurableExecution{
+		Service:         execution,
+		WorkerSettings:  workersettings.Clone(&workerSettings),
+		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
+		OperatorModels:  projectOperatorModelOverlays(operatorConfig.Models),
+	}, nil
+}
+
+func (opening *DurableOpening) resolveWorkerSettings(
+	operatorConfig operatorconfig.Config,
+	resolvedDefaults operatorconfig.ResolvedDefaults,
+) (map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, error) {
+	if opening.providerIdentities == nil {
+		return nil, factoryruntime.JavaScriptWorkerSettings{}, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
 	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
 	workerPresets := make(map[string]factoryruntime.JavaScriptWorkerPreset, len(operatorConfig.WorkerPresets))
 	for index, preset := range operatorConfig.WorkerPresets {
-		canonicalProvider, err := providerIdentities(preset.ModelProvider)
+		canonicalProvider, err := opening.providerIdentities(preset.ModelProvider)
 		if err != nil {
-			return DurableExecution{}, fmt.Errorf(
+			return nil, factoryruntime.JavaScriptWorkerSettings{}, fmt.Errorf(
 				"compose durable session worker presets: workerPresets[%d].modelProvider: %w",
 				index,
 				err,
@@ -208,43 +254,18 @@ func NewDurableExecution(
 	}
 	defaultProvider := firstNonEmpty(resolvedDefaults.WorkerModelProvider, operatorConfig.Defaults.WorkerModelProvider)
 	if strings.TrimSpace(defaultProvider) != "" {
-		defaultProvider, err = providerIdentities(defaultProvider)
+		canonicalProvider, err := opening.providerIdentities(defaultProvider)
 		if err != nil {
-			return DurableExecution{}, fmt.Errorf(
+			return nil, factoryruntime.JavaScriptWorkerSettings{}, fmt.Errorf(
 				"compose durable session worker presets: defaults.workerModelProvider: %w",
 				err,
 			)
 		}
+		defaultProvider = canonicalProvider
 	}
-	execution, err := executionFactory(
-		projectRoot,
-		persistence,
-		providerOverride,
-		clock,
-		workerPresetIDs,
-		factoryruntime.JavaScriptWorkerSettings{
-			Presets:              workerPresets,
-			DefaultModelProvider: defaultProvider,
-			DefaultModel:         firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
-		},
-		mockWorkersConfig,
-		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
-		root.BaseLogger,
-	)
-	if err != nil {
-		// The opener can acquire an owner before failing. Sessions registers
-		// its cleanup before checking this error, so preserve that partial
-		// ownership without publishing successful execution settings.
-		return DurableExecution{Service: execution}, fmt.Errorf("compose durable session persistence: %w", err)
-	}
-	return DurableExecution{
-		Service: execution,
-		WorkerSettings: workersettings.Clone(&factoryruntime.JavaScriptWorkerSettings{
-			Presets: workerPresets, DefaultModelProvider: defaultProvider,
-			DefaultModel: firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
-		}),
-		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
-		OperatorModels:  projectOperatorModelOverlays(operatorConfig.Models),
+	return workerPresetIDs, factoryruntime.JavaScriptWorkerSettings{
+		Presets: workerPresets, DefaultModelProvider: defaultProvider,
+		DefaultModel: firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
 	}, nil
 }
 
