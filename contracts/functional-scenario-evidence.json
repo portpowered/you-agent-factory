@@ -208,6 +208,14 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.terminate",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
@@ -251,6 +259,15 @@
         "cli/you.worker-sessions.invoke",
         "rest/readWorkerSessionLogs",
         "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.terminate",
+        "rest/readWorkerSessionLogs"
       ]
     },
     {

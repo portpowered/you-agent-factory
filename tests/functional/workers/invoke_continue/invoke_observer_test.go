@@ -49,6 +49,10 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 	progress := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-progress\",\"type\":\"command_execution\",\"command\":\"synthetic inspection\",\"aggregated_output\":\"T7 progress before detach\",\"exit_code\":0}}\n")
 	if observer != nil {
 		observer(platformprocess.OutputStreamStdout, progress)
+		if filepath.Base(request.WorkDir) == "t7-degraded" {
+			// One committed progress record precedes this selected append loss.
+			observer(platformprocess.OutputStreamStdout, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-lost-progress\",\"type\":\"command_execution\",\"command\":\"synthetic lost inspection\",\"exit_code\":0}}\n"))
+		}
 	}
 	close(r.started)
 	defer close(r.stopped)

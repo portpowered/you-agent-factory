@@ -122,10 +122,12 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
-	gated := &t7GatedProviderRunner{}
-	gated.reset()
-	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-detach", gated, gated, nil, nil, nil, gated.reset); err != nil {
-		return invokeContinueScenarioSetup{}, err
+	for _, name := range []string{"t7-detach", "t7-degraded", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
+		gated := &t7GatedProviderRunner{}
+		gated.reset()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
 	}
 	unreachable := newInvokeContinueResettableProviderCommandRunner()
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
