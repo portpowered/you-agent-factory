@@ -98,6 +98,7 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 // used by the Factory Sessions status routes. Wire supplies the owner root
 // only after confirming it exposes this capability.
 type FactoryStatusSessionReader interface {
+	StartupRecoveryForSession(context.Context, string) (*factorysessions.StartupRecovery, error)
 	ObserveForSession(
 		context.Context,
 		string,
@@ -120,9 +121,9 @@ func NewFactoryStatusAPI(
 	return &factoryStatusAPI{sessions: sessions, projector: projector}
 }
 
-func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
 	if api == nil || api.sessions == nil || api.projector == nil {
-		return factoryruntime.FactoryStatus{}, factoryruntime.ErrNotRunning
+		return apisurface.FactorySessionStatus{}, factoryruntime.ErrNotRunning
 	}
 	if sessionID = strings.TrimSpace(sessionID); sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
@@ -131,9 +132,16 @@ func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {
-		return factoryruntime.FactoryStatus{}, err
+		return apisurface.FactorySessionStatus{}, err
 	}
-	return api.projector.ProjectFactoryStatusFromObservation(result.Observation), nil
+	recovery, err := api.sessions.StartupRecoveryForSession(ctx, sessionID)
+	if err != nil {
+		return apisurface.FactorySessionStatus{}, err
+	}
+	return apisurface.FactorySessionStatus{
+		FactoryStatus:   api.projector.ProjectFactoryStatusFromObservation(result.Observation),
+		StartupRecovery: recovery,
+	}, nil
 }
 
 // Server is retained as a private receiver alias while the moved handler files

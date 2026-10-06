@@ -77,7 +77,33 @@ Startup restores the board before readiness and publishes the reference atomical
 
 For an older installation without a reference, startup adopts a uniquely matching retained history from the same profile.
 Repository identity and recorded facts determine the selection; file dates do not determine it.
-Missing, corrupt, foreign, or ambiguous history stops startup without activating workers or replacing retained files.
+Foreign or ambiguous history stops startup without activating workers or replacing retained files.
+
+If the selected durable snapshot is absent, startup creates an empty board without a recovery warning.
+An old reference does not cause replay when that snapshot is absent.
+
+For implicit continuous-server startup, unreadable snapshots are preserved before an empty board starts.
+This includes truncated JSON, invalid snapshot schemas, read failures, and snapshots larger than 67,108,864 bytes.
+The size limit is inclusive.
+Startup moves the snapshot and existing board reference to separate archives without replacing earlier archives.
+Each archive uses `<path>.unreadable.<UTC YYYYMMDDTHHMMSSfffffffffZ>.<unique-id>`; collisions receive a numbered suffix.
+Previous recordings remain available.
+If preservation fails, startup stops before readiness or worker activation.
+
+Without `--debug`, stderr prints one line:
+
+```text
+Durable state "<path>" quarantined as "<archive>": <safe cause>. Started an empty board.
+```
+
+`GET /status` and `GET /factory-sessions/~default/status` include the same condition in `startupRecovery`.
+Its fields are `code`, `file`, `cause`, and `quarantinedFile`.
+The code is `DURABLE_STATE_QUARANTINED`.
+Causes are `INVALID_JSON`, `INVALID_SCHEMA`, `SIZE_LIMIT`, or `READ_FAILED`; damaged content is never included.
+The condition remains until that Factory Session closes and is absent after a healthy restart.
+New Work persists normally on the fresh board.
+Archives can contain prompts or credentials; preserve them securely when investigating the failure.
+Startup does not repair or partially recover damaged snapshots.
 
 Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace the automatic board reference.
 Batch runs continue to create separate dated recordings.

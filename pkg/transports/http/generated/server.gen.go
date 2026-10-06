@@ -1319,6 +1319,19 @@ const (
 	Accepted ShutdownAcceptedResponseStatus = "accepted"
 )
 
+// Defines values for StatusResponseStartupRecoveryCause.
+const (
+	INVALIDJSON   StatusResponseStartupRecoveryCause = "INVALID_JSON"
+	INVALIDSCHEMA StatusResponseStartupRecoveryCause = "INVALID_SCHEMA"
+	READFAILED    StatusResponseStartupRecoveryCause = "READ_FAILED"
+	SIZELIMIT     StatusResponseStartupRecoveryCause = "SIZE_LIMIT"
+)
+
+// Defines values for StatusResponseStartupRecoveryCode.
+const (
+	DURABLESTATEQUARANTINED StatusResponseStartupRecoveryCode = "DURABLE_STATE_QUARANTINED"
+)
+
 // Defines values for SubmitWorkItemType.
 const (
 	SubmitWorkItemTypeAudio    SubmitWorkItemType = "audio"
@@ -8084,8 +8097,20 @@ type StatusResponse struct {
 	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
 	Resources              *[]ResourceUsage                      `json:"resources,omitempty"`
 	RuntimeStatus          string                                `json:"runtimeStatus"`
-	TotalTokens            int                                   `json:"totalTokens"`
+	StartupRecovery        *struct {
+		Cause           StatusResponseStartupRecoveryCause `json:"cause"`
+		Code            StatusResponseStartupRecoveryCode  `json:"code"`
+		File            string                             `json:"file"`
+		QuarantinedFile string                             `json:"quarantinedFile"`
+	} `json:"startupRecovery,omitempty"`
+	TotalTokens int `json:"totalTokens"`
 }
+
+// StatusResponseStartupRecoveryCause defines model for StatusResponse.StartupRecovery.Cause.
+type StatusResponseStartupRecoveryCause string
+
+// StatusResponseStartupRecoveryCode defines model for StatusResponse.StartupRecovery.Code.
+type StatusResponseStartupRecoveryCode string
 
 // StringMap defines model for StringMap.
 type StringMap map[string]string

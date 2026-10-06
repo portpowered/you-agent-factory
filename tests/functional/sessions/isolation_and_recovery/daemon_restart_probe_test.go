@@ -3,10 +3,12 @@ package isolation_and_recovery_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -425,18 +427,8 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
-	config := seededReplayResumeFactoryConfig()
-	types := config["workTypes"].([]map[string]any)
-	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
-	station := config["workstations"].([]map[string]any)[0]
-	station["type"] = "LOGICAL_MOVE"
-	delete(station, "worker")
-	dir := filepath.Join(repo, "factory")
-	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
-		t.Fatal(err)
-	}
-	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: LOGICAL_MOVE\n---\n")
-	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	scaffoldUnreadableBoard(t, repo)
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -461,10 +453,21 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 		writeRestartProbeFile(t, snapshot, damaged)
 		command, url, inputs := startEmptyPlainBoard(t, process, repo, home, apis[index+1])
 		cause := []string{"INVALID_JSON", "INVALID_SCHEMA"}[index]
+		assertUnreadableStatus(t, url, snapshot, cause)
+		if runner.calls.Load() != 0 {
+			t.Fatal("damaged startup dispatched old Work")
+		}
 		assertUnreadableArchive(t, snapshot, damaged, index+1)
 		assertUnreadableArchive(t, reference, oldReference, index+1)
 		seedPlainBoardSiblingWork(t, url, repo+" fresh § —")
 		waitForPlainBoardWorkConfirmed(t, url)
+		assertUnreadableStatus(t, url, snapshot, cause)
+		if index == 1 {
+			putPlainBoardBatch(t, url, "fresh-recovery", []byte(`{"requestId":"fresh-recovery","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"fresh-recovery","name":"fresh","workTypeName":"task","state":"fresh","payload":"fresh recovery § —"}]}`))
+			support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+				return status.TotalTokens == 3 && status.Categories.Terminal == 2 && runner.calls.Load() == 1
+			})
+		}
 		restartProbeShutdown(t, url, command)
 		assertUnreadableStderr(t, snapshot, damaged, cause, inputs)
 		assertUnreadableArchive(t, snapshot, damaged, index+1)
@@ -475,8 +478,126 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 			t.Fatal("startup exposed damaged content")
 		}
 	}
-	if runner.calls.Load() != 0 {
-		t.Fatal("unreadable snapshot dispatched stale Work")
+	if runner.calls.Load() != 1 {
+		t.Fatal("fresh Work did not dispatch exactly once")
+	}
+	// F6: clean reopening removes the prior session's diagnostic and retains
+	// the new Work. All generations reuse the same process graph.
+	command, url, inputs := startEmptyRecoverySuccessor(t, process, repo, home, apis[3])
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.TotalTokens == 3 && status.Categories.Terminal == 2
+	})
+	if runner.calls.Load() != 1 {
+		t.Fatal("clean restart redispatched completed Work")
+	}
+	restartProbeShutdown(t, url, command)
+	if strings.Contains(inputs.Stderr(), "Started an empty board.") {
+		t.Fatal("clean restart repeated the recovery warning")
+	}
+	testUnreadableOversizedBoard(t, process, repo, home, snapshot, apis[4])
+
+}
+
+func scaffoldUnreadableBoard(t *testing.T, repo string) {
+	t.Helper()
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	station := config["workstations"].([]map[string]any)[0]
+	station["type"] = "LOGICAL_MOVE"
+	delete(station, "worker")
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "fresh", "type": "PROCESSING"})
+	config["workstations"] = append(config["workstations"].([]map[string]any), map[string]any{
+		"name": "fresh-process", "worker": "worker-a",
+		"inputs":  []map[string]string{{"workType": "task", "state": "fresh"}},
+		"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+	})
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: LOGICAL_MOVE\n---\n")
+	support.WriteWorkstationConfig(t, dir, "fresh-process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+}
+
+func testUnreadableOversizedBoard(t *testing.T, process support.Process, repo, home, snapshot string, api *support.ProcessAPIServer) {
+	t.Helper()
+	// F4 owns one real cap+1 file. Stream its checksum rather than decoding or
+	// retaining another full copy of the oversized bytes in the witness.
+	file, err := os.Create(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("fixture-private-prompt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate((64 << 20) + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wantHash := unreadableFileChecksum(t, snapshot)
+	command, url, inputs := startEmptyPlainBoard(t, process, repo, home, api)
+	assertUnreadableStatus(t, url, snapshot, "SIZE_LIMIT")
+	status := support.GetJSON[factoryapi.StatusResponse](t, url+"/status")
+	archive := status.StartupRecovery.QuarantinedFile
+	if got := unreadableFileChecksum(t, archive); got != wantHash {
+		t.Fatal("oversized archive changed bytes")
+	}
+	restartProbeShutdown(t, url, command)
+	wantLine := fmt.Sprintf("Durable state %q quarantined as %q: SIZE_LIMIT. Started an empty board.\n", snapshot, archive)
+	if strings.Count(inputs.Stderr(), wantLine) != 1 || strings.Contains(inputs.Stdout()+inputs.Stderr(), "fixture-private-prompt") {
+		t.Fatal("oversized warning leaked content or was missing/repeated")
+	}
+}
+
+func unreadableFileChecksum(t *testing.T, path string) [32]byte {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		t.Fatal(err)
+	}
+	var result [32]byte
+	copy(result[:], hash.Sum(nil))
+	return result
+}
+
+func startEmptyRecoverySuccessor(t *testing.T, process support.Process, repo, home string, api *support.ProcessAPIServer) (*support.ProcessCommand, string, *support.CapturedInputs) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = repo
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	url := restartProbeReadyURL(t, api, command)
+	status := support.GetJSON[factoryapi.StatusResponse](t, url+"/status")
+	if status.StartupRecovery != nil {
+		t.Fatal("clean successor retained a closed session's recovery condition")
+	}
+	return command, url, inputs
+}
+
+func assertUnreadableStatus(t *testing.T, url, snapshot, cause string) {
+	t.Helper()
+	for _, route := range []string{"/status", "/factory-sessions/~default/status"} {
+		status := support.GetJSON[factoryapi.StatusResponse](t, url+route)
+		recovery := status.StartupRecovery
+		if recovery == nil || recovery.Code != "DURABLE_STATE_QUARANTINED" || recovery.Cause != factoryapi.StatusResponseStartupRecoveryCause(cause) || recovery.File != snapshot {
+			t.Fatalf("%s recovery = %#v, want preserved startup condition", route, recovery)
+		}
+		if !strings.HasPrefix(recovery.QuarantinedFile, snapshot+".unreadable.") {
+			t.Fatal("status omitted the quarantine path")
+		}
+		encoded, err := json.Marshal(status)
+		if err != nil || bytes.Contains(encoded, []byte("fixture-private-prompt")) {
+			t.Fatal("status exposed damaged content or could not be encoded")
+		}
 	}
 }
 

@@ -71,7 +71,7 @@ func (s *Server) getStatus(
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, apisurface.FactoryStatusToAPI(status))
+	s.writeJSON(w, http.StatusOK, apisurface.FactorySessionStatusToAPI(status))
 }
 
 // GetFactoryResponseEventsBySessionId streams the retained-then-live ephemeral

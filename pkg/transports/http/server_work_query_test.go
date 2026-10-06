@@ -15,6 +15,7 @@ import (
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -28,11 +29,11 @@ func newWorkReadProtocolServer(role strictWorkAPIFake) *Server {
 func newRuntimeStatusTestServer(status factoryruntime.FactoryStatus) *Server {
 	return newServerFromRoles(
 		nil,
-		strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+		strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
 			if sessionID != "" {
 				panic("unexpected scoped Factory status request")
 			}
-			return status, nil
+			return apisurface.FactorySessionStatus{FactoryStatus: status}, nil
 		}},
 		nil, nil, nil, nil, &modelshttp.Handler{}, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zap.NewNop(),

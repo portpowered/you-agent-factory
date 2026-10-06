@@ -37,7 +37,14 @@ type RuntimeAPI interface {
 // protocol transports. An empty session ID selects the default Factory Session
 // runtime; a non-empty ID selects that Factory Session.
 type FactoryStatusAPI interface {
-	ProjectFactoryStatus(ctx context.Context, sessionID string) (factory.FactoryStatus, error)
+	ProjectFactoryStatus(ctx context.Context, sessionID string) (FactorySessionStatus, error)
+}
+
+// FactorySessionStatus combines detached runtime health with the Sessions-owned
+// startup diagnostic. Runtime does not own durable startup policy.
+type FactorySessionStatus struct {
+	factory.FactoryStatus
+	StartupRecovery *factorysessions.StartupRecovery
 }
 
 // LiveSessionAPI owns live Factory Session inventory, lifecycle, and response

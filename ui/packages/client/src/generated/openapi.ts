@@ -2288,6 +2288,14 @@ export interface components {
       runtimeStatus: string;
       totalTokens: number;
       resources?: components["schemas"]["ResourceUsage"][];
+      startupRecovery?: {
+        /** @enum {string} */
+        code: StatusResponseStartupRecoveryCode;
+        file: string;
+        /** @enum {string} */
+        cause: StatusResponseStartupRecoveryCause;
+        quarantinedFile: string;
+      };
     };
     ListModelsResponse: {
       /** @description Managed runtimes exposed by the currently loaded runtime configuration. */
@@ -10763,6 +10771,19 @@ export const CostsReportStatus = {
 } as const;
 export type CostsReportStatus =
   (typeof CostsReportStatus)[keyof typeof CostsReportStatus];
+export const StatusResponseStartupRecoveryCode = {
+  DURABLE_STATE_QUARANTINED: "DURABLE_STATE_QUARANTINED",
+} as const;
+export type StatusResponseStartupRecoveryCode =
+  (typeof StatusResponseStartupRecoveryCode)[keyof typeof StatusResponseStartupRecoveryCode];
+export const StatusResponseStartupRecoveryCause = {
+  INVALID_JSON: "INVALID_JSON",
+  INVALID_SCHEMA: "INVALID_SCHEMA",
+  SIZE_LIMIT: "SIZE_LIMIT",
+  READ_FAILED: "READ_FAILED",
+} as const;
+export type StatusResponseStartupRecoveryCause =
+  (typeof StatusResponseStartupRecoveryCause)[keyof typeof StatusResponseStartupRecoveryCause];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",

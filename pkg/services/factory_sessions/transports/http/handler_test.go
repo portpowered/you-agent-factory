@@ -155,6 +155,10 @@ func (role *factoryStatusProjectorRole) ProjectFactoryStatusFromObservation(fact
 	return role.status
 }
 
+func (role *factoryStatusSessionRole) StartupRecoveryForSession(context.Context, string) (*factorysessions.StartupRecovery, error) {
+	return nil, nil
+}
+
 func (role *factoryStatusSessionRole) ObserveForSession(
 	_ context.Context,
 	sessionID string,
