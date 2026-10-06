@@ -411,14 +411,14 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	replayInputs := &historicalReplayInputsRecorder{portable: portable, events: &events}
 	recordingsRoot := &recordingsRootConstructionStub{replayInputs: replayInputs}
 	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
-	dependencies.Recordings.Service = recordingsRoot
-	dependencies.Recordings.Runtime = recordingsRoot
-	dependencies.FactoryRuntime.RuntimeRoot = &replayRoutingRoot{}
-	dependencies.FactoryRuntime.ResolveClock = func(clock factoryruntime.Clock) factoryruntime.Clock {
+	dependencies := validRuntimeOpeningCollaborators(&calls)
+	dependencies.RecordingsService = recordingsRoot
+	dependencies.RecordingsRuntime = recordingsRoot
+	dependencies.RuntimeRoot = &replayRoutingRoot{}
+	dependencies.ResolveClock = func(clock factoryruntime.Clock) factoryruntime.Clock {
 		return clock
 	}
-	dependencies.FactoryRuntime.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
+	dependencies.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
 		return zap.NewNop()
 	}
 	runtimeRecord := &portableReplayRuntimeRecord{
@@ -433,12 +433,12 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		},
 	}
 	dependencies.InitialActivation = portableReplayRuntimeAssemblerStub{runtime: runtimeRecord}.Open
-	dependencies.FactoryDefinitions.Service = activationDefinitionsStub{snapshot: activationSnapshot()}
-	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
+	dependencies.Definitions = activationDefinitionsStub{snapshot: activationSnapshot()}
+	dependencies.GenerateRuntimeInstanceID = func() string {
 		return "portable-replay-runtime"
 	}
-	dependencies.Workers.Service = &portableReplayWorkerService{}
-	dependencies.FactorySessions.DurableExecutionFactory = func(
+	dependencies.WorkerService = &portableReplayWorkerService{}
+	dependencies.DurableExecutionFactory = func(
 		_ factorydefinitions.RuntimeSelection,
 		_ factorysessions.PersistencePolicy,
 		_ string,

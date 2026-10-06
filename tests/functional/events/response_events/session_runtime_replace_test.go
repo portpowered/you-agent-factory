@@ -3,16 +3,23 @@ package response_events
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -63,7 +70,8 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
 
-	edges := serviceedges.Edges{}
+	candidateFiles := &replacementOpeningFiles{path: filepath.Join(dir, factorydefinitions.InputsDir)}
+	edges := serviceedges.Edges{FactoryRuntimeDirectories: candidateFiles}
 	support.ConfigureWorkerCommands(
 		t,
 		&edges,
@@ -160,6 +168,23 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		}
 	}
 	assertReplacementResponseCursor(t, baseURL, sessionID, firstMax, secondEvents)
+	// Fail only this candidate's next opening, after a successful replacement.
+	candidateFiles.fail.Store(true)
+	assertReplacementOpeningFailure(t, baseURL, sessionID)
+	if candidateFiles.fail.Load() {
+		t.Fatal("replacement never reached the candidate opening edge")
+	}
+	assertReplacementResponseCursor(t, baseURL, sessionID, firstMax, secondEvents)
+	assertSessionRuntimeReplaceInvocationCompleted(t,
+		postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "prior generation after failed replacement"))
+	afterFailure := support.GetFactoryResponseEventsAt(t, baseURL, sessionID)
+	if len(afterFailure) <= len(secondEvents) || !reflect.DeepEqual(afterFailure[:len(secondEvents)], secondEvents) {
+		t.Fatal("failed replacement lost prior generation response history")
+	}
+	assertResponseEventsAscendingSequence(t, afterFailure)
+	assertReplacementResponseCursor(t, baseURL, sessionID,
+		secondEvents[len(secondEvents)-1].Sequence, afterFailure[len(secondEvents):])
+
 	assertSessionRuntimeReplaceInvocationCompleted(t,
 		postSessionRuntimeReplaceInvocation(t, baseURL, peerID, "peer after replacement and control"))
 	peerAfter := support.GetFactoryResponseEventsAt(t, baseURL, peerID)
@@ -372,4 +397,57 @@ func sessionRuntimeReplaceFactorySaveBody(id, workType string, version factoryap
 		"workstations":[{"name":"process","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"worker-a","body":"Do the work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure":[{"workType":"` + workType + `","state":"failed"}]}]
 	}`
 	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+// Only the selected folder can fail, once; peers retain ordinary local IO.
+type replacementOpeningFiles struct {
+	platformfilesystem.Local
+	path string
+	fail atomic.Bool
+}
+
+func (files *replacementOpeningFiles) Stat(path string) (fs.FileInfo, error) {
+	if filepath.Clean(path) == filepath.Clean(files.path) && files.fail.Load() {
+		return nil, os.ErrNotExist
+	}
+	return os.Stat(path)
+}
+
+func (files *replacementOpeningFiles) MkdirAll(path string, mode fs.FileMode) error {
+	if filepath.Clean(path) == filepath.Clean(files.path) && files.fail.CompareAndSwap(true, false) {
+		return errors.New("candidate replacement opening denied")
+	}
+	return os.MkdirAll(path, mode)
+}
+
+func assertReplacementOpeningFailure(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	current := getSessionRuntimeReplaceCurrentFactory(t, baseURL, sessionID)
+	next := factoryapi.HybridLogicalTimestamp{
+		Logical:  current.Version.Logical + 1,
+		Physical: current.Version.Physical.UTC().Add(time.Millisecond),
+	}
+	body := sessionRuntimeReplaceFactorySaveBody(*current.Id, "task", next)
+	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/factory"
+	request, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(payload, &failure); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadRequest || failure.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY || failure.Message != "Factory payload is not a valid Agent Factory definition." {
+		t.Fatalf("failed replacement = HTTP %d: %s, want candidate opening failure", response.StatusCode, payload)
+	}
 }

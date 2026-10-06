@@ -631,17 +631,17 @@ func TestNewFactorySelectsLegacyHistoricalReplayBeforeLiveRuntimeAssembly(t *tes
 		recordingsRootConstructionStub: &recordingsRootConstructionStub{}, loader: loader,
 	}
 	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
-	dependencies.Recordings.Service = root
-	dependencies.Recordings.Runtime = root
+	dependencies := validRuntimeOpeningCollaborators(&calls)
+	dependencies.RecordingsService = root
+	dependencies.RecordingsRuntime = root
 	// Metadata drift inspection may consult the current authored Factory, but
 	// this selection test keeps the live-runtime fail-on-call counter focused
 	// on activation collaborators.
-	dependencies.FactoryDefinitions.LoadFactory = func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	dependencies.LoadFactory = func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return nil, nil
 	}
-	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string { return "legacy-runtime" }
-	dependencies.FactoryRuntime.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
+	dependencies.GenerateRuntimeInstanceID = func() string { return "legacy-runtime" }
+	dependencies.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
 		return zap.NewNop()
 	}
 	factory, err := dependencies.newFactory()

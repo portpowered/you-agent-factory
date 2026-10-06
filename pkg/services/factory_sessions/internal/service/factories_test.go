@@ -48,157 +48,120 @@ type workerExecutionBindingWorkerService struct {
 	workers.Service
 }
 
-// runtimeOpeningFixture is test-only assembly syntax. Production callers use
-// the ten separate owner-port arguments exposed by NewFactory; keeping this
-// fixture aggregate local makes omission and identity cases concise without
-// reintroducing an aggregate production contract.
+// runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
-	ProviderSessions   *ProviderSessionsPorts
-	FactoryRuntime     *FactoryRuntimePorts
-	FactoryDefinitions *FactoryDefinitionsPorts
-	FactorySessions    *FactorySessionsPorts
-	Work               *WorkPorts
-	Automations        *AutomationsPorts
-	Models             *ModelsPorts
-	Recordings         *RecordingsPorts
-	Webhooks           *WebhooksPorts
-	Workers            *WorkersPorts
-	InitialActivation  factoryruntime.InitialRuntimeActivationOperation
-	OperatorSettings   *OperatorSettingsPorts
+	ProviderSessions                 providersessions.Service
+	Logger                           *zap.Logger
+	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
+	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
+	WorkersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
+	RuntimeRoot                      FactoryRuntimeRoot
+	ResolveClock                     factoryruntime.ClockResolver
+	NewSessionLogger                 factoryruntime.SessionLoggerFactory
+	Clock                            factoryruntime.Clock
+	ProviderOverride                 ProviderOverrideService
+	SubmissionRecorder               recordings.SubmissionRecorder
+	DispatchRecorder                 recordings.DispatchRecorder
+	Validator                        factorydefinitions.Validator
+	NamedPaths                       factorydefinitions.NamedPathResolver
+	Definitions                      factorydefinitions.Service
+	RuntimeRouter                    *factorysessions.DefinitionRuntimeRouter
+	LoadFactory                      factorydefinitions.LoadedFactoryLoader
+	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
+	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
+	Assembly                         roles.RuntimeAssembly
+	DurableExecutionFactory          DurableExecutionFactory
+	FactorySessionExecutionFactory   FactorySessionExecutionFactory
+	FactoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
+	EditableFactoryValidator         factorysessions.EditableFactoryValidator
+	ProcessRuntimeFactory            roles.ProcessRuntimeFactory
+	GenerateSessionID                factorysessions.SessionIDGenerator
+	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
+	ResolveHome                      factorysessions.HomeDirectoryResolver
+	ProviderIdentities               factorysessions.ProviderIdentityResolver
+	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
+	WorkService                      work.Service
+	AutomationService                automations.Service
+	WebhooksService                  webhooks.Service
+	ModelService                     models.Service
+	RecordingsService                recordings.Service
+	RecordingsRuntime                recordings.RuntimeScopeService
+	WorkerService                    workers.Service
+	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
+	ProviderCommandRunner            ProviderCommandRunner
+	ScriptCommandRunner              ScriptCommandRunner
+	EnsureBackendScope               operatorsettings.BackendScopeEnsurer
+	InitialActivation                factoryruntime.InitialRuntimeActivationOperation
 }
 
 func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
-	initial := fixture.InitialActivation
-	if initial == nil {
-		initial = func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
-			return nil, nil
-		}
-	}
 	return NewRoot(
 		fixture.ProviderSessions,
-		fixture.FactoryRuntime,
-		fixture.FactoryDefinitions,
-		fixture.FactorySessions,
-		fixture.Work,
-		fixture.Automations,
-		fixture.Models,
-		fixture.Recordings,
-		fixture.Webhooks,
-		fixture.Workers,
-		fixture.OperatorSettings,
-		initial,
+		fixture.Logger,
+		fixture.FactoryWorkflows,
+		fixture.WorkflowPreview,
+		fixture.WorkersMockCommandRunnerFactory,
+		fixture.RuntimeRoot,
+		fixture.ResolveClock,
+		fixture.NewSessionLogger,
+		fixture.Clock,
+		fixture.ProviderOverride,
+		fixture.SubmissionRecorder,
+		fixture.DispatchRecorder,
+		fixture.Validator,
+		fixture.NamedPaths,
+		fixture.Definitions,
+		fixture.RuntimeRouter,
+		fixture.LoadFactory,
+		fixture.NewLoadedFactory,
+		fixture.DecodeReplayConfig,
+		fixture.CaptureLoadedFactorySnapshot,
+		fixture.Assembly,
+		fixture.DurableExecutionFactory,
+		fixture.FactorySessionExecutionFactory,
+		fixture.FactoryScaffoldInitializer,
+		fixture.EditableFactoryValidator,
+		fixture.ProcessRuntimeFactory,
+		fixture.GenerateSessionID,
+		fixture.GenerateRuntimeInstanceID,
+		fixture.ResolveHome,
+		fixture.ProviderIdentities,
+		fixture.InvocationMetricsRecorder,
+		fixture.WorkService,
+		fixture.AutomationService,
+		fixture.WebhooksService,
+		fixture.ModelService,
+		fixture.RecordingsService,
+		fixture.RecordingsRuntime,
+		fixture.WorkerService,
+		fixture.ProviderFromCommandRunnerFactory,
+		fixture.ProviderCommandRunner,
+		fixture.ScriptCommandRunner,
+		fixture.EnsureBackendScope,
+		fixture.InitialActivation,
 	)
 }
-
-func TestNewFactoryRejectsEveryMissingRuntimeOpeningOwnerPorts(t *testing.T) {
+func TestNewFactoryRemainsInert(t *testing.T) {
 	t.Parallel()
-
-	tests := []runtimeOpeningDependencyOmission{
-		{"Provider Sessions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.ProviderSessions = nil }},
-		{"Factory Runtime owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactoryRuntime = nil }},
-		{"Factory Definitions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactoryDefinitions = nil }},
-		{"Factory Sessions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactorySessions = nil }},
-		{"Work owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Work = nil }},
-		{"Automations owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Automations = nil }},
-		{"Models owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Models = nil }},
-		{"Recordings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Recordings = nil }},
-		{"Webhooks owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Webhooks = nil }},
-		{"Workers owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Workers = nil }},
-		{"Operator Settings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.OperatorSettings = nil }},
-	}
-
-	for _, test := range tests {
-		t.Run(test.requirement, func(t *testing.T) {
-			calls := 0
-			dependencies := validRuntimeOpeningOwnerPorts(&calls)
-			test.omit(&dependencies)
-
-			factory, err := dependencies.newFactory()
-			if factory != nil {
-				t.Fatalf("NewFactory() = %#v, want nil factory", factory)
-			}
-			if err == nil || !strings.Contains(err.Error(), test.requirement) {
-				t.Fatalf("NewFactory() error = %v, want actionable %q error", err, test.requirement)
-			}
-			if calls != 0 {
-				t.Fatalf("NewFactory() invoked %d collaborator functions, want inert failure", calls)
-			}
-		})
-	}
-}
-
-func TestNewFactoryRejectsEveryMissingRuntimeOpeningMember(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range runtimeOpeningMemberOmissions() {
-		t.Run(test.requirement, func(t *testing.T) {
-			calls := 0
-			dependencies := validRuntimeOpeningOwnerPorts(&calls)
-			test.omit(&dependencies)
-
-			factory, err := dependencies.newFactory()
-			if factory != nil {
-				t.Fatalf("NewFactory() = %#v, want nil factory", factory)
-			}
-			if err == nil || !strings.Contains(err.Error(), test.requirement) {
-				t.Fatalf("NewFactory() error = %v, want actionable %q error", err, test.requirement)
-			}
-			if calls != 0 {
-				t.Fatalf("NewFactory() invoked %d collaborator functions, want inert failure", calls)
-			}
-		})
-	}
-}
-
-func TestNewFactoryUsesStableFirstMissingRequirementAndRemainsInert(t *testing.T) {
-	t.Parallel()
-
 	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
-	dependencies.ProviderSessions = nil
-	dependencies.FactoryRuntime = nil
-
+	dependencies := validRuntimeOpeningCollaborators(&calls)
+	materializer := &selectedOpeningMaterializer{}
+	dependencies.WorkService = work.MaterializationService(materializer)
 	factory, err := dependencies.newFactory()
-	if factory != nil {
-		t.Fatalf("NewFactory() = %#v, want nil factory", factory)
-	}
-	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
-		t.Fatalf("NewFactory() error = %q, want first stable requirement %q", got, want)
+	if err != nil || factory == nil {
+		t.Fatalf("NewRoot() = (%v, %v)", factory, err)
 	}
 	if calls != 0 {
-		t.Fatalf("NewFactory() invoked %d collaborator functions, want inert failure", calls)
+		t.Fatalf("construction invoked %d collaborator functions", calls)
 	}
-}
-
-func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
-	materializer := &identityConstructionMaterializer{}
-	dependencies.Work.Service = work.MaterializationService(materializer)
-
-	factory, err := dependencies.newFactory()
-	if err != nil {
-		t.Fatalf("NewFactory() error = %v", err)
+	path, cleanup, err := factory.workService.MaterializeContentURL(t.Context(), "file:///identity.png")
+	if err != nil || path != "/tmp/identity.png" || cleanup == nil {
+		t.Fatalf("selected Work materialization = (%q, %v, %v)", path, cleanup, err)
 	}
-	if factory == nil {
-		t.Fatal("NewFactory() = nil, want factory")
-	}
-
-	assertProviderSessionsPortsRetained(t, factory, dependencies)
-	assertFactoryRuntimePortsRetained(t, factory, dependencies)
-	assertFactoryDefinitionsPortsRetained(t, factory, dependencies)
-	assertFactorySessionsPortsRetained(t, factory, dependencies)
-	assertWorkPortsRetained(t, factory, dependencies, materializer)
-	assertAutomationsPortsRetained(t, factory, dependencies)
-	assertModelsPortsRetained(t, factory, dependencies)
-	assertRecordingsPortsRetained(t, factory, dependencies)
-	assertWebhooksPortsRetained(t, factory, dependencies)
-	assertWorkersPortsRetained(t, factory, dependencies)
-	assertOperatorSettingsPortsRetained(t, factory, dependencies)
-	if calls != 0 {
-		t.Fatalf("NewFactory() invoked %d collaborator functions, want inert construction", calls)
+	cleanup()
+	if materializer.calls != 1 || materializer.input != "file:///identity.png" {
+		t.Fatalf("selected materializer calls = %d with %q", materializer.calls, materializer.input)
 	}
 }
 
@@ -211,16 +174,16 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	}
 	var events []string
 	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
+	dependencies := validRuntimeOpeningCollaborators(&calls)
 	replayInputs := &historicalReplayInputsRecorder{portable: portable, events: &events}
 	recordingsRoot := &recordingsRootConstructionStub{replayInputs: replayInputs}
-	dependencies.Recordings.Service = recordingsRoot
-	dependencies.Recordings.Runtime = recordingsRoot
-	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
+	dependencies.RecordingsService = recordingsRoot
+	dependencies.RecordingsRuntime = recordingsRoot
+	dependencies.GenerateRuntimeInstanceID = func() string {
 		events = append(events, "runtime-instance-id")
 		return "historical-runtime"
 	}
-	dependencies.FactoryRuntime.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
+	dependencies.NewSessionLogger = func(*zap.Logger, string, string, string) *zap.Logger {
 		events = append(events, "session-logger")
 		return zap.NewNop()
 	}
@@ -253,234 +216,47 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	}
 }
 
-func assertProviderSessionsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(t, "Provider Sessions service", opening.providerSessions, dependencies.ProviderSessions.Service)
-}
-
-func assertFactoryRuntimePortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.FactoryRuntime
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime workflows", opening.factoryWorkflows, group.FactoryWorkflows)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime preview", opening.workflowPreview, group.WorkflowPreview)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime mock runner", opening.workersMockCommandRunnerFactory, group.WorkersMockCommandRunnerFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", opening.resolveClock, group.ResolveClock)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime selected clock", opening.clock, group.Clock)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime base logger", opening.baseLogger, group.Logger)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime logger", opening.newSessionLogger, group.NewSessionLogger)
-}
-
-func assertFactoryDefinitionsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.FactoryDefinitions
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions validator", opening.factoryDefinitionValidator, group.Validator)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions paths", opening.namedPaths, group.NamedPaths)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions service", opening.factoryDefinitions, group.Service)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions runtime router", opening.definitionRuntimeRouter, group.RuntimeRouter)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions loader", opening.loadFactory, group.LoadFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions source", opening.newLoadedFactory, group.NewLoadedFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions replay decoder", opening.decodeReplayConfig, group.DecodeReplayConfig)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions snapshot capturer", opening.captureLoadedFactorySnapshot, group.CaptureLoadedFactorySnapshot)
-}
-
-func assertFactorySessionsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.FactorySessions
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime assembly", opening.factorySessionsRuntimeAssembly, group.RuntimeAssembly)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions durable execution", opening.durableExecutionFactory, group.DurableExecutionFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions execution", opening.factorySessionExecutionFactory, group.FactorySessionExecutionFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions scaffold", opening.factoryScaffoldInitializer, group.FactoryScaffoldInitializer)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions editable validation", opening.editableFactoryValidator, group.EditableFactoryValidator)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions process runtime", opening.processRuntimeFactory, group.ProcessRuntimeFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions session ID", opening.generateSessionID, group.GenerateSessionID)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime ID", opening.generateRuntimeInstanceID, group.GenerateRuntimeInstanceID)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions home", opening.resolveHome, group.ResolveHome)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions provider identities", opening.providerIdentities, group.ProviderIdentities)
-}
-
-func assertWorkPortsRetained(
-	t *testing.T,
-	opening *Root,
-	dependencies runtimeOpeningFixture,
-	materializer *identityConstructionMaterializer,
-) {
-	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(t, "Work service", opening.workService, dependencies.Work.Service)
-	path, cleanup, err := opening.workService.MaterializeContentURL(t.Context(), "file:///identity.png")
-	if err != nil || path != "/tmp/identity.png" || cleanup == nil {
-		t.Fatalf("Work materialization = (%q, %v, %v), want exact injected materializer", path, cleanup, err)
-	}
-	cleanup()
-	if materializer.calls != 1 || materializer.input != "file:///identity.png" {
-		t.Fatalf("Work materializer calls = %d with %q, want injected instance once", materializer.calls, materializer.input)
-	}
-}
-
-func assertAutomationsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.Automations
-	assertRuntimeOpeningDependencyIdentity(t, "Automations service", opening.automationService, group.Service)
-}
-
-func assertModelsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(t, "Models service", opening.modelService, dependencies.Models.Service)
-}
-
-func assertRecordingsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.Recordings
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings service", opening.recordingsService, group.Service)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings runtime", opening.recordingsRuntime, group.Runtime)
-}
-
-func assertWebhooksPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(t, "Webhooks service", opening.webhooksService, dependencies.Webhooks.Service)
-}
-
-func assertWorkersPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	group := dependencies.Workers
-	assertRuntimeOpeningDependencyIdentity(t, "Workers service", opening.workerService, group.Service)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers provider adapter", opening.providerFromCommandRunnerFactory, group.ProviderFromCommandRunnerFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers provider command runner", opening.providerCommandRunner, group.ProviderCommandRunner)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers script command runner", opening.scriptCommandRunner, group.ScriptCommandRunner)
-}
-
-func assertOperatorSettingsPortsRetained(t *testing.T, opening *Root, dependencies runtimeOpeningFixture) {
-	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(
-		t,
-		"Operator Settings backend scope",
-		opening.ensureOperatorBackendScope,
-		dependencies.OperatorSettings.EnsureBackendScope,
-	)
-}
-
-func assertRuntimeOpeningDependencyIdentity(t *testing.T, name string, got, want any) {
-	t.Helper()
-	gotValue := reflect.ValueOf(got)
-	wantValue := reflect.ValueOf(want)
-	if gotValue.Type() != wantValue.Type() {
-		t.Fatalf("%s type = %v, want %v", name, gotValue.Type(), wantValue.Type())
-	}
-	if gotValue.Kind() == reflect.Func {
-		if gotValue.Pointer() != wantValue.Pointer() {
-			t.Fatalf("%s function identity changed", name)
-		}
-		return
-	}
-	if got != want {
-		t.Fatalf("%s = %T(%[2]v), want exact injected %T(%[3]v)", name, got, want)
-	}
-}
-
-type runtimeOpeningDependencyOmission struct {
-	requirement string
-	omit        func(*runtimeOpeningFixture)
-}
-
-func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
-	return []runtimeOpeningDependencyOmission{
-		{"Provider Sessions service", func(d *runtimeOpeningFixture) { d.ProviderSessions.Service = nil }},
-		{"Factory Runtime logger", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Logger = nil }},
-		{"Factory Runtime JavaScript workflow definitions", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryWorkflows = nil }},
-		{"Factory Runtime workflow preview operation", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkflowPreview = nil }},
-		{"Factory Runtime Workers mock command runner factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkersMockCommandRunnerFactory = nil }},
-		{"Factory Runtime clock resolver", func(d *runtimeOpeningFixture) { d.FactoryRuntime.ResolveClock = nil }},
-		{"Factory Runtime session logger factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.NewSessionLogger = nil }},
-		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
-		{"Factory Definitions validator", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Validator = nil }},
-		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
-		{"Factory Definitions service", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Service = nil }},
-		{"Factory Definitions runtime router", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.RuntimeRouter = nil }},
-		{"Factory Definitions loaded factory loader", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.LoadFactory = nil }},
-		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
-		{"Factory Definitions replay runtime config decoder", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
-		{"Factory Definitions loaded factory snapshot capturer", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.CaptureLoadedFactorySnapshot = nil }},
-		{"Factory Sessions runtime assembly", func(d *runtimeOpeningFixture) { d.FactorySessions.RuntimeAssembly = nil }},
-		{"Factory Sessions durable execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.DurableExecutionFactory = nil }},
-		{"Factory Sessions session execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.FactorySessionExecutionFactory = nil }},
-		{"Factory Sessions factory scaffold initializer", func(d *runtimeOpeningFixture) { d.FactorySessions.FactoryScaffoldInitializer = nil }},
-		{"Factory Sessions editable factory validator", func(d *runtimeOpeningFixture) { d.FactorySessions.EditableFactoryValidator = nil }},
-		{"Factory Sessions process runtime factory", func(d *runtimeOpeningFixture) { d.FactorySessions.ProcessRuntimeFactory = nil }},
-		{"Factory Sessions session ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateSessionID = nil }},
-		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
-		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
-		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
-		{"Work service", func(d *runtimeOpeningFixture) { d.Work.Service = nil }},
-		{"Automations service", func(d *runtimeOpeningFixture) { d.Automations.Service = nil }},
-		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
-		{"Recordings service", func(d *runtimeOpeningFixture) { d.Recordings.Service = nil }},
-		{"Recordings runtime", func(d *runtimeOpeningFixture) { d.Recordings.Runtime = nil }},
-		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
-		{"Workers service", func(d *runtimeOpeningFixture) { d.Workers.Service = nil }},
-		{"Workers provider-from-command-runner factory", func(d *runtimeOpeningFixture) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
-		{"Workers provider command runner", func(d *runtimeOpeningFixture) { d.Workers.ProviderCommandRunner = nil }},
-		{"Workers script command runner", func(d *runtimeOpeningFixture) { d.Workers.ScriptCommandRunner = nil }},
-		{"Operator Settings backend scope ensurer", func(d *runtimeOpeningFixture) { d.OperatorSettings.EnsureBackendScope = nil }},
-	}
-}
-
-func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
+func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 	factorySessionsRoot := &factorySessionsConstructionStub{}
 	return runtimeOpeningFixture{
-		ProviderSessions: &ProviderSessionsPorts{
-			Service: providerSessionsConstructionStub{},
-		},
-		FactoryRuntime: &FactoryRuntimePorts{
-			Logger:                          zap.NewNop(),
-			FactoryWorkflows:                workflowDefinitionsConstructionStub{},
-			WorkflowPreview:                 workflowPreviewConstructionStub{},
-			WorkersMockCommandRunnerFactory: inertRuntimeOpeningFunction[factoryruntime.WorkersMockCommandRunnerFactory](calls),
-			ResolveClock:                    inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
-			NewSessionLogger:                inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
-			Clock:                           openingCoordinatorClock{},
-		},
-		FactoryDefinitions: &FactoryDefinitionsPorts{
-			Validator:                    validatorConstructionStub{},
-			NamedPaths:                   namedPathsConstructionStub{},
-			Service:                      factoryDefinitionsConstructionStub{},
-			RuntimeRouter:                &factorysessions.DefinitionRuntimeRouter{},
-			LoadFactory:                  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
-			NewLoadedFactory:             inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
-			DecodeReplayConfig:           inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
-			CaptureLoadedFactorySnapshot: inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
-		},
-		FactorySessions: &FactorySessionsPorts{
-			RuntimeAssembly:                factorySessionsRoot,
-			DurableExecutionFactory:        inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
-			FactorySessionExecutionFactory: inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
-			FactoryScaffoldInitializer:     inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
-			EditableFactoryValidator:       inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
-			ProcessRuntimeFactory:          processRuntimeFactoryConstructionStub{},
-			GenerateSessionID:              inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
-			GenerateRuntimeInstanceID:      inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
-			ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
-			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
-		},
-		Work: &WorkPorts{
-			Service: work.MaterializationService(constructionMaterializer{calls: calls}),
-		},
-		Automations: &AutomationsPorts{
-			Service: automations.Root{},
-		},
-		Models: &ModelsPorts{Service: &modelsConstructionStub{}},
-		Recordings: &RecordingsPorts{
-			Service: &recordingsRootConstructionStub{},
-			Runtime: &recordingsRootConstructionStub{},
-		},
-		Webhooks: &WebhooksPorts{Service: webhooksConstructionStub{}},
-		Workers: &WorkersPorts{
-			Service:                          &workersConstructionStub{},
-			ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
-			ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
-			ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
-		},
-		OperatorSettings: &OperatorSettingsPorts{
-			EnsureBackendScope: inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
-		},
+		InitialActivation:                inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
+		ProviderSessions:                 providerSessionsConstructionStub{},
+		Logger:                           zap.NewNop(),
+		FactoryWorkflows:                 workflowDefinitionsConstructionStub{},
+		WorkflowPreview:                  workflowPreviewConstructionStub{},
+		WorkersMockCommandRunnerFactory:  inertRuntimeOpeningFunction[factoryruntime.WorkersMockCommandRunnerFactory](calls),
+		ResolveClock:                     inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
+		NewSessionLogger:                 inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
+		Clock:                            openingCoordinatorClock{},
+		Validator:                        validatorConstructionStub{},
+		NamedPaths:                       namedPathsConstructionStub{},
+		Definitions:                      factoryDefinitionsConstructionStub{},
+		RuntimeRouter:                    &factorysessions.DefinitionRuntimeRouter{},
+		LoadFactory:                      inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
+		NewLoadedFactory:                 inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
+		DecodeReplayConfig:               inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
+		CaptureLoadedFactorySnapshot:     inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
+		Assembly:                         factorySessionsRoot,
+		DurableExecutionFactory:          inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
+		FactorySessionExecutionFactory:   inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
+		FactoryScaffoldInitializer:       inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
+		EditableFactoryValidator:         inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
+		ProcessRuntimeFactory:            processRuntimeFactoryConstructionStub{},
+		GenerateSessionID:                inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
+		GenerateRuntimeInstanceID:        inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
+		ResolveHome:                      inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
+		ProviderIdentities:               inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
+		WorkService:                      work.MaterializationService(constructionMaterializer{calls: calls}),
+		AutomationService:                automations.Root{},
+		ModelService:                     &modelsConstructionStub{},
+		RecordingsService:                &recordingsRootConstructionStub{},
+		RecordingsRuntime:                &recordingsRootConstructionStub{},
+		WebhooksService:                  webhooksConstructionStub{},
+		WorkerService:                    &workersConstructionStub{},
+		ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
+		ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
+		ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
+		EnsureBackendScope:               inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
 	}
 }
 
@@ -543,20 +319,6 @@ func (materializer constructionMaterializer) MaterializeContentURL(
 	return "", nil, nil
 }
 
-type identityConstructionMaterializer struct {
-	calls int
-	input string
-}
-
-func (materializer *identityConstructionMaterializer) MaterializeContentURL(
-	_ context.Context,
-	rawURL string,
-) (string, work.ContentCleanup, error) {
-	materializer.calls++
-	materializer.input = rawURL
-	return "/tmp/identity.png", func() {}, nil
-}
-
 type historicalReplayInputsRecorder struct {
 	portable recordings.PortableRecording
 	events   *[]string
@@ -584,3 +346,14 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 
 var _ recordings.Service = (*recordingsRootConstructionStub)(nil)
 var _ recordings.RuntimeScopeService = (*recordingsRootConstructionStub)(nil)
+
+type selectedOpeningMaterializer struct {
+	calls int
+	input string
+}
+
+func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
+	materializer.calls++
+	materializer.input = rawURL
+	return "/tmp/identity.png", func() {}, nil
+}
