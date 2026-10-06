@@ -766,7 +766,20 @@ func assertBatchWorkListedAfterSubmit(t *testing.T, baseURL, workName, workID st
 func assertBatchWorkListedWithWorkType(t *testing.T, baseURL, workName, workID, workType string) {
 	t.Helper()
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	// Admission acknowledges the Work Request before its event projection is
+	// necessarily observable. Wait for this exact accepted Work, without a
+	// fixed sleep or an unrelated runtime-idle condition.
+	listed, observationErr := support.WaitForObservation(5*time.Second,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			_, found := findListedWorkByNameAndID(listed, workName, workID)
+			return found
+		})
+	if observationErr != nil {
+		t.Fatalf("observe accepted Work name=%q workId=%q: %v", workName, workID, observationErr)
+	}
 	item, ok := findListedWorkByNameAndID(listed, workName, workID)
 	if !ok {
 		t.Fatalf(

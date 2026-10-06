@@ -49,7 +49,7 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
 
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 
 	beforeHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
 	t.Logf("before operator price row — human you metrics costs:\n%s", beforeHuman)

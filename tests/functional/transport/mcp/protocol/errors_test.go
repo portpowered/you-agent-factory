@@ -474,3 +474,12 @@ func isolatedHomeEnvironment(home string) []string {
 	return append(environment, "HOME="+home, "USERPROFILE="+home,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
 }
+
+// FunctionalMonolithCleanup owns the same package fixture as TestMain and runs
+// after all parallel children in the package group have completed.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeSharedMCPProtocolFixture(); err != nil {
+		t.Errorf("close owned package fixture: %v", err)
+	}
+}

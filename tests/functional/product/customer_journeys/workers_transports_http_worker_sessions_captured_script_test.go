@@ -82,6 +82,16 @@ func TestWorkerSessionCapturedLogsActiveScriptWriteFailure(t *testing.T) {
 		t.Fatalf("active Worker Sessions = %d", len(list.Sessions))
 	}
 	id := list.Sessions[0].WorkerSessionId
+	// The output observer queues the chunk before its durable commit finishes.
+	// Observe the public committed prefix before comparing CLI and HTTP reads.
+	_, err := support.WaitForObservation(functionalWorkerSignalTimeout, func() (factoryapi.WorkerSessionLogPage, error) {
+		return support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+id+"/logs"), nil
+	}, func(page factoryapi.WorkerSessionLogPage) bool {
+		return page.CommittedPosition == 2 && len(page.Events) == 2
+	})
+	if err != nil {
+		t.Fatalf("observe committed script output: %v", err)
+	}
 	prefix := assertCapturedLogsCLIHTTPParity(t, server, id)
 	if prefix.CommittedPosition != 2 || len(prefix.Events) != 2 {
 		t.Fatalf("script chunk was not committed: %+v", prefix)

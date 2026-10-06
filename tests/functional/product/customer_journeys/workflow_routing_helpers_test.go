@@ -77,7 +77,7 @@ func assertWorkAtCustomerStates(t *testing.T, listed factoryapi.ListWorkResponse
 	}
 }
 
-func FactoryRuntimeOrchestratorsPetriRoutingAssertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
+func assertRoutingSessionQuiescent(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
 	t.Helper()
 	categories := session.Runtime.Progress.Categories
 	if categories.Initial != 0 || categories.Processing != 0 {
@@ -184,5 +184,16 @@ func assertTerminalWorkCorrelatesToTraceIDs(
 		if !found[traceID] {
 			t.Errorf("listed Work missing %s trace %q", terminalLocation, traceID)
 		}
+	}
+}
+
+func assertReviewWorkstationDispatches(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	counts := map[string]int{}
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		counts[dispatch.Request.TransitionId]++
+	}
+	if counts["coding"] != 1 || counts["review"] != 1 || len(counts) != 2 {
+		t.Fatalf("review workstation dispatches = %v, want coding and review exactly once", counts)
 	}
 }

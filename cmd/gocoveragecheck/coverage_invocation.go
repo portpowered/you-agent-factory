@@ -770,6 +770,9 @@ func appendCoverageOutput(output *strings.Builder, chunk string) {
 }
 
 func runCommand(invocation commandInvocation) (string, string, error) {
+	if len(invocation.monolithGroups) > 0 {
+		return runFunctionalMonolithCommand(invocation)
+	}
 	return commandRunner(invocation)
 }
 

@@ -238,7 +238,7 @@ func queryCostsReport(
 	})
 	defer server.Stop(t)
 
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 	args := []string{"you", "--json", "--server", server.URL(), "metrics", "costs"}
 	if strings.TrimSpace(sessionID) != "" {
 		args = append(args, "--session", sessionID)

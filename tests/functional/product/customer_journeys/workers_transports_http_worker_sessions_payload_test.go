@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// The read/recovery boundary accepts the documented snapshot representation.
+// The read/recovery boundary handles an oversized payload in a current journal.
 // Seed a valid Direct tool record without a provider association; provider
 // decoders have their own size policies and are not the subject of this proof.
 func assertOversizedCapturedPayload(t *testing.T, config support.FunctionalAPIServerConfig, current factoryapi.WorkerSessionLogPage) {
@@ -26,10 +26,12 @@ func assertOversizedCapturedPayload(t *testing.T, config support.FunctionalAPISe
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	writeLegacyCapturedFixture(t, root, page)
+	path, journal := copyCurrentCapturedJournal(t, config, root)
+	journal[position]["record"].(map[string]any)["Payload"] = page.Events[position].Event.Payload
+	writeCapturedJournal(t, path, journal)
 	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(root)
 	server := support.StartFunctionalAPIServer(t, config)
-	bounded := assertLegacyLogsCLIHTTPParity(t, server, page.WorkerSessionId)
+	bounded := assertRestoredLogsCLIHTTPParity(t, server, page.WorkerSessionId)
 	ref := assertCapturedPayloadMetadata(t, bounded.Events[position].Event, exact)
 	assertCapturedPayloadRoundTrip(t, server, page.WorkerSessionId, ref, exact)
 	for _, query := range []string{

@@ -23,6 +23,7 @@ const (
 const (
 	coverageBuildCacheReuseExactInvocationHit  = "exact-invocation-hit"
 	coverageBuildCacheReuseCompileWorkObserved = "compile-work-observed"
+	coverageBuildCacheReuseLinkWorkObserved    = "link-work-observed"
 	coverageBuildCacheReuseUnverified          = "cache-reuse-unverified"
 	coverageBuildCacheReuseUnclassifiable      = "unclassifiable"
 	coverageBuildCacheReuseCommandFailed       = "command-failed"
@@ -366,8 +367,11 @@ func canonicalCoverageInvocationArgs(args []string) []string {
 }
 
 func classifyCoverageBuildTrace(summary coverageBuildTraceSummary, identity coverageActionCacheIdentity, identityErr error, traceErr error, commandErr error) string {
-	if summary.buildActions > 0 {
+	if summary.compilerCommands > 0 {
 		return coverageBuildCacheReuseCompileWorkObserved
+	}
+	if summary.linkerCommands > 0 {
+		return coverageBuildCacheReuseLinkWorkObserved
 	}
 	if traceErr != nil {
 		return coverageBuildCacheReuseUnclassifiable

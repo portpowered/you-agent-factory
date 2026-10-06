@@ -22,7 +22,7 @@ import (
 func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testing.T) {
 	t.Parallel()
 
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "metrics", "--group-by", "region",
 	})
@@ -54,7 +54,7 @@ func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing
 		Env:                       environment,
 	})
 
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 
 	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "metrics"})
 	human.Input.Env = environment
@@ -152,7 +152,7 @@ func TestMetricsSessionThroughRootProcessReadsOnlyTheSelectedRemoteReplay(t *tes
 		"you", "--json", "--server", server.URL, "metrics", "session", "session-functional",
 	})
 	inputs.Input.Env = []string{"HOME=" + t.TempDir(), "USERPROFILE=" + t.TempDir()}
-	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics session) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var document struct {
@@ -203,7 +203,7 @@ func TestMetricsSessionCostLensThroughRootProcessComposesCostsAndDetail(t *testi
 		"you", "--json", "--server", server.URL(), "metrics", "session", fixture.sessionID,
 		"--lens", "cost", "--by-worker", "--by-dispatch",
 	)
-	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics session cost) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var document struct {
@@ -309,7 +309,7 @@ func TestMetricsSessionByWorkerAggregatesAuthoredWorkerAcrossSessions(t *testing
 		}
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", sessionID, "--by-worker")
-	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics session by worker) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var document struct {

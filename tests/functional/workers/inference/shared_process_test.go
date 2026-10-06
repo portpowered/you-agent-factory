@@ -846,3 +846,12 @@ func isolatedHomeEnvironment(home string) []string {
 	return append(environment, "HOME="+home, "USERPROFILE="+home,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
 }
+
+// FunctionalMonolithCleanup closes the package fixture after all parallel
+// customer scenarios finish. Native go test retains the same TestMain cleanup.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := sharedInferenceGroup.close(); err != nil {
+		t.Errorf("close package fixture: %v", err)
+	}
+}

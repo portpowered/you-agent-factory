@@ -39,8 +39,23 @@ var (
 // invocations finish. Per-test t.Cleanup cannot own this process because it
 // would close the shared wiring before the next top-level test runs.
 func TestMain(m *testing.M) {
-	sharedDefinitionsProcess = sharedDefinitionsProcessForTest
 	code := m.Run()
+	if cleanupDefinitionsProcesses() != 0 {
+		code = 1
+	}
+	os.Exit(code)
+}
+
+// FunctionalMonolithCleanup closes the same fixture after all customer children.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if cleanupDefinitionsProcesses() != 0 {
+		t.Error("Factory Definitions fixture cleanup failed; see preceding diagnostic")
+	}
+}
+
+func cleanupDefinitionsProcesses() int {
+	code := 0
 	serviceHostsCloseErr := closeSharedDefinitionsServiceHosts()
 	if serviceHostsCloseErr != nil {
 		fmt.Fprintf(os.Stderr, "close shared Factory Definitions service hosts: %v\n", serviceHostsCloseErr)
@@ -60,7 +75,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(code)
+	return code
 }
 
 func sharedDefinitionsProcessForTest(t testing.TB) support.ApplicationProcess {

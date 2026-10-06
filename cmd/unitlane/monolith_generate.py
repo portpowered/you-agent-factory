@@ -1,4 +1,4 @@
-"""Generate build-only overlays for the experimental consolidated Go unit lane.
+"""Generate build-only overlays for consolidated Go test lanes.
 
 No repository source or production export is changed. Native Go registers the
 outer tests; unsupported TestMain, examples, fuzzing and known graph conflicts
@@ -39,6 +39,7 @@ def registrations(source, name, pattern=PAIR):
     return pattern.findall(body)
 
 dest=pathlib.Path(sys.argv[2]);dest.mkdir(parents=True,exist_ok=True)
+functional = len(sys.argv) > 3 and sys.argv[3] == 'functional'
 (dest/'sources').mkdir(exist_ok=True)
 entries=list(objects(pathlib.Path(sys.argv[1])))
 bases={x['ImportPath']:x for x in entries if not x.get('ForTest') and not x['ImportPath'].endswith('.test')}
@@ -48,6 +49,7 @@ excluded={
  MODULE+'/pkg/services/recordings/internal/projections': 'combined private test imports form a cycle through Factory Runtime and Recordings HTTP',
  MODULE+'/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout': 'empty-YAML diagnostic assertion depends on original temporary-directory naming',
 }
+excluded.update({pkg: base['MonolithExcludeReason'] for pkg, base in bases.items() if base.get('MonolithExcludeReason')})
 groups,overlay,bridge_groups,children=[],{},{},{}
 
 def write_if_changed(path, data):
@@ -72,13 +74,16 @@ for index,(pkg,main) in enumerate(sorted(mains.items())):
     example_entries=registrations(source,'examples',EXAMPLE)
     fuzz_entries=registrations(source,'fuzzTargets')
     leak_check=False
+    cleanup_match=re.search(r"var monolithCleanup = (_(?:x)?test)\.(\w+)",source)
+    cleanup_hook=cleanup_match.groups() if functional and cleanup_match else None
     if re.search(r'\b_(?:x)?test\.TestMain\(m\)',source):
         bodies=[]
         for filename in base.get('TestGoFiles',[])+base.get('XTestGoFiles',[]):
             content=(pathlib.Path(base['Dir'])/filename).read_text()
             bodies.extend(re.findall(r'func TestMain\(m \*testing.M\)\s*\{([^}]+)\}',content))
         leak_check=len(bodies)==1 and bodies[0].strip()=='goleak.VerifyTestMain(m)' and not example_entries
-        if leak_check:excluded.pop(pkg,None)
+        if cleanup_hook:pass
+        elif leak_check and not functional:excluded.pop(pkg,None)
         else:excluded[pkg]='custom TestMain'
 
     if fuzz_entries:excluded[pkg]='fuzz target: retain native seed execution'
@@ -87,6 +92,7 @@ for index,(pkg,main) in enumerate(sorted(mains.items())):
     group=f'TestPackage{index:04d}'
     aliases={'_test':f'p{index}','_xtest':f'x{index}'}
     used={alias for _,alias,_ in test_entries+bench_entries}|{x[1] for x in example_entries}
+    if cleanup_hook:used.add(cleanup_hook[0])
     imports=[]
     for kind,filenames in [('TestGoFiles',base.get('TestGoFiles',[])),('XTestGoFiles',base.get('XTestGoFiles',[]))]:
         for filename in filenames:
@@ -105,7 +111,8 @@ for index,(pkg,main) in enumerate(sorted(mains.items())):
     tests=',\n'.join('{'+name+', '+aliases[alias]+'.'+function+'}' for name,alias,function in test_entries)
     benches=',\n'.join('{'+name+', '+aliases[alias]+'.'+function+'}' for name,alias,function in bench_entries)
     examples=',\n'.join('{'+name+', '+aliases[alias]+'.'+function+', '+output+', '+unordered+'}' for name,alias,function,output,unordered in example_entries)
-    literal='{LeakCheck: '+str(leak_check).lower()+', Package: '+json.dumps(pkg)+', Name: '+json.dumps(group)+', Dir: '+json.dumps(base['Dir'])+', Tests: []testing.InternalTest{'+tests+'}, Benchmarks: []testing.InternalBenchmark{'+benches+'}, Examples: []testing.InternalExample{'+examples+'}}'
+    lifecycle='Cleanup: '+aliases[cleanup_hook[0]]+'.'+cleanup_hook[1]+', ' if cleanup_hook else ''
+    literal='{'+lifecycle+'LeakCheck: '+str(leak_check).lower()+', Package: '+json.dumps(pkg)+', Name: '+json.dumps(group)+', Dir: '+json.dumps(base['Dir'])+', Tests: []testing.InternalTest{'+tests+'}, Benchmarks: []testing.InternalBenchmark{'+benches+'}, Examples: []testing.InternalExample{'+examples+'}}'
     parts=pkg.split('/')
     chain=['/'.join(parts[:i])+'/monolithbridge' for i,piece in enumerate(parts) if piece=='internal']
     chain.append(pkg+'/monolithbridge')
@@ -114,7 +121,7 @@ for index,(pkg,main) in enumerate(sorted(mains.items())):
     groups.append({'package':pkg,'group':group,'directory':base['Dir'],'bridge':chain[-1],'top_level_tests':[json.loads(x[0]) for x in test_entries],'example_names':[json.loads(x[0]) for x in example_entries]})
 
 support_path=MODULE+'/internal/monolithsupport'
-add_source(ROOT/'internal/monolithsupport/group.go','package monolithsupport\nimport "testing"\ntype Group struct { LeakCheck bool; Package, Name, Dir string; Tests []testing.InternalTest; Benchmarks []testing.InternalBenchmark; Examples []testing.InternalExample }\n')
+add_source(ROOT/'internal/monolithsupport/group.go','package monolithsupport\nimport "testing"\ntype Group struct { Cleanup func(*testing.T); LeakCheck bool; Package, Name, Dir string; Tests []testing.InternalTest; Benchmarks []testing.InternalBenchmark; Examples []testing.InternalExample }\n')
 all_bridges=set(bridge_groups)|set(children)
 child_bridges=set().union(*children.values()) if children else set()
 roots=sorted(all_bridges-child_bridges)
@@ -199,6 +206,14 @@ func BenchmarkUnitPackages(b *testing.B) {
 }
 '''
 main_source=dest/'suite_test.go';write_if_changed(main_source,harness)
+if functional:
+    # Compatible functional groups own explicit sessions and can overlap.
+    # Directory/global-state/helper-process dependencies stay native rather
+    # than rewriting customer paths or changing process-wide state here.
+    harness = harness.replace('TestUnitPackages', 'TestFunctionalPackages')
+    harness = harness.replace('restore,err:=enterPackage(group.Dir,group.Name);if err!=nil {t.Fatal(err)};t.Cleanup(restore)', 't.Parallel()')
+    harness = harness.replace('  for _,test:=range group.Tests', '  if group.Cleanup != nil { t.Cleanup(func() { group.Cleanup(t) }) }\n  for _,test:=range group.Tests')
+    write_if_changed(main_source, harness)
 overlay[str(ROOT/'pkg/monolithpilot/suite_test.go')]=str(main_source)
 write_if_changed(dest/'overlay.json',json.dumps({'Replace':overlay},indent=2))
 write_if_changed(dest/'groups.json',json.dumps(groups,indent=2))

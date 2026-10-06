@@ -5,16 +5,40 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest completed hosted functional measurement, at `02a491c07b`, passed in **5m33.016s for
-the full functional supervisor**, including **4m17.763s for the coverage
-invocation**. It reported 816 final passes, two skips and no final failures;
-unchanged coverage gates and all required verification jobs passed. Providers
-and mock-worker cases failed initially and passed on retry; those recovered
-failures remain in diagnostics. The five-, three- and two-minute merge
-checkpoints remain unmet. The preceding fully passing workflow is `0958ddb01f`, whose supervisor took
-5m07.420s.
-[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867)
-contains the ongoing changes. Local measurements do not establish hosted latency.
+The five-minute checkpoint merged in
+[PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867), commit
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Its merge-queue functional supervisor
+passed in **272.327s**, including **215.102s coverage invocation**. An identical
+source tree also took 340.850s; both samples and recovered flakes are retained
+below. The three- and two-minute hosted merge checkpoints remain outstanding.
+
+Latest head `ec85aae468` passes all 68 packages / 760 results with no retries.
+The changed-source hosted job takes **246s complete / 194.783s supervisor /
+184.590s coverage invocation**, with 110 compiler actions and 25 links. Its
+identical-head rerun hits the archive cache exactly: **223s complete / 185.458s
+supervisor / 167.054s coverage invocation**, zero compiler actions and 25 links.
+The three-minute complete-job checkpoint remains outstanding. These current
+runtime results supersede pre-rebase latency for the merge decision.
+
+The last pre-rebase hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
+
+The first hosted next-phase run, at `0878fd26d0`, passes in **316.816s** full
+supervisor / **287.224s** coverage invocation. Its trace reports 1,355 compiler
+commands and 73 linker commands, and one MCP ACP permission case passes on a
+same-head retry. The existing 67 MB dependency cache leaves repository packages
+cold; the warm local result below does not predict this cold hosted run. The
+next change tests a bounded compiler-archive cache instead of the previously
+removed whole build-cache restore, which cost roughly four minutes for 7 GB.
+
+The next candidate's full four-CPU Linux supervisor passes in **111.55s**, with
+**103.120s coverage invocation**, all **758 selected tests** accounted for,
+756 passes, two skips and no retries. Coverage floors, the selected inventory,
+quarantine verification and compile-probe diagnostics remain enabled. Compatible
+packages use a build-only overlay: 19 packages share an executable and 36
+fixture-sensitive packages keep native binaries. Original source coordinates,
+test identities and evidence declarations are preserved. The coverage trace
+records **37 linker commands**. This is a warm-cache local result, not a hosted
+checkpoint or a cold-build guarantee.
 
 Consolidation has a measured benefit. A controlled build-only comparison reduced
 **136 linker invocations to one**, **160.292s linker CPU to 1.807s**, and warm
@@ -1987,3 +2011,819 @@ including the Windows and unsupported-platform memory helper files. Performance
 measurements stay in the audit harness. The focused pagination/concurrent-fleet
 pair passes three repetitions in 22.420s, and union-tag repository lint reports
 zero issues. These changes do not establish a full-lane latency result.
+
+### First hosted five-minute timing observation and merge gate
+
+Run `37346055096` (`38d312b762`) passes the full functional supervisor in
+**260.106s** (17:26:37.668Z through 17:30:57.774Z), with a **202.865s** coverage
+invocation, 755 final passes and two skips. Quarantine succeeds in 47.869s while
+overlapping coverage. The API package check also succeeds with the corrected
+Make selector. This is the first passing hosted supervisor below five minutes.
+Other required jobs on this revision are cancelled by a subsequent push, so
+this observation does not establish a merged checkpoint. Earlier passing
+320.437s and 332.773s observations remain part of the measured range.
+
+Run `37347513698` (`91b288cfd4`) fails required Backend Lint on three generated
+fixture resets that copy structs containing a Mutex or Once. It also fails the
+required functional verdict: the reduced pagination fixture accidentally made
+an active-fleet sibling's default-page-size assertion expect four instead of
+the public default of twenty. Its recorded supervisor interval is 212.793s and
+invocation is 166.920s, but the final summary retains two failed tests, so this
+is not a passing latency checkpoint even though the supervisor status files
+record zero. The required verdict, not a short elapsed interval, controls merge.
+
+Local corrective commit `676f7a1e05` initializes fresh lock-bearing fixture state
+directly from composite literals rather than copying another value, and makes
+the empty-page assertion accept the selected expected limit. The continuation
+case still checks its explicit four-row limit; the active case retains the
+default twenty-row contract. Three repetitions of all three fleet cases pass
+in 33.442s, and tagged `go vet` passes. The user subsequently authorized the
+corrective push needed to unblock merging, and commit `676f7a1e05` was published.
+The merge request is enabled, but GitHub
+reports `BLOCKED` on the current published head's required checks. Further
+optimization remains separate from the minimal merge correction.
+
+### Package-preserving consolidated build prototype
+
+A private overlay experiment reuses the unit lane's package/bridge construction
+to combine 35 compatible functional packages (426 original top-level tests)
+into one binary, while explicitly leaving 19 custom-TestMain packages native.
+Production exports and original source packages are unchanged. The initial
+warm-dependency build succeeds in 9.37s, with 24.28 user plus 3.28 system CPU
+seconds and 835,476 KiB peak RSS (0.80 GiB). Subsequent coordinator corrections
+relink from cached package archives. This prototype is not shipped and has not
+executed its 19 native exceptions or the canonical supervisor.
+
+The first execution panics because parallel coordinator ancestors prohibit
+existing process-wide `t.Setenv` calls; 412 expected tests remain unexecuted.
+It supplies no complete latency evidence. A repeat preserves serial barriers
+for the four active source packages with global environment/directory mutation:
+bootstrap portability, coverage observability, JavaScript worker scenarios and
+script workers. All 426 expected tests then run, but execution fails in 96.73s
+(96.045s package interval), with 43 failed JSON events including wrappers and
+peak RSS 3,180,728 KiB (3.03 GiB). Existing subprocess fixtures require their
+original test selectors, and the fleet default-limit mistake is also exposed.
+
+A repeat routes unique legacy helper selectors through their exact coordinator
+group and includes the fleet assertion correction. All 426 expected tests run,
+but four original ACP scenario families still fail (ten failed JSON events
+including wrappers): terminal output, permission selection, and new/config RPC
+failures. It takes 98.99s command wall / 98.283s package interval, with 228.93
+user plus 75.18 system CPU seconds and 3,180,512 KiB peak RSS. These failed,
+partial-lane observations demonstrate build feasibility and remaining fixture
+coupling; they do not establish equivalent coverage or a CI checkpoint. Source
+revision registry declarations receive exact temporary coordinator aliases only
+during each private run and are restored in cleanup. No tests are silently
+dropped, no guard is increased, and no native exception is reported as executed.
+
+### Corrected-head hosted retry and runner acquisition
+
+Run `37366971390`, attempt 1, ended with numerous cancelled required checks.
+The Docs Reference check annotation states: "The job was not acquired by Runner
+of type hosted even after multiple attempts". Its job had no runner or steps;
+this cancellation does not measure test execution. The failed-job rerun was
+requested without another source push, and attempt 2 acquired runners.
+
+On the same corrected head `676f7a1e05`, attempt 2's functional check passed.
+The supervisor ran from 22:12:13.417Z to 22:15:53.834Z on 2026-10-05:
+**220.417s total wall time**, including concurrent quarantine and coverage work.
+Quarantine took 42.440s and overlapped the coverage lane. The functional timing
+summary records **169.582s invocation wall time**, 68 expected/observed package
+entries, 757 top-level results, 755 passes, two skips, and zero final failures.
+The workflow flake ledger records one `TestPackagedLoop` failure that passed on
+same-head retry; the failure was an eight-second scheduled-execution readiness
+guard. Retain that retry when interpreting this observation and prioritizing
+future synchronization cleanup.
+
+This successful full functional interval meets five minutes but exceeds the
+three-minute target. At evidence collection, backend lint was still running,
+and the PR was open with auto-merge enabled. A timing observation alone does
+not establish a merged checkpoint.
+
+Attempt 2 ultimately passed every applicable check, including Backend Lint
+(16m8s job duration) and Verification Policy. PR #2867 entered the merge queue
+at 22:30:23Z behind PR #2868. A read-only merge-tree comparison against that
+queued commit exposed a conflict confined to generated `pkg/wire/wire_gen.go`.
+The authored source graph merged cleanly. A separate checkout merged the queued
+commit, regenerated Wire, and passed `go test ./pkg/root ./pkg/wire -short
+-count=1` (root 0.034s, Wire 25.878s). PR #2868 then merged as
+`8284dec71ffaf510c389d3fbb38e16018255c5ae` at 22:39:17Z, and GitHub classified
+our PR as conflicting and removed it from the queue.
+
+Merge correction `6759f55ae3a1f6b82e297b59268e3422abc02b22` merges that live main
+commit and regenerates Wire. Its generated file matches the tested preview
+byte-for-byte; there are no unresolved paths and `git diff --cached --check`
+passes. The correction was pushed under the user's authorization to unblock
+merging. New-head run `37383931843` started, and auto-merge was enabled again.
+The additional optimization prototypes and this unpublished audit were excluded
+from the correction.
+
+The corrected-head functional check in run `37383931843` passed, but was slower:
+supervisor 22:41:36.403Z to 22:47:17.253Z, **340.850s total wall**, with quarantine
+57.969s overlapping coverage. The invocation summary reports **268.630s wall**,
+69 expected/observed package entries, 758 top-level results, 756 passes, two
+skips, and zero final failures. It exceeds both five- and three-minute targets;
+do not carry the previous head's faster interval forward as this head's result.
+The slowest package execution intervals are customer journeys 160.694s,
+CLI/REST journeys 92.031s, packaged invocation 88.159s, factory execution 69.831s,
+Models inference 54.934s, and CLI customer commands 53.550s. These intervals
+overlap and are not independent amounts to add to total wall time. At collection,
+lint and the packaged-factory candidate build were still active, with no failed
+checks. The current priority remains completing the authorized merge before
+publishing more optimization changes.
+
+Merge-queue run `37385807288` tests candidate
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Git tree IDs confirm its source tree
+is identical to corrected PR head `6759f55ae3`. Its functional check passes in
+**272.327s supervisor wall** (23:00:05.530Z to 23:04:37.857Z), with **215.102s
+invocation wall**, 69/69 expected package entries, 758 results, 756 passes, two
+skips, and zero final failures. Quarantine takes 46.590s and overlaps coverage.
+The same source tree thus has successful 340.850s and 272.327s observations;
+the 68.523s difference is not evidence of an intervening source optimization.
+Both observations and their retry work must remain visible.
+
+The corrected-head run's flake ledger records one review-failure-recovery case
+that passes on same-head retry. The queue run records three recovered cases:
+resume recovery retaining a scenario TCP port, MCP initialization exceeding its
+five-second response guard, and an MCP ACP permission case failing to resolve
+`@you/subagent` from a project/global factory catalog. Each passes on same-head
+retry. These are concrete remaining synchronization, teardown, and isolation
+targets; a green retried verdict does not imply the first attempt was clean.
+At collection, all other queue checks had passed and Backend Lint remained
+active. The queue observation meets five minutes, but not three minutes, and
+the PR had not yet merged.
+
+The queue run ultimately completed successfully with no failed checks. GitHub
+merged PR #2867 at **2026-10-05 23:11:00Z**, as commit
+`0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. This establishes the first merged
+five-minute checkpoint using the queue's 272.327s full supervisor observation,
+with the recovered flakes and slower identical-tree observation disclosed above.
+The three- and two-minute checkpoints remain outstanding. The checkout now
+starts the next optimization branch from that live main commit, retaining this
+audit locally; no additional optimization changes were pushed to unblock merge.
+
+### Next checkpoint: compatible build consolidation
+
+The canonical full Linux supervisor on four pinned CPUs passes in **111.55s**
+(297.68s user + 83.06s system, 2.01 GiB peak RSS). Coverage invocation is
+103.120s: 69/69 original package entries, 758 selected tests, 756 passes, two
+skips, no failures and no retries. The unchanged blocking policy retains its
+existing staged coverage holds. No floor, hold or quarantine selector is edited.
+The build trace records zero compiler commands and 37 linker commands: this
+repeat uses a warm compiler cache. Phase times are list 1.706s, plan 0.893s,
+test including diagnostics 107.048s, canonicalization 0.168s, evaluation 0.014s
+and manifest processing 0.022s. These phases are sequential, while linking and
+test execution overlap inside the test phase.
+
+The overlay merges 19 compatible packages containing 171 original tests.
+Thirty-six packages retain native binaries for custom TestMain, process-global
+state, helper executables or relative/embedded fixtures. Production boundaries
+and source files remain unchanged. Native exceptions execute within the same
+bounded lane; test-level quarantine selection remains native. Normalized JSON
+preserves original test identities, nested names, source locations, failure
+capture and evidence declarations. Missing terminal events and registration
+mismatches fail the lane. A same-head retry uses the original native package.
+
+Failed development samples are not checkpoints: 130.00s had a provider timeout
+recovery observation race and coordinator inventory bookkeeping; 110.14s passed
+all customer cases but failed raw-capture completeness. Both failures are fixed
+and covered by runner checks. Batch admission now waits for the exact accepted
+Work projection; timeout recovery observes successful Work and verifies public
+timeout/recovery events rather than assuming retry admission means completion.
+Obsolete captured-log migration checks and direct internal publisher privacy
+checks are removed; public CLI/REST/replay and live privacy cases remain.
+
+The asynchronous quarantine ratchet previously occupied 30.824s of planning in
+the merged-main local baseline. With overlap enabled it now runs beside coverage
+and is joined before a passing verdict; current planning takes 0.893s. The
+baseline's 208.424s full supervisor failed a batch Work visibility race, so it
+is disclosed as a failed reference rather than a passing comparison. The earlier
+private 427-test prototype was partial and cannot establish a full checkpoint.
+Hosted confirmation and merge remain required for the three-minute milestone.
+
+### Hosted cold-build gap and bounded compiler archives
+
+Run `37390711081` at `0878fd26d0` passes in 316.816s supervisor wall, with
+287.224s invocation wall, 1,355 compiler/73 linker trace commands and one
+recovered MCP ACP permission case. Run `37391871366` after merging main
+(`daf8e9afc6`) passes in 316.715s supervisor / 291.821s invocation, with
+679 compiler/37 linker trace commands. Neither meets three minutes. The existing
+67 MB dependency-cache hit does not retain compiled repository packages.
+
+The new compiler-archive tier retains recently used Go archives and action
+metadata only, with a hard 1 GiB bound. It excludes executable/test-result
+payloads and cached executable directories, avoiding the former whole build
+cache's 7 GB/four-minute restore. Keys include platform, Go version, module
+inputs and source head, with a same-module fallback; Go checks source and tool
+identities before accepting each artifact. Functional runs explicitly use
+`-count=1`. The transfer reports retained bytes/files and omitted entries, and
+the existing build diagnostic reports exact/fallback action-cache identity.
+
+A real coverage-instrumented Go build proof restores only these artifacts into
+an empty cache: the repeat performs zero compiler invocations and produces the
+original output; changing source recompiles the affected packages and produces
+the changed output. Filtering and byte-budget checks also pass, and this proof
+now runs in Workflow Lint. Hosted cold-fill, restored-cache timing, transfer
+cost and retained size still need measurement; a first cold fill is not claimed
+as a three-minute checkpoint.
+
+The private dispatch-concurrency experiment passes at 113.65s versus 111.55s
+for the retained candidate, so its increase from two to four is not adopted.
+It records 40 links across tests/tools, 61.181s linker CPU, 57.764s overlapping
+active linker wall and 186.654s summed linker wall. Largest links are Product
+customer journeys (8.829s), Product CLI/REST journeys (8.210s), Providers ACP
+(7.311s), Runtime API Factory transformation (7.094s), and Providers (7.030s).
+Their intervals overlap and cannot be added to supervisor time. Removing two
+Git-file diagnostic helpers privately allows 21 merged groups/320 tests, but
+that full sample takes 115.06s and raises peak RSS to 3.86 GiB; it is not adopted
+as a latency improvement.
+
+### First hosted archive fill
+
+Run `37393044364`, head `6efdbac547`, has no archive hit. The supervisor takes
+296.357s, including 265.724s of test invocation; all 69 package terminals and
+759 test results finish (757 pass, two skip, one recovered permission-request
+flake). The job fails afterward because the newly wired exact-hit diagnostic
+receives an empty GitHub output on a cache miss. The correction explicitly
+defaults that output to `false`; test and coverage gates remain unchanged.
+
+Capture retains 12,129 files / 964,300,415 bytes with zero budget omissions.
+Capture takes three seconds and cache save takes five seconds. Restored hosted
+execution is still required before claiming the three-minute checkpoint.
+
+A separate private archive-restore calibration takes 203.06s with 2,038
+compiler tool records and 40 link records. It uses an older private source tree,
+the unadopted 21-group experiment, and a capture-time recency window rather
+than the workflow's job-start window. It cannot establish current-head latency
+or cache effectiveness. Its 96.818s active compiler wall / 318.784s compiler
+CPU demonstrates substantial misses, which require investigation if repeated
+by the hosted restored run.
+
+The coverage-specific cache proof reproduces one avoidable compile after an
+archive-only restore: Go requires its separately cached static coverage
+metadata (`\x00cvm`) even when the compiled archive is present. The filter now
+retains that metadata too. Repeating fresh `go test -count=1 -coverpkg=./...`
+against an empty restored cache performs zero compiles and produces an identical
+coverage profile. All four cache proofs pass. Executable, result and counter
+payloads remain excluded, and the same total byte limit applies.
+
+Quarantine outcome and package-terminal invocations now use `-vet=off`, as
+inventory discovery already does. The required canonical Backend Lint lane
+retains vet ownership. This removes duplicate static analysis and regeneration
+of vet-only cached source side files without changing runtime selection,
+terminal-event evidence, retries, or quarantine expectations. Focused quarantine
+and overlap tests pass.
+
+### Corrected metadata fill and local restored execution
+
+Hosted run `37393987887`, source `0e5bd429e7`, passes without retries:
+202.617s full supervisor, 193.405s invocation, 467 compiler and 37 linker
+trace commands. The earlier archive-only snapshot restores in four seconds
+and applies in fifteen seconds (220 MB compressed / 964,300,415 bytes retained).
+The corrected capture contains 13,707 files / 969,143,201 bytes, with no budget
+omissions; capture and save each take four seconds. This is still above three
+minutes and includes rebuilding missing static metadata.
+
+The exact-source four-CPU local restored supervisor passes in 108.938s,
+including 102.291s invocation, all 69 package terminals and 759 test results
+(757 pass, two skip), without retries. Restoring into an empty cache performs
+zero Go compiler invocations. There are 42 test/tool link records: 48.467s
+linker CPU, 53.744s active linker wall, and 159.370s summed overlapping link
+wall. Peak RSS is 2.22 GiB. The capture reaches the 1 GiB cap and omits 115
+older entries; all selected customer cases and unchanged coverage gates pass.
+This local result supports the corrected cache mechanism, but hosted reuse
+including transfer cost still needs measurement.
+
+The first exact-source local fill sample takes 150.247s and fails the existing
+`TestPackagedFullFlowDispatchTerminalFinalization/RoutesNoResultFailureToLead`
+case because its immediate public Work list is empty. It remains a failed
+sample, not checkpoint evidence. An earlier local harness attempt has no Git
+repository and fails before tests while reading the raw-failure artifact head;
+that harness setup is corrected before the two full exact-source samples.
+
+### Hosted restored result and complete-job budget
+
+Run `37394846636`, head `e671ed2e38`, passes the full functional supervisor in
+140.882s, including 132.624s invocation, zero compiler commands and 37 linker
+commands. There are no retries. Archive download takes four seconds and the
+second archive copy takes eight seconds. The entire functional job takes
+213s (00:45:08–00:48:41 UTC), so this is not yet a three-minute total-job
+checkpoint. Checkout takes 15s, Go setup 13s, other preparation and reporting
+account for the remainder. These costs are included rather than hiding them
+behind a passing supervisor-only measurement.
+
+The next workflow uses a shallow checkout and the restored archive directory
+directly as GOCACHE. A cold directory is seeded from the existing dependency
+tier. Capture still filters archives, static coverage metadata and action
+metadata into a fresh directory capped at 1 GiB before saving; executable and
+test-result payloads remain excluded. A real coverage-test proof also executes
+against the snapshot in place, with zero compiles and the same coverage profile.
+Its external marker confirms all three cold/restored/in-place tests actually
+run. Twelve workflow contract checks and actionlint pass.
+
+Backend Lint on the hosted head rejects two monolith complexity violations.
+Inventory validation is separated from construction and event identity/boundary
+tests are split; the focused tests and scoped built-in lint now pass with no
+allowance changes. Diagnostics also distinguish link-only work from compilation:
+the earlier JSON correctly reports zero compilers but labels those 37 links
+`compile-work-observed`; new diagnostics use `link-work-observed` for that case.
+
+A private cleanup candidate relocates eight internal Make/coverage-runner checks
+to their tool package, uses a scenario-owned project Factory for MCP ACP
+permissions, observes terminal Work through REST, and copies current captured
+journals for recovery fixtures instead of constructing legacy snapshots. Its
+first warm control passes in 111.92s with 68 packages/751 results. Raising test
+parallelism to 24 passes in 164.19s but needs four retries; a subsequent unchanged
+12-way control passes in 162.52s without retries. This sequence does not establish
+a parallelism improvement and the increase is not adopted. Linker CPU also
+drifts between samples, so none is used to predict a hosted checkpoint.
+
+### In-place archive restore: hosted job still exceeds three minutes
+
+Head `4492b4921d451cf335eff925b5aaeff63deb516a`, Actions run
+`37397370508`, functional job `112056602110`, passed with all coverage gates
+unchanged. The complete job took **221 seconds** (01:06:30–01:10:11 UTC).
+The supervisor took **171.948 seconds** and the coverage invocation reported
+**157.896 seconds**. This is not the three-minute checkpoint.
+
+Shallow checkout took six seconds, Go setup nine seconds, archive restore four
+seconds, and applying the in-place archive cache took less than one second.
+The coverage trace reported zero compiler commands and 73 linker command
+observations from the coverage invocation, including its failed attempt. Retry stderr is not included in these diagnostics; they do not measure retry link work. These trace
+counts are not linker CPU seconds. Capture and save each took four seconds.
+
+One recovered failure was `TestMCPSubagentCustomACPHandlesPermissionRequest`:
+its named `@you/subagent` Factory was absent from both the project and the
+runner's global catalog. The next fixture creates its own project Factory
+through the public application process before starting MCP. Three focused
+repetitions passed; the previous failure is retained in this measurement.
+
+### Customer-facing test cleanup entering the checkpoint candidate
+
+The next candidate moves eight Make/coverage-rendering checks from functional
+`observability/coverage` into `cmd/functionaltestviz`, retaining their assertions
+in tooling unit tests. Five Automations files change their misleading
+`root_composition` names to `customer_journeys`, without changing registered
+customer tests. Worker-session recovery fixtures now copy the current writer's
+journal output rather than constructing legacy snapshots. Public CLI/REST
+parity, restart, incomplete follow, unreadable recovery, damaged-recording
+isolation, and oversized-payload checks remain. The packaged full-flow failure
+journey observes terminal public Work records before asserting cardinality and
+lineage, replacing the race with an immediately read projection.
+
+Private Linux full-lane verification of these edits passed with 68 packages,
+751 test results (749 pass, two skip), and unchanged coverage policy. Twelve-way
+execution samples ranged from **111.92 to 162.52 seconds**, with no retries;
+a 24-way experiment took 164.19 seconds and recovered four failures, so it is
+not adopted. These are local supervisor samples, not hosted whole-job claims.
+Focused repetitions passed for MCP permission (three), current-journal recovery
+(three), full-flow terminal observation (five), and tooling checks (three).
+
+
+The archive restore now precedes the smaller dependency tier: a restored archive
+cache is used in place, so restoring another directory that the test job never
+reads is redundant. Cold misses retain dependency seeding; main pushes retain
+the independent dependency-cache maintenance step. This saves the three-second
+redundant restore observed in run 37397370508 without skipping fresh tests.
+
+A private cold-cache quarantine compilation experiment is rejected. Native
+verification passed in 162.14 seconds; adding the full coverage flags to its
+registration/outcome commands also passed but took 247.79 seconds. Compiler
+counts fell from 1530 to 1324, while compiler CPU rose from 194.254 to 241.088
+seconds, coverage-tool calls rose from 553 to 1157, and linker CPU rose from
+48.476 to 87.494 seconds. Aggregate job user/system time rose from 474.77/92.29
+to 705.96/175.34 seconds. Host variance and a brief overlapping scoped lint run
+limit wall-time attribution, but the experiment does not justify adopting
+coverage-instrumented quarantine checks. Both retained the same coverage gates.
+
+
+### Owned fixtures: changed-source hosted measurement
+
+Head `0e227f2485c866234b2441cbac369e1bb4535c26`, run `37398418294`,
+functional job `112060950738`, passed all 68 packages and 751 results
+(749 pass, two skip) with no recovered failures. The complete job took
+**231 seconds** (01:22:24–01:26:15 UTC); the supervisor took **186.484 seconds**,
+and coverage invocation **175.850 seconds**. The restored archive came from
+`4492b4921d`; changed test sources required 23 compiler commands and 36 linker
+command observations. This is another valid above-target sample, not the
+three-minute checkpoint. The isolated MCP Factory fixture resolved the prior
+failure in this run.
+
+On exact archive hits, the next workflow skips filtering a snapshot that cannot
+be saved again under GitHub's immutable cache key. Fresh tests still execute;
+cold or fallback hits still capture and save the bounded archive. This removes
+otherwise redundant post-test copying on same-head verification.
+
+
+### Parallel execution of isolated customer scenarios
+
+Nineteen previously serial top-level scenarios now call `t.Parallel`: ten
+initialization scenarios, three JSON/YAML failure journeys, three CLI startup
+journeys, and three JavaScript restart/resume journeys. Each owns its temporary
+home/project, process, buffers, and external-effect mocks. Steps inside each
+restart/recovery scenario remain sequential; no process-wide environment or
+working directory is mutated. Registered test names and assertions are retained.
+
+The first sixteen-scenario full-lane sample passed in **117.96 seconds**, with
+751 results and a **55.980-second** customer-journeys package. Adding the three
+JavaScript scenarios passed in **121.92 seconds**, with **115.960 seconds**
+coverage invocation and a **54.948-second** customer-journeys package. Its fresh
+tool trace recorded 39 links, **54.524 seconds linker CPU**, **57.593 seconds
+active linker wall intervals**, and **159.173 seconds summed linker wall**.
+Summed overlapping wall intervals are not elapsed job time. Aggregate job
+user/system times were 329.91/77.72 seconds. Three focused JavaScript repetitions
+also passed. Existing private twelve-way cleanup samples ranged from 111.92 to
+162.52 seconds, so this experiment establishes a lower package serial tail,
+not a consistent whole-lane speedup. Hosted whole-job measurement is still needed.
+
+A preliminary private edit accidentally added `t.Parallel` to a test that already
+called it; that full run failed and is excluded from successful latency evidence.
+An interrupted repeat and a stale overlay lock also produced no valid latency
+sample. The duplicate call was removed before the successful full-lane checks.
+The final timing directory uses fresh tool records; earlier repeated harness
+output directories contained nested stale report copies and are not used for
+compiler/link totals.
+
+For timer-only asynchronous components, `testing/synctest` remains appropriate.
+Real file, pipe, and network I/O—including loopback HTTP—is not durably blocking
+inside a synctest bubble. Accordingly, these public REST/MCP recovery scenarios
+use observable completion and controlled clocks/edges rather than shortening
+wall-clock sleeps or wrapping real sockets in virtual time. See the Go team's
+[Testing Time](https://go.dev/blog/testing-time) explanation of these limits.
+
+
+### Hosted parallel candidate and loop-duration race
+
+Head `bd5bf2728139c9d4e438d1df3de8a0c1ecb251c2`, run `37399514886`,
+functional job `112064602388`, passed in **223 seconds whole job**
+(01:37:28–01:41:11 UTC), **171.610 seconds supervisor**, and **158.206 seconds
+coverage invocation**. It accounted for all 68 packages and 751 results. The
+trace reported four compiler commands and 71 linker command observations.
+The customer-journeys package fell from 102.975 to 86.032 seconds, while the
+whole job still exceeded three minutes. The trace counts are observations,
+not measured linker CPU or a count of uniquely executed link actions.
+
+One loop boundary case recovered on retry: `maximum_168h` timed out observing
+its first scheduled Work after the invocation used a 20 ms return deadline.
+The next fixture issues the accepted-duration request asynchronously, observes
+the first scheduled Work, cancels its owned HTTP call, and joins that call
+before teardown. Duration rejection cases retain their HTTP 400 assertions;
+the separate overlap journey retains the bounded HTTP terminal-response check.
+Ten focused repetitions passed in 7.009 seconds, and scoped repository lint
+passed. This avoids an arbitrary short admission deadline without padding
+its timeout or removing the customer duration boundaries.
+
+The private removal of two direct internal metadata tests ran all 749 remaining
+results but failed existing floors: localized metadata validation fell to
+29.63% against 72.22%, and snapshot mapping fell to 68.75% against 75.00%. That
+deletion is not shipped. It needs public canonical-metadata proof and a
+documented classification of the purely programmatic defensive snapshot branch;
+no floor has been lowered to claim a performance checkpoint.
+
+A private explicit package-cleanup-hook experiment merged two more packages
+(21 groups, 175 original tests). Its full lane passed in **112.81 seconds**,
+with all 751 results and unchanged floors. It preserves native TestMain for
+packages with startup before m.Run or unsafe global/relative fixtures. The
+current prototype requires further lifecycle ordering and eligibility checks
+before adoption. Its tool trace includes tool-program links as well as tests:
+39 links, 44.354 seconds linker CPU, 44.088 seconds active linker wall intervals,
+and 137.839 seconds summed link wall. It also performed 30 compiler calls
+(3.097 seconds CPU) for changed tooling/bridge sources. This is local evidence
+for a prototype, not the next hosted checkpoint.
+
+
+### Latest hosted customer-observation fix: 62e5d98d79
+
+[Hosted run 37401008431](https://github.com/portpowered/you-agent-factory/actions/runs/37401008431) passes the complete functional lane without retries: 68 packages, 751 results, 749 pass and two skips. The functional job takes **237 seconds**, including setup and reporting. Its supervisor takes **188.583 seconds** and coverage invocation **177.583 seconds**. This does **not** satisfy the three-minute complete-job checkpoint.
+
+The restored compiler archive cache observes only two compiler commands for changed test sources and 36 linker commands. A cache miss does not explain this slower run. The largest package is customer_journeys (116.003s), followed by cli_rest_journeys (77.730s), packaged/invocation (73.274s), provider_sessions/details (47.802s), MCP worker_sessions (45.970s), recordings/lifecycle (45.310s), and models/inference (43.309s). Package elapsed times overlap and include parallel scheduling; they must not be added as the lane critical path or treated as CPU measurements.
+
+The separate Verification Policy gate fails on an outdated dry-run assertion that assumed `-stream` immediately followed `-suite functional`. The command now includes `-functional-monolith=true`; the job-count handoff remains four in that policy test. Backend Lint passes. The policy assertion is corrected in the next candidate.
+
+### Teardown-aware consolidation experiments
+
+The first private cleanup-hook prototype joins two additional teardown-only packages (rollout and MCP protocol), preserving all 751 results and blocking floors. It passes in **112.81s**, with 39 observed tool links including supervisor tools: measured link CPU **44.354s**, link active wall **44.088s**, and sum of overlapping link wall **137.839s**. It is a private source experiment, not hosted evidence or a three-minute checkpoint.
+
+A subsequent same-feature experiment limiting each process to GOMAXPROCS=2 passes in **134.20s** (coverage invocation 128.005s), without retries. Its 39 links consume **44.501s CPU**, occupy **42.401s active wall**, and sum to **114.963s overlapping wall**. Four compiler commands are observed after source changes. This does not demonstrate a total-lane improvement over the four-thread prototype; the reduced thread limit is not adopted. Earlier valid four-thread private samples range from 111.92s to 162.52s and remain relevant to variance.
+
+
+The expanded teardown-aware candidate consolidates **24 packages and 223 top-level tests**, compared with the shipped 19 packages/171 tests. Only five reviewed teardown-only packages opt in: rollout, MCP protocol, runtime_api, workers/inference, and workers/inference/agy. Other fixture, global-state, executable, relative-path, startup-TestMain and quarantine boundaries remain native. Native retries continue to use original packages. The hook runs through Go's parent `t.Cleanup` after every parallel child; cleanup errors still fail the package. Functional execution is fresh `-count=1`; this lifecycle opt-in does not claim repeat-count support for once-only shared fixtures.
+
+The expanded private run passes in **155.79 seconds**, with coverage invocation **145.599s**, all 68 packages/751 results, 749 pass/two skips, and unchanged blocking coverage gates. It observes 13 compiler actions after source changes and **34 links**, versus 39 in the smaller prototype. Those links consume **62.228s CPU**, occupy **68.692s active wall**, and sum to **175.355s overlapping wall**. The total run is slower than the smaller prototype despite fewer binaries; the evidence establishes reduced link count, not a controlled wall-time improvement. Focused Go eligibility tests, scoped built-in and repository lint, and six lane-budget policy tests pass. Hosted timing remains necessary before the three-minute merge checkpoint.
+
+
+### Hosted teardown candidate and bounded-concurrency comparison
+
+[Run 37402715640](https://github.com/portpowered/you-agent-factory/actions/runs/37402715640), head b18c676cdd, has a green **234s complete functional job** and **175.238s coverage invocation**, with 751 results/68 packages. One Providers adverse-recovery timeout subcase fails its first-dispatch error assertion and recovers on same-head retry. The next candidate removes this duplicate subcase, its runner and call counter. `TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick` retains the same workstation limit through public Factory Events and Work, observing first timeout, later retry and successful completion. The distinct worker-level timeout case also remains. No coverage policy change is made.
+
+Its trace reports 66 compiler/61 linker command observations. Failed monolith command handling appends raw output to diagnostics after normalized output; trace lines can therefore appear twice. These observations must not be reported as unique builds or CPU. Local external tool timing records actual subprocess invocations.
+
+Removing two diagnostic-only Git walks allows Product customer_journeys and cli_rest_journeys to join the monolith: **26 packages/373 tests**, 751 total results. Revision diagnostics still use supplied CI/build revision metadata. No customer assertion or customer-owned Git history is removed. Twelve-way execution passes in **170.16s**, with **161.762s coverage invocation**, **541.55s user+system CPU**, peak process RSS **3.95 GiB**, and 32 tool links (**56.192s CPU**, **49.912s active wall**, **152.645s overlapping wall sum**). This layout does not demonstrate a wall improvement at twelve-way execution; the smaller 24-group sample took 155.79s.
+
+Eight-way execution of the 26-group source passes in **138.97s**, **131.283s coverage invocation**, **398.99s user+system CPU**, peak process RSS **3.90 GiB**. Its 33 links, including supervisor tools, consume **45.651s CPU**, occupy **43.962s active wall**, and sum to **94.404s overlapping wall**. The rerun script redundantly attempted to remove the already-removed Git walk and printed a preparation error before continuing; the measured source and full suite are unchanged and complete. The preparation step is omitted from subsequent reruns.
+
+Six-way execution with the duplicate timeout subcase removed passes in **141.73s**, **134.129s coverage invocation**, **396.59s user+system CPU**, peak process RSS **3.68 GiB**. Its 32 links consume **48.858s CPU**, occupy **41.083s active wall**, and sum to **71.549s overlapping wall**. Both lower concurrency runs preserve all top-level results and blocking gates without retries. Six does not demonstrate an improvement over eight; the next hosted candidate uses eight. These are consecutive source experiments, not controlled identical-source repetitions; the source change and observed range must remain disclosed.
+
+The `you init` fixture also registers cleanup for both ordinary and interactive root-built processes. Five focused repetitions of Init/normal-command cases and Providers adverse-recovery/retained causal workstation timeout cases pass. Built-in lint and six workflow cache/concurrency contract tests pass; workflow lint passes all eight files. Hosted timing and required checks remain necessary for the merge checkpoint.
+
+
+### Latest hosted eight-way candidate and actual CPU investigation
+
+[Run 37404058648](https://github.com/portpowered/you-agent-factory/actions/runs/37404058648), head `592184914dc53c10bc2a1a63343ac07ada8673e9`, passes the complete functional job in **192 seconds** (02:26:55–02:30:07 UTC). Coverage invocation takes **147.527s**, with 68 packages/751 results, 749 pass/two skips, and no retries. The successful trace records eight compiler actions and 29 linker commands. Its restored archive key is the preceding b18 candidate, so this is a changed-source cache measurement. Setup takes approximately 24s; supervisor approximately 156s; remaining capture, save, reporting and post steps approximately 12s. Twelve more seconds must be removed from the complete job before claiming the three-minute checkpoint.
+
+The 26-group private twelve-way run consumes **541.55 user+system CPU seconds**; the eight-way run consumes **398.99 CPU seconds**, a 26.3% reduction. In the latter, links consume **45.651 CPU seconds**, about **11.4% of total measured CPU**, and occupy 43.962s of overlapping active wall intervals. The 94.404s sum of overlapping link durations is neither physical CPU nor total lane wall time. Test execution, supporting tools and supervision account for the remaining CPU; CPU profiles are required to attribute that remainder accurately. Hosted package elapsed times include scheduling and waits and cannot substitute for per-package CPU accounting.
+
+A separate private control keeps the two large customer journey packages native (24 groups, eight jobs, current provider timeout cleanup and init process cleanup). It passes in **147.04s**, using **479.81 CPU seconds**, with 34 links consuming **56.487 CPU seconds**, 66.872s active linker intervals and 123.605s overlapping link sum. Peak single-process RSS is 2.22 GiB. The corresponding broader eight-way sample took 138.97s/398.99 CPU seconds with 3.90 GiB peak single-process RSS. These are consecutive source experiments, not identical-source repetitions; consolidation trades larger process memory for less aggregate work. Maximum RSS reported by time is the largest individual process, not the sum of concurrently resident processes.
+
+Increasing GOGC to 150 in the 26-group/eight-way private layout does not improve this sample: **144.97s elapsed**, **419.29 CPU seconds** (329.31 user/89.98 system), and **4.74 GiB** peak single-process RSS, versus 138.97s/398.99 CPU seconds/3.90 GiB with the default collector setting. This tuning is rejected. No collector setting change ships, and this experiment does not establish that garbage collection dominates CPU; execution profiles will identify the actual hot paths.
+
+
+### CPU attribution: packaged installation dominates execution
+
+A private diagnostic run adds `runtime/pprof` labels around each original monolith test and uses an external `/usr/bin/time` wrapper around every native test binary. The monolith samples **230.42 CPU seconds over 86.30s elapsed**. Labels cover **211.76s (91.90%)** of sampled CPU; the remaining **18.66s** are unlabelled runtime/background work. Labels propagate to spawned goroutines; long-lived shared fixture goroutines retain their creating test's label, so package attribution is more reliable than individual-test attribution. Native totals below are measured process user+system CPU, including child-process accounting; monolith totals are statistical sampled CPU. This diagnostic run fails a selected-time event-stream observation deadline and recovers that test natively; it is not a successful checkpoint or clean performance baseline. The temporary labels/profile wrapper are private and do not ship.
+
+| Functional package | Execution CPU seconds | Measurement | Primary next action |
+| --- | ---: | --- | --- |
+| product/customer_journeys | 47.39 | labelled samples | Reuse initialized hosts and explicit sessions; avoid repeated fresh-home catalog installation in unrelated journeys |
+| product/customer_lifecycles | 40.04 | labelled samples | Retain shared session fixtures; profile remaining catalog setup and repeated factory decode during review/payload scenarios |
+| factory/packaged/invocation | 26.87 | native user+system | Keep focused packaged CLI behavior, share setup across independent invocations, avoid reinstalling every catalog for each scenario |
+| product/cli_rest_journeys | 18.01 | labelled samples | Share public preparation while retaining CLI/REST parity and independent state |
+| models/inference | 16.19 | native user+system | Retain isolated model caches; replace legacy fixture semantics with canonical LocalAI behavior |
+| factory/execution | 15.17 | labelled samples | Reuse prepared home/host for customer execution scenarios; isolate Work through sessions |
+| work/admission | 14.84 | labelled samples | Reuse prepared home/host; retain distinct rejection and accepted Work proofs |
+| providers/acp | 14.57 | native user+system | Reduce repeated bootstrap for protocol cases; preserve ACP protocol observation |
+| transport/mcp/worker_sessions | 14.23 | labelled samples | Keep one owned host with isolated sessions and MCP observations |
+| transport/cli/customer_commands | 11.74 | labelled samples | Share public installed-home setup across command matrices |
+| factory/visualization/runtime_metrics | 12.03 | native user+system | Separate actual customer metric behavior from any system-analysis fixtures |
+| sessions/chat_sessions/acp | 10.72 | native user+system | Reuse host and isolate conversations/sessions |
+
+The dominant production stack is **system_initialization/internal/workflow.Initialize: 149.93 sampled CPU seconds (65.07% of monolith samples)**, almost entirely **factory_definitions/internal/services/distribution/packagedinstallation.InstallPackagedFactory: 149.56s**. Within that nested path, packaged layout preparation consumes **90.58s**, canonical factory mapping/expansion **67.69s**, and definition validation **42.10s**. These are overlapping cumulative stacks and must not be added. JSON unmarshalling across the binary consumes **86.91s cumulative**; string parsing/validation is a substantial flat hotspot. Syscall6 accounts for **41.50s flat**; mkdir-related stacks account for **25.11s cumulative**. This identifies repeated factory decoding, validation and materialization as the main execution target rather than merely long timer waits.
+
+The optimal next order is: (1) remove repeated full-catalog bootstrap from unrelated runtime journeys using prepared, isolated homes and then owned hosts with explicit sessions; (2) simplify the largest customer journey matrices while retaining distinct customer guarantees; (3) consolidate additional safe native packages where their lifecycle boundaries permit it; (4) replace timer waits with causal observations or synctest only where no real-I/O boundary prevents virtual time. Linking remains worthwhile but the current warm sample spends about 11.4% of total CPU there; it cannot explain most remaining CPU. Collector tuning is rejected by the measured GOGC150 regression.
+
+
+### Rejected prepared-home prototype and retained synchronization fix
+
+The private prototype prepares the packaged catalog once through public `Process.Execute(you run --factory <missing>)`, snapshots its file outputs, and copies those immutable bytes into distinct homes for ordinary generic runtime journeys. Model cache paths remain isolated; configured-home and bootstrap-specific cases retain empty homes. The first run rebuilds 118 compiler actions (**52.309 compiler CPU seconds**), takes **142.94s** and **437.06 total CPU seconds**, and fails the pre-existing active-script captured-log assertion. This is not a valid performance benchmark.
+
+A warm repeat passes all **68 packages/751 results**, 749 pass/two skips, and blocking coverage gates without retries, but takes **153.77s** and **473.23 total CPU seconds** (369.11 user/104.12 system), with no compiler actions. Its 32 links consume **53.086 CPU seconds** and occupy **49.933s active wall**. Peak individual process RSS is approximately 3.88 GiB. This is slower and consumes more CPU than the earlier unmodified eight-way sample (**138.97s/398.99 CPU seconds**), so the fixture snapshot cache is **rejected and removed**. This is a sequential source experiment rather than controlled identical-source repetitions. Existing installed targets still require validation, expected-content preparation and reconciliation; copying installed files does not remove those production paths. The next direction is explicit session reuse on an already-initialized process, not broader home-copy caching.
+
+The first prototype exposed an independent synchronization race in `TestWorkerSessionCapturedLogsActiveScriptWriteFailure`: its controlled command signals that output has been emitted before the asynchronous recording writer commits the chunk. A single immediate logs read can therefore observe only the opening event. The retained change waits through the public logs endpoint for committed position two and two events before the existing CLI/HTTP parity and fault-preservation assertions. It adds no sleep, no timeout extension, no relaxed assertion and no internal observer. Ten focused repetitions pass in **3.201s**. This prevents a false failure and avoidable native retry; it is not claimed as a measured whole-lane CPU saving.
+
+
+The private eight-build-job/four-parallel-test experiment takes **173.08s** and **386.29 CPU seconds** (312.90 user/73.39 system), with a selected-time event-stream observation failure. Its combined binary takes approximately 101s. Seven compiler calls consume 13.698 CPU seconds and 35 links consume 44.879 CPU seconds; peak individual process RSS is 3.54 GiB. This is a failed diagnostic sample, not checkpoint evidence. It does not improve elapsed time over the earlier eight/eight run and is not adopted. Build and execution budgets remain eight.
+
+Package wall reporting also needs correction: Go's parent test `Elapsed` excludes parallel children. Once customer journeys are combined and their children run in parallel, some successful original packages appear to take zero seconds or only the parent's serial work. The normalizer now records each original group's start timestamp and calculates terminal package elapsed from the full event window, including child execution and parallel scheduling waits. Child test timings and native package events retain their original values. A regression test proves a ten-second package window despite the parent terminal reporting zero. Earlier consolidated-package elapsed rankings must therefore be read with this limitation; CPU attribution above remains independently measured. This reporting correction changes no execution, inventory, coverage floor or verdict.
+
+
+## Isolated-session host consolidation, October 5 continuation
+
+The next implementation targets the measured initialization hotspot rather than
+only cutting linker count. Twenty-two existing customer scenarios now use four
+explicit, parent-owned process hosts: ten routing journeys, five guard journeys,
+three provider retry/recovery journeys, and four prompt/template journeys. Each
+leaf still owns its copied Factory, command-response queue, Factory Session,
+Work identities and output assertions. Closing one session does not stop peer
+sessions; cleanup terminates and deletes the session through REST before removing
+its external command route. Each host retains its own isolated operator home and
+model-cache configuration. No process-global default session or cache registry
+was added.
+
+Provider-internal mocks and token assertions were replaced with the command edge,
+public dispatch events, terminal Work, rendered command stdin and the actual
+working directory. The branch-tag prompt case now proves the customer-visible
+worker directory selected by that tag. Matching and mismatching guards still
+prove public dispatch, Work correlation and absence of unwanted provider calls.
+The blocked sessions legitimately report ACTIVE; an extra IDLE assumption was
+rejected after five focused repetitions exposed it. The final guard cases retain
+the original public Work-category guarantee. Their 50ms sleep loops now use the
+bounded public-observation helper, which evaluates immediately.
+
+Workflow source files now identify routing, guards and provider retries instead
+of internal Petri composition. Re-grouping preserves all 22 leaf scenarios while
+reducing reported top-level results from 751 to 742. Coverage manifests, minimums,
+quarantine and retry policy are unchanged.
+
+Packaged Review exposes its existing teardown as an explicit monolith cleanup
+hook. Runtime Metrics, Factory Transformation and CLI Invocation initialize their
+existing package fixtures lazily through sync.Once and expose the same cleanup
+hook. Native TestMain still owns native teardown; the combined package owns
+teardown after all of its parallel children finish. This makes **30 packages / 451
+top-level tests** eligible, versus 26 / 373 before this batch. All executable,
+relative-fixture and process-wide-state exclusions remain intact. Attempted
+teardown opt-ins for Packaged Fix, Chat Sessions ACP, Models and docs smoke were
+removed because other independent exclusions still require their native binaries;
+there is no benefit in shipping inactive hooks or relaxing those exclusions.
+
+An observed provider-log retry exposed a separate completion assumption: stopping
+one session does not stop peer log writers. A trailing incomplete JSON record is
+therefore transient, not proof of malformed persisted output. The file-output
+assertion now waits for the complete matching customer record, stops scanning once
+it finds that record, and preserves missing-record/malformed-record failure
+reporting. Ten focused repetitions pass. No additional fixed sleep was introduced.
+
+Validation so far: five routing/prompt repetitions, five guard/retry repetitions,
+three native lazy-fixture packages, twenty selected-time automation repetitions,
+and scoped repository/built-in lint pass. The complete four-CPU Linux experiments
+retain coverage floors, selected inventory, quarantine and fresh execution:
+
+| Private experiment | Elapsed | User + system CPU | Compiler actions | Links | Outcome |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Routing/prompt hosts, changed source | 184.07s | 580.25s | 119 | 34 | Pass |
+| Same routing/prompt source, warm archives | 140.58s | 403.37s | 0 | 32 | Pass |
+| Add guard/retry hosts and Review cleanup | 166.18s | 503.93s | 119 | 32 | Pass after one provider-log native retry |
+| Add three lazy fixture packages | 124.37s | 355.74s | 21 | 29 | Failed selected-time automation observation; native leaf retry passed |
+
+The first warm repeat partially overlapped a focused Windows check, so it is
+reported as diagnostic evidence rather than a controlled speedup. Reused report
+directories also retained an old flake ledger in that repeat; its fresh timing
+summary has 746 results, 744 passes, two skips and no failing test. Subsequent runs
+clear only the private generated report directory and use distinct tool-timer
+folders. The broad failed run's coordinator failure keeps the lane failed even
+though the individual automation retry passes; its short elapsed time is **not** a
+successful baseline. New diagnostics report the pending Work identities and public
+Work projection if that automation completion observation expires.
+
+These measurements use the previously described private Linux audit checkout with
+current changed source files copied in; they are not exact hosted-head results.
+The latest hosted complete-job result remains 192s. No three-minute checkpoint has
+been claimed from these local samples.
+
+The current expanded batch passes without retries: **129.01s supervisor elapsed**,
+**122.034s coverage invocation**, **378.63s aggregate CPU** (303.63 user + 75.00
+system), 68 packages, 742 results, 740 passes and two skips. Peak single-process
+RSS is 4,034,972 KiB (about 3.85 GiB). This is a successful changed-source local
+sample, not the hosted three-minute checkpoint; an identical-source warm repeat
+and a conflict-only rebase against current main follow.
+
+The identical-source archive-warm repeat also passes without retries, but takes
+**165.17s supervisor / 159.151s coverage invocation** and **486.04s aggregate CPU**
+(379.22 user + 106.82 system). It has no compiler actions and 28 links. Linking
+uses 48.734 CPU seconds with 47.818s active wall time; the previous successful
+sample uses 36.578 linker CPU seconds with 32.122s active wall time. Successful
+expanded-batch samples therefore range **129.01–165.17s**. This variance prevents
+claiming a consistent suite-wide speedup from one favorable local sample, even
+though four additional package binaries are eliminated and eighteen repeated
+customer host initializations are removed.
+
+GitHub subsequently reports a content conflict. The candidate is rebased against
+current main, preserving its additional explicit home/model-cache isolation in
+MCP Protocol and Worker Inference alongside the teardown hooks. The obsolete
+legacy-log helper remains removed; current-writer incomplete/damaged recovery
+helpers retain those customer outcomes. Current main also changes runtime
+construction/opening, so the older private measurements cannot establish the
+rebased candidate's latency. Scoped repository lint on the rebased tree reports
+zero issues; exact-source Linux validation and hosted checks are required next.
+
+
+### Rebased hosted result and durable-store isolation
+
+Head `6617d42231`, based on current main, passes functional coverage with no
+retries: **310s complete job**, **268.955s supervisor**, **247.004s coverage
+invocation**, 68 packages / **760 results** (758 passes, two skips). Current main
+adds 18 selected top-level tests; 30 packages / **462 tests** now share the
+combined executable. The build trace records **508 compiler actions and 25 links**,
+versus eight compiler actions and 29 links in the older 192s hosted result. This
+is a changed-runtime/archive-refill sample, not a regression measured on identical
+source. Compiler archives are captured and saved in eight seconds; setup consumes
+26 seconds and the remaining completion steps consume about 15 seconds. The
+three-minute complete-job checkpoint is still outstanding.
+
+The complete-event-window package ranking is Customer Lifecycles 112.417s,
+CLI/REST Journeys 109.251s, Recording Lifecycle 102.429s, Customer Journeys
+101.904s, Worker Inference 101.828s, CLI Customer Commands 97.492s, CLI Invocation
+97.233s and Factory Transformation 97.117s. Those windows overlap and include
+scheduling waits; they are **not package CPU measurements** and must not be added
+as elapsed CI time. The earlier labelled profile remains the package CPU evidence
+for the old runtime, with the source/failure limitations already recorded.
+
+An exact-source private copy is verified against tree
+`80ee56fd93969dbce13c603130184bdf9cc9e53d`. Its diagnostic run begins with 1,310
+compiler actions and accumulated runtime output from previous private runs. WSL
+then stops responding; this run is terminated and excluded from latency/CPU
+baselines. Its generated evidence and original private Git history are not
+shipped. Clean source contents alone are insufficient for a controlled repeat:
+invocation-owned durable state must also be fresh or deliberately restored.
+
+The API helper exposes a related real test-isolation issue. It passes the
+scenario's working directory to the CLI, but the storage construction edge still
+defaults to the binary's process working directory. Consolidation makes that
+one shared directory for unrelated hosts. The next fix binds the storage edge to
+the same explicit invocation directory, preserving explicit recovery/storage
+overrides. Independent hosts therefore do not load and append to the same
+package-wide durable store. This is a fixture ownership change; its performance
+benefit remains to be measured on hosted CI.
+
+The rebased hosted lint failures identify three stale sleep-baseline entries and
+the moved Runtime Metrics teardown deadline. Delete the stale entries and mark
+the deadline as bounded teardown, without increasing any debt allowance. The
+previous local scoped custom-binary invocation used the default lint config and
+did not activate the repository plugin. Subsequent checks explicitly use
+`.golangci-repository.yml` with the repository's CI tag set; prior built-in lint
+results remain valid, but are not evidence for that plugin.
+
+The current repository plugin is rebuilt from the rebased source and reports
+**zero issues** with explicit repository config and CI's complete tag set across
+the affected packages. With the directory binding, three routing/guard/retry
+repetitions and three prompt repetitions pass. A broader native Windows attempt
+passes Factory Execution in 43.661s, but Customer Journeys times out at 600.437s
+in hosted-runtime lifecycle scenarios that call BuildProcess directly and bypass
+the changed API helper. This run is not a successful suite baseline. One such
+scenario is checked separately; Linux hosted coverage remains required for the
+helper's broader consumers.
+
+The isolated Windows `TestHostedContinuousRunsStayLiveWhileIdle/server` also fails
+in 35.222s waiting for listener startup/shutdown. It does not call the changed
+API helper, so this is separately recorded as a native hosted-runtime limitation,
+not attributed to the storage binding. No timeout ceiling is increased.
+
+
+### Test-only hosts and further setup reduction
+
+A fresh-state four-CPU Linux sample of `ec85aae468` passes in **128.04s
+supervisor / 122.132s coverage invocation**, 68 packages / 760 results, no retries
+and **373.87s aggregate CPU** (307.20 user + 66.67 system). Compilation consumes
+40.688 CPU seconds across 117 actions; 31 links consume 37.840 CPU seconds.
+Compiler active wall is 22.167s; linker active wall is 34.464s. These overlap
+other work. Maximum individual-process RSS is 5,208,324 KiB (about 4.97 GiB),
+not aggregate peak memory. Unrelated Windows workloads limit comparability.
+
+The fresh-state warm attempt fails the selected-time watcher despite a passing
+native leaf retry: 137.98s elapsed, 389.80 CPU seconds, two compiler actions and
+29 links. This is failed diagnostic evidence. No peer Work had been admitted.
+The next fixture drives watcher debounce registrations until the owned file
+read is acknowledged, then retains public dispatch and Work assertions. A real
+filesystem notification may replace the timer observed first; its first timer
+registration alone is insufficient. Exact pre-due, retry, cancellation and
+late-result checks remain. The initial observer implementation rejected unrelated
+5ms metrics waits; it now ignores those as the existing scheduler waiter does.
+Three native repetitions pass. A prior 20-repeat native attempt stalls in hosted
+activation before the final explicit storage edge and is interrupted; it is not
+successful evidence.
+
+Backend Lint finds five new support helpers in its production dead-code scan,
+which excludes tests as roots. Move the hosts into their two owning test
+packages' `_test.go` files, and withdraw the broad automatic API-helper storage
+binding. Each new host and the selected-time host instead supplies its owned
+storage directory explicitly. Production support dead-code findings then match
+the existing baseline exactly. Routing, guards and provider retries now share
+one parent-owned host; prompts retain a second host. All 22 customer scenarios
+remain session-isolated. Grouping changes selected results from 760 to 758.
+Five shared-session repetitions and three prompt repetitions pass.
+
+Remove the functional provider-Go-panic compatibility case; public provider
+failure routing remains, and the passing worker unit
+`TestExecuteRunnerPanicBecomesSafeFailedResult` retains safe panic recovery proof.
+Providers, Codex inference and invoke/continue expose existing lazy teardown
+through consolidation hooks, without changing native TestMain behavior.
+Complete Linux validation and hosted timing follow before accepting the batch.
+
+The first test-local host batch passes the full Linux lane with 758 selected
+results and no retries, but takes **203.09s supervisor / 195.446s coverage
+invocation**, **637.09 aggregate CPU seconds** (504.62 user + 132.47 system),
+119 compiler actions and 28 links. Peak individual-process RSS is 7,265,056 KiB.
+It does not show an improvement over the earlier 128.04s sample. That batch
+withdrew the general API-helper directory binding; unrelated hosts then share
+storage again, including within one execution. This is an isolation concern,
+not an established explanation for the whole measured variance.
+
+The final batch retains the general binding using the existing policy-free
+filesystem `Local` adapter's optional working-directory value. Its default
+remains `os.Getwd`; an explicit value changes only that effect, never the host
+process directory. A focused unit verifies both the owned value and unchanged
+host directory. No new production function/dead-code allowance is introduced.
+Explicit scenario storage overrides remain authoritative.
+
+Redundant missing-Factory bootstrap invocations are also removed from eight
+customer fixture files. Normal public host startup still initializes the
+customer home; construction-inertness assertions remain, and no model catalog
+or initialization implementation is mocked or bypassed. Three selected-time /
+shared-session repetitions pass after this change, and the affected repository
+lint reports zero issues. The three additional opt-ins compile natively with
+empty selectors and retain nil-safe teardown. Complete final-source Linux and
+hosted checks remain required.
+
+Linux registration rejects the three additional Providers/Codex/invoke-continue
+hooks because those packages still have executable fixtures; those inactive
+hooks are withdrawn. Factory Definitions has no such exclusions. Its test-only
+bridge moves to a test file and delegates directly to lazy fixture setup; its
+existing teardown is shared by native TestMain and the monolith cleanup hook.
+The retired production-helper dead-code baseline entry is deleted. An obsolete
+selected-time directory-helper reference left by the last cleanup causes a
+monolith build failure before any valid complete-suite timing; it is removed.
+That 109.69s incomplete run is excluded from latency baselines.
+
+The corrected 31-package candidate passes all 68 packages / 758 results without
+retries in **147.18s supervisor / 140.269s coverage invocation**. Aggregate CPU
+is **447.95s** (362.02 user + 85.93 system), 54 compiler actions consume 24.185
+CPU seconds, and 28 links consume 40.751 CPU seconds with 37.053s active wall.
+Peak individual-process RSS is 5,532,956 KiB. This is successful private evidence,
+not a hosted checkpoint or a consistently faster identical-source comparison.
+
+Claude golden transcript reads now use the existing absolute repository-path
+helper instead of embedding package-relative fixtures. Transcript bytes, hashes
+and public replay assertions remain unchanged. Session restart's workflow input
+also resolves through that helper. Both packages pass three native repetitions
+(37.731s and 10.947s), and repository lint is clean. Their cwd/embed exclusions
+can therefore be removed by ordinary source discovery without loosening any
+consolidation classifier. The next combined lane verifies those cases together.

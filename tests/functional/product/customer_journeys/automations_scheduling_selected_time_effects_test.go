@@ -136,11 +136,12 @@ func (s *selectedTimeScheduler) await(t *testing.T, duration time.Duration) *sel
 
 type selectedTimeFiles struct {
 	platformfilesystem.Local
-	mu         sync.Mutex
-	empty      map[string]int
-	reads      chan string
-	walked     chan string
-	admissions map[string]int
+	mu            sync.Mutex
+	empty         map[string]int
+	reads         chan string
+	observedReads chan string
+	walked        chan string
+	admissions    map[string]int
 }
 
 func (f *selectedTimeFiles) walk(path string, fn fs.WalkDirFunc) error {
@@ -172,6 +173,7 @@ func (f *selectedTimeFiles) count(requestID string) int {
 }
 
 func (f *selectedTimeFiles) ReadFile(path string) ([]byte, error) {
+	defer func() { f.observedReads <- filepath.Clean(path) }()
 	f.mu.Lock()
 	remaining := f.empty[filepath.Clean(path)]
 	if remaining > 0 {
@@ -189,4 +191,32 @@ func (f *selectedTimeFiles) hold(path string, reads int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.empty[filepath.Clean(path)] = reads
+}
+
+// A real filesystem notification can replace a debounce timer after the first
+// registration is observed. Drive the selected debounce until the owned input
+// is read; public Work/events still prove admission and completion.
+func awaitSelectedWatcherRead(t *testing.T, scheduler *selectedTimeScheduler, files *selectedTimeFiles, path string) {
+	t.Helper()
+	want := filepath.Clean(path)
+	ceiling := time.NewTimer(10 * time.Second)
+	defer ceiling.Stop()
+	for {
+		select {
+		case got := <-files.observedReads:
+			if got == want {
+				return
+			}
+		case wait := <-scheduler.registered:
+			if wait.timer.stopped.Load() || !wait.deadline.After(scheduler.Now()) {
+				continue
+			}
+			if wait.duration != 100*time.Millisecond {
+				continue // Metrics and request waits do not select watcher eligibility.
+			}
+			scheduler.advance(wait.deadline.Sub(scheduler.Now()))
+		case <-ceiling.C:
+			t.Fatalf("watcher did not read owned input %s", want)
+		}
+	}
 }

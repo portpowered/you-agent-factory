@@ -35,8 +35,20 @@ func FindRuntimeLogRecord(
 	exitCode int,
 ) map[string]any {
 	t.Helper()
+	found, err := support.WaitForObservation(support.ScaledTimeout(5*time.Second), func() (map[string]any, error) {
+		return readRuntimeLogRecord(fixture.runtimeLogs, workDir, exitCode)
+	}, func(record map[string]any) bool { return record != nil })
+	if err != nil {
+		t.Fatalf("observe shared runtime log: %v", err)
+	}
+	return found
+}
+
+// Peer sessions can still append to the shared log after this session stops.
+// Only complete records are observable; an incomplete final record is retried.
+func readRuntimeLogRecord(directory, workDir string, exitCode int) (map[string]any, error) {
 	var found map[string]any
-	err := filepath.WalkDir(fixture.runtimeLogs, func(path string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -52,31 +64,37 @@ func FindRuntimeLogRecord(
 		for {
 			var record map[string]any
 			if err := decoder.Decode(&record); err != nil {
-				if err == io.EOF {
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
 					break
 				}
 				return err
 			}
-			if record["event_name"] != commandRunnerCompletedLogEvent {
-				continue
-			}
-			if got, ok := record["working_dir"].(string); ok && workDir != "" && got != workDir {
-				continue
-			}
-			if got, ok := record["exit_code"].(float64); !ok || int(got) != exitCode {
+			if !runtimeLogRecordMatches(record, workDir, exitCode) {
 				continue
 			}
 			found = record
+			return fs.SkipAll
 		}
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("scan shared runtime logs: %v", err)
+		return found, err
 	}
 	if found == nil {
-		t.Fatalf("shared runtime logs contain no %s record for %q exit %d", commandRunnerCompletedLogEvent, workDir, exitCode)
+		return nil, fmt.Errorf("runtime logs contain no %s record for %q exit %d", commandRunnerCompletedLogEvent, workDir, exitCode)
 	}
-	return found
+	return found, nil
+}
+
+func runtimeLogRecordMatches(record map[string]any, workDir string, exitCode int) bool {
+	if record["event_name"] != commandRunnerCompletedLogEvent {
+		return false
+	}
+	if got, ok := record["working_dir"].(string); ok && workDir != "" && got != workDir {
+		return false
+	}
+	got, ok := record["exit_code"].(float64)
+	return ok && int(got) == exitCode
 }
 
 type runtimeLoggingSmokeRunner struct {

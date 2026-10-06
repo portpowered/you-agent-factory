@@ -20,7 +20,7 @@ function stepSection(job, marker, nextMarker) {
 	return job.slice(start, end >= 0 ? end : job.length);
 }
 
-test("functional coverage keeps the module cache and a deps-only build cache", () => {
+test("functional coverage keeps module and dependency caches plus bounded compiler archives", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const job = jobSection(workflow, "backend-coverage");
 	const unitSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'unit'", "      - uses: actions/setup-go@v5");
@@ -35,7 +35,7 @@ test("functional coverage keeps the module cache and a deps-only build cache", (
 
 	assert.match(functionalSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
 	assert.match(functionalSetup, /cache: false/);
-	assert.match(functionalParallelism, /functional_jobs=12/);
+	assert.match(functionalParallelism, /functional_jobs=8/);
 	assert.match(functionalParallelism, /jobs=\$functional_jobs/);
 
 	assert.match(moduleCache, /id: go-module-cache/);
@@ -56,9 +56,9 @@ test("functional coverage keeps the module cache and a deps-only build cache", (
 	);
 
 	assert.equal((job.match(/uses: actions\/cache@v4/g) ?? []).length, 1);
-	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 2);
-	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 2);
-	assert.doesNotMatch(job, /functional-coverage-build-|functional-go-build-cache|FUNCTIONAL_COVERAGE_ACTION_CACHE_/);
+	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 3);
+	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 3);
+	assert.doesNotMatch(job, /functional-coverage-build-|functional-go-build-cache/);
 	assert.doesNotMatch(job, /functional-coverage-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/);
 });
 
@@ -67,10 +67,12 @@ test("functional coverage build cache is deps-only, exact-key, and saved only fr
 	const job = jobSection(workflow, "backend-coverage");
 	const restore = stepSection(job, "      - name: Restore functional dependency build cache", "      - name: Build functional dependency build cache");
 	const build = stepSection(job, "      - name: Build functional dependency build cache", "      - name: Save functional dependency build cache");
-	const save = stepSection(job, "      - name: Save functional dependency build cache", "      - uses: actions/setup-node@v4");
+	const save = stepSection(job, "      - name: Save functional dependency build cache", "      - name: Apply bounded functional compiler archives");
 
 	assert.match(restore, /uses: actions\/cache\/restore@v4/);
 	assert.match(restore, /id: functional-deps-cache/);
+	assert.match(restore, /steps\.functional-compiler-cache\.outputs\.cache-matched-key == ''/);
+	assert.ok(job.indexOf("      - name: Restore bounded functional compiler archives") < job.indexOf("      - name: Restore functional dependency build cache"));
 	assert.match(restore, /path: ~\/\.cache\/go-build/);
 	assert.match(restore, /key: functional-deps-build-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.mod', 'go\.sum'\) \}\}/);
 	assert.doesNotMatch(restore, /restore-keys/);
@@ -92,12 +94,26 @@ test("functional coverage build cache is deps-only, exact-key, and saved only fr
 	);
 });
 
-test("functional coverage carries no module-package Go build cache restore or save", () => {
+test("functional compiler archives stay bounded and restore separately from the full Go cache", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const job = jobSection(workflow, "backend-coverage");
 	assert.doesNotMatch(job, /Restore functional coverage Go build cache/);
 	assert.doesNotMatch(job, /Save functional coverage Go build cache/);
-	assert.doesNotMatch(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_/);
+	const restore = stepSection(job, "      - name: Restore bounded functional compiler archives", "      - name: Restore functional dependency build cache");
+	const capture = stepSection(job, "      - name: Capture bounded functional compiler archives", "      - name: Save bounded functional compiler archives");
+	assert.match(restore, /path: \.artifacts\/functional-compiler-cache\/cache/);
+	assert.doesNotMatch(restore, /path: ~\/\.cache\/go-build/);
+	assert.match(restore, /functional-compiler-archives-v1/);
+	assert.match(capture, /steps\.functional-compiler-cache\.outputs\.cache-hit != 'true'/);
+	assert.match(capture, /--max-bytes 1073741824/);
+	assert.match(capture, /--job-start "\$JOB_START"/);
+	const apply = stepSection(job, "      - name: Apply bounded functional compiler archives", "      - uses: actions/setup-node@v4");
+	assert.match(apply, /if \[\[ -z "\$COMPILER_CACHE_MATCHED_KEY" \]\]/);
+	assert.match(apply, /restore "\$compiler_cache" "\$\(go env GOCACHE\)"/);
+	assert.match(apply, /echo "GOCACHE=\$compiler_cache" >> "\$GITHUB_ENV"/);
+	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY:/);
+	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY:/);
+	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: \$\{\{ steps\.functional-compiler-cache\.outputs\.cache-hit \|\| 'false' \}\}/);
 });
 
 test("functional coverage joins quarantine after concurrent execution and publishes both status paths", () => {
