@@ -711,3 +711,23 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
+
+// These capture-only fixtures cannot retain a safe restart recipe. This is an
+// explicit unavailable recipe, preserving ordinary invocation without claiming
+// that restart input was saved. Durable recovery fixtures delegate to the real
+// Recordings store instead.
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrInvalidRecordingRedactionRequest
+}
+
+func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingReplay
+}
