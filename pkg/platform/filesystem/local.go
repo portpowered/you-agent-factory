@@ -98,6 +98,7 @@ func (Local) WalkDir(path string, fn fs.WalkDirFunc) error { return filepath.Wal
 func (Local) ReadFile(path string) ([]byte, error)         { return os.ReadFile(path) }
 func (Local) Glob(pattern string) ([]string, error)        { return filepath.Glob(pattern) }
 func (Local) ReadDir(path string) ([]fs.DirEntry, error)   { return os.ReadDir(path) }
+func (Local) Link(source, destination string) error        { return os.Link(source, destination) }
 func (Local) Remove(path string) error                     { return os.Remove(path) }
 func (Local) RemoveAll(path string) error                  { return os.RemoveAll(path) }
 func (Local) Chmod(path string, mode fs.FileMode) error    { return os.Chmod(path, mode) }

@@ -532,12 +532,12 @@ func TestReservedSyncSessionsExposeTheirOwnProjectRootsBeforeExecution(t *testin
 }
 
 func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {
-	return runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+	return runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 }
 
 func mustTestRuntimePersistenceStore(t *testing.T, projectRoot string) runtimepersist.Store {
 	t.Helper()
-	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 	if err != nil {
 		t.Fatalf("NewLazyProjectStore: %v", err)
 	}

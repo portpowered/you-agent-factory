@@ -4,10 +4,30 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
 )
+
+// NoReplacePaths supplies only the path effects needed to preserve a file.
+type NoReplacePaths interface {
+	Lstat(string) (fs.FileInfo, error)
+	Link(string, string) error
+	Remove(string) error
+}
+
+// Recovery performs bounded reads and evidence-preserving moves through explicit
+// effects selected by Wire. Local supplies the remaining filesystem operations.
+type Recovery struct {
+	Local
+	reader ReadOpener
+	paths  NoReplacePaths
+}
+
+func NewRecovery(reader ReadOpener, paths NoReplacePaths) Recovery {
+	return Recovery{reader: reader, paths: paths}
+}
 
 // ReadSizeLimitError reports a bounded read without retaining file content.
 type ReadSizeLimitError struct {
@@ -24,11 +44,11 @@ func (e *ReadSizeLimitError) ReadSizeLimit() int64 { return e.Limit }
 // ReadFileBounded consumes at most limit+1 bytes, including when the file grows
 // during the read. Exactly limit bytes are permitted; rejected bytes are never
 // returned to a decoder. Metadata alone cannot enforce this bound.
-func (Local) ReadFileBounded(path string, limit int64) ([]byte, error) {
+func (files Recovery) ReadFileBounded(path string, limit int64) ([]byte, error) {
 	if limit < 0 || limit == math.MaxInt64 {
 		return nil, errors.New("bounded read requires a nonnegative limit below MaxInt64")
 	}
-	file, err := os.Open(path)
+	file, err := files.reader.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +71,11 @@ func (Local) ReadFileBounded(path string, limit int64) ([]byte, error) {
 // existing files untouched. A failure removing the source retains both names;
 // a crash between these operations also retains the bytes. Filesystems without
 // hard-link support fail safely. Permissions are inherited from the same inode.
-func (Local) RenameNoReplace(source, destination string) error {
+func (files Recovery) RenameNoReplace(source, destination string) error {
 	// Reject symbolic links in the selected path, including parent directories,
 	// before creating an archive or removing any name outside that selection.
 	for parent := filepath.Clean(source); ; parent = filepath.Dir(parent) {
-		info, err := os.Lstat(parent)
+		info, err := files.paths.Lstat(parent)
 		if err != nil {
 			return err
 		}
@@ -66,15 +86,15 @@ func (Local) RenameNoReplace(source, destination string) error {
 			break
 		}
 	}
-	info, err := os.Lstat(source)
+	info, err := files.paths.Lstat(source)
 	if err != nil {
 		return err
 	}
 	if !info.Mode().IsRegular() {
 		return errors.New("no-replace move requires a regular file")
 	}
-	if err := os.Link(source, destination); err != nil {
+	if err := files.paths.Link(source, destination); err != nil {
 		return err
 	}
-	return os.Remove(source)
+	return files.paths.Remove(source)
 }

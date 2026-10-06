@@ -234,6 +234,12 @@ func (*durableCustomerFaultFiles) MkdirAll(path string, mode fs.FileMode) error 
 	return os.MkdirAll(path, mode)
 }
 func (*durableCustomerFaultFiles) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+func (files *durableCustomerFaultFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).ReadFileBounded(path, limit)
+}
+func (files *durableCustomerFaultFiles) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).RenameNoReplace(source, destination)
+}
 func (files *durableCustomerFaultFiles) WriteFile(path string, payload []byte, mode fs.FileMode) error {
 	files.mu.Lock()
 	defer files.mu.Unlock()

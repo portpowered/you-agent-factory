@@ -269,15 +269,7 @@ func TestCurrentBoardArtifactQuarantinePreservesSelectedAndRelatedBytes(t *testi
 				t.Fatalf("archive %s, %s, %v", file, archive, err)
 			}
 			for _, data := range []string{"snapshot", "reference", "recording"} {
-				retained := false
-				for _, got := range files.contents {
-					if string(got) == data {
-						retained = true
-					}
-				}
-				if !retained {
-					t.Fatalf("lost %s evidence", data)
-				}
+				assertQuarantineEvidence(t, files, data)
 			}
 		})
 	}

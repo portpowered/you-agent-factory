@@ -38,17 +38,7 @@ func TestUnreadableDefaultBoardStartsEmpty(t *testing.T) {
 	// selector, --debug, mock worker or explicit recording.
 	daemon := startBoardPersistenceDaemonProcess(t, binary, factory, home, "", "")
 	waitForBoardDaemonReady(t, daemon, 30*time.Second)
-	var condition *factoryapi.StatusResponse
-	for _, route := range []string{"/status", "/factory-sessions/~default/status"} {
-		status := readUnreadableBoardStatus(t, daemon.baseURL+route)
-		if status.TotalTokens != 0 || status.StartupRecovery == nil || status.StartupRecovery.Code != "DURABLE_STATE_QUARANTINED" || status.StartupRecovery.Cause != "INVALID_JSON" || status.StartupRecovery.File != snapshot {
-			t.Fatalf("%s did not report healthy empty recovery: %#v", route, status)
-		}
-		if condition != nil && *condition.StartupRecovery != *status.StartupRecovery {
-			t.Fatal("current and session diagnostics differ")
-		}
-		condition = &status
-	}
+	condition := assertUnreadableBoardStatuses(t, daemon.baseURL, snapshot)
 	works, err := readBoardWorkList(t.Context(), daemon.baseURL)
 	if err != nil || len(works.Results) != 0 {
 		t.Fatalf("empty Work list: %#v %v", works, err)
@@ -119,4 +109,20 @@ func assertUnreadableBoardLogsPrivate(t *testing.T, root string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func assertUnreadableBoardStatuses(t *testing.T, baseURL, snapshot string) *factoryapi.StatusResponse {
+	t.Helper()
+	var condition *factoryapi.StatusResponse
+	for _, route := range []string{"/status", "/factory-sessions/~default/status"} {
+		status := readUnreadableBoardStatus(t, baseURL+route)
+		if status.TotalTokens != 0 || status.StartupRecovery == nil || status.StartupRecovery.Code != "DURABLE_STATE_QUARANTINED" || status.StartupRecovery.Cause != "INVALID_JSON" || status.StartupRecovery.File != snapshot {
+			t.Fatalf("%s did not report healthy empty recovery: %#v", route, status)
+		}
+		if condition != nil && *condition.StartupRecovery != *status.StartupRecovery {
+			t.Fatal("current and session diagnostics differ")
+		}
+		condition = &status
+	}
+	return condition
 }

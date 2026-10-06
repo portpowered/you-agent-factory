@@ -35,7 +35,7 @@ func TestLocalReadFileBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, limit := range []int64{0, int64(len(data) - 1), int64(len(data)), int64(len(data) + 1)} {
-		got, err := (Local{}).ReadFileBounded(path, limit)
+		got, err := NewRecovery(Local{}, Local{}).ReadFileBounded(path, limit)
 		if limit < int64(len(data)) {
 			var sizeErr *ReadSizeLimitError
 			if got != nil || !errors.As(err, &sizeErr) || sizeErr.ReadSizeLimit() != limit {
@@ -46,11 +46,11 @@ func TestLocalReadFileBounded(t *testing.T) {
 		}
 	}
 	for _, limit := range []int64{-1, math.MaxInt64} {
-		if _, err := (Local{}).ReadFileBounded(path, limit); err == nil {
+		if _, err := NewRecovery(Local{}, Local{}).ReadFileBounded(path, limit); err == nil {
 			t.Fatalf("unsafe limit %d accepted", limit)
 		}
 	}
-	if _, err := (Local{}).ReadFileBounded(path+".missing", 1); !errors.Is(err, os.ErrNotExist) {
+	if _, err := NewRecovery(Local{}, Local{}).ReadFileBounded(path+".missing", 1); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing read = %v", err)
 	}
 }
@@ -65,7 +65,7 @@ func TestLocalRenameNoReplacePreservesBytesAndCollisions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := (Local{}).RenameNoReplace(source, archive); !errors.Is(err, os.ErrExist) {
+	if err := NewRecovery(Local{}, Local{}).RenameNoReplace(source, archive); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("collision = %v", err)
 	}
 	for path, want := range map[string][]byte{source: data, archive: prior} {
@@ -75,7 +75,7 @@ func TestLocalRenameNoReplacePreservesBytesAndCollisions(t *testing.T) {
 		}
 	}
 	destination := source + ".unreadable"
-	if err := (Local{}).RenameNoReplace(source, destination); err != nil {
+	if err := NewRecovery(Local{}, Local{}).RenameNoReplace(source, destination); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(destination)
@@ -91,7 +91,7 @@ func TestLocalRenameNoReplacePreservesBytesAndCollisions(t *testing.T) {
 			t.Fatalf("archive permissions broadened: %v, %v", info, err)
 		}
 	}
-	if err := (Local{}).RenameNoReplace(dir, filepath.Join(dir, "directory")); err == nil {
+	if err := NewRecovery(Local{}, Local{}).RenameNoReplace(dir, filepath.Join(dir, "directory")); err == nil {
 		t.Fatal("directory accepted as a snapshot")
 	}
 }

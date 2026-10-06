@@ -251,6 +251,7 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 	}
 	return runtimePersistenceFileSystem{
 		directories: platformfilesystem.Local{},
+		recovery:    platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}),
 		storage:     platformreplay.NewLocal(runtime.GOOS),
 	}
 }
@@ -260,6 +261,7 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 // temp-write, sync, close, and replace implementation.
 type runtimePersistenceFileSystem struct {
 	directories platformfilesystem.Local
+	recovery    platformfilesystem.Recovery
 	storage     platformreplay.Storage
 }
 
@@ -272,11 +274,11 @@ func (files runtimePersistenceFileSystem) ReadFile(path string) ([]byte, error) 
 }
 
 func (files runtimePersistenceFileSystem) ReadFileBounded(path string, limit int64) ([]byte, error) {
-	return files.directories.ReadFileBounded(path, limit)
+	return files.recovery.ReadFileBounded(path, limit)
 }
 
 func (files runtimePersistenceFileSystem) RenameNoReplace(source, destination string) error {
-	return files.directories.RenameNoReplace(source, destination)
+	return files.recovery.RenameNoReplace(source, destination)
 }
 
 func (files runtimePersistenceFileSystem) WriteFile(path string, data []byte, _ fs.FileMode) error {
