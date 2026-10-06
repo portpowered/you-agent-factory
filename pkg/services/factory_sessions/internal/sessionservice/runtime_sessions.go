@@ -164,11 +164,11 @@ func (a *Assembly) scopedSubscribeFactoryEventsForSession(fs *SessionRuntime, ct
 	return stream, nil
 }
 
-func (a *Assembly) scopedGetEngineStateSnapshotForSession(fs *SessionRuntime, ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
+func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(a.state, sessionID)
+	session, err := runtimebinding.RequireLiveSession(fs.owner.state, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -342,14 +342,6 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 		a = fs.owner
 	}
 	return a.scopedSubscribeFactoryEventsForSession(fs, ctx, sessionID, reconnect)
-}
-
-func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
-	var a *Assembly
-	if fs != nil {
-		a = fs.owner
-	}
-	return a.scopedGetEngineStateSnapshotForSession(fs, ctx, sessionID)
 }
 
 func (fs *SessionRuntime) observeRuntimeForSession(

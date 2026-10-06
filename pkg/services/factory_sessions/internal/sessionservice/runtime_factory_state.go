@@ -59,7 +59,7 @@ func (a *Assembly) scopedSubscribeFactoryEvents(fs *SessionRuntime, ctx context.
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
-func (a *Assembly) scopedGetEngineStateSnapshot(fs *SessionRuntime, ctx context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
+func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
 	}
@@ -303,14 +303,6 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 		a = fs.owner
 	}
 	return a.scopedSubscribeFactoryEvents(fs, ctx, reconnect, scope)
-}
-
-func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
-	var a *Assembly
-	if fs != nil {
-		a = fs.owner
-	}
-	return a.scopedGetEngineStateSnapshot(fs, ctx)
 }
 
 func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
