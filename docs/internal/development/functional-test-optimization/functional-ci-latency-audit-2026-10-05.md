@@ -5065,3 +5065,48 @@ run verifies the final cleanup; it is not a controlled whole-lane improvement
 over the preceding changed-production rebuild. Evidence:
 cli-recovery-cleanup-full/. Main remains d6151587f0; no rebase is required.
 Fresh hosted complete-job timing and required checks remain the merge gate.
+
+### October 6: remeasure startup and reuse the workflow error fixture's home
+
+Hosted run 37498753463 at head 412189ffe9 passes Functional Coverage in 176s
+complete / 116.200s coverage. All 67 packages / 764 results finish: 762 pass,
+two skip; the complete raw-failure index is empty. A compiler-cache prefix
+restore from 9ed110dd01 still requires 176 compiler commands and 12 links.
+Backend Lint remains active at preparation time. The two-minute complete-job
+checkpoint is still unmet.
+
+A fresh native customer_journeys profile at 412189ffe9 passes in 15.199475s,
+using 23.472474 CPU-seconds (16.358188 user, 7.114286 system). Of 23.14s sampled
+CPU, packaged installation accounts for 15.75s / 68.06%, preparation for
+7.25s / 31.33%, JSON unmarshal for 7.24s / 31.29%, and mkdir for
+3.97s / 17.16%. These are overlapping cumulative samples, not additive costs
+or complete-lane package rankings. Repeated initialization and filesystem work
+remain the main targets. Evidence: customer-412189-profile/.
+
+The missing JavaScript import and TypeScript authored-source-location error
+cases previously supplied fresh homes to an already shared loading fixture.
+Both now use fixture.homeDir. Each CLI invocation already receives an explicit
+unique Factory Session through loadingArgsWithIsolatedSession; Factory source
+directories, errors, source-map locations, provider-dispatch refusals and
+success/recovery scenarios remain unchanged. No test is removed.
+
+Build-excluded B/C/C/B comparisons on four pinned Linux CPUs retain mixed
+whole-package evidence. The initial full customer package totals are baseline
+49.289263 CPU-seconds / 31.239973s wall versus candidate 52.464789 / 31.830172:
+6.4% more CPU and 1.9% more wall. A confirmation using the same built binaries
+is baseline 57.840686 / 39.177067 versus candidate 55.546280 / 37.681616:
+4.0% less CPU and 3.8% less wall. The combined comparisons do not demonstrate
+a reliable whole-package speedup. All eight full-package runs pass.
+
+Ten repetitions of the two actual error cells per run, twice per side, consume
+8.157753 CPU-seconds / 6.341039s wall on baseline versus 4.467311 / 4.715012 on
+candidate: 45.2% less CPU and 25.6% less elapsed. The initial focused selector
+matched no tests and is discarded; only the corrected parent/child selector
+provides focused evidence. Ten complete native Windows workflow-loading group
+repetitions and both scoped linters pass. Evidence: loading-home-paired/,
+loading-home-focused-paired/ and loading-home-whole-confirmation/.
+
+Main advances to 2d1d83f424 with archived Work attribution and additional public
+Worker Session scenarios. Rebase and full consolidated verification on that
+live base are required before pushing this batch; measurements above precede
+those upstream changes.

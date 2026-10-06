@@ -49,7 +49,7 @@ func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loa
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	assertFileJavaScriptMissingImportFailureOutcome(
 		t,
 		err,
