@@ -181,3 +181,42 @@ func BenchmarkDurableProbe(b *testing.B) {
 		}
 	})
 }
+
+func TestLoadCurrentBoardFactsReadsCanonicalWitnessWithoutHydration(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, snapshot string
+		valid          bool
+	}{
+		{"legacy events", `{"Session":{"SessionID":"~default"},"Events":[{"id":"a","type":"WORK_CREATED","payload":{"text":"§ —"}}]}`, true},
+		{"tagged records", `{"Session":{"SessionID":"~default"},"Records":[{"kind":"canonical_factory_event","canonicalEvent":{"id":"a","type":"WORK_CREATED","payload":{"text":"§ —"}}}]}`, true},
+		{"foreign identity", `{"Session":{"SessionID":"other"}}`, false},
+		{"invalid fact", `{"Session":{"SessionID":"~default"},"Events":[{"secret":"private"}]}`, false},
+		{"malformed", `{"secret":`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			store := &durableProbeStore{snapshot: []byte(tc.snapshot)}
+			service := &JavaScriptRuntimeService{persistence: store}
+			got, err := service.LoadCurrentBoardFacts(t.Context(), "~default")
+			if (err == nil) != tc.valid {
+				t.Fatalf("witness=%v, %v", got, err)
+			}
+			if tc.valid && (len(got) != 1 || got[0].Id != "a" || !strings.Contains(string(got[0].Payload), "§ —")) {
+				t.Fatalf("lost canonical facts: %#v", got)
+			}
+			if err != nil && strings.Contains(err.Error(), "secret") {
+				t.Fatal("exposed payload")
+			}
+			if store.reads != 1 || store.writes != 0 || len(service.sessions) != 0 {
+				t.Fatal("witness read mutated or hydrated state")
+			}
+		})
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	store := &durableProbeStore{onLoad: cancel}
+	service := &JavaScriptRuntimeService{persistence: store}
+	if _, err := service.LoadCurrentBoardFacts(ctx, "~default"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("read cancellation=%v", err)
+	}
+}

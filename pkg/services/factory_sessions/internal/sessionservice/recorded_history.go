@@ -16,6 +16,26 @@ type RecordedHistory interface {
 	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 }
 
+// ListRecordedSessions keeps opening-time discovery scoped to the invocation's
+// profile instead of the process-wide home resolver used for interactive lists.
+func (h *recordedHistory) ListRecordedSessions(request recordings.RecordedSessionInventoryRequest) (recordings.RecordedSessionInventoryResult, error) {
+	if h.inventory == nil {
+		return recordings.RecordedSessionInventoryResult{}, fmt.Errorf("recorded session inventory is required")
+	}
+	return h.inventory.ListRecordedSessions(request)
+}
+
+func (a *Assembly) ListRecordedSessions(request recordings.RecordedSessionInventoryRequest) (recordings.RecordedSessionInventoryResult, error) {
+	if a == nil {
+		return recordings.RecordedSessionInventoryResult{}, fmt.Errorf("recorded session inventory is required")
+	}
+	inventory, ok := a.recordedHistory.(recordings.RecordedSessionInventory)
+	if !ok {
+		return recordings.RecordedSessionInventoryResult{}, fmt.Errorf("recorded session inventory is required")
+	}
+	return inventory.ListRecordedSessions(request)
+}
+
 type recordedHistory struct {
 	resolveHome factorysessions.HomeDirectoryResolver
 	inventory   recordings.RecordedSessionInventory
