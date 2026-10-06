@@ -142,21 +142,12 @@ Queue progress must not take the ordinary pending-CI CONTINUE route below.
   Keep touched failures on the existing concrete-rework route. Git conflicts,
   push/auth failures, pending checks, and dependency outages use their actual
   recovery owner; never bypass checks, invent a product fix, or claim MERGED.
-- Required-job timeout policy: a configured job time limit is a delivery
-  constraint. If a required check is cancelled at that limit, inspect the job
-  and step durations, logs, current-head attempt history, and a comparable
-  passing base or main run. Separate setup/cache time from the test or coverage
-  command, and identify the likely cause or the specific remaining uncertainty.
-  Do not call the result shared infrastructure just because GitHub cancelled
-  the job at its configured limit; do not raise the limit or blindly rerun it.
-  For example, Backend Unit Coverage has a five-minute job limit. If the
-  current head repeatedly exceeds it and the evidence points to PR-owned
-  work, post a BLOCKING comment with the timing comparison and the bounded
-  diagnosis and correction needed on the retained PR, then return `REJECTED`
-  so the existing implementer receives the work. A same-failure base run or
-  independently verified GitHub infrastructure cancellation needs its own
-  evidence and owner; do not demand speculative PR changes. A red job does
-  not mean this reviewer failed to execute.
+- Required-job timeout policy: a job time limit (e.g. Backend Unit Coverage,
+  five minutes) is a delivery constraint. On a cancellation at the limit,
+  compare step durations and attempt history with a passing main run; never
+  raise the limit, blindly rerun, or call it infrastructure without evidence.
+  When evidence points to PR-owned work, post a BLOCKING comment with the timing
+  comparison and bounded correction and return `REJECTED`.
 
 ### Step 2.1a - Reject a plan that disagrees with itself
 
@@ -258,21 +249,12 @@ tests stay aligned with the referenced plan sections: stories carry
 divergence is recorded as an explicit conflict rather than silently shipped. A
 PRD that weakens or reinterprets its source plan is a blocking finding.
 
-For PRs whose owned outcome includes measured test latency or performance,
-apply this performance policy before turning a generated numeric criterion into
-a blocker:
-
-- The package-level PR/CI latency result is authoritative performance feedback.
-  A directional improvement together with preserved observable behavior and a
-  credible reduction in expensive process/setup topology satisfies the latency
-  outcome unless the admitted customer contract explicitly requires a fixed
-  threshold.
-- Do not reject solely because saturated local runs missed an absolute number,
-  had high variance, lacked three clean samples, or could not obtain an idle
-  host. Preserve those measurements as non-blocking context.
-- If the package-level PR result does not improve, reject with one bounded
-  request for the next material optimization. Behavior regressions caused by
-  the diff, missing cleanup/isolation, and assertion weakening remain blocking.
+For measured latency/performance outcomes, the package-level PR/CI result is
+authoritative: a directional improvement with preserved behavior satisfies it
+unless the customer contract requires a fixed threshold. Never reject solely for
+noisy local samples; if the PR result does not improve, reject with one bounded
+request for the next optimization. Behavior regressions, missing
+cleanup/isolation and assertion weakening remain blocking.
 
 ### Step 4 — Apply the review rules in order
 
@@ -412,18 +394,8 @@ persistence on a head containing freshly fetched current main permits
 escalation. Also: if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and
-continue. Ask the mailbox only when no such reading exists. Examples:
-
-- A packet names a new file or export that a ratchet gate forbids (a new test
-  file in a deletion-only `pkg-file-count` package, a production constructor
-  only tests call under the deadcode baseline): put the test in an existing
-  file or delete the dead export, and never raise the baseline.
-- A literal criterion contradicts documented current behavior (for example
-  "quiet emits no output" when the docs say quiet emits the raw result, or
-  "every event has sessionId" when startup frames have none): assert
-  what exists in the product-change PR and record the gap.
-- A criterion assumes an ID is globally unique when the contract makes it
-  session-scoped: assert uniqueness within the session.
+continue. Ask the mailbox only when no such reading exists (for example, put a
+new test in an existing file instead of raising a ratchet baseline).
 
 Some questions are owned by the operator, not by you: an ambiguous or
 contradictory acceptance contract, a scope or authority decision, or a policy
@@ -463,10 +435,6 @@ code, test, typecheck, lint, or other quality failures, unresolved blocking
 feedback, an unpushed final head, a missing pull request, or CI that has not
 started. The unavailable browser result alone must not send an otherwise
 complete lane back to process.
-
-Review retains ownership of waiver judgment, driving required CI to terminal
-and passing, resolving merge conflicts, and merging the pull request. Process
-does not wait for or re-check terminal CI after its finish line.
 
 Always end your PR review comment with the literal marker string [gate-policy-v3] on its own final line.
 
