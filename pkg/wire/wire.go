@@ -4,6 +4,7 @@ package wire
 
 import (
 	"context"
+
 	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 
 	"github.com/google/wire"
@@ -49,6 +50,7 @@ var servicesSet = wire.NewSet(
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
 	recordingswire.NewWorkerControlOperationStore,
+	recordingswire.NewWorkerRestartInputStore,
 	recordingswire.NewWorkerOwnerRecoveryOperation,
 	provideWorkerRecordingReader,
 	provideWorkerSessionsService,

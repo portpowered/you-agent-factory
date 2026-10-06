@@ -2,11 +2,60 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// A public direct start does not require the customer to choose a recording
+// identity. Bind its opening and recipe to one deterministic store identity.
+func (r *registry) bindDirectRecording(req *workersessions.StartRequest) {
+	if r.logs == nil || r.recording == nil || req.Execution.Execution.RecordingID != "" {
+		return
+	}
+	digest := sha256.Sum256([]byte(req.ID))
+	req.Execution.Execution.RecordingID = fmt.Sprintf("direct-%x", digest)
+}
+
+// Unreconstructible requests remain invocable. Only an actual artifact-store
+// failure rejects admission; unsafe settings never become a changed recipe.
+func (r *registry) saveDirectRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
+	if _, metadata, ok := r.loadObservationState(req.ID); !ok || !metadata.direct {
+		return nil
+	}
+	pub := r.publicationFor(req.ID)
+	if pub == nil {
+		return nil
+	}
+	pub.mu.Lock()
+	target := pub.capture
+	pub.mu.Unlock()
+	if target.RecordingID == "" {
+		return nil
+	}
+	target.ExpectedAttemptID = req.Execution.Execution.Dispatch.DispatchID
+	if !directRestartRecipeSafe(req.Execution) {
+		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
+		return nil
+	}
+	err := r.restart.SaveWorkerRestartRecipe(ctx, target, req.Execution)
+	if errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
+		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
+		return nil
+	}
+	return err
+}
+
+func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool {
+	payload, err := json.Marshal(execution)
+	return err == nil && interruptExecutionReplaySafe(execution.Execution) &&
+		interruptRecipeSafe(payload, execution.Execution.ProcessEnvironment)
+}
 
 // The caller holds pub.mu across opening acknowledgement and this binding.
 // Only the admitted capture supplies generation/epoch; later catalog entries

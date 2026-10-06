@@ -102,6 +102,7 @@ type registry struct {
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
 	operations               recordings.WorkerControlOperationStore
+	restart                  recordings.WorkerRestartInputStore
 	stopOperations           sync.Map // request key -> *sync.Mutex; no registry lock spans a join
 	clock                    platformclock.Source
 	scheduler                platformclock.TimerSource
@@ -172,9 +173,13 @@ func New(
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 ) (workersessions.Service, error) {
 	if missingControlOperationStore(operations) {
 		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
+	if restart == nil || (reflect.ValueOf(restart).Kind() == reflect.Pointer && reflect.ValueOf(restart).IsNil()) {
+		return nil, recordings.ErrMissingWorkerRestartInputStore
 	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
@@ -201,6 +206,7 @@ func New(
 		providerSessions:            providerSessions,
 		recording:                   recording,
 		operations:                  operations,
+		restart:                     restart,
 		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,
@@ -292,6 +298,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return workersessions.StartResult{}, ErrMissingScheduler
 	}
 	req = normalizeStartRequest(req)
+	r.bindDirectRecording(&req)
 	replay, owner, err := r.reserveStart(req)
 	if err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))

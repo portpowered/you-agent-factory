@@ -181,7 +181,13 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
+	unsafeRecipeRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("unsafe-recipe-thread", "ordinary invocation COMPLETE"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "restart-recipe-unsafe", unsafeRecipeRunner, unsafeRecipeRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	for _, name := range []string{"restart-recipe-write-failure", "unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
 		runner := testutil.NewProviderCommandRunner()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, nil); err != nil {
 			return invokeContinueScenarioSetup{}, err

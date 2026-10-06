@@ -13,7 +13,133 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	target := controlIntent(t, writer, "recording", "worker", "request").Target
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+	execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+	execution.Execution.Model = "captured-model"
+	execution.Execution.ReasoningEffort = "high"
+	execution.Execution.WorkingDirectory = "captured-workspace"
+	execution.Execution.ProcessEnvironment = []string{"API_KEY=private-environment-value"}
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(local, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := reopened.(*FileWriter)
+	key := recordings.WorkerControlOperationKey{RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID}
+	identity := controlInputArtifact{Key: key, Generation: target.RecordingGenerationID}
+	stored, err := fresh.ReadWorkerControlInput(t.Context(), key, controlInputRef(identity))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recipe workerRestartRecipe
+	if err := json.Unmarshal(stored, &recipe); err != nil {
+		t.Fatal(err)
+	}
+	assertRestartRecipeSchema(t, stored)
+	if recipe.Version != 1 || recipe.Target != target || recipe.Execution.Execution.Model != "captured-model" || recipe.Execution.Execution.WorkingDirectory != "captured-workspace" || recipe.Execution.Execution.ReasoningEffort != "high" {
+		t.Fatalf("recipe lost captured settings: %+v", recipe)
+	}
+	if bytes.Contains(stored, []byte("private-environment-value")) || recipe.Execution.Execution.ProcessEnvironment != nil {
+		t.Fatal("recipe retained inherited credentials")
+	}
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	execution.Execution.Model = "changed-model"
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
+		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+// Validate the persisted artifact against its published versioned contract.
+func assertRestartRecipeSchema(t *testing.T, payload []byte) {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	for _, name := range []string{"restart-recipe.v1.schema.json", "control-envelope.v2.schema.json", "control-operation.v1.schema.json"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "schemas", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		if err := compiler.AddResource(name, document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := compiler.Compile("restart-recipe.v1.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input any
+	if err := json.Unmarshal(payload, &input); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(input); err != nil {
+		t.Fatalf("persisted restart recipe violates its contract: %v", err)
+	}
+}
+
+func TestRestartRecipeRejectsUnsafeOrStaleInputs(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*recordings.WorkerControlTarget, *workers.WorkstationDispatchRequest){
+		"generation": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.RecordingGenerationID = "other"
+		},
+		"owner": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.OwnerEpoch = "other"
+		},
+		"scope": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.FactorySessionID = "other"
+		},
+		"attempt": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.ExpectedAttemptID = "other"
+		},
+		"environment": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.EnvVars = map[string]string{"API_KEY": "secret"}
+		},
+		"prompt": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.PromptRedaction = &workers.PromptRedaction{RedactUserMessage: true}
+		},
+		"workflow": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.WorkflowContext = &workers.Context{}
+		},
+		"secret-argument": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.ProcessEnvironment = []string{"API_KEY=private\nsecret\""}
+			execution.Execution.Args = []string{"prefix private\nsecret\""}
+		},
+		"secret-token-key": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.ProcessEnvironment = []string{"API_KEY=private\nsecret\""}
+			execution.Execution.Dispatch.InputTokens = []any{map[string]any{"private\nsecret\"": "safe"}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+			mutate(&target, &execution)
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err == nil {
+				t.Fatal("unsafe or stale recipe accepted")
+			}
+		})
+	}
+}
 
 func controlIntent(t *testing.T, writer *FileWriter, recordingID, workerID, requestID string) recordings.WorkerControlOperationRecord {
 	t.Helper()

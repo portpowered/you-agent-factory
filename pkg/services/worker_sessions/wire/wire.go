@@ -52,6 +52,7 @@ func NewService(
 	recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
@@ -64,6 +65,7 @@ func NewService(
 		recording,
 		captured,
 		operations,
+		restart,
 		snapshots,
 	)
 }

@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"io/fs"
 	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 
 	"go.uber.org/zap"
 
@@ -969,7 +970,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 		t.Fatalf("provider sessions service = %v", err)
 	}
 	execution := wireTestWorkersService{}
-	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget())
+	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget())
 	if err != nil {
 		t.Fatalf("worker sessions factory() error = %v", err)
 	}
@@ -1029,4 +1030,8 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrWorkerRecordingPersistence
 }

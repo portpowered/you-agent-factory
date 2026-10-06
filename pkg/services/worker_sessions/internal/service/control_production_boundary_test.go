@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -96,7 +97,7 @@ func newObservationService(
 	if projection == nil {
 		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil, unavailableWorkerControlStore{})
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -872,4 +873,8 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrWorkerRecordingPersistence
 }

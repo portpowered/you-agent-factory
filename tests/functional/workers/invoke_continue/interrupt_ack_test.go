@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Keep the production journal and its sync-confirmed reads. The controlled
@@ -111,4 +112,11 @@ func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 			scenario.close(t)
 		})
 	}
+}
+
+func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, request workers.WorkstationDispatchRequest) error {
+	if target.WorkerSessionID == "restart-recipe-write-failure" || target.WorkerSessionID == "restart-recipe-unsafe" {
+		return errors.New("private-recipe-sync-detail")
+	}
+	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request)
 }

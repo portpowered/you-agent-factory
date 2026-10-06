@@ -129,12 +129,13 @@ func NewWithCapturedActivity(
 	providerSessions providersessions.Service, recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
 	}
-	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording, operations)
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording, operations, restart)
 	if err != nil {
 		return nil, err
 	}

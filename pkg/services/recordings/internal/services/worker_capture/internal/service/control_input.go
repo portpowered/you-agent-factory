@@ -30,6 +30,10 @@ func (writer *FileWriter) PersistWorkerControlInput(ctx context.Context, key rec
 	entry := writer.entry(key.RecordingID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	return writer.persistWorkerControlInputLocked(ctx, entry, key, input)
+}
+
+func (writer *FileWriter) persistWorkerControlInputLocked(ctx context.Context, entry *recordingEntry, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
 	artifact, err := writer.controlInputIdentity(ctx, entry, key)
 	if err != nil {
 		return "", err

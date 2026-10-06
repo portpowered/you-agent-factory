@@ -11,6 +11,63 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type restartRecipeStore struct {
+	target    recordings.WorkerControlTarget
+	execution workers.WorkstationDispatchRequest
+	calls     int
+	err       error
+}
+
+func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
+	store.calls++
+	store.target = target
+	store.execution = execution
+	return store.err
+}
+
+// The recorder and artifact store are controlled collaborators; the component
+// under test decides whether one direct execution has reconstructible input.
+func TestDirectRestartRecipePreservesInputOrSkipsUnsafeInput(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"safe", "store-failure", "owner-refused", "factory", "env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-key", "non-json-token"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			r, plan, _ := newDurableInterruptFixture(t)
+			store := &restartRecipeStore{}
+			r.restart = store
+			r.observations["worker"] = &observation{direct: cell != "factory"}
+			plan.execution.Execution.Model = "captured-model"
+			plan.execution.Execution.ReasoningEffort = "high"
+			if cell != "safe" && cell != "store-failure" && cell != "factory" {
+				configureUnsafeInterruptRecipe(&plan, cell)
+			}
+			if cell == "store-failure" {
+				store.err = errors.New("sync failed")
+			}
+			if cell == "owner-refused" {
+				store.err = recordings.ErrInvalidRecordingRedactionRequest
+			}
+			err := r.saveDirectRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{ID: "worker", Execution: plan.execution})
+			if cell == "safe" || cell == "store-failure" {
+				assertDirectRestartRecipeStored(t, store, plan.dispatchID, err)
+			} else if cell == "owner-refused" {
+				if store.calls != 1 || err != nil {
+					t.Fatalf("owner refusal blocked ordinary invocation: calls=%d error=%v", store.calls, err)
+				}
+			} else if err != nil || store.calls != 0 {
+				t.Fatalf("unreconstructible input must remain invocable without persistence: calls=%d error=%v", store.calls, err)
+			}
+		})
+	}
+}
+
+func assertDirectRestartRecipeStored(t *testing.T, store *restartRecipeStore, attemptID string, err error) {
+	t.Helper()
+	if store.calls != 1 || store.target.ExpectedAttemptID != attemptID || store.target.WorkerSessionID != "worker" || store.execution.Execution.Model != "captured-model" || store.execution.Execution.ReasoningEffort != "high" || !errors.Is(err, store.err) {
+		t.Fatalf("recipe persistence: calls=%d target=%+v error=%v", store.calls, store.target, err)
+	}
+}
+
 type controlCaptureReader struct {
 	entry recordings.WorkerSessionCatalogEntry
 	err   error

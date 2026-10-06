@@ -12,6 +12,13 @@ import (
 // before a host accepts controls or new execution. It never stops children.
 type WorkerOwnerRecoveryOperation func(context.Context) error
 
+// WorkerRestartInputStore persists detached direct-execution settings in the
+// selected profile's existing captured-input store. A recipe conveys data only,
+// never live execution authority.
+type WorkerRestartInputStore = recordingcontracts.WorkerRestartInputStore
+
+var ErrMissingWorkerRestartInputStore = errors.New("recordings: Worker restart input store is required")
+
 // Worker recording values and the shared pure reducer live in the focused
 // Recordings-owned internal Worker capture package and are re-exported here
 // as the customer-facing service vocabulary.

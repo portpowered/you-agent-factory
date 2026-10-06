@@ -7,6 +7,7 @@ import (
 	"time"
 
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // WorkerCaptureClock supplies host commit-operation time.
@@ -30,6 +31,11 @@ type WorkerRecordingStore interface {
 	WorkerRecordingFailureWriter
 	WorkerCapturedActivityReader
 	WorkerControlOperationStore
+	WorkerRestartInputStore
+}
+
+type WorkerRestartInputStore interface {
+	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 }
 
 // WorkerControlOperationStore shares the recording journal's sync boundary.
