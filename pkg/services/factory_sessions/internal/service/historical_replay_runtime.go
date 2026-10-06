@@ -379,7 +379,7 @@ func bindDurableExecutionCapabilities(
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunner platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
-	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) error {
 	setWorkerInvoker(execution, invoker)
 	setDispatchDurability(execution, recordingLedger, generationID)

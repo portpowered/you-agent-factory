@@ -841,12 +841,12 @@ type runtimeWorkerAttemptStarterProvider interface {
 	BeginWorkerAttempt(
 		context.Context,
 		*workers.ExecuteRequest,
-	) (func(context.Context, workers.ExecuteResult, error) error, error)
+	) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 }
 
 func runtimeWorkerAttemptStarter(
 	runtime runtimeports.RuntimeInstance,
-) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if runtime == nil {
 		return nil
 	}
@@ -863,14 +863,14 @@ func runtimeWorkerAttemptStarter(
 
 func setWorkerAttemptStarter(
 	execution any,
-	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) {
 	if starter == nil {
 		return
 	}
 	setter, ok := execution.(interface {
 		SetWorkerAttemptStarter(
-			func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+			func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 		)
 	})
 	if !ok {

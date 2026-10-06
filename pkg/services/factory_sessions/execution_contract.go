@@ -649,8 +649,10 @@ type StartRequest struct {
 // WorkerAttemptStarter opens a Worker Session in the live runtime selected for
 // one durable invocation. Before returning it may install an admission-bound
 // observer into the request Workers will execute. The caller must not mutate
-// the request concurrently with admission. It is never transport input.
-type WorkerAttemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
+// the request concurrently with admission. Completion returns the authoritative
+// result and acknowledgement error before output publication or retry admission.
+// It is never transport input.
+type WorkerAttemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 
 // SyncOutcome reports how a sync start wait ended.
 type SyncOutcome string

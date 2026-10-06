@@ -133,7 +133,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 
 	result := workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
-	if err := terminal(context.Background(), result, nil); err != nil {
+	if _, err := terminal(context.Background(), result, nil); err != nil {
 		t.Fatalf("terminal callback error = %v", err)
 	}
 	if sessions.completed == nil || sessions.completed.DispatchID != "dispatch-begin" || sessions.completeErr != nil {
@@ -221,10 +221,10 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 			if err != nil {
 				t.Fatalf("BeginWorkerAttempt() error = %v", err)
 			}
-			if err := terminal(context.Background(), test.result, test.executeErr); err != nil {
+			if _, err := terminal(context.Background(), test.result, test.executeErr); !errors.Is(err, test.executeErr) {
 				t.Fatalf("first terminal callback error = %v", err)
 			}
-			if err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); err != nil {
+			if _, err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); !errors.Is(err, test.executeErr) {
 				t.Fatalf("duplicate terminal callback error = %v", err)
 			}
 
@@ -985,7 +985,7 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 	}
 	request.Correlation.DispatchID = "replacement-dispatch"
 	request.Correlation.AttemptID = "replacement-attempt"
-	if err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); err != nil {
+	if _, err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if sessions.completed == nil || sessions.completed.DispatchID != "dispatch-begin" {

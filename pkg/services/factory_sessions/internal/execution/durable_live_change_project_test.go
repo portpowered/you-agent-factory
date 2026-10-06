@@ -145,7 +145,7 @@ func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
 
 func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
 	service := newProcessChildRuntime(&recordingWorkerExecution{})
-	starter := factorysessions.WorkerAttemptStarter(func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	starter := factorysessions.WorkerAttemptStarter(func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 		return nil, nil
 	})
 	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, starter, nil, nil).
@@ -340,5 +340,67 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 	read, err := service.GetSession(t.Context(), sessionID)
 	if err != nil || read.Status != LifecycleStatusInterrupted {
 		t.Fatalf("failed resume state=%#v error=%v", read, err)
+	}
+}
+
+func TestChildWorkerExecutor_CompletionResolvesBeforeRetryAndOutput(t *testing.T) {
+	t.Parallel()
+	journalErr := errors.New("force acknowledgement unavailable")
+	for _, test := range []struct {
+		name          string
+		nativeOutcome workers.ExecutionOutcome
+		completionErr error
+	}{
+		{name: "retryable signal exit", nativeOutcome: workers.ExecutionOutcomeFailed},
+		{name: "natural completion raced force", nativeOutcome: workers.ExecutionOutcomeAccepted},
+		{name: "persistence acknowledgement failure", nativeOutcome: workers.ExecutionOutcomeFailed, completionErr: journalErr},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			executions, completions := 0, 0
+			invoker := &recordingWorkerExecution{
+				result: workers.ExecuteResult{
+					Outcome:          test.nativeOutcome,
+					Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
+					StructuredResult: map[string]any{"partial": true}, StructuredResultPresent: true,
+					Failure: &workers.ExecutionFailure{RetryHint: true, Message: "signal exit"},
+				},
+				onInvoke: func() { executions++ },
+			}
+			sink := newChildRecordSink()
+			executor := newTestChildWorkerExecutor(invoker, sink, nil)
+			executor.maxAttempts = 2
+			var progress []workers.ProgressFragment
+			executor.publish = func(_ string, fragment workers.ProgressFragment) { progress = append(progress, fragment) }
+			executor.attemptStarter = func(_ context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+				admitted := request.Correlation
+				return func(ctx context.Context, _ workers.ExecuteResult, _ error) (workers.ExecuteResult, error) {
+					completions++
+					if ctx.Err() != nil {
+						t.Error("completion lost its detached context")
+					}
+					return workers.ExecuteResult{
+						Correlation: admitted, Outcome: workers.ExecutionOutcomeCanceled,
+						Failure: &workers.ExecutionFailure{Family: workers.WorkFailureFamilyTerminal, Message: "operator stopped attempt"},
+					}, test.completionErr
+				}, nil
+			}
+			result, err := executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "resolve force"})
+			if err == nil || result.Status != factory.JavaScriptChildDispatchStatusFailed || executions != 1 || completions != 1 {
+				t.Fatalf("result = %#v, err = %v, executions = %d, completions = %d; want stopped child without retry", result, err, executions, completions)
+			}
+			terminal := sink.terminalChildDispatch(t)
+			if terminal.Retryable == nil || *terminal.Retryable || terminal.Output != nil {
+				t.Fatalf("terminal retained partial output or retry: %#v", terminal)
+			}
+			for _, fragment := range progress {
+				if fragment.Type == "message.delta" {
+					t.Fatalf("published unresolved partial content: %#v", fragment)
+				}
+			}
+			if test.completionErr != nil && !errors.Is(err, journalErr) {
+				t.Fatalf("completion failure lost at child boundary: %v", err)
+			}
+		})
 	}
 }

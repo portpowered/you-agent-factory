@@ -27,7 +27,7 @@ import (
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
 	executeRequest *workers.ExecuteRequest,
-) (func(context.Context, workers.ExecuteResult, error) error, error) {
+) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if executeRequest == nil {
 		return nil, workers.ErrInvalidExecuteRequest
 	}
@@ -70,20 +70,24 @@ func (f *factoryImpl) BeginWorkerAttempt(
 		f.cfg.clock.Now(),
 	)
 	var completeOnce sync.Once
+	var completedResult workers.ExecuteResult
+	var completionErr error
 	return func(
 		callbackCtx context.Context,
 		result workers.ExecuteResult,
 		executeErr error,
-	) error {
+	) (workers.ExecuteResult, error) {
 		completeOnce.Do(func() {
 			if callbackCtx == nil {
 				callbackCtx = context.Background()
 			}
+			completedResult, completionErr = result, executeErr
 			if terminal != nil {
-				_, _ = terminal(callbackCtx, admittedRequest, result, executeErr)
+				completedResult, completionErr = terminal(callbackCtx, admittedRequest, result, executeErr)
 			}
+			completedResult = completedResult.Clone()
 		})
-		return nil
+		return completedResult.Clone(), completionErr
 	}, nil
 }
 

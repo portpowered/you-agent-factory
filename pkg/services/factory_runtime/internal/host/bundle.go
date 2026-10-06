@@ -137,7 +137,7 @@ func (r *Bundle) RuntimeProgressPublisher() workers.ProgressPublisher {
 func (r *Bundle) BeginWorkerAttempt(
 	ctx context.Context,
 	request *workers.ExecuteRequest,
-) (func(context.Context, workers.ExecuteResult, error) error, error) {
+) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if r == nil || r.Factory == nil {
 		return nil, factory.ErrNotRunning
 	}
@@ -145,7 +145,7 @@ func (r *Bundle) BeginWorkerAttempt(
 		BeginWorkerAttempt(
 			context.Context,
 			*workers.ExecuteRequest,
-		) (func(context.Context, workers.ExecuteResult, error) error, error)
+		) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	})
 	if provider == nil {
 		return nil, factory.ErrNotRunning
