@@ -9,6 +9,13 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
 
+func (*recordingExecuteCapability) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (*promptExecuteCapability) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()
 

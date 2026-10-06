@@ -326,3 +326,10 @@ func runnerCapabilities(values []string) []workerexecution.RunnerOptionalCapabil
 	}
 	return capabilities
 }
+
+func (adapter ProviderServiceAdapter) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return request.Validate()
+}

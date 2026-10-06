@@ -2,6 +2,7 @@ package codex_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"reflect"
@@ -16,6 +17,28 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 )
+
+func TestCommandEffectPreservesSystemPromptAsOneConfigValue(t *testing.T) {
+	t.Parallel()
+	runner := testutil.NewProviderCommandRunner()
+	effect := codex.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
+	prompt := "Read \"quoted\" instructions\nC:\\workspace\\file\tand Unicode: café"
+	_, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+		Provider: providers.IDCodex, AttemptID: "system-prompt", SystemPrompt: prompt, UserMessage: "user input",
+	}}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(prompt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := runner.LastRequest()
+	want := []string{"exec", "--json", "--config", "developer_instructions=" + string(encoded), "-"}
+	if !reflect.DeepEqual(request.Args, want) || string(request.Stdin) != "user input" {
+		t.Fatalf("prompt command = %#v", request)
+	}
+}
 
 func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 	t.Parallel()

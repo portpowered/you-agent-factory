@@ -238,3 +238,10 @@ func authoritativeNativeResult(result providers.ExecuteResult) providers.Execute
 
 var _ providers.Service = (*NativeProvider)(nil)
 var _ providers.Service = (*NativeMockProvider)(nil)
+
+func (provider NativeProvider) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return request.Validate()
+}

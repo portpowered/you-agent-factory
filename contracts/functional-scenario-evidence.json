@@ -208,6 +208,19 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

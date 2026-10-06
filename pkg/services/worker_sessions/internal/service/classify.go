@@ -33,6 +33,14 @@ type startReplay struct {
 func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
 	req.RequestID = strings.TrimSpace(req.RequestID)
 	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+	if effort, ok := providers.ReasoningEffort(req.Execution.Execution.ReasoningEffort).Canonical(); ok {
+		req.Execution.Execution.ReasoningEffort = effort
+	}
+	// Direct invocations have no Factory recording to join. Capture them under
+	// their stable identity so local completion remains readable after exit.
+	if req.Execution.Execution.RuntimeID == "" && strings.TrimSpace(req.Execution.Execution.RecordingID) == "" {
+		req.Execution.Execution.RecordingID = publicWorkerID(req.ID)
+	}
 	req.Retry.MaxAttempts = req.Retry.Attempts()
 	return req
 }

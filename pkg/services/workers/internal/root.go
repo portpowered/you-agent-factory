@@ -12,6 +12,7 @@ import (
 // ExecuteCapability is the request-scoped Execute owner composed into the
 // Workers root.
 type ExecuteCapability interface {
+	ValidateExecution(context.Context, workers.ExecuteRequest) error
 	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 }
 
@@ -36,6 +37,14 @@ func NewRoot(execute ExecuteCapability) (workers.Service, error) {
 		return nil, fmt.Errorf("construct Workers: execution owner is required")
 	}
 	return &Root{execute: execute}, nil
+}
+
+// ValidateExecution delegates read-only preflight to the execution owner.
+func (r *Root) ValidateExecution(ctx context.Context, request workers.ExecuteRequest) error {
+	if r == nil || r.execute == nil {
+		return workers.ErrExecuteUnavailable
+	}
+	return r.execute.ValidateExecution(ctx, request)
 }
 
 // Execute delegates one isolated attempt to the request-scoped Execute owner.

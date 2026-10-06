@@ -133,25 +133,11 @@ func (s *Service) dispatch(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	request, err := s.normalizeExecutionPolicy(request)
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
 	if canonical, ok := s.acp.Resolve(request.Provider); ok {
-		if request.ReasoningEffort != "" {
-			return providers.ExecuteResult{}, providers.ExecuteFailure{
-				Kind: providers.ExecuteFailureKindInvalidRequest,
-				Message: fmt.Sprintf(
-					"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
-					canonical,
-				),
-			}
-		}
-		request.Provider = canonical
-		// Only the packaged OpenCode ACP integration has a known permission
-		// bypass contract. Other ACP peers must continue to receive permission
-		// requests with the conservative deny policy, even when callers set the
-		// generic skipPermissions option.
-		request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
-		if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
-			return providers.ExecuteResult{}, err
-		}
 		control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
 		release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
 		if bindErr != nil {
@@ -160,26 +146,7 @@ func (s *Service) dispatch(
 		defer release()
 		return s.acp.Execute(ctx, canonical, request)
 	}
-	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
-	if err != nil {
-		return providers.ExecuteResult{}, err
-	}
-	request.Provider = canonicalProvider
-	if request.Provider == providers.IDClaude && request.ReasoningEffort == "minimal" {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: `Claude does not support reasoning effort "minimal"`,
-		}
-	}
-	if request.Provider == providers.IDAntigravity && request.ReasoningEffort != "" {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: "Agy does not support a separate reasoning effort",
-		}
-	}
-	if err := s.validatePermissionBypass(request.Provider, request.SkipPermissions); err != nil {
-		return providers.ExecuteResult{}, err
-	}
+	canonicalProvider := request.Provider
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
 	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
@@ -200,21 +167,11 @@ func (s *Service) dispatchContinuation(
 	request providers.ExecuteRequest,
 	reference providers.SessionRef,
 ) (providers.ExecuteResult, error) {
+	request, err := s.normalizeExecutionPolicy(request)
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
 	if canonical, ok := s.acp.Resolve(request.Provider); ok {
-		if request.ReasoningEffort != "" {
-			return providers.ExecuteResult{}, providers.ExecuteFailure{
-				Kind: providers.ExecuteFailureKindInvalidRequest,
-				Message: fmt.Sprintf(
-					"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
-					canonical,
-				),
-			}
-		}
-		request.Provider = canonical
-		request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
-		if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
-			return providers.ExecuteResult{}, err
-		}
 		control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
 		release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
 		if bindErr != nil {
@@ -223,26 +180,7 @@ func (s *Service) dispatchContinuation(
 		defer release()
 		return s.acp.Continue(ctx, canonical, request, reference)
 	}
-	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
-	if err != nil {
-		return providers.ExecuteResult{}, err
-	}
-	request.Provider = canonicalProvider
-	if request.Provider == providers.IDClaude && request.ReasoningEffort == "minimal" {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: `Claude does not support reasoning effort "minimal"`,
-		}
-	}
-	if request.Provider == providers.IDAntigravity && request.ReasoningEffort != "" {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: "Agy does not support a separate reasoning effort",
-		}
-	}
-	if err := s.validatePermissionBypass(request.Provider, request.SkipPermissions); err != nil {
-		return providers.ExecuteResult{}, err
-	}
+	canonicalProvider := request.Provider
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
 	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
