@@ -585,7 +585,7 @@ func (r *Root) bindSessionOpeningProducts(
 	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	if err := bindDurableExecutionCapabilities(
+	releaseScope, err := bindDurableExecutionCapabilities(
 		opening.sessionID,
 		opening.durableExecution.Service,
 		rootRuntime,
@@ -598,9 +598,11 @@ func (r *Root) bindSessionOpeningProducts(
 		r.providerCommandRunner,
 		runtimeProgressPublisher(opening.startupRuntime),
 		runtimeWorkerAttemptStarter(opening.startupRuntime),
-	); err != nil {
+	)
+	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup.Add(func() error { releaseScope(); return nil })
 	opened := assembleRuntimeProducts(
 		ctx,
 		r.factoryDefinitions,
@@ -744,7 +746,7 @@ type workerScopeBinder interface {
 		platformprocess.CommandRunner,
 		workers.ProgressPublisher,
 		func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-	) error
+	) (func(), error)
 }
 
 func bindWorkerScope(
@@ -758,15 +760,16 @@ func bindWorkerScope(
 	commandRunnerOverride platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) error {
+) (func(), error) {
 	binder, ok := execution.(workerScopeBinder)
 	if !ok {
-		return fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
+		return nil, fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	if err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter); err != nil {
-		return fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
+	release, err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	if err != nil {
+		return nil, fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}
-	return nil
+	return release, nil
 }
 
 type runtimeProgressPublisherProvider interface {

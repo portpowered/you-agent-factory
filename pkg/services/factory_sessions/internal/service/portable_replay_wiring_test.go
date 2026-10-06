@@ -111,6 +111,7 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{events: &events, closeErr: ownerErr}
 	cleanup := newPortableReplayRuntimeCleanup()
 	cleanup.SetOwner(owner)
+	cleanup.releaseScope = func() { events = append(events, "worker-scope-release") }
 	cleanup.Set(portableReplayCleanupOpening(&portableReplayRuntimeRecord{
 		closeArtifacts: func() error {
 			events = append(events, "runtime-artifacts-close")
@@ -122,13 +123,13 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	if !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
 		t.Fatalf("cleanup error = %v, want both owner and artifact errors", err)
 	}
-	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
 		t.Fatalf("cleanup ordering events = %v, want owner before artifacts", events)
 	}
 	if err := cleanup.Close(); !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
 		t.Fatalf("repeated cleanup error = %v, want the joined errors", err)
 	}
-	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
 		t.Fatalf("repeated cleanup ordering events = %v, want no duplicate closes", events)
 	}
 }
@@ -613,12 +614,12 @@ func (owner *portableReplayRuntimeOwner) BindWorkerScope(
 	_ platformprocess.CommandRunner,
 	publisher workers.ProgressPublisher,
 	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) error {
+) (func(), error) {
 	owner.progressPublisher = publisher
 	owner.attemptStarter = starter
 	owner.workerRuntimeID = runtimeID
 	owner.workerGenerationID = generationID
-	return nil
+	return func() {}, nil
 }
 
 type portableReplayWorkerService struct {

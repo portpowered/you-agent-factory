@@ -102,6 +102,7 @@ type portableReplayRuntimeCleanup struct {
 	mu           sync.Mutex
 	owner        interface{ Close() error }
 	closeRuntime func(context.Context) error
+	releaseScope func()
 	closed       bool
 	closeErr     error
 }
@@ -149,6 +150,10 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 	if cleanup.owner != nil {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.owner.Close())
 		cleanup.owner = nil
+	}
+	if cleanup.releaseScope != nil {
+		cleanup.releaseScope()
+		cleanup.releaseScope = nil
 	}
 	if cleanup.closeRuntime != nil {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.closeRuntime(context.Background()))
@@ -204,6 +209,7 @@ func (r *Root) openPortableReplayDurableOwner(
 				durable.Service,
 				providerForDurable,
 				providerCommandRunner,
+				cleanup,
 			)
 			// A failed opening can still own artifacts. Register them before
 			// forwarding the error; the durable owner must stop before release.
@@ -221,6 +227,7 @@ func (r *Root) preparePortableReplayRuntime(
 	durableOwner durableexecution.Service,
 	providerForDurable providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
+	cleanup *portableReplayRuntimeCleanup,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	opening, err := r.assemblePortableReplayRuntime(
 		ctx,
@@ -236,7 +243,7 @@ func (r *Root) preparePortableReplayRuntime(
 	if admission, ok := runtimeService.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	if err := bindDurableExecutionCapabilities(
+	releaseScope, err := bindDurableExecutionCapabilities(
 		configured.Session.SessionID,
 		durableOwner,
 		runtimeService,
@@ -249,9 +256,17 @@ func (r *Root) preparePortableReplayRuntime(
 		providerCommandRunner,
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
-	); err != nil {
+	)
+	if err != nil {
 		return opening, err
 	}
+	cleanup.mu.Lock()
+	if cleanup.closed {
+		releaseScope()
+	} else {
+		cleanup.releaseScope = releaseScope
+	}
+	cleanup.mu.Unlock()
 	return opening, nil
 }
 
@@ -357,10 +372,10 @@ func bindDurableExecutionCapabilities(
 	commandRunner platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) error {
+) (func(), error) {
 	setWorkerInvoker(execution, invoker)
 	bindDispatchDurability(sessionID, execution, recordingLedger, generationID)
-	if err := bindWorkerScope(
+	release, err := bindWorkerScope(
 		sessionID,
 		execution,
 		admission,
@@ -371,10 +386,11 @@ func bindDurableExecutionCapabilities(
 		commandRunner,
 		progressPublisher,
 		attemptStarter,
-	); err != nil {
-		return err
+	)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return release, nil
 }
 
 func bindDispatchDurability(

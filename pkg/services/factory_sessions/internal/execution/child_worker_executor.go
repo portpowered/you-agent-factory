@@ -55,6 +55,7 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 // BindWorkerScope registers the owning runtime's request facts and resource
 // handles atomically. Captured children retain these immutable handles across
 // later registrations. The Workers operation is fixed by construction.
+// Release removes only this registration; prior cleanup cannot remove a replacement.
 func (s *JavaScriptRuntimeService) BindWorkerScope(
 	factorySessionID string,
 	admission factory.ResourceCapacityLeaseAdmission,
@@ -65,21 +66,28 @@ func (s *JavaScriptRuntimeService) BindWorkerScope(
 	commandRunnerOverride platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
-) error {
+) (func(), error) {
 	factorySessionID = strings.TrimSpace(factorySessionID)
 	if factorySessionID == "" {
-		return errors.New("factory session ID is required")
+		return nil, errors.New("factory session ID is required")
 	}
 	s.invokerMu.Lock()
 	defer s.invokerMu.Unlock()
 	if s.workerExecution == nil || s.workerExecution.execute == nil {
-		return errors.New("workers Execute capability is required")
+		return nil, errors.New("workers Execute capability is required")
 	}
 	if s.workerExecutionScopes == nil {
 		s.workerExecutionScopes = make(map[string]*childWorkerExecutionBinding)
 	}
-	s.workerExecutionScopes[factorySessionID] = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
-	return nil
+	binding := s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	s.workerExecutionScopes[factorySessionID] = binding
+	return func() {
+		s.invokerMu.Lock()
+		defer s.invokerMu.Unlock()
+		if s.workerExecutionScopes[factorySessionID] == binding {
+			delete(s.workerExecutionScopes, factorySessionID)
+		}
+	}, nil
 }
 
 func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
