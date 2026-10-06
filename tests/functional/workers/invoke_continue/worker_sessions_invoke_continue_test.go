@@ -1029,4 +1029,15 @@ func TestRestartRecipeUnsafeOverrideKeepsInvocationCompatible(t *testing.T) {
 	if !result.Accepted || result.State != "COMPLETED" || result.Output != "<redacted> COMPLETE" || scenario.providerRunner.CallCount() != 1 {
 		t.Fatalf("unsafe recipe changed ordinary invocation: %#v, calls=%d", result, scenario.providerRunner.CallCount())
 	}
+	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-recipe-unsafe",
+		"--request-id", "unsafe-continue", "--successor-worker-session-id", "unsafe-successor", "--user-message", "follow-up", "--async"})
+	continued.Input.Env = scenario.environment()
+	continued.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(continued.Input); err == nil {
+		t.Fatal("continuation reconstructed an unsafe source recipe")
+	}
+	assertDirectWorkerSessionCLIError(t, continued, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED")
+	if scenario.providerRunner.CallCount() != 1 || strings.Contains(continued.Stdout()+continued.Stderr(), "accepted-private-override") {
+		t.Fatal("unsafe continuation admitted a provider or leaked the override")
+	}
 }

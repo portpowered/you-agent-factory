@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -8,6 +9,50 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// ReadWorkerRestartRecipe resolves the immutable input using the selected
+// store's identity. The captured epoch is checked as data, never upgraded to
+// this host's epoch or used to restore execution authority.
+func (writer *FileWriter) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	entry := writer.entry(target.RecordingID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	key := recordings.WorkerControlOperationKey{
+		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
+		FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
+	}
+	identity, err := writer.controlInputIdentity(ctx, entry, key)
+	if err != nil {
+		return workers.WorkstationDispatchRequest{}, err
+	}
+	session := entry.sessions[target.WorkerSessionID]
+	if target.ExpectedAttemptID == "" || session.generation != target.RecordingGenerationID || session.ownerEpoch != target.OwnerEpoch {
+		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerControlConflict
+	}
+	path := writer.controlInputPath(controlInputRef(identity))
+	if err := writer.checkControlInputPath(path); err != nil {
+		return workers.WorkstationDispatchRequest{}, err
+	}
+	data, err := writer.storage.ReadFile(path)
+	if err != nil {
+		return workers.WorkstationDispatchRequest{}, err
+	}
+	input, err := decodeControlInput(data, identity)
+	if err != nil {
+		return workers.WorkstationDispatchRequest{}, err
+	}
+	var recipe workerRestartRecipe
+	if json.Unmarshal(input, &recipe) != nil || recipe.Version != 1 || recipe.Target != target {
+		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+	}
+	canonical, err := encodeWorkerRestartRecipe(target, recipe.Execution)
+	// Canonical bytes also reject unknown fields and data excluded by the
+	// detached execution contract rather than silently discarding them.
+	if err != nil || !bytes.Equal(canonical, input) {
+		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+	}
+	return recipe.Execution, nil
+}
 
 type workerRestartRecipe struct {
 	Version   int                                `json:"version"`

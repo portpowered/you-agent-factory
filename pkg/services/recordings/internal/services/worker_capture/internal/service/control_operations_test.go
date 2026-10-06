@@ -54,12 +54,44 @@ func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	if bytes.Contains(stored, []byte("private-environment-value")) || recipe.Execution.Execution.ProcessEnvironment != nil {
 		t.Fatal("recipe retained inherited credentials")
 	}
+	assertRestartRecipeRead(t, fresh, target, recipe.Execution)
 	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
 		t.Fatal(err)
 	}
 	execution.Execution.Model = "changed-model"
 	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
 		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+func assertRestartRecipeRead(t *testing.T, fresh *FileWriter, target recordings.WorkerControlTarget, expected workers.WorkstationDispatchRequest) {
+	t.Helper()
+	projected, err := fresh.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil || !reflect.DeepEqual(projected, expected) {
+		t.Fatalf("read detached recipe = %+v, %v", projected, err)
+	}
+	projected.Execution.Model = "mutated-read"
+	again, err := fresh.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil || again.Execution.Model != "captured-model" {
+		t.Fatalf("read mutation affected persisted settings: %+v, %v", again, err)
+	}
+	for _, mismatch := range []string{"owner", "generation", "attempt", "scope", "worker"} {
+		wrong := target
+		switch mismatch {
+		case "owner":
+			wrong.OwnerEpoch = "other"
+		case "generation":
+			wrong.RecordingGenerationID = "other"
+		case "attempt":
+			wrong.ExpectedAttemptID = "other"
+		case "scope":
+			wrong.FactorySessionID = "other"
+		case "worker":
+			wrong.WorkerSessionID = "other"
+		}
+		if _, err := fresh.ReadWorkerRestartRecipe(t.Context(), wrong); err == nil {
+			t.Fatalf("read accepted mismatched %s", mismatch)
+		}
 	}
 }
 

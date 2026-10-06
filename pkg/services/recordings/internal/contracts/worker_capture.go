@@ -36,6 +36,7 @@ type WorkerRecordingStore interface {
 
 type WorkerRestartInputStore interface {
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
+	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
 }
 
 // WorkerControlOperationStore shares the recording journal's sync boundary.

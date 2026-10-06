@@ -1035,3 +1035,7 @@ func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, rec
 func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
 	return recordings.ErrWorkerRecordingPersistence
 }
+
+func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
+}

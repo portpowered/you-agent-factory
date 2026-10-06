@@ -291,3 +291,61 @@ func TestControlFrozenRuntimeCaptureRefusesReplacementAfterWait(t *testing.T) {
 		})
 	}
 }
+
+func (store *restartRecipeStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return store.execution, store.err
+}
+
+// Reservation uses detached captured settings with controlled storage and
+// capture lookup collaborators, without opening a provider execution.
+func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"captured", "missing", "wrong-attempt", "wrong-scope"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+			r.supervisions[req.SourceWorkerSessionID].execution.Execution.ProcessEnvironment = []string{"API_KEY=live-host-secret"}
+			r.observations[req.SourceWorkerSessionID] = &observation{direct: true}
+			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1")}
+			store.execution.Execution.Model = "captured-model"
+			store.execution.Execution.WorkingDirectory = "captured-workspace"
+			reader := &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+				WorkerSessionID: req.SourceWorkerSessionID, RecordingID: "recording", Origin: "direct",
+				RecordingGenerationID: "generation", OwnerEpoch: "owner",
+			}}
+			r.logs = &LogReader{reader: reader}
+			r.restart = store
+			switch cell {
+			case "missing":
+				store.err = errors.New("private missing artifact")
+			case "wrong-attempt":
+				store.execution.Execution.Dispatch.DispatchID = "other"
+			case "wrong-scope":
+				reader.entry.FactorySessionID = "other"
+			}
+			replay, owner, err := r.reserveContinuation(req)
+			if cell != "captured" {
+				if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) || owner || replay != nil || len(r.sessions) != 1 {
+					t.Fatalf("invalid recipe reserved successor: %+v, %t, %v", replay, owner, err)
+				}
+				return
+			}
+			assertCapturedContinuationPlan(t, replay, owner, err, req)
+		})
+	}
+}
+
+func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner bool, err error, req workersessions.ContinueRequest) {
+	t.Helper()
+	if err != nil || !owner || replay.plan.execution.Execution.Model != "captured-model" || replay.plan.execution.Execution.WorkingDirectory != "captured-workspace" || replay.plan.execution.Execution.UserMessage != req.FollowUpInput {
+		t.Fatalf("captured settings lost: %+v, %t, %v", replay, owner, err)
+	}
+	if reference := replay.plan.execution.Execution.Continuation; reference == nil || reference.ProviderSessionID != "provider-session-1" {
+		t.Fatalf("captured execution lost exact native identity: %+v", reference)
+	}
+	if environment := replay.plan.execution.Execution.ProcessEnvironment; len(environment) != 1 || environment[0] != "API_KEY=live-host-secret" {
+		t.Fatal("continuation lost the live host environment")
+	}
+}

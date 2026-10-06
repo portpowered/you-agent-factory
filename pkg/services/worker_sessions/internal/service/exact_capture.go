@@ -57,6 +57,45 @@ func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool 
 		interruptRecipeSafe(payload, execution.Execution.ProcessEnvironment)
 }
 
+// Read outside the registry lock; reservation later rechecks the immutable
+// source attempt. A replay already reserved in this host needs no storage read.
+func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
+	r.mu.RLock()
+	source, exists := r.sessions[req.SourceWorkerSessionID]
+	metadata := r.observations[req.SourceWorkerSessionID]
+	_, replay := r.continueReplays[req.RequestID]
+	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
+	factorySessionID := ""
+	if supervision := r.supervisions[req.SourceWorkerSessionID]; supervision != nil {
+		supervision.mu.Lock()
+		factorySessionID = supervision.execution.Execution.FactorySessionID
+		supervision.mu.Unlock()
+	}
+	source = cloneSession(source)
+	r.mu.RUnlock()
+	if !read {
+		return nil, nil
+	}
+	if err := validateContinuationSourceAssociation(source); err != nil {
+		return nil, err
+	}
+	ctx := r.serverOwnedContext()
+	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
+	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	target := recordings.WorkerControlTarget{
+		RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
+	}
+	execution, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
+	if err != nil || !directRestartRecipeSafe(execution) {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	return &execution, nil
+}
+
 // The caller holds pub.mu across opening acknowledgement and this binding.
 // Only the admitted capture supplies generation/epoch; later catalog entries
 // must not upgrade a stale execution handle's authority.

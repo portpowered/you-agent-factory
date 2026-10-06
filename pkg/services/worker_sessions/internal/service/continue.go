@@ -182,6 +182,10 @@ func (r *registry) Continue(
 func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
 ) (*continueReplay, bool, error) {
+	captured, err := r.readContinuationRecipe(req)
+	if err != nil {
+		return nil, false, err
+	}
 	tuple := continueTuple{
 		sourceID:    req.SourceWorkerSessionID,
 		successorID: req.SuccessorWorkerSessionID,
@@ -206,6 +210,15 @@ func (r *registry) reserveContinuation(
 	snapshot, err := r.snapshotContinuationSourceLocked(req)
 	if err != nil {
 		return nil, false, err
+	}
+	if captured != nil {
+		if captured.Execution.Dispatch.DispatchID != snapshot.dispatchID {
+			return nil, false, workersessions.ErrContinuationExecutionUnavailable
+		}
+		// Credentials belong to this host's live execution context and are
+		// deliberately absent from the detached persisted recipe.
+		captured.Execution.ProcessEnvironment = append([]string(nil), snapshot.execution.Execution.ProcessEnvironment...)
+		snapshot.execution = *captured
 	}
 	continuation, err := r.buildContinuationExecutionLocked(req, snapshot)
 	if err != nil {
