@@ -20,6 +20,9 @@ conflicting pattern from an older PRD or from this prompt.
 
 ## Corrected successor recovery
 
+For an ordinary fresh lane, omit context.recovery or set it to null; both are
+valid and require no recovery-worktree tag.
+
 If the admitted payload has recovery, forward recovery exactly to context.recovery
 in the new-name JSON packet; do not rewrite lineage, diagnosis, workspace or
 attempt. For retained adoption, require workspace.worktree and its tag to be the same normalized repo-relative
