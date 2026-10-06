@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -358,7 +361,9 @@ func runFactoryToCompletionWithHome(
 	if configure != nil {
 		configure(homeDir)
 	}
-	inputs.Input.Env = IsolatedHomeEnvironment(homeDir)
+	inputs.Input.Env = withFunctionalEnvironment(os.Environ(), "HOME", homeDir)
+	inputs.Input.Env = withFunctionalEnvironment(inputs.Input.Env, "USERPROFILE", homeDir)
+	inputs.Input.Env = withFunctionalEnvironment(inputs.Input.Env, runcli.ModelCacheDirEnvironment, filepath.Join(homeDir, ".agent-factory", "models"))
 	inputs.Input.WorkingDirectory = dir
 	t.Cleanup(func() {
 		if !t.Failed() {

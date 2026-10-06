@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -297,7 +299,7 @@ func startProjectRootBackedMCPServerWithProcess(
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
-			Env:              support.IsolatedHomeEnvironment(homeDirectory),
+			Env:              isolatedHomeEnvironment(homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -455,4 +457,20 @@ func assertProjectRootBackedMCPServerShutdownClean(t *testing.T, server *project
 	if _, err := server.stdout.ReadByte(); err != io.EOF {
 		t.Fatalf("read stdout after shutdown = %v, want EOF (no hung stream)", err)
 	}
+}
+
+// isolatedHomeEnvironment keeps configuration and model discovery in this
+// scenario's home without changing the environment used by parallel tests.
+func isolatedHomeEnvironment(home string) []string {
+	environment := make([]string, 0, len(os.Environ())+3)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") ||
+			strings.EqualFold(name, runcli.ModelCacheDirEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+home, "USERPROFILE="+home,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
 }

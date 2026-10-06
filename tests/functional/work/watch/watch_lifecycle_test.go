@@ -132,7 +132,7 @@ func runControlledWatchCancellationCases(t *testing.T) {
 			fixture.request,
 		}}, nil)
 		process := workWatchProcess
-		ctx, expire := support.ControlledDeadlineContext(t.Context())
+		ctx, expire := newControlledDeadlineContext(t.Context())
 		defer expire()
 		stdout := newLedgerOutput()
 		stderr := newLedgerOutput()
@@ -650,5 +650,55 @@ func waitForControlledSignal(t *testing.T, signal <-chan struct{}, description s
 	case <-signal:
 	case <-ctx.Done():
 		t.Fatalf("timed out waiting for %s: %v", description, ctx.Err())
+	}
+}
+
+// newControlledDeadlineContext lets a caller expire its request after observing
+// attachment to a controlled external effect. Functional tests exercise the
+// application's handling of DeadlineExceeded, without racing fixture startup
+// against a short wall timer. Standard-library timer behavior needs no duplicate
+// functional proof; already-expired deadlines can use context.WithDeadline.
+func newControlledDeadlineContext(parent context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancelCause(parent)
+	return controlledDeadlineContext{Context: ctx, values: context.WithoutCancel(parent)}, func() {
+		cancel(context.DeadlineExceeded)
+	}
+}
+
+type controlledDeadlineContext struct {
+	context.Context
+	values context.Context
+}
+
+// Keep child contexts on the public Done/Err contract. Exposing the embedded
+// cancellation context's private value would propagate Canceled to children
+// before this caller's DeadlineExceeded classification can be observed.
+func (ctx controlledDeadlineContext) Value(key any) any {
+	return ctx.values.Value(key)
+}
+
+func (ctx controlledDeadlineContext) Err() error {
+	if ctx.Context.Err() != nil && context.Cause(ctx.Context) == context.DeadlineExceeded {
+		return context.DeadlineExceeded
+	}
+	return ctx.Context.Err()
+}
+
+// The migrated fixture must preserve the public child-context deadline contract.
+func TestControlledDeadlinePropagatesToChildren(t *testing.T) {
+	t.Parallel()
+	type valueKey struct{}
+	parent := context.WithValue(t.Context(), valueKey{}, "preserved")
+	ctx, expire := newControlledDeadlineContext(parent)
+	defer expire()
+	child, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if child.Value(valueKey{}) != "preserved" || child.Err() != nil {
+		t.Fatal("parent values or initial context state lost")
+	}
+	expire()
+	<-child.Done()
+	if !errors.Is(child.Err(), context.DeadlineExceeded) {
+		t.Fatalf("child error = %v", child.Err())
 	}
 }

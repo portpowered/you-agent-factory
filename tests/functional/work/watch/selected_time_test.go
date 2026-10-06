@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -43,7 +44,7 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	inputs.Input.Env = support.IsolatedHomeEnvironment(profile)
+	inputs.Input.Env = isolatedHomeEnvironment(profile)
 	inputs.Input.WorkingDirectory = profile
 	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, inputs.Input.WorkingDirectory)
 	inputs.Input.Context = context.Background()
@@ -252,4 +253,20 @@ func assertSelectedCursor(t *testing.T, query map[string][]string, first workWat
 		fmt.Sprint(query["after_event_id"]) != "["+first.EventID+"]" {
 		t.Fatalf("reconnect cursor=%v want sequence=%d event=%s", query, first.Sequence, first.EventID)
 	}
+}
+
+// isolatedHomeEnvironment keeps configuration and model discovery in this
+// scenario's home without changing the environment used by parallel tests.
+func isolatedHomeEnvironment(home string) []string {
+	environment := make([]string, 0, len(os.Environ())+3)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") ||
+			strings.EqualFold(name, runcli.ModelCacheDirEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+home, "USERPROFILE="+home,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
 }

@@ -59,7 +59,7 @@ Process the input task.
 				"--no-record",
 				"--model", activationOverrideModel,
 			})
-			inputs.Input.Env = support.IsolatedHomeEnvironment(homeDir)
+			inputs.Input.Env = isolatedHomeEnvironment(homeDir)
 			inputs.Input.WorkingDirectory = dir
 			if err := fixture.process.Execute(inputs.Input); err != nil {
 				t.Fatalf("Process.Execute(provider dispatch) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
@@ -102,7 +102,7 @@ func testOperatorsettingsconfigurationCLIInitPersistsProviderAndModelSettings(t 
 					"--provider", activationUpdatedProvider,
 					"--model", activationUpdatedModel,
 				},
-				Env:              support.IsolatedHomeEnvironment(homeDir),
+				Env:              isolatedHomeEnvironment(homeDir),
 				Stdin:            strings.NewReader(""),
 				Stdout:           &stdout,
 				Stderr:           io.Discard,

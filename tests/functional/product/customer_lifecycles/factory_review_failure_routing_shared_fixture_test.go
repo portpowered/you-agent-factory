@@ -124,7 +124,7 @@ func newReviewFailureProcessFixture(t testing.TB) (*reviewFailureProcessFixture,
 		"--quiet",
 	})
 	inputs.Input.WorkingDirectory = bootstrapDir
-	inputs.Input.Env = support.IsolatedHomeEnvironment(filepath.Join(rootDir, "home"))
+	inputs.Input.Env = isolatedHomeEnvironment(filepath.Join(rootDir, "home"))
 	fixture.command = startReviewFailureHostedCommand(process, inputs.Input)
 
 	baseURL, err := api.WaitForBaseURL(reviewFailureFixtureShutdownTimeout)

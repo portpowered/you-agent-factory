@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -180,7 +181,9 @@ func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 	t.Helper()
 
 	workingDirectory := t.TempDir()
-	env := IsolatedHomeEnvironment(homeDir)
+	env := withFunctionalEnvironment(os.Environ(), "HOME", homeDir)
+	env = withFunctionalEnvironment(env, "USERPROFILE", homeDir)
+	env = withFunctionalEnvironment(env, runcli.ModelCacheDirEnvironment, filepath.Join(homeDir, ".agent-factory", "models"))
 	namedFactoriesRoot := initializeCustomerHome(t, env, workingDirectory)
 	factoryDir := filepath.Join(namedFactoriesRoot, filepath.FromSlash(name))
 	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
@@ -285,7 +288,9 @@ func CreateNamedFactoryWithProcess(
 	factoryConfigPath string,
 ) string {
 	t.Helper()
-	env := IsolatedHomeEnvironment(homeDir)
+	env := withFunctionalEnvironment(os.Environ(), "HOME", homeDir)
+	env = withFunctionalEnvironment(env, "USERPROFILE", homeDir)
+	env = withFunctionalEnvironment(env, runcli.ModelCacheDirEnvironment, filepath.Join(homeDir, ".agent-factory", "models"))
 	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
 	return createNamedFactoryAtRootWithProcess(
 		t,
