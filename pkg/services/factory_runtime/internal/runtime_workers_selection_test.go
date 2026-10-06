@@ -16,6 +16,42 @@ import (
 
 // This component proof observes the exact Workers operation, not replay
 // storage or public composition. Both adapters share one execution dependency.
+func TestRuntimeWorkerProviderSelectionPreservesNativeLiveExecution(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		executor string
+		replay   bool
+		override bool
+	}{
+		{name: "live native", executor: "codex"},
+		{name: "live legacy", override: true},
+		{name: "live script wrapper", executor: "SCRIPT_WRAP", override: true},
+		{name: "replay native", executor: "codex", replay: true, override: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			provider := &struct{ providers.Service }{}
+			selected := runtimeWorkersServiceWithProgress{
+				providerOverride: provider,
+				Service: selectionWorkers{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+					if got := request.Input.ProviderOverride != nil; got != test.override {
+						t.Fatalf("provider override selected=%t, want %t", got, test.override)
+					}
+					return workers.ExecuteResult{}, nil
+				}},
+			}
+			if test.replay {
+				selected.replayCommandRunner = &selectionCommandRunner{}
+			}
+			_, err := selected.Execute(t.Context(), workers.ExecuteRequest{Target: workers.ExecutionTarget{ExecutorProvider: test.executor}})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestRuntimeWorkerAttemptReplaySelectionPreservesLivePeer(t *testing.T) {
 	t.Parallel()
 	for _, failed := range []bool{false, true} {
