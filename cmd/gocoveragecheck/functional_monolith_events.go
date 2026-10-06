@@ -14,11 +14,12 @@ import (
 // removes only coordinator wrappers, keeping every original package/test event
 // for inventory checks, failure capture, streaming and coverage diagnostics.
 type functionalMonolithEventWriter struct {
-	sink    io.Writer
-	groups  map[string]string
-	pending []byte
-	lines   int
-	started map[string]time.Time
+	sink                    io.Writer
+	groups                  map[string]string
+	pending                 []byte
+	lines                   int
+	started                 map[string]time.Time
+	observedCustomerFailure bool
 }
 
 func (writer *functionalMonolithEventWriter) Write(data []byte) (int, error) {
@@ -31,7 +32,7 @@ func (writer *functionalMonolithEventWriter) Write(data []byte) (int, error) {
 		if index < 0 {
 			return len(data), nil
 		}
-		line, err := normalizeFunctionalMonolithEvent(writer.pending[:index], writer.groups, writer.started)
+		line, err := writer.normalizeEvent(writer.pending[:index])
 		if err != nil {
 			return 0, err
 		}
@@ -45,11 +46,36 @@ func (writer *functionalMonolithEventWriter) Write(data []byte) (int, error) {
 	}
 }
 
+// An ordinary child failure also fails both Go coordinator wrappers. Keep the
+// original failure once, so diagnostics and focused retries select its package.
+// Unattributed coordinator failures remain visible; the native exit status, raw
+// panic diagnostics, and original-package completion checks are always retained.
+func (writer *functionalMonolithEventWriter) normalizeEvent(raw []byte) ([]byte, error) {
+	line, err := normalizeFunctionalMonolithEvent(raw, writer.groups, writer.started)
+	if err != nil || len(line) == 0 {
+		return line, err
+	}
+	var event goTestTimingEvent
+	if json.Unmarshal(line, &event) == nil && event.Action == timingOutcomeFail {
+		if event.Package == functionalMonolithPackage && writer.observedCustomerFailure {
+			return nil, nil
+		}
+		if event.Test != "" {
+			for _, original := range writer.groups {
+				if event.Package == original {
+					writer.observedCustomerFailure = true
+				}
+			}
+		}
+	}
+	return line, nil
+}
+
 func (writer *functionalMonolithEventWriter) flush() error {
 	if len(writer.pending) == 0 {
 		return nil
 	}
-	line, err := normalizeFunctionalMonolithEvent(writer.pending, writer.groups, writer.started)
+	line, err := writer.normalizeEvent(writer.pending)
 	if err != nil {
 		return err
 	}

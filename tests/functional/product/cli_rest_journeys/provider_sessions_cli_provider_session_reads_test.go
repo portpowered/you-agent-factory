@@ -36,7 +36,7 @@ func testProvidersessionscliTerminalProviderSessionReadsPreserveTranscriptOutcom
 			// Concurrent commands own distinct customer profiles; provider storage
 			// still resolves to the immutable home selected during BuildProcess.
 			env := functionalEnvironment(t.TempDir())
-			support.InitializeCustomerHomeWithProcess(t, fixture.process, env, caseFixture.factoryDir)
+
 			caseFixture.registerRoutes(t, test.id)
 			sessionID := caseFixture.openSession(t)
 			workID := submitWork(t, ctx, fixture.process, env, caseFixture.factoryDir, fixture.baseURL, sessionID, test.id)

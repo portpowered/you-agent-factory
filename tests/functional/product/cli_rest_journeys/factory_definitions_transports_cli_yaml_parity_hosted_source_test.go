@@ -24,7 +24,7 @@ func startAuthoredSourceHost(t *testing.T) string {
 		}},
 	})
 	env := customerEnvironment(t.TempDir())
-	support.InitializeCustomerHomeWithProcess(t, yamlParityCLIProcess, env, dir)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "run", "--dir", dir, "--continuously", "--with-server", "--quiet", "--no-record",

@@ -130,7 +130,7 @@ func runSelectedDurationIsolation(t *testing.T, selected, legacy *selectedWatchH
 		stdout, stderr := newLedgerOutput(), newLedgerOutput()
 		input := controlledWatchInput(t, t.Context(), server.URL, false, stdout, stderr)
 		input.Args = []string{"you", "--server", server.URL, "--verbose", "--json", "work", "list", "--session", "duration-observation"}
-		support.InitializeCustomerHomeWithProcess(t, host.process, input.Env, input.WorkingDirectory)
+
 		commands = append(commands, support.StartProcessCommand(t, host.process, input))
 		outputs = append(outputs, stderr)
 	}

@@ -196,7 +196,7 @@ func startTimeHost(t *testing.T, c *timeCohort, edges serviceedges.Edges) *timeC
 	inputs.WorkingDirectory = idle
 	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"), "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	c.env = inputs.Env
-	support.InitializeCustomerHomeWithProcess(t, process, inputs.Env, idle)
+
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	t.Cleanup(func() { command.Stop(t) })
 	c.url = api.WaitForURL(t)

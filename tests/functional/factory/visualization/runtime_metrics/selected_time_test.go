@@ -269,8 +269,7 @@ func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source,
 	home := t.TempDir()
 	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"), "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	inputs.WorkingDirectory = dir
-	// First-run profile installation is a prerequisite, outside host readiness.
-	support.InitializeCustomerHomeWithProcess(t, process, inputs.Env, dir)
+
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	var readiness *controlledReadinessTimers
 	if scheduler != nil {

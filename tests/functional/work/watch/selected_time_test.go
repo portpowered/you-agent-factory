@@ -46,7 +46,7 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 	}
 	inputs.Input.Env = isolatedHomeEnvironment(profile)
 	inputs.Input.WorkingDirectory = profile
-	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, inputs.Input.WorkingDirectory)
+
 	inputs.Input.Context = context.Background()
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	for {

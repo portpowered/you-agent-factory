@@ -2950,3 +2950,88 @@ changing assertions. Three post-rebase repetitions pass in 5.632s; both the
 built-in `.golangci.yml` and repository `.golangci-repository.yml` scoped runs
 now report zero issues. The hosted correction still needs its fresh full gate;
 no lint allowance is added.
+
+
+## Continued consolidation and customer-boundary cleanup (October 6)
+
+The two-minute complete hosted-job checkpoint remains unmet. The three-minute
+checkpoint previously merged in #2905 was a warm-cache result (155 seconds);
+its merge-queue run took 316 seconds after an archive-cache miss.
+
+### Current-source measurements
+
+| Run | Complete duration | Coverage command | Compile/link tool invocations | Outcome |
+| --- | ---: | ---: | --- | --- |
+| #2923 rebased head `496dca52d5`, hosted initial | 251 s | 191.605 s | 510 / 22 | Passed; complete CI passed |
+| Same head hosted rerun, exact archive-cache hit | 327 s | 251.213 s | 380 / 43 | Failed; excluded from successful timing evidence |
+| Main archive seed `e9ab358719` | 278 s | 204.126 s | 1341 / 43 | Passed; archive-cache miss |
+| Pending cleanup, current-source Linux, Models consolidated | 174.09 s | 167.293 s | 4 / 24 | Passed; 68 original packages, 755 results, 753 pass, 2 skip, no retry |
+
+The last row is a local controlled warm-cache measurement, not hosted checkpoint
+proof. It used four pinned CPUs, GOMAXPROCS=4, GOGC=100, package jobs=8, fresh
+execution (`-count=1`), full functional coverage and unchanged coverage policies.
+Aggregate process CPU was **569.28 seconds** (442.82 user + 126.46 system).
+Compiler CPU was 3.466 seconds; linker CPU was **43.752 seconds**. Linker tools
+were active for 41.412 wall seconds, with an overlapping invocation sum of
+88.784 seconds. Tool CPU is included in aggregate CPU; these numbers must not
+be added together. Largest-process RSS was 6,475,544 KiB, not aggregate memory.
+
+A preceding current-source run passed in 241.90 seconds (221.798 coverage,
+1364 compilers, 25 links). A 12.546-second native Models validation overlapped
+that sample, so it is validation-only and excluded from latency comparisons.
+Neither local sample is a paired estimate of savings against the earlier
+runtime revision. Private-repository Git-history contamination remains the
+previously documented limitation for Git fixture results.
+
+### Changes and retained customer proof
+
+- Removed redundant customer-home initialization before real CLI/API startup
+  in Metrics, response Events, provider-session reads, Work admission/watch,
+  CLI/REST journeys, process-time and worker-concurrency fixtures. Tests retain
+  owned profiles, explicit sessions, model-cache paths, external-effect fakes,
+  and customer assertions. Initializing or repairing the profile is exercised
+  through the actual customer operation.
+- Replaced the 462-line internal invocation probe with REST success, provider
+  failure and caller-timeout journeys. REST status, request/trace/Work identity,
+  Factory Event correlation, private-error redaction, continued Work after
+  timeout, missing-session diagnostics and peer-session reuse are asserted.
+  Existing REST cancellation/session-isolation tests remain. Assertions about
+  private invocation struct layouts and historical implementation behavior
+  were removed from the functional layer.
+- Converted Models inference's eager TestMain fixture into an owned lazy fixture
+  with bounded native and monolith cleanup. Its unsafe sibling-reference case
+  now uses an actual owned outside-cache sentinel and a relative escape path;
+  it still proves fail-closed removal and preservation of both managed cache
+  and outside content. This makes the package independent of process CWD and
+  eligible for the 34th compatible group without weakening the compatibility
+  classifier or sharing model assets between unrelated tests.
+- Corrected coordinator failure attribution: after an original combined-package
+  test failure, redundant Go wrapper failures do not become another customer
+  test/package. The actual original failure and native command error remain;
+  raw panic diagnostics, unattributed process failures and completion checks
+  for every original package remain. Focused retry selection therefore uses
+  the identified customer package, rather than rebuilding the entire combined
+  inventory solely because the synthetic wrapper also failed.
+
+The failed hosted rerun identified the removed internal caller-cancellation
+probe: it required request identity even when the caller returned before
+admission correlation. Its synthetic wrapper failure also exposed the broad
+native rebuild path. This failed run is diagnostic evidence, not a performance
+baseline or justification for silently accepting a failed test.
+
+Focused validation before publication: Metrics cost journeys passed three
+repetitions (54.553 s); replacement REST journeys passed three repetitions
+(14.548 s); native Models package passed (12.546 s), and unsafe sibling removal
+passed five repetitions (1.287 s). Scoped built-in and repository lint passed
+for the nine affected functional package families. Full Linux inventory and
+coverage validation passed as reported above. Coordinator regression tests
+cover focused original-package selection, panic rejection and unattributed
+process-failure visibility; existing partial-inventory checks remain.
+
+The earlier CPU profile still prioritizes packaged installation / managed
+Factory layout preparation and JSON expansion. Current package event windows
+are scheduling-inclusive and overlapping; they are not package CPU estimates.
+The next optimization should remove more repeated initialization inside
+isolated shared-session fixtures, then measure fresh CPU attribution on the
+current runtime. Archive restoration across PR/main/merge-queue scopes also
+needs hosted verification before promising consistent three-minute cold runs.

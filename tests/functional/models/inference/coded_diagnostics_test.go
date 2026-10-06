@@ -260,7 +260,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
 	})
-	remoteInputs.Input.Env = functionalSharedDefaultEnvironment()
+	remoteInputs.Input.Env = functionalSharedDefaultEnvironment(t)
 	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelCacheNotFound) {
@@ -348,7 +348,7 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
 	})
-	remoteInputs.Input.Env = functionalSharedDefaultEnvironment()
+	remoteInputs.Input.Env = functionalSharedDefaultEnvironment(t)
 	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelNotFound) {
@@ -372,7 +372,7 @@ func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedIn
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "remove", codedDiagnosticModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = functionalSharedDefaultEnvironment()
+	inputs.Input.Env = functionalSharedDefaultEnvironment(t)
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := functionalSharedDefaultProcess(t)
@@ -385,7 +385,7 @@ func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedIn
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "inspect", codedDiagnosticUnknownModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = functionalSharedDefaultEnvironment()
+	inputs.Input.Env = functionalSharedDefaultEnvironment(t)
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := functionalSharedDefaultProcess(t)

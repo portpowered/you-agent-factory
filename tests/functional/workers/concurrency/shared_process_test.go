@@ -160,9 +160,7 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 		t.Fatal("shared concurrency process started more than once")
 	}
 	env := append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
-	// First-run profile installation is fixture setup, not server readiness.
-	// Complete it through the same public process before starting the host.
-	support.InitializeCustomerHomeWithProcess(t, fixture.process, env, fixture.hostDir)
+
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--dir", fixture.hostDir,

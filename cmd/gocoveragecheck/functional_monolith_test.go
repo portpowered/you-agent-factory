@@ -153,3 +153,44 @@ func TestFunctionalMonolithPackageWallIncludesParallelChildren(t *testing.T) {
 		t.Fatalf("package wall = %+v, want complete ten-second window despite zero parent Elapsed", terminal)
 	}
 }
+
+func TestFunctionalMonolithCustomerFailureKeepsRetryFocused(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output, groups: map[string]string{"A": "original/a", "B": "original/b"}}
+	for _, event := range []string{
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A/TestCustomer","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/B","Action":"pass"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`,
+	} {
+		if _, err := writer.Write([]byte(event + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := decideFlakeRetry(output.String(), "", 2)
+	if !decision.retry || len(decision.failures) != 1 || decision.failures[0].Package != "original/a" || decision.failures[0].Test != "TestCustomer" {
+		t.Fatalf("customer failure lost or retry broadened: %+v; %s", decision, output.String())
+	}
+	if strings.Contains(output.String(), functionalMonolithPackage) {
+		t.Fatalf("coordinator counted as customer failure: %s", output.String())
+	}
+	if death := decideFlakeRetry(output.String(), "panic: coordinator died", 2); death.retry {
+		t.Fatal("panic after a customer failure became an ordinary retry")
+	}
+}
+
+func TestFunctionalMonolithUnattributedFailureRemainsVisible(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output}
+	raw := `{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`
+	if _, err := writer.Write([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), functionalMonolithPackage) || decideFlakeRetry(output.String(), "", 2).retry {
+		t.Fatalf("unattributed process failure hidden or retried: %s", output.String())
+	}
+}
