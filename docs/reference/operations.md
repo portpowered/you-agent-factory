@@ -622,9 +622,18 @@ result retains `action: TERMINATE` and adds `forced: true`. `APPLIED` requires
 confirmed completion of the exact owned process tree and execution attempt.
 
 An unsupported capability returns `UNSUPPORTED` without cancellation; an
-unconfirmed termination or service deadline returns a control failure. Windows
-force termination is unsupported. Ordinary terminate keeps its joined behavior.
+unconfirmed termination or service deadline returns a control failure.
+Local Codex and Claude command attempts support force on Linux and Windows
+when the host retains ownership of their process tree.
+Ordinary terminate keeps its joined behavior.
 The selected-host and local owner-routing rules above also apply to force.
+
+Factory force requires an authored FAILED state for every input Work type.
+Without that placement, force returns `UNSUPPORTED` before affecting the execution or Work.
+Confirmed force preserves input Work at that FAILED state, without automatic retry or successor execution.
+The Worker Session records `TERMINATED` and `terminalCause: OPERATOR_KILL`.
+Archive reads and Factory replay preserve these facts after restart.
+To deliberately restore failed Work, use `you work move <work-id> <initial-state>`.
 
 Every ended Worker Session names why it ended. `show` reports the reason on its
 `Failure` line and `list` reports it in the failure column; the API returns the
