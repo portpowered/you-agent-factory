@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -23,48 +24,81 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// One process creates real interrupted durable state, then opens its portable
-// history for inspection. Inspection must preserve the interrupted snapshot.
-func TestPortableCheckpointInspectionPreservesPersistedInterruptedChild(t *testing.T) {
+// Both independent customer scenarios share immutable process wiring. Each owns
+// its host session, durable session, profile, workspace, runner and API listener.
+func TestPortableCheckpointScenarios(t *testing.T) {
 	t.Parallel()
-	dir := functionalWriteResumableWorkflowFixture(t, "resumable-two-step-fake-children")
-	home := t.TempDir()
-	runner := &checkpointContinuationRunner{entered: make(chan struct{}), canceled: make(chan struct{})}
-	api := support.NewProcessAPIServer()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderCommandRunner: runner, APIServerStarter: api.Start})
-	if err != nil {
-		t.Fatal(err)
+	effects := &checkpointScenarioEffects{
+		runners: make(map[string]*checkpointContinuationRunner),
+		servers: make(map[int]*support.ProcessAPIServer),
 	}
-	support.CleanupProcess(t, process)
-	inputs := recordingContinuationInputs(t, dir, home, []string{"--continuously", "--with-server", "--no-record"}, false)
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	t.Cleanup(func() { command.Stop(t) })
-	api.WaitForURL(t)
-	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
-	started, err := sessions.StartAsync(t.Context(), factorysessions.StartRequest{
-		RequestID: uuid.NewString(), ProjectRoot: dir, PersistencePolicy: factorysessions.PersistencePolicyEnabled,
-		Source: factorysessions.Source{Kind: "WORKFLOW_NAME", WorkflowName: "resumable-two-step-fake-children"},
-		Args:   map[string]any{"subject": "portable checkpoint"},
+	scenarios := make([]checkpointScenario, 2)
+	for i := range scenarios {
+		scenarios[i] = checkpointScenario{
+			dir:  functionalWriteResumableWorkflowFixture(t, "resumable-two-step-fake-children"),
+			home: t.TempDir(), hostID: uuid.NewString(), port: 23000 + i,
+			runner: &checkpointContinuationRunner{entered: make(chan struct{}), canceled: make(chan struct{})},
+			api:    support.NewProcessAPIServer(),
+		}
+		effects.runners[filepath.Clean(scenarios[i].dir)] = scenarios[i].runner
+		effects.servers[scenarios[i].port] = scenarios[i].api
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderCommandRunner: effects, APIServerStarter: effects.startAPI,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	waitRecordingPeerSignal(t, runner.entered, "second child admission")
-	if _, err := sessions.InterruptDispatch(t.Context(), started.SessionID, factorysessions.InterruptDispatchRequest{DispatchID: "dispatch-2"}); err != nil {
-		t.Fatal(err)
+	support.CleanupProcess(t, process)
+	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	t.Run("inspection preserves persisted interrupted child", func(t *testing.T) {
+		t.Parallel()
+		testPortableCheckpointInspection(t, process, sessions, scenarios[0])
+	})
+	t.Run("continuation preserves completed child", func(t *testing.T) {
+		t.Parallel()
+		testPortableCheckpointContinuation(t, process, sessions, scenarios[1])
+	})
+}
+
+type checkpointScenario struct {
+	dir, home, hostID string
+	port              int
+	runner            *checkpointContinuationRunner
+	api               *support.ProcessAPIServer
+}
+
+// Maps are populated before parallel scenarios start and remain immutable.
+// The external effect key never chooses product execution or session policy.
+type checkpointScenarioEffects struct {
+	runners map[string]*checkpointContinuationRunner
+	servers map[int]*support.ProcessAPIServer
+}
+
+func (effects *checkpointScenarioEffects) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner := effects.runners[filepath.Clean(request.WorkDir)]
+	if runner == nil {
+		return platformprocess.CommandResult{}, fmt.Errorf("unregistered checkpoint workspace %q", request.WorkDir)
 	}
-	waitRecordingPeerSignal(t, runner.canceled, "interrupted child cancellation")
-	before := waitCheckpointContinuationStatus(t, sessions, started.SessionID, factorysessions.LifecycleStatusInterrupted)
-	if before.Progress == nil || before.Progress.CompletedDispatches != 1 || before.LatestCheckpoint == nil {
-		t.Fatalf("missing durable checkpoint/child: %#v", before)
+	return runner.Run(ctx, request)
+}
+
+func (effects *checkpointScenarioEffects) startAPI(ctx context.Context, request platformhttpserver.StartRequest) error {
+	api := effects.servers[request.Port]
+	if api == nil {
+		return fmt.Errorf("unregistered checkpoint API port %d", request.Port)
 	}
+	return api.Start(ctx, request)
+}
+
+func testPortableCheckpointInspection(t *testing.T, process support.Process, sessions factorysessions.Service, scenario checkpointScenario) {
+	dir, home, runner := scenario.dir, scenario.home, scenario.runner
+	started, before, path := preparePortableCheckpointContinuation(t, process, sessions, scenario)
 	snapshotPath := filepath.Join(dir, ".you-agent-factory", "durable-sessions", started.SessionID+".json")
 	snapshot, err := os.ReadFile(snapshotPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := writeCheckpointContinuationRecording(t, sessions, before)
-	command.Stop(t)
 	replay := recordingContinuationInputs(t, dir, home, []string{"--replay", path, "--no-record"}, false)
 	replay.Input.WorkingDirectory = dir
 	replay.Input.Args = []string{"you", "run", "--dir", dir, "--replay", path, "--no-record"}
@@ -80,11 +114,9 @@ func TestPortableCheckpointInspectionPreservesPersistedInterruptedChild(t *testi
 	}
 }
 
-// One process creates real interrupted durable state, then opens its portable
-// history for inspection and explicitly hands it back to live execution.
-func TestPortableCheckpointContinuesPersistedChildThroughInitialOpening(t *testing.T) {
-	t.Parallel()
-	dir, home, runner, process, sessions, started, path := preparePortableCheckpointContinuation(t)
+func testPortableCheckpointContinuation(t *testing.T, process support.Process, sessions factorysessions.Service, scenario checkpointScenario) {
+	dir, home, runner := scenario.dir, scenario.home, scenario.runner
+	started, _, path := preparePortableCheckpointContinuation(t, process, sessions, scenario)
 	assertPortableCheckpointWithoutRestorableState(t, process, sessions, dir, home, path, started.SessionID, runner)
 	writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
 	var releaseOnce sync.Once
@@ -166,22 +198,16 @@ func joinCheckpointInspection(t *testing.T, done <-chan error, dir, sessionID st
 	}
 }
 
-func preparePortableCheckpointContinuation(t *testing.T) (string, string, *checkpointContinuationRunner, support.Process, factorysessions.Service, factorysessions.AsyncStartResult, string) {
+func preparePortableCheckpointContinuation(t *testing.T, process support.Process, sessions factorysessions.Service, scenario checkpointScenario) (factorysessions.AsyncStartResult, factorysessions.SessionReadResult, string) {
 	t.Helper()
-	dir := functionalWriteResumableWorkflowFixture(t, "resumable-two-step-fake-children")
-	home := t.TempDir()
-	runner := &checkpointContinuationRunner{entered: make(chan struct{}), canceled: make(chan struct{})}
-	api := support.NewProcessAPIServer()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderCommandRunner: runner, APIServerStarter: api.Start})
-	if err != nil {
-		t.Fatal(err)
-	}
-	support.CleanupProcess(t, process)
-	inputs := recordingContinuationInputs(t, dir, home, []string{"--continuously", "--with-server", "--no-record"}, false)
+	dir, home, runner, api := scenario.dir, scenario.home, scenario.runner, scenario.api
+	inputs := recordingContinuationInputs(t, dir, home, []string{
+		"--session", scenario.hostID, "--listen", fmt.Sprintf("127.0.0.1:%d", scenario.port),
+		"--continuously", "--with-server", "--no-record",
+	}, false)
+	inputs.Input.WorkingDirectory = dir
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	t.Cleanup(func() { command.Stop(t) })
 	api.WaitForURL(t)
-	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
 	started, err := sessions.StartAsync(t.Context(), factorysessions.StartRequest{
 		RequestID: uuid.NewString(), ProjectRoot: dir, PersistencePolicy: factorysessions.PersistencePolicyEnabled,
 		Source: factorysessions.Source{Kind: "WORKFLOW_NAME", WorkflowName: "resumable-two-step-fake-children"},
@@ -201,7 +227,7 @@ func preparePortableCheckpointContinuation(t *testing.T) (string, string, *check
 	}
 	path := writeCheckpointContinuationRecording(t, sessions, before)
 	command.Stop(t)
-	return dir, home, runner, process, sessions, started, path
+	return started, before, path
 }
 
 func waitCheckpointContinuationStatus(t *testing.T, sessions factorysessions.Service, id string, status factorysessions.LifecycleStatus) factorysessions.SessionReadResult {
