@@ -2,20 +2,70 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestTerminalCaptureKeepsExactAttemptReferenceWithoutCredentials(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "foreign-attempt", "inherited-secret", "override-secret", "missing"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			supervision := newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+			r.supervisions[req.SourceWorkerSessionID] = supervision
+			attemptID := "dispatch-1"
+			if cell == "foreign-attempt" {
+				attemptID = "other"
+			}
+			if cell == "inherited-secret" {
+				supervision.execution.Execution.ProcessEnvironment = []string{"API_KEY=provider-session-1"}
+			}
+			if cell == "override-secret" {
+				supervision.execution.Execution.EnvVars = map[string]string{"API_KEY": "provider-session-1"}
+			}
+			if cell == "missing" {
+				source := r.sessions[req.SourceWorkerSessionID]
+				source.ProviderSessionAssociation = nil
+				r.sessions[source.ID] = source
+			}
+			draft, err := terminalDraft(workersessions.StateCanceled, workersessions.TerminalResult{}, attemptID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.captureTerminalProviderReference(req.SourceWorkerSessionID, attemptID, &draft)
+			var payload workers.SessionPayload
+			if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Status != "CANCELED" {
+				t.Fatal("reference capture changed terminal outcome")
+			}
+			if cell == "exact" {
+				if payload.Continuation == nil || payload.Continuation.ID != "provider-session-1" || payload.Continuation.Provider != "codex" || draft.DispatchID != "dispatch-1" {
+					t.Fatalf("terminal lost exact native reference: %+v", draft)
+				}
+			} else if payload.Continuation != nil {
+				t.Fatal("terminal captured an unproved or secret-bearing reference")
+			}
+		})
+	}
+}
 
 type restartRecipeStore struct {
 	target    recordings.WorkerControlTarget
 	execution workers.WorkstationDispatchRequest
 	calls     int
 	err       error
+	reference providers.SessionRef
 }
 
 func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
@@ -296,11 +346,15 @@ func (store *restartRecipeStore) ReadWorkerRestartRecipe(context.Context, record
 	return store.execution, store.err
 }
 
+func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return recordings.WorkerContinuationSource{Execution: store.execution, Reference: store.reference, Terminal: recordings.WorkerRecordingTerminal{Status: "COMPLETED"}}, store.err
+}
+
 // Reservation uses detached captured settings with controlled storage and
 // capture lookup collaborators, without opening a provider execution.
 func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "missing", "wrong-attempt", "wrong-scope"} {
+	for _, cell := range []string{"captured", "missing", "wrong-attempt", "wrong-scope", "wrong-reference"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -309,6 +363,7 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 			r.supervisions[req.SourceWorkerSessionID].execution.Execution.ProcessEnvironment = []string{"API_KEY=live-host-secret"}
 			r.observations[req.SourceWorkerSessionID] = &observation{direct: true}
 			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1")}
+			store.reference = r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference
 			store.execution.Execution.Model = "captured-model"
 			store.execution.Execution.WorkingDirectory = "captured-workspace"
 			reader := &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
@@ -324,10 +379,16 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				store.execution.Execution.Dispatch.DispatchID = "other"
 			case "wrong-scope":
 				reader.entry.FactorySessionID = "other"
+			case "wrong-reference":
+				store.reference.ID = "foreign-provider-session"
 			}
 			replay, owner, err := r.reserveContinuation(req)
 			if cell != "captured" {
-				if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) || owner || replay != nil || len(r.sessions) != 1 {
+				expected := workersessions.ErrContinuationExecutionUnavailable
+				if cell == "wrong-reference" {
+					expected = workersessions.ErrContinuationProviderSessionInvalid
+				}
+				if !errors.Is(err, expected) || owner || replay != nil || len(r.sessions) != 1 {
 					t.Fatalf("invalid recipe reserved successor: %+v, %t, %v", replay, owner, err)
 				}
 				return

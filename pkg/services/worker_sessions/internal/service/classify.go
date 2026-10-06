@@ -722,10 +722,11 @@ func causeKindString(cause *workersessions.FailureCause) string {
 // W3 terminal record. Failure fields are additive and carry only the already
 // normalized Worker Sessions classification.
 type terminalSessionPayload struct {
-	Status               string `json:"status,omitempty"`
-	FailureCause         string `json:"failureCause,omitempty"`
-	FailureDetail        string `json:"failureDetail,omitempty"`
-	AgentRunFailureClass string `json:"agentRunFailureClass,omitempty"`
+	Continuation         *workers.SessionContinuation `json:"continuation,omitempty"`
+	Status               string                       `json:"status,omitempty"`
+	FailureCause         string                       `json:"failureCause,omitempty"`
+	FailureDetail        string                       `json:"failureDetail,omitempty"`
+	AgentRunFailureClass string                       `json:"agentRunFailureClass,omitempty"`
 }
 
 // terminalPhase is the pure mapping from a committed Worker Session State to
@@ -963,6 +964,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 	recording := pub.recording
 	pub.recording = nil
 	draft.Provenance = lifecycleProvenance(pub.provider)
+	r.captureTerminalProviderReference(id, attemptID, &draft)
 
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
@@ -986,6 +988,41 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		}
 	}
 	return err
+}
+
+// Preserve the exact accepted reference before closing capture. A terminal
+// association is data for explicit continuation, never a restored handle.
+func (r *registry) captureTerminalProviderReference(id, attemptID string, draft *workers.Draft) {
+	r.mu.RLock()
+	association := r.sessions[id].ProviderSessionAssociation
+	var environment []string
+	if supervision := r.supervisions[id]; supervision != nil {
+		supervision.mu.Lock()
+		environment = append(environment, supervision.execution.Execution.ProcessEnvironment...)
+		for name, value := range supervision.execution.Execution.EnvVars {
+			environment = append(environment, name+"="+value)
+		}
+		supervision.mu.Unlock()
+	}
+	if association != nil {
+		copy := association.Clone()
+		association = &copy
+	}
+	r.mu.RUnlock()
+	if association == nil || association.AttemptID != attemptID || association.Validate() != nil {
+		return
+	}
+	var payload terminalSessionPayload
+	_ = json.Unmarshal(draft.Payload, &payload)
+	payload.Continuation = &workers.SessionContinuation{
+		Provider: string(association.Reference.Provider), Kind: association.Reference.Kind, ID: association.Reference.ID,
+	}
+	encoded, _ := json.Marshal(payload)
+	if !interruptRecipeSafe(encoded, environment) {
+		return
+	}
+	draft.TurnID = association.TurnID
+	draft.Payload = encoded
 }
 
 // publishTerminalRecordOrLog calls publishTerminalRecord and, on failure,

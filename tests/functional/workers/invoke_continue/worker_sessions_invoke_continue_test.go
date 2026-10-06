@@ -128,6 +128,7 @@ func runDirectWorkerSessionInvokeContinueLocal(t *testing.T, fixture *invokeCont
 	if page.WorkerSessionId != "local-source-session" || page.RecordingGenerationId == "" || page.CommittedPosition == 0 || !strings.Contains(logs.Stdout(), "initial direct output COMPLETE") {
 		t.Fatalf("direct capture omitted identity or provider output: %#v", page)
 	}
+	assertCapturedTerminalContinuation(t, page, "local-source-thread")
 
 	cont := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "continue", "local-source-session",

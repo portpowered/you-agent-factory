@@ -89,11 +89,18 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
 		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
 	}
-	execution, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
-	if err != nil || !directRestartRecipeSafe(execution) {
+	return r.readCapturedContinuationRecipe(ctx, target, source)
+}
+
+func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
+	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
+	if err != nil || !directRestartRecipeSafe(captured.Execution) {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
-	return &execution, nil
+	if captured.Reference != source.ProviderSessionAssociation.Reference || captured.Terminal.Status != string(source.State) {
+		return nil, workersessions.ErrContinuationProviderSessionInvalid
+	}
+	return &captured.Execution, nil
 }
 
 // The caller holds pub.mu across opening acknowledgement and this binding.

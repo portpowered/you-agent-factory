@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -220,4 +221,23 @@ func t19RemoteFileInputs(t *testing.T, scenario *invokeContinueScenario, ctx con
 	inputs.Input.Env = scenario.environment()
 	inputs.Input.WorkingDirectory = scenario.workingDirectory
 	return inputs
+}
+func assertCapturedTerminalContinuation(t *testing.T, page factoryapi.WorkerSessionLogPage, providerID string) {
+	t.Helper()
+	for _, event := range page.Events {
+		encoded, err := json.Marshal(event.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft workers.Draft
+		var payload workers.SessionPayload
+		if json.Unmarshal(encoded, &draft) != nil || draft.Kind != workers.KindSession || draft.Phase != workers.PhaseCompleted {
+			continue
+		}
+		if json.Unmarshal(draft.Payload, &payload) != nil || payload.Continuation == nil || payload.Continuation.ID != providerID || payload.Continuation.Provider != "codex" || draft.DispatchID == "" {
+			t.Fatalf("captured terminal lost exact provider reference or attempt: %+v", draft)
+		}
+		return
+	}
+	t.Fatal("public captured logs omitted source terminal")
 }

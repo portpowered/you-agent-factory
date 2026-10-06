@@ -6,9 +6,56 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// ReadWorkerContinuationSource requires a committed terminal for the exact
+// recipe attempt. Incomplete history and missing references never authorize
+// a native continuation, including after this writer is reopened.
+func (writer *FileWriter) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	execution, err := writer.ReadWorkerRestartRecipe(ctx, target)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	snapshot, err := writer.LoadWorkerRecording(ctx, target.RecordingID)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	for _, session := range snapshot.Sessions {
+		if session.WorkerSessionID != target.WorkerSessionID {
+			continue
+		}
+		return capturedContinuationSource(session, target, execution)
+	}
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+}
+
+func capturedContinuationSource(session recordings.WorkerSessionRecordingSnapshot, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) (recordings.WorkerContinuationSource, error) {
+	if session.RecordingGenerationID != target.RecordingGenerationID || session.OwnerEpoch != target.OwnerEpoch ||
+		session.Status != recordings.WorkerRecordingStatusComplete || session.ExecutionTerminal == nil {
+		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingIncomplete
+	}
+	for _, record := range session.Records {
+		if record.ID.Position != session.ExecutionTerminal.Position {
+			continue
+		}
+		var draft workers.Draft
+		var payload workers.SessionPayload
+		if json.Unmarshal(record.Payload, &draft) != nil || draft.Kind != workers.KindSession ||
+			draft.DispatchID != target.ExpectedAttemptID || json.Unmarshal(draft.Payload, &payload) != nil ||
+			payload.Status != session.ExecutionTerminal.Status || payload.Continuation == nil {
+			return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+		}
+		reference := providers.SessionRef{Provider: providers.ID(payload.Continuation.Provider), Kind: payload.Continuation.Kind, ID: payload.Continuation.ID}
+		if reference.Validate() != nil {
+			return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+		}
+		return recordings.WorkerContinuationSource{Execution: execution, Reference: reference, Terminal: *session.ExecutionTerminal, TurnID: draft.TurnID}, nil
+	}
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+}
 
 // ReadWorkerRestartRecipe resolves the immutable input using the selected
 // store's identity. The captured epoch is checked as data, never upgraded to

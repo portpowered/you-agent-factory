@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -37,6 +38,16 @@ type WorkerRecordingStore interface {
 type WorkerRestartInputStore interface {
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
+	ReadWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+}
+
+// WorkerContinuationSource is detached proof from committed source history.
+// It contains no execution handle and grants no admission or control authority.
+type WorkerContinuationSource struct {
+	Execution workers.WorkstationDispatchRequest
+	Reference providers.SessionRef
+	Terminal  workerrecording.WorkerRecordingTerminal
+	TurnID    string
 }
 
 // WorkerControlOperationStore shares the recording journal's sync boundary.

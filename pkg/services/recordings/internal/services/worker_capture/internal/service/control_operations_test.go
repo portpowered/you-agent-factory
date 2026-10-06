@@ -12,10 +12,85 @@ import (
 	"testing"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"captured", "active", "missing-reference", "wrong-attempt", "wrong-generation"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			writer := journalWriter(t, local)
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = "direct"
+			execution.Execution.Model = "captured-model"
+			execution.Execution.WorkingDirectory = "captured-workspace"
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+				t.Fatal(err)
+			}
+			if cell != "active" {
+				persistContinuationSourceTerminal(t, writer, target, cell)
+			}
+			reopened, err := newTestFileWriter(local, writer.root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cell == "wrong-generation" {
+				target.RecordingGenerationID = "foreign-generation"
+			}
+			source, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			if cell != "captured" {
+				if err == nil || source.Reference.ID != "" {
+					t.Fatalf("unproved source returned continuation data: %+v, %v", source, err)
+				}
+				return
+			}
+			assertCapturedContinuationSource(t, source, err)
+			source.Execution.Execution.Model = "mutated"
+			again, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			if err != nil || again.Execution.Execution.Model != "captured-model" {
+				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
+			}
+		})
+	}
+}
+
+func assertCapturedContinuationSource(t *testing.T, source recordings.WorkerContinuationSource, err error) {
+	t.Helper()
+	want := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "opaque-provider-session"}
+	if err != nil || source.Reference != want || source.Execution.Execution.Model != "captured-model" || source.Execution.Execution.WorkingDirectory != "captured-workspace" || source.Terminal.Status != "COMPLETED" || source.TurnID != "captured-turn" {
+		t.Fatalf("detached source lost committed facts: %+v, %v", source, err)
+	}
+}
+
+func persistContinuationSourceTerminal(t *testing.T, writer *FileWriter, target recordings.WorkerControlTarget, cell string) {
+	t.Helper()
+	opening := journalRecord(t, target.RecordingID, target.WorkerSessionID)
+	request := terminalAppend(opening.Record.ID.Topic, target.WorkerSessionID)
+	var draft workers.Draft
+	_ = json.Unmarshal(request.Payload, &draft)
+	payload := workers.SessionPayload{Status: "COMPLETED", Continuation: &workers.SessionContinuation{Provider: "codex", Kind: providers.SessionIDKind, ID: "opaque-provider-session"}}
+	if cell == "missing-reference" {
+		payload.Continuation = nil
+	}
+	draft.DispatchID, draft.TurnID = target.ExpectedAttemptID, "captured-turn"
+	if cell == "wrong-attempt" {
+		draft.DispatchID = "foreign-attempt"
+	}
+	draft.Payload, _ = json.Marshal(payload)
+	request.Payload, _ = json.Marshal(draft)
+	terminal := opening
+	terminal.Record = mustRecord(t, request, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	t.Parallel()

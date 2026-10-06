@@ -16,6 +16,7 @@ type WorkerOwnerRecoveryOperation func(context.Context) error
 // selected profile's existing captured-input store. A recipe conveys data only,
 // never live execution authority.
 type WorkerRestartInputStore = recordingcontracts.WorkerRestartInputStore
+type WorkerContinuationSource = recordingcontracts.WorkerContinuationSource
 
 var ErrMissingWorkerRestartInputStore = errors.New("recordings: Worker restart input store is required")
 
