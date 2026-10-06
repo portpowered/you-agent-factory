@@ -5,18 +5,26 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `78153f7b20`, passes the entire hosted workflow.
-Functional Coverage takes
-**207s complete / 153.481s coverage**, 68 packages / 740 results. It recovers one
-`TestInterruptRace` failure on the enabled same-head retry; this is not a clean
-latency checkpoint. The trace includes eight compiler commands and 37 links.
-The earlier entire-workflow-passing contract-reader head `deec6a6f0f` takes
-**198s / 142.217s**, zero compiler commands and 19 links, no retries. Its
-functional-runtime-identical predecessor `21bde1452a` took **146s / 102.318s**.
-Retain the slower samples; 146 seconds is not a reliable ceiling. The complete
-hosted two-minute checkpoint remains **unmet** and the PR stays draft. The
-earlier warm three-minute checkpoint is merged.
+The latest published source, `f0af373fba`, passes hosted Functional Coverage in
+**220s complete / 167.250s coverage**, 68 packages / 740 results, no retries,
+110 compiler commands and 19 links after a prefix 781 archive restore. Its
+workflow fails Backend Lint on two new unreachable support declarations and
+Frontend Browser on an Add workstation dialog timeout. The pending support
+correction reuses existing cursor helpers with an explicit session argument;
+no deadcode allowance is added. The complete hosted two-minute checkpoint
+remains **unmet** and the PR stays draft. The earlier warm three-minute
+checkpoint is merged. Keep prior complete 146s, 198s and 207s samples and their
+cache/retry differences; 146 seconds is not a reliable ceiling.
 
+The current worker CLI home and native-join candidate passes full local coverage
+with **38 monolith groups / 569 registrations**, all **68 packages / 738 results**,
+no retries, unchanged coverage floors and quarantine. Finite worker CLI pairs
+use **32.1% less CPU / 11.7% less wall**; removing the invoke/continue framework
+subprocess probe uses **18.0% less CPU / 19.2% less wall** in fresh-process pairs.
+Work watch now joins through lazy setup and owned cleanup. A warm-helper local
+sample takes 140.95s / 451.29 CPU-seconds; final shared-helper correction takes
+204.98s / 688.92 CPU-seconds including 117 compiler commands. Both samples are
+retained, and neither establishes a complete hosted checkpoint.
 The published MCP change shares one initialized, owned client home and model
 cache across independent stdio connections. Six native repetitions per version
 use **42.5% less CPU / 34.1% less elapsed time**. Full local validation preserves
@@ -3848,3 +3856,114 @@ selected-time automation journeys already advance injected clocks only after
 registration/readiness acknowledgements; their wall deadlines bound failure
 rather than successful completion. Network/filesystem observation is not made
 virtual by blindly wrapping it in synctest.
+
+
+### Finite worker CLI home and additional native-package joins
+
+Finite worker CLI lifecycle journeys now initialize one parent-owned home
+through public `you init --provider codex` before parallel children. Every run
+retains its explicit UUID Factory Session, authored Factory, Cwd, streams and
+provider-command route. Hosted adverse scenarios keep their independent homes.
+The environment helper replaces inherited model-cache overrides with a cache
+under each owned home. Parent teardown precedes removal of the shared home.
+
+Six native repetitions per version in B3/C3/C3/B3 order pass. Baseline uses
+**33.537s CPU / 14.627s wall**, candidate **22.778s CPU / 12.921s wall**:
+**32.1% less CPU / 11.7% less wall**. Artifact:
+`.artifacts/latency-audit/worker-cli-home-paired`.
+
+Remove `TestInvokeContinueForcedAssertionCleansOwnedResources` and its report
+helpers: it launches an intentionally failing test executable and examines
+framework cleanup counters rather than a customer operation. Retain actual
+CLI/HTTP invoke, continue, live stream, persistence, peer-session and interrupt
+assertions, including TestInterruptRace. Reuse native TestMain's existing close
+routine as FunctionalMonolithCleanup after children, allowing invoke/continue
+to join without weakening the classifier.
+
+The initial `-test.count=3` comparison is invalid: the baseline's package-wide
+fixture reuses request identities across repeated m.Run iterations and fails
+with request-ID conflicts. It is not a candidate regression or a performance
+sample. Correct measurement launches a fresh native process for each repetition,
+with the canonical parallelism of eight. Six fresh processes per version pass:
+baseline **15.930s CPU / 15.432s wall**, candidate **13.069s CPU / 12.470s wall**,
+**18.0% less CPU / 19.2% less wall**. This excludes build/link time. Artifacts:
+`.artifacts/invoke-continue-probe-paired` (private invalid attempt) and
+`.artifacts/latency-audit/invoke-continue-fresh-process-paired` (valid comparison).
+
+Work watch's process/profile setup becomes lazy and shared. Both native TestMain
+and FunctionalMonolithCleanup close the same selected-clock/legacy-clock
+processes after all children and then remove their owned profile root. Source-
+relative recorded-ledger fixture lookup remains unchanged and passes in the
+monolith. Remove a context-helper-only top-level probe; all customer CLI watch
+stream, child-deadline, cancellation, reconnect and retained-history cases remain.
+The existing real teardown timeout has a justified failure-ceiling comment;
+remove its single obsolete TestMain timeout baseline entry. No replacement debt
+is added. The rebuilt repository linter and focused analyzer tests pass.
+
+The first complete candidate passes in **140.95s supervisor / 134.554s coverage**,
+**451.29s CPU** (359.65 user / 91.64 system), RSS 6,639,120 KiB. Eight compilers
+consume 7.043s CPU; **20 supervisor links** consume 31.827s CPU / 31.046s union
+active wall. All 738 results, 736 passes/two skips, no retries, unchanged gates.
+Two removed framework-only results explain the count change. Compared with
+22 supervisor links before the joins, two separate binaries are removed.
+Artifact: `.artifacts/latency-audit/worker-home-and-native-joins-full`.
+
+### Hosted event source and corrective cursor-helper reuse
+
+Source f0's functional job 112202027678 succeeds in **220s complete**,
+09:29:41–09:33:21 UTC, **167.250s coverage**, all 740 results, no retries,
+110 compiler commands and 19 links after a prefix 781 archive restore. Artifact:
+`.artifacts/latency-audit/pr2923-events-single-host-hosted`.
+
+The final workflow fails Backend Lint and Frontend Browser. Deadcode's 2530
+reported findings differ from its 2528 inherited baseline by exactly the two
+new exported scoped-cursor support helpers. Correction removes the duplicate
+file and makes the existing unused cursor-error/recovery helpers require the
+explicit session ID. All callers use the same public session-scoped endpoint;
+no baseline allowance is widened. The UI failure waits ten seconds for Add
+workstation; retain the customer UI assertion and diagnose recurrence on the
+next head. Failure artifacts:
+`.artifacts/latency-audit/pr2923-events-single-host-lint` and
+`.artifacts/latency-audit/pr2923-events-single-host-ci-failure.log`.
+
+The final corrected source passes full canonical coverage in **204.98s supervisor
+/ 197.160s coverage**, **688.92 CPU-seconds** (538.75 user / 150.17 system),
+RSS 6,648,936 KiB, all 68 packages / 738 results, no retries. The shared support
+source change incurs **117 compilers / 71.866s CPU / 35.851s union active wall**;
+20 supervisor links consume **45.410s CPU / 48.517s union active wall**. Preserve
+this slower valid sample. Compilation alone does not account for all additional
+CPU, so no complete-lane improvement is claimed. Both scoped linters and all
+160 reviewed decisions pass. Artifact:
+`.artifacts/latency-audit/worker-home-and-native-joins-final`.
+## Refreshed CPU attribution after worker home and native joins
+
+The current corrected candidate passes the complete profiled lane with no
+retry. This diagnostic takes 162.52 seconds and 516.17 CPU-seconds; it is not
+a hosted checkpoint or a comparable uninstrumented timing sample. The
+monolith profile samples 351.78 CPU-seconds over 113.08 seconds. Initialization
+accounts for 204.73 cumulative CPU-seconds (58.20%), and packaged Factory
+installation accounts for 204.10 (58.02%). These overlapping stacks must not
+be summed. Two compiler commands consume 0.225 CPU-seconds; 20 supervisor
+links consume 35.120 CPU-seconds across 34.554 seconds of active wall time.
+
+| Labelled functional package | Sampled CPU seconds | Initialization CPU seconds |
+| --- | ---: | ---: |
+| product/customer_journeys | 79.29 | 63.37 |
+| product/customer_lifecycles | 58.73 | 19.88 |
+| factory/execution | 25.45 | 13.80 |
+| product/cli_rest_journeys | 19.90 | 13.48 |
+| transport/cli/customer_commands | 13.80 | 9.99 |
+| models/inference | 13.76 | 8.80 |
+| work/admission | 11.71 | 8.84 |
+| transport/mcp/worker_sessions | 10.67 | 8.72 |
+
+Package labels propagate into fixture background goroutines and cover 89.76%
+of sampled monolith CPU. They identify the next inspection targets, rather
+than establish isolated per-package regressions against older profiles.
+Customer journeys' repeated initialization is the largest remaining measured
+target. Preserve independently owned persistence/restart paths and explicitly
+isolated session routes when sharing setup. The review failure/recovery journey
+alone accounts for 30.79 sampled CPU-seconds, including actual session opening
+and Work admission that cannot be removed as fixture overhead.
+
+Raw diagnostic evidence: `.artifacts/latency-audit/worker-joined-source-cpu/`.

@@ -121,6 +121,15 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
+// FunctionalMonolithCleanup retains package teardown after all customer cases
+// have joined, matching the native TestMain lifecycle.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeInvokeContinuePackageFixture(); err != nil {
+		t.Errorf("invoke/continue package fixture cleanup failed: %v", err)
+	}
+}
+
 func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixture {
 	t.Helper()
 
@@ -300,9 +309,6 @@ func closeInvokeContinuePackageFixture() error {
 		errs = append(errs, fmt.Errorf("remove package fixture root %q: %w", fixture.rootDir, err))
 	} else if _, err := os.Stat(fixture.rootDir); !errors.Is(err, os.ErrNotExist) {
 		errs = append(errs, fmt.Errorf("package fixture root %q remains after cleanup: %v", fixture.rootDir, err))
-	}
-	if err := writeInvokeContinueForcedCleanupReport(fixture); err != nil {
-		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

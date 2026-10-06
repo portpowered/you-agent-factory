@@ -122,7 +122,7 @@ func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T,
 	unknownEventIDCursor := support.FactoryEventReadCursor{
 		AfterEventID: factoryEventsUnknownCursorEventID,
 	}
-	unknownEventIDError := support.GetFactoryEventsInvalidCursorErrorForSessionAt(t, server.URL(), sessionID, unknownEventIDCursor)
+	unknownEventIDError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), sessionID, unknownEventIDCursor)
 	assertFactoryEventsInvalidCursorError(t, unknownEventIDError.Response)
 	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownEventIDError.Body, retained)
 
@@ -130,11 +130,11 @@ func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T,
 	unknownSequenceCursor := support.FactoryEventReadCursor{
 		AfterSequence: &unknownSequence,
 	}
-	unknownSequenceError := support.GetFactoryEventsInvalidCursorErrorForSessionAt(t, server.URL(), sessionID, unknownSequenceCursor)
+	unknownSequenceError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), sessionID, unknownSequenceCursor)
 	assertFactoryEventsInvalidCursorError(t, unknownSequenceError.Response)
 	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownSequenceError.Body, retained)
 
-	recovery := support.ProbeFactoryEventStreamRecoveryForSessionAt(t, server.URL(), sessionID, unknownEventIDCursor)
+	recovery := support.ProbeFactoryEventStreamRecoveryAt(t, server.URL(), sessionID, unknownEventIDCursor)
 	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE {
 		t.Fatalf("recovery outcome = %q, want CURSOR_STALE", recovery.Outcome)
 	}

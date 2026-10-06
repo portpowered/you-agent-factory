@@ -2130,7 +2130,6 @@ testsleep-deadline-test|tests/functional/transport/cli/customer_commands_test|te
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerCommand::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerLines::deadline::1
 testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/production_ledger_test.go::waitForLedgerSignal::deadline::1
-testsleep-deadline-test|tests/functional/work/watch_test|tests/functional/work/watch/shared_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/workers/inference_test|tests/functional/workers/inference/recording_recovery_test.go::testWSRFT009InterruptedPrefix::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/workers_transports_cli_run_modes_adverse_modes_test.go::testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess::deadline::1
 testsleep-deadline-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/workstations_cron_helpers_test.go::assertCronServerStops::deadline::1
