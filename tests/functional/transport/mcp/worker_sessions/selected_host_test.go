@@ -57,6 +57,14 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runDetachedForceControl(t, process)
 	})
+	for _, phase := range []string{"intent", "result"} {
+		for _, mode := range []string{"confirmed", "failed"} {
+			t.Run("real host force persistence "+phase+" "+mode, func(t *testing.T) {
+				t.Parallel()
+				runForcePersistenceFailure(t, process, phase, mode)
+			})
+		}
+	}
 	t.Run("real host history snapshots", func(t *testing.T) {
 		t.Parallel()
 		runRealHostHistory(t, process)

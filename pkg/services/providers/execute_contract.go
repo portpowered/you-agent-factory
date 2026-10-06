@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providercontracts "github.com/portpowered/infinite-you/pkg/services/providers/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -213,9 +214,7 @@ type ExecuteRequest struct {
 // Provider execution have joined. Unsupported, expired or already claimed
 // handles return false without effects; errors never establish completion.
 // No handle is persisted, restored, or retargeted to a successor.
-type AttemptControl interface {
-	ForceKill(context.Context) (bool, error)
-}
+type AttemptControl = providercontracts.AttemptControl
 
 // AttemptControlObserver receives one exact execution handle before a Provider
 // Session reference is required. It must return promptly. An early handle may

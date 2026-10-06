@@ -15,10 +15,121 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Only kill-journal acknowledgements fail. Opening, activity, failure capture
+// and ordinary controls delegate to the production profile-owned store.
+type forcePersistenceStore struct {
+	recordings.WorkerRecordingStore
+	phase    string
+	failures atomic.Int32
+}
+
+func (s *forcePersistenceStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	if s.phase == "intent" && record.Operation.Action == "kill" {
+		s.failures.Add(1)
+		return recordings.WorkerControlOperationRecord{}, false, errors.New("secret-from-host")
+	}
+	return s.WorkerRecordingStore.BeginWorkerControlOperation(ctx, record)
+}
+
+func (s *forcePersistenceStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, revision uint64) (recordings.WorkerControlOperationRecord, error) {
+	if s.phase == "result" && record.Operation.Action == "kill" {
+		s.failures.Add(1)
+		return recordings.WorkerControlOperationRecord{}, errors.New("secret-from-host")
+	}
+	return s.WorkerRecordingStore.AdvanceWorkerControlOperation(ctx, record, revision)
+}
+
+func runForcePersistenceFailure(t *testing.T, process support.Process, phase, mode string) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "mcp-force-persistence-"+phase)
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	runner := &forceHostRunner{started: make(chan (<-chan struct{}), 4), mode: mode}
+	store := &forcePersistenceStore{phase: phase}
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
+			WorkerRecordingWriter: store, WorkerRecordingStoreObserver: func(base recordings.WorkerRecordingStore) { store.WorkerRecordingStore = base }},
+	})
+	session, ctx := startMCP(t, process, host.URL())
+	admission := controlHostRunner{started: runner.started}
+	sibling := admitControlWorker(t, ctx, host.URL(), "persistence-sibling", admission)
+	for index, first := range []string{"http", "cli", "mcp"} {
+		id := "persistence-" + first
+		done := admitControlWorker(t, ctx, host.URL(), id, admission)
+		observation := getHost(t, host.URL()+"/worker-sessions/"+id).(map[string]any)
+		attempt := observation["attemptId"].(string)
+		// Each transport admits a fresh request; the other transports repeat it.
+		assertForcePersistenceError(t, host, session, ctx, first, id, attempt)
+		if mode == "confirmed" {
+			waitControlSignal(t, done)
+		}
+		for _, transport := range []string{"http", "cli", "mcp"} {
+			assertForcePersistenceError(t, host, session, ctx, transport, id, attempt)
+		}
+		assertDegradedForceObservation(t, host, id, mode)
+		wantSignals := int32(index + 1)
+		if mode == "failed" {
+			wantSignals = 0
+			assertForceStillActive(t, host, id, done)
+			callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "TERMINATE"})
+			waitControlSignal(t, done)
+			assertForcePersistenceError(t, host, session, ctx, first, id, attempt)
+		}
+		if runner.calls.Load() != int32(index+1) || runner.signals.Load() != wantSignals {
+			t.Fatalf("degraded force repeated its effect: calls=%d signals=%d", runner.calls.Load(), runner.signals.Load())
+		}
+		assertForceStillActive(t, host, "persistence-sibling", sibling)
+	}
+	if store.failures.Load() == 0 {
+		t.Fatal("force did not reach the injected persistence failure")
+	}
+	// A sibling can still use the ordinary durable terminate path.
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "persistence-sibling", "operation": "TERMINATE"})
+	waitControlSignal(t, sibling)
+}
+
+func assertForcePersistenceError(t *testing.T, host *support.FunctionalAPIServer, session *mcp.ClientSession, ctx context.Context, transport, id, attempt string) {
+	t.Helper()
+	switch transport {
+	case "http":
+		result := postHostJSON(t, ctx, host.URL()+"/worker-sessions/"+id+"/terminate",
+			map[string]any{"force": true, "requestId": "kill-" + id, "expectedAttemptId": attempt}, http.StatusServiceUnavailable).(map[string]any)
+		if result["code"] != "WORKER_SESSION_CONTROL_FAILED" {
+			t.Fatalf("degraded force HTTP error = %v", result)
+		}
+		assertNoForceSecret(t, result)
+	case "cli":
+		assertForceCLIError(t, host, id, attempt)
+	case "mcp":
+		result := callTool(t, ctx, session, "you.worker_session.control",
+			map[string]any{"operation": "KILL", "workerSessionId": id, "requestId": "kill-" + id, "expectedAttemptId": attempt})
+		assertToolError(t, result, "worker_session.unavailable", true)
+		assertNoForceSecret(t, result)
+	}
+}
+
+func assertDegradedForceObservation(t *testing.T, host *support.FunctionalAPIServer, id, mode string) {
+	t.Helper()
+	observation := getHost(t, host.URL()+"/worker-sessions/"+id).(map[string]any)
+	state := "TERMINATED"
+	health := "DEGRADED"
+	if mode == "failed" {
+		state = "RUNNING"
+		health = "INCOMPLETE"
+	}
+	if observation["state"] != state || observation["terminalCause"] == "OPERATOR_KILL" {
+		t.Fatalf("uncommitted force observation = %v", observation)
+	}
+	if observation["recordingHealth"] != health || observation["recordingHealthReason"] != "CONTROL_OPERATION_PERSISTENCE_FAILED" {
+		t.Fatalf("force persistence loss omitted capture degradation: %v", observation)
+	}
+}
 
 // Only the process effect is controlled. Providers, Workers, recording,
 // supervision and the three customer transports use the production graph.
