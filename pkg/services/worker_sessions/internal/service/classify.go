@@ -67,6 +67,11 @@ func (a *runtimeAttempt) Complete(
 		defer close(completed)
 		a.retireProviderAttemptControl()
 		action, controlOutcome, controlHistory := a.completionState()
+		a.mu.Lock()
+		if a.forceConfirmed {
+			result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+		}
+		a.mu.Unlock()
 		r := a.registry
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
 		state, terminal := dispatchedTerminal(action, result, dispatchErr)

@@ -546,6 +546,11 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 
 func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	snapshot := supervision.completionSnapshot()
+	if snapshot.forceConfirmed {
+		// Only a confirmed owned tree kill overrides the adapter's signal-exit
+		// classification. A failed or timed-out force keeps its natural result.
+		result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	}
 	if snapshot.deadlineExceeded {
 		result = timeoutDispatchResult(result)
 		dispatchErr = workers.ErrWorkstationDispatchTimeout
@@ -570,6 +575,7 @@ func (r *registry) completeSupervision(ctx context.Context, id string, supervisi
 
 type completionSnapshot struct {
 	action           workersessions.ControlAction
+	forceConfirmed   bool
 	continuing       bool
 	dispatchID       string
 	serverOwned      bool
@@ -581,8 +587,17 @@ type completionSnapshot struct {
 func (s *supervision) completionSnapshot() completionSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A force signal does not establish terminality. Wait for confirmed tree
+	// completion (or failure) before selecting the terminal control action.
+	for s.forcePending {
+		wait := s.controlDone
+		s.mu.Unlock()
+		<-wait
+		s.mu.Lock()
+	}
 	return completionSnapshot{
 		action:           s.requestedAction,
+		forceConfirmed:   s.forceConfirmed,
 		continuing:       s.continuing,
 		dispatchID:       s.dispatchID,
 		serverOwned:      s.serverOwned,

@@ -16,6 +16,7 @@ type frozenControlTarget struct {
 	providerAttempt *providerAttemptControl
 	runtime         *runtimeAttempt
 	dispatchID      string
+	attemptID       string
 	publication     *publication
 	capture         recordings.WorkerControlTarget
 }
@@ -30,15 +31,22 @@ func (r *registry) freezeControlTarget(id string) (frozenControlTarget, error) {
 	if target.supervision != nil {
 		target.supervision.mu.Lock()
 		target.dispatchID = target.supervision.dispatchID
+		target.attemptID = target.supervision.dispatchID
 		target.providerAttempt = target.supervision.providerAttempt
 		target.supervision.mu.Unlock()
 	} else if target.runtime != nil {
 		target.dispatchID = target.runtime.dispatchID
+		target.attemptID = target.runtime.attemptID
+	} else if r.sessions[id].Terminal() {
+		target.dispatchID = r.latestRuntimeDispatchIDs[id]
 	}
 	r.mu.RUnlock()
 	if target.publication != nil {
 		target.publication.mu.Lock()
 		target.capture = target.publication.capture
+		if target.attemptID == "" {
+			target.attemptID = target.publication.terminalAttemptID
+		}
 		target.publication.mu.Unlock()
 	}
 	return target, nil

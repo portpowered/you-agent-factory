@@ -20,6 +20,9 @@ import (
 // execution remains truthfully unsupported rather than becoming a fabricated
 // resumable session.
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	if req.Force {
+		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, workersessions.ErrInvalidControlRecord
+	}
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -306,6 +309,9 @@ func (r *registry) Cancel(ctx context.Context, req workersessions.ControlRequest
 }
 
 func (r *registry) Terminate(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	if req.Force {
+		return r.forceTerminate(ctx, req)
+	}
 	return r.cancelControl(ctx, req, workersessions.ControlActionTerminate, true)
 }
 
@@ -314,6 +320,9 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 }
 
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
+	if req.Force {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, workersessions.ErrInvalidControlRecord
+	}
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -646,6 +655,8 @@ type supervision struct {
 	requestedAction    workersessions.ControlAction
 	controlAction      workersessions.ControlAction
 	controlActive      bool
+	forcePending       bool
+	forceConfirmed     bool
 	controlDone        chan struct{}
 	controlHistory     *controlHistoryReservation
 	deadlineExceeded   bool

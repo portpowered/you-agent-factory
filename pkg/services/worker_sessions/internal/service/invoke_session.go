@@ -85,6 +85,7 @@ type runtimeAttempt struct {
 	progress               workersessions.ProviderSessionObservationPublisher
 	providerControl        providers.AttemptControl
 	providerControlRetired bool
+	forceConfirmed         bool
 }
 
 // PublishRuntimeProgress resolves only the explicit scoped owner before any

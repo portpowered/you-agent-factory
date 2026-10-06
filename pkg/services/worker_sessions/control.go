@@ -41,6 +41,10 @@ const (
 type ControlRequest struct {
 	ID        string
 	RequestID string
+	// Force selects exact owned process termination. Both caller identities
+	// are mandatory; ExpectedAttemptID is physical, not a Factory dispatch.
+	Force             bool
+	ExpectedAttemptID string
 	// FactorySessionID optionally selects the immutable owning Factory Session.
 	// Runtime controls supply it; direct identity-only callers leave it empty.
 	FactorySessionID string
@@ -50,6 +54,10 @@ type ControlRequest struct {
 func (req ControlRequest) Validate() error {
 	if !validSessionID(req.ID) || (req.FactorySessionID != "" && strings.TrimSpace(req.FactorySessionID) == "") {
 		return ErrInvalidSessionID
+	}
+	if (req.Force && (strings.TrimSpace(req.RequestID) == "" || strings.TrimSpace(req.ExpectedAttemptID) == "")) ||
+		(!req.Force && req.ExpectedAttemptID != "") {
+		return fmt.Errorf("%w: force requires request and physical attempt identities", ErrInvalidControlRecord)
 	}
 	return nil
 }
@@ -118,6 +126,7 @@ type ControlResult struct {
 	Action     ControlAction
 	Outcome    ControlOutcome
 	DispatchID string
+	Forced     bool `json:",omitempty"`
 }
 
 // InterruptPhase identifies the authoritative boundary at which an interrupt

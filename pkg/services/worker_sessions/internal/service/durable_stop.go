@@ -66,12 +66,17 @@ func stopIntent(req workersessions.ControlRequest, action workersessions.Control
 	if target.runtime != nil {
 		capture.ExpectedAttemptID = target.runtime.attemptID
 	}
+	operationAction := strings.ToLower(string(action))
+	if req.Force {
+		capture.ExpectedAttemptID = req.ExpectedAttemptID
+		operationAction = "kill"
+	}
 	// Only the immutable address/action is hashed. No provider content or secret
 	// is needed for the bodyless stop request. JSON avoids delimiter collisions.
 	input, _ := json.Marshal(struct {
 		Target recordings.WorkerControlTarget
-		Action workersessions.ControlAction
-	}{capture, action})
+		Action string
+	}{capture, operationAction})
 	digest := sha256.Sum256(input)
 	encoded := hex.EncodeToString(digest[:])
 	key := req.RequestID
@@ -82,7 +87,7 @@ func stopIntent(req workersessions.ControlRequest, action workersessions.Control
 		Target: capture, Revision: 1,
 		Operation: recordings.WorkerControlOperation{
 			Version: 1, RequestID: key, WorkerSessionID: capture.WorkerSessionID,
-			ExpectedAttemptID: capture.ExpectedAttemptID, Action: strings.ToLower(string(action)), Phase: "INTENT", InputDigest: encoded,
+			ExpectedAttemptID: capture.ExpectedAttemptID, Action: operationAction, Phase: "INTENT", InputDigest: encoded,
 		},
 	}
 }

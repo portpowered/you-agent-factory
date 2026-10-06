@@ -73,9 +73,11 @@ func committedPlainStopCause(record recordings.WorkerControlOperationRecord, sta
 	}
 	var cause string
 	switch {
-	case record.Operation.Action == "cancel" && result.Action == workersessions.ControlActionCancel && state == workersessions.StateCanceled:
+	case record.Operation.Action == "kill" && result.Forced && result.Action == workersessions.ControlActionTerminate && state == workersessions.StateTerminated:
+		cause = "OPERATOR_KILL"
+	case record.Operation.Action == "cancel" && !result.Forced && result.Action == workersessions.ControlActionCancel && state == workersessions.StateCanceled:
 		cause = "OPERATOR_CANCEL"
-	case record.Operation.Action == "terminate" && result.Action == workersessions.ControlActionTerminate && state == workersessions.StateTerminated:
+	case record.Operation.Action == "terminate" && !result.Forced && result.Action == workersessions.ControlActionTerminate && state == workersessions.StateTerminated:
 		cause = "OPERATOR_TERMINATE"
 	default:
 		return nil
