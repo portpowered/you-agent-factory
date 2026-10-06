@@ -123,6 +123,10 @@ func validateKillResponse(result any, id string) (any, *toolError) {
 	if !slices.Contains([]string{"APPLIED", "NOOP", "UNSUPPORTED", "FAILED"}, value.Outcome) || !slices.Contains([]string{"RESERVED", "STARTING", "RUNNING", "PAUSED", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}, value.State) {
 		return nil, malformedResponse(id)
 	}
+	if (value.Outcome == "APPLIED" && value.State != "TERMINATED") ||
+		(value.Outcome == "NOOP" && !slices.Contains([]string{"COMPLETED", "FAILED", "CANCELED", "TERMINATED"}, value.State)) {
+		return nil, malformedResponse(id)
+	}
 	return result, nil
 }
 

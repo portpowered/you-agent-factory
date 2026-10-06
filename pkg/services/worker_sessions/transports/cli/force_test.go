@@ -118,3 +118,59 @@ func TestForceCLIUnconfirmedDeadlineIsFailure(t *testing.T) {
 	err := mapControlServiceError(errors.Join(workersessions.ErrForceTerminationUnconfirmed, context.DeadlineExceeded))
 	assertCLIErrorCode(t, err, "WORKER_SESSION_CONTROL_FAILED")
 }
+
+func TestForceCLIRemoteRequiresOutcomeConsistentWithJoinedState(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		outcome, state string
+		valid          bool
+	}{
+		{"APPLIED", "TERMINATED", true},
+		{"APPLIED", "RUNNING", false},
+		{"APPLIED", "FAILED", false},
+		{"NOOP", "COMPLETED", true},
+		{"NOOP", "FAILED", true},
+		{"NOOP", "CANCELED", true},
+		{"NOOP", "TERMINATED", true},
+		{"NOOP", "RUNNING", false},
+		{"NOOP", "PAUSED", false},
+		{"UNSUPPORTED", "RUNNING", true},
+		{"FAILED", "RUNNING", true},
+	} {
+		t.Run(test.outcome+"/"+test.state, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			protocol := &forceProtocolStub{execute: func(request *http.Request) (clihttp.Response, error) {
+				calls++
+				assertForceCLIHTTPRequest(t, request)
+				body, err := json.Marshal(map[string]any{
+					"workerSessionId": "worker-1", "action": "TERMINATE", "forced": true,
+					"outcome": test.outcome, "state": test.state, "dispatchId": "logical-dispatch",
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body))}}, nil
+			}}
+			local := &controlLocalFake{}
+			var output bytes.Buffer
+			config := forceCLIConfig(&output)
+			config.Remote, config.Server = true, "http://factory.test"
+			err := NewControl(protocol, local)(config)
+			if test.valid {
+				if err != nil {
+					t.Fatal(err)
+				}
+				var result factoryapi.WorkerSessionControlResponse
+				if err := json.Unmarshal(output.Bytes(), &result); err != nil || string(result.Outcome) != test.outcome || string(result.State) != test.state || result.DispatchId != "logical-dispatch" {
+					t.Fatalf("force response changed: %s, %v", output.Bytes(), err)
+				}
+			} else {
+				assertCLIErrorCode(t, err, "WORKER_SESSION_CONTROL_FAILED")
+			}
+			if calls != 1 || local.calls != 0 {
+				t.Fatalf("remote/local calls = %d/%d", calls, local.calls)
+			}
+		})
+	}
+}

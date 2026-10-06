@@ -388,6 +388,10 @@ func TestWorkerSessionKillSelectedHostResults(t *testing.T) {
 		{"wrong target", 200, `{"workerSessionId":"other","action":"TERMINATE","forced":true,"outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "internal_error", false},
 		{"false force", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":false,"outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "internal_error", false},
 		{"missing result", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true}`, "internal_error", false},
+		{"applied without terminal join", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"APPLIED","state":"RUNNING","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"applied natural failure", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"APPLIED","state":"FAILED","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"noop active", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"NOOP","state":"RUNNING","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"noop natural failure", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"NOOP","state":"FAILED","dispatchId":"logical-dispatch"}`, "", false},
 		{"stale attempt", 409, `{"code":"WORKER_SESSION_CONTROL_CONFLICT"}`, "conflict", false},
 		{"unconfirmed join", 503, `{"code":"WORKER_SESSION_CONTROL_FAILED","message":"private runner details"}`, "unavailable", true},
 		{"host unavailable", 0, `{"message":"private connection details"}`, "host_unavailable", true},
@@ -442,8 +446,8 @@ func assertKillResult(t *testing.T, value map[string]any, body, code string, ret
 			t.Fatalf("kill response changed: %s, want %s", got, want)
 		}
 	} else {
-		failure := value["error"].(map[string]any)
-		if value["result"] != nil || failure["code"] != "worker_session."+code || failure["retryable"] != retryable {
+		failure, ok := value["error"].(map[string]any)
+		if !ok || value["result"] != nil || failure["code"] != "worker_session."+code || failure["retryable"] != retryable {
 			t.Fatalf("kill failure = %v", value)
 		}
 		raw, _ := json.Marshal(value)

@@ -652,6 +652,10 @@ func requestRemoteControl(config ControlConfig) (factoryapi.WorkerSessionControl
 	if config.Force && (apiResult.Forced == nil || !*apiResult.Forced) {
 		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_CONTROL_FAILED", "remote host did not confirm force mode", nil)
 	}
+	if config.Force && ((apiResult.Outcome == factoryapi.WorkerSessionControlResponseOutcomeApplied && workersessions.State(apiResult.State) != workersessions.StateTerminated) ||
+		(apiResult.Outcome == factoryapi.WorkerSessionControlResponseOutcomeNoop && !workersessions.State(apiResult.State).Terminal())) {
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_CONTROL_FAILED", "remote host did not confirm joined force completion", nil)
+	}
 	return apiResult, nil
 }
 
