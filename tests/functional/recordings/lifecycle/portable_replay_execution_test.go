@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -804,12 +805,17 @@ func TestReadOnlyHistoricalInspection(t *testing.T) {
 	t.Parallel()
 	var service recordings.Service
 	var providerRuns, writes atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		RecordingsRootObserver: func(root recordings.Service) { service = root },
 		RecordingReadFile:      os.ReadFile,
 		RecordingWriteFile:     func(string, []byte) error { writes.Add(1); return errors.New("unexpected historical write") },
 		ProviderCommandRunner:  functionalReplayCommandRunner{calls: &providerRuns},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.CleanupProcess(t, process)
+	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
 	t.Cleanup(func() {
 		if writes.Load() != 0 || providerRuns.Load() != 0 {
 			t.Errorf("read-only scenarios admitted live effects: writes=%d provider=%d", writes.Load(), providerRuns.Load())
@@ -823,6 +829,118 @@ func TestReadOnlyHistoricalInspection(t *testing.T) {
 		t.Parallel()
 		assertEmptyRecordingInspection(t, process, service)
 	})
+	t.Run("selected concurrent reads and peer release", func(t *testing.T) {
+		t.Parallel()
+		assertSelectedReplayPeers(t, process, sessions)
+	})
+}
+
+// F17F-1 and the ordinary release portion of F17F-7 use two simultaneously
+// held CLI inspections on the same process, each with selected durable reads.
+func assertSelectedReplayPeers(t *testing.T, process support.Process, sessions factorysessions.Service) {
+	t.Helper()
+	type peer struct {
+		id, path string
+		payload  []byte
+		done     <-chan error
+		release  func()
+	}
+	peers := make([]peer, 2)
+	for i := range peers {
+		id := fmt.Sprintf("session-js-selected-%s-%d", filepath.Base(t.TempDir()), i)
+		payload := functionalPortableReplayPayloadForSessionSource(t, id, "workflow/"+id+".js")
+		dir := t.TempDir()
+		path := filepath.Join(dir, "selected.json")
+		if err := os.WriteFile(path, payload, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
+		var once sync.Once
+		release := func() { once.Do(func() { close(writer.release) }) }
+		inputs := recordingContinuationInputs(t, dir, t.TempDir(), []string{"--replay", path, "--no-record"}, false)
+		inputs.Input.Args = []string{"you", "run", "--dir", dir, "--session", id + "-inspection", "--replay", path, "--no-record"}
+		inputs.Input.WorkingDirectory = dir
+		inputs.Input.Stdout = writer
+		peers[i] = peer{id: id, path: path, payload: payload, release: release,
+			done: executeGatedRecordingCommand(t, process, inputs, release)}
+		select {
+		case <-writer.entered:
+		case err := <-peers[i].done:
+			t.Fatalf("selected inspection returned before readiness: %v; %s", err, inputs.Stderr())
+		case <-time.After(10 * time.Second):
+			t.Fatal("selected inspection did not become ready")
+		}
+	}
+	for _, selected := range peers {
+		assertSelectedReplayRead(t, sessions, selected.id)
+	}
+	// Releasing one owned opening must preserve the other selected route.
+	peers[0].release()
+	assertSelectedReplayCommandJoined(t, peers[0].done)
+	assertSelectedReplayRead(t, sessions, peers[1].id)
+	peers[1].release()
+	assertSelectedReplayCommandJoined(t, peers[1].done)
+	for _, selected := range peers {
+		after, err := os.ReadFile(selected.path)
+		if err != nil || !bytes.Equal(after, selected.payload) {
+			t.Fatalf("selected replay changed source %s: %v", selected.id, err)
+		}
+	}
+}
+
+func assertSelectedReplayCommandJoined(t *testing.T, done <-chan error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("selected replay cleanup: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("selected replay cleanup did not join")
+	}
+}
+
+func assertSelectedReplayRead(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
+	read, err := sessions.GetSession(t.Context(), id)
+	if err != nil || read.SessionID != id || read.ResolvedSource.SourceRef != "workflow/"+id+".js" || read.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("selected session %s: %#v, %v", id, read, err)
+	}
+	for _, mode := range []factorysessions.ResultMode{factorysessions.ResultModeFinal, factorysessions.ResultModePartial} {
+		for _, include := range []bool{false, true} {
+			result, resultErr := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: mode, IncludeArtifacts: include})
+			if resultErr != nil || result.SessionID != id || result.Mode != mode || result.IncludeArtifacts != include || (len(result.ArtifactRefs) == 1) != include || string(result.PrimaryResult) != `{"answer":"done"}` {
+				t.Fatalf("selected result %s mode=%s include=%t: %#v, %v", id, mode, include, result, resultErr)
+			}
+			result.PrimaryResult[0] = ' '
+		}
+	}
+	artifacts, err := sessions.ListArtifacts(t.Context(), id)
+	if err != nil || artifacts.SessionID != id || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].ID != "artifact-1" {
+		t.Fatalf("selected artifacts %s: %#v, %v", id, artifacts, err)
+	}
+	artifacts.Artifacts[0].ID = "caller-mutated"
+	artifact, err := sessions.GetArtifact(t.Context(), id, "artifact-1")
+	if err != nil || artifact.SessionID != id || artifact.ID != "artifact-1" || len(artifact.Content) != 0 {
+		t.Fatalf("selected redacted artifact %s: %#v, %v", id, artifact, err)
+	}
+	sequence := 0
+	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{AfterSequence: &sequence})
+	if err != nil || events.SessionID != id || len(events.Events) != 2 {
+		t.Fatalf("selected reconnect %s: %#v, %v", id, events, err)
+	}
+	for i, raw := range events.Events {
+		var event struct {
+			ID      string `json:"id"`
+			Context struct {
+				SessionID string `json:"sessionId"`
+				Sequence  int    `json:"sequence"`
+			} `json:"context"`
+		}
+		if err := json.Unmarshal(raw, &event); err != nil || event.Context.Sequence != i+1 || event.ID != fmt.Sprintf("event-%d", i+2) {
+			t.Fatalf("selected event %s: %s, %v", id, raw, err)
+		}
+	}
 }
 
 func assertHistoricalReadKeepsTypedCauses(t *testing.T, process support.Process, service recordings.Service) {

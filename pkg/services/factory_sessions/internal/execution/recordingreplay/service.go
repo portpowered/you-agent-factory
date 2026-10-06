@@ -29,7 +29,7 @@ type Scope struct {
 }
 
 func (b *Behavior) Acquire(projection RecordingReplayProjection, live fse.Service) *Scope {
-	return &Scope{behavior: b, projection: projection, live: live}
+	return &Scope{behavior: b, projection: copyProjection(projection), live: live}
 }
 
 // Inspection returns the complete public read model for the recording. The
@@ -40,11 +40,11 @@ func (b *Behavior) Inspection(s *Scope) factorysessions.HistoricalReplayInspecti
 		return factorysessions.HistoricalReplayInspection{}
 	}
 	inspection := factorysessions.HistoricalReplayInspection{
-		Session:       s.projection.Session,
-		Events:        s.projection.Events,
-		Artifacts:     s.projection.Artifacts,
-		Result:        s.projection.Result,
-		WorkerHistory: s.projection.WorkerHistory,
+		Session:       copySession(s.projection.Session),
+		Events:        fse.EventReadResult{SessionID: s.projection.Events.SessionID, Events: copyEvents(s.projection.Events.Events)},
+		Artifacts:     copyArtifacts(s.projection.Artifacts),
+		Result:        copyResult(s.projection.Result),
+		WorkerHistory: copyWorkerHistory(s.projection.WorkerHistory),
 		Redaction: factorysessions.HistoricalReplayRedaction{
 			RuntimeStateOmitted:        s.projection.Redaction.RuntimeStateOmitted,
 			CheckpointBodiesOmitted:    s.projection.Redaction.CheckpointBodiesOmitted,
@@ -152,7 +152,7 @@ func (b *Behavior) GetSession(s *Scope, ctx context.Context, id string) (fse.Ses
 	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.GetSession(ctx, id)
 	}
-	return s.projection.Session, nil
+	return copySession(s.projection.Session), nil
 }
 func (b *Behavior) Pause(s *Scope, ctx context.Context, id string, request fse.ControlRequest) (fse.LifecycleControlResult, error) {
 	owner, err := s.handedOffOwnerForSessionOperation(id)
@@ -220,7 +220,7 @@ func (b *Behavior) GetResult(s *Scope, ctx context.Context, id string, req fse.R
 	if err != nil {
 		return fse.ResultReadResult{}, err
 	}
-	result := s.projection.Result
+	result := copyResult(s.projection.Result)
 	result.Mode = normalized.Mode
 	result.IncludeArtifacts = normalized.IncludeArtifacts
 	if !normalized.IncludeArtifacts {
@@ -270,7 +270,7 @@ func (b *Behavior) ListArtifacts(s *Scope, ctx context.Context, id string) (fse.
 	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
 		return owner.ListArtifacts(ctx, id)
 	}
-	return s.projection.Artifacts, nil
+	return copyArtifacts(s.projection.Artifacts), nil
 }
 func (b *Behavior) GetArtifact(s *Scope, ctx context.Context, id, artifactID string) (fse.ArtifactDetail, error) {
 	if err := s.session(id); err != nil {
@@ -281,7 +281,7 @@ func (b *Behavior) GetArtifact(s *Scope, ctx context.Context, id, artifactID str
 	}
 	for _, artifact := range s.projection.Artifacts.Artifacts {
 		if artifact.ID == artifactID {
-			return fse.ArtifactDetail{ArtifactSummary: artifact, SessionID: id}, nil
+			return fse.ArtifactDetail{ArtifactSummary: copyArtifact(artifact), SessionID: id}, nil
 		}
 	}
 	return fse.ArtifactDetail{}, fse.ErrArtifactNotFound
@@ -294,12 +294,12 @@ func (b *Behavior) ReadEvents(s *Scope, ctx context.Context, id string, req fse.
 		return owner.ReadEvents(ctx, id, req)
 	}
 	events, err := fse.FilterEventsAfterReconnect(s.projection.Events.Events, req, id)
-	return fse.EventReadResult{SessionID: id, Events: events}, err
+	return fse.EventReadResult{SessionID: id, Events: copyEvents(events)}, err
 }
 func (b *Behavior) ListSessions(s *Scope, ctx context.Context, request fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
 	if owner, handedOff := s.handedOffOwner(); handedOff {
 		return owner.ListSessions(ctx, request)
 	}
-	session := s.projection.Session
+	session := copySession(s.projection.Session)
 	return fse.ListSessionsResult{DurableSessions: []fse.DurableSessionListSummary{{SessionID: session.SessionID, Status: session.Status, OrchestratorKind: session.OrchestratorKind, ResolvedSource: session.ResolvedSource, SourceHash: session.SourceHash, Policy: session.Policy, ResultSummary: session.ResultSummary, ArtifactCount: session.ArtifactCount, Lifecycle: session.Lifecycle, Links: session.Links}}}, nil
 }
