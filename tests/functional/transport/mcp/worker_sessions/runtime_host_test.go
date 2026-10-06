@@ -542,7 +542,14 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	assertFactoryCLIParity(t, reopened, "lost-worker", selected)
 	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
 	assertIncompleteLogsPolling(t, recoveredCtx, recoveredSession, reopened)
-	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.control", map[string]any{"workerSessionId": "lost-worker", "operation": "CANCEL"}), "worker_session.not_found", false)
+	// This epoch-only opening has no affirmative OS death witness. It cannot
+	// acquire stop authority or the witnessed OWNER_LOST refusal semantics.
+	for _, action := range []string{"cancel", "terminate"} {
+		assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.control", map[string]any{"workerSessionId": "lost-worker", "operation": strings.ToUpper(action)}), "worker_session.not_found", false)
+		assertUnwitnessedHistoryControlRefused(t, reopened, "lost-worker", action)
+	}
+	assertJSONEqual(t, selected, getHost(t, reopened.URL()+"/worker-sessions/lost-worker"))
+	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
 	assertToolError(t, callTool(t, recoveredCtx, recoveredSession, "you.worker_session.read", map[string]any{"workerSessionId": "damaged-worker"}), "worker_session.internal_error", false)
 	assertHistoryReadFailure(t, reopened, "damaged-worker", http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
 	// An independent profile has no captured identity and cannot consume either
@@ -648,6 +655,33 @@ func assertHistoryReadFailure(t *testing.T, host *support.FunctionalAPIServer, i
 	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "show", "--worker-session-id", id, "--server", host.URL(), "--json"})
 	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(inputs.Stderr(), code) {
 		t.Fatalf("CLI selected history error: %v %s", err, inputs.Stderr())
+	}
+}
+
+func assertUnwitnessedHistoryControlRefused(t *testing.T, host *support.FunctionalAPIServer, id, action string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, host.URL()+"/worker-sessions/"+id+"/"+action, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var diagnostic factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNotFound || string(diagnostic.Code) != "NOT_FOUND" {
+		t.Fatalf("unwitnessed HTTP %s refusal: %d %+v", action, response.StatusCode, diagnostic)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", host.URL(), "--json", "worker-sessions", action, id})
+	var cliDiagnostic struct {
+		Code string `json:"code"`
+	}
+	if err := host.Execute(t, inputs.Input); err == nil || json.Unmarshal([]byte(inputs.Stderr()), &cliDiagnostic) != nil || cliDiagnostic.Code != "NOT_FOUND" || inputs.Stdout() != "" {
+		t.Fatalf("unwitnessed CLI %s refusal: %v stdout=%s stderr=%s", action, err, inputs.Stdout(), inputs.Stderr())
 	}
 }
 
