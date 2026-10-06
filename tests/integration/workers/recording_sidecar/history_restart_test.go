@@ -6,15 +6,20 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -22,6 +27,16 @@ import (
 // host processes using one isolated profile; no test process hydrates captures.
 func TestWorkerSessionHistoryRestart(t *testing.T) {
 	t.Parallel()
+	for _, name := range []string{"originating-artifact", "legacy-unavailable", "legacy-current-board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runWorkerSessionHistoryRestart(t, name)
+		})
+	}
+}
+
+func runWorkerSessionHistoryRestart(t *testing.T, mode string) {
+	t.Helper()
 	binary := os.Getenv("INFINITE_YOU_PREBUILT_ARTIFACT")
 	if binary == "" {
 		if os.Getenv("INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT") == "1" {
@@ -51,14 +66,62 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 	}
 	env := cleanupEnvironment(home, temp)
 	factory := writeCleanupFactory(t, project, node, filepath.Join(project, "ready"), filepath.Join(project, "release"))
+	renameHistorySeed(t, factory)
 	if err := os.WriteFile(filepath.Join(project, "worker.cjs"), []byte("console.log('history-restart COMPLETE');"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
-	historyCLI(t, ctx, binary, project, env, "run", "--dir", factory, "--quiet")
+	runArgs := []string{"run", "--dir", factory, "--quiet"}
+	var readerArgs []string
+	if mode == "legacy-current-board" {
+		board := filepath.Join(project, "board.json")
+		scope := uuid.NewString()
+		// Select the same scoped path as the configured-board lookup policy.
+		// Readers own a different scope so they inspect the closed execution
+		// without restoring its runtime observations as live handles.
+		runArgs = append(runArgs, "--session", scope, "--record", filepath.Join(project, "board."+scope+".json"))
+		readerArgs = []string{"--dir", factory, "--record", board, "--continuously"}
+	}
+	historyCLI(t, ctx, binary, project, env, runArgs...)
 	// Startup watches the Current Factory inputs. Consume this test-owned seed
 	// explicitly so restarting the host cannot submit another attempt.
+	removeHistorySeeds(t, factory)
+	// No native provider files exist: script output is captured by production
+	// wiring. Replace their conventional directories with unreadable file paths
+	// so a future provider-file fallback cannot supply this replay.
+	for _, name := range []string{".codex", ".cursor", ".claude"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte("not a provider directory"), 0o000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if mode != "originating-artifact" {
+		removeHistoryOriginatingArtifact(t, project)
+	}
+	first := startHistoryHost(t, ctx, binary, project, env, readerArgs...)
+	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url, mode == "legacy-unavailable")
+	first.stop(t, ctx, binary, project, env)
+	second := startHistoryHost(t, ctx, binary, project, env, readerArgs...)
+	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url, mode == "legacy-unavailable")
+	second.stop(t, ctx, binary, project, env)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
+	}
+}
+
+func renameHistorySeed(t *testing.T, factory string) {
+	t.Helper()
+	seeds, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
+	if err != nil || len(seeds) != 1 {
+		t.Fatalf("known-name seed = %v, %v", seeds, err)
+	}
+	if err := os.Rename(seeds[0], filepath.Join(filepath.Dir(seeds[0]), "seed-archived-name.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func removeHistorySeeds(t *testing.T, factory string) {
+	t.Helper()
 	seeds, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -68,28 +131,81 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// No native provider files exist: script output is captured by production
-	// wiring. Replace their conventional directories with unreadable file paths
-	// so a future provider-file fallback cannot supply this replay.
-	for _, name := range []string{".codex", ".cursor", ".claude"} {
-		if err := os.WriteFile(filepath.Join(home, name), []byte("not a provider directory"), 0o000); err != nil {
-			t.Fatal(err)
-		}
-	}
-	first := startHistoryHost(t, ctx, binary, project, env)
-	before := readHistorySnapshot(t, ctx, binary, project, env, first.url)
-	first.stop(t, ctx, binary, project, env)
-	second := startHistoryHost(t, ctx, binary, project, env)
-	after := readHistorySnapshot(t, ctx, binary, project, env, second.url)
-	second.stop(t, ctx, binary, project, env)
-	if !reflect.DeepEqual(before, after) {
-		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
-	}
 }
 
 type historySnapshot struct {
 	Observation api.WorkerSessionObservation
 	Logs        api.WorkerSessionLogPage
+}
+
+func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string, legacy bool) historySnapshot {
+	t.Helper()
+	snapshot := readHistorySnapshot(t, ctx, binary, project, env, server)
+	observation := snapshot.Observation
+	if observation.WorkId == nil || *observation.WorkId == "" {
+		t.Fatalf("archived Work identity = %+v", observation)
+	}
+	if legacy && (observation.WorkName != nil || observation.Provider != nil) {
+		t.Fatalf("legacy capture without an available scoped artifact borrowed attribution: %+v", observation)
+	}
+	if !legacy && (observation.WorkName == nil || *observation.WorkName != "seed-archived-name") {
+		t.Fatalf("archived known name = %+v", observation)
+	}
+	table := historyCLI(t, ctx, binary, project, env, "--server", server, "worker-sessions", "list", "--history", "archived")
+	if !legacy && !bytes.Contains(table, []byte("seed-archived-name")) {
+		t.Fatalf("archived table lost Work name: %s", table)
+	}
+	if legacy {
+		lines := strings.Split(strings.TrimSpace(string(table)), "\n")
+		if len(lines) != 2 || len(strings.Fields(lines[1])) < 4 || strings.Fields(lines[1])[0] != "-" {
+			t.Fatalf("legacy unavailable Work marker: %s", table)
+		}
+	}
+	return snapshot
+}
+
+// Downgrade only the test-owned persisted capture to its pre-provenance shape.
+// All real admissions, canonical history, identities and captured logs survive.
+// Readers exercise both a validated configured-board candidate and the
+// authorized unavailable result when no candidate is configured.
+func removeHistoryOriginatingArtifact(t *testing.T, home string) {
+	t.Helper()
+	removed := 0
+	err := filepath.WalkDir(home, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		if !strings.HasSuffix(path, ".worker.jsonl") && filepath.Base(filepath.Dir(path)) != "catalog" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		lines := bytes.Split(data, []byte("\n"))
+		for i, line := range lines {
+			if len(bytes.TrimSpace(line)) == 0 {
+				continue
+			}
+			var record map[string]json.RawMessage
+			if err := json.Unmarshal(line, &record); err != nil {
+				return err
+			}
+			if _, ok := record["originatingArtifact"]; !ok {
+				continue
+			}
+			delete(record, "originatingArtifact")
+			removed++
+			lines[i], err = json.Marshal(record)
+			if err != nil {
+				return err
+			}
+		}
+		return os.WriteFile(path, bytes.Join(lines, []byte("\n")), 0o600)
+	})
+	if err != nil || removed < 2 {
+		t.Fatalf("legacy capture downgrade: removed=%d error=%v", removed, err)
+	}
 }
 
 func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
@@ -103,7 +219,18 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 		t.Fatalf("archived sessions = %+v", rows.Sessions)
 	}
 	observation := rows.Sessions[0]
-	if observation.State != "COMPLETED" || observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
+	selected := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId)
+	var selectedObservation api.WorkerSessionObservation
+	if err := json.Unmarshal(selected, &selectedObservation); err != nil {
+		t.Fatalf("selected archived observation = %s, %v", selected, err)
+	}
+	if !reflect.DeepEqual(observation, selectedObservation) {
+		t.Fatalf("list/show disagree: list=%+v show=%+v", observation, selectedObservation)
+	}
+	assertHistoryHTTP(t, ctx, server, observation)
+
+	if observation.State != "COMPLETED" || observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" ||
+		observation.TerminalCause == nil || *observation.TerminalCause != api.WorkerSessionTerminalCauseCompleted {
 		t.Fatalf("ended history = %+v", observation)
 	}
 	active := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "list", "--history", "active")
@@ -111,7 +238,106 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 		t.Fatalf("dead execution became active: %s (%v)", active, err)
 	}
 	page := readHistoryLogs(t, ctx, binary, project, env, server, observation.WorkerSessionId)
+	assertHistoryMCP(t, ctx, binary, project, env, server, observation, page)
 	return historySnapshot{Observation: observation, Logs: page}
+}
+
+func assertHistoryHTTP(t *testing.T, ctx context.Context, server string, observation api.WorkerSessionObservation) {
+	t.Helper()
+	for _, path := range []string{"/worker-sessions?history=archived", "/worker-sessions/" + observation.WorkerSessionId} {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var selected api.WorkerSessionObservation
+		if path == "/worker-sessions?history=archived" {
+			var page api.ListWorkerSessionsResponse
+			err = json.NewDecoder(response.Body).Decode(&page)
+			if len(page.Sessions) != 1 {
+				t.Errorf("HTTP archived membership: %+v", page)
+			} else {
+				selected = page.Sessions[0]
+			}
+		} else {
+			err = json.NewDecoder(response.Body).Decode(&selected)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK || err != nil || !reflect.DeepEqual(observation, selected) {
+			t.Fatalf("HTTP %s disagrees with CLI: status=%d error=%v observation=%+v", path, response.StatusCode, err, selected)
+		}
+	}
+}
+
+func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
+	t.Helper()
+	command := exec.CommandContext(ctx, binary, "--server", server, "server", "mcp")
+	command.Dir, command.Env = project, env
+	var diagnostics bytes.Buffer
+	command.Stderr = &diagnostics
+	client := mcp.NewClient(&mcp.Implementation{Name: "archived-name-restart", Version: "test"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatalf("MCP connect: %v", err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			t.Errorf("MCP close: %v", err)
+		}
+	}()
+	for _, action := range []string{"LIST", "READ", "logs"} {
+		args := map[string]any{"action": action}
+		if action == "LIST" {
+			args["history"] = "archived"
+		} else {
+			args["workerSessionId"] = observation.WorkerSessionId
+		}
+		if action == "logs" {
+			args["action"], args["view"], args["limit"] = "READ", "logs", 1000
+		}
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+		if err != nil || result.IsError || len(result.Content) != 1 {
+			t.Fatalf("MCP %s: result=%+v error=%v", action, result, err)
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok {
+			t.Fatalf("MCP %s content: %T", action, result.Content[0])
+		}
+		assertHistoryMCPResult(t, action, content.Text, observation, logs)
+	}
+}
+
+func assertHistoryMCPResult(t *testing.T, action, payload string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
+	t.Helper()
+	var envelope struct {
+		Result struct {
+			Sessions []api.WorkerSessionObservation `json:"sessions"`
+			Session  api.WorkerSessionObservation   `json:"session"`
+			Logs     api.WorkerSessionLogPage       `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if action == "logs" {
+		if !reflect.DeepEqual(logs, envelope.Result.Logs) {
+			t.Fatalf("MCP logs changed ordered captured replay: %s", payload)
+		}
+		return
+	}
+	selected := envelope.Result.Session
+	if action == "LIST" {
+		if len(envelope.Result.Sessions) != 1 {
+			t.Fatalf("MCP archived membership: %s", payload)
+		}
+		selected = envelope.Result.Sessions[0]
+	}
+	if !reflect.DeepEqual(observation, selected) {
+		t.Fatalf("MCP %s disagrees with CLI: %+v", action, selected)
+	}
 }
 
 func readHistoryLogs(t *testing.T, ctx context.Context, binary, project string, env []string, server, id string) api.WorkerSessionLogPage {

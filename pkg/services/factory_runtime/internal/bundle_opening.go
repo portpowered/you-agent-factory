@@ -162,6 +162,7 @@ func (opening *BundleOpening) Open(
 		skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride,
 		opening.requestResolver, mockWorkersConfig,
 	)
+	attempts := artifactWorkerAttempts{WorkerAttemptOpener: opening.workerAttempts, artifact: spec.RecordPath}
 	bundle, err := opening.runtimeBuild(
 		ctx,
 		spec.BaseLogger,
@@ -193,8 +194,8 @@ func (opening *BundleOpening) Open(
 		recordFlushInterval,
 		spec.ResumeCanonicalEvents,
 		workerServiceWithProgress,
-		runtimeWorkerSessionBoundary{Service: opening.workerSessions, opener: opening.workerAttempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: opening.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
-		opening.workerAttempts,
+		runtimeWorkerSessionBoundary{Service: opening.workerSessions, opener: attempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: opening.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
+		attempts,
 		dispatchCompleted,
 		mockWorkersConfig,
 	)

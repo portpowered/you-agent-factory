@@ -173,6 +173,7 @@ type SessionState struct {
 	Clock          factoryruntime.Clock
 	// ProjectionBackendScope retains the opening override as a keyed fact.
 	ProjectionBackendScope string
+	CurrentBoardRecordPath string
 	OperatorSettingsPath   string
 	Recordings             recordings.Service
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
@@ -212,6 +213,7 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	s.Reader = previous.Reader
 	s.Projections = previous.Projections
 	s.Clock = previous.Clock
+	s.CurrentBoardRecordPath = previous.CurrentBoardRecordPath
 	s.OperatorSettingsPath = previous.OperatorSettingsPath
 	s.Recordings = previous.Recordings
 	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), previous.ReplayMetadataWarnings...)

@@ -60,6 +60,12 @@ func (service *Service) QueryHistoricalRecording(
 		}
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(kind, identity, "", err)
 	}
+	if request.InferFactorySessionScope {
+		identity, err = inferRecordedScope(payload, identity)
+		if err != nil {
+			return recordings.HistoricalRecordingQueryResult{}, err
+		}
+	}
 	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err

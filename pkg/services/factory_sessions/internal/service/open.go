@@ -602,6 +602,7 @@ func (r *Root) bindSessionOpeningProducts(
 		opened.runtimeInstanceID,
 		opening.configured.Recordings.RecordPath,
 	)
+	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
 	opened.operatorSettingsPath = opening.operatorSettingsPath
 	opened.workerSettings = opening.durableExecution.WorkerSettings
 	opened.replayMetadataWarnings = append(

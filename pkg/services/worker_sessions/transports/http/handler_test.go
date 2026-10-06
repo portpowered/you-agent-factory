@@ -95,7 +95,7 @@ func TestTerminateForceHTTPRejectsInvalidPayloadBeforeControl(t *testing.T) {
 }
 
 func newForceHTTPHandler(service *controlHTTPServiceFake) *Handler {
-	return NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+	return NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}), zap.NewNop())
 }
 
 func TestTerminateForceHTTPPreservesTupleAndOrdinaryCompatibility(t *testing.T) {
@@ -782,3 +782,13 @@ var _ observationService = (*fakeObservationService)(nil)
 var _ work.Service = workServiceStub{}
 
 func durationPtr(value time.Duration) *time.Duration { return &value }
+
+type attributionStub struct{}
+
+func (attributionStub) ResolveWorkerWorkAttribution(_ context.Context, requests []recordings.WorkerWorkAttributionRequest) ([]recordings.WorkerWorkAttribution, error) {
+	results := make([]recordings.WorkerWorkAttribution, len(requests))
+	for i, request := range requests {
+		results[i] = recordings.WorkerWorkAttribution{WorkerSessionID: request.WorkerSessionID, FactorySessionID: request.FactorySessionID, WorkID: request.WorkID}
+	}
+	return results, nil
+}
