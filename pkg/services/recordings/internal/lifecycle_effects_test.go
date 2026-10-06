@@ -336,17 +336,7 @@ func TestReplayRecordingSnapshotWriterReopensFinalizedPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := append([]byte(nil), data...)
-	for _, snapshot := range []recordings.RecordingSnapshot{
-		v2LifecycleSnapshot(startedAt, 1, false),
-		v2LifecycleSnapshot(startedAt.Add(time.Second), 3, false),
-	} {
-		if err := writer("reopened.jsonl", snapshot); !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
-			t.Fatalf("incompatible prefix error = %v", err)
-		}
-		if !bytes.Equal(data, original) {
-			t.Fatal("rejected prefix changed retained artifact")
-		}
-	}
+	assertReopenedPrefixRejections(t, writer, startedAt, &data, original)
 	failReplacement = true
 	if err := writer("reopened.jsonl", v2LifecycleSnapshot(startedAt, 3, false)); !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
 		t.Fatalf("replacement error = %v", err)
@@ -355,12 +345,32 @@ func TestReplayRecordingSnapshotWriterReopensFinalizedPrefix(t *testing.T) {
 		t.Fatal("failed replacement changed retained artifact")
 	}
 	failReplacement = false
+	assertReopenedGenerations(t, writer, startedAt, &data)
+}
+
+func assertReopenedPrefixRejections(t *testing.T, writer recordings.RecordingSnapshotWriter, startedAt time.Time, data *[]byte, original []byte) {
+	t.Helper()
+	for _, snapshot := range []recordings.RecordingSnapshot{
+		v2LifecycleSnapshot(startedAt, 1, false),
+		v2LifecycleSnapshot(startedAt.Add(time.Second), 3, false),
+	} {
+		if err := writer("reopened.jsonl", snapshot); !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
+			t.Fatalf("incompatible prefix error = %v", err)
+		}
+		if !bytes.Equal(*data, original) {
+			t.Fatal("rejected prefix changed retained artifact")
+		}
+	}
+}
+
+func assertReopenedGenerations(t *testing.T, writer recordings.RecordingSnapshotWriter, startedAt time.Time, data *[]byte) {
+	t.Helper()
 	for count := 3; count <= 4; count++ {
 		for _, finalized := range []bool{false, true} {
 			if err := writer("reopened.jsonl", v2LifecycleSnapshot(startedAt, count, finalized)); err != nil {
 				t.Fatalf("reopen count=%d finalized=%t: %v", count, finalized, err)
 			}
-			stream, err := replayimpl.ParseReplayV2(data)
+			stream, err := replayimpl.ParseReplayV2(*data)
 			if err != nil || len(stream.Events) != count || (stream.Terminal != nil) != finalized {
 				t.Fatalf("reopened artifact count=%d finalized=%t: stream=%#v err=%v", count, finalized, stream, err)
 			}
