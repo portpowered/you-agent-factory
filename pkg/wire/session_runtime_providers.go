@@ -488,6 +488,7 @@ func provideFactoryDefinitionPersistence(
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 	conversions factorydefinitions.SerializedFactoryConfigReader,
+	canonical factorydefinitions.CanonicalFactoryConfigReader,
 ) (factorydefinitions.PackagedFactoryPersistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
@@ -505,6 +506,7 @@ func provideFactoryDefinitionPersistence(
 		namedPaths,
 		directoryReplacementStore,
 		conversions,
+		canonical,
 	)
 }
 

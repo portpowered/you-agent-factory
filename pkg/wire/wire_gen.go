@@ -213,7 +213,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	inputInboxSentinelEnsurer := provideFactoryDefinitionInputInboxSentinelEnsurer(authoredLayoutWriterFileSystem)
 	persistenceFileSystem := provideFactoryDefinitionPersistenceFileSystem(edges2)
 	directoryReplacementStore := provideFactoryDefinitionDirectoryReplacementStore(edges2)
-	v32, err := provideFactoryDefinitionPersistence(v28, v25, v29, v22, v30, v31, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore, serializedFactoryConfigReader)
+	canonicalFactoryConfigReader, err := provideCanonicalFactoryConfigReader()
+	if err != nil {
+		return nil, err
+	}
+	v32, err := provideFactoryDefinitionPersistence(v28, v25, v29, v22, v30, v31, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore, serializedFactoryConfigReader, canonicalFactoryConfigReader)
 	if err != nil {
 		return nil, err
 	}
@@ -1287,6 +1291,7 @@ var BundleSet = wire11.NewSet(
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
 	provideSerializedFactoryConfigReader,
+	provideCanonicalFactoryConfigReader,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation, wire11.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire11.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,

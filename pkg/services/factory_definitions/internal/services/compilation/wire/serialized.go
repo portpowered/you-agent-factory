@@ -9,3 +9,8 @@ import (
 func NewSerializedFactoryConfigDecoder(source factorydefinitions.SerializedFactoryConfigReader, fallback factorydefinitions.FactoryConfigJSONDecoder) factorydefinitions.FactoryConfigJSONDecoder {
 	return serialized.NewDecoder(source, fallback).Decode
 }
+
+// NewCanonicalFactoryConfigEncoder binds exact normalized input to immutable output.
+func NewCanonicalFactoryConfigEncoder(source factorydefinitions.CanonicalFactoryConfigReader, fallback factorydefinitions.FactoryConfigJSONEncoder) factorydefinitions.FactoryConfigJSONEncoder {
+	return serialized.NewEncoder(source, fallback).Encode
+}

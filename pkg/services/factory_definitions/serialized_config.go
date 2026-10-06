@@ -14,14 +14,20 @@ const SerializedFactoryConfigVersion = "factory-config-native/v1"
 // JSON payload. The generator owns this serialization boundary; installation
 // still owns validation, normalization and filesystem publication.
 type SerializedFactoryConfig struct {
-	Version       string          `json:"version"`
-	PayloadSHA256 string          `json:"payloadSHA256"`
-	Config        json.RawMessage `json:"config"`
+	Version              string          `json:"version"`
+	PayloadSHA256        string          `json:"payloadSHA256"`
+	Config               json.RawMessage `json:"config"`
+	CanonicalInputSHA256 string          `json:"canonicalInputSHA256,omitempty"`
+	Canonical            json.RawMessage `json:"canonical,omitempty"`
 }
 
 // SerializedFactoryConfigReader reads a detached conversion from the validated
 // immutable publication selected by application composition.
 type SerializedFactoryConfigReader func([]byte) ([]byte, error)
+
+// CanonicalFactoryConfigReader reads detached canonical output for exact
+// normalized native input from the validated immutable publication.
+type CanonicalFactoryConfigReader func([]byte) ([]byte, error)
 
 // SerializedFactoryConfigInput identifies the exact source of a cached conversion.
 type SerializedFactoryConfigInput []byte

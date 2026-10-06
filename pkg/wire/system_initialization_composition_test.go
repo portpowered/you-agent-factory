@@ -157,6 +157,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Packag
 		namedPaths,
 		directoryReplacementStore,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideFactoryDefinitionPersistence() error = %v", err)

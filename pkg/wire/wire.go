@@ -523,6 +523,7 @@ var BundleSet = wire.NewSet(
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
 	provideSerializedFactoryConfigReader,
+	provideCanonicalFactoryConfigReader,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,

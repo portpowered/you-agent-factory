@@ -5,7 +5,109 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `f367362e37`, passes all hosted checks.
+## Packaged Factory cache follow-up, October 6
+
+Rebased source `47760cc66d` includes live-main subagent MCP and daemon-restart
+scenarios. The hosted Functional Coverage job passes in **177s complete /
+122.174s coverage**, with 67 packages / 763 results, 761 pass and two skip.
+The compiler archive is a prefix hit from f367362e37; this run performs **138
+compiler commands and 16 links**. The two-minute complete checkpoint remains
+unmet. All executed hosted jobs are now confirmed successful.
+
+The corresponding local unchanged lane passes at **121.66s supervisor /
+111.549s coverage / 372.63 CPU-seconds** (307.84 user, 64.79 system). Rebuilding
+live-main changes performs 218 compiler commands (80.657503 CPU-seconds) and
+19 links (21.473357 CPU-seconds). Their active wall intervals are 31.423484s
+and 21.285776s and overlap; do not add them to estimate a critical path.
+
+Caching immutable packaged input is worthwhile; sharing mutable Factory Session
+state is not required. The shipped native serialization cache previously saved
+25.9% CPU / 19.0% elapsed in six customer runs per side. Installing once in an
+owned host and opening distinct explicit Factory Sessions avoids more work:
+the Work CLI confirmation comparison saves 47.9% CPU with nearly flat elapsed.
+
+A new private cache of decoded definitions with detached recursive copies saves
+only **0.84% CPU / 1.47% elapsed** across six repetitions per side of three
+customer journeys: baseline 13.307300 CPU-seconds / 18.358842 elapsed versus
+candidate 13.195456 / 18.089478. Discarded; the private source was restored.
+
+A different private cache stores the canonical serialized output after authored
+normalization. Generation checks whole-value round-trip equality for all 20
+published definitions. Lookup keys hash the exact normalized native input;
+nonserialized prompt metadata, unknown fields, edits and misses use the original
+encoder. Returned bytes are detached. This wraps only the concrete canonical
+encoder: validators, pruning, normalization, portable-file effects, writers,
+staged validation and publication still run.
+
+Three unchanged customer journeys, in baseline/candidate/candidate/baseline
+order with three repetitions per block, all pass. Builds are excluded from
+execution timing. Baseline totals **13.136105 CPU-seconds / 18.087352 elapsed**;
+candidate **11.849373 / 17.168674**, a **9.8% CPU / 5.1% elapsed** reduction.
+This supports further canonical-encoder work, but the prototype is not shipped
+and this focused result is not a complete CI speedup claim. Data lives in
+`.artifacts/latency-audit/canonical-encoder-paired/`.
+
+The prototype also passes the full unchanged lane at **113.41s supervisor /
+108.470s coverage / 347.54 CPU-seconds**, with the same 67 packages / 763
+results, 761 pass and two skip. It performs 118 compiler commands (40.151530
+CPU-seconds) and 19 links (21.906707 CPU-seconds), versus the baseline's 218
+compiler commands. Different rebuild work prevents attributing the full-lane
+elapsed or CPU difference to the encoder cache. This is a compatibility result;
+the repeated native-binary pairs are the performance evidence. Private Wire
+source is restored byte-for-byte and the prototype file is removed. Full data
+lives in `.artifacts/latency-audit/canonical-encoder-full/`.
+
+### Canonical-output production candidate
+
+The candidate now generates optional canonical output alongside each native
+conversion and indexes exact normalized-input hashes in the validated catalog.
+Catalog loading splits native and canonical bytes once, so the decoder does not
+repeatedly scan the larger combined asset. Canonical reads and encoder results
+are detached. Missing, stale, malformed and non-object optional output misses
+retain the original encoder. Unknown fields, file-backed prompts and runtime-only
+worker session, concurrency and model metadata also retain original mapping.
+Wire binds the encoder once and injects a distinct typed canonical reader;
+validation, pruning, normalization and persistence effects still run.
+
+The first unsplit production pair is nearly flat: baseline 12.969901
+CPU-seconds / 17.989911 elapsed, candidate 12.759414 / 17.719674. Retained;
+adding encoder output to the native envelope increased repeated decoder work.
+After splitting, a six-per-side confirmation passes at baseline **12.958215
+CPU-seconds / 18.016064 elapsed**, candidate **12.097475 / 17.207918**:
+**6.6% CPU / 4.5% elapsed reduction**. The final metadata-fallback refinement
+also passes six runs per side at baseline **13.427476 / 18.325541**, candidate
+**12.039741 / 17.308812**, saving **10.3% CPU / 5.5% elapsed**. Same three
+customer journeys, alternating blocks and compilation excluded throughout.
+Preserve both valid samples, rather than treating the fastest as a ceiling.
+
+An intervening baseline-only sample fails all three portability repetitions
+with the existing API-server-startup/shutdown timeouts (80.717671 elapsed).
+A fresh WSL instance is observed during investigation; causation is unproven.
+The driver stops before running a candidate. That failed sample is retained in
+`canonical-encoder-production-split-paired/` and excluded from speedup totals.
+The subsequent existing-timeout comparison passes on both sides.
+
+The full production candidate passes unchanged coverage before the additional
+runtime-metadata fallback checks, at **135.19s supervisor / 129.679s coverage /
+388.06 CPU-seconds**, 67 packages / 763 results, 761 pass and two skip. It
+rebuilds 414 compiler commands (72.966217 CPU-seconds) and 19 links
+(22.773331 CPU-seconds). This full run overlaps the Windows custom-linter build
+and checks; use it as compatibility evidence, not a clean latency comparison.
+Final metadata/fallback and all-20-definition equivalence tests pass, together
+with both scoped lint suites and all 11 catalog / 16 packaged-source smoke
+scenarios using a freshly built custom linter. Hosted validation of the new
+candidate is required. The complete two-minute merge checkpoint remains unmet.
+
+The preferred order is: reuse compatible initialized owned hosts with separate
+Factory Sessions; cache verified immutable serialization/renderings for tests
+that need independent installation; retain independent install, persistence and
+restart journeys to exercise those customer paths. A rendered-file cache should
+still write to each owned destination and preserve all selected validation and
+filesystem effects. Never reuse event ledgers, session state or mutated factory
+directories through an immutable packaged cache.
+
+
+Earlier published source `f367362e37` passes all hosted checks.
 Functional Coverage takes **147s complete / 92.644s coverage**, with 67 packages /
 762 results, 760 pass, two skip and no failures or retries. Its restored compiler
 archive is a prefix hit from d9e4f57e8e; coverage runs zero compiler commands and
