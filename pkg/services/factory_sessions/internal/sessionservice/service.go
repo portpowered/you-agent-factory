@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -29,6 +30,8 @@ type Service struct {
 	results           factoryruntime.SessionResultProjectionOperation
 	responseEvents    responsestreamservice.Service
 	durable           durableexecution.Service
+	replayMu          sync.RWMutex
+	replayExecutions  map[string]*replayExecutionBinding
 	recordedHistory   RecordedHistory
 	invoker           roles.SessionInvoker
 	activate          func(context.Context, string) error

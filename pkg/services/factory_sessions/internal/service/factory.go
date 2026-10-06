@@ -58,7 +58,6 @@ type FactoryRuntimePorts struct {
 	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	FactoryRuntimeAssembler         FactoryRuntimeAssembler
 	RuntimeRoot                     FactoryRuntimeRoot
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
@@ -170,7 +169,6 @@ type Root struct {
 	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
-	factoryRuntimeAssembler          FactoryRuntimeAssembler
 	initialActivation                factoryruntime.InitialRuntimeActivationOperation
 	workService                      work.Service
 	providerSessions                 providersessions.Service
@@ -253,7 +251,6 @@ func NewRoot(
 		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
-		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
 		workService:                      workPorts.Service,
 		providerSessions:                 providerSessions.Service,
 		factoryDefinitionValidator:       factoryDefinitions.Validator,
@@ -340,7 +337,6 @@ func validateFactoryRuntime(group *FactoryRuntimePorts) error {
 		portRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
 		portRequirement{"workflow preview operation", group.WorkflowPreview},
 		portRequirement{"Workers mock command runner factory", group.WorkersMockCommandRunnerFactory},
-		portRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
 		portRequirement{"clock resolver", group.ResolveClock},
 		portRequirement{"session logger factory", group.NewSessionLogger},
 		portRequirement{"clock", group.Clock},

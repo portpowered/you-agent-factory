@@ -161,10 +161,9 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 // owner for a checkpoint-bearing replay. Runtime assembly is deferred until
 // HasRestorableState confirms that the durable owner can actually resume; a
 // public checkpoint summary alone must remain inspection-only.
-func openPortableReplayDurableOwner(
+func (r *Root) openPortableReplayDurableOwner(
 	configured preparedRuntime,
 	root RuntimeRoot,
-	logger *zap.Logger,
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
@@ -175,7 +174,6 @@ func openPortableReplayDurableOwner(
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	resolveClock factoryruntime.ClockResolver,
-	factoryRuntimeAssembler FactoryRuntimeAssembler,
 ) (durableexecution.Service, func() error, error) {
 	if durableExecutionFactory == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
@@ -206,13 +204,9 @@ func openPortableReplayDurableOwner(
 	owner := &portableReplayDurableOwner{
 		Service: durable.Service,
 		prepare: func(probeContext context.Context) error {
-			runtime, err := preparePortableReplayRuntime(
+			runtime, err := r.preparePortableReplayRuntime(
 				probeContext,
 				configured,
-				root,
-				clock,
-				logger,
-				factoryRuntimeAssembler,
 				durable.Service,
 				workerService,
 				providerForDurable,
@@ -228,25 +222,17 @@ func openPortableReplayDurableOwner(
 	return owner, cleanup.Close, nil
 }
 
-func preparePortableReplayRuntime(
+func (r *Root) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
-	root RuntimeRoot,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	durableOwner durableexecution.Service,
 	workerService workers.Service,
 	providerForDurable providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
-	opening, err := assemblePortableReplayRuntime(
+	opening, err := r.assemblePortableReplayRuntime(
 		ctx,
 		configured,
-		root,
-		clock,
-		logger,
-		factoryRuntimeAssembler,
 		durableOwner,
 	)
 	if err != nil {
@@ -320,18 +306,11 @@ func constructPortableReplayDurableOwner(
 	return durable, providerForDurable, nil
 }
 
-func assemblePortableReplayRuntime(
+func (r *Root) assemblePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
-	root RuntimeRoot,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	durableOwner durableexecution.Service,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
-	if factoryRuntimeAssembler == nil {
-		return nil, fmt.Errorf("construct portable replay runtime: Factory Runtime assembler is required")
-	}
 	mutationOwner, ok := durableOwner.(interface {
 		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
 	})
@@ -346,46 +325,21 @@ func assemblePortableReplayRuntime(
 		observe = owner.PublishWorkerProgress
 	}
 	observations := replaySessionObservations{mutations: mutationOwner.RecordPetriTokenMutations, progress: observe}
-	opening, err := factoryRuntimeAssembler.Assemble(
-		ctx,
-		configured.OperatorDefaults.WorkerModelProvider,
-		configured.OperatorDefaults.WorkerModel,
-		false,
-		configured.Recordings.RecordPath,
-		configured.Recordings.WorkflowID,
-		configured.Session.SessionID,
-		configured.Session.SessionID,
-		configured.Workers.MockWorkers,
-		configured.Runtime.Mode,
-		factoryruntime.Scheduler(nil),
-		false,
-		configured.Runtime.LogDirectory,
-		configured.Runtime.LogConfig,
-		factoryruntime.RuntimeFileLoggingPolicy(configured.Runtime.FileLoggingPolicy),
-		factoryruntime.RuntimeMetricsPolicy(configured.Runtime.MetricsPolicy),
-		configured.Runtime.MetricsDirectory,
-		configured.Runtime.MetricsConfig,
-		configured.Recordings.FlushInterval,
-		runtimeSelectionForStart(configured.Session).BackendScopeID,
-		configured.Workers.RunnerID,
-		configured.Runtime.Verbose,
-		configured.Workers.SkipBuiltInPrerequisiteValidation,
-		configured.Workers.InvocationSkipPermissionsOverride,
-		clock,
-		logger,
-		false,
-		observations,
-		configured.Definition.Directory,
-		root.FactoryRootDir,
-		configured.Definition.ExecutionBaseDir,
-		nil,
-		configured.Runtime.RuntimeInstanceID,
-		nil,
-		nil,
-		nil,
-		nil,
-		false,
-	)
+	// Select the authored live definition only after the durable owner confirms
+	// restorable state. Inspection and unsuccessful probes remain nonexecuting.
+	resolved, err := r.resolveActivationSnapshot(ctx, configured.Definition, recordings.RuntimeSelection{}, nil, nil, configured.Session.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	inputs := runtimeActivationInputs(configured.Definition, configured.Session,
+		configured.CanonicalSessionIDGenerated, configured.Workers, configured.Recordings,
+		configured.ModelCacheDirectory, configured.OperatorDefaults, nil)
+	inputs.Session.CanonicalSessionID = configured.Session.SessionID
+	inputs.RecoveryInput.CheckpointContinuation = true
+	opening, err := r.initialActivation(ctx, factoryruntime.RuntimeActivationRequest{
+		RuntimeID: configured.Runtime.RuntimeInstanceID, FactorySessionID: configured.Session.SessionID,
+		Snapshot: resolved.snapshot, Runtime: configured.Runtime, Inputs: inputs,
+	}, observations)
 	if err != nil {
 		return opening, fmt.Errorf("construct portable replay runtime: %w", err)
 	}

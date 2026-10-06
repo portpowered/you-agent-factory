@@ -150,3 +150,35 @@ func TestDirectDurableCapabilityPreservesAddressedResumeAndPauseOutcomes(t *test
 		t.Fatalf("addressed durable effects: resume=%v pause=%v", execution.resumeSessionIDs, execution.pauseSessionIDs)
 	}
 }
+
+func TestHistoricalExecutionRoutePreservesPeerAndReplacementOwnership(t *testing.T) {
+	t.Parallel()
+	processOwner := &routingExecution{}
+	first := &routingExecution{}
+	replacement := &routingExecution{}
+	host := &unifiedLifecycleGatewayHost{execution: processOwner}
+	gateway := newServiceTestGateway(host)
+	releaseFirst := gateway.BindHistoricalExecution("recorded", first)
+	if _, err := gateway.ResumeInterruptedSession(t.Context(), "peer", factorysessions.ResumeSessionRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	releaseReplacement := gateway.BindHistoricalExecution("recorded", replacement)
+	releaseFirst()
+	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if processOwner.resumeCalls != 1 || first.resumeCalls != 1 || replacement.resumeCalls != 1 {
+		t.Fatal("scoped route displaced peer or replacement")
+	}
+	releaseReplacement()
+	releaseReplacement()
+	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if processOwner.resumeCalls != 2 || replacement.resumeCalls != 1 {
+		t.Fatal("released inspection retained execution ownership")
+	}
+}

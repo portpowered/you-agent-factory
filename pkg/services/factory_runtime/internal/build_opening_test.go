@@ -163,6 +163,71 @@ func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossCalls(
 	runtime.KeepAlive(initial)
 }
 
+func TestInitialActivationKeepsMutationAndProgressObservationsScopedAcrossOutcomes(t *testing.T) {
+	t.Parallel()
+	loaded, err := factorydefinitionfixtures.NewLoadedSource("factory", &interfaces.FactoryConfig{Name: "factory"}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources := &controlledInitialAssembly{failure: errors.New("controlled opening failure")}
+	var cancelDuringMaterialization context.CancelFunc
+	initial := factoryinternal.NewInitialActivation(resources, clockwork.NewFakeClock(), zap.NewNop(),
+		func(*interfaces.RuntimeSnapshot, string) (interfaces.MutableLoadedFactorySource, error) {
+			if cancelDuringMaterialization != nil {
+				cancelDuringMaterialization()
+			}
+			return loaded, nil
+		})
+	for _, outcome := range []struct {
+		name string
+		err  error
+	}{
+		{"success", nil},
+		{"failure", resources.failure},
+		{"cancellation", context.Canceled},
+	} {
+		t.Run(outcome.name, func(t *testing.T) {
+			resources.failure = outcome.err
+			ctx := t.Context()
+			if errors.Is(outcome.err, context.Canceled) {
+				canceled, cancel := context.WithCancel(ctx)
+				cancelDuringMaterialization = cancel
+				t.Cleanup(cancel)
+				ctx = canceled
+			}
+			observation := discardedInitialOpeningObservation(t, initial, ctx, outcome.err)
+			// Drop the fake engine's scoped callbacks and the result while the
+			// same reusable operation remains live across every outcome.
+			resources.mutations, resources.progress = nil, nil
+			runtime.GC()
+			if observation.Value() != nil {
+				t.Fatal("reusable initial operation retained discarded session observations")
+			}
+			runtime.KeepAlive(initial)
+		})
+	}
+}
+
+func discardedInitialOpeningObservation(t *testing.T, initial *factoryinternal.InitialActivation,
+	ctx context.Context, cause error,
+) weak.Pointer[openingSessionObservations] {
+	t.Helper()
+	observations := &openingSessionObservations{}
+	result, err := initial.Open(ctx, factory.RuntimeActivationRequest{
+		FactorySessionID: "discarded", RuntimeID: "discarded-runtime",
+	}, observations)
+	if !errors.Is(err, cause) {
+		t.Fatalf("initial opening error = %v, want %v", err, cause)
+	}
+	if errors.Is(cause, context.Canceled) && !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("cancellation case did not cancel its opening context")
+	}
+	if cause == nil && (result == nil || result.Activation == nil) {
+		t.Fatal("successful controlled opening did not return its activation")
+	}
+	return weak.Make(observations)
+}
+
 func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -637,5 +702,38 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 		if !canceled && finalized != 1 {
 			t.Fatalf("failure finalizations = %d, want 1", finalized)
 		}
+	}
+}
+
+func TestInitialActivationRequestDetachesSelectedRecoveryFacts(t *testing.T) {
+	t.Parallel()
+	config := interfaces.FactorySnapshot(`{"name":"recorded"}`)
+	at := time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC)
+	request := factory.RuntimeActivationRequest{RuntimeID: "runtime", FactorySessionID: "candidate",
+		Snapshot: interfaces.RuntimeSnapshot{FactoryDir: "/factory", RuntimeBaseDir: "/factory",
+			EffectiveFactory: interfaces.FactoryConfig{Name: "factory"}, DefinitionVersion: &interfaces.FactoryVersion{Logical: 1}},
+		Inputs: factory.RuntimeActivationInputs{RecoveryInput: factory.RuntimeActivationRecoveryInput{
+			WorldState:   &interfaces.FactoryWorldState{WorkItemsByID: map[string]work.FactoryWorkItem{"work": {ID: "work"}}},
+			EventHistory: []interfaces.FactoryEvent{{Id: "prefix"}},
+			ReplayArtifact: &interfaces.ReplayArtifact{Factory: &config, Events: []interfaces.FactoryEvent{{Id: "replayed"}},
+				Diagnostics: interfaces.ReplayDiagnostics{Notes: []string{"selected"}}, WallClock: &interfaces.ReplayWallClockMetadata{StartedAt: at}},
+		}},
+	}
+	detached, err := request.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Inputs.RecoveryInput.WorldState.WorkItemsByID["work"] = work.FactoryWorkItem{ID: "changed"}
+	request.Inputs.RecoveryInput.EventHistory[0].Id = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.Events[0].Id = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.Diagnostics.Notes[0] = "changed"
+	request.Inputs.RecoveryInput.ReplayArtifact.WallClock.StartedAt = time.Time{}
+	(*request.Inputs.RecoveryInput.ReplayArtifact.Factory)[0] = ' '
+	got := detached.Inputs.RecoveryInput
+	if got.WorldState.WorkItemsByID["work"].ID != "work" || got.EventHistory[0].Id != "prefix" || got.ReplayArtifact.Events[0].Id != "replayed" {
+		t.Fatalf("recovery retained caller mutations: %#v", got)
+	}
+	if got.ReplayArtifact.Diagnostics.Notes[0] != "selected" || !got.ReplayArtifact.WallClock.StartedAt.Equal(at) || string(*got.ReplayArtifact.Factory) != `{"name":"recorded"}` {
+		t.Fatalf("replay metadata lost or shared: %#v", got.ReplayArtifact)
 	}
 }

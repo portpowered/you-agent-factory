@@ -48,6 +48,7 @@ func initialOpeningFactoryConfig() map[string]any {
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},
+				{"name": "waiting", "type": "PROCESSING"},
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
@@ -68,7 +69,6 @@ func initialOpeningFactoryConfig() map[string]any {
 func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T) {
 	t.Parallel()
 
-	failure := errors.New("controlled initial input directory opening failure")
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
@@ -89,9 +89,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	persistence := &initialOpeningPersistence{effects: effects, sessionID: durable.candidateID, saved: make(chan struct{})}
 	gate := &initialOpeningGate{entered: make(chan struct{}), release: make(chan struct{})}
 	files := &initialOpeningDirectories{
-		failedPath: filepath.Join(failed.candidateDir, factorydefinitions.InputsDir),
-		gatedPath:  filepath.Join(canceled.candidateDir, factorydefinitions.InputsDir),
-		failure:    failure, gate: gate, effects: effects,
+		gatedPath: filepath.Join(canceled.candidateDir, factorydefinitions.InputsDir),
+		gate:      gate, effects: effects,
 	}
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
@@ -135,10 +134,16 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 
 	runInitialOpeningCompatibilityScenarios(t, sessions, process, api.WaitForURL(t), home)
+	for _, recovery := range []string{"retained", "corrupt", "missing"} {
+		t.Run("current board recovery "+recovery, func(t *testing.T) {
+			t.Parallel()
+			testInitialOpeningBoardRecovery(t, sessions, process, newInitialOpeningScenario(t), effects, logs, api.WaitForURL(t), recovery)
+		})
+	}
 
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
-		testFailedInitialOpeningRetry(t, sessions, process, failed, effects, failure)
+		testFailedInitialOpeningRetry(t, sessions, process, failed, effects)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
 		t.Parallel()
@@ -249,15 +254,23 @@ func testInitialOpeningRecordedHistory(t *testing.T, sessions factorysessions.Se
 	assertInitialOpeningInvocation(t, sessions, reused.peerID)
 }
 
-func testFailedInitialOpeningRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, failure error) {
+func testFailedInitialOpeningRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects) {
 	t.Helper()
 	peerHistory := scenario.startPeer(t, sessions)
 	request := scenario.request()
+	blockedPath := filepath.Join(scenario.candidateDir, factorydefinitions.InputsDir)
+	if err := os.WriteFile(blockedPath, []byte("blocks input directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	recordPath := filepath.Join(t.TempDir(), "retry.replay.jsonl")
 	request.RuntimeSelection.Recording.RecordPath = recordPath
 	_, err := sessions.Start(t.Context(), request)
-	if !errors.Is(err, failure) {
-		t.Fatalf("failed Start error = %v, want controlled opening cause", err)
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || filepath.Clean(pathErr.Path) != blockedPath || pathErr.Op != "mkdir" {
+		t.Fatalf("failed Start error = %v, want original input MkdirAll file error", err)
+	}
+	if err := os.Remove(blockedPath); err != nil {
+		t.Fatal(err)
 	}
 	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
@@ -552,11 +565,10 @@ type initialOpeningGate struct {
 func (gate *initialOpeningGate) unblock() { gate.once.Do(func() { close(gate.release) }) }
 
 type initialOpeningDirectories struct {
-	failedPath, gatedPath string
-	failure               error
-	gate                  *initialOpeningGate
-	failed, gated         atomic.Bool
-	effects               *initialOpeningEffects
+	gatedPath string
+	gate      *initialOpeningGate
+	gated     atomic.Bool
+	effects   *initialOpeningEffects
 }
 
 func (files *initialOpeningDirectories) Stat(path string) (fs.FileInfo, error) {
@@ -566,9 +578,6 @@ func (files *initialOpeningDirectories) Stat(path string) (fs.FileInfo, error) {
 
 func (files *initialOpeningDirectories) MkdirAll(path string, mode fs.FileMode) error {
 	files.effects.record("runtime.mkdir", path)
-	if filepath.Clean(path) == files.failedPath && files.failed.CompareAndSwap(false, true) {
-		return files.failure
-	}
 	if filepath.Clean(path) == files.gatedPath && files.gated.CompareAndSwap(false, true) {
 		close(files.gate.entered)
 		<-files.gate.release

@@ -1,10 +1,14 @@
 package start_retry_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/url"
 	"os"
@@ -304,5 +308,159 @@ func assertInitialOpeningWorkProjection(t *testing.T, process support.Process, s
 	}
 	if !found {
 		t.Fatalf("projected history lost submitted Work: %s", inputs.Stdout())
+	}
+}
+
+func testInitialOpeningBoardRecovery(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, logs *observer.ObservedLogs, serverURL, recovery string) {
+	t.Helper()
+	peer := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	request.Persistence = factorysessions.PersistencePolicyEnabled
+	recordPath := filepath.Join(t.TempDir(), "board.jsonl")
+	request.RuntimeSelection.Recording.RecordPath = recordPath
+	startInitialOpeningSession(t, sessions, request)
+	requestID := "completed-" + scenario.candidateID
+	stream := initialOpeningHistory(t, sessions, scenario.candidateID)
+	submitInitialRecoveryWork(t, process, scenario, serverURL, requestID, "completed", true)
+	assertInitialOpeningAttributedEvents(t, t.Context(), stream, scenario.candidateID, requestID)
+	// A nonterminal waiting state has no workstation input until explicitly
+	// moved to init, so it can be persisted without opening a dispatch.
+	submitInitialRecoveryWork(t, process, scenario, serverURL, "pending-"+scenario.candidateID, "pending", false)
+	waitInitialRecoveryAdmission(t, stream, "pending-"+scenario.candidateID)
+	before := initialOpeningHistory(t, sessions, scenario.candidateID)
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	// A successful close finalizes that runtime generation. Recovery reopens
+	// the same logical session with a fresh runtime generation.
+	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	prepareInitialRecoveryArtifact(t, sessions, &request, scenario, recordPath, recovery)
+	startInitialOpeningSession(t, sessions, request)
+	if recovery == "missing" {
+		entries := logs.FilterField(zap.String("session_id", scenario.candidateID)).FilterField(zap.String("recovery", "missing_board_recording_after_durable_state")).All()
+		if len(entries) != 1 {
+			t.Fatalf("missing-board warnings=%d, want one preserved-durable-state warning", len(entries))
+		}
+	} else {
+		after := initialOpeningHistory(t, sessions, scenario.candidateID)
+		for index, event := range before.History {
+			if index >= len(after.History) || after.History[index].Id != event.Id {
+				t.Fatalf("reopening lost selected prefix at %d", index)
+			}
+		}
+		assertInitialRecoveryWorkStates(t, process, scenario, serverURL)
+		move := support.FakeInputs(t.Context(), []string{"you", "--server", serverURL, "--session", scenario.candidateID,
+			"work", "move", "pending-" + scenario.candidateID, "init"})
+		move.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+		move.Input.WorkingDirectory = scenario.candidateDir
+		if err := process.Execute(move.Input); err != nil {
+			t.Fatalf("release recovered pending Work: %v %s", err, move.Stderr())
+		}
+
+	}
+	// Running the successor must leave the completed Work terminal. Count the
+	// exact owned external executions: one before close, pending only if its
+	// board survived, and one new invocation after reopen.
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	want := 3
+	if recovery == "missing" {
+		want = 2
+	}
+	calls := effects.forScenario(scenario)
+	if calls[filepath.Clean(scenario.candidateDir)+"|worker.run"] != want {
+		t.Fatalf("recovery ran completed Work again or lost pending Work: %v want=%d", calls, want)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func submitInitialRecoveryWork(t *testing.T, process support.Process, scenario initialOpeningScenario, serverURL, requestID, label string, running bool) {
+	t.Helper()
+	state := "init"
+	if !running {
+		state = "waiting"
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", serverURL, "--session", scenario.candidateID, "submit", "batch",
+		fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"workId":%q,"name":%q,"state":%q,"workTypeName":"task","payload":{"title":"recover"}}]}`, requestID, label+"-"+scenario.candidateID, label, state)})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("submit recovery Work (running=%v): %v %s", running, err, inputs.Stderr())
+	}
+}
+
+func assertInitialRecoveryWorkStates(t *testing.T, process support.Process, scenario initialOpeningScenario, serverURL string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", serverURL, "--session", scenario.candidateID, "work", "list"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatal(err)
+	}
+	var listed factoryapi.ListWorkResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if !support.HasWorkAtCustomerState(listed, "completed-"+scenario.candidateID, "task:complete") || !support.HasWorkAtCustomerState(listed, "pending-"+scenario.candidateID, "task:waiting") {
+		t.Fatalf("recovered Work state: %s", inputs.Stdout())
+	}
+}
+
+func prepareInitialRecoveryArtifact(t *testing.T, sessions factorysessions.Service, request *factorysessions.SessionStartRequest, scenario initialOpeningScenario, recordPath, recovery string) {
+	t.Helper()
+	selectedPath := filepath.Join(filepath.Dir(recordPath), "board."+scenario.candidateID+".jsonl")
+	original, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Initial compatibility recordings use the selected filename; explicit
+	// current-board reads use the session-suffixed filename. Seed the selected
+	// recovery destination from finalized public history, as when restoring a
+	// trusted backup. This proves recovery of selected facts, not path naming.
+	if err := os.WriteFile(selectedPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if recovery == "corrupt" {
+		corrupt := []byte("{invalid board")
+		if err := os.WriteFile(selectedPath, corrupt, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := sessions.Start(t.Context(), *request)
+		if err == nil || !strings.Contains(err.Error(), "CORRUPT_HISTORY") {
+			t.Fatalf("corrupt board error: %v", err)
+		}
+		assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+		after, err := os.ReadFile(selectedPath)
+		if err != nil || !bytes.Equal(after, corrupt) {
+			t.Fatalf("failed opening changed corrupt source: %v", err)
+		}
+		if err := os.WriteFile(selectedPath, original, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	} else if recovery == "missing" {
+		if err := os.Remove(selectedPath); err != nil {
+			t.Fatal(err)
+		}
+		// Select a fresh missing-board destination for this successor. The
+		// reusable Recordings process retains the old finalized writer cursor;
+		// reusing that physical writer tests a separate recording lifecycle.
+		request.RuntimeSelection.Recording.RecordPath = filepath.Join(t.TempDir(), "missing-board.jsonl")
+	}
+}
+
+func waitInitialRecoveryAdmission(t *testing.T, stream *factorydefinitions.FactoryEventStream, requestID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
+	defer cancel()
+	for {
+		select {
+		case event, ok := <-stream.Events:
+			if !ok {
+				t.Fatal("pending Work stream closed")
+			}
+			if event.Type == factorydefinitions.FactoryEventTypeWorkRequest && event.Context.RequestID != nil && *event.Context.RequestID == requestID {
+				return
+			}
+		case <-ctx.Done():
+			t.Fatalf("pending Work admission: %v", ctx.Err())
+		}
 	}
 }

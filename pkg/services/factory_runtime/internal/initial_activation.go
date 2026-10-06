@@ -6,6 +6,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -59,6 +60,14 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
 	observations factoryruntime.SessionObservations,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
+	recovery := request.Inputs.RecoveryInput
+	if clock == nil && recovery.ReplayArtifact != nil {
+		clock = a.recordingsRuntime.ReplayClock(recovery.ReplayArtifact)
+	}
+	var resumeInput *recordings.LoadResumeInputResult
+	if request.Inputs.Recordings.ResumePath != "" {
+		resumeInput = &request.Inputs.ResumeInput
+	}
 	metricsID := request.Inputs.Session.CanonicalSessionID
 	if metricsID == "" {
 		metricsID = request.FactorySessionID
@@ -66,7 +75,7 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 	// Sessions normalizes Definition.Directory to the opening workspace root.
 	// Snapshot.FactoryDir identifies the loaded definition, which may be nested.
 	return a.Assemble(ctx,
-		request.Inputs.OperatorDefaults.WorkerModelProvider, request.Inputs.OperatorDefaults.WorkerModel, true,
+		request.Inputs.OperatorDefaults.WorkerModelProvider, request.Inputs.OperatorDefaults.WorkerModel, recovery.ReplayArtifact == nil && !recovery.CheckpointContinuation,
 		request.Inputs.Recordings.RecordPath, request.Inputs.Recordings.WorkflowID,
 		request.FactorySessionID, metricsID, activationMockWorkers(request.Inputs.Workers.MockWorkers),
 		request.Runtime.Mode, nil, false,
@@ -75,9 +84,10 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 		request.Inputs.Recordings.FlushInterval, request.Inputs.Session.BackendScopeID,
 		request.Inputs.Workers.RunnerID, request.Runtime.Verbose,
 		request.Inputs.Workers.SkipBuiltInPrerequisiteValidation, request.Inputs.Workers.InvocationSkipPermissionsOverride,
-		clock, logger, true, observations,
+		clock, logger, !recovery.CheckpointContinuation, observations,
 		request.Inputs.Definition.Directory, request.Inputs.Definition.Directory, request.Inputs.Definition.ExecutionBaseDir,
-		loaded, request.RuntimeID, nil, nil, nil, nil, request.Runtime.Mode == factorydefinitions.RuntimeModeService)
+		loaded, request.RuntimeID, recovery.ReplayArtifact, resumeInput, recovery.WorldState, recovery.EventHistory,
+		request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation)
 }
 
 func cloneInt64Pointer(value *int64) *int64 {
