@@ -313,9 +313,9 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	home := t.TempDir()
-	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
-	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 2), output: "guard § —"}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
@@ -380,6 +380,72 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	if runner.calls.Load() != 0 {
 		t.Fatal("waiting sibling Work dispatched a provider or process mutation")
 	}
+	// These exact-command journeys all own local ~default routing. Extend the
+	// smallest ordered cohort on its existing graph for the retained guard.
+	t.Run("F9 retained visit threshold", func(t *testing.T) {
+		testPlainBoardRetainedVisitThreshold(t, process, home, apis[4:], runner)
+	})
+}
+
+func testPlainBoardRetainedVisitThreshold(t *testing.T, process support.Process, home string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	repo := t.TempDir()
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	stations := config["workstations"].([]map[string]any)
+	stations[0]["outputs"] = []map[string]string{{"workType": "task", "state": "waiting"}}
+	config["workstations"] = append(stations, map[string]any{
+		"name": "finish-after-two-visits", "type": "LOGICAL_MOVE",
+		"inputs": []map[string]string{{"workType": "task", "state": "waiting"}}, "outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+		"guards": []map[string]any{{"type": "VISIT_COUNT", "workstation": "process", "maxVisits": float64(2)}},
+	})
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+	support.WriteWorkstationConfig(t, dir, "finish-after-two-visits", "---\ntype: LOGICAL_MOVE\n---\n")
+	command, url := startPlainBoardInRepository(t, process, repo, home, apis[0])
+	batch := []byte(`{"requestId":"guard-board","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"same-id","name":"same-id","workTypeName":"task","state":"init","payload":"guard § —"}]}`)
+	putPlainBoardBatch(t, url, "guard-board", batch)
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.TotalTokens == 1 && runner.calls.Load() == 1
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	var before factoryapi.Work
+	for ctx.Err() == nil {
+		before = support.GetDefaultSessionWorkByID(t, url, "same-id")
+		if before.State != nil && before.State.Name == "waiting" && before.ConfirmationState != nil && *before.ConfirmationState == factoryapi.CONFIRMED {
+			break
+		}
+	}
+	if ctx.Err() != nil {
+		t.Fatal("first watched visit did not rest CONFIRMED at the unsatisfied guard")
+	}
+	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
+	restartProbeShutdown(t, url, command)
+	command, url = startPlainBoardInRepository(t, process, repo, home, apis[1])
+	after := support.GetDefaultSessionWorkByID(t, url, "same-id")
+	if after.State == nil || after.State.Name != "waiting" || !reflect.DeepEqual(before.Content, after.Content) || !reflect.DeepEqual(before.WorkId, after.WorkId) || runner.calls.Load() != 1 {
+		t.Fatal("restart lost the waiting Work or released the guard prematurely")
+	}
+	assertRestartProbeEventFacts(t, events, support.GetFactoryEventsForSessionAt(t, url, "~default"))
+	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/same-id/move"), []byte(`{"stateName":"init"}`))
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 1 })
+	if runner.calls.Load() != 2 {
+		t.Fatalf("guard dispatched %d watched visits, want two total", runner.calls.Load())
+	}
+	for range 2 {
+		request := <-runner.requests
+		if !strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "guard § —") {
+			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
+		}
+	}
+	assertRestartProbeEventFacts(t, events, support.GetFactoryEventsForSessionAt(t, url, "~default"))
+	restartProbeShutdown(t, url, command)
 }
 
 func seedPlainBoardSiblingWork(t *testing.T, url, repo string) {
@@ -469,6 +535,7 @@ type restartProbeUnexpectedRunner struct {
 	calls    atomic.Int32
 	fail     atomic.Bool
 	requests chan platformprocess.CommandRequest
+	output   string
 }
 
 func (runner *restartProbeUnexpectedRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -477,5 +544,9 @@ func (runner *restartProbeUnexpectedRunner) Run(_ context.Context, request platf
 	if runner.fail.Load() {
 		return platformprocess.CommandResult{Stderr: []byte("controlled provider unavailable"), ExitCode: 1}, nil
 	}
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("restart COMPLETE")}, nil
+	output := runner.output
+	if output == "" {
+		output = "restart COMPLETE"
+	}
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
 }

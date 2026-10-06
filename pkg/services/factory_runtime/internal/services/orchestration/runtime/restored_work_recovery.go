@@ -66,6 +66,12 @@ func restoreRestoredWorkMarking(
 	if err != nil {
 		return nil, err
 	}
+	histories := subsystems.RecoverWorkHistories(restoredForMarking, cfg.net)
+	for _, token := range marking.Tokens {
+		if history, exists := histories[token.Color.WorkID]; exists {
+			token.History = history
+		}
+	}
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
 }
