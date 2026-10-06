@@ -43,3 +43,16 @@ func (r *recordingDispatchPublisher) snapshot() map[string][]workers.ProgressFra
 	}
 	return out
 }
+
+func cloneServiceProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
+	fragment.Continuation = (fragment.Continuation).ClonePtr()
+	if fragment.Metadata == nil {
+		return fragment
+	}
+	cloned := make(map[string]string, len(fragment.Metadata))
+	for key, value := range fragment.Metadata {
+		cloned[key] = value
+	}
+	fragment.Metadata = cloned
+	return fragment
+}

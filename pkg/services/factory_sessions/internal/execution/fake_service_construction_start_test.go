@@ -626,10 +626,9 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 		return NewFakeService(clock, config.FakeScenarios...)
 	case ExecutionProviderJavaScriptRuntime:
 		workflows := constructorWorkflowContracts{}
-		return NewJavaScriptExecutionService(
+		return NewProcessDurableExecutionService(
 			config.ProjectRoot,
 			config.ChildExecutorMode,
-			firstWorkerExecution(config.ProviderExecutor, config.Provider),
 			config.Persistence,
 			config.Clock,
 			testSyncWaitScheduler{},
@@ -644,7 +643,15 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 			config.WorkerSettings,
 			mustTestRecordingWriter(),
 			testSessionIDGenerator,
-			nil, nil, nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			firstWorkerExecution(config.ProviderExecutor, config.Provider),
+			nil,
+			nil,
 		)
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
@@ -678,10 +685,9 @@ func (testSyncWaitScheduler) After(duration time.Duration) <-chan time.Time {
 func TestNewJavaScriptExecutionServiceRequiresSyncWaitScheduler(t *testing.T) {
 	t.Parallel()
 	workflows := constructorWorkflowContracts{}
-	_, err := NewJavaScriptExecutionService(
+	_, err := NewProcessDurableExecutionService(
 		t.TempDir(),
 		ChildExecutorModeFake,
-		nil,
 		DisabledPersistence(),
 		durableFixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		nil,
@@ -693,7 +699,15 @@ func TestNewJavaScriptExecutionServiceRequiresSyncWaitScheduler(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		mustTestRecordingWriter(),
 		testSessionIDGenerator,
-		nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "sync wait scheduler is required") {
 		t.Fatalf("NewJavaScriptExecutionService error = %v, want missing sync wait scheduler", err)

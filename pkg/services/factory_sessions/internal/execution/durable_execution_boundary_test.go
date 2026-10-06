@@ -158,10 +158,9 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 	workflows := boundaryRootWorkflows{}
 	orchestration := boundaryOrchestrationAdapter{workflows}
 	projectRoot := t.TempDir()
-	service, err := factorysessionexecution.NewJavaScriptExecutionService(
+	service, err := factorysessionexecution.NewProcessDurableExecutionService(
 		projectRoot,
 		factorysessionexecution.ChildExecutorModeFake,
-		nil,
 		factorysessionexecution.DisabledPersistence(),
 		fixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		harnessSyncWaitScheduler{},
@@ -176,7 +175,15 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		boundaryRecordingWriter{},
 		func() string { return "dur-sess-boundary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewJavaScriptExecutionService: %v", err)

@@ -133,6 +133,35 @@ func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
 	}
 }
 
+// Each owner receives its warning logger before it can save a snapshot.
+func TestDurableSnapshotWarningsRetainConstructedOwnerLogger(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"first", "second"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			core, observed := observer.New(zap.WarnLevel)
+			store := &runtimeRecordingStore{}
+			service := NewProcessDurableRuntime(
+				"/project", ChildExecutorModeFake, store, nil, nil, nil,
+				nil, nil, nil, nil, factory.JavaScriptWorkerSettings{}, nil,
+				func() string { return "durable-warning-owner" }, nil, nil, nil,
+				nil, nil, nil, nil, nil, zap.New(core).With(zap.String("owner", name)),
+			)
+			const maxBytes = 4096
+			service.persistedSnapshotMaxBytes = maxBytes
+			threshold := durableSessionSnapshotWarningThresholdForMax(maxBytes)
+			if err := service.persistSessionSnapshot(exactEncodedSizeWarningState(t, int(threshold))); err != nil {
+				t.Fatalf("persist snapshot: %v", err)
+			}
+			entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
+			assertSnapshotWarning(t, entries, true, threshold)
+			if entries[0].ContextMap()["owner"] != name {
+				t.Fatalf("warning attribution = %#v, want owner %s", entries[0].ContextMap(), name)
+			}
+		})
+	}
+}
+
 func TestProjectResultRead_TerminalFinalAndUnavailable(t *testing.T) {
 	t.Parallel()
 	service := newContractFakeService(t)

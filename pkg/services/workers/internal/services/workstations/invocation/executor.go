@@ -35,64 +35,6 @@ func NewProviderExecutor(provider providers.Service) *Executor {
 	return &Executor{provider: provider}
 }
 
-// NewRunnerExecutor adapts an already selected Workers runner without
-// reintroducing a provider client interface. The runner is still invoked for
-// one request-scoped attempt; provider-backed runners reach Providers through
-// their owner-side implementation.
-func NewRunnerExecutor(runner workers.Runner) workers.InvocationExecutor {
-	if runner == nil {
-		return nil
-	}
-	return &runnerExecutor{runner: runner}
-}
-
-type runnerExecutor struct {
-	runner workers.Runner
-}
-
-func (e *runnerExecutor) Execute(
-	ctx context.Context,
-	input workers.InvocationInput,
-) (workers.InvocationResult, error) {
-	attempt := input.Attempt
-	if attempt < 1 {
-		attempt = 1
-	}
-	if e == nil || e.runner == nil {
-		err := workers.NewProviderError(
-			workers.WorkFailureTypeMisconfigured,
-			"runner execution requires a runner",
-			nil,
-		)
-		return failedInvocationResult(attempt, err), err
-	}
-	result, err := e.runner.Execute(ctx, input.Request)
-	if err != nil {
-		return failedInvocationResult(attempt, err), err
-	}
-	response := workers.InferenceResponse{
-		Content:        result.Content,
-		Outcome:        result.Outcome,
-		ProposedOutput: cloneProposedOutput(result.ProposedOutput),
-		Continuation:   cloneContinuation(result.Continuation),
-		Diagnostics:    workers.CloneWorkDiagnostics(result.Diagnostics),
-	}
-	return workers.InvocationResult{
-		Response:     response,
-		Attempt:      attempt,
-		Continuation: cloneContinuation(response.Continuation),
-		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
-	}, nil
-}
-
-func cloneProposedOutput(output *workers.ProposedOutput) *workers.ProposedOutput {
-	if output == nil {
-		return nil
-	}
-	clone := output.Clone()
-	return &clone
-}
-
 func (e *Executor) Execute(
 	ctx context.Context,
 	input workers.InvocationInput,

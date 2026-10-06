@@ -717,13 +717,13 @@ func assertRuntimeModelInvokerBaseUnavailable(
 ) {
 	t.Helper()
 	var nilInvoker *runtimeModelInvoker
-	if _, err := nilInvoker.InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
+	if _, err := nilInvoker.InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "models service is not available") {
 		t.Fatalf("nil invoker error = %v, want Models unavailable", err)
 	}
-	if _, err := (&runtimeModelInvoker{}).InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
+	if _, err := (&runtimeModelInvoker{}).InvokeRuntimeModel(context.Background(), RuntimeModelInvocation{}, "local-model", request); err == nil || !strings.Contains(err.Error(), "models service is not available") {
 		t.Fatalf("nil Models error = %v, want Models unavailable", err)
 	}
-	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Factory Session service is not available") {
+	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "factory session service is not available") {
 		t.Fatalf("nil Sessions error = %v, want Factory Session unavailable", err)
 	}
 	if _, err := newTestModelInvocation(testModelInvocationConfig{Models: readyModels, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrRuntimeScopeInvalid) {

@@ -259,6 +259,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 			factoryruntime.JavaScriptWorkerSettings{},
 			mockWorkers,
 			nil,
+			zap.NewNop(),
 		)
 		if err != nil {
 			t.Fatalf("factory(mockWorkers=%#v) error = %v", mockWorkers, err)

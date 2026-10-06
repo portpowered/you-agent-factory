@@ -189,10 +189,10 @@ func (invoker *runtimeModelInvoker) InvokeRuntimeModel(
 
 func (invoker *runtimeModelInvoker) validateInvocation(invocation RuntimeModelInvocation, failureContext workers.InferenceFailureContext) error {
 	if invoker == nil || invoker.models == nil {
-		return classifyRuntimeModelError(fmt.Errorf("Models service is not available"), failureContext)
+		return classifyRuntimeModelError(fmt.Errorf("models service is not available"), failureContext)
 	}
 	if invoker.sessions == nil {
-		return classifyRuntimeModelError(fmt.Errorf("Factory Session service is not available"), failureContext)
+		return classifyRuntimeModelError(fmt.Errorf("factory session service is not available"), failureContext)
 	}
 	if invocation.FactorySessionID == "" || strings.TrimSpace(invocation.RuntimeID) == "" ||
 		strings.TrimSpace(invocation.GenerationID) == "" || invocation.Scope.IsZero() {

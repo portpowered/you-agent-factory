@@ -250,10 +250,9 @@ func newExecutionService(provider fse.ExecutionProvider, config executionService
 		if workflows == nil {
 			workflows = factoryruntimefixtures.ScriptedJavaScriptWorkflows{}
 		}
-		return fse.NewJavaScriptExecutionService(
+		return fse.NewProcessDurableExecutionService(
 			config.ProjectRoot,
 			config.ChildExecutorMode,
-			config.ProviderExecutor,
 			config.Persistence,
 			config.Clock,
 			fixtureSyncWaitScheduler{},
@@ -268,7 +267,15 @@ func newExecutionService(provider fse.ExecutionProvider, config executionService
 			config.WorkerSettings,
 			fixtureRecordingWriter(),
 			fixtureSessionID,
-			fixtureSessionID, fixtureResponseStreams{}, nil,
+			fixtureSessionID,
+			fixtureResponseStreams{},
+			nil,
+			nil,
+			nil,
+			nil,
+			config.ProviderExecutor,
+			nil,
+			nil,
 		)
 	default:
 		return nil, fse.NewValidationError("provider", "unsupported execution provider")

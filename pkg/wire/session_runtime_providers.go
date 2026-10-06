@@ -282,13 +282,6 @@ func (projection providerIdentityProjection) CanonicalIdentity(identity string) 
 	return resolved.ID.String(), nil
 }
 
-func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
-	if edges.WorkersOperatingSystem != "" {
-		return edges.WorkersOperatingSystem
-	}
-	return workers.OperatingSystem(runtime.GOOS)
-}
-
 // provideWorkersProviderCommandRunner resolves the shared provider CLI runner
 // used by native executors and by migrated catalog Integrations on the
 // conductor path. Injected edges win; otherwise the platform process runner is
@@ -728,6 +721,7 @@ func provideFactorySessionExecutionFactory(
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 		mockWorkers *workers.MockWorkersConfig,
 		_ []operatorsettings.ACPIntegration,
+		logger *zap.Logger,
 	) (factorysessionwire.DurableExecutionService, error) {
 		// Whether this session runs children live is the same question the
 		// deleted live-child block answered, asked the same way: an explicit
@@ -756,7 +750,7 @@ func provideFactorySessionExecutionFactory(
 			sessionIDs,
 			responseEventIDs,
 			responseStreams,
-			liveChangeCoordinator,
+			liveChangeCoordinator, logger,
 		)
 	}
 }

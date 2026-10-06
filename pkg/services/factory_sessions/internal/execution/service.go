@@ -334,36 +334,6 @@ func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
 	}
 }
 
-// NewJavaScriptExecutionService validates and constructs durable JavaScript
-// execution from explicit collaborators.
-func NewJavaScriptExecutionService(
-	projectRoot string,
-	childExecutorMode string,
-	workerExecution WorkerExecution,
-	persistenceChoice PersistenceChoice,
-	clock factory.Clock,
-	syncWaits SyncWaitScheduler,
-	checkpointSummaries factory.JavaScriptCheckpointSummaries,
-	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
-	orchestration factory.OrchestrationJavaScriptExecution,
-	childValues factory.JavaScriptChildValues,
-	workerPresetIDs map[string]struct{},
-	workerSettings factory.JavaScriptWorkerSettings,
-	recordingWriter recording.PortableRecordingWriter,
-	generateSessionID internalcontracts.SessionIDGenerator,
-	generateResponseEventID factorysessions.ResponseEventIDGenerator,
-	responseStreams responsestreamservice.Service,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (Service, error) {
-	return NewProcessDurableExecutionService(
-		projectRoot, childExecutorMode, persistenceChoice, clock, syncWaits,
-		checkpointSummaries, workflowDefinitions, orchestration, childValues,
-		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
-		generateResponseEventID, responseStreams, liveChangeCoordinator,
-		nil, nil, nil, workerExecution, nil, nil,
-	)
-}
-
 // NewProcessDurableExecutionService validates the complete durable leaf using
 // the same construction policy as runtime-backed execution.
 func NewProcessDurableExecutionService(

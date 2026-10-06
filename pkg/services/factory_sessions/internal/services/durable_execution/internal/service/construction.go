@@ -10,6 +10,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
 )
 
 // NewDurable constructs the runtime-backed durable execution capability while
@@ -32,6 +33,7 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
@@ -63,7 +65,7 @@ func NewDurable(
 		responseStreams,
 		liveChangeCoordinator,
 		adaptRuntimePersistenceStoreFactory(stores),
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, logger,
 	)
 }
 

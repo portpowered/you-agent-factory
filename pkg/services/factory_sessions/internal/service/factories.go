@@ -11,6 +11,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // The factory roles below are consumed only while opening a Factory Session
@@ -27,6 +28,7 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.JavaScriptWorkerSettings,
 	*workers.MockWorkersConfig,
 	[]operatorsettings.ACPIntegration,
+	*zap.Logger,
 ) (durableexecution.Service, error)
 
 // FactoryRuntimeRoot is the process-scoped Runtime capability. Factory

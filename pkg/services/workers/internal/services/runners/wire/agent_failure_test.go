@@ -253,12 +253,12 @@ func resolveAgentRunner(
 	publish workers.ProgressPublisher,
 ) workers.Runner {
 	t.Helper()
-	registry, err := NewAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(runners.AgentDependencies{
 		Providers: providersService,
 		Publish:   publish,
 	})
 	if err != nil {
-		t.Fatalf("NewAgentRegistry() error = %v", err)
+		t.Fatalf("newTestAgentRegistry() error = %v", err)
 	}
 	return agentRegistryStrategy{registry: registry}
 }
@@ -331,5 +331,72 @@ func assertAgentFailureFacts(
 		published[1].Type != "FAILED" ||
 		!reflect.DeepEqual(published[1].Continuation, wantContinuation) {
 		t.Fatalf("failure progress = %#v, want correlated diagnostic and terminal failure", published)
+	}
+}
+
+// TestAgentRunnerThrottledFailureThroughServiceComposition proves provider
+// saturation maps to one normalized throttle failure with progress before the
+// terminal handoff.
+func TestAgentRunnerThrottledFailureThroughServiceComposition(t *testing.T) {
+	fake := &failingServiceAgentProvidersFake{
+		serviceAgentProvidersFake: newServiceAgentProvidersFake(),
+		failure: providerServiceFailureFixture(
+			providers.ExecuteFailureKindThrottled,
+		),
+	}
+
+	var published []workers.ProgressFragment
+	runner := resolveServiceAgentRunner(t, fake, func(fragment workers.ProgressFragment) {
+		published = append(published, cloneServiceProgressFragment(fragment))
+	})
+
+	result, err := runner.Execute(t.Context(), serviceAgentRequest())
+	if err == nil {
+		t.Fatal("Execute() error = nil, want normalized throttle failure")
+	}
+	if fake.calls.Load() != 1 {
+		t.Fatalf("Providers.Execute calls = %d, want exactly one", fake.calls.Load())
+	}
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) ||
+		providerErr.Type != workers.WorkFailureTypeThrottled ||
+		providerErr.Family != workers.WorkFailureFamilyThrottle {
+		t.Fatalf("Execute() error = %#v, want throttle ProviderError", err)
+	}
+	assertServiceAgentFailureFacts(t, result, providerErr, published)
+}
+
+// TestAgentRunnerCancellationThroughServiceComposition proves caller
+// cancellation wins concurrent provider failure classification without retrying.
+func TestAgentRunnerCancellationThroughServiceComposition(t *testing.T) {
+	fake := &interruptingServiceAgentProvidersFake{
+		serviceAgentProvidersFake: newServiceAgentProvidersFake(),
+		entered:                   make(chan struct{}),
+	}
+	runner := resolveServiceAgentRunner(t, fake, func(workers.ProgressFragment) {})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	outcome := make(chan serviceAgentExecutionOutcome, 1)
+	go func() {
+		result, err := runner.Execute(ctx, serviceAgentRequest())
+		outcome <- serviceAgentExecutionOutcome{result: result, err: err}
+	}()
+	<-fake.entered
+	cancel()
+
+	var got serviceAgentExecutionOutcome
+	select {
+	case got = <-outcome:
+	case <-time.After(time.Second):
+		t.Fatal("Execute() did not return after cancellation")
+	}
+	if !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", got.err)
+	}
+	if fake.calls.Load() != 1 {
+		t.Fatalf("Providers.Execute calls = %d, want exactly one", fake.calls.Load())
+	}
+	if got.result.Content != "" {
+		t.Fatalf("cancellation result = %#v, want no success content", got.result)
 	}
 }

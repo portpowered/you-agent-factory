@@ -229,6 +229,7 @@ func NewDurableExecution(
 		},
 		mockWorkersConfig,
 		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
+		root.BaseLogger,
 	)
 	if err != nil {
 		// The opener can acquire an owner before failing. Sessions registers

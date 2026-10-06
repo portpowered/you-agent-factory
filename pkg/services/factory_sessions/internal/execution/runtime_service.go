@@ -286,16 +286,6 @@ type JavaScriptRuntimeService struct {
 var _ Service = (*JavaScriptRuntimeService)(nil)
 var _ canonicaldurable.Service = (*JavaScriptRuntimeService)(nil)
 
-// SetPersistenceWarningLogger binds the session-scoped logger used for safe
-// durable snapshot size warnings. Runtime opening supplies this after it has
-// resolved the Factory Session identity; construction itself remains inert.
-func (s *JavaScriptRuntimeService) SetPersistenceWarningLogger(logger *zap.Logger) {
-	if s == nil {
-		return
-	}
-	s.persistenceWarningLogger = logger
-}
-
 // NewJavaScriptRuntimeService constructs the durable session service.
 func NewJavaScriptRuntimeService(
 	projectRoot string,

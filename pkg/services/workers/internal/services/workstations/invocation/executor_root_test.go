@@ -452,70 +452,6 @@ func TestNewExecutorAbsentProviderYieldsNoExecutor(t *testing.T) {
 	}
 }
 
-func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
-	t.Run("success", assertRunnerExecutorSuccess)
-	t.Run("failure", assertRunnerExecutorFailure)
-}
-
-func assertRunnerExecutorSuccess(t *testing.T) {
-	t.Helper()
-	providerContinuation := (&providers.SessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"}).ContinuationRef()
-	diagnostics := &workerexecution.WorkDiagnostics{
-		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
-	}
-	runner := &runnerExecutorTestDouble{result: workerexecution.RunnerExecutionResult{
-		Content: "runner output",
-		Outcome: workerexecution.OutcomeAccepted,
-		ProposedOutput: &workerexecution.ProposedOutput{Primary: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeAudio,
-			URL:  "data:audio/wav;base64,YXVkaW8=",
-		}}},
-		Continuation: providerContinuation,
-		Diagnostics:  diagnostics,
-	}}
-
-	result, err := workerinvocation.NewRunnerExecutor(runner).Execute(
-		context.Background(),
-		workerexecution.InvocationInput{Attempt: 0, Request: workerexecution.ProviderInferenceRequest{UserMessage: "hello"}},
-	)
-	if err != nil {
-		t.Fatalf("runner Execute() = %v", err)
-	}
-	if result.Attempt != 1 || result.Response.Content != "runner output" || result.Response.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("runner result = %#v, want normalized attempt and output", result)
-	}
-	if result.Continuation == providerContinuation || result.Response.Continuation == providerContinuation {
-		t.Fatal("runner result shares continuation pointer with the runner")
-	}
-	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["source"] != "runner" {
-		t.Fatalf("runner diagnostics = %#v, want preserved safe metadata", result.Diagnostics)
-	}
-	if result.Response.ProposedOutput == nil || len(result.Response.ProposedOutput.Primary) != 1 ||
-		result.Response.ProposedOutput.Primary[0].URL != "data:audio/wav;base64,YXVkaW8=" {
-		t.Fatalf("runner proposed output = %#v, want preserved audio proposal", result.Response.ProposedOutput)
-	}
-	if result.Response.ProposedOutput == runner.result.ProposedOutput {
-		t.Fatal("runner executor reused the runner's proposed output pointer")
-	}
-	if runner.request.UserMessage != "hello" {
-		t.Fatalf("runner request = %#v, want forwarded request", runner.request)
-	}
-}
-
-func assertRunnerExecutorFailure(t *testing.T) {
-	t.Helper()
-	failure := errors.New("runner failed")
-	failed, runErr := workerinvocation.NewRunnerExecutor(&runnerExecutorTestDouble{err: failure}).Execute(
-		context.Background(), workerexecution.InvocationInput{Attempt: 4},
-	)
-	if !errors.Is(runErr, failure) || failed.Attempt != 4 || failed.FailureDetail == nil || failed.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown {
-		t.Fatalf("runner failure = result %#v, err %v; want attempt 4 and unknown failure", failed, runErr)
-	}
-	if workerinvocation.NewRunnerExecutor(nil) != nil {
-		t.Fatal("NewRunnerExecutor(nil) returned an executor")
-	}
-}
-
 func TestProviderExecutorMapsStructuredRequestAndProviderDiagnostics(t *testing.T) {
 	assertProviderExecutorStructuredRequest(t)
 }
@@ -686,17 +622,6 @@ func TestProviderExecutorRejectsCanceledContextAndMissingProvider(t *testing.T) 
 	if missingErr == nil || missing.FailureDetail == nil || missing.FailureDetail.Reason != workerexecution.WorkFailureTypeMisconfigured {
 		t.Fatalf("missing provider = result %#v, err %v, want misconfigured failure", missing, missingErr)
 	}
-}
-
-type runnerExecutorTestDouble struct {
-	result  workerexecution.RunnerExecutionResult
-	err     error
-	request workerexecution.RunnerExecutionRequest
-}
-
-func (runner *runnerExecutorTestDouble) Execute(_ context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
-	runner.request = request
-	return runner.result, runner.err
 }
 
 type invocationProviderServiceBase struct {

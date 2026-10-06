@@ -286,7 +286,7 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 				definition, persistence, home, configPath, defaults, root, clock, provider, mock,
 				func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
 					map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
-					[]operatorconfig.ACPIntegration) (durableexecution.Service, error) {
+					[]operatorconfig.ACPIntegration, *zap.Logger) (durableexecution.Service, error) {
 					if durableFailure {
 						return execution, openingErr
 					}

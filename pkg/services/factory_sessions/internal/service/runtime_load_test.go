@@ -874,6 +874,8 @@ func TestLoadRuntimeRejectsMissingOrNilSessionLoggerFactory(t *testing.T) {
 
 func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T) {
 	var got factoryruntime.JavaScriptWorkerSettings
+	logger := zap.NewNop()
+	var selectedLogger *zap.Logger
 	executionFactory := func(
 		_ string,
 		_ factorysessions.PersistencePolicy,
@@ -883,8 +885,10 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		settings factoryruntime.JavaScriptWorkerSettings,
 		_ *workers.MockWorkersConfig,
 		_ []operatorconfig.ACPIntegration,
+		logger *zap.Logger,
 	) (durableexecution.Service, error) {
 		got = settings
+		selectedLogger = logger
 		return nil, nil
 	}
 	opened, err := NewDurableExecution(
@@ -901,7 +905,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		t.TempDir(),
 		"",
 		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
-		RuntimeRoot{FactoryRootDir: t.TempDir()},
+		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: logger},
 		nil,
 		nil,
 		nil,
@@ -921,6 +925,9 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	)
 	if err != nil {
 		t.Fatalf("NewDurableExecution: %v", err)
+	}
+	if selectedLogger != logger {
+		t.Fatal("durable constructor did not receive the selected opening logger")
 	}
 	if got.DefaultModelProvider != "codex" || got.DefaultModel != "operator-model" {
 		t.Fatalf("resolved defaults = %#v, want codex/operator-model", got)
