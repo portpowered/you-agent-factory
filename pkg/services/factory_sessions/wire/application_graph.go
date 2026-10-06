@@ -88,7 +88,6 @@ type (
 	ProviderCommandRunner                  = service.ProviderCommandRunner
 	ScriptCommandRunner                    = service.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = service.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler                = service.FactoryRuntimeAssembler
 	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
 	RuntimeRoot                            = service.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder

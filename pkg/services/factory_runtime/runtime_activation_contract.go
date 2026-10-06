@@ -442,7 +442,11 @@ func (request RuntimeActivationRequest) Normalize() (RuntimeActivationRequest, e
 	request.RuntimeID = runtimeID
 	request.FactorySessionID = sessionID
 	request.Runtime.RuntimeInstanceID = runtimeID
-	request.Inputs = request.Inputs.Clone()
+	request.Inputs, err = request.Inputs.Clone()
+	if err != nil {
+		return RuntimeActivationRequest{}, runtimeActivationError(
+			RuntimeActivationErrorInvalidSnapshot, "activate Factory Runtime: recovery inputs could not be detached", err)
+	}
 	request.Snapshot = cloned
 	return request, nil
 }

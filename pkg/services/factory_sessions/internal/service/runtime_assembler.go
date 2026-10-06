@@ -4,14 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 func cloneStringMap(input map[string]string) map[string]string {
@@ -58,50 +53,4 @@ func newOrderlyRecordingFlush(
 		}
 		return nil
 	}
-}
-
-// FactoryRuntimeAssembler is the session-owned runtime assembly operation
-// constructed once by Wire. Assemble receives only invocation/session values;
-// its product-policy dependencies are already bound.
-type FactoryRuntimeAssembler interface {
-	Assemble(
-		context.Context,
-		string,
-		string,
-		bool,
-		string,
-		string,
-		string,
-		string,
-		*workers.MockWorkersConfig,
-		factorydefinitions.RuntimeMode,
-		factoryruntime.Scheduler,
-		bool,
-		string,
-		factoryruntime.RuntimeLogStorageConfig,
-		factoryruntime.RuntimeFileLoggingPolicy,
-		factoryruntime.RuntimeMetricsPolicy,
-		string,
-		factoryruntime.RuntimeMetricsStorageConfig,
-		time.Duration,
-		string,
-		string,
-		bool,
-		bool,
-		*bool,
-		factoryruntime.Clock,
-		*zap.Logger,
-		bool,
-		factoryruntime.SessionObservations,
-		string,
-		string,
-		string,
-		factorydefinitions.MutableLoadedFactorySource,
-		string,
-		*factorydefinitions.ReplayArtifact,
-		*recordings.LoadResumeInputResult,
-		*factorydefinitions.FactoryWorldState,
-		[]factorydefinitions.FactoryEvent,
-		bool,
-	) (*factoryruntime.RuntimeInitialOpening, error)
 }

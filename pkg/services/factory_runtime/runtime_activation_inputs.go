@@ -1,6 +1,9 @@
 package factory
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -18,8 +21,20 @@ type RuntimeActivationInputs struct {
 	Workers             RuntimeActivationWorkerInputs
 	Recordings          RuntimeActivationRecordingInputs
 	ResumeInput         recordings.LoadResumeInputResult
+	RecoveryInput       RuntimeActivationRecoveryInput
 	ModelCacheDirectory string
 	OperatorDefaults    RuntimeActivationOperatorDefaults
+}
+
+// RuntimeActivationRecoveryInput carries already-selected recovery facts.
+// CheckpointContinuation identifies the deferred, inspection-owned opening;
+// it suppresses operator defaults, runtime stream publication and sidecars.
+// It contains no live owner, callbacks or runtime handles.
+type RuntimeActivationRecoveryInput struct {
+	WorldState             *factorydefinitions.FactoryWorldState
+	EventHistory           []factorydefinitions.FactoryEvent
+	ReplayArtifact         *factorydefinitions.ReplayArtifact
+	CheckpointContinuation bool
 }
 
 type RuntimeActivationDefinitionInputs struct {
@@ -137,14 +152,19 @@ type RuntimeActivationOperatorDefaults struct {
 
 // Clone detaches all nested slices, maps, and pointer values before the
 // Runtime root stores an activation request.
-func (inputs RuntimeActivationInputs) Clone() RuntimeActivationInputs {
+func (inputs RuntimeActivationInputs) Clone() (RuntimeActivationInputs, error) {
 	cloned := inputs
+	var err error
+	cloned.RecoveryInput, err = cloneRuntimeActivationRecovery(inputs.RecoveryInput)
+	if err != nil {
+		return RuntimeActivationInputs{}, err
+	}
 	if inputs.Workers.InvocationSkipPermissionsOverride != nil {
 		value := *inputs.Workers.InvocationSkipPermissionsOverride
 		cloned.Workers.InvocationSkipPermissionsOverride = &value
 	}
 	if inputs.Workers.MockWorkers == nil {
-		return cloned
+		return cloned, nil
 	}
 	mock := &RuntimeActivationMockWorkersConfig{
 		UnmatchedDispatchPolicy: inputs.Workers.MockWorkers.UnmatchedDispatchPolicy,
@@ -185,7 +205,7 @@ func (inputs RuntimeActivationInputs) Clone() RuntimeActivationInputs {
 		mock.MockWorkers[index] = clonedWorker
 	}
 	cloned.Workers.MockWorkers = mock
-	return cloned
+	return cloned, nil
 }
 
 func cloneRuntimeActivationInt64Pointer(value *int64) *int64 {
@@ -194,4 +214,41 @@ func cloneRuntimeActivationInt64Pointer(value *int64) *int64 {
 	}
 	clone := *value
 	return &clone
+}
+
+// The activation boundary detaches the selected projection without changing
+// persisted formats. ReplayArtifact's in-memory metadata is carried separately
+// because its JSON representation deliberately omits those fields.
+func cloneRuntimeActivationRecovery(input RuntimeActivationRecoveryInput) (RuntimeActivationRecoveryInput, error) {
+	if input.WorldState == nil && input.EventHistory == nil && input.ReplayArtifact == nil {
+		return input, nil
+	}
+	type recoveryValues struct {
+		Recovery    RuntimeActivationRecoveryInput
+		Factory     *factorydefinitions.FactorySnapshot
+		Diagnostics factorydefinitions.ReplayDiagnostics
+		WallClock   *factorydefinitions.ReplayWallClockMetadata
+	}
+	values := recoveryValues{Recovery: input}
+	if input.ReplayArtifact != nil {
+		values.Factory = input.ReplayArtifact.Factory
+		values.Diagnostics = input.ReplayArtifact.Diagnostics
+		values.WallClock = input.ReplayArtifact.WallClock
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return RuntimeActivationRecoveryInput{}, fmt.Errorf("detach runtime recovery input: %w", err)
+	}
+	var cloned recoveryValues
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&cloned); err != nil {
+		return RuntimeActivationRecoveryInput{}, fmt.Errorf("detach runtime recovery input: %w", err)
+	}
+	if cloned.Recovery.ReplayArtifact != nil {
+		cloned.Recovery.ReplayArtifact.Factory = cloned.Factory
+		cloned.Recovery.ReplayArtifact.Diagnostics = cloned.Diagnostics
+		cloned.Recovery.ReplayArtifact.WallClock = cloned.WallClock
+	}
+	return cloned.Recovery, nil
 }

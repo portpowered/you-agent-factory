@@ -63,10 +63,17 @@ type runtimeOpeningFixture struct {
 	Recordings         *RecordingsPorts
 	Webhooks           *WebhooksPorts
 	Workers            *WorkersPorts
+	InitialActivation  factoryruntime.InitialRuntimeActivationOperation
 	OperatorSettings   *OperatorSettingsPorts
 }
 
 func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
+	initial := fixture.InitialActivation
+	if initial == nil {
+		initial = func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+			return nil, nil
+		}
+	}
 	return NewRoot(
 		fixture.ProviderSessions,
 		fixture.FactoryRuntime,
@@ -79,9 +86,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Webhooks,
 		fixture.Workers,
 		fixture.OperatorSettings,
-		func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
-			return nil, nil
-		},
+		initial,
 	)
 }
 
@@ -259,7 +264,6 @@ func assertFactoryRuntimePortsRetained(t *testing.T, opening *Root, dependencies
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime workflows", opening.factoryWorkflows, group.FactoryWorkflows)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime preview", opening.workflowPreview, group.WorkflowPreview)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime mock runner", opening.workersMockCommandRunnerFactory, group.WorkersMockCommandRunnerFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime assembler", opening.factoryRuntimeAssembler, group.FactoryRuntimeAssembler)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", opening.resolveClock, group.ResolveClock)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime selected clock", opening.clock, group.Clock)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime base logger", opening.baseLogger, group.Logger)
@@ -384,7 +388,6 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime JavaScript workflow definitions", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryWorkflows = nil }},
 		{"Factory Runtime workflow preview operation", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkflowPreview = nil }},
 		{"Factory Runtime Workers mock command runner factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkersMockCommandRunnerFactory = nil }},
-		{"Factory Runtime runtime assembler", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryRuntimeAssembler = nil }},
 		{"Factory Runtime clock resolver", func(d *runtimeOpeningFixture) { d.FactoryRuntime.ResolveClock = nil }},
 		{"Factory Runtime session logger factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.NewSessionLogger = nil }},
 		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
@@ -431,7 +434,6 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			FactoryWorkflows:                workflowDefinitionsConstructionStub{},
 			WorkflowPreview:                 workflowPreviewConstructionStub{},
 			WorkersMockCommandRunnerFactory: inertRuntimeOpeningFunction[factoryruntime.WorkersMockCommandRunnerFactory](calls),
-			FactoryRuntimeAssembler:         factoryRuntimeAssemblerConstructionStub{},
 			ResolveClock:                    inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
 			NewSessionLogger:                inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
 			Clock:                           openingCoordinatorClock{},
@@ -510,7 +512,6 @@ type factorySessionsConstructionStub struct {
 	roles.SessionGateway
 	roles.RuntimeAssembly
 }
-type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
 type recordingsRootConstructionStub struct {

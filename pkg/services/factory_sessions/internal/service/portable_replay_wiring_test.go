@@ -74,13 +74,13 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 	var events []string
 	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	factory.factoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{
+	factory.initialActivation = portableReplayRuntimeAssemblerStub{
 		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
 			events = append(events, "partial-runtime-close")
 			return artifactErr
 		}},
 		err: openingErr,
-	}
+	}.Open
 	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatal(err)
@@ -432,7 +432,8 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 			return nil
 		},
 	}
-	dependencies.FactoryRuntime.FactoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{runtime: runtimeRecord}
+	dependencies.InitialActivation = portableReplayRuntimeAssemblerStub{runtime: runtimeRecord}.Open
+	dependencies.FactoryDefinitions.Service = activationDefinitionsStub{snapshot: activationSnapshot()}
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
 		return "portable-replay-runtime"
 	}
@@ -456,6 +457,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
+	factory.namedPaths = nil
 	return factory
 }
 
@@ -676,45 +678,10 @@ type portableReplayRuntimeAssemblerStub struct {
 	err     error
 }
 
-func (assembler portableReplayRuntimeAssemblerStub) Assemble(
+func (assembler portableReplayRuntimeAssemblerStub) Open(
 	context.Context,
-	string,
-	string,
-	bool,
-	string,
-	string,
-	string,
-	string,
-	*workers.MockWorkersConfig,
-	factorydefinitions.RuntimeMode,
-	factoryruntime.Scheduler,
-	bool,
-	string,
-	factoryruntime.RuntimeLogStorageConfig,
-	factoryruntime.RuntimeFileLoggingPolicy,
-	factoryruntime.RuntimeMetricsPolicy,
-	string,
-	factoryruntime.RuntimeMetricsStorageConfig,
-	time.Duration,
-	string,
-	string,
-	bool,
-	bool,
-	*bool,
-	factoryruntime.Clock,
-	*zap.Logger,
-	bool,
+	factoryruntime.RuntimeActivationRequest,
 	factoryruntime.SessionObservations,
-	string,
-	string,
-	string,
-	factorydefinitions.MutableLoadedFactorySource,
-	string,
-	*factorydefinitions.ReplayArtifact,
-	*recordings.LoadResumeInputResult,
-	*factorydefinitions.FactoryWorldState,
-	[]factorydefinitions.FactoryEvent,
-	bool,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	return &factoryruntime.RuntimeInitialOpening{Record: assembler.runtime,
 		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error {
