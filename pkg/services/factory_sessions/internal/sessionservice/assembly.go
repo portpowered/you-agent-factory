@@ -453,7 +453,6 @@ func (a *Assembly) Complete(
 		workflowID,
 		nil,
 		a.loadFactory,
-		a.factoryScaffoldInitializer,
 		a.editableFactoryValidator,
 		a.reconnectCursorValidator,
 		a.worldStateProjector,

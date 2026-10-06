@@ -160,7 +160,7 @@ func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, curr
 
 func (r *Root) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	if request.InitNewFactory {
-		factoryDir, err := r.Assembly.PrepareNewFactoryScaffold(request.FolderPath, r.factoryScaffoldInitializer)
+		factoryDir, err := r.PrepareNewFactoryScaffold(request.FolderPath)
 		if err != nil {
 			return factorysessions.SessionStartResult{}, err
 		}

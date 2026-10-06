@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -20,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -28,6 +32,52 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
+
+type scaffoldNamedPaths struct {
+	factorydefinitions.NamedPathResolver
+}
+
+func (scaffoldNamedPaths) ResolveCurrentDir(root string) (string, error) {
+	return filepath.Join(root, "current"), nil
+}
+
+type scaffoldDirectories struct{ roles.DirectoryInspection }
+
+func (scaffoldDirectories) Stat(string) (fs.FileInfo, error) {
+	return fstest.MapFS{"folder": &fstest.MapFile{Mode: fs.ModeDir}}.Stat("folder")
+}
+
+func TestPrepareNewFactoryScaffoldUsesFixedInitializerOnRetry(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("scaffold unavailable")
+	var calls []string
+	assembly := &Assembly{
+		namedPaths:          scaffoldNamedPaths{},
+		directoryInspection: scaffoldDirectories{},
+		resolveHome:         func() (string, error) { return "", nil },
+		factoryScaffoldInitializer: func(dir string) error {
+			calls = append(calls, dir)
+			if len(calls) == 1 {
+				return failure
+			}
+			return nil
+		},
+	}
+	folderA, _ := filepath.Abs("session-a")
+	folderB, _ := filepath.Abs("session-b")
+	wantA, wantB := filepath.Join(folderA, "current"), filepath.Join(folderB, "current")
+	if dir, err := assembly.PrepareNewFactoryScaffold(folderA); dir != wantA || !errors.Is(err, failure) {
+		t.Fatalf("failed scaffold = %q, %v; want %q, %v", dir, err, wantA, failure)
+	}
+	for _, folder := range []string{folderB, folderA} {
+		if dir, err := assembly.PrepareNewFactoryScaffold(folder); err != nil || dir != filepath.Join(folder, "current") {
+			t.Fatalf("scaffold(%q) = %q, %v", folder, dir, err)
+		}
+	}
+	if !reflect.DeepEqual(calls, []string{wantA, wantB, wantA}) {
+		t.Fatalf("initializer destinations = %v, want failed A, successful B, retried A", calls)
+	}
+}
 
 type workReadMetricsRecorderStub struct{}
 

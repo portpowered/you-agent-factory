@@ -83,7 +83,6 @@ type SessionRuntime struct {
 	workflowID                     string
 	workstationLoader              interfaces.WorkstationLoader
 	loadFactory                    interfaces.LoadedFactoryLoader
-	factoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator       factorysessions.EditableFactoryValidator
 	reconnectCursorValidator       factorysessions.ReconnectCursorValidator
 	worldStateProjector            factory.WorldStateProjector
