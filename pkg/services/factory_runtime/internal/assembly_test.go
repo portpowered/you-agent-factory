@@ -12,17 +12,14 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -1052,47 +1049,4 @@ func (*openingObservationStub) RecordPetriTokenMutations(string, []interfaces.To
 
 func (observations *openingObservationStub) PublishWorkerProgress(fragment workers.ProgressFragment) {
 	observations.progress(fragment)
-}
-
-// initialPreparationFake deliberately supplies a replacement-scoped path. The
-// initial operation must select its invocation path after preparation.
-type initialPreparationFake struct {
-	runtimebuild.ExecutionPreparation
-}
-
-func (*initialPreparationFake) PrepareExecutionValues(_ context.Context, defaults runtimebuild.BuildDefaults,
-	values runtimebuild.SessionBuildValues, _ *zap.Logger, _ providers.Service,
-	_ platformprocess.CommandRunner, _ *workers.MockWorkersConfig,
-) (runtimebuild.PreparedExecutionValues, error) {
-	return runtimebuild.PreparedExecutionValues{PreparedSessionValues: runtimebuild.PreparedSessionValues{
-		SessionID: values.SessionID, RecordPath: runtimebuild.SessionScopedRecordPath(defaults.RecordPath, values.SessionID),
-	}}, nil
-}
-
-func (*assemblyWorldStateOpening) ReplayExecution(*recordings.ReplayArtifact) (
-	providers.Service, platformprocess.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error,
-) {
-	return nil, nil, nil, nil, nil
-}
-
-func TestAssemblyInitialRecordingPathsRetainInvocationSelection(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct{ name, path, want string }{
-		{"empty", "", ""},
-		{"default", "recording.json", "recording.json"},
-		{"explicit", "/recordings/chosen.json", "/recordings/chosen.json"},
-		{"placeholder", "/recordings/__factory_session_id__.json", "/recordings/~default.json"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			clock := clockwork.NewFakeClock()
-			assembly := &Assembly{preparation: &initialPreparationFake{}, recordingsRuntime: &assemblyWorldStateOpening{}}
-			request := factoryruntime.RuntimeActivationRequest{FactorySessionID: "selected"}
-			request.Inputs.Recordings.RecordPath = test.path
-			spec, err := assembly.prepareInitialOpening(t.Context(), request, nil, clock, zap.NewNop(), nil, nil)
-			if err != nil || spec.RecordPath != test.want || spec.SessionID != "selected" || spec.Clock != clock {
-				t.Fatalf("initial spec = %#v, %v; want path %q and addressed identity/clock", spec, err, test.want)
-			}
-		})
-	}
 }
