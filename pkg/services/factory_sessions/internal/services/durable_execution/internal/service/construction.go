@@ -33,6 +33,7 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	workerExecution factorysessionexecution.WorkerExecution,
 	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
@@ -43,8 +44,8 @@ func NewDurable(
 	if err != nil {
 		return nil, err
 	}
-	// A runtime-backed live session invokes its children as Workers through its
-	// own Factory Runtime, so it takes no direct provider edge of its own. The
+	// A runtime-backed live session invokes its children through the fixed
+	// Workers operation, so it takes no direct provider edge of its own. The
 	// mode still arrives from composition: a session with no provider behind it
 	// runs fake children, exactly as before.
 	return factorysessionexecution.NewProcessDurableExecutionService(
@@ -65,7 +66,7 @@ func NewDurable(
 		responseStreams,
 		liveChangeCoordinator,
 		adaptRuntimePersistenceStoreFactory(stores),
-		nil, nil, nil, nil, logger,
+		nil, nil, workerExecution, nil, logger,
 	)
 }
 

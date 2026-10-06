@@ -167,7 +167,6 @@ func (r *Root) openPortableReplayDurableOwner(
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
-	workerService workers.Service,
 	durableExecutionFactory DurableExecutionFactory,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
@@ -203,7 +202,6 @@ func (r *Root) openPortableReplayDurableOwner(
 				probeContext,
 				configured,
 				durable.Service,
-				workerService,
 				providerForDurable,
 				providerCommandRunner,
 			)
@@ -221,7 +219,6 @@ func (r *Root) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
 	durableOwner durableexecution.Service,
-	workerService workers.Service,
 	providerForDurable providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
@@ -242,7 +239,6 @@ func (r *Root) preparePortableReplayRuntime(
 	if err := bindDurableExecutionCapabilities(
 		configured.Session.SessionID,
 		durableOwner,
-		workerService,
 		runtimeService,
 		resourceLeaseAdmission,
 		configured.Runtime.RuntimeInstanceID,
@@ -351,7 +347,6 @@ func (observations replaySessionObservations) PublishWorkerProgress(fragment wor
 func bindDurableExecutionCapabilities(
 	sessionID string,
 	execution durableexecution.Service,
-	workerService workers.Service,
 	invoker factoryruntime.Service,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
@@ -365,10 +360,9 @@ func bindDurableExecutionCapabilities(
 ) error {
 	setWorkerInvoker(execution, invoker)
 	setDispatchDurability(execution, recordingLedger, generationID)
-	if err := setWorkerExecution(
+	if err := bindWorkerScope(
 		sessionID,
 		execution,
-		workerService,
 		admission,
 		runtimeID,
 		generationID,

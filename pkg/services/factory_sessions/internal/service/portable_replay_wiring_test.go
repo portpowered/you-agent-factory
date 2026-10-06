@@ -439,6 +439,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		return "portable-replay-runtime"
 	}
 	dependencies.WorkerService = &portableReplayWorkerService{}
+	owner.workerExecution = dependencies.WorkerService
 	dependencies.DurableExecutionFactory = func(
 		_ factorydefinitions.RuntimeSelection,
 		_ factorysessions.PersistencePolicy,
@@ -602,20 +603,17 @@ func (owner *portableReplayRuntimeOwner) SetWorkerInvoker(runtime factoryruntime
 	owner.workerInvoker = runtime
 }
 
-func (owner *portableReplayRuntimeOwner) SetWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
+func (owner *portableReplayRuntimeOwner) BindWorkerScope(
 	_ factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
 	_ providers.Service,
 	_ *workers.MockWorkersConfig,
 	_ platformprocess.CommandRunner,
-) {
-	owner.workerExecution = execution
+) error {
 	owner.workerRuntimeID = runtimeID
 	owner.workerGenerationID = generationID
+	return nil
 }
 
 func (owner *portableReplayRuntimeOwner) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {

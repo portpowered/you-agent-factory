@@ -205,7 +205,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.clock,
 			r.providerOverride,
 			r.providerCommandRunner,
-			r.workerService,
 			r.durableExecutionFactory,
 			r.factorySessionExecutionFactory,
 			r.providerIdentities,
@@ -589,7 +588,6 @@ func (r *Root) bindSessionOpeningProducts(
 	if err := bindDurableExecutionCapabilities(
 		opening.sessionID,
 		opening.durableExecution.Service,
-		r.workerService,
 		rootRuntime,
 		resourceLeaseAdmission,
 		opening.configured.Runtime.RuntimeInstanceID,
@@ -734,28 +732,21 @@ func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
 	setter.SetWorkerInvoker(runtime)
 }
 
-// workerExecutionSetter is the narrow live-session child capability. The
-// Workers service is already composed by process Wire; only its Execute method
-// crosses into the child projection, while Runtime contributes the separate
-// resource-lease admission and identity metadata.
-type workerExecutionSetter interface {
-	SetWorkerExecution(
-		interface {
-			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-		},
+// workerScopeBinder accepts runtime-owned facts without replacing Workers.
+type workerScopeBinder interface {
+	BindWorkerScope(
 		factoryruntime.ResourceCapacityLeaseAdmission,
 		string,
 		string,
 		providers.Service,
 		*workers.MockWorkersConfig,
 		platformprocess.CommandRunner,
-	)
+	) error
 }
 
-func setWorkerExecution(
+func bindWorkerScope(
 	sessionID string,
 	execution any,
-	workerService workers.Service,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
@@ -763,20 +754,13 @@ func setWorkerExecution(
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
 ) error {
-	setter, ok := execution.(workerExecutionSetter)
+	binder, ok := execution.(workerScopeBinder)
 	if !ok {
-		return fmt.Errorf(
-			"bind Workers Execute for Factory Session %q: live child execution setter is required",
-			strings.TrimSpace(sessionID),
-		)
+		return fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	if workerService == nil {
-		return fmt.Errorf(
-			"bind Workers Execute for Factory Session %q: Workers service is required",
-			strings.TrimSpace(sessionID),
-		)
+	if err := binder.BindWorkerScope(admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride); err != nil {
+		return fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}
-	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
 	return nil
 }
 

@@ -914,7 +914,7 @@ func TestChildStartProgressBridgePreservesDurableOwnerAndPeer(t *testing.T) {
 					CanonicalDraft: validMessageDeltaDraft(request.Correlation.DispatchID),
 				})
 			}
-			service.SetWorkerExecution(invoker, nil, "runtime", "generation", nil, nil, nil)
+			service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "runtime", "generation", nil, nil, nil)
 			forwarded := 0
 			hooks := service.childExecutorHooksForStart(ChildExecutorModeLive, sessionID, nil, nil, nil, func(fragment workers.ProgressFragment) {
 				if fragment.DispatchID == "" || fragment.Correlation.DispatchID != fragment.DispatchID {

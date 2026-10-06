@@ -33,6 +33,7 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	workerExecution factorysessionexecution.WorkerExecution,
 	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
@@ -40,6 +41,6 @@ func NewDurable(
 		checkpointSummaries, workflows, orchestration, childValues,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
-		liveChangeCoordinator, logger,
+		liveChangeCoordinator, workerExecution, logger,
 	)
 }

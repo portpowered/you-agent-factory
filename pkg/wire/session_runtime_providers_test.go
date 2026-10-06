@@ -243,6 +243,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		adaptRunner,
 		provideFactoryRuntimeProviderOverride(edges),
 		factorysessionwire.NewLiveChangeCoordinator(),
+		nil,
 	)
 
 	clock := platformclock.Real{}

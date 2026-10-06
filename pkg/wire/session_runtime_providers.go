@@ -705,6 +705,7 @@ func provideFactorySessionExecutionFactory(
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride providerOverrideService,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+	workerService workers.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	// The allocator, runner adapter, and fixed provider override are read only
 	// to decide whether this process can reach a provider at all. No invocation executor is built
@@ -750,7 +751,7 @@ func provideFactorySessionExecutionFactory(
 			sessionIDs,
 			responseEventIDs,
 			responseStreams,
-			liveChangeCoordinator, logger,
+			liveChangeCoordinator, workerService, logger,
 		)
 	}
 }

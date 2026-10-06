@@ -343,3 +343,40 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 		t.Fatalf("failed resume state=%#v error=%v", read, err)
 	}
 }
+
+func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
+	t.Parallel()
+	service := &JavaScriptRuntimeService{}
+	if err := service.BindWorkerScope(nil, "runtime", "generation", nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Workers Execute capability is required") {
+		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
+	}
+}
+
+func TestBindWorkerScopeRetainsExecutionAndCapturedChildIdentity(t *testing.T) {
+	t.Parallel()
+	invocation := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	service := newProcessChildRuntime(invocation)
+	if err := service.BindWorkerScope(nil, "runtime-first", "generation-first", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	first := service.childExecutorHooks(ChildExecutorModeLive, "first-parent").NewChildExecutor("first-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+	if err := service.BindWorkerScope(nil, "runtime-second", "generation-second", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	second := service.childExecutorHooks(ChildExecutorModeLive, "second-parent").NewChildExecutor("second-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+	for _, scenario := range []struct {
+		executor                     factory.JavaScriptChildExecutor
+		session, runtime, generation string
+	}{
+		{first, "first-child", "runtime-first", "generation-first"},
+		{second, "second-child", "runtime-second", "generation-second"},
+	} {
+		if _, err := scenario.executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run", Preset: "worker-a"}); err != nil {
+			t.Fatal(err)
+		}
+		got := invocation.request.Correlation
+		if got.FactorySessionID != scenario.session || got.RuntimeID != scenario.runtime || got.GenerationID != scenario.generation {
+			t.Fatalf("child correlation = %#v, want session %q runtime %q generation %q", got, scenario.session, scenario.runtime, scenario.generation)
+		}
+	}
+}

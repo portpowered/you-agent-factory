@@ -432,7 +432,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
 	v111 := provideLoadedFactorySnapshotCapturer()
 	v112 := provideDurableExecutionFactory(configLoader)
-	v113 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v27, v23, v24, v13, responseEventIDGenerator, v11, v74, v75, v73, liveChangeCoordinator)
+	v113 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v27, v23, v24, v13, responseEventIDGenerator, v11, v74, v75, v73, liveChangeCoordinator, workersService)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v114, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)

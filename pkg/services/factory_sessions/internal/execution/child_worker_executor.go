@@ -53,28 +53,23 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 	s.invokerMu.Unlock()
 }
 
-// SetWorkerExecution attaches the already-composed Workers Execute operation
-// to the durable child path. The binding is request-scoped at the Workers
-// boundary: Sessions supplies detached identity and policy values, while
-// Workers retains runner/provider ownership and terminal normalization.
-func (s *JavaScriptRuntimeService) SetWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
+// BindWorkerScope registers the owning runtime's request facts and resource
+// handles. The Workers operation is fixed by construction.
+func (s *JavaScriptRuntimeService) BindWorkerScope(
 	admission factory.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
-) {
-	if s == nil {
-		return
-	}
-	binding := s.newChildWorkerExecutionBinding(execution, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+) error {
 	s.invokerMu.Lock()
-	s.workerExecution = binding
-	s.invokerMu.Unlock()
+	defer s.invokerMu.Unlock()
+	if s.workerExecution == nil || s.workerExecution.execute == nil {
+		return errors.New("Workers Execute capability is required")
+	}
+	s.workerExecution = s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+	return nil
 }
 
 func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
