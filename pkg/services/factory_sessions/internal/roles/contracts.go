@@ -192,12 +192,8 @@ type RuntimeAssembly interface {
 		workFile string,
 		workflowID string,
 		workstationLoader factorydefinitions.WorkstationLoader,
-		loadFactory factorydefinitions.LoadedFactoryLoader,
-		factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-		editableFactoryValidator factorysessions.EditableFactoryValidator,
 		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
-		invocationMetricsRecorder InvocationMetricsRecorder,
 	) (ApplicationRuntime, SessionGateway, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }
 

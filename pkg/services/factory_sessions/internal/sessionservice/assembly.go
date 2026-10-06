@@ -38,6 +38,10 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      StreamManager
 	projectionReader             runtimebinding.SessionProjectionOwner
+	loadFactory                  factorydefinitions.LoadedFactoryLoader
+	factoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator     factorysessions.EditableFactoryValidator
+	invocationMetricsRecorder    roles.InvocationMetricsRecorder
 	namedFactoryActivator        func(context.Context, string) error
 	definitionActivationGateway  factorydefinitions.DefinitionActivationGateway
 	invoker                      roles.InvocationService
@@ -96,9 +100,17 @@ func NewAssembly(
 	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		SessionGateway:               gateway,
+		loadFactory:                  loadFactory,
+		factoryScaffoldInitializer:   factoryScaffoldInitializer,
+		editableFactoryValidator:     editableFactoryValidator,
+		invocationMetricsRecorder:    invocationMetricsRecorder,
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
@@ -351,12 +363,8 @@ func (a *Assembly) Complete(
 	workFile string,
 	workflowID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 	worldStateProjector factoryruntime.WorldStateProjector,
-	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) (
 	roles.ApplicationRuntime,
 	roles.SessionGateway,
@@ -398,7 +406,7 @@ func (a *Assembly) Complete(
 		livesession.CanonicalID(session),
 		startupSpec.ResumeSourceCanonicalSessionID,
 	)
-	session.InvocationMetricsRecorder = invocationMetricsRecorder
+	session.InvocationMetricsRecorder = a.invocationMetricsRecorder
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
@@ -439,12 +447,12 @@ func (a *Assembly) Complete(
 		workFile,
 		workflowID,
 		workstationLoader,
-		loadFactory,
-		factoryScaffoldInitializer,
-		editableFactoryValidator,
+		a.loadFactory,
+		a.factoryScaffoldInitializer,
+		a.editableFactoryValidator,
 		reconnectCursorValidator,
 		worldStateProjector,
-		invocationMetricsRecorder,
+		a.invocationMetricsRecorder,
 		a.newJavaScriptCheckpointStore,
 		a.sessionResultProjection,
 		a.state,

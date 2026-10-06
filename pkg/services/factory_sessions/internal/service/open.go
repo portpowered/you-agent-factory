@@ -504,9 +504,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		opening.sessionSelection.WorkFile,
 		opening.configured.Recordings.WorkflowID,
 		nil,
-		r.loadFactory,
-		r.factoryScaffoldInitializer,
-		r.editableFactoryValidator,
 		func(
 			recorded []factorydefinitions.FactoryEvent,
 			cursor factorydefinitions.FactoryEventReconnectCursor,
@@ -515,7 +512,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 			return opening.recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
 		},
 		opening.recordingProjections.ReconstructFactoryWorldState,
-		r.invocationMetricsRecorder,
 	)
 	if err != nil {
 		return runtimeProducts{}, err

@@ -69,7 +69,6 @@ type runtimeOpeningFixture struct {
 	GenerateRuntimeInstanceID    factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                  factorysessions.HomeDirectoryResolver
 	ProviderIdentities           factorysessions.ProviderIdentityResolver
-	InvocationMetricsRecorder    roles.InvocationMetricsRecorder
 	WorkService                  work.Service
 	AutomationService            automations.Service
 	WebhooksService              webhooks.Service
@@ -113,7 +112,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,
 		fixture.ProviderIdentities,
-		fixture.InvocationMetricsRecorder,
 		fixture.WorkService,
 		fixture.AutomationService,
 		fixture.WebhooksService,

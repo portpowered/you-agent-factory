@@ -279,6 +279,10 @@ func NewRuntimeAssembly(
 	processDurable durableexecution.Service,
 	namedFactoryActivator NamedFactoryActivator,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) (RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -316,6 +320,10 @@ func NewRuntimeAssembly(
 		processDurable,
 		namedFactoryActivator,
 		definitionActivationGateway,
+		loadFactory,
+		factoryScaffoldInitializer,
+		editableFactoryValidator,
+		invocationMetricsRecorder,
 	)
 	return assembly, nil
 }

@@ -428,22 +428,22 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v109 := wire5.NewScopeActivation(v42)
 	v110 := provideFactorySessionDirectoryInspection(edges2)
 	initialWorkReader := provideFactorySessionInitialWorkReader(edges2)
-	v111, err := wire5.NewRuntimeAssembly(sessionGateway, v38, v42, v47, v108, v43, v109, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v41, homeDirectoryResolver, v110, namedPathResolver, initialWorkReader, v44, v39, source, liveChangeCoordinator, v103, v47, host, v99, namedFactoryActivator, definitionActivationGateway)
-	if err != nil {
-		return nil, err
-	}
-	v112 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v51, v49, v50, v41, responseEventIDGenerator, v39, v97, v98, v16, liveChangeCoordinator, workersService)
-	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(service)
-	v113 := provideDurableOpening(configLoader, v112, providerIdentityResolver)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
-	v114, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
+	v111, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
 	if err != nil {
 		return nil, err
 	}
-	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v114)
-	v115 := provideDefinitionValidationOperation(validationOperations)
-	editableFactoryValidator := provideEditableFactoryValidator(v115)
+	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v111)
+	v112 := provideDefinitionValidationOperation(validationOperations)
+	editableFactoryValidator := provideEditableFactoryValidator(v112)
+	v113, err := wire5.NewRuntimeAssembly(sessionGateway, v38, v42, v47, v108, v43, v109, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v41, homeDirectoryResolver, v110, namedPathResolver, initialWorkReader, v44, v39, source, liveChangeCoordinator, v103, v47, host, v99, namedFactoryActivator, definitionActivationGateway, v35, factoryScaffoldInitializer, editableFactoryValidator, v105)
+	if err != nil {
+		return nil, err
+	}
+	v114 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v51, v49, v50, v41, responseEventIDGenerator, v39, v97, v98, v16, liveChangeCoordinator, workersService)
+	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(service)
+	v115 := provideDurableOpening(configLoader, v114, providerIdentityResolver)
 	commandLineReader := providePprofCommandLineReader()
 	starter, err := provideAPIServerStarter(edges2, commandLineReader)
 	if err != nil {
@@ -459,7 +459,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v118 := provideWorkSessionResolver(v111)
+	v118 := provideWorkSessionResolver(v113)
 	v119 := provideWorkSnapshotReader()
 	v120, err := provideRecordingClock(source)
 	if err != nil {
@@ -491,7 +491,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	requestContentBridge := wire.NewRequestContentBridge(contentPreparation)
 	v134 := wire.NewRequestPolicy(requestContentBridge)
 	requestPreparationService := wire.NewRequestPreparationService(v134)
-	workService := provideWorkService(v111, submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer, v132, requestPreparationService, invocationInputPreparation)
+	workService := provideWorkService(v113, submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer, v132, requestPreparationService, invocationInputPreparation)
 	v135 := provideAutomationsClock(source, timerSource)
 	commandRunner, err := provideAutomationsCommandRunner(edges2)
 	if err != nil {
@@ -588,15 +588,15 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v161 := provideRuntimePreparationWorkstationLoader()
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	v162 := provideRuntimePreparation(v161, v35, factoryIDGenerator, logger, v16, v150, v95, workersMockCommandRunnerFactory)
-	v163, err := provideFactoryRuntimeAssembly(v152, timerSource, workersService, workersessionsService, workerAttemptOpener, v159, initialFactorySnapshotFactory, v160, v13, v162, v149, root, v111)
+	v163, err := provideFactoryRuntimeAssembly(v152, timerSource, workersService, workersessionsService, workerAttemptOpener, v159, initialFactorySnapshotFactory, v160, v13, v162, v149, root, v113)
 	if err != nil {
 		return nil, err
 	}
 	initialRuntimeActivationOperation := provideInitialRuntimeActivation(v163, source, logger, v36)
-	v164 := provideRuntimeModelFactoryConfigReader(v111)
+	v164 := provideRuntimeModelFactoryConfigReader(v113)
 	v165 := provideRuntimeModelWorkerExecution(workersService)
 	v166 := wire5.NewRuntimeModelInvocation(modelsService, v164, v165)
-	v167, err := wire5.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v15, clockResolver, sessionLoggerFactory, source, v16, v17, v18, v27, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v35, v36, replayRuntimeConfigDecoder, v37, v111, v113, factoryScaffoldInitializer, editableFactoryValidator, v117, v41, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, v105, workService, root, webhooksService, modelsService, recordingsService, v149, workersService, v150, v95, backendScopeEnsurer, initialRuntimeActivationOperation, v166, liveChangeCoordinator)
+	v167, err := wire5.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v15, clockResolver, sessionLoggerFactory, source, v16, v17, v18, v27, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v35, v36, replayRuntimeConfigDecoder, v37, v113, v115, factoryScaffoldInitializer, editableFactoryValidator, v117, v41, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, workService, root, webhooksService, modelsService, recordingsService, v149, workersService, v150, v95, backendScopeEnsurer, initialRuntimeActivationOperation, v166, liveChangeCoordinator)
 	if err != nil {
 		return nil, err
 	}
@@ -808,7 +808,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		SubmitBatch:                       submitBatchOperation,
 		FlattenFactoryConfig:              flattenFactoryConfigOperation,
 		ExpandFactoryConfig:               expandFactoryConfigOperation,
-		InitFactory:                       v114,
+		InitFactory:                       v111,
 		ConfigureInit:                     configureInitOperation,
 		InstallPackagedFactory:            cliInstallPackagedFactoryOperation,
 		QueryFactory:                      queryFactoryOperation,

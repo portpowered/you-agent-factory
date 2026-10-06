@@ -305,6 +305,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		nil,
 		NewNamedFactoryActivator(state),
 		NewKeyedDefinitionActivationGateway(state, in.clock),
+		nil, nil, nil, nil,
 	)
 }
 
@@ -726,7 +727,6 @@ func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveCha
 		nil,
 		nil,
 		assembly,
-		nil,
 		nil,
 		nil,
 		nil,

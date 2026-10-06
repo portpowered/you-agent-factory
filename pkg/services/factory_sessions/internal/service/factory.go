@@ -93,7 +93,6 @@ type Root struct {
 	runtimeRoot                    FactoryRuntimeRoot
 	clock                          factoryruntime.Clock
 	providerOverride               providers.Service
-	invocationMetricsRecorder      roles.InvocationMetricsRecorder
 	providerCommandRunner          platformprocess.CommandRunner
 	scriptCommandRunner            platformprocess.CommandRunner
 	submissionRecorder             recordings.SubmissionRecorder
@@ -129,7 +128,6 @@ func NewRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 	workService work.Service,
 	automationService automations.Service,
 	webhooksService webhooks.Service,
@@ -187,7 +185,6 @@ func NewRoot(
 		providerIdentities:             providerIdentities,
 		clock:                          clock,
 		providerOverride:               providerOverride,
-		invocationMetricsRecorder:      invocationMetricsRecorder,
 		providerCommandRunner:          providerCommandRunner,
 		scriptCommandRunner:            scriptCommandRunner,
 		submissionRecorder:             submissionRecorder,
