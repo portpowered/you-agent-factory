@@ -2248,3 +2248,11 @@ than the workflow's job-start window. It cannot establish current-head latency
 or cache effectiveness. Its 96.818s active compiler wall / 318.784s compiler
 CPU demonstrates substantial misses, which require investigation if repeated
 by the hosted restored run.
+
+The coverage-specific cache proof reproduces one avoidable compile after an
+archive-only restore: Go requires its separately cached static coverage
+metadata (`\x00cvm`) even when the compiled archive is present. The filter now
+retains that metadata too. Repeating fresh `go test -count=1 -coverpkg=./...`
+against an empty restored cache performs zero compiles and produces an identical
+coverage profile. All four cache proofs pass. Executable, result and counter
+payloads remain excluded, and the same total byte limit applies.

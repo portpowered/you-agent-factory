@@ -2,7 +2,7 @@
 
 Go marks cache entries used at most once per hour. The one-hour margin retains
 objects read during this job, including hits restored with an earlier mtime.
-Archives and action metadata preserve Go's own content-based invalidation;
+Archives, static coverage metadata and action metadata preserve Go's own content-based invalidation;
 executables, test results, generated-file directories and unrelated data stay
 out of the transferable cache.
 """
@@ -13,6 +13,7 @@ import shutil
 import time
 
 ARCHIVE_MAGIC = b"!<arch>\n"
+COVERAGE_META_MAGIC = b"\x00cvm"
 
 
 def entries(root):
@@ -32,7 +33,7 @@ def entries(root):
 def compiler_entry(path):
     with path.open("rb") as source:
         prefix = source.read(8)
-    return prefix.startswith(b"v1 ") if path.name.endswith("-a") else prefix == ARCHIVE_MAGIC
+    return prefix.startswith(b"v1 ") if path.name.endswith("-a") else prefix == ARCHIVE_MAGIC or prefix.startswith(COVERAGE_META_MAGIC)
 
 
 def transfer(source, destination, cutoff=None, limit=None):

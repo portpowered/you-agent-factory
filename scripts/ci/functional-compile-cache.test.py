@@ -14,6 +14,30 @@ spec.loader.exec_module(cache)
 
 class CompilerCacheTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("go"), "requires the Go compiler")
+    def test_real_test_coverage_reuse_preserves_profile(self):
+        with tempfile.TemporaryDirectory(prefix="coverage-cache-proof-") as directory:
+            root = Path(directory)
+            project = root / "project"
+            (project / "witness").mkdir(parents=True)
+            (project / "go.mod").write_text("module example.com/coverageproof\n\ngo 1.25.0\n")
+            (project / "witness/value.go").write_text('package witness\nfunc Value() string{return "one"}\n')
+            (project / "proof_test.go").write_text('package proof\nimport("testing";"example.com/coverageproof/witness")\nfunc TestValue(t *testing.T){if witness.Value()!="one"{t.Fatal("unexpected value")}}\n')
+
+            def run(name, go_cache):
+                profile = root / (name + ".out")
+                environment = dict(os.environ, GOCACHE=str(go_cache), GOMAXPROCS="4", GOFLAGS="")
+                result = subprocess.run(["go", "test", "-p=4", "-vet=off", "-count=1", "-coverpkg=./...", "-covermode=count", "-coverprofile=" + str(profile), "-x", "./..."], cwd=project, env=environment, capture_output=True, text=True, check=True)
+                return len(re.findall(r'[/\\]compile(?:\.exe)?(?=["\s]|$)', result.stderr)), profile.read_text()
+
+            cold, before = run("cold", root / "cache-a")
+            cache.transfer(root / "cache-a", root / "snapshot", limit=1024**3)
+            cache.transfer(root / "snapshot", root / "cache-b", limit=1024**3)
+            reused, after = run("restored", root / "cache-b")
+            self.assertGreater(cold, 0)
+            self.assertEqual(reused, 0)
+            self.assertEqual(before, after)
+
+    @unittest.skipUnless(shutil.which("go"), "requires the Go compiler")
     def test_real_go_reuse_and_source_invalidation(self):
         with tempfile.TemporaryDirectory(prefix="compiler-cache-proof-") as directory:
             root = Path(directory)
