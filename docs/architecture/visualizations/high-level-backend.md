@@ -13,8 +13,8 @@ flowchart TB
     s_services_operator_settings["operator settings<br/>7508 LOC · 2 subservices"]
   end
   subgraph coordination["Factory coordination"]
-    s_services_factory_runtime["factory runtime<br/>48517 LOC · 4 subservices"]
-    s_services_factory_sessions["factory sessions<br/>58442 LOC · 3 subservices"]
+    s_services_factory_runtime["factory runtime<br/>48586 LOC · 4 subservices"]
+    s_services_factory_sessions["factory sessions<br/>58357 LOC · 3 subservices"]
   end
   subgraph execution["Execution"]
     s_services_models["models<br/>38289 LOC · 5 subservices"]
