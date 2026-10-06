@@ -88,3 +88,29 @@ func TestT7ProviderPreflightSharesPolicyWithoutExecution(t *testing.T) {
 		})
 	}
 }
+
+func TestT7ProviderPreflightRejectsMissingOrCanceledContext(t *testing.T) {
+	t.Parallel()
+	for _, canceled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing", true: "canceled"}[canceled], func(t *testing.T) {
+			t.Parallel()
+			native := &validationExecution{}
+			svc, err := providerservice.NewWithACP(validationCatalog{}, native, &stubACPService{}, nil, logging.NoopLogger{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ctx context.Context
+			want := providers.ErrExecuteFailed
+			if canceled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(context.Background())
+				cancel()
+				want = context.Canceled
+			}
+			err = svc.ValidateExecution(ctx, providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt"})
+			if !errors.Is(err, want) || native.calls != 0 {
+				t.Fatalf("preflight = %v, provider calls %d", err, native.calls)
+			}
+		})
+	}
+}

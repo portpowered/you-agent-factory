@@ -24,7 +24,14 @@ func assertPackagedTTSCommandRequest(
 	if request.Command != "codex" {
 		t.Fatalf("packaged TTS command = %q, want codex", request.Command)
 	}
-	wantArgs := []string{"exec", "--json", "--model", factorydefinitions.DefaultTTSModelName, "-"}
+	if len(request.Args) != 7 || !strings.HasPrefix(request.Args[5], "developer_instructions=") {
+		t.Fatalf("packaged TTS command args = %#v, want explicit developer instructions", request.Args)
+	}
+	var systemPrompt string
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(request.Args[5], "developer_instructions=")), &systemPrompt); err != nil || !strings.Contains(systemPrompt, "TTS_EDGE_WITNESS") {
+		t.Fatalf("packaged TTS system prompt = %q, error %v", systemPrompt, err)
+	}
+	wantArgs := []string{"exec", "--json", "--model", factorydefinitions.DefaultTTSModelName, "--config", request.Args[5], "-"}
 	if !reflect.DeepEqual(request.Args, wantArgs) {
 		t.Fatalf("packaged TTS command args = %#v, want %#v", request.Args, wantArgs)
 	}
