@@ -16,6 +16,8 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,6 +31,7 @@ func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	t.Run("saved process feedback reaches the resumed review provider", testDurableCustomerFeedbackRecovery)
+	t.Run("latest empty feedback and deleted tags survive recovery", testDurableCustomerEmptyFeedbackRecovery)
 	t.Run("consumed branch stays retired while its sibling resumes", testDurableCustomerBranchRecovery)
 	t.Run("last good Work stays readable after a live writer failure", testDurableCustomerLiveWriterFailure)
 	t.Run("ordinary writer failure preserves the last durable result", func(t *testing.T) {
@@ -93,6 +96,98 @@ func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 			t.Fatalf("recovery changed canonical source: %v", err)
 		}
 	})
+}
+
+// A controlled canonical recording supplies two complete versions of the same
+// Work. Public resume, save and a second reconstruction must use the latest
+// tags, rather than merging deleted keys or substituting the old feedback.
+func testDurableCustomerEmptyFeedbackRecovery(t *testing.T) {
+	t.Parallel()
+	dir, source, payload := durableEmptyFeedbackRecording(t)
+	for index := 0; index < 2; index++ {
+		runner := &durableFeedbackRunner{requests: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
+		record := filepath.Join(dir, []string{"saved.jsonl", "successor.jsonl"}[index])
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: dir, WorkingDirectory: dir, WaitForServiceModeRuntime: true, ServerReadyTimeout: 15 * time.Second,
+			Args:  []string{"--provider", "CODEX", "--model", "gpt-5-codex", "--resume", source, "--record", record},
+			Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+		})
+		works := support.ListDefaultSessionWork(t, server.URL())
+		if len(works.Results) != 2 || !support.HasWorkAtCustomerState(works, "empty-feedback-work", "task:init") {
+			t.Fatalf("latest Work not recovered: %#v", works.Results)
+		}
+		for _, item := range works.Results {
+			if item.Tags == nil || (*item.Tags)["_last_output"] != "" {
+				t.Fatalf("empty output changed: %#v", item.Tags)
+			}
+			if _, present := (*item.Tags)["_last_output"]; !present {
+				t.Fatal("explicit empty feedback tag lost")
+			}
+			if _, exists := (*item.Tags)["deleted"]; exists {
+				t.Fatal("deleted tag resurrected")
+			}
+		}
+		assertDurableReviewFeedback(t, runner, "")
+		if index == 1 {
+			close(runner.release)
+			support.WaitForStatus(t, server.URL(), 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 1 })
+		}
+		server.Stop(t)
+		server.Close(t)
+		runner.mu.Lock()
+		calls := runner.calls
+		runner.mu.Unlock()
+		if calls != 1 {
+			t.Fatalf("empty feedback guard routed %d times, want one", calls)
+		}
+		if after := mustReadSeededReplayArtifact(t, source); !bytes.Equal(payload, after) {
+			t.Fatal("recovery changed canonical source")
+		}
+	}
+}
+
+func durableEmptyFeedbackRecording(t *testing.T) (string, string, []byte) {
+	t.Helper()
+	config := durableBranchFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "witness", "states": []map[string]string{{"name": "init", "type": "INITIAL"}},
+	})
+	review := config["workstations"].([]map[string]any)[1]
+	review["type"] = "MODEL_WORKSTATION"
+	review["body"] = "FEEDBACK_START{{ (index .Inputs 0).PreviousOutput }}FEEDBACK_END\nDELETED_START{{ index (index .Inputs 0).Tags \"deleted\" }}DELETED_END"
+	config["workers"] = []map[string]string{{"name": "worker-a", "type": "MODEL_WORKER", "body": "Review this Work.", "modelProvider": "CODEX", "model": "gpt-5-codex"}}
+	review["inputs"] = []map[string]string{{"workType": "task", "state": "init"}, {"workType": "witness", "state": "init"}}
+	review["guards"] = []map[string]any{{"type": "MATCHES_FIELDS", "matchConfig": map[string]string{"inputKey": `.Tags["_last_output"]`}}}
+	config["workstations"] = []map[string]any{review}
+	dir := support.ScaffoldFactory(t, config)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
+	events := []factorydefinitions.FactoryEvent{seededReplayResumeEvent(t, "run", 0, 0, base,
+		factorydefinitions.FactoryEventTypeRunRequest, factorydefinitions.RunRequestEventPayload{Factory: snapshot, RecordedAt: base})}
+	requestID, eventSource := "empty-feedback", "external-submit"
+	workIDs, traceIDs := []string{"empty-feedback-work", "empty-witness"}, []string{"empty-feedback-trace"}
+	for index, tags := range []map[string]string{{"_last_output": "stale-feedback", "deleted": "stale-key"}, {"_last_output": ""}} {
+		events = append(events, seededReplayResumeEventWithContext(t, []string{"old", "latest"}[index], index+1, index+1, base.Add(time.Duration(index+1)*time.Second),
+			factorydefinitions.FactoryEventTypeWorkRequest, work.WorkRequestEventPayload{
+				Type: work.WorkRequestTypeFactoryRequestBatch, Source: "external-submit",
+				Works: []work.WorkRequestEventWork{{Name: "empty-feedback", WorkID: "empty-feedback-work", RequestID: "empty-feedback",
+					WorkTypeID: "task", TraceID: traceIDs[0], State: &work.WorkEventState{Name: "init", Type: "INITIAL"}, Tags: tags,
+					Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "review the latest Work"}}},
+					{Name: "witness", WorkID: "empty-witness", WorkTypeID: "witness", State: &work.WorkEventState{Name: "init", Type: "INITIAL"}, Tags: map[string]string{"_last_output": ""}}},
+			}, &eventSource, &requestID, &workIDs, &traceIDs))
+	}
+	payload, err := json.Marshal(factorydefinitions.ReplayArtifact{SchemaVersion: factorydefinitions.ReplayV1SourceFormat, RecordedAt: base, Events: events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(dir, "source.json")
+	if err := os.WriteFile(source, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return dir, source, payload
 }
 
 // The API owns this cell: admission and reads share the still-running host.
@@ -322,6 +417,9 @@ func assertDurableReviewFeedback(t *testing.T, runner *durableFeedbackRunner, fe
 		prompt := strings.Join(request.Args, " ") + string(request.Stdin)
 		if !strings.Contains(prompt, "FEEDBACK_START"+feedback+"FEEDBACK_END") {
 			t.Fatalf("review provider did not receive exact %d-byte feedback; prompt bytes=%d", len(feedback), len(prompt))
+		}
+		if strings.Contains(prompt, "DELETED_START") && (!strings.Contains(prompt, "DELETED_STARTDELETED_END") || strings.Contains(prompt, "stale-feedback") || strings.Contains(prompt, "stale-key")) {
+			t.Fatal("review prompt resurrected deleted tags or stale feedback")
 		}
 	case <-ctx.Done():
 		t.Fatal("review provider boundary not reached")
