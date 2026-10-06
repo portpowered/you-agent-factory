@@ -139,7 +139,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.SetDirectWorkerExecution(involver)
+	service.workerExecution = service.newChildWorkerExecutionBinding(involver, nil, "", "", nil, nil, nil)
 	policy := factory.DefaultJavaScriptPolicy()
 	policy.MaxRetries = 1
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "direct-structured-retry")
@@ -156,7 +156,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 	if attempts != 2 || len(requests) != 2 {
 		t.Fatalf("attempts = %d, requests = %d, want two", attempts, len(requests))
 	}
-	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "dispatch-1/attempt/2" {
+	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "direct-structured-retry/dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "direct-structured-retry/dispatch-1/attempt/2" {
 		t.Fatalf("attempt requests = %#v, want numbered detached attempts", requests)
 	}
 	if result.Status != factory.JavaScriptChildDispatchStatusCompleted || !result.SchemaValidated {

@@ -45,7 +45,7 @@ func NewDurable(
 	// own Factory Runtime, so it takes no direct provider edge of its own. The
 	// mode still arrives from composition: a session with no provider behind it
 	// runs fake children, exactly as before.
-	execution, err := factorysessionexecution.NewJavaScriptExecutionService(
+	return factorysessionexecution.NewProcessDurableExecutionService(
 		projectRoot,
 		childExecutorMode,
 		nil,
@@ -63,14 +63,9 @@ func NewDurable(
 		generateResponseEventID,
 		responseStreams,
 		liveChangeCoordinator,
+		adaptRuntimePersistenceStoreFactory(stores),
+		nil, nil, nil, nil, nil,
 	)
-	if err != nil {
-		return nil, err
-	}
-	if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
-		runtime.SetPersistenceRouting(adaptRuntimePersistenceStoreFactory(stores), nil)
-	}
-	return execution, nil
 }
 
 func adaptRuntimePersistenceStoreFactory(

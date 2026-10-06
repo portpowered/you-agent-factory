@@ -53,23 +53,6 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 	s.invokerMu.Unlock()
 }
 
-// SetDirectWorkerExecution attaches the already-composed Workers Execute
-// operation to the standalone JavaScript composition. The standalone path has
-// no Factory Runtime to contribute identity or capacity, but it still enters
-// Workers through the same detached request/result boundary.
-func (s *JavaScriptRuntimeService) SetDirectWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	s.directChildExecution = execution
-	s.invokerMu.Unlock()
-}
-
 // SetWorkerExecution attaches the already-composed Workers Execute operation
 // to the durable child path. The binding is request-scoped at the Workers
 // boundary: Sessions supplies detached identity and policy values, while
@@ -212,16 +195,6 @@ func (s *JavaScriptRuntimeService) workerExecutionBinding() *childWorkerExecutio
 		return nil
 	}
 	return binding
-}
-
-func (s *JavaScriptRuntimeService) directWorkerExecution() childExecuteService {
-	if s == nil {
-		return nil
-	}
-	s.invokerMu.RLock()
-	execution := s.directChildExecution
-	s.invokerMu.RUnlock()
-	return execution
 }
 
 // childWorkerExecutor runs one JavaScript workflow child as an ordinary Worker.

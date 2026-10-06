@@ -235,10 +235,9 @@ type JavaScriptRuntimeService struct {
 	childExecutorMode string
 	// directChildInvocation remains only for legacy in-package construction
 	// helpers and tests. Production standalone opening supplies the narrow
-	// Workers Execute capability through directChildExecution; P6-C can remove
+	// Workers Execute capability through workerExecution; P6-C can remove
 	// this compatibility input after those callers are retired.
 	directChildInvocation   workers.InvocationExecutor
-	directChildExecution    childExecuteService
 	persistence             runtimepersist.Store
 	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
 	persistenceProjectRoot  func() string
@@ -361,20 +360,6 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 	return s.persistence
 }
 
-// SetPersistenceRouting selects the opened project's store for process-owned
-// durable requests. The resolver reads the canonical live Factory Session.
-func (s *JavaScriptRuntimeService) SetPersistenceRouting(storeForRoot func(string) (runtimepersist.Store, error), projectRoot func() string) {
-	if s == nil {
-		return
-	}
-	if storeForRoot != nil {
-		s.persistenceStoreForRoot = storeForRoot
-	}
-	if projectRoot != nil {
-		s.persistenceProjectRoot = projectRoot
-	}
-}
-
 // ResumeRuntimeScope carries transient Worker capabilities from the selected
 // live Factory Session. No function in this value is persisted in a snapshot.
 type ResumeRuntimeScope struct {
@@ -383,13 +368,6 @@ type ResumeRuntimeScope struct {
 	WorkerAttemptStarter    factorysessions.WorkerAttemptStarter
 	WorkerResourceAdmission factory.ResourceCapacityLeaseAdmission
 	WorkerProgressPublisher workers.ProgressPublisher
-}
-
-func (s *JavaScriptRuntimeService) SetResumeRuntimeScopeResolver(resolve func(string) (ResumeRuntimeScope, error)) {
-	if s == nil {
-		return
-	}
-	s.resumeRuntimeScope = resolve
 }
 
 func (s *JavaScriptRuntimeService) persistenceForRoot(root string) (runtimepersist.Store, error) {

@@ -472,18 +472,6 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 			}
 			return executor
 		}
-		if execution := s.directWorkerExecution(); execution != nil {
-			executor := newDirectChildExecutor(
-				childSessionID,
-				execution,
-				records,
-				s.childValues,
-				workingDir,
-				policy.MaxRetries,
-			)
-			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
-			return executor
-		}
 		// Compatibility is retained for in-package callers that have not yet
 		// moved to the standalone Workers binding. It is not part of the Wire
 		// production path and is the P6-C retirement survivor.

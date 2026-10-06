@@ -86,7 +86,7 @@ func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *t
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.SetDirectWorkerExecution(invoker)
+	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil)
 
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "standalone-session")
 	if hooks.NewChildExecutor == nil {
