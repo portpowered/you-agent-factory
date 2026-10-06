@@ -51,6 +51,13 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 	}
 	env := cleanupEnvironment(home, temp)
 	factory := writeCleanupFactory(t, project, node, filepath.Join(project, "ready"), filepath.Join(project, "release"))
+	seedsBefore, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
+	if err != nil || len(seedsBefore) != 1 {
+		t.Fatalf("known-name seed = %v, %v", seedsBefore, err)
+	}
+	if err := os.Rename(seedsBefore[0], filepath.Join(filepath.Dir(seedsBefore[0]), "seed-archived-name.json")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(project, "worker.cjs"), []byte("console.log('history-restart COMPLETE');"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +110,15 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 		t.Fatalf("archived sessions = %+v", rows.Sessions)
 	}
 	observation := rows.Sessions[0]
+	if observation.WorkName == nil || *observation.WorkName != "seed-archived-name" || observation.WorkId == nil || *observation.WorkId == "" {
+		t.Fatalf("archived known name = %+v", observation)
+	}
+	selected := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId)
+	var selectedObservation api.WorkerSessionObservation
+	if err := json.Unmarshal(selected, &selectedObservation); err != nil || selectedObservation.WorkName == nil || *selectedObservation.WorkName != "seed-archived-name" {
+		t.Fatalf("selected archived name = %s, %v", selected, err)
+	}
+
 	if observation.State != "COMPLETED" || observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
 		t.Fatalf("ended history = %+v", observation)
 	}

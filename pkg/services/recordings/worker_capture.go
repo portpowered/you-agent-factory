@@ -10,25 +10,14 @@ import (
 
 // WorkerWorkAttributionRequest selects an existing captured association. IDs
 // convey no artifact path or authority; an absent Work association stays absent.
-type WorkerWorkAttributionRequest struct {
-	WorkerSessionID  string
-	FactorySessionID string
-	WorkID           string
-}
+type WorkerWorkAttributionRequest = recordingcontracts.WorkerWorkAttributionRequest
 
 // WorkerWorkAttribution contains only an explicit, scoped recorded Work name.
 // Empty WorkName means the recorded history cannot establish a name.
-type WorkerWorkAttribution struct {
-	WorkerSessionID  string
-	FactorySessionID string
-	WorkID           string
-	WorkName         string
-}
+type WorkerWorkAttribution = recordingcontracts.WorkerWorkAttribution
 
 // WorkerWorkAttributionReader resolves captured associations in one batch.
-type WorkerWorkAttributionReader interface {
-	ResolveWorkerWorkAttribution(context.Context, []WorkerWorkAttributionRequest) ([]WorkerWorkAttribution, error)
-}
+type WorkerWorkAttributionReader = recordingcontracts.WorkerWorkAttributionReader
 
 // WorkerOwnerRecoveryOperation activates same-journal ownership recovery once
 // before a host accepts controls or new execution. It never stops children.

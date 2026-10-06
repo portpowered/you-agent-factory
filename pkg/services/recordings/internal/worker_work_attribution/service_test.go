@@ -124,7 +124,7 @@ func TestWorkerWorkAttributionMissingFactsAndLegacy(t *testing.T) {
 			if err != nil || len(got) != 1 || got[0].WorkName != want {
 				t.Fatalf("optional name = %+v, %v; want %q", got, err, want)
 			}
-			if (scenario == "direct" || scenario == "scopeless" || scenario == "uncaptured") && history.calls != 0 {
+			if history.calls != expectedHistoryReads(scenario) {
 				t.Fatal("unassociated capture consulted Factory history")
 			}
 		})
@@ -229,7 +229,7 @@ func capturePage(t *testing.T, worker, factory, recording, dispatch, id string) 
 	t.Helper()
 	payload := workers.SessionPayload{WorkerSessionID: worker, FactorySessionID: factory, RecordingID: recording, DispatchID: dispatch, WorkIDs: []string{id}}
 	return recordings.WorkerCapturedActivityPage{
-		Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: worker, FactorySessionID: factory, RecordingID: recording},
+		Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: worker, FactorySessionID: factory, RecordingID: recording, OriginatingArtifact: "original.json"},
 		Opening: events.Record{ID: events.RecordID{Position: 1}, Payload: marshal(t, workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: marshal(t, payload)})},
 	}
 }
@@ -255,4 +255,51 @@ func marshal(t *testing.T, value any) json.RawMessage {
 		t.Fatal(err)
 	}
 	return payload
+}
+
+func expectedHistoryReads(scenario string) int {
+	switch scenario {
+	case "direct", "scopeless", "uncaptured":
+		return 0
+	default:
+		return 1
+	}
+}
+
+func TestWorkerWorkAttributionReportedDefaultRequiresExactAssociation(t *testing.T) {
+	t.Parallel()
+	const canonical = "6e98a017-c0a5-4b68-b6cf-3a77b46270fd"
+	for _, scenario := range []string{"exact", "foreign-scope", "missing-association", "foreign-dispatch"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			page := capturePage(t, "worker", canonical, "recording", "dispatch", "work")
+			history := namedHistory(t, "~default", "worker", "dispatch", "work", "Recorded")
+			var want error
+			switch scenario {
+			case "foreign-scope":
+				history = namedHistory(t, "sibling", "worker", "dispatch", "work", "Foreign")
+				want = recordings.ErrInvalidProjectionScope
+			case "missing-association":
+				history.Events = history.Events[:2]
+			case "foreign-dispatch":
+				history = namedHistory(t, "~default", "worker", "foreign-dispatch", "work", "Foreign")
+				want = recordings.ErrInvalidProjectionInput
+			}
+			reader := New(&captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": page}}, &historyFake{histories: map[string]recordings.HistoricalRecordingQueryResult{"recording": history}})
+			got, err := reader.ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: canonical, WorkID: "work"}})
+			if scenario == "missing-association" {
+				var typed *recordings.HistoricalRecordingQueryError
+				if !errors.As(err, &typed) || typed.Kind != recordings.HistoricalRecordingQueryErrorMissingHistory || got != nil {
+					t.Fatalf("unvalidated alias = %+v, %v", got, err)
+				}
+				return
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("alias error = %v; want %v", err, want)
+			}
+			if scenario == "exact" && (len(got) != 1 || got[0].FactorySessionID != canonical || got[0].WorkName != "Recorded") {
+				t.Fatalf("canonical attribution = %+v", got)
+			}
+		})
+	}
 }

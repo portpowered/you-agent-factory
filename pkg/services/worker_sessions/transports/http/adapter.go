@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -80,6 +81,7 @@ type Adapter struct {
 	continuer    continuationService
 	interrupter  interruptService
 	controller   controlService
+	attribution  recordings.WorkerWorkAttributionReader
 	work         work.Service
 	resolver     SessionScopeResolver
 }
@@ -156,14 +158,15 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 	controller controlService,
 	observations observationService,
 	workRoot work.Service,
+	attribution recordings.WorkerWorkAttributionReader,
 	resolvers ...SessionScopeResolver,
 ) *Adapter {
-	if starter == nil || continuer == nil || interrupter == nil || controller == nil || observations == nil || workRoot == nil {
+	if starter == nil || continuer == nil || interrupter == nil || controller == nil || observations == nil || workRoot == nil || attribution == nil {
 		return nil
 	}
 	return &Adapter{
 		starter: starter, continuer: continuer, interrupter: interrupter,
-		controller: controller, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
+		controller: controller, attribution: attribution, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
 	}
 }
 

@@ -106,6 +106,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 	writer recordings.WorkerRecordingWriter,
 	clock factoryruntime.Clock,
 	snapshots *workersessionswire.HistorySnapshotBudget,
+	attribution recordings.WorkerWorkAttributionReader,
 ) (httpRuntimeBinding, error) {
 	if factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || snapshots == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
@@ -116,7 +117,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 				return nil, err
 			}
 		}
-		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs, writer, clock, snapshots)
+		return newHTTPRuntimeHandlerWithMetrics(root, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs, writer, clock, snapshots, attribution)
 	}, nil
 }
 
@@ -136,6 +137,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	writer recordings.WorkerRecordingWriter,
 	clock factoryruntime.Clock,
 	snapshots *workersessionswire.HistorySnapshotBudget,
+	attribution recordings.WorkerWorkAttributionReader,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -163,7 +165,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 		return nil, err
 	}
 	recordingsAdapter := newHTTPRecordingsAdapter(root, presentation)
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation, logs, writer, clock, snapshots)
+	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation, logs, writer, clock, snapshots, attribution)
 	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
 	if metricsScopeResolver == nil {
 		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
@@ -278,6 +280,7 @@ func newHTTPWorkerSessionsHandler(
 	writer recordings.WorkerRecordingWriter,
 	clock platformclock.Source,
 	snapshots *workersessionswire.HistorySnapshotBudget,
+	attribution recordings.WorkerWorkAttributionReader,
 ) *workersessionshttp.Handler {
 	if presentation.WorkerSessions == nil {
 		return nil
@@ -291,7 +294,7 @@ func newHTTPWorkerSessionsHandler(
 	}
 	adapter := workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
 		presentation.WorkerSessions, presentation.WorkerSessions, presentation.WorkerSessions,
-		controller, presentation.WorkerSessions, root.WorkService(), resolver,
+		controller, presentation.WorkerSessions, root.WorkService(), attribution, resolver,
 	)
 	if adapter == nil {
 		return nil

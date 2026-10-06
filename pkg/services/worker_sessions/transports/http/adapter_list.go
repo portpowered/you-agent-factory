@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -172,6 +173,8 @@ func (a *Adapter) resolveWorkAttribution(
 	// Each session read clones its runtime snapshot. Share that read only within
 	// this request, including failed reads, and keep session identities separate.
 	namesBySession := make(map[string]map[string]string)
+	available := make(map[string]bool)
+	requests := make([]recordings.WorkerWorkAttributionRequest, 0, len(observations))
 	for _, observation := range observations {
 		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
 			continue
@@ -195,6 +198,7 @@ func (a *Adapter) resolveWorkAttribution(
 					IncludeSuperseded: true, MaxResults: math.MaxInt,
 				})
 				if err == nil {
+					available[sessionID] = true
 					for _, model := range result.Results {
 						if _, exists := names[model.WorkID]; !exists {
 							names[model.WorkID] = model.Name
@@ -214,8 +218,18 @@ func (a *Adapter) resolveWorkAttribution(
 			}
 			namesBySession[sessionID] = names
 		}
-		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
-			WorkID: workID, WorkName: names[workID],
+		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID, WorkName: names[workID]}
+		if !available[sessionID] {
+			requests = append(requests, recordings.WorkerWorkAttributionRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: sessionID, WorkID: workID})
+		}
+	}
+	if len(requests) > 0 && a.attribution != nil {
+		results, err := a.attribution.ResolveWorkerWorkAttribution(ctx, requests)
+		if err != nil {
+			return nil, err
+		}
+		for _, result := range results {
+			attribution[result.WorkerSessionID] = workerSessionWorkAttribution{WorkID: result.WorkID, WorkName: result.WorkName}
 		}
 	}
 	return attribution, nil

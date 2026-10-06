@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"os"
 	"strings"
 
@@ -74,7 +75,7 @@ func (s *Service) ResolveWorkerWorkAttribution(ctx context.Context, requests []r
 	return results, ctx.Err()
 }
 
-type historyIdentity struct{ factory, recording string }
+type historyIdentity struct{ factory, recording, artifact string }
 
 type attributionQuery struct {
 	service     *Service
@@ -92,22 +93,9 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	if request.FactorySessionID == "" || request.WorkID == "" {
 		return result, nil
 	}
-	page, loaded := q.captures[request.WorkerSessionID]
-	if !loaded {
-		var err error
-		page, err = q.service.captures.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{
-			WorkerSessionID: request.WorkerSessionID, Limit: 1,
-		})
-		if canceled := ctx.Err(); canceled != nil {
-			return result, canceled
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return result, err
-		}
-		if err == nil && page.Catalog.WorkerSessionID == "" {
-			return result, recordings.ErrWorkerRecordingReplay
-		}
-		q.captures[request.WorkerSessionID] = page
+	page, err := q.capture(ctx, request.WorkerSessionID)
+	if err != nil {
+		return result, err
 	}
 	if page.Catalog.WorkerSessionID == "" {
 		return result, nil // No compatible capture: live presentation may still supply its name.
@@ -116,25 +104,16 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	if err != nil {
 		return result, err
 	}
-	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID}
-	projection, loaded := q.projections[key]
-	if !loaded {
-		history, err := q.service.history.ReadWorkerFactoryHistory(ctx, page)
-		if canceled := ctx.Err(); canceled != nil {
-			return result, canceled
-		}
-		if err != nil {
-			return result, err
-		}
-		projection, err = projectNames(history, request.FactorySessionID)
-		if err != nil {
-			return result, err
-		}
-		q.projections[key] = projection
+	projection, err := q.projection(ctx, page, request.FactorySessionID)
+	if err != nil {
+		return result, err
 	}
 	association, exists := projection.associations[request.WorkerSessionID]
 	if !exists {
-		return result, nil // Legacy histories may lack a canonical association.
+		if page.Catalog.OriginatingArtifact == "" || projection.reportedDefault {
+			return result, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: recordings.RecordingID(page.Catalog.RecordingID)}
+		}
+		return result, nil // Histories may lack a canonical association.
 	}
 	if association.dispatch != opening.DispatchID || !containsWork(association.workIDs, request.WorkID) {
 		return result, recordings.ErrInvalidProjectionInput
@@ -164,4 +143,53 @@ func containsWork(ids []string, id string) bool {
 		}
 	}
 	return false
+}
+
+func (q *attributionQuery) capture(ctx context.Context, workerID string) (recordings.WorkerCapturedActivityPage, error) {
+	if page, loaded := q.captures[workerID]; loaded {
+		return page, nil
+	}
+	page, err := q.service.captures.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{WorkerSessionID: workerID, Limit: 1})
+	if canceled := ctx.Err(); canceled != nil {
+		return page, canceled
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return page, err
+	}
+	if err == nil && page.Catalog.WorkerSessionID == "" {
+		return page, recordings.ErrWorkerRecordingReplay
+	}
+	q.captures[workerID] = page
+	return page, nil
+}
+
+func (q *attributionQuery) projection(ctx context.Context, page recordings.WorkerCapturedActivityPage, factory string) (nameProjection, error) {
+	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.OriginatingArtifact}
+	projection, loaded := q.projections[key]
+	if !loaded {
+		history, err := q.service.history.ReadWorkerFactoryHistory(ctx, page)
+		if canceled := ctx.Err(); canceled != nil {
+			return nameProjection{}, canceled
+		}
+		if err != nil {
+			return nameProjection{}, err
+		}
+		// Default recordings retain their reported ~default token while the
+		// capture retains the canonical UUID. Accept that source-native alias
+		// only from the selected artifact; exact captured association checks below
+		// remain mandatory. A foreign explicit scope is never accepted.
+		sourceScope := history.Recording.Scope.FactorySessionID
+		if sourceScope != factory {
+			if _, err := uuid.Parse(factory); err != nil || sourceScope != "~default" {
+				return nameProjection{}, recordings.ErrInvalidProjectionScope
+			}
+		}
+		projection, err = projectNames(history, sourceScope)
+		if err != nil {
+			return nameProjection{}, err
+		}
+		projection.reportedDefault = sourceScope != factory
+		q.projections[key] = projection
+	}
+	return projection, nil
 }

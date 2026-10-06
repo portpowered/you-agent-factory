@@ -406,6 +406,7 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.Reader = products.reader
 	bound.Projections = products.projections
 	bound.Clock = products.clock
+	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
 	bound.OperatorSettingsPath = products.operatorSettingsPath
 	bound.Recordings = products.recordings
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)

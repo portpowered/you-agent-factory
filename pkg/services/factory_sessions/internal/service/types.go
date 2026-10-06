@@ -50,6 +50,7 @@ type runtimeProducts struct {
 	directory              string
 	runtimeInstanceID      string
 	backendScopeID         string
+	currentBoardRecordPath string
 	operatorSettingsPath   string
 	orderlyStop            func(context.Context) error
 	closeArtifacts         func() error

@@ -14,8 +14,9 @@ type association struct {
 }
 
 type nameProjection struct {
-	names        map[string]string
-	associations map[string]association
+	names           map[string]string
+	associations    map[string]association
+	reportedDefault bool
 }
 
 func projectNames(history recordings.HistoricalRecordingQueryResult, factory string) (nameProjection, error) {
