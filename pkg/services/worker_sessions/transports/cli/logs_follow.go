@@ -158,7 +158,7 @@ func observeLogsEvents(ctx context.Context, config ReadConfig, wake chan<- struc
 		if errors.As(err, &cliErr) && cliErr.Code == "WORKER_SESSION_EVENT_CURSOR_STALE" {
 			return nil // Durable polling backfills the evicted Events prefix.
 		}
-		if errors.As(err, &cliErr) && cliErr.Code == "WORKER_SESSION_NOT_FOUND" {
+		if errors.As(err, &cliErr) && (cliErr.Code == "WORKER_SESSION_NOT_FOUND" || cliErr.Code == "WORKER_SESSION_PROJECTION_UNAVAILABLE") {
 			// drain already established a captured prefix. Missing live Events
 			// ownership cannot make that retained history nonexistent or complete.
 			return newCLIError("WORKER_SESSION_LOGS_GAP", "Worker Session captured history is incomplete", nil)
