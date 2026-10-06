@@ -33,18 +33,7 @@ func TestDurableOpeningCanonicalizesAndSnapshotsRequestFacts(t *testing.T) {
 			facts = append(facts, selected)
 			return func(context.Context) error { return nil }, nil
 		},
-		func(identity string) (string, error) {
-			switch identity {
-			case "CODEX":
-				return "codex", nil
-			case "customer":
-				return "customer.provider", nil
-			case "agent":
-				return "cursor", nil
-			default:
-				return "", errors.New("unexpected provider")
-			}
-		}, false,
+		openingTestProviderIdentity, false,
 	)
 	open := func(id, root, model string) DurableExecution {
 		t.Helper()
@@ -133,5 +122,18 @@ func TestDurableOpeningPreservesChildModeSelection(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func openingTestProviderIdentity(identity string) (string, error) {
+	switch identity {
+	case "CODEX":
+		return "codex", nil
+	case "customer":
+		return "customer.provider", nil
+	case "agent":
+		return "cursor", nil
+	default:
+		return "", errors.New("unexpected provider")
 	}
 }
