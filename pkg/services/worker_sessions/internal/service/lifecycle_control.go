@@ -155,7 +155,7 @@ func validateResumeAssociationForSupervision(session workersessions.Session, sup
 	dispatchID := strings.TrimSpace(supervision.dispatchID)
 	turnID := strings.TrimSpace(supervision.turnID)
 	accepted := supervision.accepted
-	activeControl := supervision.controlActive || supervision.requestedAction != "" || supervision.controlAction != ""
+	activeControl := supervision.controlActive || supervision.forceJournalPending != 0 || supervision.controlPersistenceLost || supervision.requestedAction != "" || supervision.controlAction != ""
 	continuing := supervision.continuing
 	publishing := supervision.publishing
 	supervision.mu.Unlock()
@@ -233,7 +233,7 @@ func (r *registry) prepareContinuation(
 	if !supervision.accepted || supervision.dispatchID == "" ||
 		association.DispatchID != supervision.dispatchID || association.AttemptID != supervision.dispatchID ||
 		strings.TrimSpace(association.TurnID) != strings.TrimSpace(supervision.turnID) ||
-		supervision.continuing || supervision.publishing || supervision.controlActive ||
+		supervision.continuing || supervision.publishing || supervision.controlActive || supervision.forceJournalPending != 0 || supervision.controlPersistenceLost ||
 		supervision.requestedAction != "" || supervision.controlAction != "" {
 		return workers.WorkstationDispatchRequest{}, "", false
 	}
@@ -645,30 +645,34 @@ type supervision struct {
 	startedAt  time.Time
 	deadlineAt time.Time
 
-	mu                 sync.Mutex
-	publishing         bool
-	accepted           bool
-	serverOwned        bool
-	continuing         bool
-	resumeCount        uint
-	preAdmissionAction workersessions.ControlAction
-	requestedAction    workersessions.ControlAction
-	controlAction      workersessions.ControlAction
-	controlActive      bool
-	forcePending       bool
-	forceConfirmed     bool
-	controlDone        chan struct{}
-	controlHistory     *controlHistoryReservation
-	deadlineExceeded   bool
-	processGone        bool
-	interrupting       bool
-	interruptRequestID string
-	interruptDone      chan struct{}
-	result             workers.WorkstationDispatchResult
-	err                error
-	cancel             context.CancelFunc
-	cancelFailure      func() error
-	providerAttempt    *providerAttemptControl
+	mu                     sync.Mutex
+	publishing             bool
+	accepted               bool
+	serverOwned            bool
+	continuing             bool
+	resumeCount            uint
+	preAdmissionAction     workersessions.ControlAction
+	requestedAction        workersessions.ControlAction
+	controlAction          workersessions.ControlAction
+	controlActive          bool
+	forcePending           bool
+	forceConfirmed         bool
+	forceJournalPending    int
+	forceJournalDone       chan struct{}
+	controlPersistenceLost bool
+	forceSafetyClaimed     bool
+	controlDone            chan struct{}
+	controlHistory         *controlHistoryReservation
+	deadlineExceeded       bool
+	processGone            bool
+	interrupting           bool
+	interruptRequestID     string
+	interruptDone          chan struct{}
+	result                 workers.WorkstationDispatchResult
+	err                    error
+	cancel                 context.CancelFunc
+	cancelFailure          func() error
+	providerAttempt        *providerAttemptControl
 
 	// retryBudget is the total attempt allowance for this supervision and
 	// attemptsMade counts the attempts actually published. retryPending records

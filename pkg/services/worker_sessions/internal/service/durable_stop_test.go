@@ -21,6 +21,7 @@ type stopOperationStore struct {
 	unavailableWorkerControlStore
 	begin      func(context.Context, recordings.WorkerControlOperationRecord) error
 	advanceErr error
+	advance    func(context.Context, recordings.WorkerControlOperationRecord) error
 	records    []recordings.WorkerControlOperationRecord
 	failures   []recordings.WorkerRecordingFailure
 }
@@ -56,7 +57,12 @@ func (s *stopOperationStore) BeginWorkerControlOperation(ctx context.Context, re
 	return record.Detached(), true, nil
 }
 
-func (s *stopOperationStore) AdvanceWorkerControlOperation(_ context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+func (s *stopOperationStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+	if s.advance != nil {
+		if err := s.advance(ctx, record); err != nil {
+			return record, err
+		}
+	}
 	if s.advanceErr != nil {
 		return record, s.advanceErr
 	}

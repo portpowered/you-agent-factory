@@ -589,8 +589,14 @@ func (s *supervision) completionSnapshot() completionSnapshot {
 	defer s.mu.Unlock()
 	// A force signal does not establish terminality. Wait for confirmed tree
 	// completion (or failure) before selecting the terminal control action.
-	for s.forcePending {
+	for s.forcePending || (s.forceJournalPending != 0 && s.forceSafetyClaimed && !s.forceConfirmed && s.requestedAction == "" && s.controlAction == "") {
 		wait := s.controlDone
+		if !s.forcePending {
+			// A declined or failed force must acknowledge its journal before
+			// natural completion can select a retry. Confirmed force bypasses
+			// this gate so its authoritative join can precede result persistence.
+			wait = s.forceJournalDone
+		}
 		s.mu.Unlock()
 		<-wait
 		s.mu.Lock()

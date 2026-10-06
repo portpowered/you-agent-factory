@@ -64,6 +64,8 @@ func (r *registry) forceTerminate(ctx context.Context, req workersessions.Contro
 }
 
 func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessions.ControlRequest, target frozenControlTarget, intent recordings.WorkerControlOperationRecord) (workersessions.ControlResult, error) {
+	finishJournal := target.supervision.beginForceJournal()
+	defer finishJournal()
 	var accepted recordings.WorkerControlOperationRecord
 	var storeErr error
 	journal := target.capture.RecordingID != ""
@@ -78,6 +80,9 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 	} else if r.logs != nil {
 		storeErr = recordings.ErrWorkerRecordingPersistence
 	}
+	if storeErr != nil {
+		target.supervision.markControlPersistenceLost()
+	}
 	r.logger.Info("worker session force intent", "sessionID", publicWorkerID(req.ID), "attemptID", target.attemptID, "action", "kill", "durable", journal && storeErr == nil)
 	result, stopErr := r.executeFrozenForce(ctx, req.ID, target)
 	if journal && storeErr == nil {
@@ -85,12 +90,45 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 		storeErr = r.commitStopResult(context.WithoutCancel(ctx), accepted, result, stopErr)
 	}
 	if storeErr != nil {
+		target.supervision.markControlPersistenceLost()
 		r.recordStopPersistenceLoss(context.WithoutCancel(ctx), req.ID, target)
 		result.Outcome = workersessions.ControlOutcomeFailed
 		stopErr = errors.Join(stopErr, recordings.ErrWorkerRecordingPersistence)
 	}
 	r.logger.Info("worker session force outcome", "sessionID", publicWorkerID(req.ID), "attemptID", target.attemptID, "action", "kill", "outcome", string(result.Outcome))
 	return result, stopErr
+}
+
+// Completion may release the attempt join before the journal acknowledges its
+// result. Keep successor admission fenced throughout that acknowledgement.
+// This gate belongs to the captured supervision, never a replacement owner.
+func (s *supervision) beginForceJournal() func() {
+	if s == nil {
+		return func() {}
+	}
+	s.mu.Lock()
+	if s.forceJournalPending == 0 {
+		s.forceJournalDone = make(chan struct{})
+	}
+	s.forceJournalPending++
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		s.forceJournalPending--
+		if s.forceJournalPending == 0 {
+			close(s.forceJournalDone)
+		}
+		s.mu.Unlock()
+	}
+}
+
+func (s *supervision) markControlPersistenceLost() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.controlPersistenceLost = true
+	s.mu.Unlock()
 }
 
 func recoveredForceResult(record, intent recordings.WorkerControlOperationRecord, dispatchID string) (workersessions.ControlResult, error) {
@@ -251,6 +289,9 @@ func (s *supervision) claimForce(target frozenControlTarget, terminal bool) (for
 	if s.dispatchID != target.dispatchID || s.providerAttempt != target.providerAttempt {
 		return forceControlClaim{}, staleControlTargetError()
 	}
+	if s.controlPersistenceLost && s.forceSafetyClaimed {
+		return forceControlClaim{}, recordings.ErrWorkerRecordingPersistence
+	}
 	if terminal || s.controlAction != "" {
 		return forceControlClaim{joined: s.done}, nil
 	}
@@ -264,6 +305,7 @@ func (s *supervision) claimForce(target frozenControlTarget, terminal bool) (for
 		return forceControlClaim{}, nil
 	}
 	s.controlActive, s.forcePending = true, true
+	s.forceSafetyClaimed = true
 	s.controlDone = make(chan struct{})
 	return forceControlClaim{control: s.providerAttempt.control, joined: s.done, resolve: s.resolveForce}, nil
 }

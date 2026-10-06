@@ -13,6 +13,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -319,6 +320,135 @@ func TestForceControlPersistenceLossKeepsLiveSafetyAndRefusesDurableSuccess(t *t
 			intent := stopIntent(forceRequest(), workersessions.ControlActionTerminate, target)
 			if committedStopCause(store.records, intent.Target, workersessions.StateTerminated) != nil {
 				t.Fatal("uncommitted force acquired a durable operator cause")
+			}
+			installForceContinuationAssociation(r)
+			assertForceSuccessorRefused(t.Context(), t, r)
+			if !s.controlPersistenceLost || s.forceJournalPending != 0 {
+				t.Fatal("journal failure did not leave admission sealed after the operation finished")
+			}
+		})
+	}
+}
+
+func installForceContinuationAssociation(r *registry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session := r.sessions["worker"]
+	session.ProviderSessionAssociation = &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker", DispatchID: "attempt", AttemptID: "attempt",
+		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "captured-provider-session"},
+	}
+	r.sessions["worker"] = session
+}
+
+func assertForceSuccessorRefused(ctx context.Context, t *testing.T, r *registry) {
+	t.Helper()
+	result, err := r.Continue(ctx, workersessions.ContinueRequest{
+		RequestID: "continue-after-force", SourceWorkerSessionID: "worker", SuccessorWorkerSessionID: "successor", FollowUpInput: "continue",
+	})
+	if !errors.Is(err, workersessions.ErrContinuationSourceConflict) || result.Session.ID != "" {
+		t.Fatalf("uncertain force admitted successor: %#v, %v", result, err)
+	}
+	if _, err := r.Get(ctx, workersessions.GetRequest{ID: "successor"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("refused successor was reserved: %v", err)
+	}
+}
+
+func TestForceControlJournalAcknowledgementFencesSuccessorAdmission(t *testing.T) {
+	t.Parallel()
+	r, s, store := newDurableStopFixture(t)
+	installForceContinuationAssociation(r)
+	store.advance = func(ctx context.Context, _ recordings.WorkerControlOperationRecord) error {
+		// The exact execution has joined but its durable result has not yet
+		// been acknowledged. A public continuation must not reserve a successor.
+		assertForceSuccessorRefused(ctx, t, r)
+		return nil
+	}
+	installForceDouble(s, func(ctx context.Context) (bool, error) {
+		go r.completeSupervision(context.WithoutCancel(ctx), "worker", s, failedForceDispatch(), errors.New("signal exit"))
+		return true, nil
+	})
+	result, err := r.Terminate(t.Context(), forceRequest())
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied || s.forceJournalPending != 0 || s.controlPersistenceLost {
+		t.Fatalf("acknowledged force retained an admission gate: %#v, %v", result, err)
+	}
+	r.mu.Lock()
+	_, snapshotErr := r.snapshotContinuationSourceLocked(workersessions.ContinueRequest{SourceWorkerSessionID: "worker"})
+	r.mu.Unlock()
+	if snapshotErr != nil {
+		t.Fatalf("acknowledged force prevented later continuation: %v", snapshotErr)
+	}
+}
+
+func TestForceControlIntentLossSuppressesRetryButPreservesOrdinaryStop(t *testing.T) {
+	t.Parallel()
+	r, s, store := newDurableStopFixture(t)
+	s.retryBudget = 2
+	s.attemptsMade = 1
+	store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	owned := installForceDouble(s, func(context.Context) (bool, error) { return false, errors.New("unconfirmed cleanup") })
+	result, err := r.Terminate(t.Context(), forceRequest())
+	if !errors.Is(err, recordings.ErrWorkerRecordingPersistence) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("degraded force = %#v, %v", result, err)
+	}
+	retryable := failedForceDispatch()
+	retryable.Result.FailureMetadata = &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable, Type: workers.WorkFailureTypeInternalServerError}
+	if r.claimRetryAttempt(s, "", retryable, nil) {
+		t.Fatal("persistence loss admitted an automatic retry")
+	}
+	if _, allowed := r.prepareRetryAttempt("worker", s); allowed {
+		t.Fatal("preselected retry bypassed persistence-loss fencing")
+	}
+	for _, requestID := range []string{"kill-request", "another-kill-request"} {
+		repeat := forceRequest()
+		repeat.RequestID = requestID
+		replayed, replayErr := r.Terminate(t.Context(), repeat)
+		if !errors.Is(replayErr, recordings.ErrWorkerRecordingPersistence) || replayed.Outcome != workersessions.ControlOutcomeFailed || owned.calls.Load() != 1 {
+			t.Fatalf("uncertain force repeated its effect: %#v, %v, signals %d", replayed, replayErr, owned.calls.Load())
+		}
+	}
+	s.installCancel(func() { r.commitControlTerminal("worker", workersessions.StateCanceled); s.signalDone() })
+	r.publications["worker"].capture = recordings.WorkerControlTarget{}
+	ordinary, stopErr := r.Cancel(t.Context(), workersessions.ControlRequest{ID: "worker"})
+	if stopErr != nil || ordinary.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("persistence seal prevented live ordinary stop: %#v, %v", ordinary, stopErr)
+	}
+}
+
+func TestForceControlFailedEffectWaitsForJournalBeforeRetryDecision(t *testing.T) {
+	t.Parallel()
+	for _, persistenceLost := range []bool{false, true} {
+		t.Run(strconv.FormatBool(persistenceLost), func(t *testing.T) {
+			t.Parallel()
+			r, s, store := newDurableStopFixture(t)
+			s.retryBudget, s.attemptsMade = 2, 1
+			if persistenceLost {
+				store.advanceErr = recordings.ErrWorkerRecordingPersistence
+			}
+			completed := make(chan struct{})
+			retryable := failedForceDispatch()
+			retryable.Result.FailureMetadata = &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable, Type: workers.WorkFailureTypeInternalServerError}
+			installForceDouble(s, func(ctx context.Context) (bool, error) {
+				go func() {
+					r.completeSupervision(context.WithoutCancel(ctx), "worker", s, retryable, errors.New("retryable provider failure"))
+					close(completed)
+				}()
+				return false, errors.New("unconfirmed tree cleanup")
+			})
+			result, err := r.Terminate(t.Context(), forceRequest())
+			awaitStopSignal(t, completed)
+			if result.Outcome != workersessions.ControlOutcomeFailed || err == nil {
+				t.Fatalf("failed effect = %#v, %v", result, err)
+			}
+			current, getErr := r.Get(t.Context(), workersessions.GetRequest{ID: "worker"})
+			wantState := workersessions.StateRunning
+			if persistenceLost {
+				wantState = workersessions.StateFailed
+			}
+			if getErr != nil || current.State != wantState || s.retryPending == persistenceLost {
+				t.Fatalf("journal retry decision: state %s, retry %t, persistence lost %t, %v", current.State, s.retryPending, persistenceLost, getErr)
 			}
 		})
 	}

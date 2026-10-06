@@ -667,7 +667,7 @@ func (r *registry) prepareRetryAttempt(id string, supervision *supervision) (wor
 
 	supervision.mu.Lock()
 	defer supervision.mu.Unlock()
-	if supervision.controlAction != "" || supervision.requestedAction != "" {
+	if supervision.controlPersistenceLost || supervision.controlAction != "" || supervision.requestedAction != "" {
 		return workers.WorkstationDispatchRequest{}, false
 	}
 	previousDispatchID := supervision.dispatchID
@@ -710,7 +710,7 @@ func (r *registry) claimRetryAttempt(
 	}
 	supervision.mu.Lock()
 	defer supervision.mu.Unlock()
-	if supervision.controlAction != "" || supervision.requestedAction != "" {
+	if supervision.controlPersistenceLost || supervision.controlAction != "" || supervision.requestedAction != "" {
 		return false
 	}
 	// A continuation is a resumed provider session, not a fresh attempt;
