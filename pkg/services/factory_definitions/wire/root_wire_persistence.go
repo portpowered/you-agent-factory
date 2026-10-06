@@ -26,8 +26,10 @@ func Persistence(
 	persistenceFileSystem contracts.PersistenceFileSystem,
 	namedPaths contracts.NamedPathResolver,
 	replacement contracts.DirectoryReplacementStore,
+	conversions contracts.SerializedFactoryConfigReader,
 ) (contracts.PackagedFactoryPersistence, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
+	decodeFactory := FactoryConfigDecoder(conversions)
 	writer := factoryauthoredlayout.NewWriter(
 		authoredmapping.RenderWorkerAgentsMarkdown,
 		authoredmapping.RenderWorkstationAgentsMarkdown,
@@ -52,7 +54,7 @@ func Persistence(
 				segment,
 				payload,
 				validator,
-				mapper.Expand,
+				decodeFactory,
 				authoredmapping.AuthoredFactoryConfigForExpandedLayout,
 				mapper.Flatten,
 			)

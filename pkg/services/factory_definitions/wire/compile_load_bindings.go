@@ -34,8 +34,9 @@ func NewLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	conversions factorydefinitions.SerializedFactoryConfigReader,
 ) *Loader {
-	mapper := factorymapping.NewFactoryConfigMapper()
+	decodeFactory := FactoryConfigDecoder(conversions)
 	authoredReader := internalauthoredlayout.NewReader(
 		authoredmapping.ParseWorkerConfig,
 		authoredmapping.ParseWorkstationConfig,
@@ -48,7 +49,7 @@ func NewLoader(
 		namedPaths.ResolveCurrentDir,
 		LoadedFactorySourceFactory(),
 		factorymapping.ExpandFactoryConfigForRuntimeLoad,
-		mapper.Expand,
+		decodeFactory,
 		factorymapping.MarshalCanonicalFactoryConfig,
 		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
 		normalizeCanonicalFactory,

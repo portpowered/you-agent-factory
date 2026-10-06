@@ -5,11 +5,14 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `69eaa32820`, passes hosted Functional
-Coverage in **210s complete / 150.914s coverage**, 68 packages / 738 results,
-including recovered interrupt-admission and script cancellation failures.
-Backend Integration passes the server-owned port-binding correction. Its
-remaining workflow checks were still active at capture. The preceding
+The latest measured published source, `643e6f3b7b`, passes every hosted
+workflow check. Functional Coverage takes **201s complete / 142.303s coverage**,
+68 packages / 738 results (736 pass, two skip), including one recovered
+TestInterruptRace admission failure recorded in the same-head flake ledger.
+Backend Integration passes. Parent `69eaa32820` takes 210s complete / 150.914s
+coverage and recovers interrupt-admission and Script cancellation failures;
+its remaining workflow is canceled by the newer push. Neither cancellation
+failure is claimed fixed by the Agent change. The preceding
 `f7e138ae4e` functional job takes 222s complete / 154.403s coverage, with one
 recovered Agent cancellation failure, and its integration job fails the
 released probe-port race. The preceding `e243441e58` workflow passes
@@ -19,6 +22,16 @@ The complete hosted two-minute checkpoint
 remains **unmet** and the PR stays draft. The earlier warm three-minute
 checkpoint is merged. Keep prior complete 146s, 198s and 207s samples and their
 cache/retry differences; 146 seconds is not a reliable ceiling.
+
+The generated native conversion cache passes complete local validation. A warm
+candidate takes **140.07s complete / 133.380s coverage / 449.12 CPU-seconds**,
+versus a clean repeated disabled-reader baseline at **193.65s / 184.204s /
+636.78 CPU-seconds**, with zero compiler commands and 19 links on each side.
+This one complete comparison saves 27.7% elapsed time / 29.5% CPU. Six-per-side
+native customer journeys save 19.0% elapsed / 25.9% CPU. Cold rebuild cost,
+baseline timing variation and the earlier baseline's recovered admission failure
+are preserved below. Fresh hosted validation is required; 140 seconds remains
+above the complete two-minute checkpoint.
 
 A private rendered-file cache prototype passes the complete unchanged functional
 lane. In one matched four-CPU comparison, baseline takes **181.21s / 564.70
@@ -4163,3 +4176,87 @@ Evidence: `.artifacts/latency-audit/agent-customer-cleanup-paired/`,
 `.artifacts/latency-audit/agent-customer-cleanup-full/`,
 `.artifacts/latency-audit/pr2923-server-port-hosted/` and
 `.artifacts/latency-audit/pr2923-server-port-flakes/`.
+
+
+## Generated native conversion cache
+
+The supported implementation caches immutable serialized Factory definitions,
+not initialized sessions or rendered filesystem effects. Generation runs the
+canonical strict public-to-native mapper for each of the 20 packaged Factories,
+serializes the result and verifies whole-value round-trip equality. The generated
+assets add 440,152 bytes. Each entry records its conversion format version and
+exact source payload SHA-256. Existing generated-catalog drift checks regenerate
+these assets with the current mapper; the ordinary JSON/YAML publications and
+manifest remain unchanged.
+
+The validated packaged catalog supplies detached optional bytes through the
+canonical Wire graph. The compilation implementation checks version and source
+identity, then decodes a fresh independent native definition. Missing, stale or
+malformed entries retain canonical conversion and its diagnostics. Arbitrary
+customer input continues on that path. Installation still executes definition
+validation, layout pruning, authored normalization, canonical formatting,
+portable-file effects, the authored writer, staged validation and atomic
+publication. There is no rendered-file shortcut or shared mutable runtime state.
+
+The source profile attributes 91.97 cumulative CPU-seconds (26.14% of the
+351.78-second monolith sample) to generated conversion; this overlaps JSON and
+installation stacks and must not be added to them. Six fresh customer-journey
+repetitions per side compare the same graph and generated assets with only the
+optional reader disabled for baseline. Both binaries are built before timing.
+The three existing public journeys verify API terminal results, canonical
+stream dispatch usage and installed-factory invocation outside the repository
+with bootstrap parity. Baseline/candidate/candidate/baseline blocks of three
+all pass. Baseline totals **27.481948 CPU-seconds / 29.172077655s elapsed**;
+candidate totals **20.350384 / 23.626741598s**: **25.9% less aggregate execution
+CPU and 19.0% less elapsed time** for these selected journeys. This is not a
+claim about complete hosted CI timing or linker improvement.
+
+Focused isolated decoder checks cover independently mutable returned definitions
+and canonical fallback diagnostics; generation checks cover deterministic output
+and replacement. Existing focused authored-layout/required-tool/persistence
+checks pass. Both scoped lint suites pass after placing the decoder under the
+compilation service's private implementation and constructing it in its owning
+Wire provider. No architecture exception or lint allowance is added.
+
+Evidence: `.artifacts/latency-audit/serialized-reader-paired/comparison.json`
+and `.artifacts/latency-audit/pr2923-agent-cleanup-hosted/`, plus the recovered
+interrupt evidence under `pr2923-agent-cleanup-flakes/`. The first complete candidate run passes all 68 packages / 738 results (736 pass,
+two skip), with no failures or retries and unchanged gates. It takes **211.35s
+supervisor / 187.850s coverage / 722.97 CPU-seconds** (585.05 user, 137.92
+kernel). Changed-source coverage compiles 1,068 units, consuming 232.189588
+CPU-seconds over 75.558s active compiler wall. Nineteen links consume 31.204730
+CPU-seconds over 33.322s active link wall. Keep this cold build cost; it does not
+establish a full-lane speedup. Evidence is under `serialized-reader-full/`.
+The continuous four-CPU full comparison passes both versions. Baseline takes
+**169.74s supervisor / 161.948s coverage / 544.19 CPU-seconds**; candidate takes
+**140.07s / 133.380s / 449.12 CPU-seconds**. Baseline recovers one
+TestInterruptRace CLI admission failure on the unchanged same-head retry; retain
+that ledger and do not claim a clean matched full speedup from this pair.
+Baseline has eight compiler commands (13.142591 CPU-seconds) and 20 links
+(37.620202 CPU-seconds / 37.444s active wall); candidate has zero compiler
+commands and 19 links (34.985537 CPU-seconds / 34.340s active wall). Candidate
+has no failures or retries. Both preserve 68 packages / 738 results and all
+gates. This local candidate is still above the complete hosted two-minute
+checkpoint. Evidence: `serialized-reader-matched-baseline/` and
+`serialized-reader-matched-candidate/`. Repeat baseline after candidate without changing CPU/coverage settings. It passes
+without failures or retries at **193.65s supervisor / 184.204s coverage /
+636.78 CPU-seconds** (474.41 user, 162.37 kernel), with zero compiler commands
+and 19 links (35.578623 CPU-seconds / 37.074s active wall). Candidate's
+140.07s / 449.12 CPU-seconds is **27.7% less supervisor wall and 29.5% less
+aggregate CPU** than this clean baseline. Baseline variation from 169.74s to
+193.65s remains visible; the first includes one recovered admission failure.
+This is one complete candidate sample between two baselines, not a stable hosted
+ceiling. The independent six-per-side native customer comparison supports the
+conversion improvement. Confirmation evidence is under
+`serialized-reader-confirmation-baseline/`.
+
+The full internal packaged-catalog unit suite also runs against the parent source
+through an overlay and against candidate. Both fail the same five top-level
+tests: the validation-ledger inventory lacks the new dub-video Factory; two TTS
+characterizations expect the former builtin-command model instead of the current
+owned model resource; the subagent prompt inventory expects the former file
+layout; and a generated-artifact check expects the former skipPermissions shape.
+These existing assertions are not weakened to pass this cache change. New
+focused decoder/generation/authoring checks and the complete functional lane
+pass; the entire catalog unit suite is not claimed green. Exact parent/candidate
+failure lists and JSON event logs are under `catalog-baseline-overlay/`.

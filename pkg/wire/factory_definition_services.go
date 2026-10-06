@@ -398,6 +398,7 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	conversions factorydefinitions.SerializedFactoryConfigReader,
 ) *factorydefinitionswire.Loader {
 	return factorydefinitionswire.NewLoader(
 		applySupportedFiles,
@@ -409,6 +410,7 @@ func provideFactoryDefinitionLoader(
 		sourceResolver,
 		inspectSource,
 		requiredToolChecker,
+		conversions,
 	)
 }
 

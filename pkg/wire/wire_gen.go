@@ -193,7 +193,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v25 := provideFactoryDefinitionLoader(v20, v21, v22, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v23, portableBundledFileInspection, v24)
+	serializedFactoryConfigReader, err := provideSerializedFactoryConfigReader()
+	if err != nil {
+		return nil, err
+	}
+	v25 := provideFactoryDefinitionLoader(v20, v21, v22, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v23, portableBundledFileInspection, v24, serializedFactoryConfigReader)
 	v26 := provideFactoryDefinitionCompilation(v25)
 	v27 := provideOrchestratorDefinitionValidator(javaScriptWorkflows)
 	validationOperations := provideFactoryDefinitionValidationService(javaScriptWorkflows, v26, v27)
@@ -209,7 +213,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	inputInboxSentinelEnsurer := provideFactoryDefinitionInputInboxSentinelEnsurer(authoredLayoutWriterFileSystem)
 	persistenceFileSystem := provideFactoryDefinitionPersistenceFileSystem(edges2)
 	directoryReplacementStore := provideFactoryDefinitionDirectoryReplacementStore(edges2)
-	v32, err := provideFactoryDefinitionPersistence(v28, v25, v29, v22, v30, v31, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore)
+	v32, err := provideFactoryDefinitionPersistence(v28, v25, v29, v22, v30, v31, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore, serializedFactoryConfigReader)
 	if err != nil {
 		return nil, err
 	}
@@ -1282,6 +1286,7 @@ var BundleSet = wire11.NewSet(
 	workerServiceSet,
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
+	provideSerializedFactoryConfigReader,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation, wire11.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire11.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,

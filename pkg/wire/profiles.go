@@ -416,6 +416,14 @@ func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinitio
 	return catalog.All(), nil
 }
 
+func provideSerializedFactoryConfigReader() (factorydefinitions.SerializedFactoryConfigReader, error) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return catalog.ReadSerializedFactoryConfig, nil
+}
+
 func providePackagedFactoryCatalog(
 	definitions []factorydefinitions.PackagedDefinition,
 ) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
