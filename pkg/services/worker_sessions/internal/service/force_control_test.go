@@ -566,6 +566,94 @@ func archiveForceFixture(r *registry) *controlCaptureReader {
 	return reader
 }
 
+func TestForceControlReturnsSameSafeFactsBeforeAndAfterRecovery(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"applied", "unsupported", "failed", "natural"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			r, s, store := newDurableStopFixture(t)
+			t.Cleanup(s.signalDone)
+			private := "force-recovery-private-sentinel"
+			session := r.sessions["worker"]
+			session.Model, session.ReasoningEffort = &private, &private
+			session.PredecessorWorkerSessionID = private
+			session.ProviderSessionAssociation = &workersessions.ProviderSessionAssociation{
+				WorkerSessionID: "worker", DispatchID: "attempt", AttemptID: "attempt",
+				Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: private},
+			}
+			r.sessions["worker"] = session
+			owned := installForceDouble(s, func(ctx context.Context) (bool, error) {
+				switch variant {
+				case "applied":
+					go r.completeSupervision(context.WithoutCancel(ctx), "worker", s, failedForceDispatch(), errors.New("signal exit"))
+					return true, nil
+				case "failed":
+					return false, errors.New(private)
+				default:
+					return false, nil
+				}
+			})
+			if variant == "natural" {
+				store.begin = func(context.Context, recordings.WorkerControlOperationRecord) error {
+					r.commitTerminal("worker", workersessions.StateCompleted, workersessions.TerminalResult{})
+					s.signalDone()
+					return nil
+				}
+			}
+			first, firstErr := r.Terminate(t.Context(), forceRequest())
+			assertSafeForceFacts(t, variant, private, first, firstErr, r.sessions["worker"])
+			assertSafeForceRecovery(t, r, store, first, firstErr)
+			wantCalls := int32(1)
+			if variant == "natural" {
+				wantCalls = 0
+				if first.Outcome != workersessions.ControlOutcomeNoop || committedStopCause(store.records, store.records[0].Target, workersessions.StateCompleted) != nil {
+					t.Fatal("natural winner acquired a force effect or operator cause")
+				}
+			}
+			if owned.calls.Load() != wantCalls {
+				t.Fatalf("recovery repeated force: calls=%d", owned.calls.Load())
+			}
+		})
+	}
+}
+
+func assertSafeForceFacts(t *testing.T, variant, private string, first workersessions.ControlResult, firstErr error, live workersessions.Session) {
+	t.Helper()
+	if (variant == "failed") != errors.Is(firstErr, workersessions.ErrForceTerminationUnconfirmed) {
+		t.Fatalf("initial force = %#v, %v", first, firstErr)
+	}
+	want := map[string]workersessions.ControlOutcome{
+		"applied": workersessions.ControlOutcomeApplied, "unsupported": workersessions.ControlOutcomeUnsupported,
+		"failed": workersessions.ControlOutcomeFailed, "natural": workersessions.ControlOutcomeNoop,
+	}
+	if first.Outcome != want[variant] || !first.Forced || first.Action != workersessions.ControlActionTerminate {
+		t.Fatalf("initial force lost control facts: %#v", first)
+	}
+	payload, err := json.Marshal(first)
+	if err != nil || strings.Contains(string(payload), private) || first.Session.Result != nil {
+		t.Fatalf("initial force exposed facts omitted from recovery: %s, %v", payload, err)
+	}
+	if live.Model == nil || *live.Model != private || live.ProviderSessionAssociation == nil {
+		t.Fatal("safe control projection erased canonical inspection facts")
+	}
+}
+
+func assertSafeForceRecovery(t *testing.T, r *registry, store *stopOperationStore, first workersessions.ControlResult, firstErr error) {
+	t.Helper()
+	for _, archived := range []bool{false, true} {
+		if archived {
+			archiveForceFixture(r)
+		}
+		replayed, replayErr := r.Terminate(t.Context(), forceRequest())
+		if !reflect.DeepEqual(first, replayed) || (firstErr == nil) != (replayErr == nil) || len(store.records) != 2 {
+			t.Fatalf("archived=%v recovered different facts: %#v, %v; initial %#v, %v", archived, replayed, replayErr, first, firstErr)
+		}
+		if firstErr != nil && !errors.Is(replayErr, workersessions.ErrForceTerminationUnconfirmed) {
+			t.Fatalf("failed recovery lost public error identity: %v", replayErr)
+		}
+	}
+}
+
 func TestForceControlRecoversOriginalOutcomeAfterReplacementOrRestart(t *testing.T) {
 	t.Parallel()
 	for _, archived := range []bool{false, true} {

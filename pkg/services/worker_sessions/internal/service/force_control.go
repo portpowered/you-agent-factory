@@ -259,7 +259,11 @@ func awaitForceJoin(ctx context.Context, joined <-chan struct{}) error {
 
 func (r *registry) forceResult(id string, target frozenControlTarget, outcome workersessions.ControlOutcome) workersessions.ControlResult {
 	r.mu.RLock()
-	session := cloneSession(r.sessions[id])
+	snapshot := r.sessions[id]
+	// Return the same safe control facts that the operation journal retains.
+	// Inspection metadata belongs to session reads; including it here would
+	// make the initial result differ from a duplicate or archived recovery.
+	session := workersessions.Session{ID: snapshot.ID, State: snapshot.State}
 	r.mu.RUnlock()
 	return workersessions.ControlResult{Session: session, Action: workersessions.ControlActionTerminate, Outcome: outcome, DispatchID: target.dispatchID, Forced: true}
 }
