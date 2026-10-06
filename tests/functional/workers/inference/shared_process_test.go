@@ -35,11 +35,17 @@ const (
 
 var sharedInferenceGroup = &inferenceProcessGroup{}
 
-// TestMain owns the one process group used by the controlled P003 inference
-// scenarios. The process is intentionally started lazily so package selectors
-// that only exercise construction tests do not pay for a service-mode host.
+// TestMain owns the reusable process groups used by controlled P003 inference
+// scenarios, including isolated profiles for global provider-association reads.
+// Hosts start lazily so construction-only selectors do not pay for hosting.
 func TestMain(m *testing.M) {
 	code := m.Run()
+	for variant, group := range selectedObservationGroups {
+		if err := group.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close selected observation %s process group: %v\n", variant, err)
+			code = 1
+		}
+	}
 	closeErr := sharedInferenceGroup.close()
 	if closeErr != nil {
 		fmt.Fprintf(os.Stderr, "close shared inference process group: %v\n", closeErr)

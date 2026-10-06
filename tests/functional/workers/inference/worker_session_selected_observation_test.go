@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +17,18 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Work-scoped compatibility enrichment selects by provider tuple, not Factory
+// Session: it must enumerate the entire profile catalog to prove uniqueness.
+// Unrelated Worker openings invalidate that catalog generation. Give each native
+// availability variant its own profile so public completed-capture reads have a
+// stable membership window without serializing any of the variants. Reuse these
+// processes across test repetitions; TestMain joins their hosts after all leaves.
+var selectedObservationGroups = map[string]*inferenceProcessGroup{
+	"available":          {},
+	"missing-transcript": {},
+	"no-provider-tuple":  {},
+}
 
 // The command edge holds one lifecycle phase while customer CLI reads traverse
 // production session selection, HTTP binding, live registry and history joins.
@@ -30,7 +44,7 @@ func TestWorkerSessionSelectedSessionObservationConsistency(t *testing.T) {
 
 func runSelectedObservationScenario(t *testing.T, variant string) {
 	t.Helper()
-	group := sharedInferenceGroup
+	group := selectedObservationGroups[variant]
 	group.ensure(t)
 	dir := support.ScaffoldSingleStepFactory(t, "selected-observation-"+variant)
 	support.WriteAgentConfig(t, dir, "processor", sharedInferenceWithExecutorProvider(
@@ -77,7 +91,48 @@ func runSelectedObservationScenario(t *testing.T, variant string) {
 	assertSelectedObservationParity(t, group, dir, sessionID, workID, workerID, runner.providerID, variant, "RUNNING")
 	runner.unblock()
 	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, sharedInferenceScenarioTimeout)
+	if runner.providerID != "" {
+		assertSelectedCapturedDetail(t, group, runner.providerID)
+	}
 	assertSelectedObservationParity(t, group, dir, sessionID, workID, workerID, runner.providerID, variant, "COMPLETED")
+}
+
+// The public detail read exposes a typed projection failure directly rather
+// than hiding its cause behind optional Work enrichment's UNAVAILABLE value.
+func assertSelectedCapturedDetail(t *testing.T, group *inferenceProcessGroup, providerID string) {
+	t.Helper()
+	query := url.Values{"provider": {"codex"}, "kind": {"session_id"}, "id": {providerID}}
+	ctx, cancel := context.WithTimeout(t.Context(), sharedInferenceScenarioTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, group.baseURL+"/provider-sessions/detail?"+query.Encode(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var diagnostic factoryapi.ErrorResponse
+		if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
+			t.Fatalf("captured detail status=%d; decode typed error: %v", response.StatusCode, err)
+		}
+		t.Fatalf("captured detail status=%d code=%s", response.StatusCode, diagnostic.Code)
+	}
+	var detail factoryapi.ProviderSessionDetailResponse
+	if err := json.NewDecoder(response.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Parse.EventCount != 9 {
+		t.Fatalf("captured detail events=%d, want 9", detail.Parse.EventCount)
+	}
+	for _, entry := range detail.Transcript {
+		if entry.Text != nil && *entry.Text == "Selected observation COMPLETE" {
+			return
+		}
+	}
+	t.Fatal("captured detail omitted the completed provider message")
 }
 
 type selectedObservationRunner struct {
