@@ -82,12 +82,10 @@ type SessionRuntime struct {
 	startupWorkErr                 error
 	workflowID                     string
 	workstationLoader              interfaces.WorkstationLoader
-	loadFactory                    interfaces.LoadedFactoryLoader
 	editableFactoryValidator       factorysessions.EditableFactoryValidator
 	reconnectCursorValidator       factorysessions.ReconnectCursorValidator
 	worldStateProjector            factory.WorldStateProjector
 	invocationMetricsRecorder      roles.InvocationMetricsRecorder
-	baseLogger                     *zap.Logger
 	logger                         *zap.Logger
 	callerContext                  context.Context
 	startTime                      time.Time

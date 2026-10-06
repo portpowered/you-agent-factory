@@ -174,7 +174,6 @@ type RuntimeAssembly interface {
 	Complete(
 		factoryRootDir string,
 		clock factoryruntime.Clock,
-		baseLogger *zap.Logger,
 		logger *zap.Logger,
 		runtimeBuild runtimeports.RuntimeReplacementBuilder,
 		startupRuntime runtimeports.RuntimeInstance,

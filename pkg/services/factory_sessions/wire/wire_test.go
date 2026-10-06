@@ -305,7 +305,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		nil,
 		NewNamedFactoryActivator(state),
 		NewKeyedDefinitionActivationGateway(state, in.clock),
-		nil, nil, nil, nil,
+		nil, nil, nil,
 		nil,
 		nil, nil,
 	)

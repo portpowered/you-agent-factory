@@ -479,7 +479,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
 		opening.root.FactoryRootDir,
 		opening.clock,
-		opening.logger,
 		opening.startupRuntime.RuntimeLogger(),
 		opening.runtimebuildService,
 		opening.startupRuntime,

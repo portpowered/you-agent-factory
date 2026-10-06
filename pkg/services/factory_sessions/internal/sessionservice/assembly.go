@@ -41,7 +41,6 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      StreamManager
 	projectionReader             runtimebinding.SessionProjectionOwner
-	loadFactory                  factorydefinitions.LoadedFactoryLoader
 	factoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator     factorysessions.EditableFactoryValidator
 	invocationMetricsRecorder    roles.InvocationMetricsRecorder
@@ -103,7 +102,6 @@ func NewAssembly(
 	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
@@ -116,7 +114,6 @@ func NewAssembly(
 		reconnectCursorValidator:     reconnectCursorValidator,
 		worldStateProjector:          worldStateProjector,
 		SessionGateway:               gateway,
-		loadFactory:                  loadFactory,
 		factoryScaffoldInitializer:   factoryScaffoldInitializer,
 		editableFactoryValidator:     editableFactoryValidator,
 		invocationMetricsRecorder:    invocationMetricsRecorder,
@@ -354,7 +351,6 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 func (a *Assembly) Complete(
 	factoryRootDir string,
 	clock factoryruntime.Clock,
-	baseLogger *zap.Logger,
 	logger *zap.Logger,
 	runtimeBuild runtimeports.RuntimeReplacementBuilder,
 	startupRuntime runtimeports.RuntimeInstance,
@@ -436,7 +432,6 @@ func (a *Assembly) Complete(
 	runtime := NewSessionRuntime(
 		factoryRootDir,
 		clock,
-		baseLogger,
 		logger,
 		runtimeBuild,
 		startupRuntime,
@@ -452,7 +447,6 @@ func (a *Assembly) Complete(
 		workFile,
 		workflowID,
 		nil,
-		a.loadFactory,
 		a.editableFactoryValidator,
 		a.reconnectCursorValidator,
 		a.worldStateProjector,
