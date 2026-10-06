@@ -1,6 +1,7 @@
 package cancel_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1006,23 +1008,52 @@ func waitForFactoryForceResponse(t *testing.T, ctx context.Context, fixture canc
 	// Public force joins the Worker; Runtime publishes its dispatch response on
 	// the next tick. Observe that real asynchronous boundary rather than sleeping
 	// for an assumed completion time or substituting a controlled runner.
-	deadline := time.NewTimer(10 * time.Second) //nolint:testsleep // Bound the real asynchronous dispatch publication observed through the prebuilt daemon's public events.
-	defer deadline.Stop()
+	streamCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:testsleep // Failure ceiling for the prebuilt daemon's public event stream; completion is event-driven.
+	defer cancel()
+	endpoint := fixture.serverURL + "/factory-sessions/" + url.PathEscape(session) + "/events"
+	request, err := http.NewRequestWithContext(streamCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response *http.Response
 	for {
-		events, err := readFactoryEvents(ctx, fixture.serverURL, session)
-		if err == nil {
-			for _, event := range events {
-				if event.Type == factoryapi.FactoryEventTypeDispatchResponse && eventHasWorkID(event, workID) {
-					return events
-				}
-			}
+		response, err = http.DefaultClient.Do(request)
+		if err == nil && response.StatusCode == http.StatusOK {
+			break
+		}
+		if response != nil {
+			_ = response.Body.Close()
 		}
 		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case <-deadline.C: //nolint:testsleep // Failure ceiling for public dispatch publication from the real prebuilt daemon.
-			t.Fatalf("Factory force dispatch response unavailable: %v; events=%v", err, cancelDaemonEventDiagnostic(fixture.serverURL, session))
-		case <-time.After(50 * time.Millisecond):
+		case <-streamCtx.Done():
+			t.Fatalf("Factory event stream did not become available: %v (last request: %v)", streamCtx.Err(), err)
+		case <-time.After(50 * time.Millisecond): //nolint:testsleep // The separately restarted prebuilt replay daemon has no injected listener-ready signal; retry connection only, then observe dispatch completion through SSE.
 		}
 	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Factory event stream returned %s", response.Status)
+	}
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse && eventHasWorkID(event, workID) {
+			// Keep the complete retained head for the one-response assertion.
+			events, err := readFactoryEvents(ctx, fixture.serverURL, session)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return events
+		}
+	}
+	t.Fatalf("Factory force dispatch response unavailable: %v; events=%v", scanner.Err(), cancelDaemonEventDiagnostic(fixture.serverURL, session))
+	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,23 +16,16 @@ import (
 const packagedRuntimeScriptPath = "scripts/pf2-003-runtime-fixture.sh"
 
 // TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript is
-// isolated because it proves Unix shebang permissions and Factory-relative
-// executable selection through the real exec runner.
+// proves customer Work output through the shared process's controlled script edge.
+// Real executable selection and permissions belong to prebuilt integration coverage.
 func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable shebang scripts are not supported on Windows")
-	}
 	t.Parallel()
 
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-success", "#!/bin/sh\nprintf 'packaged runtime success\\n'\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	_, listed := RunFactory(t, factoryDir, factoryDir,
+		&fakeCommandRunner{stdout: "packaged runtime success\n"}, 5*time.Second)
 	for placeID, want := range map[string]int{
 		"task:complete": 1,
 		"task:init":     0,
@@ -43,26 +35,19 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "complete", "packaged runtime success")
+	assertListedWorkText(t, listed, "task", "complete", "packaged runtime success")
 }
 
-// TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome is isolated
-// because it proves real shell exit-code and stderr mapping through exec.
+// TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome proves customer
+// failure placement and diagnostics from a controlled ScriptCommandRunner result.
 func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable shebang scripts are not supported on Windows")
-	}
 	t.Parallel()
 
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-failure", "#!/bin/sh\nprintf 'packaged runtime failure\\n' >&2\nexit 23\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	scenario, listed := RunFactory(t, factoryDir, factoryDir,
+		&fakeCommandRunner{stderr: "packaged runtime failure\n", exitCode: 23}, 5*time.Second)
 	for placeID, want := range map[string]int{
 		"task:failed":   1,
 		"task:init":     0,
@@ -72,7 +57,7 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	assertPackagedScriptExitEvent(t, server.GetFactoryEvents(t), 23, "packaged runtime failure\n")
+	assertPackagedScriptExitEvent(t, scenario.FactoryEvents(t), 23, "packaged runtime failure\n")
 }
 
 func installPackagedScriptRuntimeFixture(t *testing.T, packageName, scriptBody string) string {
