@@ -433,9 +433,13 @@ func providePackagedFactoryInstallation(
 	}
 }
 
-// provideDurableExecutionFactory binds the execution opener once; session and
-// replay operations supply request facts without substituting construction roles.
-func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader, factory factorysessionwire.FactorySessionExecutionFactory) factorysessionwire.DurableExecutionFactory {
+// provideDurableExecutionFactory binds the execution opener and provider identity
+// policy once; live and replay requests cannot substitute these collaborators.
+func provideDurableExecutionFactory(
+	loadOperatorConfig operatorsettings.ConfigLoader,
+	factory factorysessionwire.FactorySessionExecutionFactory,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+) factorysessionwire.DurableExecutionFactory {
 	return func(
 		definition factorydefinitions.RuntimeSelection,
 		persistence factorysessions.PersistencePolicy,
@@ -446,7 +450,6 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		clock factoryruntime.Clock,
 		provider providers.Service,
 		mockWorkersConfig *workers.MockWorkersConfig,
-		providerIdentities factorysessions.ProviderIdentityResolver,
 	) (factorysessionwire.DurableExecution, error) {
 		return factorysessionwire.NewDurableExecutionRuntime(
 			loadOperatorConfig,

@@ -154,13 +154,12 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 				policy factorysessions.PersistencePolicy, home, path string,
 				defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
 				provider providers.Service, mocks *workers.MockWorkersConfig,
-				identities factorysessions.ProviderIdentityResolver,
 			) (DurableExecution, error) {
 				attempts++
 				if attempts == 1 {
 					return DurableExecution{Service: failedOwner}, failure
 				}
-				return acquire(definition, policy, home, path, defaults, root, clock, provider, mocks, identities)
+				return acquire(definition, policy, home, path, defaults, root, clock, provider, mocks)
 			}
 			request := portableCheckpointOwnerFixture(t).startRequest()
 			failed, err := factory.openForRequest(t.Context(), request)
@@ -512,7 +511,6 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		_ factoryruntime.Clock,
 		_ providers.Service,
 		_ *workers.MockWorkersConfig,
-		_ factorysessions.ProviderIdentityResolver,
 	) (DurableExecution, error) {
 		return DurableExecution{Service: owner}, nil
 	}
@@ -862,7 +860,6 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 			acquire := func(_ factorydefinitions.RuntimeSelection, _ factorysessions.PersistencePolicy,
 				_, _ string, _ operatorconfig.ResolvedDefaults, _ RuntimeRoot, _ factoryruntime.Clock,
 				provider providers.Service, mocks *workers.MockWorkersConfig,
-				_ factorysessions.ProviderIdentityResolver,
 			) (DurableExecution, error) {
 				if provider != tc.provider {
 					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
@@ -875,7 +872,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 				}
 				return DurableExecution{Service: owner}, nil
 			}
-			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire, nil)
+			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire)
 			if !errors.Is(err, tc.failure) {
 				t.Fatalf("error = %v, want %v", err, tc.failure)
 			}

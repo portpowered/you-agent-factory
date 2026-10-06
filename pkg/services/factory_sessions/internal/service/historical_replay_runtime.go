@@ -174,7 +174,6 @@ func (r *Root) openPortableReplayDurableOwner(
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 	durableExecutionFactory DurableExecutionFactory,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 	resolveClock factoryruntime.ClockResolver,
 ) (durableexecution.Service, func() error, error) {
 	if durableExecutionFactory == nil {
@@ -190,7 +189,6 @@ func (r *Root) openPortableReplayDurableOwner(
 		clock,
 		providerOverride,
 		durableExecutionFactory,
-		providerIdentities,
 	)
 	if err != nil {
 		// Acquisition may have opened resources before failing. Return only
@@ -279,7 +277,6 @@ func constructPortableReplayDurableOwner(
 	clock factoryruntime.Clock,
 	providerOverride providers.Service,
 	durableExecutionFactory DurableExecutionFactory,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, providers.Service, error) {
 	providerForDurable := providerOverride
 	durable, err := durableExecutionFactory(
@@ -292,7 +289,6 @@ func constructPortableReplayDurableOwner(
 		clock,
 		providerForDurable,
 		configured.Workers.MockWorkers,
-		providerIdentities,
 	)
 	if err != nil {
 		return durable, nil, err
