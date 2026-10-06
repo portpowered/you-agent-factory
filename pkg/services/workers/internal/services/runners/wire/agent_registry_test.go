@@ -20,12 +20,12 @@ const agentFixtureExecutionFailure = "fixture execution failure"
 
 func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := NewAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(runners.AgentDependencies{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
 	if err != nil {
-		t.Fatalf("NewAgentRegistry() error = %v", err)
+		t.Fatalf("newTestAgentRegistry() error = %v", err)
 	}
 	if fake.calls.Load() != 0 {
 		t.Fatalf("construction Providers.Execute calls = %d, want 0", fake.calls.Load())
@@ -86,12 +86,12 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 
 func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := NewAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(runners.AgentDependencies{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
 	if err != nil {
-		t.Fatalf("NewAgentRegistry() error = %v", err)
+		t.Fatalf("newTestAgentRegistry() error = %v", err)
 	}
 
 	valid := agentRequest()
@@ -125,12 +125,12 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 		entered:            make(chan struct{}),
 		release:            make(chan struct{}),
 	}
-	registry, err := NewAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(runners.AgentDependencies{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
 	if err != nil {
-		t.Fatalf("NewAgentRegistry() error = %v", err)
+		t.Fatalf("newTestAgentRegistry() error = %v", err)
 	}
 	request := agentRequest()
 	done := make(chan error, 1)
@@ -162,20 +162,20 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 }
 
 func TestNewAgentRegistryRejectsMissingProvidersRoot(t *testing.T) {
-	_, err := NewAgentRegistry(runners.AgentDependencies{
+	_, err := newTestAgentRegistry(runners.AgentDependencies{
 		Publish: agentNoopPublisher,
 	})
 	if err == nil {
-		t.Fatal("NewAgentRegistry() error = nil, want missing Providers root")
+		t.Fatal("newTestAgentRegistry() error = nil, want missing Providers root")
 	}
 }
 
 func TestNewAgentRegistryRejectsMissingProgressPublisher(t *testing.T) {
-	_, err := NewAgentRegistry(runners.AgentDependencies{
+	_, err := newTestAgentRegistry(runners.AgentDependencies{
 		Providers: newAgentProvidersFake(),
 	})
 	if err == nil {
-		t.Fatal("NewAgentRegistry() error = nil, want missing progress publisher")
+		t.Fatal("newTestAgentRegistry() error = nil, want missing progress publisher")
 	}
 }
 
@@ -400,4 +400,18 @@ func assertAgentResult(t *testing.T, result workers.RunnerExecutionResult) {
 	if !reflect.DeepEqual(result, expectedAgentResult()) {
 		t.Fatalf("Runner result = %#v, want %#v", result, expectedAgentResult())
 	}
+}
+
+// newTestAgentRegistry constructs one inert Agent Runner over the singular
+// Providers root and publishes it through the immutable private registry.
+func newTestAgentRegistry(
+	dependencies runners.AgentDependencies,
+) (runners.Service, error) {
+	implementation, err := agentImplementation(dependencies)
+	service, registryErr := NewService([]runners.Registration{{
+		Identity: runners.AgentIdentity,
+		Metadata: agentMetadata(),
+		Runner:   implementation,
+	}})
+	return service, errors.Join(err, registryErr)
 }

@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
@@ -50,55 +51,52 @@ type ScriptCommandRunner interface {
 }
 
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
-// Its Assembly is bound after the other process services have been composed.
+// Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
 	*legacyservice.Assembly
-	startFlights                     singleflight.Group
-	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
-	durableExecutionFactory          DurableExecutionFactory
-	workerService                    workers.Service
-	modelService                     models.Service
-	automationService                automations.Service
-	factorySessionExecutionFactory   FactorySessionExecutionFactory
-	recordingsService                recordings.Service
-	recordingsRuntime                recordings.RuntimeScopeService
-	replayInputs                     recordings.ReplayInputLoader
-	webhooksService                  webhooks.Service
-	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	factoryDefinitions               factorydefinitions.Service
-	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
-	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
-	editableFactoryValidator         factorysessions.EditableFactoryValidator
-	initialActivation                factoryruntime.InitialRuntimeActivationOperation
-	workService                      work.Service
-	providerSessions                 providersessions.Service
-	factoryDefinitionValidator       factorydefinitions.Validator
-	namedPaths                       factorydefinitions.NamedPathResolver
-	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
-	workflowPreview                  factoryruntime.WorkflowPreviewOperation
-	loadFactory                      factorydefinitions.LoadedFactoryLoader
-	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
-	resolveClock                     factoryruntime.ClockResolver
-	newSessionLogger                 factoryruntime.SessionLoggerFactory
-	baseLogger                       *zap.Logger
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	processRuntimeFactory            roles.ProcessRuntimeFactory
-	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
-	generateSessionID                factorysessions.SessionIDGenerator
-	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
-	resolveHome                      factorysessions.HomeDirectoryResolver
-	providerIdentities               factorysessions.ProviderIdentityResolver
-	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
-	runtimeRoot                      FactoryRuntimeRoot
-	clock                            factoryruntime.Clock
-	providerOverride                 providers.Service
-	invocationMetricsRecorder        roles.InvocationMetricsRecorder
-	providerCommandRunner            platformprocess.CommandRunner
-	scriptCommandRunner              platformprocess.CommandRunner
-	submissionRecorder               recordings.SubmissionRecorder
-	dispatchRecorder                 recordings.DispatchRecorder
+	startFlights                   singleflight.Group
+	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
+	durableOpening                 *DurableOpening
+	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
+	workerService                  workers.Service
+	modelService                   models.Service
+	automationService              automations.Service
+	recordingsService              recordings.Service
+	recordingsRuntime              recordings.RuntimeScopeService
+	replayInputs                   recordings.ReplayInputLoader
+	webhooksService                webhooks.Service
+	factoryDefinitions             factorydefinitions.Service
+	definitionRuntimeRouter        *factorysessions.DefinitionRuntimeRouter
+	factoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator       factorysessions.EditableFactoryValidator
+	initialActivation              factoryruntime.InitialRuntimeActivationOperation
+	workService                    work.Service
+	providerSessions               providersessions.Service
+	factoryDefinitionValidator     factorydefinitions.Validator
+	namedPaths                     factorydefinitions.NamedPathResolver
+	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
+	workflowPreview                factoryruntime.WorkflowPreviewOperation
+	loadFactory                    factorydefinitions.LoadedFactoryLoader
+	newLoadedFactory               factorydefinitions.LoadedFactorySourceFactory
+	decodeReplayConfig             factorydefinitions.ReplayRuntimeConfigDecoder
+	captureLoadedFactorySnapshot   factorydefinitions.LoadedFactorySnapshotCapturer
+	resolveClock                   factoryruntime.ClockResolver
+	newSessionLogger               factoryruntime.SessionLoggerFactory
+	baseLogger                     *zap.Logger
+	processRuntimeFactory          roles.ProcessRuntimeFactory
+	ensureOperatorBackendScope     operatorsettings.BackendScopeEnsurer
+	generateSessionID              factorysessions.SessionIDGenerator
+	generateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
+	resolveHome                    factorysessions.HomeDirectoryResolver
+	providerIdentities             factorysessions.ProviderIdentityResolver
+	factorySessionsRuntimeAssembly roles.RuntimeAssembly
+	runtimeRoot                    FactoryRuntimeRoot
+	clock                          factoryruntime.Clock
+	providerOverride               providers.Service
+	providerCommandRunner          platformprocess.CommandRunner
+	scriptCommandRunner            platformprocess.CommandRunner
+	submissionRecorder             recordings.SubmissionRecorder
+	dispatchRecorder               recordings.DispatchRecorder
 }
 
 func NewRoot(
@@ -106,7 +104,6 @@ func NewRoot(
 	logger *zap.Logger,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -123,8 +120,7 @@ func NewRoot(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly roles.RuntimeAssembly,
-	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
+	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
@@ -132,7 +128,6 @@ func NewRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 	workService work.Service,
 	automationService automations.Service,
 	webhooksService webhooks.Service,
@@ -140,56 +135,60 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
+	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
+	if err != nil {
+		return nil, err
+	}
 	root := &Root{
-		initialActivation:                initialActivation,
-		durableExecutionFactory:          durableExecutionFactory,
-		workerService:                    workerService,
-		modelService:                     modelService,
-		automationService:                automationService,
-		factorySessionsRuntimeAssembly:   assembly,
-		factorySessionExecutionFactory:   factorySessionExecutionFactory,
-		recordingsService:                recordingsService,
-		recordingsRuntime:                recordingsRuntime,
-		replayInputs:                     recordingsRuntime,
-		webhooksService:                  webhooksService,
-		workersMockCommandRunnerFactory:  workersMockCommandRunnerFactory,
-		factoryDefinitions:               definitions,
-		definitionRuntimeRouter:          runtimeRouter,
-		factoryScaffoldInitializer:       factoryScaffoldInitializer,
-		editableFactoryValidator:         editableFactoryValidator,
-		workService:                      workService,
-		providerSessions:                 providerSessions,
-		factoryDefinitionValidator:       validator,
-		namedPaths:                       namedPaths,
-		factoryWorkflows:                 factoryWorkflows,
-		workflowPreview:                  workflowPreview,
-		loadFactory:                      loadFactory,
-		newLoadedFactory:                 newLoadedFactory,
-		decodeReplayConfig:               decodeReplayConfig,
-		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
-		resolveClock:                     resolveClock,
-		newSessionLogger:                 newSessionLogger,
-		baseLogger:                       logger,
-		providerFromCommandRunnerFactory: providerFromCommandRunnerFactory,
-		processRuntimeFactory:            processRuntimeFactory,
-		generateSessionID:                generateSessionID,
-		ensureOperatorBackendScope:       ensureBackendScope,
-		generateRuntimeInstanceID:        generateRuntimeInstanceID,
-		resolveHome:                      resolveHome,
-		providerIdentities:               providerIdentities,
-		clock:                            clock,
-		providerOverride:                 providerOverride,
-		invocationMetricsRecorder:        invocationMetricsRecorder,
-		providerCommandRunner:            providerCommandRunner,
-		scriptCommandRunner:              scriptCommandRunner,
-		submissionRecorder:               submissionRecorder,
-		dispatchRecorder:                 dispatchRecorder,
+		Assembly:                       concrete,
+		liveChangeCoordinator:          liveChangeCoordinator,
+		initialActivation:              initialActivation,
+		modelInvocation:                modelInvocation,
+		durableOpening:                 durableOpening,
+		workerService:                  workerService,
+		modelService:                   modelService,
+		automationService:              automationService,
+		factorySessionsRuntimeAssembly: assembly,
+		recordingsService:              recordingsService,
+		recordingsRuntime:              recordingsRuntime,
+		replayInputs:                   recordingsRuntime,
+		webhooksService:                webhooksService,
+		factoryDefinitions:             definitions,
+		definitionRuntimeRouter:        runtimeRouter,
+		factoryScaffoldInitializer:     factoryScaffoldInitializer,
+		editableFactoryValidator:       editableFactoryValidator,
+		workService:                    workService,
+		providerSessions:               providerSessions,
+		factoryDefinitionValidator:     validator,
+		namedPaths:                     namedPaths,
+		factoryWorkflows:               factoryWorkflows,
+		workflowPreview:                workflowPreview,
+		loadFactory:                    loadFactory,
+		newLoadedFactory:               newLoadedFactory,
+		decodeReplayConfig:             decodeReplayConfig,
+		captureLoadedFactorySnapshot:   captureLoadedFactorySnapshot,
+		resolveClock:                   resolveClock,
+		newSessionLogger:               newSessionLogger,
+		baseLogger:                     logger,
+		processRuntimeFactory:          processRuntimeFactory,
+		generateSessionID:              generateSessionID,
+		ensureOperatorBackendScope:     ensureBackendScope,
+		generateRuntimeInstanceID:      generateRuntimeInstanceID,
+		resolveHome:                    resolveHome,
+		providerIdentities:             providerIdentities,
+		clock:                          clock,
+		providerOverride:               providerOverride,
+		providerCommandRunner:          providerCommandRunner,
+		scriptCommandRunner:            scriptCommandRunner,
+		submissionRecorder:             submissionRecorder,
+		dispatchRecorder:               dispatchRecorder,
 	}
 	root.runtimeRoot = runtimeRoot
 	return root, nil

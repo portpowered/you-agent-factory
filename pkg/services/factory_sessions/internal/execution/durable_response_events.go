@@ -16,11 +16,9 @@ import (
 )
 
 func (s *JavaScriptRuntimeService) ensureSessionResponseEventsIfNeeded(state *runtimeSessionState) error {
-	// Only a runtime-backed session publishes provider progress through this
-	// store: its children are Workers, invoked through the narrow Execute
-	// capability bound after the Runtime has opened. A fake session, a replay,
-	// or the standalone `you run script.js` composition has no such capability
-	// and needs no store.
+	// Sessions with injected Workers Execute retain child progress in their
+	// own response-event store. Fake and historical-only compositions without
+	// that operation need no store.
 	if s == nil || !s.workerExecutionBound() {
 		return nil
 	}

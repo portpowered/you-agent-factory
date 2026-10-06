@@ -231,14 +231,8 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot       string
-	childExecutorMode string
-	// directChildInvocation remains only for legacy in-package construction
-	// helpers and tests. Production standalone opening supplies the narrow
-	// Workers Execute capability through directChildExecution; P6-C can remove
-	// this compatibility input after those callers are retired.
-	directChildInvocation   workers.InvocationExecutor
-	directChildExecution    childExecuteService
+	projectRoot             string
+	childExecutorMode       string
 	persistence             runtimepersist.Store
 	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
 	persistenceProjectRoot  func() string
@@ -257,12 +251,11 @@ type JavaScriptRuntimeService struct {
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
 	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
-	// workerInvokerService is guarded by its own lock, not the session lock. It
-	// is attached once after construction and read on paths that already hold the
-	// session lock; sharing one mutex between them deadlocks.
-	invokerMu            sync.RWMutex
-	workerInvokerService factory.Service
-	workerExecution      *childWorkerExecutionBinding
+	// Request bindings use a separate lock from durable session state.
+	invokerMu             sync.RWMutex
+	liveChangeScopes      map[string]*durableLiveChangeBinding
+	workerExecution       *childWorkerExecutionBinding
+	workerExecutionScopes map[string]*childWorkerExecutionBinding
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
 	// knows only the dispatch it belongs to, so this is what routes a child's
@@ -271,16 +264,15 @@ type JavaScriptRuntimeService struct {
 	workerSessionsMu sync.RWMutex
 	workerSessions   map[string]string
 
-	mu                         sync.RWMutex
-	sessions                   map[string]*runtimeSessionState
-	startReplay                map[string]startReplayRecord
-	startInflight              map[string]*startInflightFlight
-	controlReplay              map[string]controlReplayRecord
-	liveChangeMu               sync.Mutex
-	dispatchDurabilityMu       sync.RWMutex
-	dispatchDurability         recording.CompletedFlushWatermarkReader
-	dispatchStreamGenerationID string
-	persistenceWarningLogger   *zap.Logger
+	mu                       sync.RWMutex
+	sessions                 map[string]*runtimeSessionState
+	startReplay              map[string]startReplayRecord
+	startInflight            map[string]*startInflightFlight
+	controlReplay            map[string]controlReplayRecord
+	liveChangeMu             sync.Mutex
+	dispatchDurabilityMu     sync.RWMutex
+	dispatchDurabilityScopes map[string]*dispatchDurabilityBinding
+	persistenceWarningLogger *zap.Logger
 
 	runLifecycleMu sync.Mutex
 	runWaitGroup   sync.WaitGroup
@@ -292,21 +284,11 @@ type JavaScriptRuntimeService struct {
 var _ Service = (*JavaScriptRuntimeService)(nil)
 var _ canonicaldurable.Service = (*JavaScriptRuntimeService)(nil)
 
-// SetPersistenceWarningLogger binds the session-scoped logger used for safe
-// durable snapshot size warnings. Runtime opening supplies this after it has
-// resolved the Factory Session identity; construction itself remains inert.
-func (s *JavaScriptRuntimeService) SetPersistenceWarningLogger(logger *zap.Logger) {
-	if s == nil {
-		return
-	}
-	s.persistenceWarningLogger = logger
-}
-
 // NewJavaScriptRuntimeService constructs the durable session service.
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
+	workerExecution WorkerExecution,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -329,7 +311,6 @@ func NewJavaScriptRuntimeService(
 	service := &JavaScriptRuntimeService{
 		projectRoot:             projectRoot,
 		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		directChildInvocation:   directChildInvocation,
 		clock:                   clock,
 		syncWaits:               syncWaits,
 		checkpointSummaries:     checkpointSummaries,
@@ -349,6 +330,7 @@ func NewJavaScriptRuntimeService(
 		startInflight:           make(map[string]*startInflightFlight),
 		controlReplay:           make(map[string]controlReplayRecord),
 	}
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil, nil, nil)
 	return service
 }
 
@@ -361,20 +343,6 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 	return s.persistence
 }
 
-// SetPersistenceRouting selects the opened project's store for process-owned
-// durable requests. The resolver reads the canonical live Factory Session.
-func (s *JavaScriptRuntimeService) SetPersistenceRouting(storeForRoot func(string) (runtimepersist.Store, error), projectRoot func() string) {
-	if s == nil {
-		return
-	}
-	if storeForRoot != nil {
-		s.persistenceStoreForRoot = storeForRoot
-	}
-	if projectRoot != nil {
-		s.persistenceProjectRoot = projectRoot
-	}
-}
-
 // ResumeRuntimeScope carries transient Worker capabilities from the selected
 // live Factory Session. No function in this value is persisted in a snapshot.
 type ResumeRuntimeScope struct {
@@ -383,13 +351,6 @@ type ResumeRuntimeScope struct {
 	WorkerAttemptStarter    factorysessions.WorkerAttemptStarter
 	WorkerResourceAdmission factory.ResourceCapacityLeaseAdmission
 	WorkerProgressPublisher workers.ProgressPublisher
-}
-
-func (s *JavaScriptRuntimeService) SetResumeRuntimeScopeResolver(resolve func(string) (ResumeRuntimeScope, error)) {
-	if s == nil {
-		return
-	}
-	s.resumeRuntimeScope = resolve
 }
 
 func (s *JavaScriptRuntimeService) persistenceForRoot(root string) (runtimepersist.Store, error) {
@@ -641,7 +602,7 @@ func (s *JavaScriptRuntimeService) listDispatches(ctx context.Context, sessionID
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: s.dispatchesForRead(state.dispatches, state.events),
+		Dispatches: s.dispatchesForRead(id, state.dispatches, state.events),
 	}, nil
 }
 
@@ -661,7 +622,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	for _, summary := range s.dispatchesForRead(state.dispatches, state.events) {
+	for _, summary := range s.dispatchesForRead(id, state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			detail := DispatchDetail{
 				DispatchSummary:  summary,

@@ -93,7 +93,7 @@ type sessionRuntimeOpening struct {
 	boardHistoryOpening         currentBoardHistoryOpening
 	runtimebuildService         runtimeports.RuntimeReplacementBuilder
 	startupRuntime              runtimeports.RuntimeInstance
-	startupSpec                 factoryruntime.SessionBuildSpec
+	completion                  factoryruntime.RuntimeInitialCompletion
 	runtimeLifecycle            runtimeports.RuntimeLifecycle
 	runtimeSidecars             runtimeports.RuntimeSidecarService
 	activation                  *factoryruntime.RuntimeActivation
@@ -202,18 +202,13 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 		liveOwner, replayClose, err = r.openPortableReplayDurableOwner(
 			opening.configured,
 			opening.root,
-			r.clock,
-			r.providerOverride,
-			r.providerCommandRunner,
-			r.workerService,
-			r.workersMockCommandRunnerFactory,
-			r.providerFromCommandRunnerFactory,
-			r.durableExecutionFactory,
-			r.factorySessionExecutionFactory,
-			r.providerIdentities,
-			r.resolveClock,
 		)
 		if err != nil {
+			if replayClose != nil {
+				if cleanupErr := replayClose(); cleanupErr != nil {
+					return runtimeProducts{closeArtifacts: replayClose}, errors.Join(err, cleanupErr)
+				}
+			}
 			return runtimeProducts{}, err
 		}
 	}
@@ -243,21 +238,11 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if opening.recordingProjections == nil {
 		return fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
 	}
-	if r.durableExecutionFactory == nil {
+	if r.durableOpening == nil {
 		return fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
-	opening.providerForDurable, err = resolveDurableExecutionProvider(
-		r.providerOverride,
-		opening.configured.Workers.MockWorkers,
-		opening.load.LoadedFactoryCfg,
-		r.providerCommandRunner,
-		r.workersMockCommandRunnerFactory,
-		r.providerFromCommandRunnerFactory,
-	)
-	if err != nil {
-		return err
-	}
-	opening.durableExecution, err = r.durableExecutionFactory(
+	opening.providerForDurable = r.providerOverride
+	opening.durableExecution, err = r.durableOpening.Open(
 		opening.configured.Definition,
 		opening.configured.Session.Persistence,
 		opening.sessionSelection.SystemConfigHome,
@@ -267,8 +252,6 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 		opening.clock,
 		opening.providerForDurable,
 		opening.configured.Workers.MockWorkers,
-		r.factorySessionExecutionFactory,
-		r.providerIdentities,
 	)
 	if closer, ok := opening.durableExecution.Service.(interface{ Close() error }); ok {
 		cleanup.Add(func() error {
@@ -284,7 +267,6 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if err := opening.bindSessionObservations(); err != nil {
 		return err
 	}
-	setPersistenceWarningLogger(opening.durableExecution.Service, opening.logger)
 	if r.factorySessionsRuntimeAssembly == nil {
 		return fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
 	}
@@ -387,14 +369,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if initial != nil {
 		opening.runtimebuildService = initial.ReplacementBuilder
 		opening.startupRuntime = initial.Record
-		opening.startupSpec = factoryruntime.SessionBuildSpec{
-			SessionID: initial.Completion.SessionID, MetricsSessionID: initial.Completion.MetricsSessionID,
-			CanonicalSessionIDGenerated:    initial.Completion.CanonicalSessionIDGenerated,
-			ResumeSourceCanonicalSessionID: initial.Completion.ResumeSourceCanonicalSessionID,
-		}
-		if initial.Record != nil {
-			opening.startupSpec.LoadedFactoryCfg = initial.Record.LoadedRuntimeConfig()
-		}
+		opening.completion = initial.Completion
 		opening.runtimeLifecycle = initial.Lifecycle
 		opening.runtimeSidecars = initial.Sidecars
 		opening.activation = initial.Activation
@@ -405,14 +380,14 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(opening.startupSpec.SessionID) != opening.sessionID {
+	if strings.TrimSpace(opening.completion.SessionID) != opening.sessionID {
 		return fmt.Errorf(
 			"construct runtime scope: built Factory Session ID %q does not match requested ID %q",
-			opening.startupSpec.SessionID,
+			opening.completion.SessionID,
 			opening.sessionID,
 		)
 	}
-	opening.startupSpec.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
+	opening.completion.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.warnMissingBoardHistory()
@@ -504,16 +479,14 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
 		opening.root.FactoryRootDir,
 		opening.clock,
-		opening.logger,
 		opening.startupRuntime.RuntimeLogger(),
 		opening.runtimebuildService,
 		opening.startupRuntime,
 		opening.modelsBind.Scope,
-		opening.startupSpec,
+		opening.completion,
 		opening.runtimeLifecycle,
 		opening.runtimeSidecars,
 		opening.durableExecution.Service,
-		r.factoryDefinitions,
 		opening.sessionID,
 		opening.configured.Definition.Directory,
 		opening.configured.Definition.ExecutionBaseDir,
@@ -521,19 +494,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		opening.sessionSelection.BackendScopeID,
 		opening.sessionSelection.WorkFile,
 		opening.configured.Recordings.WorkflowID,
-		nil,
-		r.loadFactory,
-		r.factoryScaffoldInitializer,
-		r.editableFactoryValidator,
-		func(
-			recorded []factorydefinitions.FactoryEvent,
-			cursor factorydefinitions.FactoryEventReconnectCursor,
-			scope factorydefinitions.FactoryEventReconnectScope,
-		) error {
-			return opening.recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
-		},
-		opening.recordingProjections.ReconstructFactoryWorldState,
-		r.invocationMetricsRecorder,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -599,10 +559,9 @@ func (r *Root) bindSessionOpeningProducts(
 	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	if err := bindDurableExecutionCapabilities(
+	releaseScope, err := bindDurableExecutionCapabilities(
 		opening.sessionID,
 		opening.durableExecution.Service,
-		r.workerService,
 		rootRuntime,
 		resourceLeaseAdmission,
 		opening.configured.Runtime.RuntimeInstanceID,
@@ -613,9 +572,11 @@ func (r *Root) bindSessionOpeningProducts(
 		r.providerCommandRunner,
 		runtimeProgressPublisher(opening.startupRuntime),
 		runtimeWorkerAttemptStarter(opening.startupRuntime),
-	); err != nil {
+	)
+	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup.Add(func() error { releaseScope(); return nil })
 	opened := assembleRuntimeProducts(
 		ctx,
 		r.factoryDefinitions,
@@ -730,79 +691,42 @@ func lastCanonicalCursor(
 	return nil
 }
 
-// workerInvokerBinder is the narrow capability a durable execution service
-// exposes when its orchestrator runs Workers of its own.
-type workerInvokerSetter interface {
-	SetWorkerInvoker(factoryruntime.Service)
-}
-
-// setWorkerInvoker hands one session's opaque Factory Runtime capability to its
-// execution service. An execution backend with no Workers of its own does not
-// implement the setter, and skipping it is correct rather than a missing wire.
-func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
-	setter, ok := execution.(workerInvokerSetter)
-	if !ok || runtime == nil {
-		return
-	}
-	setter.SetWorkerInvoker(runtime)
-}
-
-func setPersistenceWarningLogger(execution durableexecution.Service, logger *zap.Logger) {
-	if execution == nil {
-		return
-	}
-	setter, ok := execution.(interface {
-		SetPersistenceWarningLogger(*zap.Logger)
-	})
-	if ok {
-		setter.SetPersistenceWarningLogger(logger)
-	}
-}
-
-// workerExecutionSetter is the narrow live-session child capability. The
-// Workers service is already composed by process Wire; only its Execute method
-// crosses into the child projection, while Runtime contributes the separate
-// resource-lease admission and identity metadata.
-type workerExecutionSetter interface {
-	SetWorkerExecution(
-		interface {
-			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-		},
+// workerScopeBinder accepts runtime-owned facts without replacing Workers.
+type workerScopeBinder interface {
+	BindWorkerScope(
+		string,
 		factoryruntime.ResourceCapacityLeaseAdmission,
 		string,
 		string,
 		providers.Service,
 		*workers.MockWorkersConfig,
 		platformprocess.CommandRunner,
-	)
+		workers.ProgressPublisher,
+		func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+	) (func(), error)
 }
 
-func setWorkerExecution(
+func bindWorkerScope(
 	sessionID string,
 	execution any,
-	workerService workers.Service,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
-) error {
-	setter, ok := execution.(workerExecutionSetter)
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+) (func(), error) {
+	binder, ok := execution.(workerScopeBinder)
 	if !ok {
-		return fmt.Errorf(
-			"bind Workers Execute for Factory Session %q: live child execution setter is required",
-			strings.TrimSpace(sessionID),
-		)
+		return nil, fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	if workerService == nil {
-		return fmt.Errorf(
-			"bind Workers Execute for Factory Session %q: Workers service is required",
-			strings.TrimSpace(sessionID),
-		)
+	release, err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	if err != nil {
+		return nil, fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}
-	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
-	return nil
+	return release, nil
 }
 
 type runtimeProgressPublisherProvider interface {
@@ -822,19 +746,6 @@ func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.Prog
 		}
 	}
 	return nil
-}
-
-func setWorkerProgressPublisher(execution any, publisher workers.ProgressPublisher) {
-	if publisher == nil {
-		return
-	}
-	setter, ok := execution.(interface {
-		SetWorkerProgressPublisher(workers.ProgressPublisher)
-	})
-	if !ok {
-		return
-	}
-	setter.SetWorkerProgressPublisher(publisher)
 }
 
 type runtimeWorkerAttemptStarterProvider interface {
@@ -859,24 +770,6 @@ func runtimeWorkerAttemptStarter(
 		}
 	}
 	return nil
-}
-
-func setWorkerAttemptStarter(
-	execution any,
-	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
-) {
-	if starter == nil {
-		return
-	}
-	setter, ok := execution.(interface {
-		SetWorkerAttemptStarter(
-			func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
-		)
-	})
-	if !ok {
-		return
-	}
-	setter.SetWorkerAttemptStarter(starter)
 }
 
 type historicalRecordingReader interface {

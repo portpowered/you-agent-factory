@@ -22,8 +22,6 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
-	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -34,10 +32,16 @@ import (
 // services are constructed against its root resolver roles.
 type Assembly struct {
 	roles.SessionGateway
+	factoryDefinitions           factorydefinitions.Service
+	reconnectCursorValidator     factorysessions.ReconnectCursorValidator
+	worldStateProjector          factoryruntime.WorldStateProjector
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
 	projectionReader             runtimebinding.SessionProjectionOwner
+	factoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator     factorysessions.EditableFactoryValidator
+	invocationMetricsRecorder    roles.InvocationMetricsRecorder
 	namedFactoryActivator        func(context.Context, string) error
 	definitionActivationGateway  factorydefinitions.DefinitionActivationGateway
 	invoker                      roles.InvocationService
@@ -80,7 +84,6 @@ func NewAssembly(
 	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -89,16 +92,25 @@ func NewAssembly(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
-	gatewayStreams *stream.Manager,
 	projectionReader runtimebinding.SessionProjectionOwner,
-	processDurable durableexecution.Service,
 	namedFactoryActivator func(context.Context, string) error,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	factoryDefinitions factorydefinitions.Service,
+	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) roles.RuntimeAssembly {
 	return &Assembly{
+		factoryDefinitions:           factoryDefinitions,
+		reconnectCursorValidator:     reconnectCursorValidator,
+		worldStateProjector:          worldStateProjector,
 		SessionGateway:               gateway,
+		factoryScaffoldInitializer:   factoryScaffoldInitializer,
+		editableFactoryValidator:     editableFactoryValidator,
+		invocationMetricsRecorder:    invocationMetricsRecorder,
 		registry:                     registry,
 		state:                        state,
 		streams:                      streams,
@@ -333,16 +345,14 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 func (a *Assembly) Complete(
 	factoryRootDir string,
 	clock factoryruntime.Clock,
-	baseLogger *zap.Logger,
 	logger *zap.Logger,
 	runtimeBuild runtimeports.RuntimeReplacementBuilder,
 	startupRuntime runtimeports.RuntimeInstance,
 	modelsScope models.RuntimeScopeRef,
-	startupSpec factoryruntime.SessionBuildSpec,
+	completion factoryruntime.RuntimeInitialCompletion,
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
 	durableExecution durableexecution.Service,
-	factoryDefinitions factorydefinitions.Service,
 	factorySessionID string,
 	dir string,
 	executionBaseDir string,
@@ -350,13 +360,6 @@ func (a *Assembly) Complete(
 	backendScopeID string,
 	workFile string,
 	workflowID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
-	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
-	worldStateProjector factoryruntime.WorldStateProjector,
-	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) (
 	roles.ApplicationRuntime,
 	roles.SessionGateway,
@@ -371,7 +374,7 @@ func (a *Assembly) Complete(
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
-	identity := selectCompletionSessionIdentity(factorySessionID, startupSpec)
+	identity := selectCompletionSessionIdentity(factorySessionID, completion)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
@@ -382,7 +385,7 @@ func (a *Assembly) Complete(
 		startupRuntime.FolderDirectory(),
 		startupRuntime.LoadedRuntimeConfig().RuntimeBaseDir(),
 		identity.target,
-		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &startupSpec},
+		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &completion},
 		identity.isDefault,
 		filepath.Base(startupRuntime.FolderDirectory()),
 		clock,
@@ -393,12 +396,12 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
-	session.RuntimeEventSessionID = completionEventScopeID(identity.id, startupSpec)
+	session.RuntimeEventSessionID = completionEventScopeID(identity.id, completion)
 	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
 		livesession.CanonicalID(session),
-		startupSpec.ResumeSourceCanonicalSessionID,
+		completion.ResumeSourceCanonicalSessionID,
 	)
-	session.InvocationMetricsRecorder = invocationMetricsRecorder
+	session.InvocationMetricsRecorder = a.invocationMetricsRecorder
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
@@ -423,7 +426,6 @@ func (a *Assembly) Complete(
 	runtime := NewSessionRuntime(
 		factoryRootDir,
 		clock,
-		baseLogger,
 		logger,
 		runtimeBuild,
 		startupRuntime,
@@ -431,20 +433,18 @@ func (a *Assembly) Complete(
 		runtimeLifecycle,
 		runtimeSidecars,
 		durableExecution,
-		factoryDefinitions,
+		a.factoryDefinitions,
 		dir,
 		executionBaseDir,
 		runtimeMode,
 		backendScopeID,
 		workFile,
 		workflowID,
-		workstationLoader,
-		loadFactory,
-		factoryScaffoldInitializer,
-		editableFactoryValidator,
-		reconnectCursorValidator,
-		worldStateProjector,
-		invocationMetricsRecorder,
+		nil,
+		a.editableFactoryValidator,
+		a.reconnectCursorValidator,
+		a.worldStateProjector,
+		a.invocationMetricsRecorder,
 		a.newJavaScriptCheckpointStore,
 		a.sessionResultProjection,
 		a.state,
@@ -487,7 +487,7 @@ type completionSessionIdentity struct {
 	runtimeID string
 }
 
-func selectCompletionSessionIdentity(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) completionSessionIdentity {
+func selectCompletionSessionIdentity(factorySessionID string, completion factoryruntime.RuntimeInitialCompletion) completionSessionIdentity {
 	sessionID := strings.TrimSpace(factorySessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
@@ -499,18 +499,18 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 	}
 	runtimeID := ""
 	if isDefault {
-		metricsSessionID := strings.TrimSpace(startupSpec.MetricsSessionID)
+		metricsSessionID := strings.TrimSpace(completion.MetricsSessionID)
 		if metricsSessionID != "" && metricsSessionID != factorysessions.DefaultSessionID {
 			runtimeID = metricsSessionID
-		} else if livesession.IsUUIDID(startupSpec.SessionID) {
-			runtimeID = strings.TrimSpace(startupSpec.SessionID)
+		} else if livesession.IsUUIDID(completion.SessionID) {
+			runtimeID = strings.TrimSpace(completion.SessionID)
 		}
 	}
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }
 
-func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) string {
-	if sourceID := strings.TrimSpace(startupSpec.ResumeSourceCanonicalSessionID); sourceID != "" {
+func completionEventScopeID(factorySessionID string, completion factoryruntime.RuntimeInitialCompletion) string {
+	if sourceID := strings.TrimSpace(completion.ResumeSourceCanonicalSessionID); sourceID != "" {
 		return sourceID
 	}
 	return strings.TrimSpace(factorySessionID)
@@ -704,4 +704,13 @@ func workSessionAliases(session *livesession.LiveSession) []string {
 		}
 	}
 	return aliases
+}
+
+// FactoryConfigForSession narrows the existing selected projection for model invocation.
+func (a *Assembly) FactoryConfigForSession(ctx context.Context, sessionID string) (*factorydefinitions.FactoryConfig, error) {
+	projection, err := a.GetFactorySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return projection.Context.FactoryCfg, nil
 }

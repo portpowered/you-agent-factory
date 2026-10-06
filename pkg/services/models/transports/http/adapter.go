@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -16,27 +17,25 @@ var (
 
 // Adapter maps Models service values at the outward HTTP boundary.
 type Adapter struct {
-	models  models.Service
-	scope   models.RuntimeScopeRef
-	invoker ModelInvoker
-	content work.ContentPreparation
+	models         models.Service
+	scope          models.RuntimeScopeRef
+	content        work.ContentPreparation
+	sessionInvoker SessionModelInvoker
+	sessionID      string
 }
 
-// NewAdapter constructs the Models HTTP representation adapter.
-func NewAdapter(
-	service models.Service,
-	invoker ModelInvoker,
-	content work.ContentPreparation,
-	scopes ...models.RuntimeScopeRef,
-) *Adapter {
-	if service == nil || invoker == nil || content == nil {
+// SessionModelInvoker is the addressed invocation capability consumed by a live host.
+type SessionModelInvoker interface {
+	InvokeModelForSession(context.Context, string, string, models.Request) (models.Result, error)
+}
+
+// NewSessionAdapter retains the host's explicit session selection on this
+// representation boundary; the invocation owner remains process-scoped.
+func NewSessionAdapter(service models.Service, invoker SessionModelInvoker, content work.ContentPreparation, scope models.RuntimeScopeRef, sessionID string) *Adapter {
+	if service == nil || invoker == nil || content == nil || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	var scope models.RuntimeScopeRef
-	if len(scopes) > 0 {
-		scope = scopes[0]
-	}
-	return &Adapter{models: service, scope: scope, invoker: invoker, content: content}
+	return &Adapter{models: service, scope: scope, content: content, sessionInvoker: invoker, sessionID: sessionID}
 }
 
 // Root returns the accepted Models root consumed by adapter-owned operations.
@@ -52,7 +51,7 @@ func (a *Adapter) InvokeModel(
 	modelName string,
 	request factoryapi.ModelInvocationRequest,
 ) (models.Result, error) {
-	if a == nil || a.invoker == nil || a.content == nil {
+	if a == nil || a.sessionInvoker == nil || a.content == nil {
 		return models.Result{}, errModelInvocationServicesRequired
 	}
 	mapped := modelInvocationRequestFromHTTP(request)
@@ -61,7 +60,7 @@ func (a *Adapter) InvokeModel(
 		return models.Result{}, err
 	}
 	mapped.Content = prepared
-	return a.invoker.InvokeModel(ctx, modelName, mapped)
+	return a.sessionInvoker.InvokeModelForSession(ctx, a.sessionID, modelName, mapped)
 }
 
 // InvokeGenericModel maps and validates the provider-neutral request before it

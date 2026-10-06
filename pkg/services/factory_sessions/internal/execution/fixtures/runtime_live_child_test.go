@@ -5,6 +5,7 @@ package fixtures_test
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"reflect"
 	"strings"
 	"sync"
@@ -129,10 +130,10 @@ func newFixtureMockProvider(response workerexecution.InferenceResponse) *fixture
 
 func (m *fixtureMockProvider) Execute(
 	_ context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
+	input workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
 	m.callCount++
-	return fixtureInvocationSuccess(input.Attempt, m.response), nil
+	return fixtureWorkerSuccess(input, m.response), nil
 }
 
 func (m *fixtureMockProvider) CallCount() int {
@@ -367,8 +368,8 @@ func newBlockingFixtureProvider() *blockingFixtureProvider {
 
 func (m *blockingFixtureProvider) Execute(
 	ctx context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
+	input workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
 	m.mu.Lock()
 	if !m.inferStartedSet {
 		m.inferStartedSet = true
@@ -380,7 +381,7 @@ func (m *blockingFixtureProvider) Execute(
 	m.mu.Lock()
 	m.contextCanceled++
 	m.mu.Unlock()
-	return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
+	return workerexecution.ExecuteResult{}, ctx.Err()
 }
 
 func (m *blockingFixtureProvider) inferContextsHonored() int {
@@ -547,10 +548,10 @@ func newFailingFixtureMockProvider(reason workerexecution.WorkFailureType) *fail
 
 func (m *failingFixtureMockProvider) Execute(
 	_ context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
+	input workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
 	m.inferCallCount++
-	return fixtureInvocationFailure(input.Attempt, m.reason)
+	return fixtureWorkerFailure(input, m.reason)
 }
 
 type parallelLiveChildMockProvider struct {
@@ -563,52 +564,37 @@ func newParallelLiveChildMockProvider() *parallelLiveChildMockProvider {
 
 func (m *parallelLiveChildMockProvider) Execute(
 	_ context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
+	input workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
 	m.callCount++
-	req := input.Request
-	if strings.Contains(req.UserMessage, "force provider failure") {
-		return fixtureInvocationFailure(input.Attempt, workerexecution.WorkFailureTypePermanentBadRequest)
+	req := input
+	if strings.Contains(req.Target.Prompt.UserMessage, "force provider failure") {
+		return fixtureWorkerFailure(input, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	response := workerexecution.InferenceResponse{
-		Content:      `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
-		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Dispatch.DispatchID}).ContinuationRef(),
+		Content:      `{"text":"live:` + req.Correlation.DispatchID + `:` + req.Target.Prompt.UserMessage + `"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Correlation.DispatchID}).ContinuationRef(),
 	}
-	return fixtureInvocationSuccess(input.Attempt, response), nil
+	return fixtureWorkerSuccess(input, response), nil
 }
 
-func fixtureInvocationSuccess(
-	attempt int,
-	response workerexecution.InferenceResponse,
-) workerexecution.InvocationResult {
-	return workerexecution.InvocationResult{
-		Response:     response,
-		Attempt:      attempt,
-		Continuation: (response.Continuation).ClonePtr(),
-	}
+func fixtureWorkerSuccess(input workerexecution.ExecuteRequest, response workerexecution.InferenceResponse) workerexecution.ExecuteResult {
+	return workerexecution.ExecuteResult{Correlation: input.Correlation, Outcome: workerexecution.ExecutionOutcomeAccepted,
+		Output:       workerexecution.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: response.Content}}},
+		Continuation: response.Continuation.ClonePtr()}
 }
 
-func fixtureInvocationFailure(
-	attempt int,
-	reason workerexecution.WorkFailureType,
-) (workerexecution.InvocationResult, error) {
-	decision := workerexecution.WorkFailureDecision{}
-	return workerexecution.InvocationResult{
-		Attempt:         attempt,
-		FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyTerminal, Type: reason},
-		FailureDecision: &decision,
-		FailureDetail: &workerexecution.FailureDetail{
-			Reason:  reason,
-			Message: "Provider rejected the request as invalid.",
-		},
-	}, errors.New("scripted Worker invocation failure")
+func fixtureWorkerFailure(input workerexecution.ExecuteRequest, reason workerexecution.WorkFailureType) (workerexecution.ExecuteResult, error) {
+	return workerexecution.ExecuteResult{Correlation: input.Correlation, Outcome: workerexecution.ExecutionOutcomeFailed,
+		Failure: &workerexecution.ExecutionFailure{Type: reason, Family: workerexecution.WorkFailureFamilyTerminal,
+			Message: "Provider rejected the request as invalid.", Detail: &workerexecution.FailureDetail{Reason: reason, Message: "Provider rejected the request as invalid."}}}, errors.New("scripted Worker execution failure")
 }
 
 var (
-	_ workerexecution.InvocationExecutor = (*fixtureMockProvider)(nil)
-	_ workerexecution.InvocationExecutor = (*blockingFixtureProvider)(nil)
-	_ workerexecution.InvocationExecutor = (*failingFixtureMockProvider)(nil)
-	_ workerexecution.InvocationExecutor = (*parallelLiveChildMockProvider)(nil)
+	_ fse.WorkerExecution = (*fixtureMockProvider)(nil)
+	_ fse.WorkerExecution = (*blockingFixtureProvider)(nil)
+	_ fse.WorkerExecution = (*failingFixtureMockProvider)(nil)
+	_ fse.WorkerExecution = (*parallelLiveChildMockProvider)(nil)
 )
 
 func assertLiveChildDispatchInspection(

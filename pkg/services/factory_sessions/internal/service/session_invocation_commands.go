@@ -80,17 +80,24 @@ func (r *Root) invokeJavaScriptSession(ctx context.Context, sessionID string, re
 	}, nil
 }
 
-// InvokeModelForSession uses the model invoker retained on the canonical live
-// session. No invocation-specific runtime service or registry is allocated.
+// InvokeModelForSession passes selected generation facts to the fixed operation.
 func (r *Root) InvokeModelForSession(ctx context.Context, sessionID, modelName string, request models.Request) (models.Result, error) {
 	bound, err := r.applicationSessionState(sessionID)
 	if err != nil {
 		return models.Result{}, err
 	}
-	if bound.ModelInvoker == nil {
+	if r.modelInvocation == nil {
 		return models.Result{}, fmt.Errorf("%w: model invoker for session %q", factorysessions.ErrRuntimeNotAvailable, sessionID)
 	}
-	return bound.ModelInvoker.InvokeModel(ctx, modelName, request)
+	invocation := bound.ModelInvocation
+	invocation.FactorySessionID = sessionID
+	invocation.Scope = bound.ModelsScope
+	if bound.Instance != nil {
+		invocation.GenerationID = bound.Instance.StreamGeneration()
+		invocation.FactoryDirectory = bound.Instance.Directory()
+		invocation.WorkingDirectory = bound.Instance.Directory()
+	}
+	return r.modelInvocation.InvokeRuntimeModel(ctx, invocation, modelName, request)
 }
 
 // ResolveInvocationInputForSession applies the selected Factory signature
@@ -116,4 +123,9 @@ func (r *Root) ModelsScopeForSession(_ context.Context, sessionID string) (model
 		return models.RuntimeScopeRef{}, err
 	}
 	return bound.ModelsScope, nil
+}
+
+// InvokeModel preserves the default-session Models transport compatibility route.
+func (r *Root) InvokeModel(ctx context.Context, modelName string, request models.Request) (models.Result, error) {
+	return r.InvokeModelForSession(ctx, factorysessions.DefaultSessionID, modelName, request)
 }

@@ -12,13 +12,18 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -153,10 +158,9 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 	workflows := boundaryRootWorkflows{}
 	orchestration := boundaryOrchestrationAdapter{workflows}
 	projectRoot := t.TempDir()
-	service, err := factorysessionexecution.NewJavaScriptExecutionService(
+	service, err := factorysessionexecution.NewProcessDurableExecutionService(
 		projectRoot,
 		factorysessionexecution.ChildExecutorModeFake,
-		nil,
 		factorysessionexecution.DisabledPersistence(),
 		fixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		harnessSyncWaitScheduler{},
@@ -171,7 +175,15 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		boundaryRecordingWriter{},
 		func() string { return "dur-sess-boundary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewJavaScriptExecutionService: %v", err)
@@ -238,7 +250,7 @@ type harnessConfig struct {
 	Mode                harnessMode
 	ProjectRoot         string
 	Clock               factory.Clock
-	InvocationExecutor  workerexecution.InvocationExecutor
+	WorkerExecution     factorysessionexecution.WorkerExecution
 	Persistence         runtimepersist.Store
 	ChildExecutorMode   string
 	CheckpointSummaries factory.JavaScriptCheckpointSummaries
@@ -276,10 +288,11 @@ func newHarness(config harnessConfig) (factorysessionexecution.Service, error) {
 		if err := validateHarnessJavaScriptConfig(config); err != nil {
 			return nil, err
 		}
+		var responseIDs atomic.Uint64
 		return factorysessionexecution.NewJavaScriptRuntimeService(
 			strings.TrimSpace(config.ProjectRoot),
 			config.ChildExecutorMode,
-			config.InvocationExecutor,
+			config.WorkerExecution,
 			config.Persistence,
 			config.Clock,
 			harnessSyncWaitScheduler{},
@@ -291,7 +304,7 @@ func newHarness(config harnessConfig) (factorysessionexecution.Service, error) {
 			factory.JavaScriptWorkerSettings{},
 			config.RecordingWriter,
 			func() string { return "00000000-0000-4000-8000-000000000001" },
-			nil, nil, nil,
+			func() string { return fmt.Sprintf("response-%d", responseIDs.Add(1)) }, fixtureResponseStreams{}, nil,
 		), nil
 	default:
 		return nil, fmt.Errorf("durable execution test harness: unsupported mode %q", config.Mode)
@@ -307,7 +320,7 @@ func (harnessSyncWaitScheduler) After(duration time.Duration) <-chan time.Time {
 }
 
 func hasHarnessRuntimeDependencies(config harnessConfig) bool {
-	return strings.TrimSpace(config.ProjectRoot) != "" || config.InvocationExecutor != nil ||
+	return strings.TrimSpace(config.ProjectRoot) != "" || config.WorkerExecution != nil ||
 		config.Persistence != nil || config.Workflows != nil || strings.TrimSpace(config.ChildExecutorMode) != ""
 }
 
@@ -329,11 +342,11 @@ func validateHarnessJavaScriptConfig(config harnessConfig) error {
 	}
 	switch config.ChildExecutorMode {
 	case factorysessionexecution.ChildExecutorModeFake:
-		if config.InvocationExecutor != nil {
+		if config.WorkerExecution != nil {
 			return fmt.Errorf("durable execution test harness: invocation executor is only valid with live-provider child execution")
 		}
 	case factorysessionexecution.ChildExecutorModeLive:
-		if config.InvocationExecutor == nil {
+		if config.WorkerExecution == nil {
 			return fmt.Errorf("durable execution test harness: invocation executor is required for live-provider child execution")
 		}
 	default:
@@ -555,13 +568,12 @@ func (sink *scriptedChildRecordSink) NextChildArtifactID() string {
 
 func (p *recordingProvider) Execute(
 	_ context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
+	input workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	p.mu.Unlock()
-	response := workerexecution.InferenceResponse{Content: `{"text":"provider result"}`}
-	return workerexecution.InvocationResult{Response: response, Attempt: input.Attempt}, nil
+	return workerexecution.ExecuteResult{Correlation: input.Correlation, Outcome: workerexecution.ExecutionOutcomeAccepted, Output: workerexecution.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: `{"text":"provider result"}`}}}}, nil
 }
 
 func (p *recordingProvider) callCount() int {
@@ -570,7 +582,7 @@ func (p *recordingProvider) callCount() int {
 	return p.calls
 }
 
-var _ workerexecution.InvocationExecutor = (*recordingProvider)(nil)
+var _ factorysessionexecution.WorkerExecution = (*recordingProvider)(nil)
 
 func TestNew_SelectsFakeAndKeepsInstancesIsolated(t *testing.T) {
 	t.Parallel()
@@ -658,7 +670,7 @@ func TestNewJavaScript_ForwardsLiveChildProviderAndMode(t *testing.T) {
 	provider := &recordingProvider{}
 	config := javascriptConfig(t.TempDir(), fixedClock{now: time.Now()}, newMemoryStore())
 	config.ChildExecutorMode = factorysessionexecution.ChildExecutorModeLive
-	config.InvocationExecutor = provider
+	config.WorkerExecution = provider
 	service, err := newHarness(config)
 	if err != nil {
 		t.Fatalf("New(JavaScript live): %v", err)
@@ -789,7 +801,7 @@ func TestNew_RejectsUnsupportedAndIncompleteConfiguration(t *testing.T) {
 		{name: "missing child mode", config: withConfig(valid, func(c *harnessConfig) { c.ChildExecutorMode = "" }), want: "child executor mode"},
 		{name: "live without executor", config: withConfig(valid, func(c *harnessConfig) { c.ChildExecutorMode = factorysessionexecution.ChildExecutorModeLive }), want: "invocation executor is required"},
 		{name: "fake with executor", config: withConfig(valid, func(c *harnessConfig) {
-			c.InvocationExecutor = &recordingProvider{}
+			c.WorkerExecution = &recordingProvider{}
 		}), want: "invocation executor is only valid"},
 	}
 	for _, tt := range tests {
@@ -990,4 +1002,16 @@ func assertCanonicalFakeOwnerControl(t *testing.T, service *factorysessionexecut
 	if control.Lifecycle.Status != factorysessions.LifecycleStatusPaused {
 		t.Fatalf("ControlCanonical status = %q, want PAUSED", control.Lifecycle.Status)
 	}
+}
+
+// fixtureResponseStreams keeps durable child tests on an explicit in-memory
+// stream collaborator without constructing the response service graph.
+type fixtureResponseStreams struct{ responsestreamservice.Service }
+
+func (fixtureResponseStreams) NewEventStore(id string, clock factory.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	var next atomic.Uint64
+	return responseeventstore.NewSessionResponseEventStoreWithClock(id, clock, func() string { return fmt.Sprintf("fixture-response-%d", next.Add(1)) }), nil
+}
+func (fixtureResponseStreams) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	return store.Publish(event)
 }

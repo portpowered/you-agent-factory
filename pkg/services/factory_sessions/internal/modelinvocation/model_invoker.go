@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -86,36 +85,42 @@ func projectModelsRuntimeOperationSlots(slots []factorydefinitions.ModelOperatio
 
 const directModelInvocationDispatchID = "direct-model-invocation"
 
-// RuntimeModelInvokerConfig carries the already-opened, session-owned
-// capabilities needed by one direct model operation. It contains no mutable
-// execution state; each call constructs a detached request for Workers while
-// Models remains the authority for scoped readiness.
-type RuntimeModelInvokerConfig struct {
-	Models   models.Service
-	Scope    models.RuntimeScopeRef
-	Sessions interface {
-		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	}
-	Workers          workers.Service
+// RuntimeModelInvocation contains the facts selected for one live generation.
+type RuntimeModelInvocation struct {
+	FactorySessionID string
+	Scope            models.RuntimeScopeRef
 	RuntimeID        string
 	GenerationID     string
 	FactoryDirectory string
 	WorkingDirectory string
 }
 
+type FactoryConfigReader interface {
+	FactoryConfigForSession(context.Context, string) (*factorydefinitions.FactoryConfig, error)
+}
+
+type WorkerExecution interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+type RuntimeModelInvocationOperation interface {
+	InvokeRuntimeModel(context.Context, RuntimeModelInvocation, string, models.Request) (models.Result, error)
+}
+
 type runtimeModelInvoker struct {
-	config RuntimeModelInvokerConfig
+	models   models.Service
+	sessions FactoryConfigReader
+	workers  WorkerExecution
 }
 
-// NewRuntimeModelInvoker binds direct model invocation to one opened runtime.
-// The opened Models scope is used for readiness, while the attempt itself
-// enters the same request-scoped Workers path as Factory Runtime execution.
-func NewRuntimeModelInvoker(config RuntimeModelInvokerConfig) workers.ModelInvoker {
-	return &runtimeModelInvoker{config: config}
+// NewRuntimeModelInvocation constructs the reusable model operation.
+func NewRuntimeModelInvocation(modelService models.Service, sessions FactoryConfigReader, workerService WorkerExecution) RuntimeModelInvocationOperation {
+	return &runtimeModelInvoker{models: modelService, sessions: sessions, workers: workerService}
 }
 
-func (invoker *runtimeModelInvoker) InvokeModel(
+func (invoker *runtimeModelInvoker) InvokeRuntimeModel(
 	ctx context.Context,
+	invocation RuntimeModelInvocation,
 	modelName string,
 	request models.Request,
 ) (models.Result, error) {
@@ -123,35 +128,26 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 		ModelName: strings.TrimSpace(modelName),
 		Operation: strings.TrimSpace(request.Operation),
 	}
-	if invoker == nil || invoker.config.Models == nil {
-		return models.Result{}, classifyRuntimeModelError(
-			fmt.Errorf("Models service is not available"), failureContext,
-		)
+	invocation.FactorySessionID = strings.TrimSpace(invocation.FactorySessionID)
+	if err := invoker.validateInvocation(invocation, failureContext); err != nil {
+		return models.Result{}, err
 	}
-	if invoker.config.Sessions == nil {
-		return models.Result{}, classifyRuntimeModelError(
-			fmt.Errorf("Factory Session service is not available"), failureContext,
-		)
-	}
-	if invoker.config.Scope.IsZero() {
-		return models.Result{}, models.ErrRuntimeScopeInvalid
-	}
-	projection, err := invoker.config.Sessions.GetFactorySession(
-		ctx, factorysessions.DefaultSessionID,
+	factoryConfig, err := invoker.sessions.FactoryConfigForSession(
+		ctx, invocation.FactorySessionID,
 	)
 	if err != nil {
 		return models.Result{}, err
 	}
 	worker, operation, err := invoker.resolveRuntimeModelWorker(
-		ctx, projection.Context.FactoryCfg, modelName, request.Operation,
+		ctx, invocation, factoryConfig, modelName, request.Operation,
 	)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
 	}
 	failureContext.ModelName = worker.Model
 	failureContext.WorkerName = worker.Name
-	readiness, err := invoker.config.Models.GetModelReadiness(ctx, models.GetModelReadinessRequest{
-		Scope: invoker.config.Scope, Name: worker.Model, Operation: request.Operation,
+	readiness, err := invoker.models.GetModelReadiness(ctx, models.GetModelReadinessRequest{
+		Scope: invocation.Scope, Name: worker.Model, Operation: request.Operation,
 	})
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
@@ -165,7 +161,7 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 	}
 
 	raw, err := invoker.invokeRuntimeModel(
-		ctx, worker, projection.Context.FactoryCfg, request, bindings,
+		ctx, invocation, worker, factoryConfig, request, bindings,
 	)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
@@ -191,8 +187,23 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 	}, nil
 }
 
+func (invoker *runtimeModelInvoker) validateInvocation(invocation RuntimeModelInvocation, failureContext workers.InferenceFailureContext) error {
+	if invoker == nil || invoker.models == nil {
+		return classifyRuntimeModelError(fmt.Errorf("models service is not available"), failureContext)
+	}
+	if invoker.sessions == nil {
+		return classifyRuntimeModelError(fmt.Errorf("factory session service is not available"), failureContext)
+	}
+	if invocation.FactorySessionID == "" || strings.TrimSpace(invocation.RuntimeID) == "" ||
+		strings.TrimSpace(invocation.GenerationID) == "" || invocation.Scope.IsZero() {
+		return models.ErrRuntimeScopeInvalid
+	}
+	return nil
+}
+
 func (invoker *runtimeModelInvoker) resolveRuntimeModelWorker(
 	ctx context.Context,
+	invocation RuntimeModelInvocation,
 	factoryConfig *factorydefinitions.FactoryConfig,
 	modelName, operationName string,
 ) (*factorydefinitions.FactoryWorkerConfig, factorydefinitions.ModelOperation, error) {
@@ -200,8 +211,8 @@ func (invoker *runtimeModelInvoker) resolveRuntimeModelWorker(
 	if err == nil || (!errors.Is(err, models.ErrNotFound) && factoryConfig != nil) {
 		return worker, operation, err
 	}
-	resolved, resolveErr := invoker.config.Models.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
-		Scope: invoker.config.Scope,
+	resolved, resolveErr := invoker.models.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
+		Scope: invocation.Scope,
 		Reference: models.ModelReference{
 			NameOrURI: strings.TrimSpace(modelName),
 		},
@@ -322,12 +333,13 @@ func projectEffectiveRuntimeModelSlots(slots []models.OperationSlot) []factoryde
 
 func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 	ctx context.Context,
+	invocation RuntimeModelInvocation,
 	worker *factorydefinitions.FactoryWorkerConfig,
 	factoryConfig *factorydefinitions.FactoryConfig,
 	request models.Request,
 	bindings []models.ResolvedModelOperationBinding,
 ) (string, error) {
-	if invoker == nil || invoker.config.Workers == nil {
+	if invoker == nil || invoker.workers == nil {
 		return "", fmt.Errorf("Workers service is not available")
 	}
 	selection := workers.ResolveRunnerSelection("", "", worker.ModelProvider)
@@ -336,16 +348,16 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 		provider = selection.RunnerID
 	}
 	dispatchID := directModelInvocationDispatchID
-	runtimeID := firstRuntimeModelValue(invoker.config.RuntimeID, dispatchID+"-runtime")
-	generationID := firstRuntimeModelValue(invoker.config.GenerationID, dispatchID+"-generation")
+	runtimeID := strings.TrimSpace(invocation.RuntimeID)
+	generationID := strings.TrimSpace(invocation.GenerationID)
 	requestID := dispatchID + "-request"
 	traceID := dispatchID + "-trace"
-	workingDirectory := strings.TrimSpace(invoker.config.WorkingDirectory)
-	factoryDirectory := strings.TrimSpace(invoker.config.FactoryDirectory)
+	workingDirectory := strings.TrimSpace(invocation.WorkingDirectory)
+	factoryDirectory := strings.TrimSpace(invocation.FactoryDirectory)
 	userMessage := runtimeModelUserMessage(request.Operation, request.Content, bindings)
 	executeRequest := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: factorysessions.DefaultSessionID,
+			FactorySessionID: invocation.FactorySessionID,
 			RuntimeID:        runtimeID,
 			GenerationID:     generationID,
 			DispatchID:       dispatchID,
@@ -396,16 +408,16 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 			},
 			ModelBindings:  runtimeWorkerBindings(bindings),
 			ModelOperation: strings.TrimSpace(request.Operation),
-			ModelRuntime:   modelRuntimeInput(invoker.config.Scope, factoryConfig, worker),
+			ModelRuntime:   modelRuntimeInput(invocation.Scope, factoryConfig, worker),
 			WorkflowContext: &workers.Context{
 				FactoryDirectory: factoryDirectory,
 				WorkDirectory:    workingDirectory,
-				SessionID:        factorysessions.DefaultSessionID,
+				SessionID:        invocation.FactorySessionID,
 			},
 		},
 		Attempt: workers.AttemptContext{Number: 1},
 	}
-	executeResult, err := invoker.config.Workers.Execute(ctx, executeRequest)
+	executeResult, err := invoker.workers.Execute(ctx, executeRequest)
 	if err != nil {
 		return "", err
 	}
@@ -531,13 +543,6 @@ func runtimeWorkerBindings(
 		}
 	}
 	return result
-}
-
-func firstRuntimeModelValue(value, fallback string) string {
-	if value = strings.TrimSpace(value); value != "" {
-		return value
-	}
-	return fallback
 }
 
 func directRuntimeModelWorker(

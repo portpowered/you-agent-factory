@@ -34,16 +34,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestNewRootFromAssemblyRetainsLiveChangeCoordinator(t *testing.T) {
+func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
 	coordinator := livechange.NewCoordinator()
 	root, err := newRootForTest(coordinator)
 	if err != nil {
-		t.Fatalf("NewRootFromAssembly() error = %v", err)
+		t.Fatalf("NewRoot() error = %v", err)
 	}
 	if root == nil {
-		t.Fatal("NewRootFromAssembly() returned nil root")
+		t.Fatal("NewRoot() returned nil root")
 	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
@@ -113,53 +113,50 @@ func TestLiveControlRequiresSelectedSession(t *testing.T) {
 	}
 }
 
-func TestNewRootFromAssemblyRequiresRetainedRuntimeOpening(t *testing.T) {
+func TestNewRootClassifiesMissingAndRejectedAssembly(t *testing.T) {
 	t.Parallel()
-
-	inputs := validRootInputs(livechange.NewCoordinator())
-	assembly, err := inputs.callAssembly()
-	if err != nil {
-		t.Fatalf("NewAssembly() error = %v", err)
+	var typedNil *legacyservice.Assembly
+	cases := []struct {
+		name     string
+		assembly roles.RuntimeAssembly
+		want     string
+	}{
+		{"nil", nil, "construct Factory Sessions: runtime assembly is required"},
+		{"typed nil", typedNil, "construct Factory Sessions: runtime assembly implementation rejected"},
+		{"foreign", &factorySessionsConstructionStub{}, "construct Factory Sessions: runtime assembly implementation rejected"},
 	}
-	root, err := NewRootFromAssembly(assembly, nil, inputs.liveChangeCoordinator)
-	if root != nil || err == nil {
-		t.Fatalf("NewRootFromAssembly(nil opening) = (%#v, %v), want nil root and stable error", root, err)
-	}
-	if got, want := err.Error(), "construct Factory Sessions: process root is required"; got != want {
-		t.Fatalf("NewRootFromAssembly(nil opening) error = %q, want %q", got, want)
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			root, err := (runtimeOpeningFixture{Assembly: test.assembly, LiveChangeCoordinator: livechange.NewCoordinator()}).newFactory()
+			if root != nil || err == nil || err.Error() != test.want {
+				t.Fatalf("NewRoot = (%v, %v), want nil and %q", root, err, test.want)
+			}
+		})
 	}
 }
 
-func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
+func TestNewRootRetainsAssemblyDuringConstruction(t *testing.T) {
 	t.Parallel()
-
 	inputs := validRootInputs(livechange.NewCoordinator())
 	assembly, err := inputs.callAssembly()
 	if err != nil {
-		t.Fatalf("NewAssembly() error = %v", err)
+		t.Fatal(err)
 	}
-	opening := &Root{}
-	root, err := NewRootFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
+	root, err := (runtimeOpeningFixture{Assembly: assembly, LiveChangeCoordinator: inputs.liveChangeCoordinator}).newFactory()
 	if err != nil {
-		t.Fatalf("NewRootFromAssembly() error = %v", err)
+		t.Fatal(err)
 	}
-	if root == nil {
-		t.Fatal("NewRootFromAssembly() returned nil root")
-	}
-	if root != opening {
-		t.Fatal("NewRootFromAssembly() allocated a second root")
-	}
-	if any(root.Assembly) != any(assembly) {
-		t.Fatalf("root assembly = %T(%[1]v), want injected assembly %T(%[2]v)", root.Assembly, assembly)
+	if any(root.Assembly) != any(assembly) || root.factorySessionsRuntimeAssembly != assembly || root.liveChangeCoordinator != inputs.liveChangeCoordinator {
+		t.Fatal("root did not retain its fixed construction roles")
 	}
 }
 
 func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
-	root, err := newRootForTest(nil)
-	if root != nil || err == nil {
-		t.Fatalf("NewRootFromAssembly() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
+	root, err := (runtimeOpeningFixture{Assembly: &legacyservice.Assembly{}}).newFactory()
+	if root != nil || err == nil || err.Error() != "construct Factory Sessions: live-change coordinator is required" {
+		t.Fatalf("NewRoot() with missing live-change coordinator = (%#v, %v), want nil root and stable error", root, err)
 	}
 }
 
@@ -176,7 +173,7 @@ func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.
 	inputs.recordedSessionInventory = inventory
 	root, err := inputs.call()
 	if err != nil {
-		t.Fatalf("NewRootFromAssembly: %v", err)
+		t.Fatalf("NewRoot: %v", err)
 	}
 
 	result, err := root.ListSessions(context.Background(), factorysessions.ListSessionsRequest{
@@ -243,7 +240,7 @@ func (in rootTestInputs) call() (*Root, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewRootFromAssembly(assembly, &Root{}, in.liveChangeCoordinator)
+	return (runtimeOpeningFixture{Assembly: assembly, LiveChangeCoordinator: in.liveChangeCoordinator}).newFactory()
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
@@ -260,7 +257,6 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		registry, state, streams, sessioninvocation.NewSessionOwner(legacyservice.NewInvocationAuthority(state, platformclock.Real{}, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), legacyservice.NewScopeControl(state, nil, zap.NewNop()), legacyservice.NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
-		in.clock,
 		in.eventIDs,
 		in.sessionIDs,
 		in.resolveHome,
@@ -269,13 +265,13 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		in.initialWorkFiles,
 		in.identity,
 		in.responseStreams,
-		in.liveChangeCoordinator,
 		legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory),
-		streams,
 		legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil),
-		nil,
 		legacyservice.NewNamedFactoryActivator(state),
 		legacyservice.NewKeyedDefinitionActivationGateway(state, in.clock),
+		nil, nil, nil,
+		nil,
+		nil, nil,
 	), nil
 }
 

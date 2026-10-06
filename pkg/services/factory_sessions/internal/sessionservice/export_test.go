@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -20,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -28,6 +32,52 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
+
+type scaffoldNamedPaths struct {
+	factorydefinitions.NamedPathResolver
+}
+
+func (scaffoldNamedPaths) ResolveCurrentDir(root string) (string, error) {
+	return filepath.Join(root, "current"), nil
+}
+
+type scaffoldDirectories struct{ roles.DirectoryInspection }
+
+func (scaffoldDirectories) Stat(string) (fs.FileInfo, error) {
+	return fstest.MapFS{"folder": &fstest.MapFile{Mode: fs.ModeDir}}.Stat("folder")
+}
+
+func TestPrepareNewFactoryScaffoldUsesFixedInitializerOnRetry(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("scaffold unavailable")
+	var calls []string
+	assembly := &Assembly{
+		namedPaths:          scaffoldNamedPaths{},
+		directoryInspection: scaffoldDirectories{},
+		resolveHome:         func() (string, error) { return "", nil },
+		factoryScaffoldInitializer: func(dir string) error {
+			calls = append(calls, dir)
+			if len(calls) == 1 {
+				return failure
+			}
+			return nil
+		},
+	}
+	folderA, _ := filepath.Abs("session-a")
+	folderB, _ := filepath.Abs("session-b")
+	wantA, wantB := filepath.Join(folderA, "current"), filepath.Join(folderB, "current")
+	if dir, err := assembly.PrepareNewFactoryScaffold(folderA); dir != wantA || !errors.Is(err, failure) {
+		t.Fatalf("failed scaffold = %q, %v; want %q, %v", dir, err, wantA, failure)
+	}
+	for _, folder := range []string{folderB, folderA} {
+		if dir, err := assembly.PrepareNewFactoryScaffold(folder); err != nil || dir != filepath.Join(folder, "current") {
+			t.Fatalf("scaffold(%q) = %q, %v", folder, dir, err)
+		}
+	}
+	if !reflect.DeepEqual(calls, []string{wantA, wantB, wantA}) {
+		t.Fatalf("initializer destinations = %v, want failed A, successful B, retried A", calls)
+	}
+}
 
 type workReadMetricsRecorderStub struct{}
 
@@ -71,11 +121,12 @@ func TestResolveWorkRuntimeUsesSessionOwnedMetricsRecorder(t *testing.T) {
 }
 
 func TestSelectCompletionSessionIdentityUsesRetainedMetricIdentity(t *testing.T) {
+	t.Parallel()
 	const canonicalID = "canonical-runtime-id"
 
 	identity := selectCompletionSessionIdentity(
 		factorysessions.DefaultSessionID,
-		factory.SessionBuildSpec{
+		factory.RuntimeInitialCompletion{
 			SessionID:        factorysessions.DefaultSessionID,
 			MetricsSessionID: canonicalID,
 		},
@@ -92,6 +143,54 @@ func TestSelectCompletionSessionIdentityUsesRetainedMetricIdentity(t *testing.T)
 	}
 }
 
+func TestSelectCompletionSessionIdentityKeepsExplicitSessionSeparateFromDefault(t *testing.T) {
+	t.Parallel()
+	const runtimeID = "7a4cce0a-e28c-4fe6-9058-6b46910f20bd"
+	completion := factory.RuntimeInitialCompletion{SessionID: runtimeID}
+	defaultIdentity := selectCompletionSessionIdentity("", completion)
+	if !defaultIdentity.isDefault || defaultIdentity.runtimeID != runtimeID ||
+		defaultIdentity.target.Kind != factorysessions.TargetKindDefault {
+		t.Fatalf("default identity = %#v, want retained runtime %q", defaultIdentity, runtimeID)
+	}
+	explicitIdentity := selectCompletionSessionIdentity(" peer-session ", completion)
+	if explicitIdentity.id != "peer-session" || explicitIdentity.isDefault || explicitIdentity.runtimeID != "" ||
+		explicitIdentity.target.Kind != factorysessions.TargetKindNamed || explicitIdentity.target.Name != "peer-session" {
+		t.Fatalf("explicit identity = %#v, want its own named target", explicitIdentity)
+	}
+	if got := completionEventScopeID(explicitIdentity.id, completion); got != "peer-session" {
+		t.Fatalf("explicit event scope = %q, want peer-session", got)
+	}
+}
+
+type completionConfigRecord struct {
+	factory.RuntimeRecord
+	config interfaces.LoadedFactorySource
+}
+
+func (record completionConfigRecord) LoadedRuntimeConfig() factory.LoadedConfig { return record.config }
+
+type completionFactoryConfig struct{ interfaces.LoadedFactorySource }
+
+func TestCurrentRuntimeConfigRetainsDefaultOpeningConfigWithoutBuildSpec(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	config := &completionFactoryConfig{}
+	state.Registry().Upsert(&livesession.LiveSession{
+		ID: factorysessions.DefaultSessionID, IsDefault: true,
+		Handle: &runtimebinding.SessionState{
+			Instance: completionConfigRecord{config: config},
+			Spec:     &factory.RuntimeInitialCompletion{SessionID: factorysessions.DefaultSessionID},
+		},
+	}, true)
+	// A selected peer without a loaded config must not erase the default
+	// opening's compatibility fallback.
+	state.Registry().Upsert(&livesession.LiveSession{ID: "peer", Runtime: &factorysessions.LiveRuntime{}}, true)
+	runtime := &SessionRuntime{sessionState: state}
+	if got := runtime.CurrentRuntimeConfig(); got != config {
+		t.Fatalf("CurrentRuntimeConfig = %v, want default opening config %v", got, config)
+	}
+}
+
 func TestCompletionEventScopeIDUsesResumeSourceIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -101,7 +200,7 @@ func TestCompletionEventScopeIDUsesResumeSourceIdentity(t *testing.T) {
 	)
 	identity := selectCompletionSessionIdentity(
 		factorysessions.DefaultSessionID,
-		factory.SessionBuildSpec{
+		factory.RuntimeInitialCompletion{
 			SessionID:                      factorysessions.DefaultSessionID,
 			MetricsSessionID:               successorID,
 			ResumeSourceCanonicalSessionID: sourceID,
@@ -110,7 +209,7 @@ func TestCompletionEventScopeIDUsesResumeSourceIdentity(t *testing.T) {
 	if identity.runtimeID != successorID {
 		t.Fatalf("completion metrics identity = %q, want %q", identity.runtimeID, successorID)
 	}
-	if got := completionEventScopeID(identity.id, factory.SessionBuildSpec{
+	if got := completionEventScopeID(identity.id, factory.RuntimeInitialCompletion{
 		ResumeSourceCanonicalSessionID: sourceID,
 	}); got != sourceID {
 		t.Fatalf("completion event scope = %q, want %q", got, sourceID)
@@ -122,7 +221,7 @@ func TestCompletionEventScopeIDFallsBackToPublicSelector(t *testing.T) {
 
 	if got := completionEventScopeID(
 		factorysessions.DefaultSessionID,
-		factory.SessionBuildSpec{MetricsSessionID: "current-runtime-id"},
+		factory.RuntimeInitialCompletion{MetricsSessionID: "current-runtime-id"},
 	); got != factorysessions.DefaultSessionID {
 		t.Fatalf("completion event scope = %q, want public selector %q", got, factorysessions.DefaultSessionID)
 	}

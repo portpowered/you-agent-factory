@@ -2,7 +2,6 @@
 package wire
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -210,20 +209,6 @@ func inferenceImplementation(
 			MediaFiles:          dependencies.MediaFiles,
 		},
 	)
-}
-
-// NewAgentRegistry constructs one inert Agent Runner over the singular
-// Providers root and publishes it through the immutable private registry.
-func NewAgentRegistry(
-	dependencies runners.AgentDependencies,
-) (runners.Service, error) {
-	implementation, err := agentImplementation(dependencies)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.AgentIdentity,
-		Metadata: agentMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
 }
 
 func agentImplementation(

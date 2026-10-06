@@ -32,7 +32,6 @@ type childWorkerExecutionBinding struct {
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
 	commandRunnerOverride platformprocess.CommandRunner
-	progressPublisher     workers.ProgressPublisher
 	publish               childWorkerProgressPublisher
 }
 
@@ -41,57 +40,42 @@ type childWorkerAttemptStarter func(
 	*workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 
-// SetWorkerInvoker attaches the Runtime capability used by durable live-change
-// control. Child execution deliberately does not use this broad capability;
-// it receives the narrow Workers Execute binding below.
-func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	s.workerInvokerService = runtime
-	s.invokerMu.Unlock()
-}
-
-// SetDirectWorkerExecution attaches the already-composed Workers Execute
-// operation to the standalone JavaScript composition. The standalone path has
-// no Factory Runtime to contribute identity or capacity, but it still enters
-// Workers through the same detached request/result boundary.
-func (s *JavaScriptRuntimeService) SetDirectWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	s.directChildExecution = execution
-	s.invokerMu.Unlock()
-}
-
-// SetWorkerExecution attaches the already-composed Workers Execute operation
-// to the durable child path. The binding is request-scoped at the Workers
-// boundary: Sessions supplies detached identity and policy values, while
-// Workers retains runner/provider ownership and terminal normalization.
-func (s *JavaScriptRuntimeService) SetWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
+// BindWorkerScope registers the owning runtime's request facts and resource
+// handles atomically. Captured children retain these immutable handles across
+// later registrations. The Workers operation is fixed by construction.
+// Release removes only this registration; prior cleanup cannot remove a replacement.
+func (s *JavaScriptRuntimeService) BindWorkerScope(
+	factorySessionID string,
 	admission factory.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
-) {
-	if s == nil {
-		return
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+) (func(), error) {
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" {
+		return nil, errors.New("factory session ID is required")
 	}
-	binding := s.newChildWorkerExecutionBinding(execution, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
 	s.invokerMu.Lock()
-	s.workerExecution = binding
-	s.invokerMu.Unlock()
+	defer s.invokerMu.Unlock()
+	if s.workerExecution == nil || s.workerExecution.execute == nil {
+		return nil, errors.New("workers Execute capability is required")
+	}
+	if s.workerExecutionScopes == nil {
+		s.workerExecutionScopes = make(map[string]*childWorkerExecutionBinding)
+	}
+	binding := s.newChildWorkerExecutionBinding(s.workerExecution.execute, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	s.workerExecutionScopes[factorySessionID] = binding
+	return func() {
+		s.invokerMu.Lock()
+		defer s.invokerMu.Unlock()
+		if s.workerExecutionScopes[factorySessionID] == binding {
+			delete(s.workerExecutionScopes, factorySessionID)
+		}
+	}, nil
 }
 
 func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
@@ -101,12 +85,15 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
+	progressPublisher workers.ProgressPublisher,
+	attemptStarter childWorkerAttemptStarter,
 ) *childWorkerExecutionBinding {
 	if execution == nil {
 		return nil
 	}
 	binding := &childWorkerExecutionBinding{
 		execute:               execution,
+		attemptStarter:        attemptStarter,
 		runtimeID:             strings.TrimSpace(runtimeID),
 		generationID:          strings.TrimSpace(generationID),
 		providerOverride:      providerOverride,
@@ -139,9 +126,6 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 		if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
 			fragment.Correlation.DispatchID = workerDispatchID
 		}
-		s.invokerMu.RLock()
-		progressPublisher := binding.progressPublisher
-		s.invokerMu.RUnlock()
 		if progressPublisher != nil {
 			progressPublisher(fragment)
 			return
@@ -151,77 +135,24 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 	return binding
 }
 
-// SetWorkerProgressPublisher attaches the runtime-owned progress bridge to
-// the already-bound child Execute operation. Runtime construction creates the
-// bridge while it binds the session-owned Worker Sessions service, which is
-// later than the durable execution service itself. Keeping this as a narrow
-// optional bind preserves the existing Execute seam for standalone, replay,
-// and test compositions.
-func (s *JavaScriptRuntimeService) SetWorkerProgressPublisher(
-	publisher workers.ProgressPublisher,
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	if s.workerExecution != nil {
-		s.workerExecution.progressPublisher = publisher
-	}
-	s.invokerMu.Unlock()
-}
-
-// SetWorkerAttemptStarter attaches the Runtime-owned Worker Session opening
-// boundary to the direct child Execute route. Runtime remains responsible for
-// admission and execution; the returned completion callback commits the durable
-// observation and resolves the authoritative result before retry or output.
-func (s *JavaScriptRuntimeService) SetWorkerAttemptStarter(
-	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
-) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	if s.workerExecution != nil {
-		s.workerExecution.attemptStarter = starter
-	}
-	s.invokerMu.Unlock()
-}
-
-func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {
-	if s == nil {
-		return nil
-	}
-	s.invokerMu.RLock()
-	runtime := s.workerInvokerService
-	s.invokerMu.RUnlock()
-	return runtime
-}
-
 func (s *JavaScriptRuntimeService) workerExecutionBound() bool {
-	return s.workerExecutionBinding() != nil
+	return s.workerExecutionBinding("") != nil
 }
 
-func (s *JavaScriptRuntimeService) workerExecutionBinding() *childWorkerExecutionBinding {
+func (s *JavaScriptRuntimeService) workerExecutionBinding(sessionID string) *childWorkerExecutionBinding {
 	if s == nil {
 		return nil
 	}
 	s.invokerMu.RLock()
 	binding := s.workerExecution
+	if scoped := s.workerExecutionScopes[strings.TrimSpace(sessionID)]; scoped != nil {
+		binding = scoped
+	}
 	s.invokerMu.RUnlock()
 	if binding == nil || binding.execute == nil {
 		return nil
 	}
 	return binding
-}
-
-func (s *JavaScriptRuntimeService) directWorkerExecution() childExecuteService {
-	if s == nil {
-		return nil
-	}
-	s.invokerMu.RLock()
-	execution := s.directChildExecution
-	s.invokerMu.RUnlock()
-	return execution
 }
 
 // childWorkerExecutor runs one JavaScript workflow child as an ordinary Worker.

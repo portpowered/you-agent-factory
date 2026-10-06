@@ -30,7 +30,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
@@ -275,11 +274,15 @@ func NewRuntimeAssembly(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedHistory RecordedHistory,
-	gatewayStreams *GatewayStreams,
 	host sessionservice.Host,
-	processDurable durableexecution.Service,
 	namedFactoryActivator NamedFactoryActivator,
 	definitionActivationGateway factorydefinitions.DefinitionActivationGateway,
+	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
+	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	factoryDefinitions factorydefinitions.Service,
+	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) (RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -301,7 +304,6 @@ func NewRuntimeAssembly(
 		registry, state, streams, invoker, control, activation,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
-		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
@@ -310,36 +312,18 @@ func NewRuntimeAssembly(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
-		liveChangeCoordinator,
 		recordedHistory,
-		gatewayStreams,
 		host,
-		processDurable,
 		namedFactoryActivator,
 		definitionActivationGateway,
+		factoryScaffoldInitializer,
+		editableFactoryValidator,
+		invocationMetricsRecorder,
+		factoryDefinitions,
+		reconnectCursorValidator,
+		worldStateProjector,
 	)
 	return assembly, nil
-}
-
-// NewServiceFromAssembly binds the already-composed owner assembly to the
-// existing process root.
-func NewServiceFromAssembly(
-	assembly RuntimeAssembly,
-	root *factorysessionroot.Root,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (*factorysessionroot.Root, error) {
-	service, err := factorysessionroot.NewRootFromAssembly(
-		assembly,
-		root,
-		liveChangeCoordinator,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
-	}
-	return service, nil
 }
 
 func NewDurableExecution(
@@ -359,13 +343,15 @@ func NewDurableExecution(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams ResponseStreams,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	workerExecution factorysessionexecution.WorkerExecution,
+	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	return durableexecutionwire.NewDurable(
 		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, workflows,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
-		liveChangeCoordinator,
+		liveChangeCoordinator, workerExecution, logger,
 	)
 }
 
@@ -405,7 +391,7 @@ func NewProcessDurableExecution(
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
 	execution, err := factorysessionexecution.NewProcessDurableExecutionService(
-		home, childExecutorMode, nil, persistence, clock, syncWaits,
+		home, childExecutorMode, persistence, clock, syncWaits,
 		summaries, workflows, orchestration, workflows,
 		nil, factoryruntime.JavaScriptWorkerSettings{}, writer, sessionIDs, responseIDs,
 		responses, liveChange, storeForRoot, scope.CurrentProjectRoot, scope.ResumeRuntimeScope,

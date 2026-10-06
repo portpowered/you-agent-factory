@@ -103,7 +103,7 @@ func assertChildCorrelation(t *testing.T, request workers.ExecuteRequest) {
 	}
 }
 
-func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
+func TestChildWorkerExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
 	const diagnostic = "structured output schema violation: instance /answer; expected string"
 	attempts := 0
 	var requests []workers.ExecuteRequest
@@ -139,7 +139,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 		projectRoot: "/project",
 		childValues: childTestValues{},
 	}
-	service.SetDirectWorkerExecution(involver)
+	service.workerExecution = service.newChildWorkerExecutionBinding(involver, nil, "", "", nil, nil, nil, nil, nil)
 	policy := factory.DefaultJavaScriptPolicy()
 	policy.MaxRetries = 1
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "direct-structured-retry")
@@ -156,7 +156,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 	if attempts != 2 || len(requests) != 2 {
 		t.Fatalf("attempts = %d, requests = %d, want two", attempts, len(requests))
 	}
-	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "dispatch-1/attempt/2" {
+	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "direct-structured-retry/dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "direct-structured-retry/dispatch-1/attempt/2" {
 		t.Fatalf("attempt requests = %#v, want numbered detached attempts", requests)
 	}
 	if result.Status != factory.JavaScriptChildDispatchStatusCompleted || !result.SchemaValidated {
@@ -174,7 +174,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 	}
 }
 
-func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
+func TestChildWorkerExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
 	const diagnostic = "structured output schema violation: instance /answer; expected string"
 	attempts := 0
 	involver := &recordingWorkerExecution{result: workers.ExecuteResult{
@@ -191,11 +191,12 @@ func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *te
 	}}
 	involver.onExecute = func(_ workers.ExecuteRequest) { attempts++ }
 	sink := newChildRecordSink()
-	executor := newDirectChildExecutor(
+	executor := newChildWorkerExecutor(
 		"direct-structured-exhausted",
 		involver,
 		sink,
 		childTestValues{},
+		nil,
 		"/project",
 		2,
 	)
@@ -913,7 +914,7 @@ func TestChildStartProgressBridgePreservesDurableOwnerAndPeer(t *testing.T) {
 					CanonicalDraft: validMessageDeltaDraft(request.Correlation.DispatchID),
 				})
 			}
-			service.SetWorkerExecution(invoker, nil, "runtime", "generation", nil, nil, nil)
+			service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "runtime", "generation", nil, nil, nil, nil, nil)
 			forwarded := 0
 			hooks := service.childExecutorHooksForStart(ChildExecutorModeLive, sessionID, nil, nil, nil, func(fragment workers.ProgressFragment) {
 				if fragment.DispatchID == "" || fragment.Correlation.DispatchID != fragment.DispatchID {

@@ -11,13 +11,12 @@ import (
 var _ factorysessions.Service = (*Root)(nil)
 var _ roles.RuntimeAssembly = (*Root)(nil)
 
-// NewRootFromAssembly binds the already-composed assembly to the one
-// process-scoped Factory Sessions root.
-func NewRootFromAssembly(
+// requireRootAssembly preserves the public construction boundary's existing
+// nil and implementation classification without binding a constructed root.
+func requireRootAssembly(
 	assembly roles.RuntimeAssembly,
-	processRoot *Root,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (*Root, error) {
+) (*legacyservice.Assembly, error) {
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: runtime assembly is required")
 	}
@@ -28,14 +27,5 @@ func NewRootFromAssembly(
 	if !ok || concrete == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: runtime assembly implementation rejected")
 	}
-	root := processRoot
-	if root == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: process root is required")
-	}
-	if root.Assembly != nil && root.Assembly != concrete {
-		return nil, fmt.Errorf("construct Factory Sessions: process root is already bound to another assembly")
-	}
-	root.Assembly = concrete
-	root.liveChangeCoordinator = liveChangeCoordinator
-	return root, nil
+	return concrete, nil
 }
