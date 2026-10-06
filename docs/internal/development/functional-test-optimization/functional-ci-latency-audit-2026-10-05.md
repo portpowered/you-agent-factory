@@ -5,15 +5,18 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `c8b026366d`, passes hosted Functional
-Coverage in **209s complete / 143.728s coverage**, 67 packages / 762 results,
-760 pass and two skip, with no failures or retries. Its restored compiler
-archive is a prefix hit from 963695eff9; coverage runs zero compiler commands
-and 16 linker commands. Workflow fails Backend Lint's catalog drift race test
-and both Packaged Factories packaging jobs because expected finding sets omit
-the newly generated native conversion assets. These expectations are corrected
-locally without weakening drift/read-only checks; fresh hosted validation is
-required. Earlier source `643e6f3b7b` passes every hosted workflow check in
+The latest measured published source, `d9e4f57e8e`, passes hosted Functional
+Coverage in **189s complete / 139.494s coverage**, 67 packages / 762 results,
+760 pass and two skip, with no failures or retries. Its compiler archive is a
+prefix hit from c8b026366d; coverage runs two compiler commands and 16 linker
+commands. Every other executed job passes except Backend Lint: its migration
+smoke fixture publication predates native conversion assets and reports one
+missing conversion in the default clean-source cell. Regenerate that tiny
+fixture through the canonical catalog generator; retain its assertions. All
+16 packaged-source and 11 catalog smoke scenarios pass locally. Fresh hosted validation
+is required for the fixture correction. Parent c8b026366d passes Functional
+Coverage in 209s / 143.728s but fails the earlier catalog drift expectations,
+corrected in d9e4f57e8e. Earlier source `643e6f3b7b` passes every hosted workflow check in
 201s complete / 142.303s functional coverage with one recovered interrupt
 admission failure. Parent `69eaa32820` takes 210s / 150.914s coverage with
 recovered interrupt and Script failures; its remaining workflow is canceled by
@@ -4376,3 +4379,63 @@ those ports with the rejected filesystem shortcut or share session state.
 Evidence: `interrupt-identity-paired/`, `interrupt-identity-profile/`,
 `pr2923-cache-live-hosted/`, `job-112262243278-terminal.log`,
 `job-112262243397-terminal.log` and `cache-live-backend-lint-failed.log`.
+
+
+## Packaged serialization, canonical encodings and installation reuse
+
+The existing immutable native conversion cache is effective on its selected
+decoder port: a private stderr probe of three existing customer journeys passes
+with 242 reads, 241 hits and one miss (20 distinct published inputs). This is
+read accounting, not a timing experiment. It does not imply installation is
+cached: each initialized home still validates, prepares, writes and publishes
+its own definitions and portable files. Session/runtime state stays independent.
+
+Canonical pre-persist validation marshals the submitted generated API value,
+then the loader expands that different JSON encoding. A private experiment
+routes the normalizer through the existing decoder, preserving authored
+normalization, Flatten validation and every loader/validator operation. The
+same three journeys pass, but reads become 483 / 241 hits / 242 misses, with 21
+distinct misses. Simply binding the existing reader cannot remove this cost.
+
+A second experiment generates the exact pre-persist encoding's SHA alongside
+the published source SHA, verifies whole native configuration equality through
+both strict mappings, and accepts only those two exact inputs. It retains all
+validation, writer ports, independent decoded values and customer-edit fallback.
+Generation, focused serializer/analyzer tests, scoped builtin lint and the
+customer journeys pass. Probe coverage rises to 482 hits / 483 reads across 40
+exact published/canonical forms. However, measured execution gets worse.
+
+In B3/C3/C3/B3 order, six repetitions per side of the same three customer journeys
+all pass. Baseline consumes 23.729038 CPU-seconds / 26.347894477s elapsed;
+candidate 25.862887 / 28.864202045: **9.0% more CPU / 9.6% more elapsed**. Valid
+three-repetition samples span 12.921-13.427s baseline and 13.741-15.123s candidate.
+Binary builds are excluded from these execution totals. This is a small sample,
+but it provides no performance justification for shipping the alias expansion.
+Restore all experiment-only source, generated assets and tests; retain its patch
+and results under private latency artifacts. No additional production cache or
+changed cache-hit allowance is installed.
+
+Prioritize avoiding repeated installation through package-owned initialized
+test homes and isolated Factory Sessions, then investigate a prepared-layout
+cache through the existing authoring writer and persistence ports. Cache only
+immutable definition/file preparation, keep destination writes, validators,
+permissions, portable artifacts and atomic replacement, and invalidate against
+exact source plus serializer/generator version. Retain dedicated fresh-install
+customer coverage. The earlier rendered-file prototype's full-lane 20% saving
+remains historical evidence for that direction, not a validated production
+shortcut or an estimate for current main. Sharing live Factory Session state is
+not part of this optimization.
+
+Hosted d9e4f57e8e's functional ledger explicitly reports no test failures.
+The catalog drift unit/packaging corrections pass in that workflow; the separate
+lint migration fixture omission must also be repaired. Complete 189s exceeds
+the two-minute checkpoint, so PR #2923 stays draft.
+
+The regenerated synthetic publication supplies the missing native asset without
+changing authored inputs, JSON/YAML pairs, manifest or smoke assertions. Both
+delivered-plugin smoke cohorts pass: 16 packaged-source and 11 catalog cases.
+
+Evidence: `serialized-cache-read-probe/`, `canonical-cache-read-probe/`,
+`canonical-cache-alias-read-probe/`, `canonical-cache-paired/`,
+`canonical-cache-candidate.patch`, `pr2923-identity-hosted/`,
+`identity-hosted-functional.log` and `identity-hosted-lint-failed.log`.
