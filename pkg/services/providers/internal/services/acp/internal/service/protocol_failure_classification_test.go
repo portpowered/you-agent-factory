@@ -693,7 +693,8 @@ func handleProtocolFailureInitialize(mode string, writer *bufio.Writer, id json.
 	if mode == "version" {
 		version = 999
 	}
-	if err := writeRPCResult(writer, id, fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":{},"authMethods":[]}`, version)); err != nil {
+	loadSession := mode == "resume" || mode == "resume-not-found"
+	if err := writeRPCResult(writer, id, fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":{"loadSession":%t},"authMethods":[]}`, version, loadSession)); err != nil {
 		return false, err
 	}
 	// The peer stays connected after answering initialize. A client rejects an

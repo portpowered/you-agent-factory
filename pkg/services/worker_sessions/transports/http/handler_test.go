@@ -142,6 +142,34 @@ func TestInterruptPersistenceErrorIsNotInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		cause  error
+		status int
+		code   string
+	}{
+		{workersessions.ErrInterruptFactoryUnsupported, http.StatusConflict, "UNSUPPORTED"},
+		{workersessions.ErrInterruptContinuationUnsupported, http.StatusConflict, "PROVIDER_UNSUPPORTED"},
+		{workersessions.ErrInterruptProviderSessionMissing, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptProviderSessionInvalid, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceNotActive, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceConflict, http.StatusConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceNotFound, http.StatusNotFound, "NOT_FOUND"},
+		{workersessions.ErrInterruptRequestIDConflict, http.StatusConflict, "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT"},
+		{workersessions.ErrInvalidInterruptMessage, http.StatusBadRequest, "BAD_REQUEST"},
+		{workersessions.ErrInterruptInputTooLarge, http.StatusBadRequest, "BAD_REQUEST"},
+		{workersessions.ErrInterruptValidation, http.StatusBadRequest, "BAD_REQUEST"},
+	} {
+		err := &workersessions.InterruptError{Phase: workersessions.InterruptPhaseValidation,
+			Cause: errors.Join(workersessions.ErrInterruptValidation, cell.cause)}
+		status, code, _ := interruptErrorResponse(err)
+		if status != cell.status || code != cell.code {
+			t.Fatalf("validation cause %v: mapping=%d/%s, want %d/%s", cell.cause, status, code, cell.status, cell.code)
+		}
+	}
+}
+
 func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T) {
 	total := 17
 	duration := 2500 * time.Millisecond

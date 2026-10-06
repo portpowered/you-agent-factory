@@ -52,11 +52,15 @@ func runRealHostFactory(t *testing.T, process support.Process) {
 	assertFactoryCLIParity(t, host, id, getHost(t, endpoint))
 	assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": id, "view": "transcript"}), "worker_session.conflict", false)
 	args := map[string]any{"workerSessionId": id, "operation": "INTERRUPT", "requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}
-	// Existing Factory dispatches lack direct interrupt supervision. HTTP maps
-	// the validation-phase rejection to 400 before the specific conflict code.
-	// Preserve host policy and prove rejection has no provider effect.
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
-	postHostJSON(t, ctx, endpoint+"/interrupt", map[string]any{"requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}, http.StatusBadRequest)
+	// Runtime owns Factory replacement. Preserve the explicit unsupported
+	// refusal and prove it has no provider effect through both transports.
+	refusal := callTool(t, ctx, session, "you.worker_session.control", args)
+	assertToolError(t, refusal, "worker_session.conflict", false)
+	details := refusal.StructuredContent.(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
+	if details["upstreamCode"] != "UNSUPPORTED" || details["phase"] != "VALIDATION" {
+		t.Fatalf("Factory replacement refusal lost typed policy: %v", details)
+	}
+	postHostJSON(t, ctx, endpoint+"/interrupt", map[string]any{"requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}, http.StatusConflict)
 	assertProviderCallCount(t, runner, 1)
 	if source := getHost(t, endpoint).(map[string]any); source["state"] != "RUNNING" {
 		t.Fatalf("rejected Factory interrupt changed source: %v", source)

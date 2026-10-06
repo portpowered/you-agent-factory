@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -43,7 +45,7 @@ func TestCapturedLogsRetainCommittedIdentityAndDetachedTime(t *testing.T) {
 			ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"MESSAGE"}`),
 		}, CapturedAt: &stamp}},
 	}}
-	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake, unavailableWorkerControlStore{}, newTestHistoryBudget())
+	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, fake, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +92,7 @@ func TestCapturedLogsReturnSafeTypedStorageOutcomes(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source}, unavailableWorkerControlStore{}, newTestHistoryBudget())
+			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, nil, &capturedActivityFake{err: cell.source}, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -128,5 +130,21 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 }
 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }

@@ -18,6 +18,10 @@ type catalogPeerFake struct {
 
 var _ providers.Service = (*catalogPeerFake)(nil)
 
+func (*catalogPeerFake) SupportsContinuation(context.Context, providers.SessionRef) (bool, error) {
+	return false, nil
+}
+
 func (*catalogPeerFake) ResolveIdentity(
 	context.Context,
 	providers.ResolveIdentityRequest,

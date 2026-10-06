@@ -19,6 +19,20 @@ import (
 
 const argumentRoundTripHelperEnvironment = "YOU_TEST_ACP_ARGUMENT_ROUNDTRIP_HELPER"
 
+// A prior attempt's advertised load support cannot authorize this attempt's
+// protocol traffic. An unavailable connection proves refusal precedes any RPC.
+func TestContinuationRefusesCurrentHandshakeWithoutLoadSession(t *testing.T) {
+	t.Parallel()
+	owned := &attempt{provider: &provider{id: "cursor"}}
+	_, err := owned.openSession(t.Context(), "workspace", nil, acpsdk.InitializeResponse{
+		AgentCapabilities: acpsdk.AgentCapabilities{LoadSession: false},
+	}, providers.ExecuteRequest{}, &providers.SessionRef{Provider: "cursor", Kind: providers.SessionIDKind, ID: "opaque-source"})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindInvalidRequest {
+		t.Fatalf("unsupported current handshake = %v, want typed refusal before load/new/prompt", err)
+	}
+}
+
 // TestACPArgumentRoundTripHelperProcess is the direct child used by
 // TestExecuteUsesLosslessQuotedLaunch. It exits before an ACP handshake so the
 // test can assert the exact executable and argv received by exec.Command

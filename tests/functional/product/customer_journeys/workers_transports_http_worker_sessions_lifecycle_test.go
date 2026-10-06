@@ -139,15 +139,15 @@ func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T)
 		t.Fatalf("POST Worker Session interrupt: %v", err)
 	}
 	defer interrupt.Body.Close()
-	if interrupt.StatusCode != http.StatusBadRequest {
+	if interrupt.StatusCode != http.StatusConflict {
 		responseBody, _ := io.ReadAll(interrupt.Body)
-		t.Fatalf("interrupt status = %d, want 400; body = %s", interrupt.StatusCode, strings.TrimSpace(string(responseBody)))
+		t.Fatalf("interrupt status = %d, want 409; body = %s", interrupt.StatusCode, strings.TrimSpace(string(responseBody)))
 	}
 	var result factoryapi.WorkerSessionInterruptError
 	if err := json.NewDecoder(interrupt.Body).Decode(&result); err != nil {
 		t.Fatalf("decode interrupt error: %v", err)
 	}
-	if result.Code != string(factoryapi.ErrorResponseCodeBADREQUEST) ||
+	if result.Code != "WORKER_SESSION_INTERRUPT_CONFLICT" ||
 		result.Phase != factoryapi.WorkerSessionInterruptErrorPhaseValidation ||
 		result.RequestId == nil || *result.RequestId != payload.RequestId ||
 		result.SourceWorkerSessionId == nil || *result.SourceWorkerSessionId != "interrupt-source" ||

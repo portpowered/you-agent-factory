@@ -433,15 +433,19 @@ func mapInterruptServiceError(err error) error {
 		phase = string(typed.Phase)
 	}
 	switch {
+	case errors.Is(err, workersessions.ErrInterruptFactoryUnsupported):
+		return newInterruptCLIError("UNSUPPORTED", "Factory Worker Session replacement is unsupported", phase, err)
+	case errors.Is(err, workersessions.ErrInterruptContinuationUnsupported):
+		return newInterruptCLIError("PROVIDER_UNSUPPORTED", "Provider does not support Worker Session continuation", phase, err)
 	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
 		return newInterruptCLIError("INTERNAL_ERROR", "Worker Session interrupt persistence unavailable", phase, err)
 	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
 		errors.Is(err, workersessions.ErrInterruptServerStopping):
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_ADMISSION_FAILED", "Workers could not admit the Worker Session interrupt", phase, err)
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
+		errors.Is(err, workersessions.ErrInterruptInputTooLarge),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
-		errors.Is(err, workersessions.ErrInvalidInterruptMessage),
-		errors.Is(err, workersessions.ErrInterruptValidation):
+		errors.Is(err, workersessions.ErrInvalidInterruptMessage):
 		return newInterruptCLIError("BAD_REQUEST", "invalid Worker Session interrupt request", phase, err)
 	case errors.Is(err, workersessions.ErrInterruptSourceNotFound):
 		return newInterruptCLIError("NOT_FOUND", "Worker Session interrupt source not found", phase, err)
@@ -452,6 +456,8 @@ func mapInterruptServiceError(err error) error {
 		errors.Is(err, workersessions.ErrInterruptProviderSessionMissing),
 		errors.Is(err, workersessions.ErrInterruptProviderSessionInvalid):
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_CONFLICT", "Worker Session interrupt conflicts with existing state", phase, err)
+	case errors.Is(err, workersessions.ErrInterruptValidation):
+		return newInterruptCLIError("BAD_REQUEST", "invalid Worker Session interrupt request", phase, err)
 	case errors.Is(err, workersessions.ErrInterruptSourceCancellation),
 		errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed):
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED", "Workers could not cancel the Worker Session interrupt source", phase, err)

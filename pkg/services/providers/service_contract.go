@@ -18,6 +18,9 @@ import (
 // Providers owns exactly one native attempt per Execute call; callers own
 // selection, retry, throttle, and scheduling policy.
 type Service interface {
+	// SupportsContinuation reports configured and already negotiated resume
+	// capability without starting a provider attempt or probing native state.
+	SupportsContinuation(context.Context, SessionRef) (bool, error)
 	// ListProviders returns detached catalog descriptors for every known
 	// provider, including availability and capability facts. Unavailable or
 	// prerequisite-blocked providers remain listed with their catalog facts.

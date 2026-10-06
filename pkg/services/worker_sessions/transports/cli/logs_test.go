@@ -254,37 +254,48 @@ func TestReadLogsFollowRequiresLogsAndExcludesArtifacts(t *testing.T) {
 
 func TestReadLogsFollowRetainedPrefixWithoutLiveOwner(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/events") {
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = io.WriteString(w, `{"code":"WORKER_SESSION_NOT_FOUND","message":"no live owner"}`)
-			return
-		}
-		page := followTestPage(1, 1, "1")
-		page.Health = factoryapi.INCOMPLETE
-		if r.URL.Query().Get("nextToken") != "" {
-			page.Events = nil
-		}
-		if err := json.NewEncoder(w).Encode(page); err != nil {
-			t.Error(err)
-		}
-	}))
-	t.Cleanup(server.Close)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	var output bytes.Buffer
-	err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
-	var failure *CLIError
-	if !errors.As(err, &failure) || failure.Code != "WORKER_SESSION_LOGS_GAP" || ctx.Err() != nil {
-		t.Fatalf("retained incomplete prefix lost its meaning: %v", err)
-	}
-	var event factoryapi.WorkerSessionEvent
-	decoder := json.NewDecoder(&output)
-	if err := decoder.Decode(&event); err != nil || event.Event.Position != 1 {
-		t.Fatalf("retained prefix lost: %+v %v", event, err)
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		t.Fatalf("prefix duplicated or error emitted as an event: %v", err)
+	for _, code := range []string{"WORKER_SESSION_NOT_FOUND", "WORKER_SESSION_PROJECTION_UNAVAILABLE"} {
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/events") {
+					status := http.StatusNotFound
+					if code == "WORKER_SESSION_PROJECTION_UNAVAILABLE" {
+						status = http.StatusServiceUnavailable
+					}
+					w.WriteHeader(status)
+					if err := json.NewEncoder(w).Encode(map[string]string{"code": code, "message": "no live owner"}); err != nil {
+						t.Error(err)
+					}
+					return
+				}
+				page := followTestPage(1, 1, "1")
+				page.Health = factoryapi.INCOMPLETE
+				if r.URL.Query().Get("nextToken") != "" {
+					page.Events = nil
+				}
+				if err := json.NewEncoder(w).Encode(page); err != nil {
+					t.Error(err)
+				}
+			}))
+			t.Cleanup(server.Close)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			var output bytes.Buffer
+			err := NewRead(testHTTPProtocol(t), testHTTPProtocol(t))(ReadConfig{Context: ctx, Server: server.URL, WorkerSessionID: "worker", View: "logs", Follow: true, Output: &output})
+			var failure *CLIError
+			if !errors.As(err, &failure) || failure.Code != "WORKER_SESSION_LOGS_GAP" || ctx.Err() != nil {
+				t.Fatalf("retained incomplete prefix lost its meaning: %v", err)
+			}
+			var event factoryapi.WorkerSessionEvent
+			decoder := json.NewDecoder(&output)
+			if err := decoder.Decode(&event); err != nil || event.Event.Position != 1 {
+				t.Fatalf("retained prefix lost: %+v %v", event, err)
+			}
+			if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+				t.Fatalf("prefix duplicated or error emitted as an event: %v", err)
+			}
+		})
 	}
 }
 

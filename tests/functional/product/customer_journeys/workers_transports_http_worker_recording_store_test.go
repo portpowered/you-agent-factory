@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // remoteWorkerRecordingStore is the functional test's replaceable durable
@@ -24,6 +25,22 @@ type remoteWorkerRecordingStore struct {
 // These capture-only fixtures explicitly refuse durable controls. Their
 // snapshot store supplies no sync acknowledgement or execution authority.
 type unavailableWorkerControlStore struct{}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrInvalidRecordingRedactionRequest
+}
+
+func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
+}
 
 func (unavailableWorkerControlStore) BeginWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
 	return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence

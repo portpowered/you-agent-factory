@@ -407,25 +407,27 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
-	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
-		WorkerSessionID: workerSessionID,
-	})
+	observation, err := a.GetTopLevelWorkerSessionObservation(ctx, workerSessionID)
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
-	subscription, err := a.topLevel.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+	request := workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:      replayOnly,
 		Cursor:          cursor,
-	})
+	}
+	subscription, err := a.topLevel.StreamObservationsByWorkerSessionID(ctx, request)
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		subscription, err = a.logs.StreamObservationsByWorkerSessionID(ctx, request)
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream top-level Worker Session events: %w", err)
 	}
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	return WorkerSessionObservationToAPI(observation), subscription, nil
+	return observation, subscription, nil
 }
 
 func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID string) (workerSessionScope, error) {

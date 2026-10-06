@@ -225,6 +225,7 @@ func newWSRFT009DurableWriter(
 	}
 	return &wsrFT009DurableWriter{
 		WorkerControlOperationStore: delegate,
+		WorkerRestartInputStore:     delegate,
 		delegate:                    delegate,
 		reader:                      delegate,
 		failureWriter:               delegate,
@@ -234,6 +235,7 @@ func newWSRFT009DurableWriter(
 
 type wsrFT009DurableWriter struct {
 	recordings.WorkerControlOperationStore
+	recordings.WorkerRestartInputStore
 	trace         *wsrFT009Trace
 	delegate      recordings.WorkerRecordingWriter
 	reader        recordings.WorkerRecordingReader

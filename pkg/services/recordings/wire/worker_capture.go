@@ -60,3 +60,13 @@ func NewWorkerControlOperationStore(writer recordings.WorkerRecordingWriter) (re
 	}
 	return store, nil
 }
+
+// NewWorkerRestartInputStore binds the existing profile-owned artifact writer.
+// Construction is inert and a missing capability fails before admission.
+func NewWorkerRestartInputStore(writer recordings.WorkerRecordingWriter) (recordings.WorkerRestartInputStore, error) {
+	store, ok := writer.(recordings.WorkerRestartInputStore)
+	if !ok || store == nil || (reflect.ValueOf(store).Kind() == reflect.Pointer && reflect.ValueOf(store).IsNil()) {
+		return nil, recordings.ErrMissingWorkerRestartInputStore
+	}
+	return store, nil
+}

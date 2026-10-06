@@ -508,6 +508,28 @@ you --server http://localhost:7437 worker-sessions continue <source-worker-sessi
   --async --output json "Review the result"
 ```
 
+Continuation uses the captured Provider Session ID, workspace, model, and
+execution settings. A terminal direct source can continue after a server restart
+when its complete capture and saved execution input remain available in the
+same profile. Portos does not read native provider logs for this operation.
+
+Retry with the same request ID, source, successor, and follow-up input. A
+completed, durably admitted successor returns its recorded outcome and output
+after restart, without another provider execution. Changing the successor or
+follow-up input conflicts. A saved input or opening alone cannot prove admission;
+an uncertain retry fails without starting another execution.
+
+The server confirms saved input before admitting a successor. If storage loses
+the write acknowledgement, exact committed readback can confirm that first
+request. Missing, corrupt, or mismatched readback prevents admission. Missing
+provider identity, unavailable execution input, or unsupported continuation
+also fails explicitly. A provider rejection never starts a fresh conversation.
+Before reserving a successor, the server checks configured provider policy and
+already negotiated continuation capability. Unsupported terminal continuation
+returns `WORKER_SESSION_PROVIDER_CONTINUATION_INVALID` without creating a
+successor. Exact retries of previously admitted requests retain their original
+outcome.
+
 To replace an active direct Worker Session, interrupt its admitted dispatch and
 provide a distinct successor identity and replacement input. The server first
 records the source as canceled, then admits the successor against the same
@@ -524,6 +546,11 @@ you --server http://localhost:7437 worker-sessions interrupt <source-worker-sess
   --successor-worker-session-id <successor-worker-session-id> \
   --async --output json "Stop and revise the plan"
 ```
+
+Before stopping the source, the server checks configured provider policy and
+already negotiated continuation capability. An unsupported provider returns
+`PROVIDER_UNSUPPORTED` in `VALIDATION`; the source keeps running and ordinary
+cancel and terminate remain available.
 
 Interrupt failures include a stable phase: `VALIDATION`,
 `SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
@@ -543,11 +570,19 @@ the interrupt joins its source and reports `SUCCESSOR_ADMISSION` with
 `WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED`. The sibling keeps
 running. Retrying the same tuple after restarting the host returns that saved
 failure, even after the sibling has ended; it does not admit the successor.
+Factory-origin Worker Session replacement returns `UNSUPPORTED` before any
+source control or successor admission. Factory Runtime owns replacement of
+those attempts. A direct invocation's Factory Session correlation preserves
+its eligibility for interruption.
 New interruptions capture the execution recipe and exact
 Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.
+Replacement text must be valid UTF-8. The complete serialized recipe, including
+settings and replacement text, must fit within one MiB. JSON escaping counts
+toward this limit. Interruption refuses overflow before stopping the source;
+it preserves accepted replacement text in full.
 Saved recipes reject field-name case aliases, including aliases in execution
 settings and provider references. Customer token-map keys remain case-sensitive.
 The recipe also refuses inherited credentials embedded in replacement text,

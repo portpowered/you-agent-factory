@@ -50,6 +50,10 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		}
 		return nil, nil
 	}
+	plan, err = r.capturedInterruptPlan(ctx, plan, target.capture)
+	if err != nil {
+		return nil, err
+	}
 	if !interruptInputSafe(plan) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
@@ -63,14 +67,9 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 	intent.Operation.SuccessorWorkerSessionID = plan.request.SuccessorWorkerSessionID
 	intent.Operation.ResumeMode = "provider"
 	key := interruptOperationKey(intent)
-	ref, err := r.operations.PersistWorkerControlInput(ctx, key, payload)
+	ref, err := r.syncInterruptInput(ctx, key, payload)
 	if err != nil {
-		return nil, safeInterruptStoreError(err)
-	}
-	// Reuse is authoritative only after validating the immutable captured bytes.
-	stored, err := r.operations.ReadWorkerControlInput(ctx, key, ref)
-	if err != nil || !bytes.Equal(stored, payload) {
-		return nil, recordings.ErrWorkerRecordingPersistence
+		return nil, err
 	}
 	intent.InputArtifactRef = ref
 	accepted, err := r.commitInterruptIntent(ctx, intent)
@@ -82,6 +81,36 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		return &accepted, err
 	}
 	return &accepted, nil
+}
+
+// Reconcile only this reservation's uncertain write, before intent or source
+// cancellation. Exact readback alone cannot prove the failed write synced:
+// immutable reuse must confirm sync before intent. A definitive conflict never
+// licenses effects, even with readback.
+func (r *registry) syncInterruptInput(ctx context.Context, key recordings.WorkerControlOperationKey, payload []byte) (string, error) {
+	ref, writeErr := r.operations.PersistWorkerControlInput(ctx, key, payload)
+	if errors.Is(writeErr, recordings.ErrWorkerControlConflict) {
+		return "", workersessions.ErrInterruptRequestIDConflict
+	}
+	if ref == "" {
+		return "", recordings.ErrWorkerRecordingPersistence
+	}
+	stored, err := r.operations.ReadWorkerControlInput(ctx, key, ref)
+	if err != nil || !bytes.Equal(stored, payload) {
+		return "", recordings.ErrWorkerRecordingPersistence
+	}
+	if writeErr != nil {
+		confirmed, err := r.operations.PersistWorkerControlInput(ctx, key, payload)
+		if err != nil {
+			return "", safeInterruptStoreError(err)
+		}
+		if confirmed != ref {
+			return "", recordings.ErrWorkerRecordingPersistence
+		}
+		r.logger.Info("worker session interrupt input reconciled", "sessionID", key.WorkerSessionID,
+			"requestID", key.RequestID, "outcome", "committed")
+	}
+	return ref, nil
 }
 
 func (r *registry) commitInterruptIntent(ctx context.Context, intent recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, error) {

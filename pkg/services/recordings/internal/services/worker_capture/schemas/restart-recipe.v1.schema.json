@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-restart-recipe.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "target",
+    "execution"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "target": {
+      "$ref": "./control-envelope.v2.schema.json#/properties/controlOperation/properties/target"
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "WorkstationName",
+        "Execution"
+      ],
+      "properties": {
+        "WorkstationName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Execution": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "dispatch"
+          ],
+          "properties": {
+            "dispatch": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "dispatch_id",
+                "workstation_name",
+                "input_tokens"
+              ],
+              "properties": {
+                "dispatch_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "workstation_name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input_tokens": {
+                  "type": "array"
+                }
+              }
+            },
+            "model": {
+              "type": "string"
+            },
+            "reasoning_effort": {
+              "type": "string"
+            },
+            "working_directory": {
+              "type": "string"
+            },
+            "system_prompt": {
+              "type": "string"
+            },
+            "user_message": {
+              "type": "string"
+            },
+            "output_schema": {
+              "type": "string"
+            },
+            "env_vars": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": 1,
+      "target": {
+        "recordingId": "recording-001",
+        "workerSessionId": "ws-001",
+        "recordingGenerationId": "generation-001",
+        "ownerEpoch": "owner-001",
+        "expectedAttemptId": "attempt-001"
+      },
+      "execution": {
+        "WorkstationName": "__provider_invocation__",
+        "Execution": {
+          "dispatch": {
+            "dispatch_id": "attempt-001",
+            "transition_id": "direct",
+            "workstation_name": "__provider_invocation__",
+            "input_tokens": []
+          },
+          "worker_type": "agent",
+          "runner_id": "agent",
+          "executor_provider": "codex",
+          "model": "model-1",
+          "working_directory": "workspace-1",
+          "user_message": "Initial work"
+        }
+      }
+    }
+  ]
+}

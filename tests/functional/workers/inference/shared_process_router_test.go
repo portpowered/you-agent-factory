@@ -11,6 +11,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type inferenceCommandRoute struct {
@@ -264,6 +265,46 @@ func (router *inferenceWorkerRecordingRouter) ReadWorkerControlInput(ctx context
 		return nil, err
 	}
 	return store.ReadWorkerControlInput(ctx, key, ref)
+}
+
+func (router *inferenceWorkerRecordingRouter) restartStore(recordingID, workerID string) (recordings.WorkerRestartInputStore, error) {
+	store, ok := router.routeIdentity(recordingID, workerID).(recordings.WorkerRestartInputStore)
+	if !ok || store == nil {
+		return nil, recordings.ErrMissingWorkerRestartInputStore
+	}
+	return store, nil
+}
+
+func (router *inferenceWorkerRecordingRouter) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
+	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
+	if err != nil {
+		return err
+	}
+	return store.SaveWorkerRestartRecipe(ctx, target, execution)
+}
+
+func (router *inferenceWorkerRecordingRouter) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
+	if err != nil {
+		return workers.WorkstationDispatchRequest{}, err
+	}
+	return store.ReadWorkerRestartRecipe(ctx, target)
+}
+
+func (router *inferenceWorkerRecordingRouter) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	return store.ReadWorkerContinuationSource(ctx, target)
+}
+
+func (router *inferenceWorkerRecordingRouter) ReadWorkerContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	store, err := router.restartStore(key.RecordingID, key.WorkerSessionID)
+	if err != nil {
+		return nil, err
+	}
+	return store.ReadWorkerContinuationInput(ctx, key)
 }
 
 func (router *inferenceCommandRouter) set(

@@ -307,6 +307,9 @@ func (r *registry) prepareInvocation(
 	if options.runtimeOwned {
 		return invocationPreparation{}, nil
 	}
+	if err := r.saveDirectRestartRecipe(ctx, req); err != nil {
+		return r.rejectOpening(ctx, req.ID, attemptID, "save_restart_recipe", err, workersessions.ErrStartOpeningPublication), nil
+	}
 
 	return r.registerInvocationSupervision(ctx, req, options, executor, clock, scheduler)
 }
@@ -826,6 +829,9 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 		return workersessions.ObservationSubscription{}, err
 	}
 	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID, req.FactorySessionID)
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return r.completedContinuationStream(ctx, req)
+	}
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}

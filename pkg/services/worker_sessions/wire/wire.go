@@ -14,6 +14,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 
@@ -52,7 +53,9 @@ func NewService(
 	recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
+	continuationSupport providers.Service,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,
@@ -64,6 +67,8 @@ func NewService(
 		recording,
 		captured,
 		operations,
+		restart,
 		snapshots,
+		continuationSupport,
 	)
 }

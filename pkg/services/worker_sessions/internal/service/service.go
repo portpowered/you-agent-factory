@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -99,13 +100,17 @@ type registry struct {
 	events                   EventsAppender
 	eventReader              EventsReader
 	retainedReader           EventsRetainedReader
-	providerSessions         providersessions.Service
-	recording                recordings.WorkerSessionRecordingService
-	operations               recordings.WorkerControlOperationStore
-	stopOperations           sync.Map // request key -> *sync.Mutex; no registry lock spans a join
-	clock                    platformclock.Source
-	scheduler                platformclock.TimerSource
-	logger                   logging.Logger
+	continuationSupport      interface {
+		SupportsContinuation(context.Context, providers.SessionRef) (bool, error)
+	}
+	providerSessions providersessions.Service
+	recording        recordings.WorkerSessionRecordingService
+	operations       recordings.WorkerControlOperationStore
+	restart          recordings.WorkerRestartInputStore
+	stopOperations   sync.Map // request key -> *sync.Mutex; no registry lock spans a join
+	clock            platformclock.Source
+	scheduler        platformclock.TimerSource
+	logger           logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
 	// contexts are never used as the lifetime of an admitted Start. Stop
@@ -172,9 +177,13 @@ func New(
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 ) (workersessions.Service, error) {
 	if missingControlOperationStore(operations) {
 		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
+	if restart == nil || (reflect.ValueOf(restart).Kind() == reflect.Pointer && reflect.ValueOf(restart).IsNil()) {
+		return nil, recordings.ErrMissingWorkerRestartInputStore
 	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
@@ -201,6 +210,7 @@ func New(
 		providerSessions:            providerSessions,
 		recording:                   recording,
 		operations:                  operations,
+		restart:                     restart,
 		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,
@@ -292,6 +302,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return workersessions.StartResult{}, ErrMissingScheduler
 	}
 	req = normalizeStartRequest(req)
+	r.bindDirectRecording(&req)
 	// Accepted requests replay before readiness checks. Only new requests must
 	// pass read-only Workers validation before reserving identity or capture.
 	if replay, err := r.lookupStart(req); replay != nil || err != nil {

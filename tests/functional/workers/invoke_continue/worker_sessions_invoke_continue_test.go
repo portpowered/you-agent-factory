@@ -113,6 +113,22 @@ func runDirectWorkerSessionInvokeContinueLocal(t *testing.T, fixture *invokeCont
 	if !strings.Contains(invoked.Output, "initial direct output COMPLETE") {
 		t.Fatalf("local invoke output = %q, want provider output; calls=%d requests=%#v\nstdout:\n%s\nstderr:\n%s", invoked.Output, runner.CallCount(), runner.Requests(), invoke.Stdout(), invoke.Stderr())
 	}
+	// The execution file supplies no recording identity. Capture must still be
+	// available through the public host, with no native provider-log lookup.
+	logs := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "--json", "worker-sessions", "read", "--view", "logs", "--worker-session-id", "local-source-session"})
+	logs.Input.Env = scenario.environment()
+	logs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := process.Execute(logs.Input); err != nil {
+		t.Fatalf("direct captured logs: %v\n%s\n%s", err, logs.Stdout(), logs.Stderr())
+	}
+	var page factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(logs.Stdout()), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.WorkerSessionId != "local-source-session" || page.RecordingGenerationId == "" || page.CommittedPosition == 0 || !strings.Contains(logs.Stdout(), "initial direct output COMPLETE") {
+		t.Fatalf("direct capture omitted identity or provider output: %#v", page)
+	}
+	assertCapturedTerminalContinuation(t, page, "local-source-thread")
 
 	cont := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "continue", "local-source-session",
@@ -399,9 +415,9 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	continuation.Input.Env = scenario.environment()
 	continuation.Input.WorkingDirectory = scenario.workingDirectory
 	if err := process.Execute(continuation.Input); err == nil {
-		t.Fatal("unsupported provider continuation succeeded, want one terminal failure")
+		t.Fatal("unsupported provider continuation succeeded, want preflight refusal")
 	}
-	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")
+	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
 	if got := scenario.providerRunner.CallCount(); got != 1 {
 		t.Fatalf("provider command calls after unsupported continuation = %d, want initial call only", got)
 	}
@@ -960,4 +976,69 @@ func directCodexOutputWithoutSession(content string) []byte {
 	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "unassociated-message", "type": "agent_message", "text": content}})
 	completed := []byte(`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}`)
 	return append(item, append([]byte{'\n'}, completed...)...)
+}
+
+// Direct controls need direct sessions: Factory-origin Workers are deliberately
+// ineligible for replacement. This parallel route owns its source and profile.
+func TestRestartRecipeSyncFailurePreventsProviderAdmission(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "restart-recipe-write-failure")
+	t.Cleanup(func() { scenario.close(t) })
+	executionPath := filepath.Join(scenario.workingDirectory, "execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "restart-recipe-write-failure-request", workerSessionID: "restart-recipe-write-failure", dispatchID: "restart-recipe-write-failure-attempt",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial input",
+	})
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath, "--async"})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err == nil {
+		t.Fatal("recipe sync failure admitted invocation")
+	}
+	assertDirectWorkerSessionCLIError(t, inputs, "WORKER_SESSION_START_OPENING_FAILED")
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("provider calls = %d, want zero", got)
+	}
+	if strings.Contains(inputs.Stdout()+inputs.Stderr(), "private-recipe-sync-detail") {
+		t.Fatal("private persistence failure leaked")
+	}
+}
+
+func TestRestartRecipeUnsafeOverrideKeepsInvocationCompatible(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "restart-recipe-unsafe")
+	t.Cleanup(func() { scenario.close(t) })
+	executionPath := filepath.Join(scenario.workingDirectory, "execution.json")
+	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+		requestID: "restart-recipe-unsafe-request", workerSessionID: "restart-recipe-unsafe", dispatchID: "restart-recipe-unsafe-attempt",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "ordinary invocation",
+	})
+	document["execution"].(map[string]any)["envVars"] = map[string]string{"CUSTOM_VALUE": "accepted-private-override"}
+	writeInvokeContinueJSON(t, executionPath, document)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("ordinary invocation with unsafe recipe: %v\n%s\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
+	// Explicit environment overrides already redact the submitted prompt in
+	// captured output. Preserve that privacy behavior while allowing execution.
+	if !result.Accepted || result.State != "COMPLETED" || result.Output != "<redacted> COMPLETE" || scenario.providerRunner.CallCount() != 1 {
+		t.Fatalf("unsafe recipe changed ordinary invocation: %#v, calls=%d", result, scenario.providerRunner.CallCount())
+	}
+	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-recipe-unsafe",
+		"--request-id", "unsafe-continue", "--successor-worker-session-id", "unsafe-successor", "--user-message", "follow-up", "--async"})
+	continued.Input.Env = scenario.environment()
+	continued.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(continued.Input); err == nil {
+		t.Fatal("continuation reconstructed an unsafe source recipe")
+	}
+	assertDirectWorkerSessionCLIError(t, continued, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED")
+	if scenario.providerRunner.CallCount() != 1 || strings.Contains(continued.Stdout()+continued.Stderr(), "accepted-private-override") {
+		t.Fatal("unsafe continuation admitted a provider or leaked the override")
+	}
 }

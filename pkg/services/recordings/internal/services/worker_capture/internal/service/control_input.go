@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-const controlInputLimit = 1 << 20
+const controlInputLimit = recordings.WorkerControlInputMaxBytes
 
 type controlInputArtifact struct {
 	Key        recordings.WorkerControlOperationKey `json:"key"`
@@ -30,16 +30,28 @@ func (writer *FileWriter) PersistWorkerControlInput(ctx context.Context, key rec
 	entry := writer.entry(key.RecordingID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	return writer.persistWorkerControlInputLocked(ctx, entry, key, input)
+}
+
+func (writer *FileWriter) persistWorkerControlInputLocked(ctx context.Context, entry *recordingEntry, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
 	artifact, err := writer.controlInputIdentity(ctx, entry, key)
 	if err != nil {
 		return "", err
 	}
 	ref := controlInputRef(artifact)
 	path := writer.controlInputPath(ref)
-	if err := writer.checkControlInputPath(path); err != nil {
-		return "", err
+	pathErr := writer.checkControlInputPath(path)
+	if pathErr != nil && !errors.Is(pathErr, os.ErrNotExist) {
+		return "", pathErr
 	}
-	data, err := writer.storage.ReadFile(path)
+	// This writer owns immutable creation under entry.mu. The directory check
+	// already establishes absence; reading a new blob would invoke replacement
+	// retries on Windows while every sibling control waits on the recording.
+	var data []byte
+	err = pathErr
+	if pathErr == nil {
+		data, err = writer.storage.ReadFile(path)
+	}
 	if err == nil {
 		previous, err := decodeControlInput(data, artifact)
 		if err != nil {
@@ -95,6 +107,19 @@ func (writer *FileWriter) ReadWorkerControlInput(ctx context.Context, key record
 		return nil, err
 	}
 	return decodeControlInput(data, artifact)
+}
+
+// ReadWorkerContinuationInput resolves the retained generation inside the
+// selected store. Callers supply identity data, never a path or cached hash.
+func (writer *FileWriter) ReadWorkerContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	entry := writer.entry(key.RecordingID)
+	entry.mu.Lock()
+	identity, err := writer.controlInputIdentity(ctx, entry, key)
+	entry.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return writer.ReadWorkerControlInput(ctx, key, controlInputRef(identity))
 }
 
 func (writer *FileWriter) controlInputIdentity(ctx context.Context, entry *recordingEntry, key recordings.WorkerControlOperationKey) (controlInputArtifact, error) {
@@ -157,11 +182,17 @@ func decodeControlInput(data []byte, identity controlInputArtifact) (json.RawMes
 // payload directory and blob through the injected filesystem scanner as well.
 // The configured profile's ancestors remain the composition boundary's trust.
 func (writer *FileWriter) checkControlInputPath(path string) error {
+	exists := false
 	for _, candidate := range []string{filepath.Clean(writer.root), filepath.Dir(path), path} {
 		err := writer.directory.ScanDirectory(filepath.Dir(candidate), 64, func(files []os.DirEntry) error {
 			for _, file := range files {
-				if file.Name() == filepath.Base(candidate) && file.Type()&os.ModeSymlink != 0 {
-					return recordings.ErrInvalidWorkerControlOperation
+				if file.Name() == filepath.Base(candidate) {
+					if file.Type()&os.ModeSymlink != 0 {
+						return recordings.ErrInvalidWorkerControlOperation
+					}
+					if candidate == path {
+						exists = true
+					}
 				}
 			}
 			return nil
@@ -169,6 +200,9 @@ func (writer *FileWriter) checkControlInputPath(path string) error {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+	}
+	if !exists {
+		return os.ErrNotExist
 	}
 	return nil
 }

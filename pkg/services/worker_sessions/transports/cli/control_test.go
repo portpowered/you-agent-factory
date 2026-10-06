@@ -47,6 +47,35 @@ func TestInterruptUnavailableRecoveryPreservesPhaseAndCause(t *testing.T) {
 	}
 }
 
+func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		cause error
+		code  string
+	}{
+		{workersessions.ErrInterruptFactoryUnsupported, "UNSUPPORTED"},
+		{workersessions.ErrInterruptContinuationUnsupported, "PROVIDER_UNSUPPORTED"},
+		{workersessions.ErrInterruptInputTooLarge, "BAD_REQUEST"},
+		{workersessions.ErrInterruptProviderSessionMissing, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptProviderSessionInvalid, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceNotActive, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceConflict, "WORKER_SESSION_INTERRUPT_CONFLICT"},
+		{workersessions.ErrInterruptSourceNotFound, "NOT_FOUND"},
+		{workersessions.ErrInterruptRequestIDConflict, "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT"},
+		{workersessions.ErrInvalidInterruptMessage, "BAD_REQUEST"},
+		{workersessions.ErrInterruptValidation, "BAD_REQUEST"},
+	} {
+		mapped := mapInterruptServiceError(&workersessions.InterruptError{
+			Phase: workersessions.InterruptPhaseValidation,
+			Cause: errors.Join(workersessions.ErrInterruptValidation, cell.cause),
+		})
+		var typed *CLIError
+		if !errors.As(mapped, &typed) || typed.Code != cell.code || typed.Phase != "VALIDATION" || !errors.Is(mapped, cell.cause) {
+			t.Fatalf("validation cause %v: mapping=%#v, want %s", cell.cause, mapped, cell.code)
+		}
+	}
+}
+
 func TestControlLocalMapsAllActionsAndJSONResult(t *testing.T) {
 	for _, action := range []workersessions.ControlAction{
 		workersessions.ControlActionPause, workersessions.ControlActionResume,

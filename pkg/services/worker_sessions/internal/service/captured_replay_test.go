@@ -2,17 +2,144 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type replayCaptureReader struct {
 	recordings.WorkerSessionRecordingService
 	snapshot recordings.WorkerRecordingSnapshot
+}
+
+type continuationPageReader struct {
+	capturedActivityFake
+	next recordings.WorkerCapturedActivityPage
+}
+
+func (f *continuationPageReader) ReadWorkerCapturedActivity(_ context.Context, req recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	if req.NextToken == "next" {
+		return f.next, f.err
+	}
+	return f.page, nil
+}
+
+func TestContinuationCapturedStreamPagesAndFailsClosed(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"complete", "generation", "gap", "missing-terminal", "false-terminal", "read-failure", "canceled", "closed"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			reader := continuationStreamPages(t)
+			r := newContinuationSource(t, continuationReservationRequest())
+			r.logs = &LogReader{reader: reader}
+			stream, err := r.StreamObservationsByWorkerSessionID(t.Context(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived-successor", Limit: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			if first := stream.Next(t.Context()); first.Kind != workersessions.ObservationDeliveryRecord || first.Event.Position != 1 {
+				t.Fatalf("opening delivery = %+v", first)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			want := configureContinuationStreamCell(cell, reader, stream, cancel)
+			got := stream.Next(ctx)
+			if got.Kind != want {
+				t.Fatalf("next delivery = %+v, want %s", got, want)
+			}
+			if cell == "complete" && (got.Event.Position != 2 || got.Summary == nil || !got.Summary.Complete || !json.Valid(got.Event.Payload)) {
+				t.Fatalf("terminal replay lost captured evidence: %+v", got)
+			}
+			if _, exists := r.sessions["archived-successor"]; exists || len(r.supervisions) != 0 {
+				t.Fatal("captured stream restored live authority")
+			}
+		})
+	}
+}
+
+func configureContinuationStreamCell(cell string, reader *continuationPageReader, stream workersessions.ObservationSubscription, cancel context.CancelFunc) workersessions.ObservationDeliveryKind {
+	switch cell {
+	case "complete":
+		return workersessions.ObservationDeliveryTerminalReplay
+	case "generation":
+		reader.next.Catalog.RecordingGenerationID = "changed"
+	case "gap":
+		reader.next.Records[0].Record.ID.Position = 3
+	case "missing-terminal":
+		reader.next.Terminal = nil
+	case "false-terminal":
+		reader.next.Records[0].Record.SourceEventID = "progress"
+	case "read-failure":
+		reader.err = context.DeadlineExceeded
+	case "canceled":
+		cancel()
+		return workersessions.ObservationDeliveryCanceled
+	case "closed":
+		stream.Close()
+		return workersessions.ObservationDeliveryClosed
+	}
+	return workersessions.ObservationDeliverySourceFailure
+}
+
+func continuationStreamPages(t *testing.T) *continuationPageReader {
+	t.Helper()
+	_, plan, target := retainedContinuationFixture(t)
+	opening := openingSessionPayload("archived-successor", "successor-attempt", newContinuationSource(t, plan.request).clock.Now(),
+		plan.execution.Execution, &workers.SessionLineage{PredecessorWorkerSessionID: target.WorkerSessionID,
+			PreviousAttemptID: target.ExpectedAttemptID, PreviousDispatchID: target.ExpectedAttemptID})
+	payload, _ := json.Marshal(opening)
+	encoded, _ := json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
+	first := replayObservationRecord(workersessions.Topic("archived-successor"), 1, "opening")
+	first.Payload = encoded
+	terminal := replayObservationRecord(first.ID.Topic, 2, "terminal")
+	terminal.SourceType, terminal.SourceSequence, terminal.SourceEventID = lifecycleSourceType, terminalSourceSequence, terminalSourceEventID
+	terminal.Payload = []byte(`{"kind":"SESSION","phase":"COMPLETED","payload":{"status":"COMPLETED"}}`)
+	page := recordings.WorkerCapturedActivityPage{
+		Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: "archived-successor", RecordingGenerationID: "generation", CommittedPosition: 2},
+		Opening: first, Health: recordings.WorkerRecordingStatusComplete,
+		Terminal: &recordings.WorkerRecordingTerminal{Status: "COMPLETED", Position: 2},
+		Records:  []recordings.WorkerCapturedRecord{{Record: first}}, NextToken: "next",
+	}
+	next := page
+	next.Records, next.NextToken = []recordings.WorkerCapturedRecord{{Record: terminal}}, ""
+	return &continuationPageReader{capturedActivityFake: capturedActivityFake{page: page}, next: next}
+}
+
+func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"foreign-scope", "foreign-worker", "incomplete", "non-terminal", "missing-opening", "cursor"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			reader := continuationStreamPages(t)
+			r := newContinuationSource(t, continuationReservationRequest())
+			r.logs = &LogReader{reader: reader}
+			req := workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived-successor"}
+			switch cell {
+			case "foreign-scope":
+				req.FactorySessionID = "foreign"
+			case "foreign-worker":
+				reader.page.Catalog.WorkerSessionID = "foreign"
+			case "incomplete":
+				reader.page.Health = recordings.WorkerRecordingStatusIncomplete
+			case "non-terminal":
+				reader.page.Terminal.Status = "RUNNING"
+			case "missing-opening":
+				reader.page.Opening.Payload = nil
+			case "cursor":
+				req.Cursor = &workersessions.ObservationCursor{Position: 1}
+			}
+			_, err := r.StreamObservationsByWorkerSessionID(t.Context(), req)
+			if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+				t.Fatalf("unsafe captured history opened: %v", err)
+			}
+		})
+	}
 }
 
 func (f replayCaptureReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {

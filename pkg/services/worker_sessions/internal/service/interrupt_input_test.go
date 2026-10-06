@@ -54,6 +54,58 @@ func TestInterruptCapturedRecipePreservesExecutionAndReference(t *testing.T) {
 	}
 }
 
+func TestInterruptRecipeSerializedByteLimitPreservesFullReplacement(t *testing.T) {
+	t.Parallel()
+	_, plan, _ := newDurableInterruptFixture(t)
+	plan.request.ReplacementMessage = "x"
+	base, err := encodeInterruptInput(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.request.ReplacementMessage = strings.Repeat("x", recordings.WorkerControlInputMaxBytes-len(base)+1)
+	payload, err := encodeInterruptInput(plan)
+	if err != nil || len(payload) != recordings.WorkerControlInputMaxBytes {
+		t.Fatalf("exact boundary bytes=%d err=%v", len(payload), err)
+	}
+	var input durableInterruptInput
+	if err := json.Unmarshal(payload, &input); err != nil || input.ReplacementMessage != plan.request.ReplacementMessage {
+		t.Fatalf("accepted boundary lost replacement: %v", err)
+	}
+	plan.request.ReplacementMessage += "x"
+	if payload, err := encodeInterruptInput(plan); !errors.Is(err, workersessions.ErrInterruptInputTooLarge) || payload != nil {
+		t.Fatalf("one-byte overflow returned bytes=%d err=%v", len(payload), err)
+	}
+}
+
+func TestInterruptRecipeOverflowRefusesBeforeIntentAndCancellation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"replacement", "json-escaping", "settings"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			switch cell {
+			case "replacement":
+				plan.request.ReplacementMessage = strings.Repeat("x", recordings.WorkerControlInputMaxBytes)
+			case "json-escaping":
+				// JSON escapes '<' to six ASCII bytes. Raw text alone fits.
+				plan.request.ReplacementMessage = strings.Repeat("<", recordings.WorkerControlInputMaxBytes/6)
+			case "settings":
+				plan.execution.Execution.Args = []string{strings.Repeat("x", recordings.WorkerControlInputMaxBytes)}
+			}
+			cancellations := 0
+			plan.supervision.installCancel(func() { cancellations++ })
+			result, err := r.runInterrupt(plan)
+			if !errors.Is(err, workersessions.ErrInterruptInputTooLarge) || result.Phase != workersessions.InterruptPhaseValidation || result.Source.State != workersessions.StateRunning || cancellations != 0 {
+				t.Fatalf("overflow phase=%s source=%s cancellations=%d err=%v", result.Phase, result.Source.State, cancellations, err)
+			}
+			if len(store.input) != 0 || len(store.records) != 0 {
+				t.Fatal("overflow reached input persistence or intent")
+			}
+			assertNoSuccessor(t, r, "successor")
+		})
+	}
+}
+
 // The contract subject is the actual persisted recipe, not a file inventory.
 func assertInterruptInputSchema(t *testing.T, payload []byte) {
 	t.Helper()

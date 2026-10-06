@@ -63,6 +63,10 @@ func (r *registry) Interrupt(
 	if result, found, err := r.replayDurableInterrupt(callerCtx, req); found {
 		return result, err
 	}
+	if err := r.interruptOrigin(req.SourceWorkerSessionID); err != nil {
+		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
+		return result, newInterruptError(result.Phase, result, err)
+	}
 	reservation, historyErr := r.beginControlHistory(
 		callerCtx,
 		req.SourceWorkerSessionID,
@@ -115,6 +119,18 @@ func (r *registry) Interrupt(
 		)
 		return workersessions.InterruptResult{}, callerCtx.Err()
 	}
+}
+
+// Factory attempts retain Runtime-owned admission and cancellation. Refuse
+// replacement before publishing a control bracket or claiming live execution.
+// Factory Session correlation on a direct invocation does not change ownership.
+func (r *registry) interruptOrigin(id string) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, factory := r.runtimeAttempts[r.workerAddressLocked(id)]; factory {
+		return workersessions.ErrInterruptFactoryUnsupported
+	}
+	return nil
 }
 
 const (
@@ -487,6 +503,15 @@ func (r *registry) prepareInterruptPlanLocked(
 	association, err := interruptSourceAssociation(source)
 	if err != nil {
 		return interruptPlan{}, err
+	}
+	if r.continuationSupport != nil {
+		supported, err := r.continuationSupport.SupportsContinuation(controlContext(r.lifecycleCtx), association.Reference)
+		if err != nil {
+			return interruptPlan{}, fmt.Errorf("%w: %w", workersessions.ErrInterruptProviderSessionInvalid, err)
+		}
+		if !supported {
+			return interruptPlan{}, workersessions.ErrInterruptContinuationUnsupported
+		}
 	}
 	return r.reserveInterruptSupervisionLocked(req, source, association)
 }

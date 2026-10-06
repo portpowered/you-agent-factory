@@ -5,9 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"path/filepath"
 	runtime "runtime"
+
+	"github.com/google/uuid"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -17,6 +18,7 @@ import (
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -119,11 +121,13 @@ func provideWorkerSessionsService(
 	recorder recordings.WorkerSessionRecordingService,
 	writer recordings.WorkerRecordingWriter,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 	snapshots *workersessionswire.HistorySnapshotBudget,
+	providerService providers.Service,
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, snapshots)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots, providerService)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

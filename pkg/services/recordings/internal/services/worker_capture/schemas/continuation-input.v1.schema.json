@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-continuation-input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "target",
+    "requestId",
+    "successorWorkerSessionId",
+    "followUpInput",
+    "providerReference",
+    "execution"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "target": {
+      "$ref": "./control-envelope.v2.schema.json#/properties/controlOperation/properties/target"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "successorWorkerSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "followUpInput": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "WorkstationName",
+        "Execution"
+      ],
+      "properties": {
+        "WorkstationName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Execution": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "dispatch"
+          ],
+          "properties": {
+            "dispatch": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "dispatch_id",
+                "workstation_name",
+                "input_tokens"
+              ],
+              "properties": {
+                "dispatch_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "workstation_name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "input_tokens": {
+                  "type": "array"
+                }
+              }
+            },
+            "model": {
+              "type": "string"
+            },
+            "reasoning_effort": {
+              "type": "string"
+            },
+            "working_directory": {
+              "type": "string"
+            },
+            "system_prompt": {
+              "type": "string"
+            },
+            "user_message": {
+              "type": "string"
+            },
+            "output_schema": {
+              "type": "string"
+            },
+            "env_vars": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

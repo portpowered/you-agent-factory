@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -225,8 +226,35 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
+	unsafeRecipeRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("unsafe-recipe-thread", "ordinary invocation COMPLETE"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "restart-recipe-unsafe", unsafeRecipeRunner, unsafeRecipeRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	for _, provider := range []string{"codex", "claude"} {
+		runner := newNativeContinuationRunner(provider)
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "native-stop-continue-"+provider, runner, runner, nil, nil, nil, nil); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	noReferenceRunner := newNativeContinuationRunner("no-reference")
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "native-no-reference", noReferenceRunner, noReferenceRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	for _, name := range []string{"continuation-input-ack-lost", "continuation-input-write-failure", "restart-recipe-write-failure", "unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
 		runner := testutil.NewProviderCommandRunner()
+		if name == "continuation-input-write-failure" {
+			runner = testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+				Stdout: directCodexSessionOutput("continuation-input-thread", "source complete"),
+			})
+		}
+		if name == "continuation-input-ack-lost" {
+			runner = testutil.NewProviderCommandRunner(
+				platformprocess.CommandResult{Stdout: directCodexSessionOutput("continuation-ack-thread", "source complete")},
+				platformprocess.CommandResult{Stdout: directCodexSessionOutput("continuation-ack-thread", "continued COMPLETE")},
+			)
+		}
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, nil); err != nil {
 			return invokeContinueScenarioSetup{}, err
 		}
@@ -276,7 +304,14 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"manager-interrupt-disconnect",
 		"manager-interrupt-failure",
 		"unsafe-recipe",
+		"serialized-overflow",
+		"invalid-utf8",
+		"interrupt-recipe-read-failure",
+		"interrupt-recipe-unsafe-read",
 		"interrupt-ack-source",
+		"interrupt-ack-input",
+		"interrupt-ack-input-unsynced",
+		"interrupt-ack-input-missing-ref",
 		"interrupt-ack-intent",
 		"interrupt-ack-intent-disputed",
 		"interrupt-ack-admission",
@@ -334,6 +369,24 @@ func startInvokeContinuePackageProcess(
 	readiness *t7ReadinessBoundary,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
+	if readiness == nil {
+		return startInvokeContinuePackageProcessWithCapabilities(t, rootDir, hostDir, homeDir, route, nil)
+	}
+	return startInvokeContinuePackageProcessWithEdges(t, hostDir, homeDir, route, serviceedges.Edges{
+		ProviderRegistrations: readiness.registrations,
+		ProviderCatalogProbe:  readiness.probe,
+	})
+}
+
+// Capability policy is immutable, so its refusal witness uses a distinct edge
+// shape shared by its source, sibling, and local/remote control requests.
+func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, hostDir, homeDir string, route *invokeContinueStaticCommandRoute, overrides []providerswire.CatalogCapabilityOverride) (invokeContinueStartedProcess, error) {
+	t.Helper()
+	return startInvokeContinuePackageProcessWithEdges(t, hostDir, homeDir, route, serviceedges.Edges{ProviderCatalogCapabilityOverrides: overrides})
+}
+
+func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir string, route *invokeContinueStaticCommandRoute, replacements serviceedges.Edges) (invokeContinueStartedProcess, error) {
+	t.Helper()
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
@@ -341,9 +394,7 @@ func startInvokeContinuePackageProcess(
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
 	ackStore := &interruptPhaseAckStore{}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderRegistrations: readiness.registrations,
-		ProviderCatalogProbe:  readiness.probe,
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
 		WorkerRecordingWriter: ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
 			ackStore.WorkerRecordingStore = store
@@ -361,7 +412,7 @@ func startInvokeContinuePackageProcess(
 			apiStopOnce.Do(func() { close(apiStopped) })
 			return err
 		},
-	})
+	}, replacements))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("BuildProcess: %w", err)
 	}

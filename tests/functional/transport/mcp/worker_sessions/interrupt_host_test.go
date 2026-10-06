@@ -22,6 +22,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -95,11 +96,10 @@ func runRealHostInterrupt(t *testing.T, process support.Process) {
 	assertInterruptCLIParity(t, host, admitted)
 	assertJSONEqual(t, admitted, callWorker(t, ctx, session, "control", args)["result"])
 	args["replacementMessage"] = "changed immutable tuple"
-	// Current HTTP mapping classifies validation-phase tuple conflicts as 400:
-	// ErrInterruptValidation precedes ErrInterruptRequestIDConflict. Preserve
-	// that public meaning in T9; do not change the host's control policy here.
-	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
-	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptPayload("changed immutable tuple"), http.StatusBadRequest)
+	// Changed accepted tuples retain their specific conflict meaning across
+	// transports rather than being classified as malformed requests.
+	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptPayload("changed immutable tuple"), http.StatusConflict)
 	assertTerminalTranscriptParity(t, ctx, session, host)
 	assertTerminalReplayParity(t, ctx, session, host, "source")
 	listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"].(map[string]any)
@@ -454,6 +454,22 @@ func assertTranscriptEqual(t *testing.T, actual, expected any) {
 // that do not own durable control behavior. Every operation fails explicitly;
 // it must never be used as evidence that an intent was committed or replayed.
 type unavailableWorkerControlStore struct{}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrInvalidRecordingRedactionRequest
+}
+
+func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
+}
 
 func (unavailableWorkerControlStore) BeginWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
 	return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence

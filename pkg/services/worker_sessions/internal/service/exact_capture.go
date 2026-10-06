@@ -2,11 +2,143 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// A public direct start does not require the customer to choose a recording
+// identity. Bind its opening and recipe to one deterministic store identity.
+func (r *registry) bindDirectRecording(req *workersessions.StartRequest) {
+	if r.logs == nil || r.recording == nil || req.Execution.Execution.RecordingID != "" {
+		return
+	}
+	digest := sha256.Sum256([]byte(req.ID))
+	req.Execution.Execution.RecordingID = fmt.Sprintf("direct-%x", digest)
+}
+
+// Unreconstructible requests remain invocable. Only an actual artifact-store
+// failure rejects admission; unsafe settings never become a changed recipe.
+func (r *registry) saveDirectRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
+	if _, metadata, ok := r.loadObservationState(req.ID); !ok || !metadata.direct {
+		return nil
+	}
+	pub := r.publicationFor(req.ID)
+	if pub == nil {
+		return nil
+	}
+	pub.mu.Lock()
+	target := pub.capture
+	pub.mu.Unlock()
+	if target.RecordingID == "" {
+		return nil
+	}
+	target.ExpectedAttemptID = req.Execution.Execution.Dispatch.DispatchID
+	if !directRestartRecipeSafe(req.Execution) {
+		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
+		return nil
+	}
+	err := r.restart.SaveWorkerRestartRecipe(ctx, target, req.Execution)
+	if errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
+		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
+		return nil
+	}
+	return err
+}
+
+func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool {
+	payload, err := json.Marshal(execution)
+	return err == nil && interruptExecutionReplaySafe(execution.Execution) &&
+		interruptRecipeSafe(payload, execution.Execution.ProcessEnvironment)
+}
+
+// Validate the immutable direct input before source cancellation, rather than
+// discovering an unusable recipe in Continue after the source has stopped.
+// Capture identity remains pinned by the existing interrupt fence.
+func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan, target recordings.WorkerControlTarget) (interruptPlan, error) {
+	_, metadata, exists := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	if r.logs == nil || !exists || !metadata.direct {
+		// Component fixtures and legacy non-direct interruption have no direct
+		// recipe. Preserve those paths; they do not authorize captured restart.
+		return plan, nil
+	}
+	target.ExpectedAttemptID = plan.dispatchID
+	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, plan.request.SourceWorkerSessionID)
+	selected := recordings.WorkerControlTarget{
+		RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: plan.dispatchID,
+	}
+	if err != nil || selected != target {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	captured, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
+	start := workersessions.StartRequest{RequestID: plan.request.RequestID, ID: plan.request.SourceWorkerSessionID, Execution: captured}
+	if err != nil || start.Validate() != nil || !directRestartRecipeSafe(captured) ||
+		captured.Execution.Dispatch.DispatchID != plan.dispatchID || captured.Execution.FactorySessionID != target.FactorySessionID {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	// The environment is owned by the current host and never restored from
+	// storage. Check the detached recipe against that environment for secrets.
+	captured.Execution.ProcessEnvironment = append([]string(nil), plan.execution.Execution.ProcessEnvironment...)
+	if !directRestartRecipeSafe(captured) {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	plan.execution = captured
+	return plan, nil
+}
+
+// Read outside the registry lock; reservation later rechecks the immutable
+// source attempt. A replay already reserved in this host needs no storage read.
+func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
+	r.mu.RLock()
+	source, exists := r.sessions[req.SourceWorkerSessionID]
+	metadata := r.observations[req.SourceWorkerSessionID]
+	_, replay := r.continueReplays[req.RequestID]
+	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
+	factorySessionID := ""
+	if supervision := r.supervisions[req.SourceWorkerSessionID]; supervision != nil {
+		supervision.mu.Lock()
+		factorySessionID = supervision.execution.Execution.FactorySessionID
+		supervision.mu.Unlock()
+	}
+	source = cloneSession(source)
+	r.mu.RUnlock()
+	if !read {
+		return nil, nil
+	}
+	if err := validateContinuationSourceAssociation(source); err != nil {
+		return nil, err
+	}
+	ctx := r.serverOwnedContext()
+	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
+	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	target := recordings.WorkerControlTarget{
+		RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
+	}
+	return r.readCapturedContinuationRecipe(ctx, target, source)
+}
+
+func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
+	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
+	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
+		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if captured.Reference != source.ProviderSessionAssociation.Reference || captured.Terminal.Status != string(source.State) {
+		return nil, workersessions.ErrContinuationProviderSessionInvalid
+	}
+	return &captured.Execution, nil
+}
 
 // The caller holds pub.mu across opening acknowledgement and this binding.
 // Only the admitted capture supplies generation/epoch; later catalog entries

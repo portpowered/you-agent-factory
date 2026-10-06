@@ -2767,7 +2767,7 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
-	)
+		unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2817,7 +2817,7 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
-	)
+		unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2877,7 +2877,7 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				unavailableProviderSessionsForCapture{},
 				terminalAwareRecordingService{recording: recording},
 				unavailableWorkerControlStore{},
-			)
+				unavailableWorkerControlStore{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2913,7 +2913,7 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		unavailableProviderSessionsForCapture{},
 		terminalAwareRecordingService{recording: recording},
 		unavailableWorkerControlStore{},
-	)
+		unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2981,7 +2981,7 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		unavailableProviderSessionsForCapture{},
 		observedRecorder,
 		unavailableWorkerControlStore{},
-	)
+		unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}

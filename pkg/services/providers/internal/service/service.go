@@ -451,6 +451,20 @@ func continuationReferenceFailure(
 	}
 }
 
+// SupportsContinuation checks static or already negotiated capability without
+// executing a provider, probing readiness, or claiming a live attempt.
+func (s *Service) SupportsContinuation(ctx context.Context, reference providers.SessionRef) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if err := reference.Validate(); err != nil {
+		return false, err
+	}
+	_, supported, err := s.resolveContinuationProvider(reference)
+	s.logger.Info("provider continuation capability", "provider", string(reference.Provider), "supported", supported, "failed", err != nil)
+	return supported, err
+}
+
 // resolveContinuationProvider returns the canonical provider identity for
 // reference.Provider and whether that resolved provider truthfully
 // advertises CapabilitySessionResume, without invoking any provider adapter

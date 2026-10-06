@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -118,6 +119,84 @@ func (runner *invokeContinueResettableProviderCommandRunner) Requests() []platfo
 var _ invokeContinueProviderCommandRunner = (*invokeContinueResettableProviderCommandRunner)(nil)
 
 var _ platformprocess.CommandRunner = (*invokeContinueResettableProviderCommandRunner)(nil)
+
+// The immutable command route supplies native provider frames without native
+// files. Source and sibling wait for their own cancellation; continuation
+// completes only after the source command has returned.
+type nativeContinuationRunner struct {
+	provider     string
+	mu           sync.Mutex
+	requests     []platformprocess.CommandRequest
+	sourceJoined bool
+	sourceReady  chan struct{}
+	siblingReady chan struct{}
+}
+
+func newNativeContinuationRunner(provider string) *nativeContinuationRunner {
+	return &nativeContinuationRunner{provider: provider, sourceReady: make(chan struct{}), siblingReady: make(chan struct{})}
+}
+
+func (runner *nativeContinuationRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.RunStreaming(ctx, request, nil)
+}
+
+func (runner *nativeContinuationRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	text := strings.Join(request.Args, " ") + string(request.Stdin)
+	continuation, sibling := strings.Contains(text, "native follow-up"), strings.Contains(text, "native sibling")
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, cloneS8CommandRequest(request))
+	joined := runner.sourceJoined
+	runner.mu.Unlock()
+	if continuation {
+		if !joined {
+			return platformprocess.CommandResult{}, errors.New("continuation admitted before source command joined")
+		}
+		emitWSRFT015CodexOutput(observe, runner.output("opaque-native-source", true))
+		return platformprocess.CommandResult{}, nil
+	}
+	id, ready := "opaque-native-source", runner.sourceReady
+	if sibling {
+		id, ready = "opaque-native-sibling", runner.siblingReady
+	}
+	emitWSRFT015CodexOutput(observe, runner.output(id, false))
+	close(ready)
+	<-ctx.Done()
+	if !sibling {
+		runner.mu.Lock()
+		runner.sourceJoined = true
+		runner.mu.Unlock()
+	}
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (runner *nativeContinuationRunner) output(id string, completed bool) []byte {
+	if runner.provider == "no-reference" && !completed {
+		return nil
+	}
+	if runner.provider == "claude" {
+		initial := fmt.Sprintf("{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":%q}\n", id)
+		if completed {
+			initial += fmt.Sprintf("{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"native continued COMPLETE\",\"session_id\":%q}\n", id)
+		}
+		return []byte(initial)
+	}
+	if completed {
+		return directCodexSessionOutput(id, "native continued COMPLETE")
+	}
+	return []byte(fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", id))
+}
+
+func (runner *nativeContinuationRunner) Requests() []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(runner.requests))
+	for i, request := range runner.requests {
+		requests[i] = cloneS8CommandRequest(request)
+	}
+	return requests
+}
+
+func (runner *nativeContinuationRunner) CallCount() int { return len(runner.Requests()) }
 
 // Run selects only a route fixed before process construction. It deliberately
 // has no mutable map, request-order fallback, or Factory Session lookup.

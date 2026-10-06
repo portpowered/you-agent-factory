@@ -10,6 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -129,15 +130,18 @@ func NewWithCapturedActivity(
 	providerSessions providersessions.Service, recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
+	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
+	continuationSupport providers.Service,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
 	}
-	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording, operations)
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, providerSessions, recording, operations, restart)
 	if err != nil {
 		return nil, err
 	}
+	service.(*registry).continuationSupport = continuationSupport
 	service.(*registry).historySnapshots.HistorySnapshotBudget = snapshots
 	if captured != nil {
 		reader, err := NewLogReader(captured, logger)

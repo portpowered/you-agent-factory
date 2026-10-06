@@ -4,18 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // Keep the production journal and its sync-confirmed reads. The controlled
 // external store boundary loses only the selected phase acknowledgement.
 type interruptPhaseAckStore struct {
 	recordings.WorkerRecordingStore
+	inputAcknowledgements sync.Map
 }
 
 func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
@@ -25,14 +30,107 @@ func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, re
 	if strings.HasPrefix(record.WorkerSessionID, "interrupt-admission-failure-") {
 		return errors.New("private-successor-opening-detail")
 	}
-	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+	err := store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+	if err == nil && record.WorkerSessionID == "continuation-opening-ack-lost-successor" {
+		return errors.New("private-continuation-opening-acknowledgement-detail")
+	}
+	return err
 }
 
 func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
+	if strings.HasPrefix(key.RequestID, "continue/continuation-input-write-failure") {
+		return "", errors.New("private-continuation-sync-detail")
+	}
 	if strings.Contains(key.RequestID, "interrupt-input-write-failure") {
 		return "", errors.New("private-input-write-detail")
 	}
-	return store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+	ref, err := store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input-unsynced") {
+		return ref, errors.New("private-input-sync-unconfirmed")
+	}
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input-missing-ref") {
+		return "", errors.New("private-input-reference-unavailable")
+	}
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input") {
+		if _, lost := store.inputAcknowledgements.LoadOrStore(key, true); !lost {
+			return ref, errors.New("private-interrupt-input-acknowledgement-detail")
+		}
+	}
+	if err == nil && strings.HasPrefix(key.RequestID, "continue/continuation-input-ack-lost") {
+		return "", errors.New("private-continuation-acknowledgement-detail")
+	}
+	return ref, err
+}
+
+// F7-C10: the actual Recordings store syncs the tuple, but the storage edge
+// loses the response. Public continuation still admits exactly one successor.
+func TestContinuationInputLostAcknowledgementAdmitsOneSuccessor(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "continuation-input-ack-lost")
+	t.Cleanup(func() { scenario.close(t) })
+	path := filepath.Join(scenario.workingDirectory, "execution.json")
+	writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{
+		requestID: "continuation-input-ack-lost-start", workerSessionID: "continuation-input-ack-lost-source", dispatchID: "continuation-input-ack-lost-attempt",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial input",
+	})
+	invoke := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
+	invoke.Input.Env, invoke.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("source invocation: %v %s %s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	for range 2 {
+		request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "continuation-input-ack-lost-source",
+			"--request-id", "continuation-input-ack-lost-request", "--successor-worker-session-id", "continuation-input-ack-lost-successor", "--user-message", "follow up"})
+		request.Input.Env, request.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+		if err := fixture.process.Execute(request.Input); err != nil {
+			t.Fatalf("committed input acknowledgement: %v %s %s", err, request.Stdout(), request.Stderr())
+		}
+		var result directWorkerSessionCLIResult
+		decodeDirectWorkerSessionResult(t, request.Stdout(), &result)
+		if !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "continuation-input-ack-lost-successor" ||
+			!strings.Contains(result.Output, "continued COMPLETE") || scenario.providerRunner.CallCount() != 2 {
+			t.Fatalf("lost acknowledgement repeated admission or lost output: %#v calls=%d", result, scenario.providerRunner.CallCount())
+		}
+		if strings.Contains(request.Stdout()+request.Stderr(), "private-continuation") {
+			t.Fatal("storage diagnostic leaked")
+		}
+	}
+}
+
+// The direct source completes normally; only its continuation-input sync is
+// refused at the external storage edge. Repeated CLI requests cannot admit a
+// provider or leak the storage diagnostic.
+func TestContinuationInputSyncFailurePreventsSuccessorAdmission(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "continuation-input-write-failure")
+	t.Cleanup(func() { scenario.close(t) })
+	executionPath := filepath.Join(scenario.workingDirectory, "execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "continuation-input-write-failure-start", workerSessionID: "continuation-input-write-failure-source", dispatchID: "continuation-input-write-failure-attempt",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial input",
+	})
+	invoke := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env, invoke.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("source invocation: %v\n%s\n%s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	for range 2 {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "continuation-input-write-failure-source",
+			"--request-id", "continuation-input-write-failure-request", "--successor-worker-session-id", "continuation-input-write-failure-successor", "--user-message", "follow up", "--async"})
+		inputs.Input.Env, inputs.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+		if err := fixture.process.Execute(inputs.Input); err == nil {
+			t.Fatal("unsynced continuation admitted successor")
+		}
+		assertDirectWorkerSessionCLIError(t, inputs, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED")
+		if strings.Contains(inputs.Stdout()+inputs.Stderr(), "private-continuation-sync-detail") {
+			t.Fatal("private persistence error leaked")
+		}
+	}
+	if calls := scenario.providerRunner.CallCount(); calls != 1 {
+		t.Fatalf("provider calls = %d, want source only", calls)
+	}
 }
 
 func (store *interruptPhaseAckStore) ReadWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {
@@ -84,7 +182,7 @@ func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.C
 
 func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"interrupt-ack-intent", "interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
+	for _, name := range []string{"interrupt-ack-input", "interrupt-ack-intent", "interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -114,4 +212,23 @@ func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 			scenario.close(t)
 		})
 	}
+}
+
+func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, request workers.WorkstationDispatchRequest) error {
+	if target.WorkerSessionID == "restart-recipe-write-failure" || target.WorkerSessionID == "restart-recipe-unsafe" ||
+		target.WorkerSessionID == "continuation-unadmitted-recipe-successor" {
+		return errors.New("private-recipe-sync-detail")
+	}
+	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request)
+}
+
+func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	if strings.HasPrefix(target.WorkerSessionID, "interrupt-recipe-read-failure-") {
+		return workers.WorkstationDispatchRequest{}, errors.New("private-recipe-read-detail")
+	}
+	execution, err := store.WorkerRecordingStore.ReadWorkerRestartRecipe(ctx, target)
+	if strings.HasPrefix(target.WorkerSessionID, "interrupt-recipe-unsafe-read-") {
+		execution.Execution.EnvVars = map[string]string{"API_KEY": "private-recipe-read-detail"}
+	}
+	return execution, err
 }

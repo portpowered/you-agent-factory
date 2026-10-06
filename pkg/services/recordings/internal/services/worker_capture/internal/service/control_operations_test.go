@@ -12,8 +12,244 @@ import (
 	"testing"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"captured", "active", "missing-reference", "wrong-attempt", "wrong-generation"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			writer := journalWriter(t, local)
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = "direct"
+			execution.Execution.Model = "captured-model"
+			execution.Execution.WorkingDirectory = "captured-workspace"
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+				t.Fatal(err)
+			}
+			if cell != "active" {
+				persistContinuationSourceTerminal(t, writer, target, cell)
+			}
+			reopened, err := newTestFileWriter(local, writer.root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cell == "wrong-generation" {
+				target.RecordingGenerationID = "foreign-generation"
+			}
+			source, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			if cell != "captured" {
+				if err == nil || source.Reference.ID != "" {
+					t.Fatalf("unproved source returned continuation data: %+v, %v", source, err)
+				}
+				return
+			}
+			assertCapturedContinuationSource(t, source, err)
+			source.Execution.Execution.Model = "mutated"
+			again, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			if err != nil || again.Execution.Execution.Model != "captured-model" {
+				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
+			}
+		})
+	}
+}
+
+func assertCapturedContinuationSource(t *testing.T, source recordings.WorkerContinuationSource, err error) {
+	t.Helper()
+	want := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "opaque-provider-session"}
+	if err != nil || source.Reference != want || source.Execution.Execution.Model != "captured-model" || source.Execution.Execution.WorkingDirectory != "captured-workspace" || source.Terminal.Status != "COMPLETED" || source.TurnID != "captured-turn" {
+		t.Fatalf("detached source lost committed facts: %+v, %v", source, err)
+	}
+}
+
+func persistContinuationSourceTerminal(t *testing.T, writer *FileWriter, target recordings.WorkerControlTarget, cell string) {
+	t.Helper()
+	opening := journalRecord(t, target.RecordingID, target.WorkerSessionID)
+	request := terminalAppend(opening.Record.ID.Topic, target.WorkerSessionID)
+	var draft workers.Draft
+	_ = json.Unmarshal(request.Payload, &draft)
+	payload := workers.SessionPayload{Status: "COMPLETED", Continuation: &workers.SessionContinuation{Provider: "codex", Kind: providers.SessionIDKind, ID: "opaque-provider-session"}}
+	if cell == "missing-reference" {
+		payload.Continuation = nil
+	}
+	draft.DispatchID, draft.TurnID = target.ExpectedAttemptID, "captured-turn"
+	if cell == "wrong-attempt" {
+		draft.DispatchID = "foreign-attempt"
+	}
+	draft.Payload, _ = json.Marshal(payload)
+	request.Payload, _ = json.Marshal(draft)
+	terminal := opening
+	terminal.Record = mustRecord(t, request, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	target := controlIntent(t, writer, "recording", "worker", "request").Target
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+	execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+	execution.Execution.Model = "captured-model"
+	execution.Execution.ReasoningEffort = "high"
+	execution.Execution.WorkingDirectory = "captured-workspace"
+	execution.Execution.ProcessEnvironment = []string{"API_KEY=private-environment-value"}
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(local, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := reopened.(*FileWriter)
+	key := recordings.WorkerControlOperationKey{RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID}
+	identity := controlInputArtifact{Key: key, Generation: target.RecordingGenerationID}
+	stored, err := fresh.ReadWorkerControlInput(t.Context(), key, controlInputRef(identity))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recipe workerRestartRecipe
+	if err := json.Unmarshal(stored, &recipe); err != nil {
+		t.Fatal(err)
+	}
+	assertRestartRecipeSchema(t, stored)
+	if recipe.Version != 1 || recipe.Target != target || recipe.Execution.Execution.Model != "captured-model" || recipe.Execution.Execution.WorkingDirectory != "captured-workspace" || recipe.Execution.Execution.ReasoningEffort != "high" {
+		t.Fatalf("recipe lost captured settings: %+v", recipe)
+	}
+	if bytes.Contains(stored, []byte("private-environment-value")) || recipe.Execution.Execution.ProcessEnvironment != nil {
+		t.Fatal("recipe retained inherited credentials")
+	}
+	assertRestartRecipeRead(t, fresh, target, recipe.Execution)
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	execution.Execution.Model = "changed-model"
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
+		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+func assertRestartRecipeRead(t *testing.T, fresh *FileWriter, target recordings.WorkerControlTarget, expected workers.WorkstationDispatchRequest) {
+	t.Helper()
+	projected, err := fresh.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil || !reflect.DeepEqual(projected, expected) {
+		t.Fatalf("read detached recipe = %+v, %v", projected, err)
+	}
+	projected.Execution.Model = "mutated-read"
+	again, err := fresh.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil || again.Execution.Model != "captured-model" {
+		t.Fatalf("read mutation affected persisted settings: %+v, %v", again, err)
+	}
+	for _, mismatch := range []string{"owner", "generation", "attempt", "scope", "worker"} {
+		wrong := target
+		switch mismatch {
+		case "owner":
+			wrong.OwnerEpoch = "other"
+		case "generation":
+			wrong.RecordingGenerationID = "other"
+		case "attempt":
+			wrong.ExpectedAttemptID = "other"
+		case "scope":
+			wrong.FactorySessionID = "other"
+		case "worker":
+			wrong.WorkerSessionID = "other"
+		}
+		if _, err := fresh.ReadWorkerRestartRecipe(t.Context(), wrong); err == nil {
+			t.Fatalf("read accepted mismatched %s", mismatch)
+		}
+	}
+}
+
+// Validate the persisted artifact against its published versioned contract.
+func assertRestartRecipeSchema(t *testing.T, payload []byte) {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	for _, name := range []string{"restart-recipe.v1.schema.json", "control-envelope.v2.schema.json", "control-operation.v1.schema.json"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "schemas", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		if err := compiler.AddResource(name, document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := compiler.Compile("restart-recipe.v1.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input any
+	if err := json.Unmarshal(payload, &input); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(input); err != nil {
+		t.Fatalf("persisted restart recipe violates its contract: %v", err)
+	}
+}
+
+func TestRestartRecipeRejectsUnsafeOrStaleInputs(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*recordings.WorkerControlTarget, *workers.WorkstationDispatchRequest){
+		"generation": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.RecordingGenerationID = "other"
+		},
+		"owner": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.OwnerEpoch = "other"
+		},
+		"scope": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.FactorySessionID = "other"
+		},
+		"attempt": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
+			target.ExpectedAttemptID = "other"
+		},
+		"recipe-scope": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.FactorySessionID = "foreign"
+		},
+		"environment": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.EnvVars = map[string]string{"API_KEY": "secret"}
+		},
+		"prompt": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.PromptRedaction = &workers.PromptRedaction{RedactUserMessage: true}
+		},
+		"workflow": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.WorkflowContext = &workers.Context{}
+		},
+		"secret-argument": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.ProcessEnvironment = []string{"API_KEY=private\nsecret\""}
+			execution.Execution.Args = []string{"prefix private\nsecret\""}
+		},
+		"secret-token-key": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.ProcessEnvironment = []string{"API_KEY=private\nsecret\""}
+			execution.Execution.Dispatch.InputTokens = []any{map[string]any{"private\nsecret\"": "safe"}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+			mutate(&target, &execution)
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err == nil {
+				t.Fatal("unsafe or stale recipe accepted")
+			}
+		})
+	}
+}
 
 func controlIntent(t *testing.T, writer *FileWriter, recordingID, workerID, requestID string) recordings.WorkerControlOperationRecord {
 	t.Helper()
@@ -283,6 +519,54 @@ func TestControlInputDurableImmutableScopedReference(t *testing.T) {
 	}
 }
 
+// The input writer's directory collaborator proves absence before creation.
+// An unavailable blob reader must still prevent reuse of an existing input.
+func TestControlInputMissingBlobDoesNotRequireReplacementRead(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	intent := controlIntent(t, writer, "recording", "worker", "request")
+	key := operationKey(intent)
+	identity := controlInputArtifact{Key: key, Generation: intent.Target.RecordingGenerationID}
+	ref := controlInputRef(identity)
+	reader := &controlInputReadRefusal{Local: platformreplay.NewLocal(runtime.GOOS), refuse: true}
+	writer.storage = reader
+	if _, err := writer.ReadWorkerControlInput(t.Context(), key, ref); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("absent input = %v, want not found", err)
+	}
+	input := json.RawMessage(`{"replacementMessage":"complete redirect"}`)
+	if created, err := writer.PersistWorkerControlInput(t.Context(), key, input); err != nil || created != ref {
+		t.Fatalf("new immutable input = %q, %v", created, err)
+	}
+	for _, read := range []bool{true, false} {
+		var err error
+		if read {
+			_, err = writer.ReadWorkerControlInput(t.Context(), key, ref)
+		} else {
+			_, err = writer.PersistWorkerControlInput(t.Context(), key, input)
+		}
+		if !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("existing input read=%t bypassed storage refusal: %v", read, err)
+		}
+	}
+	reader.refuse = false
+	got, err := writer.ReadWorkerControlInput(t.Context(), key, ref)
+	if err != nil || !bytes.Equal(got, input) {
+		t.Fatalf("acknowledged input = %s, %v", got, err)
+	}
+}
+
+type controlInputReadRefusal struct {
+	platformreplay.Local
+	refuse bool
+}
+
+func (reader *controlInputReadRefusal) ReadFile(path string) ([]byte, error) {
+	if reader.refuse && strings.HasSuffix(path, ".control.json") {
+		return nil, os.ErrPermission
+	}
+	return reader.Local.ReadFile(path)
+}
+
 func TestControlInputRefusesCorruptBlobAndSymlink(t *testing.T) {
 	t.Parallel()
 	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
@@ -316,5 +600,47 @@ func TestControlInputRefusesCorruptBlobAndSymlink(t *testing.T) {
 	}
 	if _, err := writer.ReadWorkerControlInput(t.Context(), key, ref); !errors.Is(err, recordings.ErrInvalidWorkerControlOperation) {
 		t.Fatalf("symlink accepted: %v", err)
+	}
+}
+
+func TestContinuationInputResolvesRetainedIdentityAcrossReopen(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	intent := controlIntent(t, writer, "recording", "worker", "request")
+	key := operationKey(intent)
+	key.RequestID = "continue/request"
+	input := json.RawMessage(`{"followUpInput":"exact input"}`)
+	if _, err := writer.PersistWorkerControlInput(t.Context(), key, input); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(platformreplay.NewLocal(runtime.GOOS), writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := reopened.(*FileWriter)
+	got, err := fresh.ReadWorkerContinuationInput(t.Context(), key)
+	if err != nil || !bytes.Equal(got, input) {
+		t.Fatalf("retained input = %s, %v", got, err)
+	}
+	got[0] = '!'
+	again, err := fresh.ReadWorkerContinuationInput(t.Context(), key)
+	if err != nil || !bytes.Equal(again, input) {
+		t.Fatal("read mutation changed stored input")
+	}
+	for _, cell := range []string{"scope", "worker", "request", "recording"} {
+		foreign := key
+		switch cell {
+		case "scope":
+			foreign.FactorySessionID = "foreign"
+		case "worker":
+			foreign.WorkerSessionID = "foreign"
+		case "request":
+			foreign.RequestID = "restart-recipe/request"
+		case "recording":
+			foreign.RecordingID = "foreign"
+		}
+		if leaked, err := fresh.ReadWorkerContinuationInput(t.Context(), foreign); err == nil || len(leaked) != 0 {
+			t.Fatalf("%s leaked retained input: %s, %v", cell, leaked, err)
+		}
 	}
 }

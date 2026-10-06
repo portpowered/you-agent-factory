@@ -314,15 +314,19 @@ func interruptResultForError(
 
 func interruptErrorResponse(err error) (int, string, string) {
 	switch {
+	case errors.Is(err, workersessions.ErrInterruptFactoryUnsupported):
+		return http.StatusConflict, "UNSUPPORTED", "Factory Worker Session replacement is unsupported"
+	case errors.Is(err, workersessions.ErrInterruptContinuationUnsupported):
+		return http.StatusConflict, "PROVIDER_UNSUPPORTED", "Provider does not support Worker Session continuation"
 	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
 		return http.StatusInternalServerError, "INTERNAL_ERROR", "Worker Session interrupt persistence unavailable"
 	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
 		errors.Is(err, workersessions.ErrInterruptServerStopping):
 		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt"
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
+		errors.Is(err, workersessions.ErrInterruptInputTooLarge),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
-		errors.Is(err, workersessions.ErrInvalidInterruptMessage),
-		errors.Is(err, workersessions.ErrInterruptValidation):
+		errors.Is(err, workersessions.ErrInvalidInterruptMessage):
 		return http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request"
 	case errors.Is(err, workersessions.ErrInterruptSourceNotFound):
 		return http.StatusNotFound, "NOT_FOUND", "Worker Session interrupt source not found"
@@ -333,6 +337,8 @@ func interruptErrorResponse(err error) (int, string, string) {
 		errors.Is(err, workersessions.ErrInterruptProviderSessionMissing),
 		errors.Is(err, workersessions.ErrInterruptProviderSessionInvalid):
 		return http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT), "Worker Session interrupt conflicts with existing state"
+	case errors.Is(err, workersessions.ErrInterruptValidation):
+		return http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request"
 	case errors.Is(err, workersessions.ErrInterruptSourceCancellation),
 		errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed):
 		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSOURCECANCELLATIONFAILED), "Workers could not cancel the Worker Session interrupt source"

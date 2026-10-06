@@ -809,9 +809,12 @@ var (
 	// ErrInvalidInterruptLineage reports missing or equal source and successor
 	// identities.
 	ErrInvalidInterruptLineage = errors.New("worker session: invalid interrupt lineage")
-	// ErrInvalidInterruptMessage reports an interrupt without replacement
+	// ErrInvalidInterruptMessage reports missing or invalid UTF-8 replacement
 	// content.
 	ErrInvalidInterruptMessage = errors.New("worker session: interrupt replacement message is required")
+	// ErrInterruptInputTooLarge reports a complete encoded input that exceeds
+	// the Recordings artifact budget before source cancellation.
+	ErrInterruptInputTooLarge = errors.New("worker session: interrupt input exceeds recording byte limit")
 	// ErrInterruptSourceNotFound reports an interrupt whose source is absent.
 	ErrInterruptSourceNotFound = errors.New("worker session: interrupt source not found")
 	// ErrInterruptSourceNotActive reports a source that is not currently
@@ -839,6 +842,10 @@ var (
 	// ErrInterruptSuccessorAdmissionFailed reports a successor reservation or
 	// Workers admission failure after source cancellation committed.
 	ErrInterruptSuccessorAdmissionFailed = errors.New("worker session: interrupt successor admission failed")
+	// ErrInterruptContinuationUnsupported refuses redirection before source cancellation.
+	ErrInterruptContinuationUnsupported = errors.New("worker session: provider continuation unsupported")
+	// ErrInterruptFactoryUnsupported preserves Factory Runtime's replacement authority.
+	ErrInterruptFactoryUnsupported = errors.New("worker session: Factory interruption unsupported")
 	// ErrInterruptServerStopping reports rejection while the owning process
 	// lifecycle is stopping.
 	ErrInterruptServerStopping = errors.New("worker session: interrupt server is stopping")

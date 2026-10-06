@@ -38,7 +38,7 @@ func TestInterruptAdmissionFailureReplaysStoppedSourceWithoutAnotherSuccessor(t 
 		t.Fatalf("admission failure changed on retry: first=%#v replay=%#v", first, replayed)
 	}
 	conflictStatus, _, conflict := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor+"-other", s8ReplacementMessage)
-	if conflictStatus != http.StatusBadRequest || string(conflict.Phase) != "VALIDATION" || string(conflict.Code) != "BAD_REQUEST" {
+	if conflictStatus != http.StatusConflict || string(conflict.Phase) != "VALIDATION" || string(conflict.Code) != "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT" {
 		t.Fatalf("changed successor was not refused: status=%d response=%#v", conflictStatus, conflict)
 	}
 	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)

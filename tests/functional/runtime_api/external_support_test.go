@@ -287,3 +287,7 @@ func runtimeAPICommandContent(command string, stdout []byte) string {
 }
 
 var _ providers.Service = (*runtimeAPICommandProvider)(nil)
+
+func (*runtimeAPIProviderRouter) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	return false, reference.Validate()
+}

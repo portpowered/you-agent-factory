@@ -456,3 +456,36 @@ func assertKillResult(t *testing.T, value map[string]any, body, code string, ret
 		}
 	}
 }
+
+func TestWorkerSessionInterruptPreservesUnsupportedProviderPreflight(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"PROVIDER_UNSUPPORTED", "UNSUPPORTED"} {
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+			assertWorkerSessionUnsupportedPreflight(t, code)
+		})
+	}
+}
+
+func assertWorkerSessionUnsupportedPreflight(t *testing.T, code string) {
+	t.Helper()
+	body := &trackedBody{Reader: strings.NewReader(`{"code":"` + code + `","message":"private-provider-detail","phase":"VALIDATION","sourceWorkerSessionId":"target"}`)}
+	calls := 0
+	adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.Method != http.MethodPost || request.URL.Path != "/worker-sessions/target/interrupt" {
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusConflict, Body: body}, nil
+	})
+	value := workerCall(t, adapter, ToolControl, `{"workerSessionId":"target","operation":"INTERRUPT","requestId":"request","successorWorkerSessionId":"successor","replacementMessage":"replacement"}`)
+	failure := value["error"].(map[string]any)
+	details := failure["details"].(map[string]any)
+	if failure["code"] != "worker_session.conflict" || failure["retryable"] != false || details["upstreamCode"] != code || details["phase"] != "VALIDATION" || calls != 1 || !body.closed {
+		t.Fatalf("unsupported preflight: %v calls=%d closed=%v", value, calls, body.closed)
+	}
+	raw, _ := json.Marshal(value)
+	if strings.Contains(string(raw), "private-provider-detail") {
+		t.Fatalf("unsafe upstream text: %s", raw)
+	}
+}

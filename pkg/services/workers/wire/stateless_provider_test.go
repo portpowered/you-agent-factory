@@ -13,6 +13,10 @@ import (
 // inference-shaped adapter used by later caller-family migrations.
 type statelessProviderContract struct{}
 
+func (statelessProviderContract) SupportsContinuation(context.Context, providers.SessionRef) (bool, error) {
+	return false, nil
+}
+
 func (statelessProviderContract) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,
