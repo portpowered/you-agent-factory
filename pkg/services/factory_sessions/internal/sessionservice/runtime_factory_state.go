@@ -239,11 +239,11 @@ func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource 
 	if fs == nil || fs.sessionState == nil {
 		return nil
 	}
-	spec, _ := runtimebinding.PreparedSpecFromSession(fs.sessionState.Default()).(*factory.SessionBuildSpec)
-	if spec == nil {
+	record := runtimebinding.BundleFromSession(fs.sessionState.Default())
+	if record == nil {
 		return nil
 	}
-	loaded, _ := spec.LoadedFactoryCfg.(interfaces.LoadedFactorySource)
+	loaded, _ := record.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
 	return loaded
 }
 

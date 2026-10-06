@@ -93,7 +93,7 @@ type sessionRuntimeOpening struct {
 	boardHistoryOpening         currentBoardHistoryOpening
 	runtimebuildService         runtimeports.RuntimeReplacementBuilder
 	startupRuntime              runtimeports.RuntimeInstance
-	startupSpec                 factoryruntime.SessionBuildSpec
+	completion                  factoryruntime.RuntimeInitialCompletion
 	runtimeLifecycle            runtimeports.RuntimeLifecycle
 	runtimeSidecars             runtimeports.RuntimeSidecarService
 	activation                  *factoryruntime.RuntimeActivation
@@ -369,14 +369,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if initial != nil {
 		opening.runtimebuildService = initial.ReplacementBuilder
 		opening.startupRuntime = initial.Record
-		opening.startupSpec = factoryruntime.SessionBuildSpec{
-			SessionID: initial.Completion.SessionID, MetricsSessionID: initial.Completion.MetricsSessionID,
-			CanonicalSessionIDGenerated:    initial.Completion.CanonicalSessionIDGenerated,
-			ResumeSourceCanonicalSessionID: initial.Completion.ResumeSourceCanonicalSessionID,
-		}
-		if initial.Record != nil {
-			opening.startupSpec.LoadedFactoryCfg = initial.Record.LoadedRuntimeConfig()
-		}
+		opening.completion = initial.Completion
 		opening.runtimeLifecycle = initial.Lifecycle
 		opening.runtimeSidecars = initial.Sidecars
 		opening.activation = initial.Activation
@@ -387,14 +380,14 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(opening.startupSpec.SessionID) != opening.sessionID {
+	if strings.TrimSpace(opening.completion.SessionID) != opening.sessionID {
 		return fmt.Errorf(
 			"construct runtime scope: built Factory Session ID %q does not match requested ID %q",
-			opening.startupSpec.SessionID,
+			opening.completion.SessionID,
 			opening.sessionID,
 		)
 	}
-	opening.startupSpec.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
+	opening.completion.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.warnMissingBoardHistory()
@@ -491,7 +484,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		opening.runtimebuildService,
 		opening.startupRuntime,
 		opening.modelsBind.Scope,
-		opening.startupSpec,
+		opening.completion,
 		opening.runtimeLifecycle,
 		opening.runtimeSidecars,
 		opening.durableExecution.Service,

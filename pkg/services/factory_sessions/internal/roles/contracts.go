@@ -179,7 +179,7 @@ type RuntimeAssembly interface {
 		runtimeBuild runtimeports.RuntimeReplacementBuilder,
 		startupRuntime runtimeports.RuntimeInstance,
 		modelsScope models.RuntimeScopeRef,
-		startupSpec factoryruntime.SessionBuildSpec,
+		completion factoryruntime.RuntimeInitialCompletion,
 		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
 		durableExecution durableexecution.Service,
