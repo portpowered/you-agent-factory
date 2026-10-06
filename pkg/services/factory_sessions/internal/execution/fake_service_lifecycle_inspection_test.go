@@ -887,8 +887,8 @@ func TestDispatchDurabilityScopesKeepPeerConfirmationIsolated(t *testing.T) {
 		cursor:    recordings.CanonicalEventCursor{StreamGenerationID: "generation-first", Sequence: 7},
 	}
 	peer := &dispatchDurabilityReader{}
-	service.BindDispatchDurability("dur-sess-flush-first", first, "generation-first")
-	service.BindDispatchDurability("dur-sess-flush-peer", peer, "generation-peer")
+	releaseFirst := service.BindDispatchDurability("dur-sess-flush-first", first, "generation-first")
+	releasePeer := service.BindDispatchDurability("dur-sess-flush-peer", peer, "generation-peer")
 	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
 	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
 
@@ -897,14 +897,27 @@ func TestDispatchDurabilityScopesKeepPeerConfirmationIsolated(t *testing.T) {
 		available: true,
 		cursor:    recordings.CanonicalEventCursor{StreamGenerationID: "generation-peer-replaced", Sequence: 7},
 	}
-	service.BindDispatchDurability("dur-sess-flush-peer", replacement, "generation-peer-replaced")
+	releaseReplacement := service.BindDispatchDurability("dur-sess-flush-peer", replacement, "generation-peer-replaced")
+	releasePeer()
+	releasePeer()
 	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
 	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateConfirmed, "generation-peer-replaced")
+
+	// Reused generation IDs cannot authorize an older registration's cleanup.
+	releaseCurrent := service.BindDispatchDurability("dur-sess-flush-peer", replacement, "generation-peer-replaced")
+	releaseReplacement()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateConfirmed, "generation-peer-replaced")
+	releaseCurrent()
+	releaseCurrent()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
+	releaseFirst()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateUnconfirmed, "")
 
 	// Without a recording handle, a session remains explicitly unconfirmed.
 	service.BindDispatchDurability("dur-sess-flush-peer", nil, "generation-peer-replaced")
 	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
-	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateUnconfirmed, "")
 }
 
 func assertSessionDispatchConfirmation(t *testing.T, service *JavaScriptRuntimeService, sessionID, dispatchID string, confirmation ConfirmationState, generationID string) {

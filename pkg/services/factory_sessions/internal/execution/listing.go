@@ -876,23 +876,32 @@ type dispatchDurabilityBinding struct {
 }
 
 // BindDispatchDurability registers the recording handle for one owning session.
-// Peer openings cannot replace its completed-flush reader or generation.
+// Release removes only this registration, preserving replacements and peers.
 func (s *JavaScriptRuntimeService) BindDispatchDurability(
 	sessionID string,
 	reader recordings.CompletedFlushWatermarkReader,
 	streamGenerationID string,
-) {
+) func() {
 	if s == nil {
-		return
+		return func() {}
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	binding := &dispatchDurabilityBinding{
+		reader:       reader,
+		generationID: strings.TrimSpace(streamGenerationID),
 	}
 	s.dispatchDurabilityMu.Lock()
 	defer s.dispatchDurabilityMu.Unlock()
 	if s.dispatchDurabilityScopes == nil {
-		s.dispatchDurabilityScopes = make(map[string]dispatchDurabilityBinding)
+		s.dispatchDurabilityScopes = make(map[string]*dispatchDurabilityBinding)
 	}
-	s.dispatchDurabilityScopes[strings.TrimSpace(sessionID)] = dispatchDurabilityBinding{
-		reader:       reader,
-		generationID: strings.TrimSpace(streamGenerationID),
+	s.dispatchDurabilityScopes[sessionID] = binding
+	return func() {
+		s.dispatchDurabilityMu.Lock()
+		defer s.dispatchDurabilityMu.Unlock()
+		if s.dispatchDurabilityScopes[sessionID] == binding {
+			delete(s.dispatchDurabilityScopes, sessionID)
+		}
 	}
 }
 
@@ -907,6 +916,9 @@ func (s *JavaScriptRuntimeService) dispatchesForRead(
 	s.dispatchDurabilityMu.RLock()
 	binding := s.dispatchDurabilityScopes[strings.TrimSpace(sessionID)]
 	s.dispatchDurabilityMu.RUnlock()
+	if binding == nil {
+		return dispatchesForRead(dispatches, events)
+	}
 	return dispatchesForReadWithDurability(dispatches, events, binding.reader, binding.generationID)
 }
 

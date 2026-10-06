@@ -374,7 +374,6 @@ func bindDurableExecutionCapabilities(
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) (func(), error) {
 	setWorkerInvoker(execution, invoker)
-	bindDispatchDurability(sessionID, execution, recordingLedger, generationID)
 	release, err := bindWorkerScope(
 		sessionID,
 		execution,
@@ -390,7 +389,11 @@ func bindDurableExecutionCapabilities(
 	if err != nil {
 		return nil, err
 	}
-	return release, nil
+	releaseDurability := bindDispatchDurability(sessionID, execution, recordingLedger, generationID)
+	return func() {
+		release()
+		releaseDurability()
+	}, nil
 }
 
 func bindDispatchDurability(
@@ -398,15 +401,15 @@ func bindDispatchDurability(
 	execution durableexecution.Service,
 	ledger recordings.Ledger,
 	generationID string,
-) {
+) func() {
 	reader, _ := ledger.(recordings.CompletedFlushWatermarkReader)
 	binder, ok := execution.(interface {
-		BindDispatchDurability(string, recordings.CompletedFlushWatermarkReader, string)
+		BindDispatchDurability(string, recordings.CompletedFlushWatermarkReader, string) func()
 	})
 	if !ok {
-		return
+		return func() {}
 	}
-	binder.BindDispatchDurability(sessionID, reader, generationID)
+	return binder.BindDispatchDurability(sessionID, reader, generationID)
 }
 
 type durableSessionStateReader interface {

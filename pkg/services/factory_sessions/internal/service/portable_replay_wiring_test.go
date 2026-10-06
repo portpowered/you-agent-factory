@@ -828,3 +828,54 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 		})
 	}
 }
+
+func TestDurableCapabilityRegistrationOwnsCompletedFlushRelease(t *testing.T) {
+	t.Parallel()
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "release", true: "failed worker registration"}[fail], func(t *testing.T) {
+			owner := &durabilityRegistrationOwner{workerErr: nil}
+			if fail {
+				owner.workerErr = errors.New("worker registration failed")
+			}
+			release, err := bindDurableExecutionCapabilities("session-owned-flush", owner, nil, nil,
+				"runtime-owned-flush", "generation-owned-flush", nil, nil, nil, nil, nil, nil)
+			if fail {
+				if !errors.Is(err, owner.workerErr) || release != nil || len(owner.events) != 0 {
+					t.Fatalf("failed registration = %v, release present %v, events %v", err, release != nil, owner.events)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			release()
+			if !reflect.DeepEqual(owner.events, []string{"flush-register", "worker-release", "flush-release"}) {
+				t.Fatalf("registration lifecycle = %v", owner.events)
+			}
+		})
+	}
+}
+
+type durabilityRegistrationOwner struct {
+	portableReplayRuntimeOwner
+	workerErr error
+	events    []string
+}
+
+func (owner *durabilityRegistrationOwner) BindWorkerScope(
+	string, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service,
+	*workers.MockWorkersConfig, platformprocess.CommandRunner, workers.ProgressPublisher,
+	func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) (func(), error) {
+	if owner.workerErr != nil {
+		return nil, owner.workerErr
+	}
+	return func() { owner.events = append(owner.events, "worker-release") }, nil
+}
+
+func (owner *durabilityRegistrationOwner) BindDispatchDurability(
+	string, recordings.CompletedFlushWatermarkReader, string,
+) func() {
+	owner.events = append(owner.events, "flush-register")
+	return func() { owner.events = append(owner.events, "flush-release") }
+}

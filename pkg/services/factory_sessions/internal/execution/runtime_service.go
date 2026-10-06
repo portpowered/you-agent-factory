@@ -273,7 +273,7 @@ type JavaScriptRuntimeService struct {
 	controlReplay            map[string]controlReplayRecord
 	liveChangeMu             sync.Mutex
 	dispatchDurabilityMu     sync.RWMutex
-	dispatchDurabilityScopes map[string]dispatchDurabilityBinding
+	dispatchDurabilityScopes map[string]*dispatchDurabilityBinding
 	persistenceWarningLogger *zap.Logger
 
 	runLifecycleMu sync.Mutex
