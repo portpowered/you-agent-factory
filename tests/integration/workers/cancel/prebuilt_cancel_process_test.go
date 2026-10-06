@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -575,6 +577,7 @@ func proveNativeForceTreeAndArchive(t *testing.T, provider string) {
 	}
 	assertNativeTerminalForceNoop(t, ctx, binary, fixture, source)
 	assertNativeTreesLive(t, siblingTree)
+	assertNativeTreeResponsive(t, ctx, fixture, siblingTree, "after-force")
 	assertNativeLaunchCount(t, fixture, 2)
 	stopCancelDaemon(t, binary, fixture, daemon)
 	daemon = startCancelDaemon(t, ctx, binary, fixture)
@@ -586,6 +589,96 @@ func proveNativeForceTreeAndArchive(t *testing.T, provider string) {
 	assertNativeLaunchCount(t, fixture, 2)
 	stopCancelDaemon(t, binary, fixture, daemon)
 	t.Log("PASS: direct force joined native launcher/root/child/grandchild before APPLIED; sibling survived; archive and committed retry survived joined host restart")
+}
+
+func assertNativeTreeResponsive(t *testing.T, ctx context.Context, fixture cancelFixture, tree workerProcessTree, challenge string) {
+	t.Helper()
+	marker := filepath.Join(fixture.stateDir, safePathSegment(tree.WorkID), fmt.Sprintf("run-%d", tree.RootPID))
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watcher.Close()
+	if err := watcher.Add(marker); err != nil {
+		t.Fatal(err)
+	}
+	// A FIFO blocks until the real Linux grandchild reads it. Bound that native
+	// protocol operation by the journey context rather than polling/sleeping.
+	written := make(chan error, 1)
+	go func() { written <- os.WriteFile(filepath.Join(marker, "challenge"), []byte(challenge+"\n"), 0o600) }()
+	select {
+	case err := <-written:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		// Opening both FIFO ends releases a blocked writer before test teardown.
+		// It does not signal or replace the observed execution.
+		if unblock, err := os.OpenFile(filepath.Join(marker, "challenge"), os.O_RDWR, 0o600); err == nil {
+			<-written
+			_ = unblock.Close()
+		}
+		t.Fatalf("survivor did not read challenge: %v", ctx.Err())
+	}
+	for {
+		content, err := os.ReadFile(filepath.Join(marker, "response"))
+		if err == nil && strings.TrimSpace(string(content)) == challenge {
+			assertNativeTreesLive(t, tree)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("survivor grandchild did not answer fresh challenge %q: %v", challenge, ctx.Err())
+		case <-watcher.Events:
+		case err := <-watcher.Errors:
+			t.Fatalf("watch survivor response: %v", err)
+		}
+	}
+}
+
+// The prebuilt artifact runs as the real native command. Retaining the public
+// platform capability is necessary to exercise expiry directly; Worker controls
+// intentionally do not expose host handles or persist them across restart.
+func TestPrebuiltWorkerSessionForceStaleHandle(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("owned force capability requires Windows Job or Linux retained leader")
+	}
+	t.Parallel()
+	binary := resolveCancelArtifact(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	fixture := writeNativeForceFixture(t, "codex")
+	daemon := startCancelDaemon(t, ctx, binary, fixture)
+	session := waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
+	invokeNativeForceFixture(t, ctx, binary, fixture, session, "codex", "source")
+	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "source")
+	registerFailedTreeCleanup(t, tree)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil,
+		platformprocess.NewProcfsProcessStateReader(os.ReadFile), os.DirFS("/proc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, streamed := range []bool{false, true} {
+		var retained platformprocess.OwnedProcessControl
+		request := platformprocess.CommandRequest{Command: binary, Args: []string{"--help"}, Env: fixture.environment,
+			WorkDir: fixture.factoryDir, OwnedProcessObserver: func(control platformprocess.OwnedProcessControl) { retained = control }}
+		var result platformprocess.CommandResult
+		if streamed {
+			result, err = runner.RunStreaming(ctx, request, nil)
+		} else {
+			result, err = runner.Run(ctx, request)
+		}
+		if err != nil || result.ExitCode != 0 || retained == nil {
+			t.Fatalf("natural native command completion: streamed=%t result=%+v error=%v capability=%v", streamed, result, err, retained)
+		}
+		if applied, err := retained.ForceKill(ctx); applied || err != nil {
+			t.Fatalf("expired native handle claimed effects: streamed=%t applied=%t error=%v", streamed, applied, err)
+		}
+		assertNativeTreeResponsive(t, ctx, fixture, tree, fmt.Sprintf("expired-%t", streamed))
+	}
+	assertNativeLaunchCount(t, fixture, 1)
+	stopCancelDaemon(t, binary, fixture, daemon)
+	t.Logf("PASS: OS=%s both Run/RunStreaming expired native capabilities refused without affecting responsive unrelated tree", runtime.GOOS)
 }
 
 func assertNativeLaunchCount(t *testing.T, fixture cancelFixture, want int) {
