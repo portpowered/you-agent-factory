@@ -5,16 +5,17 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `d3b757b530`, passes the complete hosted job in
-**228s / 168.592s coverage** with one recovered exact-target cancellation
-failure. Its identical-head rerun passes without retries in **270s / 176.798s
-coverage**. The rerun restores an exact compiler archive but still executes
-**363 compiler commands and 21 links**; an exact cache key does not imply a
-complete warm build. Both cover 68 packages / 746 results. These are complete
-workflow successes, including backend lint. The two-minute checkpoint remains
-**unmet**; the previously merged warm three-minute checkpoint is historical.
+The latest published source, `d5d14fe082`, passes hosted functional CI in
+**239s complete / 173.206s coverage**, with 68 packages / 744 results and no
+retries. It executes 369 compiler commands and 20 links after a prefix compiler
+archive restore. Backend lint also passes. Its preceding source, d3, passes an
+initial 228s run with one recovered cancellation failure and an identical-head
+270s rerun without retries; the exact archive hit still executes 363 compilers.
+An exact cache key does not imply a complete warm build. The two-minute
+checkpoint remains **unmet**; the previously merged warm three-minute
+checkpoint is historical.
 
-The next candidate shares one host across lifecycle, dispatch and eligibility
+The published candidate shares one host across lifecycle, dispatch and eligibility
 journeys, retaining all 31 journey selectors with isolated Factory Sessions,
 command routes and owned home/model storage. Six native repetitions per version
 use **36.6% less CPU / 5.8% less wall**. Removing a test-framework subprocess
@@ -23,6 +24,14 @@ that package uses **41.7% less CPU / 14.1% less wall** across six repetitions.
 These targeted comparisons exclude build time and do not predict hosted totals.
 A full local four-CPU validation passes 68 packages / 744 results without retries
 in **165.72s supervisor / 159.276s coverage**, using 556.32s aggregate CPU.
+
+The next candidate removes a service-only inventory probe, reuses an owned
+home for sequential JavaScript policy invocations, and releases the final-history
+read's unused live subscription before runtime teardown. The policy home change
+uses 42.3% less native execution CPU across six repetitions; separately, fixing
+history subscription ownership cuts six repetitions from 20.713s to 2.631s.
+Focused component regressions and lint pass. The full four-CPU lane passes in
+171.33s supervisor / 165.362s coverage, 68 packages / 743 results, no retries.
 
 The current runtime CPU profile puts repeated system initialization on the
 critical optimization path: InitializeSystem accounts for 262.56s cumulative
@@ -3403,3 +3412,85 @@ This full-run variability (165.72s versus 185.36s) prevents a claim of consisten
 whole-job latency reduction from these targeted changes. Keep the paired
 package measurements separate from complete-lane observations. Evidence:
 .artifacts/latency-audit/shared-runtime-host-final.
+
+## Customer-only inventory and owned JavaScript policy setup
+
+Remove TestGatewayServiceInventoryExclusionAndFiltersPreservePeers and its
+three service-only helpers from the functional lane. It calls StartSync and
+ListSessions directly through the process service and tests status filters and
+history exclusion unavailable through the customer REST inventory. Retain
+TestGatewaySessionInventoriesPreserveIdentityAndHistory: CLI recording plus
+REST live/history/persisted/all scopes, exact identities, stable ordering,
+partial history failure and recovery. Existing component checks for listing
+filters/normalization, recorded history exclusion, assembly source selection
+and scoped merging pass in three service packages.
+
+Paired native inventory execution (baseline/candidate/candidate/baseline,
+three repetitions per command) passes. Aggregate CPU is **3.985s → 2.639s,
+33.8% lower**; wall is **2.584s → 2.733s, 5.8% higher**. Removal saves compute,
+not measured elapsed time in this small comparison. Evidence:
+.artifacts/latency-audit/gateway-customer-only-paired.
+
+The CLI JavaScript policy fixture now owns one home/model cache for its three
+sequential invocations, preserving fresh Factory directories, request IDs and
+Factory Session IDs. These calls do not run concurrently, so mutable first-run
+installation is never shared across concurrent invocations. Inject owned
+Factory Session storage/home and workflow storage. Remove unused host workflow,
+API server startup/stream counters, hosted process machinery and synthesized
+resource reports; neither retained policy scenario starts that server. Keep
+the no-provider-dispatch assertion and stable public failure diagnostics.
+
+Six native repetitions per version pass: **5.062s → 2.921s CPU (42.3% lower)**
+and **22.771s → 20.792s wall (8.7% lower)**. This comparison precedes the
+subscription ownership fix below and excludes compilation. Evidence:
+.artifacts/latency-audit/policy-owned-home-paired.
+
+## Release final-history subscription before runtime teardown
+
+A block profile of the policy CLI journey identifies about one second per
+invocation in FactoryEventHistory.CloseLiveSubscriptions. The final-history
+presentation read opens a live subscription using its caller context, reads
+History, then leaves that subscription active. Subsequent runtime termination
+waits for the one-second bounded drain deadline because the read has no live
+consumer. This is avoidable subscription lifetime, not customer execution time.
+
+readFactoryEventHistory now derives and cancels its own context on return for
+both default live history and durable session history. Clone/present all history
+before releasing it. Preserve the real subscriber drain deadline and queued
+terminal-event delivery. The focused bridge regression fails in both live and
+durable cases before the fix, then passes after it, checking history release,
+caller context preservation, exact presented event IDs and no duplicates. All
+Factory Sessions wire and Recordings event component tests pass, including
+queued terminal delivery and unread-subscriber bounding. Scoped built-in and
+repository linters report zero issues.
+
+A separate paired comparison keeps the simplified policy fixture identical
+and changes only the history-read fix: six repetitions per version pass with
+**20.713s → 2.631s wall (87.3% lower)** and **2.857s → 2.437s CPU (14.7% lower)**.
+No other local CPU-heavy validation overlaps the pairs. Do not add this gain
+to other percentages or extrapolate it to whole CI. Evidence:
+.artifacts/latency-audit/policy-event-history-release-paired.
+
+## Hosted shared-runtime source at d5d14fe082
+
+Hosted functional job 112164923707 passes at 07:51:16–07:55:15 UTC on October 6:
+**239s complete / 173.206s coverage**, 68 packages / 744 results, 742 pass and
+two skip, no retries. It restores the preceding d3 compiler archive, executes
+369 compiler commands and **20 links**. Backend lint also passes. Archive
+capture reaches 1,073,730,377 bytes and omits 172 eligible files; a prefix restore
+is not a warm build. These measurements precede the new inventory/policy/history
+changes. The complete two-minute checkpoint remains unmet. Evidence:
+.artifacts/latency-audit/pr2923-runtime-host-hosted.
+
+### Combined history-release candidate validation
+
+The full four-CPU Linux supervisor passes **68 packages / 743 results**, 741
+pass and two skip, no failures or retries, in **171.33s complete / 165.362s
+coverage**. All existing coverage floors and holds pass unchanged; quarantine
+and 160 reviewed scenario decisions remain enabled/current. Aggregate CPU is
+**581.48s** (490.38s user / 91.10s kernel). Seven compiler commands and 23
+supervisor-wide links consume 7.375s compiler CPU and 31.429s linker CPU;
+linker union elapsed activity is 31.365s. No other local CPU-heavy validation
+runs concurrently. This is changed-source local evidence; do not infer a
+hosted two-minute checkpoint or claim a matched whole-lane speedup. Evidence:
+.artifacts/latency-audit/policy-history-release-full.

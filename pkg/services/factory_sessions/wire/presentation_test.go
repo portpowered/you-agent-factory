@@ -97,6 +97,12 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 			if err := bridge.Finish(t.Context(), service, factorysessions.FactoryInvocationOutcome{}); err != nil {
 				t.Fatalf("Finish: %v", err)
 			}
+			if service.finalContext == nil || service.finalContext.Err() != context.Canceled {
+				t.Fatal("final history read retained its live subscription after Finish")
+			}
+			if t.Context().Err() != nil {
+				t.Fatal("history read canceled its caller context")
+			}
 			for _, want := range testCase.finalIDs[1:] {
 				assertPresentedID(t, presented, want)
 			}
@@ -122,26 +128,29 @@ type invocationEventServiceStub struct {
 	final        *factorydefinitions.FactoryEventStream
 	liveCalls    int
 	durableCalls int
+	finalContext context.Context
 }
 
 func (stub *invocationEventServiceStub) SubscribeFactoryEventsForSession(
-	context.Context,
-	string,
-	*factorydefinitions.FactoryEventReconnectCursor,
+	ctx context.Context,
+	_ string,
+	_ *factorydefinitions.FactoryEventReconnectCursor,
 ) (*factorydefinitions.FactoryEventStream, error) {
 	stub.liveCalls++
 	if stub.liveCalls == 1 {
 		return stub.live, nil
 	}
+	stub.finalContext = ctx
 	return stub.final, nil
 }
 
 func (stub *invocationEventServiceStub) ReadDurableFactorySessionEventStream(
-	context.Context,
-	string,
-	factorysessions.EventReconnectRequest,
+	ctx context.Context,
+	_ string,
+	_ factorysessions.EventReconnectRequest,
 ) (*factorydefinitions.FactoryEventStream, error) {
 	stub.durableCalls++
+	stub.finalContext = ctx
 	return stub.final, nil
 }
 
