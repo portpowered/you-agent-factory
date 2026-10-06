@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -140,7 +141,27 @@ func RequireSafeCLIDiagnostic(t testing.TB, stderr string, startup ...bool) fact
 	t.Helper()
 	var response factoryapi.ErrorResponse
 	if len(startup) > 0 && startup[0] {
-		response = testutil.RequireStartupCLIDiagnostic(t, stderr)
+		lines := strings.Split(strings.TrimSpace(stderr), "\n")
+		if err := json.Unmarshal([]byte(lines[0]), &response); err != nil {
+			t.Fatalf("decode startup envelope: %v; stderr=%q", err, stderr)
+		}
+		// The common assertion below validates the startup code and message.
+		if response.Family == "" {
+			t.Fatalf("incomplete startup envelope: %#v", response)
+		}
+		if len(lines) > 18 {
+			t.Fatalf("startup causes exceed 16 nodes plus truncation: %q", stderr)
+		}
+		for index, line := range lines[1:] {
+			prefix := fmt.Sprintf("cause[%d]=", index)
+			if !strings.HasPrefix(line, prefix) {
+				t.Fatalf("unexpected trailing startup diagnostic: %q", line)
+			}
+			cause := strings.TrimPrefix(line, prefix)
+			if cause == "" || len(cause) > 515 || unsafeStartupCause.MatchString(cause) {
+				t.Fatalf("unbounded or unsafe startup cause: %q", line)
+			}
+		}
 	} else if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
 		t.Fatalf("decode safe CLI diagnostic: %v; stderr=%q", err, stderr)
 	}
@@ -627,3 +648,5 @@ func (command *ProcessCommand) Err() error {
 	defer command.mu.Unlock()
 	return command.err
 }
+
+var unsafeStartupCause = regexp.MustCompile(`(?i)(?:^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\|\.\.?[\\/]|~/|/)[^\s]+|https?://[^\s]*[?@#]|\b(?:password|secret|token|prompt|payload|body|authorization)\s*[:=]\s*(?:[^<\s]|<(?:[^r]|r[^e]))`)
