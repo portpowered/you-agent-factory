@@ -16,7 +16,10 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	if err := json.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("decode layout validation payload: %w", err)
 	}
+	return validatePortableLayoutBoundary(root)
+}
 
+func validatePortableLayoutBoundary(root map[string]any) error {
 	layoutValue, ok := root["layout"]
 	if !ok || layoutValue == nil {
 		return nil

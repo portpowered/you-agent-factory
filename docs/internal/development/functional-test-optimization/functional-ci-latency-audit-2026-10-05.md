@@ -5,6 +5,69 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
+### Reuse the decoded public input across boundary checks
+
+The generated-model boundary decoded the same input independently for retired
+aliases, normalization, three unsupported-field checks, portable layout and
+unknown-field diagnostics. Reuse the normalized JSON object for the read-only
+checks before decoding the generated model. The standalone authored/layout
+boundaries retain their own parsing, and strict/tolerant field handling and
+generated-model validation remain. No global cache, new effect port or shared
+mutable configuration is introduced.
+
+Two complete customer-package executions per side in B/C/C/B order pass.
+Initial baseline totals 72.895403 CPU-seconds / 37.996198394s elapsed;
+candidate 68.465248 / 38.340250861: **6.1% less CPU / 0.9% more elapsed**.
+A separate confirmation passes with baseline **61.163351 CPU-seconds /
+35.029389710s elapsed** versus candidate **55.638802 / 32.720213763**,
+saving **9.0% CPU / 6.6% elapsed**. Builds are excluded and the initial pair's
+builtin lint overlap is retained as a measurement limitation; confirmation
+has no concurrent local lint/build work. These are package comparisons, not
+complete hosted checkpoint evidence.
+
+All mapping test packages and Factory Definitions Wire pass, as do both
+scoped lint suites and the catalog-generator command tests. The broader
+artifact-generation inventory test fails the same existing @you/subagent
+skipPermissions expectation on the restored baseline and candidate. Do not
+claim that test green or weaken its assertion to justify this change.
+Evidence: `factory-boundary-decode-paired/`,
+`factory-boundary-decode-confirmation/` in `.artifacts/latency-audit/`.
+
+The subsequent full lane on the rebased 45e5504c66 base passes at **133.50s
+supervisor / 122.331s coverage / 423.68 CPU-seconds** (349.25 user, 74.43
+system), 67 packages / 763 results, 761 pass/two skip. There is no flake ledger
+and no retry reported in the supervisor log. It rebuilds **649 compiler
+commands**, consuming 150.529880 CPU-seconds / 48.878179s active compile wall,
+plus **19 links**, 23.291724 CPU-seconds / 22.162300s active link wall. Preserve
+that rebuild cost; this full run is not a controlled speedup comparison.
+It precedes the final missing-field guard, whose focused public-input tests
+pass. Case-insensitive container checks retain the generated model's sorted
+last-field selection, and absent containers do not treat an unrelated empty
+object key as Workstations. All mapping/Wire and focused canonical publication
+tests pass. Evidence: `factory-boundary-live-full/`.
+
+### Hosted rebased canonical loading result, October 6
+
+Head 93d1fd8767 passes hosted Functional Coverage in run 37484727726.
+The complete job runs 15:08:53-15:14:42 UTC, **349s**; its coverage invocation
+takes **259.580s**, with 67 packages / 763 results, 761 pass and two skip.
+The concurrent supervisor takes 290.384s and quarantine verification 125.840s.
+A prefix compiler-archive restore from d2b1f09cc0 still requires **361 compiler
+commands / 16 links**. Retain this substantial rebuild work and distinguish
+coverage invocation, concurrent supervisor and complete job timing. This hosted
+sample does not isolate the loading cleanup's execution effect or prove the
+two-minute checkpoint. Backend Lint later passes, and the complete workflow is
+confirmed terminal with success after its Architecture Preview job finishes.
+Evidence: `canonical-load-cleanup-hosted/` in `.artifacts/latency-audit/`.
+
+A separate cached-decoder binding experiment routes canonical loading through
+the already injected serialized decoder instead of its mapper. Both complete
+customer-package executions per side pass, but baseline totals 63.174784
+CPU-seconds / 35.086235051s elapsed versus candidate 73.983320 /
+38.276307960: **17.1% more CPU / 9.1% more elapsed**. The private source is
+restored; this additional binding does not ship. Evidence:
+`canonical-decoder-binding-paired/` in `.artifacts/latency-audit/`.
+
 ### Remove discarded canonical loading serialization
 
 Canonical loading used Expand to validate/map its public input, then cloned the
@@ -31,6 +94,17 @@ arguments/trailing-input rejection. The complete Wire, compilation loader and
 two public mapping test packages pass, as do both scoped lint suites.
 Evidence: `canonical-load-cleanup-paired/` and
 `canonical-load-cleanup-full-package/` in `.artifacts/latency-audit/`.
+
+The pre-rebase complete local candidate finishes at **113.93s supervisor /
+113.924s coverage / 343.11 CPU-seconds** (268.94 user, 74.17 system).
+It performs 15 compiler commands (9.132855 CPU-seconds) and 20 links
+(25.144966 CPU-seconds / 24.304098s active link wall). The unchanged retry
+supervisor recovers one ACP child-visibility cancellation failure on the same
+source; retain that failure and do not describe this run as retry-free. This
+single warm measurement is compatibility and diagnostic evidence, not the
+hosted two-minute checkpoint. Evidence: `canonical-load-cleanup-full/`.
+The change is subsequently rebased without conflicts onto live main 45e5504c66
+and published as 93d1fd8767; hosted run 37484727726 is pending verification.
 
 ### Cached serialization versus pre-rendered packaged layouts
 
