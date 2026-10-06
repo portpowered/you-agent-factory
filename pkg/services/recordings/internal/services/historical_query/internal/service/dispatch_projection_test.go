@@ -50,6 +50,19 @@ func TestProjectHistoricalDispatchesCarriesPetriResponseUsage(t *testing.T) {
 	}
 }
 
+func TestProjectHistoricalDispatchesPreservesCanceledResponse(t *testing.T) {
+	t.Parallel()
+	dispatches, err := projectHistoricalDispatches(
+		recordings.HistoricalRecordingIdentity{RecordingID: "recording-canceled"},
+		[]recordings.CanonicalEvent{historicalDispatchEvent(t, "dispatch-canceled", factorydefinitions.FactoryEventTypeDispatchResponse, workerexecution.DispatchResponseEventPayload{
+			Outcome: workerexecution.OutcomeCanceled, TransitionID: "process",
+		})},
+	)
+	if err != nil || len(dispatches) != 1 || dispatches[0].Status != recordings.FactoryDispatchStatusInterrupted {
+		t.Fatalf("canceled dispatch projection = %+v, %v; want interrupted", dispatches, err)
+	}
+}
+
 func TestProjectHistoricalDispatchesRetainsDurationWhenPetriTokensAreAbsent(t *testing.T) {
 	t.Parallel()
 

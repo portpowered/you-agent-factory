@@ -19,19 +19,39 @@ import (
 // sequential. Reuse the existing parity helpers rather than a second harness.
 func TestArchivedWorkAttributionNamedClose(t *testing.T) {
 	t.Parallel()
+	for _, recorded := range []bool{false, true} {
+		name := "unrecorded"
+		if recorded {
+			name = "recorded"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runArchivedWorkAttributionNamedClose(t, recorded)
+		})
+	}
+}
+
+func runArchivedWorkAttributionNamedClose(t *testing.T, recorded bool) {
+	t.Helper()
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	dir := support.ScaffoldSingleStepFactory(t, "archived-attribution")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 1)}
-	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	cfg := support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Args:  []string{"--record", filepath.Join(dir, "board.json")},
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
-	})
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
 	session, ctx := startMCP(t, process, host.URL())
-	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	scopeID := ""
+	if recorded {
+		scopeID = support.GetDefaultSession(t, host.URL()).Id
+	} else {
+		scopeID = support.OpenFactorySessionAt(t, host.URL(), dir).Session.Id
+	}
 	name := "archive-alpha"
-	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, host.URL(), scopeID, factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task", Name: &name, Payload: "hold named Work until cancellation",
 	})
 	var done <-chan struct{}
@@ -47,16 +67,26 @@ func TestArchivedWorkAttributionNamedClose(t *testing.T) {
 	}
 	live := rows[0].(map[string]any)
 	id, ok := live["workerSessionId"].(string)
-	if !ok || live["workName"] != name || live["factorySessionId"] != opened.Session.Id || live["workId"] == nil {
+	if !ok || live["workName"] != name || live["factorySessionId"] != scopeID || live["workId"] == nil {
 		t.Fatalf("named live association: %v", live)
 	}
 	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
 	assertFactoryCLIParity(t, host, id, getHost(t, endpoint))
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "CANCEL"})
 	waitControlSignal(t, done)
-	support.CloseFactorySessionAt(t, host.URL(), opened.Session.Id)
+	if recorded {
+		// The recorded host owns its default scope. Orderly host closure joins
+		// that scope; a fresh host reads the same profile without a live Work.
+		host.Close(t)
+		cfg.Args = nil
+		host = support.StartFunctionalAPIServer(t, cfg)
+		session, ctx = startMCP(t, process, host.URL())
+		endpoint = host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	} else {
+		support.CloseFactorySessionAt(t, host.URL(), scopeID)
+	}
 	archived := historyParityPage(t, ctx, session, host, "archived", "factory", "")
-	closed := assertUnrecordedArchivedRow(t, archived, id, live)
+	closed := assertArchivedAttributionRow(t, archived, id, live, recorded)
 	selected := getHost(t, endpoint)
 	assertJSONEqual(t, closed, selected)
 	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
@@ -67,13 +97,17 @@ func TestArchivedWorkAttributionNamedClose(t *testing.T) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(inputs.Stdout()), "\n")[1:] {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[0] != "-" || fields[3] != "-" {
+		wantName, wantProvider := "-", "-"
+		if recorded {
+			wantName, wantProvider = name, "codex"
+		}
+		if len(fields) < 4 || fields[0] != wantName || fields[3] != wantProvider {
 			t.Fatalf("human unavailable Work name/provider: %s", line)
 		}
 	}
 }
 
-func assertUnrecordedArchivedRow(t *testing.T, archived map[string]any, id string, live map[string]any) map[string]any {
+func assertArchivedAttributionRow(t *testing.T, archived map[string]any, id string, live map[string]any, recorded bool) map[string]any {
 	t.Helper()
 	rows := archived["sessions"].([]any)
 	var closed map[string]any
@@ -91,7 +125,10 @@ func assertUnrecordedArchivedRow(t *testing.T, archived map[string]any, id strin
 			t.Fatalf("close changed %s: live=%v closed=%v", key, live, closed)
 		}
 	}
-	if closed["workName"] != nil || closed["provider"] != nil {
+	if recorded && (closed["workName"] != live["workName"] || closed["provider"] != live["provider"]) {
+		t.Fatalf("recorded scope lost authoritative attribution: live=%v closed=%v", live, closed)
+	}
+	if !recorded && (closed["workName"] != nil || closed["provider"] != nil) {
 		t.Fatalf("unrecorded scope supplied unavailable attribution: %v", closed)
 	}
 	if closed["terminalCause"] != "OPERATOR_CANCEL" || closed["recordingHealth"] != "COMPLETE" {
