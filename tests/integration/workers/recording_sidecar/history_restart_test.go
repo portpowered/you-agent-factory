@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -118,8 +120,17 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 	if err := json.Unmarshal(selected, &selectedObservation); err != nil || selectedObservation.WorkName == nil || *selectedObservation.WorkName != "seed-archived-name" {
 		t.Fatalf("selected archived name = %s, %v", selected, err)
 	}
+	if !reflect.DeepEqual(observation, selectedObservation) {
+		t.Fatalf("list/show disagree: list=%+v show=%+v", observation, selectedObservation)
+	}
+	table := historyCLI(t, ctx, binary, project, env, "--server", server, "worker-sessions", "list", "--history", "archived")
+	if !bytes.Contains(table, []byte("seed-archived-name")) {
+		t.Fatalf("archived table lost Work name: %s", table)
+	}
+	assertHistoryHTTP(t, ctx, server, observation)
 
-	if observation.State != "COMPLETED" || observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
+	if observation.State != "COMPLETED" || observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" ||
+		observation.TerminalCause == nil || *observation.TerminalCause != api.WorkerSessionTerminalCauseCompleted {
 		t.Fatalf("ended history = %+v", observation)
 	}
 	active := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "list", "--history", "active")
@@ -127,7 +138,106 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 		t.Fatalf("dead execution became active: %s (%v)", active, err)
 	}
 	page := readHistoryLogs(t, ctx, binary, project, env, server, observation.WorkerSessionId)
+	assertHistoryMCP(t, ctx, binary, project, env, server, observation, page)
 	return historySnapshot{Observation: observation, Logs: page}
+}
+
+func assertHistoryHTTP(t *testing.T, ctx context.Context, server string, observation api.WorkerSessionObservation) {
+	t.Helper()
+	for _, path := range []string{"/worker-sessions?history=archived", "/worker-sessions/" + observation.WorkerSessionId} {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var selected api.WorkerSessionObservation
+		if path == "/worker-sessions?history=archived" {
+			var page api.ListWorkerSessionsResponse
+			err = json.NewDecoder(response.Body).Decode(&page)
+			if len(page.Sessions) != 1 {
+				t.Errorf("HTTP archived membership: %+v", page)
+			} else {
+				selected = page.Sessions[0]
+			}
+		} else {
+			err = json.NewDecoder(response.Body).Decode(&selected)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK || err != nil || !reflect.DeepEqual(observation, selected) {
+			t.Fatalf("HTTP %s disagrees with CLI: status=%d error=%v observation=%+v", path, response.StatusCode, err, selected)
+		}
+	}
+}
+
+func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
+	t.Helper()
+	command := exec.CommandContext(ctx, binary, "--server", server, "server", "mcp")
+	command.Dir, command.Env = project, env
+	var diagnostics bytes.Buffer
+	command.Stderr = &diagnostics
+	client := mcp.NewClient(&mcp.Implementation{Name: "archived-name-restart", Version: "test"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatalf("MCP connect: %v", err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			t.Errorf("MCP close: %v", err)
+		}
+	}()
+	for _, action := range []string{"LIST", "READ", "logs"} {
+		args := map[string]any{"action": action}
+		if action == "LIST" {
+			args["history"] = "archived"
+		} else {
+			args["workerSessionId"] = observation.WorkerSessionId
+		}
+		if action == "logs" {
+			args["action"], args["view"], args["limit"] = "READ", "logs", 1000
+		}
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+		if err != nil || result.IsError || len(result.Content) != 1 {
+			t.Fatalf("MCP %s: result=%+v error=%v", action, result, err)
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok {
+			t.Fatalf("MCP %s content: %T", action, result.Content[0])
+		}
+		assertHistoryMCPResult(t, action, content.Text, observation, logs)
+	}
+}
+
+func assertHistoryMCPResult(t *testing.T, action, payload string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
+	t.Helper()
+	var envelope struct {
+		Result struct {
+			Sessions []api.WorkerSessionObservation `json:"sessions"`
+			Session  api.WorkerSessionObservation   `json:"session"`
+			Logs     api.WorkerSessionLogPage       `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if action == "logs" {
+		if !reflect.DeepEqual(logs, envelope.Result.Logs) {
+			t.Fatalf("MCP logs changed ordered captured replay: %s", payload)
+		}
+		return
+	}
+	selected := envelope.Result.Session
+	if action == "LIST" {
+		if len(envelope.Result.Sessions) != 1 {
+			t.Fatalf("MCP archived membership: %s", payload)
+		}
+		selected = envelope.Result.Sessions[0]
+	}
+	if !reflect.DeepEqual(observation, selected) {
+		t.Fatalf("MCP %s disagrees with CLI: %+v", action, selected)
+	}
 }
 
 func readHistoryLogs(t *testing.T, ctx context.Context, binary, project string, env []string, server, id string) api.WorkerSessionLogPage {
