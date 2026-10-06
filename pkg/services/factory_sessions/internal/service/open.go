@@ -210,6 +210,11 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.resolveClock,
 		)
 		if err != nil {
+			if replayClose != nil {
+				if cleanupErr := replayClose(); cleanupErr != nil {
+					return runtimeProducts{closeArtifacts: replayClose}, errors.Join(err, cleanupErr)
+				}
+			}
 			return runtimeProducts{}, err
 		}
 	}

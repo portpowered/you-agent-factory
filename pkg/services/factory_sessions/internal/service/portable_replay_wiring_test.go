@@ -134,6 +134,67 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	}
 }
 
+func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries(t *testing.T) {
+	t.Parallel()
+	for _, failsClose := range []bool{false, true} {
+		t.Run(map[bool]string{false: "released", true: "cleanup error retained"}[failsClose], func(t *testing.T) {
+			t.Parallel()
+			failure := errors.New("durable acquisition failed after opening resources")
+			var closeErr error
+			if failsClose {
+				closeErr = errors.New("durable resource release failed")
+			}
+			var events []string
+			failedOwner := &portableReplayRuntimeOwner{events: &events, closeErr: closeErr}
+			retryOwner := &portableReplayRuntimeOwner{}
+			factory := newPortableCheckpointRuntimeOpeningFactory(t, retryOwner)
+			acquire := factory.durableExecutionFactory
+			attempts := 0
+			factory.durableExecutionFactory = func(definition factorydefinitions.RuntimeSelection,
+				policy factorysessions.PersistencePolicy, home, path string,
+				defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
+				provider providers.Service, mocks *workers.MockWorkersConfig,
+				identities factorysessions.ProviderIdentityResolver,
+			) (DurableExecution, error) {
+				attempts++
+				if attempts == 1 {
+					return DurableExecution{Service: failedOwner}, failure
+				}
+				return acquire(definition, policy, home, path, defaults, root, clock, provider, mocks, identities)
+			}
+			request := portableCheckpointOwnerFixture(t).startRequest()
+			failed, err := factory.openForRequest(t.Context(), request)
+			if !errors.Is(err, failure) || (failsClose && !errors.Is(err, closeErr)) {
+				t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
+			}
+			if failed.execution != nil || failed.process != nil {
+				t.Fatal("failed acquisition published usable session roles")
+			}
+			if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
+				t.Fatalf("failed owner cleanup = %v, want immediate release", events)
+			}
+			if failsClose {
+				if failed.closeArtifacts == nil {
+					t.Fatal("failed release lost its owned cleanup handle")
+				}
+				if err := failed.closeArtifacts(); !errors.Is(err, closeErr) {
+					t.Fatalf("retained cleanup error = %v, want release cause", err)
+				}
+			}
+			retried, err := factory.openForRequest(t.Context(), request)
+			if err != nil || retried.execution == nil || attempts != 2 {
+				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.execution != nil)
+			}
+			if err := retried.closeArtifacts(); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
+				t.Fatalf("stale cleanup or retry closed failed owner again: %v", events)
+			}
+		})
+	}
+}
+
 func testPortableReplayResumeInterruptedSession(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{
 		restorable: true,

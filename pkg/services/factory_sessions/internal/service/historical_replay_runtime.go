@@ -193,7 +193,11 @@ func (r *Root) openPortableReplayDurableOwner(
 		providerIdentities,
 	)
 	if err != nil {
-		return nil, nil, err
+		// Acquisition may have opened resources before failing. Return only
+		// their owned release; the failed candidate must never become usable.
+		cleanup := newPortableReplayRuntimeCleanup()
+		cleanup.SetOwner(&portableReplayDurableOwner{Service: durable.Service})
+		return nil, cleanup.Close, err
 	}
 	if durable.Service == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution owner is required")
@@ -291,7 +295,7 @@ func constructPortableReplayDurableOwner(
 		providerIdentities,
 	)
 	if err != nil {
-		return DurableExecution{}, nil, err
+		return durable, nil, err
 	}
 	return durable, providerForDurable, nil
 }
