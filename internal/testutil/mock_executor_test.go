@@ -1,12 +1,45 @@
 package testutil_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestProviderDoublesUseScenarioContinuationCapability(t *testing.T) {
+	t.Parallel()
+	for _, supported := range []bool{false, true} {
+		support := &scenarioContinuationCapability{supported: supported}
+		doubles := []providers.Service{
+			testutil.NativeProvider{ContinuationSupport: support},
+			testutil.ProviderServiceAdapter{ContinuationSupport: support},
+		}
+		for _, double := range doubles {
+			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "captured-session"}
+			got, err := double.SupportsContinuation(t.Context(), reference)
+			if err != nil || got != supported || support.reference != reference {
+				t.Fatalf("capability = %v, %v, reference = %#v; want %v, %#v", got, err, support.reference, supported, reference)
+			}
+			if _, err := double.SupportsContinuation(t.Context(), providers.SessionRef{}); err == nil {
+				t.Fatal("invalid reference accepted")
+			}
+		}
+	}
+}
+
+type scenarioContinuationCapability struct {
+	supported bool
+	reference providers.SessionRef
+}
+
+func (support *scenarioContinuationCapability) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	support.reference = reference
+	return support.supported, reference.Validate()
+}
 
 func TestMockExecutorTracksCallsAndFallsBackToAccepted(t *testing.T) {
 	t.Parallel()

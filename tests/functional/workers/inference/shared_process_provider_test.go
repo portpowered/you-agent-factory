@@ -124,8 +124,8 @@ func (router *inferenceProviderOverride) ContinueReference(
 	return router.catalog.ContinueReference(ctx, request)
 }
 
-func (router *inferenceProviderOverride) SupportsContinuation(ctx context.Context, reference providers.SessionRef) (bool, error) {
-	return router.catalog.SupportsContinuation(ctx, reference)
+func (*inferenceProviderOverride) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	return false, reference.Validate()
 }
 
 type inferenceIntegrationRouter struct {

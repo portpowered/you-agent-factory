@@ -8,19 +8,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
+// ContinuationSupport is the optional capability edge supplied by a test scenario.
+type ContinuationSupport interface {
+	SupportsContinuation(context.Context, providers.SessionRef) (bool, error)
+}
+
 // NativeProvider is an execute-shaped Providers root double. Its execution
 // callback receives the public Providers request directly; it does not adapt
 // through the legacy Workers inference vocabulary.
 type NativeProvider struct {
+	// ContinuationSupport must be supplied by scenarios that query capability.
+	// An unconfigured query is an unexpected call, like an unset execution edge.
+	ContinuationSupport
 	ExecuteFunc  func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error)
 	ContinueFunc func(context.Context, providers.ContinueRequest) (providers.ContinueResult, error)
-}
-
-func (provider NativeProvider) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
-	if err := reference.Validate(); err != nil {
-		return false, err
-	}
-	return provider.ContinueFunc != nil, nil
 }
 
 func (provider NativeProvider) ListProviders(
