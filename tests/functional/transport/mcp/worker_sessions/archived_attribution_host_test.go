@@ -170,12 +170,12 @@ func TestArchivedWorkAttributionReusedWorkID(t *testing.T) {
 	assertJSONEqual(t, last[0], archived[1])
 }
 
-func startRecordedAttributionHost(t *testing.T) (*support.FunctionalAPIServer, factorysessions.Service, controlHostRunner, string) {
+func startRecordedAttributionHost(t *testing.T) (*support.FunctionalAPIServer, support.FactorySessionStarter, controlHostRunner, string) {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "scoped-attribution")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 2)}
-	var sessions factorysessions.Service
+	var sessions support.FactorySessionStarter
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
@@ -225,7 +225,7 @@ func TestArchivedWorkAttributionProfileIsolation(t *testing.T) {
 	}
 }
 
-func admitRecordedAttributionWork(t *testing.T, ctx context.Context, sessions factorysessions.Service, host *support.FunctionalAPIServer, runner controlHostRunner, dir, name string) string {
+func admitRecordedAttributionWork(t *testing.T, ctx context.Context, sessions support.FactorySessionStarter, host *support.FunctionalAPIServer, runner controlHostRunner, dir, name string) string {
 	t.Helper()
 	scopeID := uuid.NewString()
 	result, err := sessions.Start(ctx, factorysessions.SessionStartRequest{
