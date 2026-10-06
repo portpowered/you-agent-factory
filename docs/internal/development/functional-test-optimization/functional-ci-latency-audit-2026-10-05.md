@@ -4858,3 +4858,55 @@ remote-transcript-reproduction/, remote-transcript-barrier/,
 canonical-boundary-barrier-profile/ and
 packaged-portability-shared-session-attempt.patch under the ignored local
 latency-audit artifact directory.
+
+### October 6: reuse CLI output processes and remove duplicate reads
+
+The four successful/failed invocation-output cases retain their isolated homes,
+working directories, model caches and parallel execution. Each now bootstraps
+its packaged Factory and invokes the customer command through the same owned
+root-built process, removing a redundant graph and separate initializer.
+Failed output uses a Codex command-runner result with exit code 7 rather than
+the unrelated mock-workers feature. All existing stdout, stderr, terminal
+result, lifecycle ordering and redaction assertions remain.
+
+Build-excluded Linux baseline/candidate/candidate/baseline runs, ten focused
+repetitions per invocation, total 25.018137 CPU-seconds / 12.655299s baseline
+versus 14.358964 / 9.685830 candidate: 42.6% less CPU and 23.5% less elapsed.
+Two whole customer-package runs per side total 52.965068 CPU-seconds /
+31.750835s baseline versus 50.165006 / 30.780398 candidate: 5.3% less CPU and
+3.1% less elapsed. All runs pass. The whole-package comparison measures the
+combined process reuse and command-runner cleanup; it does not isolate either
+change. Both scoped linters pass.
+
+The first complete local lane takes 106.98s supervisor / 102.905s coverage,
+308.73 CPU-seconds (244.24 user, 64.49 system), with 83 compiler commands
+(41.239288 CPU-seconds / 17.390561s active wall) and 20 links
+(22.851636 CPU-seconds / 20.331758s active wall). Final results are 67 packages,
+763 tests, 761 passes and two skips. This is not a retry-free result:
+TestProviderSessionCLIJourneys recovers one truncated-native-transcript case
+through the existing retry policy. The retained failure is another read racing
+durable publication after live completion. No retry allowance changes.
+
+That read cell now opens the public live stream for its exact Worker Session
+and observes scoped terminal delivery before reading. The attempted replay-only
+barrier fails focused Linux repetitions because its snapshot can end at
+recording-complete before a terminal event is published; retain this distinction
+rather than accepting an incomplete snapshot. The live-stream version passes
+50 Linux and 20 Windows focused repetitions and both scoped linters. A duplicate
+show/read pair is removed: this fault-specific cell needs one captured read and
+a final association check; separate public CLI coverage already verifies
+repeated read stability. Four commands replace five, including the publication
+observation. The existing context deadline remains unchanged.
+
+Evidence: output-process-reuse-paired/, output-process-reuse-full/ and
+terminal-provider-read-publication/ under the ignored local latency-audit
+artifact directory. The complete rerun with the terminal-stream correction
+passes in 99.23s supervisor / 93.831s coverage and 282.20 CPU-seconds
+(217.90 user, 64.30 system): 67 packages / 763 results, 761 passes, two skips,
+no retry ledger and no logged retries. It has four compiler commands
+(2.181784 CPU-seconds) and 19 links (24.522591 CPU-seconds / 20.719161s active
+wall). The warmer build and absence of the earlier retry make this a full-lane
+verification result, not a controlled whole-lane improvement claim. Evidence
+is retained in output-terminal-publication-full/. Both local complete results
+use base ca7ed9388e; live main has since advanced to d6151587f0 with Factory
+Session construction changes. Hosted checkpoint verification remains required.

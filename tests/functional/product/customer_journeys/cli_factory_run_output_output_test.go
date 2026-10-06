@@ -2,11 +2,13 @@ package customer_journeys_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -60,10 +62,13 @@ func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, stri
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, CliFactoryRunOutputGoalFactoryName)
 	providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
 	})
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: providerRunner})
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, "models"))
+	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, CliFactoryRunOutputGoalFactoryName)
 
 	args := []string{"you"}
 	args = append(args, globalArgs...)
@@ -76,12 +81,10 @@ func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, stri
 	args = append(args, runArgs...)
 	args = append(args, "deterministic output contract")
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
 
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-	}).Execute(inputs.Input); err != nil {
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs.Stdout(), inputs.Stderr()
