@@ -80,13 +80,16 @@ func TestFunctionalMonolithPlanKeepsNativePackages(t *testing.T) {
 }
 
 func TestFunctionalMonolithNativeFixtures(t *testing.T) {
-	for _, source := range []string{`os.Getwd()`, `t.Setenv("A", "B")`, `//go:embed fixture`, `filepath.Join("testdata", "input")`, `exec.Command("helper")`, `func FuzzCustomer(f *testing.F) {}`} {
+	for _, source := range []string{`os.Getwd()`, `t.Setenv("A", "B")`, `//go:embed fixture`, `filepath.Join("testdata", "input")`, `exec.Command("helper")`, `exec.Command(binary)`, `exec.Command(os.Args[0], "-test.run=TestChild")`, `exec.CommandContext(ctx, executable, os.Executable())`, `exec.Command("git", "status"); exec.Command("helper")`, `func FuzzCustomer(f *testing.F) {}`} {
 		if functionalMonolithNativeReason(source) == "" {
 			t.Fatalf("process/fixture dependency accepted: %s", source)
 		}
 	}
 	if reason := functionalMonolithNativeReason(`func TestCustomer(t *testing.T) { t.Parallel(); session := newSession(t); session.Execute() }`); reason != "" {
 		t.Fatal(reason)
+	}
+	if reason := functionalMonolithNativeReason(`command := exec.Command("git", args...); command.Dir = workspace; command.CombinedOutput()`); reason != "" {
+		t.Fatalf("explicit fixture command depends on native test identity: %s", reason)
 	}
 }
 

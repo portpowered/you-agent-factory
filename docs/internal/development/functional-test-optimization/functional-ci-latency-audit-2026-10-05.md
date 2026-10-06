@@ -4910,3 +4910,58 @@ verification result, not a controlled whole-lane improvement claim. Evidence
 is retained in output-terminal-publication-full/. Both local complete results
 use base ca7ed9388e; live main has since advanced to d6151587f0 with Factory
 Session construction changes. Hosted checkpoint verification remains required.
+
+### October 6: consolidate four Git-fixture packages
+
+Hosted run 37492932822 at rebased head 912c4ba874 is fully green. Backend
+Functional Coverage takes 204s complete / 147.446s coverage invocation,
+67 packages / 763 results, 761 passes and two skips. Its prefix-restored build
+executes 298 compiler commands and 16 links. The supervisor takes 158.176s;
+quarantine takes 51.613s. The hosted two-minute checkpoint remains unmet.
+
+The same hosted elapsed report puts Work Watch among the longest overlapping
+groups. A fresh build-excluded standalone profile on live base d6151587f0
+passes in 0.824432s, using 0.587066 CPU-seconds (0.475060 user, 0.112006
+system). It is not a material CPU target. Consolidated group elapsed values
+include their scheduling and overlap; they must not be used as package CPU
+rankings. Evidence: work-watch-live-profile/ and output-process-hosted/.
+
+Four packages prepare or clean up Git repositories through literal git
+commands with explicit working directories or -C paths. Those commands do not
+depend on the Go test executable identity. The monolith eligibility check now
+parses command calls and permits literal Git fixture commands while retaining
+native execution for unknown, dynamic and re-executed helpers, process-wide
+directory/environment mutations, relative assets and quarantine selectors.
+Both new cleanup hooks use the same finalizers as their native TestMain and
+run only after all package children finish. No customer cases are deleted.
+
+The resulting shared binary contains 43 groups / 629 registrations, versus
+39 groups / 596 registrations before this change. The four added packages are
+factory/packaged/fix, factory/packaged/invocation, providers/codex and
+workers/inference/codex. The exact native link commands for these four are
+absent in the final run. They previously consumed 4.789973 CPU-seconds; this
+is removed native link work, not a claim of equivalent end-to-end wall savings
+or zero added shared-binary link cost. link-package-comparison.json retains
+the individual records and their presence/absence.
+
+The initial broader command-eligibility probe passes the full lane in 103.71s
+supervisor / 98.424s coverage and 285.89 CPU-seconds, with 138 compiler commands
+and 18 links. It recovers one pre-existing ACP structured-result cancellation
+through the unchanged retry policy; retain that ledger. Eligibility is then
+tightened to literal Git commands, with component checks preserving unknown,
+dynamic, mixed-command and test-binary exceptions. The final full lane passes
+without retries in 88.07s supervisor / 83.281s coverage and 241.05 CPU-seconds
+(186.29 user, 54.76 system), 67 packages / 764 results (762 passes, two skips).
+It executes two compiler commands (2.034966 CPU-seconds) and 17 links
+(16.384572 CPU-seconds / 12.404227s active wall). The differing cache state,
+retry and changed live base preclude a controlled whole-lane speedup claim.
+All selected test inventory and coverage checks remain enabled.
+
+Evidence: external-fixture-consolidation-full/ retains the probe and recovered
+failure; external-fixture-git-final-full/ retains final verification and exact
+link records under the ignored local latency-audit artifact directory.
+The native Windows Fix and Codex inference suites also pass. The full run
+precedes a behavior-preserving extraction of command classification to satisfy
+the complexity lint limit; monolith component checks and both scoped linters
+pass after that extraction. Fresh hosted verification is required on the pushed
+head before evaluating the two-minute merge checkpoint.

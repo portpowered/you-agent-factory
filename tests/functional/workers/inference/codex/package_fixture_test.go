@@ -64,6 +64,14 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
+// FunctionalMonolithCleanup closes the same owned fixture after all children.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeCodexPackageFixture(); err != nil {
+		t.Errorf("Codex package fixture cleanup failed: %v", err)
+	}
+}
+
 type codexPackageProcessCommand struct {
 	cancel context.CancelFunc
 	done   chan error
