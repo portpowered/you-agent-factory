@@ -49,7 +49,7 @@ func closeRuntimeMetricsProcess() error {
 	if runtimeMetricsProcessState.process == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // bounded process teardown; public tests own completion signals
 	defer cancel()
 	return runtimeMetricsProcessState.process.Close(ctx)
 }

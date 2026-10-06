@@ -12,7 +12,7 @@ passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
 below. The three- and two-minute hosted merge checkpoints remain outstanding.
 
-The latest hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
+The last pre-rebase hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
 
 The first hosted next-phase run, at `0878fd26d0`, passes in **316.816s** full
 supervisor / **287.224s** coverage invocation. Its trace reports 1,355 compiler
@@ -2666,3 +2666,65 @@ helpers retain those customer outcomes. Current main also changes runtime
 construction/opening, so the older private measurements cannot establish the
 rebased candidate's latency. Scoped repository lint on the rebased tree reports
 zero issues; exact-source Linux validation and hosted checks are required next.
+
+
+### Rebased hosted result and durable-store isolation
+
+Head `6617d42231`, based on current main, passes functional coverage with no
+retries: **310s complete job**, **268.955s supervisor**, **247.004s coverage
+invocation**, 68 packages / **760 results** (758 passes, two skips). Current main
+adds 18 selected top-level tests; 30 packages / **462 tests** now share the
+combined executable. The build trace records **508 compiler actions and 25 links**,
+versus eight compiler actions and 29 links in the older 192s hosted result. This
+is a changed-runtime/archive-refill sample, not a regression measured on identical
+source. Compiler archives are captured and saved in eight seconds; setup consumes
+26 seconds and the remaining completion steps consume about 15 seconds. The
+three-minute complete-job checkpoint is still outstanding.
+
+The complete-event-window package ranking is Customer Lifecycles 112.417s,
+CLI/REST Journeys 109.251s, Recording Lifecycle 102.429s, Customer Journeys
+101.904s, Worker Inference 101.828s, CLI Customer Commands 97.492s, CLI Invocation
+97.233s and Factory Transformation 97.117s. Those windows overlap and include
+scheduling waits; they are **not package CPU measurements** and must not be added
+as elapsed CI time. The earlier labelled profile remains the package CPU evidence
+for the old runtime, with the source/failure limitations already recorded.
+
+An exact-source private copy is verified against tree
+`80ee56fd93969dbce13c603130184bdf9cc9e53d`. Its diagnostic run begins with 1,310
+compiler actions and accumulated runtime output from previous private runs. WSL
+then stops responding; this run is terminated and excluded from latency/CPU
+baselines. Its generated evidence and original private Git history are not
+shipped. Clean source contents alone are insufficient for a controlled repeat:
+invocation-owned durable state must also be fresh or deliberately restored.
+
+The API helper exposes a related real test-isolation issue. It passes the
+scenario's working directory to the CLI, but the storage construction edge still
+defaults to the binary's process working directory. Consolidation makes that
+one shared directory for unrelated hosts. The next fix binds the storage edge to
+the same explicit invocation directory, preserving explicit recovery/storage
+overrides. Independent hosts therefore do not load and append to the same
+package-wide durable store. This is a fixture ownership change; its performance
+benefit remains to be measured on hosted CI.
+
+The rebased hosted lint failures identify three stale sleep-baseline entries and
+the moved Runtime Metrics teardown deadline. Delete the stale entries and mark
+the deadline as bounded teardown, without increasing any debt allowance. The
+previous local scoped custom-binary invocation used the default lint config and
+did not activate the repository plugin. Subsequent checks explicitly use
+`.golangci-repository.yml` with the repository's CI tag set; prior built-in lint
+results remain valid, but are not evidence for that plugin.
+
+The current repository plugin is rebuilt from the rebased source and reports
+**zero issues** with explicit repository config and CI's complete tag set across
+the affected packages. With the directory binding, three routing/guard/retry
+repetitions and three prompt repetitions pass. A broader native Windows attempt
+passes Factory Execution in 43.661s, but Customer Journeys times out at 600.437s
+in hosted-runtime lifecycle scenarios that call BuildProcess directly and bypass
+the changed API helper. This run is not a successful suite baseline. One such
+scenario is checked separately; Linux hosted coverage remains required for the
+helper's broader consumers.
+
+The isolated Windows `TestHostedContinuousRunsStayLiveWhileIdle/server` also fails
+in 35.222s waiting for listener startup/shutdown. It does not call the changed
+API helper, so this is separately recorded as a native hosted-runtime limitation,
+not attributed to the storage binding. No timeout ceiling is increased.

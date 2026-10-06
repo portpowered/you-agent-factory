@@ -23,6 +23,10 @@ type FactorySessionHost struct {
 	commands *factorySessionCommands
 }
 
+type functionalWorkingDirectory string
+
+func (directory functionalWorkingDirectory) Getwd() (string, error) { return string(directory), nil }
+
 type factorySessionCommands struct {
 	mu     sync.RWMutex
 	routes map[string]platformprocess.CommandRunner

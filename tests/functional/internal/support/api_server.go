@@ -95,6 +95,20 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		edges.FactorySessionResponseEventRetentionLimits = cfg.ResponseEventRetentionLimits
 	}
 
+	// Bind storage to the same invocation directory supplied to the CLI below.
+	// A combined test binary must not make unrelated hosts load or append to one
+	// package-wide durable store. Explicit recovery/storage edges remain owned
+	// by the scenario and take precedence.
+	if edges.FactorySessionsWorkingDirectory == nil {
+		directory := cfg.WorkingDirectory
+		if directory == "" {
+			directory = cfg.FactoryDir
+		}
+		if directory != "" {
+			edges.FactorySessionsWorkingDirectory = functionalWorkingDirectory(directory)
+		}
+	}
+
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
 	process := BuildProcess(t, edges)
