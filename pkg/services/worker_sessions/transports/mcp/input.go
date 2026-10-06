@@ -26,6 +26,7 @@ type controlInput struct {
 	WorkerSessionID          string  `json:"workerSessionId"`
 	Operation                string  `json:"operation"`
 	RequestID                *string `json:"requestId"`
+	ExpectedAttemptID        *string `json:"expectedAttemptId"`
 	SuccessorWorkerSessionID *string `json:"successorWorkerSessionId"`
 	ReplacementMessage       *string `json:"replacementMessage"`
 }
@@ -116,8 +117,14 @@ func decodeControl(raw json.RawMessage) (controlInput, error) {
 	if strings.TrimSpace(input.WorkerSessionID) == "" {
 		return input, fmt.Errorf("workerSessionId is required")
 	}
-	if !slices.Contains([]string{"CANCEL", "TERMINATE", "INTERRUPT"}, input.Operation) {
-		return input, fmt.Errorf("operation must be CANCEL, TERMINATE or INTERRUPT")
+	if !slices.Contains([]string{"CANCEL", "TERMINATE", "INTERRUPT", "KILL"}, input.Operation) {
+		return input, fmt.Errorf("operation must be CANCEL, TERMINATE, INTERRUPT or KILL")
+	}
+	if input.Operation == "KILL" {
+		return input, validateKillInput(input)
+	}
+	if input.ExpectedAttemptID != nil {
+		return input, fmt.Errorf("expectedAttemptId is accepted only with KILL")
 	}
 	if input.Operation != "INTERRUPT" {
 		if input.RequestID != nil || input.SuccessorWorkerSessionID != nil || input.ReplacementMessage != nil {
@@ -129,4 +136,14 @@ func decodeControl(raw json.RawMessage) (controlInput, error) {
 		return input, fmt.Errorf("INTERRUPT requires requestId, successorWorkerSessionId and replacementMessage")
 	}
 	return input, nil
+}
+
+func validateKillInput(input controlInput) error {
+	if input.SuccessorWorkerSessionID != nil || input.ReplacementMessage != nil {
+		return fmt.Errorf("replacement fields are accepted only with INTERRUPT")
+	}
+	if input.RequestID == nil || strings.TrimSpace(*input.RequestID) == "" || input.ExpectedAttemptID == nil || strings.TrimSpace(*input.ExpectedAttemptID) == "" {
+		return fmt.Errorf("KILL requires requestId and expectedAttemptId")
+	}
+	return nil
 }

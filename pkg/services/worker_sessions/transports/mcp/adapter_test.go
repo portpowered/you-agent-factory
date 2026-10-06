@@ -331,3 +331,112 @@ func TestWorkerSessionHistorySelection(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkerSessionKillRejectsInvalidTupleBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("invalid kill tuple reached selected host")
+		return nil, nil
+	})
+	for _, input := range []string{
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r"}`,
+		`{"workerSessionId":"w","operation":"KILL","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":" ","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":" "}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":null}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":1}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","successorWorkerSessionId":"s"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","replacementMessage":"m"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","force":true}`,
+		`{"workerSessionId":"w","operation":"CANCEL","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"TERMINATE","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s","replacementMessage":"m","expectedAttemptId":"a"}`,
+	} {
+		t.Run(input, func(t *testing.T) {
+			value := workerCall(t, adapter, ToolControl, input)
+			if value["result"] != nil || value["error"].(map[string]any)["code"] != "worker_session.invalid_request" {
+				t.Fatalf("invalid tuple = %v", value)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionKillSelectedHostResults(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		status     int
+		body, code string
+		retryable  bool
+	}{
+		{"applied", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "", false},
+		{"unsupported", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"UNSUPPORTED","state":"RUNNING","dispatchId":"logical-dispatch"}`, "", false},
+		{"noop", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true,"outcome":"NOOP","state":"COMPLETED","dispatchId":"logical-dispatch"}`, "", false},
+		{"old host", 200, `{"workerSessionId":"target","action":"TERMINATE","outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"wrong target", 200, `{"workerSessionId":"other","action":"TERMINATE","forced":true,"outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"false force", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":false,"outcome":"APPLIED","state":"TERMINATED","dispatchId":"logical-dispatch"}`, "internal_error", false},
+		{"missing result", 200, `{"workerSessionId":"target","action":"TERMINATE","forced":true}`, "internal_error", false},
+		{"stale attempt", 409, `{"code":"WORKER_SESSION_CONTROL_CONFLICT"}`, "conflict", false},
+		{"unconfirmed join", 503, `{"code":"WORKER_SESSION_CONTROL_FAILED","message":"private runner details"}`, "unavailable", true},
+		{"host unavailable", 0, `{"message":"private connection details"}`, "host_unavailable", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			body := &trackedBody{Reader: strings.NewReader(test.body)}
+			adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+				calls++
+				assertKillRequest(t, request)
+				response := &http.Response{StatusCode: test.status, Body: body}
+				if test.status == 0 {
+					return response, errors.New("private transport details")
+				}
+				return response, nil
+			})
+			value := workerCall(t, adapter, ToolControl, `{"workerSessionId":"target","operation":"KILL","requestId":"request","expectedAttemptId":"physical-attempt"}`)
+			assertKillResult(t, value, test.body, test.code, test.retryable)
+			if calls != 1 || !body.closed {
+				t.Fatalf("kill calls=%d body closed=%v", calls, body.closed)
+			}
+		})
+	}
+}
+
+func assertKillRequest(t *testing.T, request *http.Request) {
+	t.Helper()
+	if request.Method != "POST" || request.URL.Host != "selected-host:7437" || request.URL.Path != "/worker-sessions/target/terminate" {
+		t.Fatalf("kill request = %s %s", request.Method, request.URL)
+	}
+	var tuple map[string]any
+	if err := json.NewDecoder(request.Body).Decode(&tuple); err != nil {
+		t.Fatal(err)
+	}
+	if len(tuple) != 3 || tuple["force"] != true || tuple["requestId"] != "request" || tuple["expectedAttemptId"] != "physical-attempt" {
+		t.Fatalf("kill tuple = %v", tuple)
+	}
+}
+
+func assertKillResult(t *testing.T, value map[string]any, body, code string, retryable bool) {
+	t.Helper()
+	if code == "" {
+		got, _ := json.Marshal(value["result"])
+		if string(got) == "null" || value["error"] != nil {
+			t.Fatalf("kill result = %v", value)
+		}
+		var expected any
+		_ = json.Unmarshal([]byte(body), &expected)
+		want, _ := json.Marshal(expected)
+		if string(got) != string(want) {
+			t.Fatalf("kill response changed: %s, want %s", got, want)
+		}
+	} else {
+		failure := value["error"].(map[string]any)
+		if value["result"] != nil || failure["code"] != "worker_session."+code || failure["retryable"] != retryable {
+			t.Fatalf("kill failure = %v", value)
+		}
+		raw, _ := json.Marshal(value)
+		if strings.Contains(string(raw), "private") {
+			t.Fatalf("private host diagnostics leaked: %s", raw)
+		}
+	}
+}

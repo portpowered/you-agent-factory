@@ -181,7 +181,7 @@
       "path": "generated/joined/contracts/manifest.schema.json"
     },
     "generated.mcp.manifest": {
-      "artifactHash": "b2c481dcdfd14c8bebef3e3b612c8aed3fda22856b5f36e38a80688eaafa555e",
+      "artifactHash": "1aa15c4e7c8bb7c3bcae73352093995a20afe138ac281bf43faa701abb07a6d2",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.mcp.manifest",
-        "sourceHash": "b2c481dcdfd14c8bebef3e3b612c8aed3fda22856b5f36e38a80688eaafa555e",
+        "sourceHash": "1aa15c4e7c8bb7c3bcae73352093995a20afe138ac281bf43faa701abb07a6d2",
         "visibility": "public"
       },
       "family": "mcp",
@@ -211,7 +211,7 @@
       "path": "generated/mcp/manifest.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "67256591fe7756f1818824de17cb9db85c7f87cc9080ae96235de695fcc48ac4",
+      "artifactHash": "6c38ff5e6833fe6350cf13ffd20faa09ed86b0c50431f63da537585ecfce5808",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "67256591fe7756f1818824de17cb9db85c7f87cc9080ae96235de695fcc48ac4",
+        "sourceHash": "6c38ff5e6833fe6350cf13ffd20faa09ed86b0c50431f63da537585ecfce5808",
         "visibility": "public"
       },
       "family": "openapi",
