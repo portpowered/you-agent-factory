@@ -1,6 +1,9 @@
 package service
 
 import (
+	"context"
+	"errors"
+
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -12,6 +15,53 @@ import (
 type providerAttemptControl struct {
 	control providers.AttemptControl
 	retired bool
+}
+
+// Binding belongs to the admitted handle, not a lookup by reusable dispatch
+// identity. Installation runs outside ownership locks. If a caller unwinds,
+// close its admitted observation window before propagating the panic.
+func (a *runtimeAttempt) bindProviderAttemptControl(ctx context.Context, bind func(providers.AttemptControlObserver), next providers.AttemptControlObserver) {
+	if bind == nil {
+		return
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			_ = a.Complete(context.WithoutCancel(ctx), workers.WorkstationDispatchResult{}, errors.New("runtime attempt control observer installation failed"))
+			panic(recovered)
+		}
+	}()
+	bind(func(control providers.AttemptControl) {
+		if a.observeProviderAttemptControl(control) && next != nil {
+			next(control)
+		}
+	})
+}
+
+func (a *runtimeAttempt) observeProviderAttemptControl(control providers.AttemptControl) bool {
+	if control == nil {
+		return false
+	}
+	r := a.registry
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.runtimeAttemptControls[a.workerID] != a || r.runtimeAttemptOwners[a.key] != a.workerID ||
+		r.latestRuntimeDispatchIDs[a.workerID] != a.dispatchID {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.providerControlRetired || a.completing || a.providerControl != nil {
+		return false
+	}
+	a.providerControl = control
+	return true
+}
+
+func (a *runtimeAttempt) retireProviderAttemptControl() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.providerControlRetired = true
+	a.providerControl = nil
 }
 
 // bindProviderAttemptControl captures the slot before Workers enters Providers.

@@ -12,6 +12,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -65,23 +66,25 @@ func cloneOptionalExecutionFact(value *string) *string {
 }
 
 type runtimeAttempt struct {
-	registry       *registry
-	key            workersessions.RuntimeAttemptKey
-	workerID       string
-	dispatchID     string
-	attemptID      string
-	correlation    workers.ExecutionCorrelation
-	once           sync.Once
-	mu             sync.Mutex
-	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
-	controlPending bool
-	controlDone    chan struct{}
-	controlAction  workersessions.ControlAction
-	controlOutcome workersessions.ControlOutcome
-	controlHistory *controlHistoryReservation
-	completing     bool
-	completed      chan struct{}
-	progress       workersessions.ProviderSessionObservationPublisher
+	registry               *registry
+	key                    workersessions.RuntimeAttemptKey
+	workerID               string
+	dispatchID             string
+	attemptID              string
+	correlation            workers.ExecutionCorrelation
+	once                   sync.Once
+	mu                     sync.Mutex
+	cancel                 func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	controlPending         bool
+	controlDone            chan struct{}
+	controlAction          workersessions.ControlAction
+	controlOutcome         workersessions.ControlOutcome
+	controlHistory         *controlHistoryReservation
+	completing             bool
+	completed              chan struct{}
+	progress               workersessions.ProviderSessionObservationPublisher
+	providerControl        providers.AttemptControl
+	providerControlRetired bool
 }
 
 // PublishRuntimeProgress resolves only the explicit scoped owner before any

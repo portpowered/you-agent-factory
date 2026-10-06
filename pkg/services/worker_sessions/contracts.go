@@ -58,6 +58,11 @@ type RuntimeAttemptRequest struct {
 	ID                          string
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
+	// BindAttemptControl installs the exact admitted generation's observer into
+	// the externally executed request. It runs once after admission, before
+	// BeginRuntimeAttempt returns, and must return promptly. The observer is
+	// ephemeral; late publications cannot reacquire a completed/replaced owner.
+	BindAttemptControl func(providers.AttemptControlObserver) `json:"-"`
 }
 
 // Validate rejects contradictory routing before opening a topic or capture.

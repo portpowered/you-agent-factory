@@ -850,6 +850,7 @@ func (r *registry) BeginRuntimeAttempt(
 		return nil, err
 	}
 	opened = true
+	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
 	return workersessions.RuntimeAttempt(handle.Complete), nil
 }
 

@@ -65,6 +65,7 @@ func (a *runtimeAttempt) Complete(
 	a.mu.Unlock()
 	a.once.Do(func() {
 		defer close(completed)
+		a.retireProviderAttemptControl()
 		action, controlOutcome, controlHistory := a.completionState()
 		r := a.registry
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)

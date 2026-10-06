@@ -2351,6 +2351,96 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 	}
 }
 
+func TestBeginRuntimeAttempt_BindsAndRetiresProviderControl(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	var observed providers.AttemptControlObserver
+	var admitted *runtimeAttempt
+	bindCalls := 0
+	observerCalls := 0
+	fixture.request.Execution.Execution.AttemptControlObserver = func(control providers.AttemptControl) {
+		admitted.mu.Lock()
+		defer admitted.mu.Unlock()
+		if admitted.providerControl != control {
+			t.Fatal("external observer ran before retention or under the attempt lock")
+		}
+		observerCalls++
+	}
+	fixture.request.BindAttemptControl = func(observer providers.AttemptControlObserver) {
+		// The binder can inspect ownership without deadlocking, and only runs
+		// after admission has installed the exact handle.
+		r := fixture.service
+		r.mu.RLock()
+		admitted = r.runtimeAttemptControls[scopedWorkerAddress(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)]
+		r.mu.RUnlock()
+		if admitted == nil {
+			t.Fatal("observer installed before runtime admission")
+		}
+		observed = observer
+		bindCalls++
+	}
+	attempt, err := fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+		coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil || attempt == nil || observed == nil || bindCalls != 1 {
+		t.Fatalf("admission = %v, %v, bindings %d", attempt, err, bindCalls)
+	}
+	t.Cleanup(func() {
+		_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+	})
+	owned := &projectedAttemptControl{identity: "runtime-owned"}
+	observed(nil)
+	observed(owned)
+	observed(&projectedAttemptControl{identity: "substitute"})
+	if admitted.providerControl != owned || observerCalls != 1 {
+		t.Fatal("bound observer lost the executing capability")
+	}
+	if err := attempt.Complete(t.Context(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	observed(owned)
+	if admitted.providerControl != nil || !admitted.providerControlRetired || observerCalls != 1 {
+		t.Fatal("completed Runtime retained or reacquired control")
+	}
+}
+
+func TestBeginRuntimeAttempt_RejectedAdmissionDoesNotBindProviderControl(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	fixture.request.Key.DispatchID = "contradictory-dispatch"
+	bound := false
+	fixture.request.BindAttemptControl = func(providers.AttemptControlObserver) { bound = true }
+	attempt, err := fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+		coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) || attempt != nil || bound {
+		t.Fatalf("rejected admission = %v, %v, bound %t", attempt, err, bound)
+	}
+}
+
+func TestBeginRuntimeAttempt_ObserverBindingPanicClosesAdmission(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	var observed providers.AttemptControlObserver
+	fixture.request.BindAttemptControl = func(observer providers.AttemptControlObserver) {
+		observed = observer
+		panic("controlled binding failure")
+	}
+	func() {
+		defer func() {
+			if recover() != "controlled binding failure" {
+				t.Fatal("binding panic was not propagated")
+			}
+		}()
+		_, _ = fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+			coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	}()
+	observed(&projectedAttemptControl{identity: "late"})
+	r := fixture.service
+	if len(r.runtimeAttemptControls) != 0 || len(r.runtimeAttemptOwners) != 0 {
+		t.Fatal("binding panic stranded admitted runtime ownership")
+	}
+	assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateFailed)
+}
+
 func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
 	var r *registry
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}, newTestRegistry(t).execution, platformclock.Real{}, platformclock.Real{}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
