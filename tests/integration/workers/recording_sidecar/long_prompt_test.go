@@ -42,7 +42,7 @@ func TestLongWorkerPromptWindows(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(config), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	developer := "  read \"quoted\" C:\\workspace\\file\tUnicode café 😀\r\n" + strings.Repeat("exact developer instructions ", 1400) + "\r\n  "
+	developer := "Explain the literal project_root_markers in this document.\n  read \"quoted\" C:\\workspace\\file\tUnicode café 😀\r\n" + strings.Repeat("exact developer instructions ", 1400) + "\r\n  "
 	user := "  identical user café 😀\r\n\t  "
 	document, err := json.Marshal(map[string]any{
 		"requestId": "long-prompt-request", "workerSessionId": "long-prompt-session",

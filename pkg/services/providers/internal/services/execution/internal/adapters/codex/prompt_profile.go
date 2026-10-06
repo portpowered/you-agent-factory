@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/pelletier/go-toml/v2"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -15,7 +17,7 @@ import (
 )
 
 type promptPreparation struct {
-	files       providers.CodexPromptFileSystem
+	files       providerservice.CodexPromptFileSystem
 	resolveHome func() (string, error)
 }
 
@@ -104,7 +106,11 @@ func (p promptPreparation) compatible(args []string, directory, home string) boo
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return false
 	}
-	if strings.Contains(string(base), "project_root_markers") {
+	var config map[string]any
+	if err := toml.Unmarshal(base, &config); err != nil {
+		return false
+	}
+	if _, customized := config["project_root_markers"]; customized {
 		return false
 	}
 	// Without an absolute working root, the project configuration search cannot
@@ -141,12 +147,44 @@ func (p promptPreparation) compatible(args []string, directory, home string) boo
 }
 
 func incompatibleProfileArgs(args []string) bool {
-	for _, arg := range args {
-		if arg == "--ignore-user-config" || arg == "--profile" || strings.HasPrefix(arg, "-p") || strings.HasPrefix(arg, "--profile=") || arg == "--cd" || strings.HasPrefix(arg, "--cd=") || strings.HasPrefix(arg, "-C") || strings.Contains(arg, "project_root_markers") {
+	for i := 0; i < len(args); i++ {
+		option, value, attached := strings.Cut(args[i], "=")
+		switch option {
+		case "--ignore-user-config", "--profile", "-p", "--cd", "-C":
 			return true
+		case "--config", "-c":
+			if !attached && i+1 < len(args) {
+				i++
+				value = args[i]
+			}
+			if incompatibleRootOverride(value) {
+				return true
+			}
+		default:
+			if strings.HasPrefix(option, "-c") && !strings.HasPrefix(option, "--") {
+				if incompatibleRootOverride(strings.TrimPrefix(args[i], "-c")) {
+					return true
+				}
+			} else if (strings.HasPrefix(option, "-p") || strings.HasPrefix(option, "-C")) && !strings.HasPrefix(option, "--") {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func incompatibleRootOverride(value string) bool {
+	key, _, ok := strings.Cut(value, "=")
+	if !ok {
+		return false
+	}
+	// Decode only the key: arbitrary instruction/option values are never policy.
+	var config map[string]any
+	if err := toml.Unmarshal([]byte(key+"=[]"), &config); err != nil {
+		return true
+	}
+	_, customized := config["project_root_markers"]
+	return customized
 }
 
 // profileCommandArgs changes only the generated override pair and remeasures

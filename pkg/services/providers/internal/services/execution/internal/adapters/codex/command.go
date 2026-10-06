@@ -25,7 +25,7 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds the completed runner and duration source to Codex.
-func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, files providers.CodexPromptFileSystem, resolveHome func() (string, error)) Effect {
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, files providerservice.CodexPromptFileSystem, resolveHome func() (string, error)) Effect {
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,

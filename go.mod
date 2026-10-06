@@ -19,6 +19,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/pelletier/go-toml/v2 v2.0.9
 	github.com/portpowered/go-agent-harness/go-agent-loop v0.0.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2

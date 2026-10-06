@@ -276,7 +276,7 @@ type Edges struct {
 	WorkersRetryRandomSource           platformrandom.Source
 	WorkersWorkstationFileSystem       platformfilesystem.ReadFileInspector
 	WorkersProviderTemporaryFileSystem platformfilesystem.TemporaryFileSystem
-	ProvidersCodexPromptFiles          providers.CodexPromptFileSystem
+	ProvidersCodexPromptFiles          providercontract.CodexPromptFileSystem
 	ProvidersCodexResolveHomeDirectory func() (string, error)
 
 	ScriptCommandRunner platformprocess.CommandRunner

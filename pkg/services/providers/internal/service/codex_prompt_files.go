@@ -1,4 +1,4 @@
-package providers
+package service
 
 import (
 	"io/fs"

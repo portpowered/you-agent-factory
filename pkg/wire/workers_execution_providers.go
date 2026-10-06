@@ -279,7 +279,7 @@ func provideInvocationWorkPolicy() factorysessionwire.InvocationWorkPolicy {
 	return work.NewInvocationPolicyService()
 }
 
-func provideProvidersCodexPromptFiles(edges serviceedges.Edges) providers.CodexPromptFileSystem {
+func provideProvidersCodexPromptFiles(edges serviceedges.Edges) providerswire.CodexPromptFileSystem {
 	if edges.ProvidersCodexPromptFiles != nil {
 		return edges.ProvidersCodexPromptFiles
 	}

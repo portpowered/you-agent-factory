@@ -172,17 +172,7 @@ func TestPromptProfileComposedBoundariesPreserveBytesAndOptions(t *testing.T) {
 					t.Fatal("below-bound command changed")
 				}
 			} else {
-				if !files.closed || files.created != 1 || platformprocess.ComposedCommandLineLength(command.Command, command.Args) >= 32767 {
-					t.Fatal("profile did not close before bounded delivery")
-				}
-				var decoded string
-				value := strings.TrimSuffix(strings.TrimPrefix(files.content, "developer_instructions="), "\n")
-				if err := json.Unmarshal([]byte(value), &decoded); err != nil || decoded != request.SystemPrompt {
-					t.Fatalf("decoded developer bytes changed: %v", err)
-				}
-				if !reflect.DeepEqual(command.Args[len(command.Args)-5:], original[len(original)-5:]) {
-					t.Fatal("options or resume changed")
-				}
+				assertSpilledPrompt(t, files, command, request, original)
 			}
 			if string(command.Stdin) != request.UserMessage {
 				t.Fatal("user bytes changed")
@@ -201,23 +191,7 @@ func TestPromptProfileLifecycleDoesNotLaunchIncompleteFiles(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			t.Parallel()
 			files, request := profileFixture(t)
-			cause := errors.New("injected private-file fault")
-			switch fault {
-			case "create":
-				files.createErr = cause
-			case "write":
-				files.writeErr = cause
-			case "short-write":
-				files.short = true
-			case "close":
-				files.closeErr = cause
-			case "project-config":
-				files.projectConfig = true
-			case "selected-profile":
-				request.Args = append(request.Args, "--profile=existing")
-			case "fixed-args":
-				request.Args = append(request.Args, strings.Repeat("x", 32767))
-			}
+			injectProfileFault(files, &request, fault)
 			runner := profileRunner{run: func(providerservice.CommandRequest) (providerservice.CommandResult, error) {
 				t.Error("incomplete/incompatible profile launched")
 				return providerservice.CommandResult{}, nil
@@ -268,6 +242,89 @@ func TestPromptProfileCleanupAfterEveryRunnerOutcome(t *testing.T) {
 			wantError := outcome != "success" && outcome != "remove-failure"
 			if (err != nil) != wantError || calls != 1 || files.removed != 1 {
 				t.Fatalf("outcome=%v calls=%d removed=%d", err, calls, files.removed)
+			}
+		})
+	}
+}
+
+func assertSpilledPrompt(t *testing.T, files *profileFiles, command providerservice.CommandRequest, request execution.ContinuationRequest, original []string) {
+	t.Helper()
+	if !files.closed || files.created != 1 || platformprocess.ComposedCommandLineLength(command.Command, command.Args) >= 32767 {
+		t.Fatal("profile did not close before bounded delivery")
+	}
+	var decoded string
+	value := strings.TrimSuffix(strings.TrimPrefix(files.content, "developer_instructions="), "\n")
+	if err := json.Unmarshal([]byte(value), &decoded); err != nil || decoded != request.SystemPrompt {
+		t.Fatalf("decoded developer bytes changed: %v", err)
+	}
+	if !reflect.DeepEqual(command.Args[len(command.Args)-5:], original[len(original)-5:]) {
+		t.Fatal("options or resume changed")
+	}
+}
+
+func injectProfileFault(files *profileFiles, request *execution.ContinuationRequest, fault string) {
+	cause := errors.New("injected private-file fault")
+	switch fault {
+	case "create":
+		files.createErr = cause
+	case "write":
+		files.writeErr = cause
+	case "short-write":
+		files.short = true
+	case "close":
+		files.closeErr = cause
+	case "project-config":
+		files.projectConfig = true
+	case "selected-profile":
+		request.Args = append(request.Args, "--profile=existing")
+	case "fixed-args":
+		request.Args = append(request.Args, strings.Repeat("x", 32767))
+	}
+}
+
+func TestPromptProfileMarkerProsePreservesBytes(t *testing.T) {
+	t.Parallel()
+	files, request := profileFixture(t)
+	request.SystemPrompt = "Explain the literal project_root_markers in this document.\n" + request.SystemPrompt
+	request.Args = append(request.Args, "--config", `unrelated="project_root_markers"`, "--model", "project_root_markers")
+	files.baseConfig = "# project_root_markers is ordinary documentation\nmodel = \"project_root_markers\"\n"
+	command, err := buildCommand(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := append([]string(nil), command.Args...)
+	cleanup, err := (promptPreparation{files: files}).prepare(&command, request.ExecuteRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	assertSpilledPrompt(t, files, command, request, original)
+	if string(command.Stdin) != request.UserMessage {
+		t.Fatal("user bytes changed")
+	}
+}
+
+func TestPromptProfileRejectsActualRootOverrides(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"--config", `project_root_markers=[".custom"]`},
+		{"-c", ` project_root_markers = [".custom"]`},
+		{`--config="project_root_markers"=[".custom"]`},
+		{`-cproject_root_markers=[".custom"]`},
+		{`-c='project_root_markers'=[".custom"]`},
+	} {
+		t.Run(fmt.Sprint(args), func(t *testing.T) {
+			t.Parallel()
+			files, request := profileFixture(t)
+			request.Args = append(request.Args, args...)
+			command, err := buildCommand(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = (promptPreparation{files: files}).prepare(&command, request.ExecuteRequest)
+			var rejected *platformprocess.CommandStartError
+			if !errors.As(err, &rejected) || files.created != 0 {
+				t.Fatalf("root override not rejected before profile creation: %v", err)
 			}
 		})
 	}

@@ -40,7 +40,7 @@ func newConfiguredProvidersService(
 	commandFactory platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
-	promptFiles providers.CodexPromptFileSystem,
+	promptFiles providerswire.CodexPromptFileSystem,
 	resolveHome func() (string, error),
 ) (providers.Service, error) {
 	runner := workerswire.NewProviderCommandRunner(agyRunner)

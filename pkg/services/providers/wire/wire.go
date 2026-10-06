@@ -32,6 +32,8 @@ import (
 // CommandRunner is the Providers-owned subprocess effect accepted at the
 // composition boundary. Workers-specific runners are projected into this
 // contract by pkg/wire.
+type CodexPromptFileSystem = providerservice.CodexPromptFileSystem
+
 type CommandRunner = providerservice.CommandRunner
 type CommandRequest = providerservice.CommandRequest
 type CommandResult = providerservice.CommandResult
@@ -73,7 +75,7 @@ type CodexEffect = executionwire.CodexEffect
 type ClaudeEffect = executionwire.ClaudeEffect
 
 // NewCodexEffect constructs one Codex command effect.
-func NewCodexEffect(runner CommandRunner, clock platformclock.Source, files providers.CodexPromptFileSystem, resolveHome func() (string, error)) CodexEffect {
+func NewCodexEffect(runner CommandRunner, clock platformclock.Source, files CodexPromptFileSystem, resolveHome func() (string, error)) CodexEffect {
 	return executionwire.NewCodexEffect(runner, clock, files, resolveHome)
 }
 
