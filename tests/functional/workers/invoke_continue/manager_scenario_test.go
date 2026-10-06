@@ -269,6 +269,7 @@ type s8RemoteWorkerInvocation struct {
 	repository       string
 	workID           string
 	message          string
+	envVars          map[string]string
 }
 
 func invokeS8RemoteWorker(
@@ -317,14 +318,15 @@ func s8ExecutionDocument(t *testing.T, invocation s8RemoteWorkerInvocation) stri
 					WorkIDs []string `json:"workIds"`
 				} `json:"execution"`
 			} `json:"dispatch"`
-			WorkerType               string `json:"workerType"`
-			RunnerID                 string `json:"runnerId"`
-			ExecutorProvider         string `json:"executorProvider"`
-			ModelProvider            string `json:"modelProvider"`
-			Model                    string `json:"model"`
-			WorkingDirectory         string `json:"workingDirectory"`
-			WorkingDirectoryAuthored bool   `json:"workingDirectoryAuthored"`
-			UserMessage              string `json:"userMessage"`
+			WorkerType               string            `json:"workerType"`
+			RunnerID                 string            `json:"runnerId"`
+			ExecutorProvider         string            `json:"executorProvider"`
+			ModelProvider            string            `json:"modelProvider"`
+			Model                    string            `json:"model"`
+			WorkingDirectory         string            `json:"workingDirectory"`
+			WorkingDirectoryAuthored bool              `json:"workingDirectoryAuthored"`
+			UserMessage              string            `json:"userMessage"`
+			EnvVars                  map[string]string `json:"envVars,omitempty"`
 		} `json:"execution"`
 	}{RequestID: invocation.requestID, WorkerSessionID: invocation.workerSessionID}
 	document.Execution.WorkstationName = workers.ProviderInvocationRoute
@@ -341,6 +343,7 @@ func s8ExecutionDocument(t *testing.T, invocation s8RemoteWorkerInvocation) stri
 	document.Execution.WorkingDirectory = invocation.repository
 	document.Execution.WorkingDirectoryAuthored = true
 	document.Execution.UserMessage = invocation.message
+	document.Execution.EnvVars = invocation.envVars
 	encoded, err := json.Marshal(document)
 	if err != nil {
 		t.Fatalf("encode S8 execution document: %v", err)

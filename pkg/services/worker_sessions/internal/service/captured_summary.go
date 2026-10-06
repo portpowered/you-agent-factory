@@ -47,6 +47,7 @@ func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req wor
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	s.applyArchivedTerminalCause(ctx, page, result)
 	err = s.archivedCapturedFacts(ctx, page, result)
 	if err != nil {
 		return workersessions.Observation{}, err

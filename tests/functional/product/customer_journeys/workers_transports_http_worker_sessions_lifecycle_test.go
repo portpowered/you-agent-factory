@@ -211,6 +211,7 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 	assertSingleTerminalWorkerSessionEvent(t, events.frames, "control-session", "CANCELED")
 	assertOrderedWorkerSessionControlBracket(t, events.frames, "control-session", "CANCELED")
 	assertTerminalWorkerSessionScopeCompatibility(t, server.URL(), "control-session", "CANCELED")
+	assertCapturedStopCause(t, server.URL(), "control-session", "OPERATOR_CANCEL")
 
 	repeated := postWorkerSessionControl(t, server.URL(), "control-session", "cancel")
 	defer repeated.Body.Close()
@@ -241,6 +242,7 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 		terminateResult.DispatchId != "control-dispatch" {
 		t.Fatalf("mixed terminate result = %#v, want canonical canceled no-op", terminateResult)
 	}
+	assertCapturedStopCause(t, server.URL(), "control-session", "OPERATOR_CANCEL")
 	for _, action := range []string{"pause", "resume"} {
 		control := postWorkerSessionControl(t, server.URL(), "control-session", action)
 		defer control.Body.Close()

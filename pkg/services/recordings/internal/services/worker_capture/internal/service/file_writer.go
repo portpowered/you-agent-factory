@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -24,31 +25,44 @@ import (
 // FileWriter persists synced deltas; its map lock never covers disk I/O.
 // Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage       platformreplay.Storage
-	appender      platformreplay.Appender
-	directory     platformreplay.DirectoryScanner
-	root          string
-	mu            sync.Mutex
-	entries       map[string]*recordingEntry
-	clock         recordings.WorkerCaptureClock
-	ownerEpoch    string
-	catalogMu     sync.Mutex
-	catalog       map[string]recordings.WorkerSessionCatalogEntry
-	unavailable   map[string]struct{}
-	ambiguous     map[string]struct{}
-	successors    map[capturedLineageIdentity]map[string]capturedSuccessor
-	catalogLoaded bool
-	rebuildMu     sync.Mutex
+	storage    platformreplay.Storage
+	appender   platformreplay.Appender
+	directory  platformreplay.DirectoryScanner
+	root       string
+	mu         sync.Mutex
+	entries    map[string]*recordingEntry
+	clock      recordings.WorkerCaptureClock
+	ownerEpoch string
+	ownerProbe interface {
+		CurrentProcess() (platformprocess.Incarnation, error)
+	}
+	ownerStamped       bool
+	ownerRecoveryMu    sync.Mutex
+	ownerRecoveryDone  bool
+	ownerDeaths        map[string]bool
+	catalogMu          sync.Mutex
+	catalog            map[string]recordings.WorkerSessionCatalogEntry
+	unavailable        map[string]struct{}
+	ambiguous          map[string]struct{}
+	successors         map[capturedLineageIdentity]map[string]capturedSuccessor
+	catalogLoaded      bool
+	rebuildMu          sync.Mutex
+	controlIndexMu     sync.Mutex
+	controlIndex       map[string]*controlKeySlot
+	controlRebuildMu   sync.Mutex
+	controlIndexLoaded bool
 }
 type recordingEntry struct {
-	mu        sync.Mutex
-	pendingMu sync.Mutex
-	pending   []*pendingWorkerRecord
-	loaded    bool
-	exists    bool
-	damaged   bool
-	sessions  map[string]*recordingSession
-	order     []string
+	pendingMu       sync.Mutex
+	pending         []*pendingWorkerRecord
+	controlUnsynced bool
+	mu              sync.Mutex
+	loaded          bool
+	exists          bool
+	damaged         bool
+	sessions        map[string]*recordingSession
+	order           []string
+	operations      map[string][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
 	generation       string
@@ -61,17 +75,19 @@ type recordingSession struct {
 	usagePositions   []uint64
 }
 type workerJournalEntry struct {
-	RecordingGenerationID string                              `json:"recordingGenerationId,omitempty"`
-	OwnerEpoch            string                              `json:"ownerEpoch,omitempty"`
-	CapturedAt            *time.Time                          `json:"capturedAt,omitempty"`
-	Version               int                                 `json:"version"`
-	Kind                  string                              `json:"kind"`
-	RecordingID           string                              `json:"recordingId"`
-	WorkerSessionID       string                              `json:"workerSessionId"`
-	Record                *events.Record                      `json:"record,omitempty"`
-	Topic                 events.Topic                        `json:"topic,omitempty"`
-	Code                  string                              `json:"code,omitempty"`
-	ExecutionTerminal     *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	RecordingGenerationID string                                   `json:"recordingGenerationId,omitempty"`
+	OwnerEpoch            string                                   `json:"ownerEpoch,omitempty"`
+	CapturedAt            *time.Time                               `json:"capturedAt,omitempty"`
+	Version               int                                      `json:"version"`
+	Kind                  string                                   `json:"kind"`
+	RecordingID           string                                   `json:"recordingId"`
+	WorkerSessionID       string                                   `json:"workerSessionId"`
+	Record                *events.Record                           `json:"record,omitempty"`
+	Topic                 events.Topic                             `json:"topic,omitempty"`
+	Code                  string                                   `json:"code,omitempty"`
+	ExecutionTerminal     *recordings.WorkerRecordingTerminal      `json:"executionTerminal,omitempty"`
+	ControlOperation      *recordings.WorkerControlOperationRecord `json:"controlOperation,omitempty"`
+	OwnerLoss             *ownerLossFact                           `json:"ownerLoss,omitempty"`
 }
 
 var _ recordings.WorkerRecordingWriter = (*FileWriter)(nil)
@@ -80,7 +96,9 @@ var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
 // NewFileWriter requires the existing append-and-sync storage capability.
-func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string) (recordings.WorkerRecordingStore, error) {
+func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appender, directory platformreplay.DirectoryScanner, clock recordings.WorkerCaptureClock, root, ownerEpoch string, ownerProbe interface {
+	CurrentProcess() (platformprocess.Incarnation, error)
+}) (recordings.WorkerRecordingStore, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
@@ -96,7 +114,7 @@ func NewFileWriter(storage platformreplay.Storage, appender platformreplay.Appen
 	if clock == nil || strings.TrimSpace(ownerEpoch) == "" {
 		return nil, fmt.Errorf("worker recording file writer: clock and owner epoch are required")
 	}
-	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry), unavailable: make(map[string]struct{})}, nil
+	return &FileWriter{storage: storage, appender: appender, directory: directory, clock: clock, ownerEpoch: ownerEpoch, ownerProbe: ownerProbe, root: root, entries: make(map[string]*recordingEntry), catalog: make(map[string]recordings.WorkerSessionCatalogEntry), unavailable: make(map[string]struct{})}, nil
 }
 func (writer *FileWriter) entry(id string) *recordingEntry {
 	writer.mu.Lock()
@@ -155,6 +173,9 @@ func (session *recordingSession) prepareRecord(record events.Record) (recordings
 		}
 		return recordings.WorkerRecordingProjection{}, false, recordings.ErrWorkerRecordingDuplicate
 	}
+	if session.projection.Degradation == "OWNER_LOST" {
+		return recordings.WorkerRecordingProjection{}, false, recordings.ErrWorkerRecordingTerminal
+	}
 	projection, err := (recordings.WorkerRecordingCodec{}).AdvanceWorkerRecording(session.projection, record)
 	return projection, false, err
 }
@@ -201,10 +222,16 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	return nil
 }
 func (session *recordingSession) prepareFailure(delta workerJournalEntry) (recordings.WorkerRecordingProjection, error) {
+	if session.projection.Degradation == "OWNER_LOST" {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrWorkerRecordingTerminal
+	}
 	if delta.Topic != session.projection.Topic {
 		return recordings.WorkerRecordingProjection{}, recordings.ErrWorkerRecordingOrder
 	}
 	if strings.TrimSpace(delta.Code) == "" {
+		return recordings.WorkerRecordingProjection{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	if delta.Code == "OWNER_LOST" {
 		return recordings.WorkerRecordingProjection{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return (recordings.WorkerRecordingCodec{}).FailWorkerRecording(session.projection, delta.Code, delta.ExecutionTerminal)
@@ -309,6 +336,7 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 	entry.order = loaded.order
 	entry.exists = loaded.exists
 	entry.damaged = loaded.damaged
+	entry.operations = loaded.operations
 	entry.loaded = true
 	return nil
 }
@@ -331,6 +359,9 @@ func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
 		return recordings.ErrWorkerRecordingReplay
 	}
 	for _, legacy := range snapshot.Sessions {
+		if legacy.Failure == "OWNER_LOST" {
+			return recordings.ErrWorkerRecordingReplay
+		}
 		result, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot, WorkerSessionID: legacy.WorkerSessionID})
 		if err != nil {
 			return err
@@ -356,8 +387,26 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 	if err := json.Unmarshal(line, &delta); err != nil {
 		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
+	if delta.Kind == "control-operation" || delta.Kind == "owner-loss" {
+		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&delta); err != nil {
+			return recordings.ErrWorkerRecordingReplay
+		}
+		if delta.Kind == "owner-loss" {
+			canonical, err := json.Marshal(delta)
+			if err != nil || !bytes.Equal(canonical, line) {
+				return recordings.ErrWorkerRecordingReplay
+			}
+			return entry.applyOwnerLoss(id, delta)
+		}
+		return entry.applyControlDelta(id, delta)
+	}
 	if delta.Version != 1 {
 		return recordings.ErrWorkerRecordingCompatibility
+	}
+	if delta.ControlOperation != nil || delta.OwnerLoss != nil || delta.Code == "OWNER_LOST" {
+		return recordings.ErrWorkerRecordingReplay
 	}
 	if delta.RecordingID != id || strings.TrimSpace(delta.WorkerSessionID) == "" {
 		return recordings.ErrWorkerRecordingReplay

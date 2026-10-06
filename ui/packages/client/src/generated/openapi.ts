@@ -1800,6 +1800,11 @@ export interface components {
       recordingHealth?: WorkerSessionObservationRecordingHealth;
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
       recordingHealthReason?: string;
+      /**
+       * @description Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+       * @enum {string|null}
+       */
+      terminalCause?: WorkerSessionObservationTerminalCause;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
       /** @description Source Worker Session when this session was admitted by continue or interrupt. */
       predecessorWorkerSessionId?: string;
@@ -10636,6 +10641,17 @@ export const WorkerSessionObservationRecordingHealth = {
 } as const;
 export type WorkerSessionObservationRecordingHealth =
   (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
+export const WorkerSessionObservationTerminalCause = {
+  WorkerSessionTerminalCauseCompleted: "COMPLETED",
+  WorkerSessionTerminalCauseFailed: "FAILED",
+  WorkerSessionTerminalCauseOperatorCancel: "OPERATOR_CANCEL",
+  WorkerSessionTerminalCauseOperatorTerminate: "OPERATOR_TERMINATE",
+  WorkerSessionTerminalCauseOperatorKill: "OPERATOR_KILL",
+  WorkerSessionTerminalCauseOperatorInterrupt: "OPERATOR_INTERRUPT",
+  WorkerSessionTerminalCauseOwnerLost: "OWNER_LOST",
+} as const;
+export type WorkerSessionObservationTerminalCause =
+  (typeof WorkerSessionObservationTerminalCause)[keyof typeof WorkerSessionObservationTerminalCause];
 export const WorkerSessionEventRecordingHealth = {
   WorkerSessionEventRecordingHealthComplete: "COMPLETE",
   WorkerSessionEventRecordingHealthDegraded: "DEGRADED",

@@ -354,6 +354,25 @@ identity, start time, usage, and capture health. Unknown end times and durations
 remain absent. A history without a captured terminal remains readable through
 `read --view logs`, but its summary is unavailable.
 
+Repeating `cancel` or `terminate` for a captured terminal Worker Session after
+restart returns `NOOP` with its terminal state. This repeat uses the selected
+host's recording and does not restart execution or replace the committed cause.
+An unavailable terminal summary cannot establish a successful stop.
+
+Worker Session summaries expose `terminalCause` when the reason is known.
+Live sessions report no terminal cause. Natural outcomes report `COMPLETED` or
+`FAILED`. `OPERATOR_CANCEL` and `OPERATOR_TERMINATE` require a committed,
+applied control for the exact attempt. Failed persistence or a no-op control
+does not establish an operator cause. Older captures may leave the cause
+unknown. The existing `failure.kind` classification remains available separately.
+Malformed saved stop results, including duplicate or aliased identity fields
+and unexpected private content, leave the operator cause unknown while the
+recorded terminal state remains readable. Factory controls fence the physical
+attempt independently of the logical dispatch ID returned by the control.
+Archived operator causes also require an unambiguous terminal event whose
+attempt, lifecycle phase and status match the recorded outcome. Conflicting
+terminal fields leave the cause unknown without changing the recorded state.
+
 Session summaries include the recorded `provider` even before a Provider Session
 reference is available. Recorded continuation links appear as
 `predecessorWorkerSessionId` and `successorWorkerSessionId`; missing legacy facts
@@ -476,6 +495,84 @@ Interrupt failures include a stable phase: `VALIDATION`,
 `SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
 default. `--remote` sends the complete request only to the configured
 `--server`; it never falls back to local state.
+
+Retry an interrupt with the same request ID, source, successor, and replacement
+message. A committed result preserves its phase and source/successor identity,
+state, and accepted predecessor/successor links without stopping or admitting
+another execution. Later continuations do not change these saved links. A recovered
+admission failure leaves the source stopped. Use session inspection for richer
+session metadata. After a host restart, use `--async` to read the saved admission
+result without waiting on a live successor stream. A committed source stop
+retains `OPERATOR_CANCEL` even if successor admission fails.
+For example, if another live Worker already owns the continuation dispatch,
+the interrupt joins its source and reports `SUCCESSOR_ADMISSION` with
+`WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED`. The sibling keeps
+running. Retrying the same tuple after restarting the host returns that saved
+failure, even after the sibling has ended; it does not admit the successor.
+New interruptions capture the execution recipe and exact
+Provider Session reference before stopping the source. Inherited environment
+values stay out of that recipe. Explicit environment overrides or prompts that
+require secret redaction prevent safe recipe recovery, so interruption refuses
+before stopping; ordinary cancel and terminate remain available.
+Saved recipes reject field-name case aliases, including aliases in execution
+settings and provider references. Customer token-map keys remain case-sensitive.
+The recipe also refuses inherited credentials embedded in replacement text,
+arguments, structured input, or the Provider Session reference. It uses the
+same sensitive environment names as captured command diagnostics, including
+authentication and access-key variables.
+An input write, input read, or intent persistence failure also refuses interruption
+before stopping the source. Repeating that request preserves the failure;
+use cancel or terminate to stop the still-running source.
+Durable replay validates the captured replacement input against the original
+request. Older request-only artifacts remain readable for result replay.
+Missing or corrupt captured input, or a stored control
+result containing unknown fields, duplicate JSON members, field-name case aliases,
+provider metadata, or private diagnostics, reports persistence
+unavailable without returning that content, stopping a Worker Session, or
+admitting a successor.
+A saved validation or source-cancellation failure cannot establish successor admission.
+Contradictory successor facts report persistence unavailable and do not repeat execution.
+If an intent or phase write loses its acknowledgement, the host reloads the
+journal and proceeds only when the exact attempted record is confirmed durable.
+This check does not repeat source cancellation or successor admission.
+An explicit storage conflict stops the operation. Reloading a saved record
+cannot override that refusal or authorize successor admission.
+An operation with only a pending intent or joined source reports execution unavailable
+until its prior ownership and admission can be reconciled safely; submitting
+the same request does not blindly repeat its effects. CLI and HTTP report
+`WORKER_SESSION_INTERRUPT_ADMISSION_FAILED` at `VALIDATION` for a recovered
+intent without observed completion. A torn journal tail instead reports
+persistence unavailable (`INTERNAL_ERROR`); its committed log prefix remains
+readable with `INCOMPLETE` capture health when no terminal was committed. Neither result proves a source stop
+or successor admission.
+
+An abrupt host exit without a terminal callback also leaves capture health `INCOMPLETE`.
+At host startup, a local OS check compares the recorded daemon PID and process
+creation identity. Confirmed loss is persisted once: exact-ID observation reports
+`FAILED`, failure kind `PROCESS_GONE`, and `terminalCause: OWNER_LOST`.
+The recovered log prefix stays readable. Child liveness remains `UNKNOWN`;
+owner loss does not establish child termination. Remote owners, failed OS queries,
+and older recordings without incarnation metadata retain unknown ownership.
+An unreadable capture journal leaves its history unavailable without preventing
+the host from serving other work. Restoring storage makes its captured prefix
+readable again; ordinary reads do not establish ownership or persist loss facts.
+Cancel and terminate refuse with
+`WORKER_SESSION_CONTROL_FAILED` when the host cannot establish execution ownership.
+This refusal does not prove that the provider process stopped.
+
+If a joined
+source snapshot was committed before interruption, the error
+includes those saved facts. A committed accepted successor snapshot returns
+success even when the final operation result is unavailable. Replay preserves
+that admission snapshot without another stop or admission. Inspect the successor
+to read its current state.
+For a joined source without an admission snapshot, recovery inspects the reserved
+successor's captured opening. A conflicting owner, scope, attempt, or predecessor
+refuses recovery. Openings with unknown fields, duplicate JSON members, or
+field-name case aliases also refuse recovery. A matching opening still reports
+execution unavailable because
+the opening precedes provider admission. A missing opening also leaves admission
+uncertain. Neither result starts another execution.
 
 Use the direct Worker Session controls when the same admitted session should
 be paused, resumed, canceled, or terminated. Each command accepts one stable

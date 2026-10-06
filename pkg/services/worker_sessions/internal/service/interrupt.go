@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -59,6 +60,9 @@ func (r *registry) Interrupt(
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
 	}
 	req = req.Normalize()
+	if result, found, err := r.replayDurableInterrupt(callerCtx, req); found {
+		return result, err
+	}
 	reservation, historyErr := r.beginControlHistory(
 		callerCtx,
 		req.SourceWorkerSessionID,
@@ -200,7 +204,21 @@ func (r *registry) beginControlHistory(
 	action workersessions.ControlAction,
 	requestID string,
 ) (*controlHistoryReservation, error) {
-	session, supervision, err := r.controlTarget(id)
+	target, err := r.freezeControlTarget(r.workerAddress(id))
+	if err != nil {
+		return nil, err
+	}
+	return r.beginFrozenControlHistory(ctx, id, action, requestID, target)
+}
+
+func (r *registry) beginFrozenControlHistory(
+	ctx context.Context,
+	id string,
+	action workersessions.ControlAction,
+	requestID string,
+	target frozenControlTarget,
+) (*controlHistoryReservation, error) {
+	session, _, err := r.controlTarget(id)
 	if err != nil {
 		return nil, err
 	}
@@ -214,19 +232,16 @@ func (r *registry) beginControlHistory(
 	if !pub.control.acquire() {
 		return nil, nil
 	}
-	runtimeAttempt := r.runtimeAttemptFor(id)
+	supervision, runtimeAttempt := target.supervision, target.runtime
 
 	pub.mu.Lock()
 	open := pub.open
-	dispatchID := ""
+	dispatchID := target.dispatchID
 	turnID := pub.turnID
 	if supervision != nil {
 		supervision.mu.Lock()
-		dispatchID = strings.TrimSpace(supervision.dispatchID)
 		turnID = strings.TrimSpace(supervision.turnID)
 		supervision.mu.Unlock()
-	} else if runtimeAttempt != nil {
-		dispatchID = strings.TrimSpace(runtimeAttempt.dispatchID)
 	}
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
@@ -575,6 +590,10 @@ func interruptSourceAssociation(source workersessions.Session) (workersessions.P
 }
 
 func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptResult, error) {
+	return r.runDurableInterrupt(plan)
+}
+
+func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {
 	defer finishInterruptOperation(plan.supervision)
 	cancelResult := workers.WorkstationDispatchCancelResult{
 		DispatchID: plan.dispatchID,
@@ -617,6 +636,11 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 	}
 
 	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
+	stopped := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+	if err := r.commitInterruptPhase(boundaryContext, operation, "SOURCE_STOPPED", stopped, nil); err != nil {
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+	}
 	continued, continueErr := r.Continue(boundaryContext, workersessions.ContinueRequest{
 		RequestID:                interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,
@@ -634,6 +658,9 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, cause)
 	}
 	result.Accepted = true
+	if err := r.commitInterruptPhase(boundaryContext, operation, "SUCCESSOR_ADMITTED", result, nil); err != nil {
+		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
+	}
 	r.logger.Info(
 		"worker session interrupt",
 		"sourceWorkerSessionID", plan.request.SourceWorkerSessionID,

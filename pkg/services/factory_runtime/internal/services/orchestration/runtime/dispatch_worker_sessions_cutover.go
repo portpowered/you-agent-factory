@@ -29,6 +29,14 @@ func runtimeAttemptPreparation(
 	if cfg == nil || cfg.workerAttempts == nil {
 		return nil
 	}
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		if _, recorded := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); recorded {
+			// Recorded dispatches derive their Worker observations from Factory
+			// history. Replaying a result must not admit the original Worker ID
+			// again or reacquire execution/control authority over its live owner.
+			return nil
+		}
+	}
 	recorder := cfg.workerAttempts
 	lifecycle := cfg.attempts
 	clock := cfg.clock

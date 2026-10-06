@@ -83,6 +83,7 @@ func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.List
 			if observation == nil || !observationStateMatches(observation.State, req.States) {
 				continue
 			}
+			s.applyArchivedTerminalCause(ctx, recordings.WorkerCapturedActivityPage{Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health, HealthReason: item.HealthReason}, observation)
 			key := identityOfHistory(*observation)
 			if _, duplicate := seen[key]; duplicate {
 				return nil, workersessions.ErrObservationProjectionUnavailable

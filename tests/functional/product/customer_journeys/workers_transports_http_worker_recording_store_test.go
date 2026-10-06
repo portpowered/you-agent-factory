@@ -2,6 +2,7 @@ package customer_journeys_test
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,8 +16,32 @@ import (
 // Recordings-owned reducer in the test while avoiding direct construction of
 // the sibling recordings wire package from a transport test.
 type remoteWorkerRecordingStore struct {
+	unavailableWorkerControlStore
 	mu        sync.Mutex
 	snapshots map[string]recordings.WorkerRecordingSnapshot
+}
+
+// These capture-only fixtures explicitly refuse durable controls. Their
+// snapshot store supplies no sync acknowledgement or execution authority.
+type unavailableWorkerControlStore struct{}
+
+func (unavailableWorkerControlStore) BeginWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence
+}
+func (unavailableWorkerControlStore) AdvanceWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord, uint64) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+func (unavailableWorkerControlStore) LoadWorkerControlOperation(context.Context, recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+func (unavailableWorkerControlStore) ListWorkerControlOperations(context.Context, recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, json.RawMessage) (string, error) {
+	return "", recordings.ErrWorkerRecordingPersistence
+}
+func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
 }
 
 func newRemoteWorkerRecordingStore() *remoteWorkerRecordingStore {

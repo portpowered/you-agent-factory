@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -432,6 +433,11 @@ func mapInterruptServiceError(err error) error {
 		phase = string(typed.Phase)
 	}
 	switch {
+	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
+		return newInterruptCLIError("INTERNAL_ERROR", "Worker Session interrupt persistence unavailable", phase, err)
+	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
+		errors.Is(err, workersessions.ErrInterruptServerStopping):
+		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_ADMISSION_FAILED", "Workers could not admit the Worker Session interrupt", phase, err)
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage),
@@ -452,9 +458,6 @@ func mapInterruptServiceError(err error) error {
 	case errors.Is(err, workersessions.ErrInterruptSuccessorAdmission),
 		errors.Is(err, workersessions.ErrInterruptSuccessorAdmissionFailed):
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED", "Workers could not admit the Worker Session interrupt successor", phase, err)
-	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
-		errors.Is(err, workersessions.ErrInterruptServerStopping):
-		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_ADMISSION_FAILED", "Workers could not admit the Worker Session interrupt", phase, err)
 	default:
 		return newInterruptCLIError("INTERNAL_ERROR", "failed to interrupt Worker Session", phase, err)
 	}

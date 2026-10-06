@@ -367,7 +367,7 @@ func TestStart_ProviderSessionInspectionFailureReachesTerminalEventWithSafeCause
 			}, nil
 		},
 	}
-	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -450,7 +450,7 @@ func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSucce
 			}, inspectionErr
 		},
 	}
-	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	registry, err := workersessionservice.New(executionBoundary{execution: execution}, eventsSvc, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}

@@ -1,12 +1,24 @@
 package wire
 
 import (
+	"context"
+	"reflect"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerrecordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/wire"
 )
+
+// NewWorkerOwnerRecoveryOperation binds the existing writer's boot capability.
+// External writers retain their explicit ownership/recovery policy.
+func NewWorkerOwnerRecoveryOperation(writer recordings.WorkerRecordingWriter) recordings.WorkerOwnerRecoveryOperation {
+	if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
+		return recovery.RecoverWorkerOwners
+	}
+	return func(context.Context) error { return nil }
+}
 
 // NewWorkerSessionRecorder constructs the Recordings-owned capture capability
 // over the process Events stream and an explicit durable writer. It performs
@@ -30,4 +42,21 @@ func NewWorkerRecordingFileWriter(
 	ownerEpoch string,
 ) (recordings.WorkerRecordingStore, error) {
 	return workerrecordingwire.NewFileWriter(storage, appender, directory, clock, root, ownerEpoch)
+}
+
+// NewWorkerControlOperationStore selects the control capability of the same
+// recording writer. It performs no IO and never supplies an alternate ledger.
+func NewWorkerControlOperationStore(writer recordings.WorkerRecordingWriter) (recordings.WorkerControlOperationStore, error) {
+	store, ok := writer.(recordings.WorkerControlOperationStore)
+	if !ok || store == nil {
+		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
+	value := reflect.ValueOf(store)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return nil, recordings.ErrMissingWorkerControlOperationStore
+		}
+	}
+	return store, nil
 }

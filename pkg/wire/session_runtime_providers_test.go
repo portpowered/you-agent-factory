@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"io/fs"
 	"reflect"
 	"slices"
@@ -968,7 +969,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 		t.Fatalf("provider sessions service = %v", err)
 	}
 	execution := wireTestWorkersService{}
-	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, provideWorkerHistorySnapshotBudget())
+	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget())
 	if err != nil {
 		t.Fatalf("worker sessions factory() error = %v", err)
 	}
@@ -999,4 +1000,33 @@ func statelessDecisionEnvelopeService(t *testing.T) factorydefinitions.DecisionE
 		t.Fatalf("provideFactoryInvocationPolicyPorts() error = %v", err)
 	}
 	return provideDecisionEnvelopeService(ports)
+}
+
+// unavailableWorkerControlStore is a controlled persistence outage for tests
+// that do not own durable control behavior. Every operation fails explicitly;
+// it must never be used as evidence that an intent was committed or replayed.
+type unavailableWorkerControlStore struct{}
+
+func (unavailableWorkerControlStore) BeginWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	return recordings.WorkerControlOperationRecord{}, false, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) AdvanceWorkerControlOperation(context.Context, recordings.WorkerControlOperationRecord, uint64) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) LoadWorkerControlOperation(context.Context, recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	return recordings.WorkerControlOperationRecord{}, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ListWorkerControlOperations(context.Context, recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, json.RawMessage) (string, error) {
+	return "", recordings.ErrWorkerRecordingPersistence
+}
+
+func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
 }

@@ -132,7 +132,7 @@ func TestFileWriterCapturedSnapshotsPreserveReducedHealthAndDetachedHistory(t *t
 	if err != nil || len(first.Sessions) != 3 {
 		t.Fatalf("shared snapshot=%+v error=%v", first, err)
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestFileWriterCapturedUsageKeepsFrozenHeadAcrossRestart(t *testing.T) {
 	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestFileWriterCapturedActiveLossPreservesIncompletePrefix(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	reader, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened-owner")
+	reader, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,7 +346,7 @@ func TestFileWriterCapturedSuccessorSurvivesRestartWithoutSourceRewrite(t *testi
 		t.Fatal(err)
 	}
 	assertCapturedSuccessor(t, writer, "successor")
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestFileWriterCatalogSummaryKeepsLatestFactsAcrossRestart(t *testing.T) {
 		t.Errorf("cached summary reloaded logs: reads %d -> %d", reads, probe.reads)
 	}
 	probe.mu.Unlock()
-	reopened, err := NewFileWriter(probe, probe, probe, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(probe, probe, probe, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -556,7 +556,7 @@ func TestFileWriterCatalogSummaryModelOnlyUsageKeepsCounters(t *testing.T) {
 	if len(want.MetadataRecords) != 2 || want.MetadataRecords[0].ID.Position != 2 || want.MetadataRecords[1].ID.Position != 3 {
 		t.Fatalf("model-only update erased captured counters: %+v", want.MetadataRecords)
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +656,7 @@ func restartedPrefixSummary(t *testing.T, legacy, terminal bool) recordings.Work
 			t.Fatal(err)
 		}
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,7 +804,7 @@ func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -884,7 +884,7 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "healthy", "healthy")); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened")
+	reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "reopened", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -995,7 +995,7 @@ func TestFileWriterCatalogReadFailureDoesNotCacheAbsence(t *testing.T) {
 		t.Fatal(err)
 	}
 	storage := &catalogReadProbe{Local: local, fault: errors.New("private-path sentinel-secret")}
-	reader, err := NewFileWriter(storage, local, local, &captureTimeProbe{}, original.root, "retry-owner")
+	reader, err := NewFileWriter(storage, local, local, &captureTimeProbe{}, original.root, "retry-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1020,7 +1020,7 @@ func TestFileWriterCatalogCanceledScanDoesNotCacheAbsence(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	scan := &catalogScanProbe{local: local, afterScan: cancel}
-	reader, err := NewFileWriter(local, local, scan, &captureTimeProbe{}, root, "observer-owner")
+	reader, err := NewFileWriter(local, local, scan, &captureTimeProbe{}, root, "observer-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1029,7 +1029,7 @@ func TestFileWriterCatalogCanceledScanDoesNotCacheAbsence(t *testing.T) {
 	}
 	// A different store writes only after the canceled read has returned. The
 	// next observer must reconstruct, rather than inherit permanent absence.
-	writer, err := NewFileWriter(local, local, local, &captureTimeProbe{}, root, "writer-owner")
+	writer, err := NewFileWriter(local, local, local, &captureTimeProbe{}, root, "writer-owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1048,7 +1048,7 @@ func TestFileWriterCatalogScanRetriesFailureAndCachesLookup(t *testing.T) {
 	local := platformreplay.NewLocal(runtime.GOOS)
 	root := t.TempDir()
 	clock := &captureTimeProbe{now: time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)}
-	original, err := NewFileWriter(local, local, local, clock, root, "original")
+	original, err := NewFileWriter(local, local, local, clock, root, "original", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1058,7 +1058,7 @@ func TestFileWriterCatalogScanRetriesFailureAndCachesLookup(t *testing.T) {
 	}
 	fault := errors.New("selected filesystem unavailable")
 	scan := &catalogScanProbe{local: local, fault: fault}
-	reopened, err := NewFileWriter(local, local, scan, clock, root, "reopened")
+	reopened, err := NewFileWriter(local, local, scan, clock, root, "reopened", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1088,7 +1088,7 @@ func TestFileWriterCapturedAtAndCatalogSurviveReopening(t *testing.T) {
 	local := platformreplay.NewLocal(runtime.GOOS)
 	root := t.TempDir()
 	clock := &captureTimeProbe{now: time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)}
-	store, err := NewFileWriter(local, local, local, clock, root, "owner-one")
+	store, err := NewFileWriter(local, local, local, clock, root, "owner-one", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1114,7 +1114,7 @@ func TestFileWriterCapturedAtAndCatalogSurviveReopening(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, "catalog")); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewFileWriter(local, local, local, clock, root, "owner-two")
+	reopened, err := NewFileWriter(local, local, local, clock, root, "owner-two", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

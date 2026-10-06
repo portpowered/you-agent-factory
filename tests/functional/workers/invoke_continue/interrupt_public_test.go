@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -196,6 +197,61 @@ func TestInterruptRace(t *testing.T) {
 	scenario.close(t)
 }
 
+// The real HTTP host retains its synced operation after the caller disconnects.
+// A scenario-owned command gate separates cancellation from callback return,
+// making the interrupted wait observable without sleeps or shared host locks.
+func TestInterruptCallerDisconnectRetainsOneHostOwnedSuccessor(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-disconnect")
+	defer scenario.runner.releaseAll()
+	ids := scenario.ids
+	callbackReturn := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseCallback := func() { releaseOnce.Do(func() { close(callbackReturn) }) }
+	t.Cleanup(releaseCallback)
+	call := scenario.runner.callFor(scenario.repositoryA.path, s8InterruptCallAInitial)
+	call.cancellationReturn = callbackReturn
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+	callerCtx, disconnect := context.WithCancel(ctx)
+	defer disconnect()
+	callerDone := make(chan error, 1)
+	go func() {
+		_, _, _, err := sendS8InterruptHTTP(callerCtx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+		callerDone <- err
+	}()
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	disconnect()
+	select {
+	case err := <-callerDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("disconnected caller error=%v, want context cancellation", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("disconnected HTTP caller did not return")
+	}
+	if scenario.runner.CallCount() != 1 {
+		t.Fatal("successor admitted before source callback joined")
+	}
+	releaseCallback()
+	first := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	assertS8APIInterruptAdmission(t, first, ids)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, scenario.fixture.router.requests)
+	cli := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	if !reflect.DeepEqual(cli, s8InterruptResultFromAPI(first)) || scenario.runner.CallCount() != 2 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 {
+		t.Fatalf("disconnected retry=%#v, want one cancellation and one successor matching %#v", cli, first)
+	}
+	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	_ = replayS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	assertS8WorkNotAdvanced(t, scenario.fixture, scenario.session.id, ids.workA)
+	scenario.close(t)
+}
+
 // TestInterruptFailure proves the stable validation failure through the
 // root-composed HTTP server for a conflicting successor. The source-cancellation
 // response is also sent through the configured remote HTTP edge to keep the
@@ -296,6 +352,45 @@ type publicInterruptOutcome struct {
 	status int
 	body   string
 	err    error
+}
+
+// Explicit environment overrides cannot be reconstructed from a configuration
+// reference. Refuse replacement before stopping; exact termination still works.
+func TestInterruptUnsafeRecipeLeavesSourceControllable(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "unsafe-recipe")
+	t.Cleanup(scenario.runner.releaseAll)
+	ids := scenario.ids
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+		envVars: map[string]string{"CUSTOM_TOKEN": "private-explicit-override"},
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+	status, body, response := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	if status < 400 || response.Code == "" || string(response.Phase) != "VALIDATION" || strings.Contains(body, "private-explicit-override") {
+		t.Fatalf("unsafe recipe HTTP status=%d response=%#v", status, response)
+	}
+	code, phase, err := executeS8InterruptCLIError(ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	if err != nil || code != string(response.Code) || phase != "VALIDATION" {
+		t.Fatalf("unsafe recipe CLI code=%s phase=%s err=%v", code, phase, err)
+	}
+	if scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
+		t.Fatal("refused interruption stopped the source or admitted a successor")
+	}
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "terminate", ids.workerA})
+	inputs.Input.Env = append([]string(nil), scenario.env...)
+	inputs.Input.WorkingDirectory = scenario.repositoryA.path
+	if err := scenario.manager.Execute(inputs.Input); err != nil {
+		t.Fatalf("exact terminate after unsafe recipe: %v stderr=%s", err, inputs.Stderr())
+	}
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
+	if source := findS8Observation(t, listed, ids.workerA); source.State != "TERMINATED" || scenario.runner.CallCount() != 1 {
+		t.Fatalf("plain termination source=%#v provider calls=%d", source, scenario.runner.CallCount())
+	}
 }
 
 func postS8Interrupt(

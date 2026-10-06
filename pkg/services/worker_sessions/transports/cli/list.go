@@ -233,6 +233,7 @@ type listJSONObservation struct {
 	WorkIDs                    []string                                            `json:"workIds"`
 	WorkName                   *string                                             `json:"workName"`
 	WorkerSessionID            string                                              `json:"workerSessionId"`
+	TerminalCause              *factoryapi.WorkerSessionObservationTerminalCause   `json:"terminalCause"`
 }
 
 type listJSONTokenUsage struct {

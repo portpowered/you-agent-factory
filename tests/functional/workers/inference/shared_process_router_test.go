@@ -2,6 +2,7 @@ package inference_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -207,6 +208,62 @@ func (router *inferenceWorkerRecordingRouter) LoadWorkerRecording(
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
 	}
 	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+func (router *inferenceWorkerRecordingRouter) controlStore(recordingID, workerID string) (recordings.WorkerControlOperationStore, error) {
+	store, ok := router.routeIdentity(recordingID, workerID).(recordings.WorkerControlOperationStore)
+	if !ok || store == nil {
+		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
+	return store, nil
+}
+
+func (router *inferenceWorkerRecordingRouter) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
+	store, err := router.controlStore(record.Target.RecordingID, record.Target.WorkerSessionID)
+	if err != nil {
+		return recordings.WorkerControlOperationRecord{}, false, err
+	}
+	return store.BeginWorkerControlOperation(ctx, record)
+}
+
+func (router *inferenceWorkerRecordingRouter) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, revision uint64) (recordings.WorkerControlOperationRecord, error) {
+	store, err := router.controlStore(record.Target.RecordingID, record.Target.WorkerSessionID)
+	if err != nil {
+		return recordings.WorkerControlOperationRecord{}, err
+	}
+	return store.AdvanceWorkerControlOperation(ctx, record, revision)
+}
+
+func (router *inferenceWorkerRecordingRouter) LoadWorkerControlOperation(ctx context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	store, err := router.controlStore(key.RecordingID, key.WorkerSessionID)
+	if err != nil {
+		return recordings.WorkerControlOperationRecord{}, err
+	}
+	return store.LoadWorkerControlOperation(ctx, key)
+}
+
+func (router *inferenceWorkerRecordingRouter) ListWorkerControlOperations(ctx context.Context, target recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
+	store, err := router.controlStore(target.RecordingID, target.WorkerSessionID)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListWorkerControlOperations(ctx, target)
+}
+
+func (router *inferenceWorkerRecordingRouter) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
+	store, err := router.controlStore(key.RecordingID, key.WorkerSessionID)
+	if err != nil {
+		return "", err
+	}
+	return store.PersistWorkerControlInput(ctx, key, input)
+}
+
+func (router *inferenceWorkerRecordingRouter) ReadWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {
+	store, err := router.controlStore(key.RecordingID, key.WorkerSessionID)
+	if err != nil {
+		return nil, err
+	}
+	return store.ReadWorkerControlInput(ctx, key, ref)
 }
 
 func (router *inferenceCommandRouter) set(

@@ -40,6 +40,8 @@ type HistorySnapshotBudget = internalservice.HistorySnapshotBudget
 // logging.NoopLogger{}. Provider Sessions remains a required direct
 // dependency even when its implementation reports unavailable storage.
 // clock supplies observation facts; scheduler supplies deadline timers.
+// operations is the required control store supplied from the same recording
+// writer; missing capabilities fail process construction before admission.
 func NewService(
 	execution workers.Service,
 	eventsAppender EventsAppender,
@@ -49,6 +51,7 @@ func NewService(
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
+	operations recordings.WorkerControlOperationStore,
 	snapshots *HistorySnapshotBudget,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
@@ -60,6 +63,7 @@ func NewService(
 		providerSessions,
 		recording,
 		captured,
+		operations,
 		snapshots,
 	)
 }

@@ -218,7 +218,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
 		EndedAt: session.EndedAt, FactorySessionID: session.FactorySessionId, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
-		ReasoningEffort: session.ReasoningEffort, RecordingHealth: session.RecordingHealth, RecordingHealthReason: session.RecordingHealthReason,
+		ReasoningEffort: session.ReasoningEffort, RecordingHealth: session.RecordingHealth, RecordingHealthReason: session.RecordingHealthReason, TerminalCause: session.TerminalCause,
 		StartedAt: session.StartedAt, State: session.State, ConfirmationState: workerSessionConfirmationState(session), TokenUsage: tokenUsage,
 		TurnUsage:  turnUsageJSON(session.TurnUsage),
 		Transcript: session.Transcript, TurnID: session.TurnId, WorkID: session.WorkId, WorkIDs: session.WorkIds, WorkName: session.WorkName,
@@ -264,6 +264,7 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		{"State", stringOrDashPtr(string(session.State))}, {"Confirmation state", string(workerSessionConfirmationState(session))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
 		{"Duration", formatDuration(session.DurationMillis)}, {"Duration basis", stringOrDashPtr(string(session.DurationBasis))},
 		{"Transcript", stringOrDashPtr(string(session.Transcript))},
+		{"Terminal cause", optionalTerminalCause(session.TerminalCause)},
 	}
 	for _, field := range fields {
 		if _, err := fmt.Fprintf(output, "%s:\t%s\n", field.label, field.value); err != nil {
@@ -271,6 +272,13 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		}
 	}
 	return nil
+}
+
+func optionalTerminalCause(cause *factoryapi.WorkerSessionObservationTerminalCause) string {
+	if cause == nil {
+		return "-"
+	}
+	return string(*cause)
 }
 
 func writeTokenUsage(output io.Writer, usage *factoryapi.ProviderSessionTokenUsage) error {

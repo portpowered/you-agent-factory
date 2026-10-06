@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-owner-loss-envelope.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "kind", "recordingId", "workerSessionId", "recordingGenerationId", "ownerEpoch", "capturedAt", "ownerLoss"],
+  "properties": {
+    "version": {"const": 2},
+    "kind": {"const": "owner-loss"},
+    "recordingId": {"type": "string", "minLength": 1},
+    "workerSessionId": {"type": "string", "minLength": 1},
+    "recordingGenerationId": {"type": "string", "minLength": 1},
+    "ownerEpoch": {"type": "string", "minLength": 1},
+    "capturedAt": {"type": "string", "format": "date-time"},
+    "ownerLoss": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recoveryOwnerEpoch", "childLiveness"],
+      "properties": {
+        "recoveryOwnerEpoch": {"type": "string", "minLength": 1},
+        "childLiveness": {"const": "UNKNOWN"}
+      }
+    }
+  }
+}

@@ -21,7 +21,7 @@ func TestCapturedPayloadCapPreservesJournalAndArtifact(t *testing.T) {
 	local := platformreplay.NewLocal(runtime.GOOS)
 	root := t.TempDir()
 	clock := &captureTimeProbe{now: time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)}
-	store, err := NewFileWriter(local, local, local, clock, root, "owner")
+	store, err := NewFileWriter(local, local, local, clock, root, "owner", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

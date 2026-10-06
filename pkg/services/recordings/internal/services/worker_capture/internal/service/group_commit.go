@@ -138,6 +138,10 @@ func (writer *FileWriter) stagePendingRecords(entry *recordingEntry, group []*pe
 			continue
 		}
 		previous := projections[record.WorkerSessionID]
+		if previous.Degradation == "OWNER_LOST" {
+			request.err = recordings.ErrWorkerRecordingTerminal
+			continue
+		}
 		projection, err := (recordings.WorkerRecordingCodec{}).AdvanceWorkerRecording(previous, record.Record)
 		if err != nil {
 			request.err = err
@@ -145,10 +149,11 @@ func (writer *FileWriter) stagePendingRecords(entry *recordingEntry, group []*pe
 		}
 		delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
 		if previous.LastPosition == 0 {
-			identity, _ := json.Marshal([]string{writer.ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
+			ownerEpoch := writer.captureOwnerEpoch()
+			identity, _ := json.Marshal([]string{ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
 			generation := sha256.Sum256(identity)
 			delta.RecordingGenerationID = hex.EncodeToString(generation[:])
-			delta.OwnerEpoch = writer.ownerEpoch
+			delta.OwnerEpoch = ownerEpoch
 		}
 		stamp := writer.clock.Now().UTC()
 		delta.CapturedAt = &stamp

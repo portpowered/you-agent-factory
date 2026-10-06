@@ -1542,6 +1542,17 @@ const (
 	WorkerSessionObservationStateTerminated WorkerSessionObservationState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionObservationTerminalCause.
+const (
+	WorkerSessionTerminalCauseCompleted         WorkerSessionObservationTerminalCause = "COMPLETED"
+	WorkerSessionTerminalCauseFailed            WorkerSessionObservationTerminalCause = "FAILED"
+	WorkerSessionTerminalCauseOperatorCancel    WorkerSessionObservationTerminalCause = "OPERATOR_CANCEL"
+	WorkerSessionTerminalCauseOperatorInterrupt WorkerSessionObservationTerminalCause = "OPERATOR_INTERRUPT"
+	WorkerSessionTerminalCauseOperatorKill      WorkerSessionObservationTerminalCause = "OPERATOR_KILL"
+	WorkerSessionTerminalCauseOperatorTerminate WorkerSessionObservationTerminalCause = "OPERATOR_TERMINATE"
+	WorkerSessionTerminalCauseOwnerLost         WorkerSessionObservationTerminalCause = "OWNER_LOST"
+)
+
 // Defines values for WorkerSessionObservationTranscript.
 const (
 	WorkerSessionObservationTranscriptAVAILABLE   WorkerSessionObservationTranscript = "AVAILABLE"
@@ -9175,9 +9186,12 @@ type WorkerSessionObservation struct {
 	State                 WorkerSessionObservationState `json:"state"`
 
 	// SuccessorWorkerSessionId Successor admitted from this session by continue or interrupt, when known.
-	SuccessorWorkerSessionId *string                            `json:"successorWorkerSessionId,omitempty"`
-	TokenUsage               *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
-	Transcript               WorkerSessionObservationTranscript `json:"transcript"`
+	SuccessorWorkerSessionId *string `json:"successorWorkerSessionId,omitempty"`
+
+	// TerminalCause Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+	TerminalCause *WorkerSessionObservationTerminalCause `json:"terminalCause"`
+	TokenUsage    *ProviderSessionTokenUsage             `json:"tokenUsage,omitempty"`
+	Transcript    WorkerSessionObservationTranscript     `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
 	TurnId *string `json:"turnId"`
@@ -9206,6 +9220,9 @@ type WorkerSessionObservationRecordingHealth string
 
 // WorkerSessionObservationState defines model for WorkerSessionObservation.State.
 type WorkerSessionObservationState string
+
+// WorkerSessionObservationTerminalCause Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
+type WorkerSessionObservationTerminalCause string
 
 // WorkerSessionObservationTranscript defines model for WorkerSessionObservation.Transcript.
 type WorkerSessionObservationTranscript string

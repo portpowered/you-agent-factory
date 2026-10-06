@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +75,10 @@ func runIncompleteHistoryRestart(t *testing.T, direct bool) {
 	}
 	assertIncompleteHistoryObservation(t, observation, archived[0])
 	assertArchivedHistoryControlRefused(t, ctx, binary, project, env, second.url, observation.WorkerSessionId)
+	afterControls := historyRows(t, ctx, binary, project, env, second.url, "archived")
+	if !reflect.DeepEqual(archived, afterControls) || len(historyRows(t, ctx, binary, project, env, second.url, "active")) != 0 {
+		t.Fatalf("refused controls changed recovered history or restored ownership: before=%+v after=%+v", archived, afterControls)
+	}
 	replayed := historyLogPage(t, ctx, binary, project, env, second.url, observation.WorkerSessionId, "")
 	assertIncompleteHistoryPrefix(t, prefix, replayed)
 	tail := historyLogPage(t, ctx, binary, project, env, second.url, observation.WorkerSessionId, *prefix.NextToken)
@@ -84,7 +90,28 @@ func runIncompleteHistoryRestart(t *testing.T, direct bool) {
 
 func assertArchivedHistoryControlRefused(t *testing.T, ctx context.Context, binary, project string, env []string, server, id string) {
 	t.Helper()
-	command := exec.CommandContext(ctx, binary, "--remote", "--server", server, "--json", "worker-sessions", "cancel", id)
+	for _, action := range []string{"cancel", "terminate"} {
+		assertArchivedHistoryCLIControlRefused(t, ctx, binary, project, env, server, id, action)
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, server+"/worker-sessions/"+id+"/"+action, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		var diagnostic api.ErrorResponse
+		if readErr != nil || json.Unmarshal(body, &diagnostic) != nil || response.StatusCode != http.StatusServiceUnavailable || string(diagnostic.Code) != "WORKER_SESSION_CONTROL_FAILED" {
+			t.Fatalf("archived HTTP %s refusal: status=%d body=%s read=%v", action, response.StatusCode, body, readErr)
+		}
+	}
+}
+
+func assertArchivedHistoryCLIControlRefused(t *testing.T, ctx context.Context, binary, project string, env []string, server, id, action string) {
+	t.Helper()
+	command := exec.CommandContext(ctx, binary, "--remote", "--server", server, "--json", "worker-sessions", action, id)
 	command.Dir, command.Env = project, env
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
@@ -94,7 +121,7 @@ func assertArchivedHistoryControlRefused(t *testing.T, ctx context.Context, bina
 	var diagnostic struct {
 		Code string `json:"code"`
 	}
-	if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil || diagnostic.Code != "NOT_FOUND" || stdout.Len() != 0 {
+	if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil || diagnostic.Code != "WORKER_SESSION_CONTROL_FAILED" || stdout.Len() != 0 {
 		t.Fatalf("archived control refusal: %s; stderr=%s; decode=%v", &stdout, &stderr, err)
 	}
 }
@@ -249,6 +276,10 @@ func assertIncompleteHistoryObservation(t *testing.T, observation, ended api.Wor
 		ended.State == "RUNNING" || ended.State == "COMPLETED" || ended.ConfirmationState != "UNCONFIRMED" ||
 		ended.RecordingHealth == nil || *ended.RecordingHealth != "INCOMPLETE" || ended.EndedAt != nil || ended.DurationMillis != nil {
 		t.Fatalf("invented recovered outcome: %+v", ended)
+	}
+	if ended.State != "FAILED" || ended.TerminalCause == nil || *ended.TerminalCause != "OWNER_LOST" ||
+		ended.Failure == nil || ended.Failure.Kind != "PROCESS_GONE" {
+		t.Fatalf("missing witnessed supervisor loss: %+v", ended)
 	}
 }
 

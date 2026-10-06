@@ -98,6 +98,8 @@ type registry struct {
 	retainedReader           EventsRetainedReader
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
+	operations               recordings.WorkerControlOperationStore
+	stopOperations           sync.Map // request key -> *sync.Mutex; no registry lock spans a join
 	clock                    platformclock.Source
 	scheduler                platformclock.TimerSource
 	logger                   logging.Logger
@@ -156,6 +158,8 @@ func prepareRuntimeAttemptExecution(req workersessions.RuntimeAttemptRequest) (w
 // implementations where supported. The supplied scheduler owns safety
 // deadlines independently of the fact clock. Selected per-attempt effects are
 // validated at admission, before reservation or publication.
+// The control-operation store is required at construction and is injected
+// directly from the Recordings writer capability.
 func New(
 	execution workers.Service,
 	eventsAppender EventsAppender,
@@ -164,7 +168,11 @@ func New(
 	scheduler platformclock.TimerSource,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
+	operations recordings.WorkerControlOperationStore,
 ) (workersessions.Service, error) {
+	if missingControlOperationStore(operations) {
+		return nil, recordings.ErrMissingWorkerControlOperationStore
+	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
 	close(startsDone)
@@ -189,6 +197,7 @@ func New(
 		scheduler:                   scheduler,
 		providerSessions:            providerSessions,
 		recording:                   recording,
+		operations:                  operations,
 		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,
@@ -202,6 +211,19 @@ func New(
 		registry.retainedReader = reader
 	}
 	return registry, nil
+}
+
+func missingControlOperationStore(store recordings.WorkerControlOperationStore) bool {
+	if store == nil {
+		return true
+	}
+	value := reflect.ValueOf(store)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {

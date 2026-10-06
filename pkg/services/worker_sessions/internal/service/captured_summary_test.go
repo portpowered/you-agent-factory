@@ -102,3 +102,17 @@ func TestCapturedArchivedSummaryMatchesIncompleteHistory(t *testing.T) {
 		t.Fatalf("foreign Factory scope: %v", err)
 	}
 }
+
+func TestCapturedArchivedSummaryPersistsOwnerLossCause(t *testing.T) {
+	t.Parallel()
+	item := historyCapture(t, "worker", "factory", "attempt", false)
+	item.Terminal = &recordings.WorkerRecordingTerminal{Phase: workers.PhaseFailed, Status: "FAILED"}
+	item.HealthReason = "OWNER_LOST"
+	reader := &LogReader{reader: &capturedSummaryFake{snapshot: recordings.WorkerRecordingSnapshot{RecordingID: item.Catalog.RecordingID}, capturedActivityFake: capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+		Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health, HealthReason: item.HealthReason,
+	}}}}
+	got, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+	if err != nil || got.TerminalCause == nil || *got.TerminalCause != "OWNER_LOST" || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone {
+		t.Fatalf("owner loss observation=%+v error=%v", got, err)
+	}
+}

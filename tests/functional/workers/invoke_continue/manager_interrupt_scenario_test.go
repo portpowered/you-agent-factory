@@ -302,15 +302,16 @@ const (
 )
 
 type s8InterruptProviderCall struct {
-	kind        string
-	sessionID   string
-	output      string
-	started     chan struct{}
-	release     chan struct{}
-	canceled    chan struct{}
-	startOnce   sync.Once
-	releaseOnce sync.Once
-	cancelOnce  sync.Once
+	kind               string
+	sessionID          string
+	output             string
+	started            chan struct{}
+	release            chan struct{}
+	canceled           chan struct{}
+	startOnce          sync.Once
+	releaseOnce        sync.Once
+	cancelOnce         sync.Once
+	cancellationReturn <-chan struct{}
 }
 
 type s8InterruptProviderCase struct {
@@ -433,6 +434,9 @@ func (runner *s8InterruptProviderRunner) run(
 	case <-call.release:
 	case <-ctx.Done():
 		runner.recordCanceled(call)
+		if call.cancellationReturn != nil {
+			<-call.cancellationReturn
+		}
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 	if observer != nil && lineEnd < len(output) {

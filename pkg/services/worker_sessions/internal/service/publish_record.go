@@ -525,6 +525,12 @@ type publication struct {
 	// recordingID remains after recording is closed so a source-side
 	// continuation lineage record can be appended to the same durable sidecar.
 	recordingID string
+	// terminalAttemptID pins the physical attempt that published the absorbing
+	// terminal outcome, independently of provider association or logical dispatch.
+	terminalAttemptID string
+	// capture is the immutable identity acknowledged at opening, retained after
+	// close. A catalog lookup alone never grants execution control authority.
+	capture recordings.WorkerControlTarget
 }
 
 // publicationFor returns the publication registered for id, or nil if id was

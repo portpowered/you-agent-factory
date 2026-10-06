@@ -203,6 +203,9 @@ func reconcileWorkerRecording(projection WorkerRecordingProjection, terminal *Wo
 }
 
 func classifyWorkerRecordingStatus(projection WorkerRecordingProjection, hasAuthoritativeTerminal bool) WorkerRecordingStatus {
+	if projection.Degradation == "OWNER_LOST" && projection.Terminal == nil {
+		return WorkerRecordingStatusIncomplete
+	}
 	if projection.ExecutionTerminal == nil {
 		return WorkerRecordingStatusIncomplete
 	}

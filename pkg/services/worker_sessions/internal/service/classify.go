@@ -876,6 +876,11 @@ func (r *registry) publishOpeningRecord(
 			pub.mu.Unlock()
 			return err
 		}
+		if err := r.bindOpeningCapture(ctx, id, payload, pub); err != nil {
+			abortErr := recording.Abort(context.WithoutCancel(ctx), err)
+			pub.mu.Unlock()
+			return errors.Join(err, abortErr)
+		}
 	}
 	pub.open = true
 	pub.recording = recording
@@ -923,6 +928,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		return workersessions.ErrPublicationNotOpen
 	}
 	pub.open = false
+	pub.terminalAttemptID = attemptID
 	recording := pub.recording
 	pub.recording = nil
 	draft.Provenance = lifecycleProvenance(pub.provider)

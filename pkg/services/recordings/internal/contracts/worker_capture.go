@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -28,6 +29,18 @@ type WorkerRecordingStore interface {
 	WorkerRecordingReader
 	WorkerRecordingFailureWriter
 	WorkerCapturedActivityReader
+	WorkerControlOperationStore
+}
+
+// WorkerControlOperationStore shares the recording journal's sync boundary.
+// Begin's bool is true only for a newly committed intent. Advance uses CAS.
+type WorkerControlOperationStore interface {
+	BeginWorkerControlOperation(context.Context, workerrecording.WorkerControlOperationRecord) (workerrecording.WorkerControlOperationRecord, bool, error)
+	AdvanceWorkerControlOperation(context.Context, workerrecording.WorkerControlOperationRecord, uint64) (workerrecording.WorkerControlOperationRecord, error)
+	LoadWorkerControlOperation(context.Context, workerrecording.WorkerControlOperationKey) (workerrecording.WorkerControlOperationRecord, error)
+	ListWorkerControlOperations(context.Context, workerrecording.WorkerControlTarget) ([]workerrecording.WorkerControlOperationRecord, error)
+	PersistWorkerControlInput(context.Context, workerrecording.WorkerControlOperationKey, json.RawMessage) (string, error)
+	ReadWorkerControlInput(context.Context, workerrecording.WorkerControlOperationKey, string) (json.RawMessage, error)
 }
 
 // WorkerSessionRecordingService is the narrow capture capability used by

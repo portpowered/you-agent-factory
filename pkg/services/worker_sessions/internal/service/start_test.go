@@ -2766,6 +2766,7 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		recording,
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2815,6 +2816,7 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		recording,
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2874,6 +2876,7 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				platformclock.Real{},
 				unavailableProviderSessionsForCapture{},
 				terminalAwareRecordingService{recording: recording},
+				unavailableWorkerControlStore{},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -2909,6 +2912,7 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		terminalAwareRecordingService{recording: recording},
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -2976,6 +2980,7 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		platformclock.Real{},
 		unavailableProviderSessionsForCapture{},
 		observedRecorder,
+		unavailableWorkerControlStore{},
 	)
 	if err != nil {
 		t.Fatal(err)

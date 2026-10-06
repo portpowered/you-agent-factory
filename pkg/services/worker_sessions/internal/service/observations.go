@@ -477,6 +477,7 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string, 
 	projected := baseObservation(id, session, metadata)
 	applyObservationTiming(&projected, session, metadata, r.clock)
 	projected.Failure = observedTerminalCause(session)
+	projected.TerminalCause = r.observationTerminalCause(ctx, r.workerAddress(id, factorySessionIDs...), projected.State)
 	return projected, nil
 }
 

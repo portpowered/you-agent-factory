@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-control-operation.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestId", "workerSessionId", "expectedAttemptId", "action", "phase", "inputDigest"],
+  "properties": {
+    "version": {"const": 1},
+    "requestId": {"type": "string", "minLength": 1},
+    "workerSessionId": {"type": "string", "minLength": 1},
+    "expectedAttemptId": {"type": "string", "minLength": 1},
+    "action": {"enum": ["cancel", "terminate", "kill", "interrupt"]},
+    "phase": {"enum": ["INTENT", "SOURCE_STOPPED", "SUCCESSOR_ADMITTED", "COMPLETED", "FAILED"]},
+    "inputDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "successorWorkerSessionId": {"type": "string", "minLength": 1},
+    "resumeMode": {"enum": ["provider", "recorded"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "interrupt"}}},
+      "then": {"required": ["successorWorkerSessionId", "resumeMode"]}
+    }
+  ]
+}

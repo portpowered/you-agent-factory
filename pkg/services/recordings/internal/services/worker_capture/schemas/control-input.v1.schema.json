@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-control-input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "replacementMessage", "execution", "providerReference"],
+  "properties": {
+    "version": {"const": 1},
+    "replacementMessage": {"type": "string", "minLength": 1},
+    "execution": {"type": "object", "additionalProperties": true},
+    "providerReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "kind", "id"],
+      "properties": {
+        "provider": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
