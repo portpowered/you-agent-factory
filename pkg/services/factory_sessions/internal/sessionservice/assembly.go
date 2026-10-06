@@ -14,14 +14,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -339,41 +339,64 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 	return a.streams.DispatchCompletionObserverFactory()
 }
 
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func (a *Assembly) Complete(
-	factoryRootDir string,
+// RegisterOpening publishes scoped state through the fixed owner. Acquisition
+// remains owned by the caller; release retires only this registration.
+func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts,
+	initial *factoryruntime.RuntimeInitialOpening, clock factoryruntime.Clock, logger *zap.Logger,
+) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, nil, err
+	}
+	if initial == nil || initial.Record == nil {
+		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+	}
+	session, err := a.prepareOpeningSession(facts, initial, clock)
+	startupRuntime := initial.Record
+	if session == nil {
+		return nil, nil, nil, nil, err
+	}
+	runtime := &SessionRuntime{
+		owner: a, openingSession: session,
+		factoryRootDir: facts.FactoryRootDir, dir: facts.Directory, executionBaseDir: facts.ExecutionBaseDir,
+		runtimeMode: facts.RuntimeMode, backendScopeID: facts.BackendScopeID,
+		workFile: facts.WorkFile, workflowID: facts.WorkflowID, modelsScope: facts.ModelsScope,
+		clock: clock, logger: logger,
+		runtimeBuild: initial.ReplacementBuilder, runtimeLifecycle: initial.Lifecycle, runtimeSidecars: initial.Sidecars,
+		startupSessionID: session.ID, runtimeID: facts.RuntimeID, generationID: facts.GenerationID,
+	}
+	release := func(releaseCtx context.Context) error { return a.releaseOpening(releaseCtx, runtime, session) }
+	if err != nil {
+		if session.ResponseEvents == nil {
+			release = nil
+		}
+		return nil, nil, nil, release, err
+	}
+	runtime.runtimeState.SetStartup(startupRuntime)
+	bound := runtimebinding.SessionStateFrom(session)
+	bound.Owner = runtime
+	bound.Clock = clock
+	bound.ProjectionBackendScope = facts.BackendScopeID
+	bound.Logger = logger
+	bound.Invoker = a.invoker
+	bound.InputResolver = a.invoker
+	runtime.bindRuntimeReadMetrics(startupRuntime)
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, release, err
+	}
+	a.registry.Upsert(session, true)
+	logger.Debug("registered Factory Session opening", zap.String("session_id", facts.FactorySessionID),
+		zap.String("runtime_id", facts.RuntimeID), zap.String("generation_id", facts.GenerationID))
+	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
+}
+
+func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening,
 	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	runtimeBuild runtimeports.RuntimeReplacementBuilder,
-	startupRuntime runtimeports.RuntimeInstance,
-	modelsScope models.RuntimeScopeRef,
-	completion factoryruntime.RuntimeInitialCompletion,
-	runtimeLifecycle runtimeports.RuntimeLifecycle,
-	runtimeSidecars factorysessions.RuntimeSidecars,
-	factorySessionID string,
-	dir string,
-	executionBaseDir string,
-	runtimeMode factorydefinitions.RuntimeMode,
-	backendScopeID string,
-	workFile string,
-	workflowID string,
-) (
-	roles.ApplicationRuntime,
-	factorysessions.DefinitionHost,
-	factorydefinitions.DefinitionActivationGateway,
-	error,
-) {
-	if a == nil || a.state == nil || a.registry == nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Sessions assembly is required")
-	}
-	if startupRuntime == nil {
-		return nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
-	}
-	identity := selectCompletionSessionIdentity(factorySessionID, completion)
+) (*livesession.LiveSession, error) {
+	startupRuntime, completion := initial.Record, initial.Completion
+	identity := selectCompletionSessionIdentity(facts.FactorySessionID, completion)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
-		return nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
+		return nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
 	session := livesession.NewWithRuntimeID(
 		identity.id,
@@ -390,7 +413,7 @@ func (a *Assembly) Complete(
 		identity.runtimeID,
 	)
 	if session == nil {
-		return nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
+		return nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
 	session.RuntimeEventSessionID = completionEventScopeID(identity.id, completion)
 	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
@@ -399,10 +422,10 @@ func (a *Assembly) Complete(
 	)
 	session.InvocationMetricsRecorder = a.invocationMetricsRecorder
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
-	}
 	session.ResponseEvents = responseEvents
+	if err != nil {
+		return session, fmt.Errorf("construct live Factory Session response events: %w", err)
+	}
 	session.Runtime = &factorysessions.LiveRuntime{
 		Factory:               startupRuntime.RuntimeService(),
 		WorkAndEventIngress:   runtimebinding.DeclaredWorkAndEventIngress(startupRuntime.RuntimeService()),
@@ -419,61 +442,34 @@ func (a *Assembly) Complete(
 			a.responseStreams.Complete(session.ResponseEvents)
 		}
 	})
-	runtime := NewSessionRuntime(
-		factoryRootDir,
-		clock,
-		logger,
-		runtimeBuild,
-		startupRuntime,
-		modelsScope,
-		runtimeLifecycle,
-		runtimeSidecars,
-		a.factoryDefinitions,
-		dir,
-		executionBaseDir,
-		runtimeMode,
-		backendScopeID,
-		workFile,
-		workflowID,
-		nil,
-		a.editableFactoryValidator,
-		a.reconnectCursorValidator,
-		a.worldStateProjector,
-		a.invocationMetricsRecorder,
-		a.newJavaScriptCheckpointStore,
-		a.sessionResultProjection,
-		a.state,
-		a.scopeControl,
-		a.scopeActivation,
-		session,
-		a.sessionIDs,
-		a.resolveHome,
-		a.directoryInspection,
-		a.namedPaths,
-		a.initialWorkFiles,
-		a.identity,
-		a.SessionGateway,
-	)
-	if runtime == nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Sessions runtime is required")
+	return session, nil
+}
+
+// releaseOpening detaches a captured registration without closing Runtime,
+// Models, or durable resources owned by the outer acquisition cleanup.
+func (a *Assembly) releaseOpening(ctx context.Context, scope *SessionRuntime, session *livesession.LiveSession) error {
+	scope.releaseMu.Lock()
+	defer scope.releaseMu.Unlock()
+	if scope.releaseDone {
+		return nil
 	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Session runtime state is required")
+	if err := a.scopeActivation.Retire(ctx, SessionScope{Session: session}); err != nil {
+		scope.logger.Warn("release Factory Session registration failed", zap.Error(err),
+			zap.String("session_id", session.ID), zap.String("runtime_id", scope.runtimeID), zap.String("generation_id", scope.generationID))
+		return err
 	}
-	bound.Owner = runtime
-	bound.Clock = clock
-	bound.ProjectionBackendScope = backendScopeID
-	bound.Logger = logger
-	runtime.startupSessionID = identity.id
-	runtime.bindRuntimeReadMetrics(startupRuntime)
-	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
-	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
-	invoker := a.invoker
-	bound.Invoker = invoker
-	bound.InputResolver = invoker
-	a.registry.Upsert(session, true)
-	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
+	// A runtime replacement retains this response history. Its current
+	// registration, rather than the retired generation, owns completion.
+	current := a.state.Resolve(session.ID)
+	if current == nil || current.ResponseEvents != session.ResponseEvents {
+		a.responseStreams.Complete(session.ResponseEvents)
+	}
+	a.retireWorkAdmissionProjection(session.ID, session.Runtime, runtimebinding.BundleFromSession(session))
+	scope.runtimeState.ClearStartup()
+	scope.releaseDone = true
+	scope.logger.Debug("released Factory Session registration", zap.String("session_id", session.ID),
+		zap.String("runtime_id", scope.runtimeID), zap.String("generation_id", scope.generationID))
+	return nil
 }
 
 type completionSessionIdentity struct {
@@ -516,41 +512,43 @@ type definitionHost struct {
 	runtime *SessionRuntime
 }
 
-func (h definitionHost) callbacks() DefinitionHostCallbacks {
-	return DefinitionCallbacks(h.runtime)
+func (h definitionHost) PersistRootDir() string {
+	if h.runtime.factoryRootDir != "" {
+		return h.runtime.factoryRootDir
+	}
+	return h.runtime.dir
 }
-
-func (h definitionHost) PersistRootDir() string { return h.callbacks().PersistRootDir() }
-func (h definitionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
-	return h.callbacks().WorkstationLoader()
-}
+func (h definitionHost) WorkstationLoader() factorydefinitions.WorkstationLoader { return nil }
 func (h definitionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
-	return h.callbacks().CurrentRuntimeConfig()
+	return h.runtime.currentRuntimeConfig()
 }
-func (h definitionHost) WorkflowID() string { return h.callbacks().WorkflowID() }
+func (h definitionHost) WorkflowID() string { return h.runtime.workflowID }
 func (h definitionHost) RequireSession(id string) (*factorydefinitions.DefinitionSession, error) {
-	session, err := h.callbacks().RequireSession(id)
+	session, err := runtimebinding.RequireLiveSession(h.runtime.owner.state, id)
 	return projectDefinitionSession(session), err
 }
 func (h definitionHost) SessionRuntimeConfig(id string) (factorydefinitions.LoadedFactorySource, error) {
-	return h.callbacks().SessionRuntimeConfig(id)
+	return runtimebinding.RuntimeConfigForSession(h.runtime.owner.state, id)
 }
 func (h definitionHost) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
-	return h.callbacks().SessionFactoryPersistRoot(h.liveSession(session))
+	return logicaltarget.SessionFactoryPersistRoot(h.runtime.factoryRootDir, h.liveSession(session))
 }
 func (h definitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
-	return h.callbacks().ValidateEditableFactorySnapshot(ctx, snapshot)
+	return h.runtime.owner.editableFactoryValidator(ctx, snapshot, nil)
 }
 func (h definitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, id string) (*factorydefinitions.FactorySnapshot, error) {
-	return h.callbacks().GetCurrentFactorySnapshotForSession(ctx, id)
+	current, err := h.runtime.owner.factoryDefinitions.GetCurrentFactoryForSession(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if current.Snapshot == nil {
+		return nil, fmt.Errorf("current factory snapshot is unavailable")
+	}
+	return current.Snapshot, nil
 }
-func (h definitionHost) ReplaceFactoryLayoutAtDir(
-	targetDir string,
-	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return h.callbacks().ReplaceFactoryLayoutAtDir(targetDir, prepared)
+func (h definitionHost) ReplaceFactoryLayoutAtDir(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
+	return nil, fmt.Errorf("factory layout replacement is owned by Factory Definitions")
 }
-
 func (h definitionHost) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
 	return h.runtime.DefinitionActivationGateway()
 }
@@ -575,7 +573,7 @@ func (h definitionHost) liveSession(
 	if session == nil {
 		return nil
 	}
-	if live, err := h.callbacks().RequireSession(session.ID); err == nil && live != nil {
+	if live, err := runtimebinding.RequireLiveSession(h.runtime.owner.state, session.ID); err == nil && live != nil {
 		return live
 	}
 	return &livesession.LiveSession{

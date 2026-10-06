@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"sync"
 	"testing"
 	"time"
@@ -336,6 +337,7 @@ type scopeControlRecord struct {
 }
 
 func (r scopeControlRecord) RuntimeMetrics() factoryruntime.MetricsEmitter { return r.metrics }
+func (r scopeControlRecord) RecordingLedger() recordings.Ledger            { return nil }
 
 func registerScopeControlRuntime(state *sessionruntime.Service, id string, runtime *scopedControlRuntime, logger *zap.Logger) *scopeControlMetrics {
 	metrics := &scopeControlMetrics{}

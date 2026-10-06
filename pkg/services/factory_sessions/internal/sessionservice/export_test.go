@@ -30,7 +30,6 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -59,10 +58,142 @@ func (registrationRuntimeRecord) RuntimeLogger() *zap.Logger                    
 func (registrationRuntimeRecord) RecordingLedger() recordings.Ledger                             { return nil }
 func (registrationRuntimeRecord) AddEventTypeRecorder(func(factorydefinitions.FactoryEventType)) {}
 
-type registrationResponseStreams struct{ responsestreamservice.Service }
+type registrationResponseStreams struct {
+	responsestreamservice.Service
+	open     func() (*responseeventstore.SessionResponseEventStore, error)
+	complete func(*responseeventstore.SessionResponseEventStore)
+}
 
-func (registrationResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+func (streams registrationResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	if streams.open != nil {
+		return streams.open()
+	}
 	return nil, nil
+}
+
+func (streams registrationResponseStreams) Complete(store *responseeventstore.SessionResponseEventStore) {
+	if streams.complete != nil {
+		streams.complete(store)
+	}
+}
+
+type registrationActivation struct {
+	SessionScopeActivation
+	retire func(context.Context, SessionScope) error
+}
+
+func (activation registrationActivation) Retire(ctx context.Context, scope SessionScope) error {
+	return activation.retire(ctx, scope)
+}
+
+func TestRegisterOpeningFailureCancellationAndRetryPreservePeer(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"failure", "partial", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			state := newWorkResolverSessionState()
+			peer := &livesession.LiveSession{ID: "peer"}
+			state.Registry().Upsert(peer, true)
+			cause := errors.New("response registration failed")
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			failed := true
+			completions := 0
+			store := &responseeventstore.SessionResponseEventStore{}
+			assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{},
+				sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
+				responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) {
+					if failed && mode == "failure" {
+						return nil, cause
+					}
+					if failed && mode == "partial" {
+						return store, cause
+					}
+					if failed {
+						cancel()
+					}
+					return store, nil
+				}, complete: func(got *responseeventstore.SessionResponseEventStore) {
+					if got != store {
+						t.Fatal("released peer response store")
+					}
+					completions++
+				}},
+				scopeActivation: registrationActivation{retire: func(_ context.Context, scope SessionScope) error {
+					state.UnregisterGeneration(scope.Session)
+					return nil
+				}},
+			}
+			facts := roles.SessionOpeningFacts{FactorySessionID: "candidate"}
+			initial := &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}
+			_, _, _, release, err := assembly.RegisterOpening(ctx, facts, initial, platformclock.Real{}, zap.NewNop())
+			expected := map[string]error{"failure": cause, "partial": cause, "cancel": context.Canceled}[mode]
+			if !errors.Is(err, expected) || state.Resolve("candidate") != nil || state.Current() != peer {
+				t.Fatalf("failed registration = %v; candidate or selection changed", err)
+			}
+			if release != nil {
+				if err := release(context.WithoutCancel(ctx)); err != nil {
+					t.Fatal(err)
+				}
+				if err := release(context.WithoutCancel(ctx)); err != nil || completions != 1 {
+					t.Fatalf("repeated release = %v, completions = %d", err, completions)
+				}
+			}
+			failed = false
+			assertRegistrationRetryPreservesPeer(t, assembly, facts, initial, peer)
+
+		})
+	}
+}
+
+func assertRegistrationRetryPreservesPeer(t *testing.T, assembly *Assembly, facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening, peer *livesession.LiveSession) {
+	t.Helper()
+	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, initial, platformclock.Real{}, zap.NewNop())
+	if err != nil || assembly.state.Resolve("candidate") == nil || assembly.state.Resolve("peer") != peer {
+		t.Fatalf("same-ID retry = %v", err)
+	}
+	if err := release(context.Background()); err != nil || assembly.state.Resolve("candidate") != nil || assembly.state.Resolve("peer") != peer {
+		t.Fatalf("retry release = %v", err)
+	}
+}
+
+func TestRegisterOpeningReleaseRetriesAndPreservesReplacementHistory(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	store := &responseeventstore.SessionResponseEventStore{}
+	cause := errors.New("registration retirement failed")
+	retireErr := cause
+	completions := 0
+	assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{},
+		sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
+		responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) { return store, nil },
+			complete: func(*responseeventstore.SessionResponseEventStore) { completions++ }},
+		scopeActivation: registrationActivation{retire: func(_ context.Context, scope SessionScope) error {
+			if retireErr != nil {
+				return retireErr
+			}
+			state.UnregisterGeneration(scope.Session)
+			return nil
+		}},
+	}
+	facts := roles.SessionOpeningFacts{FactorySessionID: "candidate", RuntimeID: "runtime", GenerationID: "reused-generation"}
+	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}, platformclock.Real{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := state.Resolve("candidate")
+	if err := release(context.Background()); !errors.Is(err, cause) || state.Resolve("candidate") != previous || completions != 0 {
+		t.Fatalf("failed release = %v", err)
+	}
+	replacement := &livesession.LiveSession{ID: previous.ID, ResponseEvents: store}
+	state.Registry().Upsert(replacement, true)
+	retireErr = nil
+	if err := release(context.Background()); err != nil || state.Resolve("candidate") != replacement || completions != 0 {
+		t.Fatalf("stale release = %v, completions = %d", err, completions)
+	}
+	if err := release(context.Background()); err != nil || completions != 0 {
+		t.Fatalf("repeated stale release = %v", err)
+	}
 }
 
 type registrationInvoker struct{ roles.InvocationService }
@@ -78,7 +209,7 @@ type registrationObserver struct {
 
 func (r registrationObserver) Upsert(session *livesession.LiveSession, _ bool) { r.publish(session) }
 
-func TestCompletePublishesSessionWithRegisteredInputResolver(t *testing.T) {
+func TestRegisterOpeningPublishesSessionWithRegisteredInputResolver(t *testing.T) {
 	t.Parallel()
 	publications := 0
 	assembly := &Assembly{
@@ -101,9 +232,9 @@ func TestCompletePublishesSessionWithRegisteredInputResolver(t *testing.T) {
 			}
 		}},
 	}
-	_, _, _, err := assembly.Complete("/factory", platformclock.Real{}, nil, nil, registrationRuntimeRecord{}, models.RuntimeScopeRef{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, "session", "/factory", "/factory", "", "backend", "", "")
+	_, _, _, _, err := assembly.RegisterOpening(context.Background(), roles.SessionOpeningFacts{FactorySessionID: "session", FactoryRootDir: "/factory", Directory: "/factory", ExecutionBaseDir: "/factory", BackendScopeID: "backend"}, &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}, platformclock.Real{}, zap.NewNop())
 	if err != nil || publications != 1 {
-		t.Fatalf("Complete = %v, publications = %d", err, publications)
+		t.Fatalf("RegisterOpening = %v, publications = %d", err, publications)
 	}
 }
 
@@ -255,7 +386,7 @@ func TestCurrentRuntimeConfigRetainsDefaultOpeningConfigWithoutBuildSpec(t *test
 	// A selected peer without a loaded config must not erase the default
 	// opening's compatibility fallback.
 	state.Registry().Upsert(&livesession.LiveSession{ID: "peer", Runtime: &factorysessions.LiveRuntime{}}, true)
-	runtime := &SessionRuntime{sessionState: state}
+	runtime := &SessionRuntime{owner: &Assembly{state: state}}
 	if got := runtime.CurrentRuntimeConfig(); got != config {
 		t.Fatalf("CurrentRuntimeConfig = %v, want default opening config %v", got, config)
 	}
@@ -315,7 +446,7 @@ func TestRetainedRuntimeMetricsSessionIDsDeduplicatesSuccessorAndSource(t *testi
 // NewDefinitionActivationGatewayForTest publishes the activation gateway backed by
 // the supplied session state for unit tests.
 func NewDefinitionActivationGatewayForTest(state *sessionruntime.Service) factorysessions.DefinitionActivationGateway {
-	return NewDefinitionActivationGateway(&SessionRuntime{sessionState: state})
+	return definitionActivationGateway{definitionHost{runtime: &SessionRuntime{owner: &Assembly{state: state}}}}
 }
 
 func TestWorkAdmissionProjectionWaitsForLedgerCatchUp(t *testing.T) {
@@ -530,8 +661,7 @@ func TestProcessHostLateStopPreservesReplacementWorkAdmissions(t *testing.T) {
 		registerGenerationSession(state, id, record, runtime)
 		session := state.Resolve(id)
 		owner := &SessionRuntime{
-			releaseWorkAdmissionProjection: assembly.releaseWorkAdmissionProjection,
-			retireWorkAdmissionProjection:  assembly.retireWorkAdmissionProjection,
+			owner: assembly,
 		}
 		bound := runtimebinding.SessionStateFrom(session)
 		bound.Handle = invocationQueryRun{record: record}

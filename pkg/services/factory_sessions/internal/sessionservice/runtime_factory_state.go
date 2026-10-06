@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (fs *SessionRuntime) syncActiveSessionDir(runtimeBundle factoryRuntimeBundle) {
+func (a *Assembly) scopeSyncActiveSessionDir(fs *SessionRuntime, runtimeBundle factoryRuntimeBundle) {
 	if fs == nil {
 		return
 	}
@@ -23,12 +23,12 @@ func (fs *SessionRuntime) syncActiveSessionDir(runtimeBundle factoryRuntimeBundl
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the factory.
-func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	if fs == nil || fs.sessionState == nil {
+func (a *Assembly) scopedSubmitWorkRequest(fs *SessionRuntime, ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	if fs == nil || a.state == nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("factory session service is required")
 	}
 	var result work.WorkRequestSubmitResult
-	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
+	err := a.state.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
 		submitter, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
 		if !ok {
@@ -42,7 +42,7 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
-func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+func (a *Assembly) scopedSubscribeFactoryEvents(fs *SessionRuntime, ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
 	}
@@ -76,7 +76,7 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 
 // CleanInvocationSnapshot forwards the Runtime-owned clean-invocation
 // projection through the replaceable Factory Session runtime.
-func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+func (a *Assembly) scopedCleanInvocationSnapshot(fs *SessionRuntime, ctx context.Context) (factory.CleanInvocationSnapshot, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.CleanInvocationSnapshot{}, factory.ErrNotRunning
@@ -85,7 +85,7 @@ func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.
 }
 
 // ControlPause routes root control to the current replaceable runtime.
-func (fs *SessionRuntime) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
+func (a *Assembly) scopedControlPause(fs *SessionRuntime, ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.PauseResult{}, factory.ErrNotFound
@@ -94,7 +94,7 @@ func (fs *SessionRuntime) ControlPause(ctx context.Context, req factory.PauseReq
 }
 
 // ControlResume routes root control to the current replaceable runtime.
-func (fs *SessionRuntime) ControlResume(ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
+func (a *Assembly) scopedControlResume(fs *SessionRuntime, ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.ResumeResult{}, factory.ErrNotFound
@@ -103,7 +103,7 @@ func (fs *SessionRuntime) ControlResume(ctx context.Context, req factory.ResumeR
 }
 
 // ControlTerminate routes root control to the current replaceable runtime.
-func (fs *SessionRuntime) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+func (a *Assembly) scopedControlTerminate(fs *SessionRuntime, ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.TerminateResult{}, factory.ErrNotFound
@@ -112,7 +112,7 @@ func (fs *SessionRuntime) ControlTerminate(ctx context.Context, req factory.Term
 }
 
 // ControlWaitToComplete returns the current runtime's completion signal.
-func (fs *SessionRuntime) ControlWaitToComplete(req factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
+func (a *Assembly) scopedControlWaitToComplete(fs *SessionRuntime, req factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
 	runtime := fs.currentRuntimeService()
 	if runtime != nil {
 		return runtime.ControlWaitToComplete(req)
@@ -123,7 +123,7 @@ func (fs *SessionRuntime) ControlWaitToComplete(req factory.WaitToCompleteReques
 }
 
 // ControlMoveWork routes root work relocation to the current replaceable runtime.
-func (fs *SessionRuntime) ControlMoveWork(ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
+func (a *Assembly) scopedControlMoveWork(fs *SessionRuntime, ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.MoveWorkResult{}, factory.ErrNotFound
@@ -132,7 +132,7 @@ func (fs *SessionRuntime) ControlMoveWork(ctx context.Context, req factory.MoveW
 }
 
 // Observe routes root observation to the current replaceable runtime.
-func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+func (a *Assembly) scopedObserve(fs *SessionRuntime, ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.ObserveResult{}, factory.ErrNotFound
@@ -141,7 +141,7 @@ func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveReques
 }
 
 // PlanDispatch routes root dispatch planning to the current replaceable runtime.
-func (fs *SessionRuntime) PlanDispatch(ctx context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+func (a *Assembly) scopedPlanDispatch(fs *SessionRuntime, ctx context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.PlanDispatchResult{}, factory.ErrNotFound
@@ -150,7 +150,7 @@ func (fs *SessionRuntime) PlanDispatch(ctx context.Context, req factory.PlanDisp
 }
 
 // AcceptDispatchResult routes correlated worker results to the current runtime.
-func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+func (a *Assembly) scopedAcceptDispatchResult(fs *SessionRuntime, ctx context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.AcceptDispatchResultResult{}, factory.ErrNotFound
@@ -161,7 +161,7 @@ func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.
 // InvokeWorker routes one orchestrator-resolved Worker invocation to the
 // current runtime, which owns the Worker Sessions service and the canonical
 // ledger the invocation's dispatch/Worker Session association must land on.
-func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+func (a *Assembly) scopedInvokeWorker(fs *SessionRuntime, ctx context.Context, req factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotFound
@@ -177,7 +177,7 @@ type workerSessionsObservationProvider interface {
 // the replaceable Factory Session runtime. Without this capability adapter,
 // service-mode HTTP binding sees only the broad Factory Runtime contract and
 // leaves the public Worker Sessions routes unavailable.
-func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
+func (a *Assembly) scopedWorkerSessionsObservation(fs *SessionRuntime) workersessions.ObservationService {
 	runtime := fs.currentRuntimeService()
 	provider, _ := runtime.(workerSessionsObservationProvider)
 	if provider == nil {
@@ -188,20 +188,20 @@ func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.Observation
 
 // WorkerSessionsObservationForSession forwards the effective public Factory
 // Session identity through the replaceable runtime read projection.
-func (fs *SessionRuntime) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+func (a *Assembly) scopedWorkerSessionsObservationForSession(fs *SessionRuntime, factorySessionID string) workersessions.ObservationService {
 	reader := sessionLifecycleReader{}
 	if fs != nil {
-		reader.state, reader.active = fs.sessionState, &fs.runtimeState
+		reader.state, reader.active = a.state, &fs.runtimeState
 	}
 	return reader.WorkerSessionsObservationForSession(factorySessionID)
 }
 
-func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
+func (a *Assembly) scopeSubmitWorkFile(fs *SessionRuntime, ctx context.Context) error {
 	workFile := fs.workFile
-	if fs.initialWorkFiles == nil {
+	if a.initialWorkFiles == nil {
 		return fmt.Errorf("Factory Session initial Work file reader is required")
 	}
-	data, err := fs.initialWorkFiles.ReadFile(workFile)
+	data, err := a.initialWorkFiles.ReadFile(workFile)
 	if err != nil {
 		return fmt.Errorf("read work file %s: %w", workFile, err)
 	}
@@ -224,22 +224,22 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	return nil
 }
 
-func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource {
+func (a *Assembly) scopeCurrentRuntimeConfig(fs *SessionRuntime) interfaces.LoadedFactorySource {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		loaded, _ := bundle.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
 		if loaded != nil {
 			return loaded
 		}
 	}
-	if fs != nil && fs.sessionState != nil {
-		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil && runtime.RuntimeConfig != nil {
+	if fs != nil && a.state != nil {
+		if runtime := a.state.CurrentRuntime(); runtime != nil && runtime.RuntimeConfig != nil {
 			return runtime.RuntimeConfig
 		}
 	}
-	if fs == nil || fs.sessionState == nil {
+	if fs == nil || a.state == nil {
 		return nil
 	}
-	record := runtimebinding.BundleFromSession(fs.sessionState.Default())
+	record := runtimebinding.BundleFromSession(a.state.Default())
 	if record == nil {
 		return nil
 	}
@@ -249,11 +249,11 @@ func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource 
 
 // CurrentRuntimeConfig returns the loaded definition/configuration for the
 // currently selected runtime without exposing its host bundle.
-func (fs *SessionRuntime) CurrentRuntimeConfig() interfaces.LoadedFactorySource {
+func (a *Assembly) scopedCurrentRuntimeConfig(fs *SessionRuntime) interfaces.LoadedFactorySource {
 	return fs.currentRuntimeConfig()
 }
 
-func (fs *SessionRuntime) currentRuntimeService() factory.Service {
+func (a *Assembly) scopeCurrentRuntimeService(fs *SessionRuntime) factory.Service {
 	// The SessionRuntime is invocation-owned. Its active/startup bundle must win
 	// over the process-wide selected session, which can belong to a concurrent
 	// command using the same root-built process.
@@ -262,8 +262,8 @@ func (fs *SessionRuntime) currentRuntimeService() factory.Service {
 			return service
 		}
 	}
-	if fs != nil && fs.sessionState != nil {
-		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil {
+	if fs != nil && a.state != nil {
+		if runtime := a.state.CurrentRuntime(); runtime != nil {
 			if service := runtimebinding.ServiceForLiveRuntime(runtime); service != nil {
 				return service
 			}
@@ -273,10 +273,170 @@ func (fs *SessionRuntime) currentRuntimeService() factory.Service {
 }
 
 // StartupWorkerConfig returns the named worker from the built startup runtime config.
-func (fs *SessionRuntime) StartupWorkerConfig(name string) (*interfaces.FactoryWorkerConfig, bool) {
+func (a *Assembly) scopedStartupWorkerConfig(fs *SessionRuntime, name string) (*interfaces.FactoryWorkerConfig, bool) {
 	runtimeCfg := fs.currentRuntimeConfig()
 	if runtimeCfg == nil {
 		return nil, false
 	}
 	return runtimeCfg.Worker(name)
+}
+
+func (fs *SessionRuntime) syncActiveSessionDir(runtimeBundle factoryRuntimeBundle) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	a.scopeSyncActiveSessionDir(fs, runtimeBundle)
+}
+
+func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSubmitWorkRequest(fs, ctx, request)
+}
+
+func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSubscribeFactoryEvents(fs, ctx, reconnect, scope)
+}
+
+func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedCleanInvocationSnapshot(fs, ctx)
+}
+
+func (fs *SessionRuntime) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedControlPause(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) ControlResume(ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedControlResume(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) ControlTerminate(ctx context.Context, req factory.TerminateRequest) (factory.TerminateResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedControlTerminate(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) ControlWaitToComplete(req factory.WaitToCompleteRequest) factory.WaitToCompleteResult {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedControlWaitToComplete(fs, req)
+}
+
+func (fs *SessionRuntime) ControlMoveWork(ctx context.Context, req factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedControlMoveWork(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedObserve(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) PlanDispatch(ctx context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedPlanDispatch(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.AcceptDispatchResultRequest) (factory.AcceptDispatchResultResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedAcceptDispatchResult(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedInvokeWorker(fs, ctx, req)
+}
+
+func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedWorkerSessionsObservation(fs)
+}
+
+func (fs *SessionRuntime) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedWorkerSessionsObservationForSession(fs, factorySessionID)
+}
+
+func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeSubmitWorkFile(fs, ctx)
+}
+
+func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeCurrentRuntimeConfig(fs)
+}
+
+func (fs *SessionRuntime) CurrentRuntimeConfig() interfaces.LoadedFactorySource {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedCurrentRuntimeConfig(fs)
+}
+
+func (fs *SessionRuntime) currentRuntimeService() factory.Service {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeCurrentRuntimeService(fs)
+}
+
+func (fs *SessionRuntime) StartupWorkerConfig(name string) (*interfaces.FactoryWorkerConfig, bool) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedStartupWorkerConfig(fs, name)
 }

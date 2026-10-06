@@ -118,7 +118,7 @@ func TestRetireOwnedSessionUsesScopedStopAndRetainsFailedCleanup(t *testing.T) {
 		}
 		return stopErr
 	}, zap.NewNop())
-	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state)}
+	owner := &SessionRuntime{owner: &Assembly{state: state, scopeControl: control, scopeActivation: NewScopeActivation(state)}}
 	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
 		t.Fatalf("failed retirement = %v", err)
 	}
@@ -163,7 +163,7 @@ func TestRetireOwnedSessionRetainsPartiallyActivatedScopeForCleanupRetry(t *test
 		stopped = true
 		return nil
 	}, zap.NewNop())
-	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: activation}
+	owner := &SessionRuntime{owner: &Assembly{state: state, scopeControl: control, scopeActivation: activation}}
 	if err := owner.RetireOwnedSession(context.Background(), session); !errors.Is(err, failure) {
 		t.Fatalf("partial activation cleanup = %v, want original cause", err)
 	}
@@ -211,7 +211,7 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 	oldBound.Clock = state.Clock()
 	var replacement *livesession.LiveSession
 	replacementRuntime := &scopedControlRuntime{status: "RUNNING"}
-	var stopped, retired bool
+	var stopped bool
 	control := NewScopeControl(state, func(run factoryruntime.RuntimeRun, clock factoryruntime.Clock) error {
 		if run != oldBound.Handle || clock != oldBound.Clock {
 			t.Fatal("close stopped replacement run or used its clock")
@@ -219,14 +219,10 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 		stopped = true
 		return nil
 	}, zap.NewNop())
-	owner := &SessionRuntime{sessionState: state, scopeControl: control, scopeActivation: NewScopeActivation(state),
-		retireWorkAdmissionProjection: func(id string, runtime *factorysessions.LiveRuntime, record factoryruntime.RuntimeRecord) {
-			if id != "a" || runtime != oldSession.Runtime || record != oldRecord {
-				t.Fatal("close retired a foreign Work projection generation")
-			}
-			retired = true
-		},
-	}
+	projection := newWorkAdmissionProjectionForGeneration("a", oldSession.Runtime, nil, state.Clock())
+	owner := &SessionRuntime{owner: &Assembly{state: state, scopeControl: control, scopeActivation: NewScopeActivation(state),
+		workAdmissions: map[string][]*workAdmissionProjection{"a": {projection}},
+	}}
 	oldBound.Owner = owner
 	oldBound.Activation = closeScopeActivation(func(context.Context) error {
 		registerScopeControlRuntime(state, "a", replacementRuntime, zap.NewNop())
@@ -237,7 +233,7 @@ func TestAssemblyCloseKeepsCapturedGenerationAcrossActivationReplacement(t *test
 	if err := assembly.CloseSession(context.Background(), "a"); err != nil {
 		t.Fatalf("CloseSession = %v", err)
 	}
-	if !stopped || !retired || oldRuntime.controls != 1 || state.Resolve("a") != replacement || state.Resolve("b") == nil {
+	if !stopped || !projection.closed || oldRuntime.controls != 1 || state.Resolve("a") != replacement || state.Resolve("b") == nil {
 		t.Fatal("close lost captured effects, replacement or peer")
 	}
 	assertReplacementControlAfterClose(t, control, replacementRuntime, oldRuntime)
@@ -286,7 +282,7 @@ func TestStopLiveRuntimeSidecars_UsesInjectedSidecarsExactlyOnce(t *testing.T) {
 	t.Parallel()
 
 	sidecars := &stubRuntimeSidecars{}
-	runtime := &SessionRuntime{runtimeSidecars: sidecars}
+	runtime := &SessionRuntime{owner: &Assembly{}, runtimeSidecars: sidecars}
 
 	runtime.StopLiveRuntimeSidecars(nil)
 
@@ -299,7 +295,7 @@ func TestStopLiveRuntimeSidecars_MissingSidecarsSkipsLifecycleFallback(t *testin
 	t.Parallel()
 
 	lifecycle := &stubRuntimeLifecycle{}
-	runtime := &SessionRuntime{runtimeLifecycle: lifecycle}
+	runtime := &SessionRuntime{owner: &Assembly{}, runtimeLifecycle: lifecycle}
 
 	runtime.StopLiveRuntimeSidecars(nil)
 
@@ -692,7 +688,7 @@ func TestKeyedDefinitionGatewayFollowsAddressedFactsAndReplacement(t *testing.T)
 	now := time.Date(2026, 10, 5, 3, 4, 5, 0, time.FixedZone("selected", 3600))
 	gateway := NewKeyedDefinitionActivationGateway(state, projectionClockStub{now: now})
 	register := func(id, root string, selected bool) {
-		owner := &SessionRuntime{sessionState: state, factoryRootDir: root, dir: root + "/configured"}
+		owner := &SessionRuntime{owner: &Assembly{state: state}, factoryRootDir: root, dir: root + "/configured"}
 		owner.runtimeState.SetActive(context.Background(), id, nil)
 		record := &generationRuntimeRecord{service: &observeStubRuntime{}}
 		state.Registry().Upsert(&livesession.LiveSession{ID: id,
@@ -776,7 +772,7 @@ func TestKeyedDefinitionGatewayPreservesAddressedBuildFailureAndPeer(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	register := func(id string, failure error) {
-		owner := &SessionRuntime{sessionState: state, runtimeBuild: replacementRuntimeBuilderFunc(func(got context.Context, folder, dir, sessionID, base string) (factoryruntime.RuntimeRecord, error) {
+		owner := &SessionRuntime{owner: &Assembly{state: state}, runtimeBuild: replacementRuntimeBuilderFunc(func(got context.Context, folder, dir, sessionID, base string) (factoryruntime.RuntimeRecord, error) {
 			if got != ctx || sessionID != id || folder != "folder" || dir != "factory" {
 				t.Fatalf("addressed build = %v/%q/%q/%q", got, sessionID, folder, dir)
 			}
@@ -850,12 +846,15 @@ func TestProcessHostStopUsesCapturedOwnerAndPreservesRetryPeer(t *testing.T) {
 	state := newWorkResolverSessionState()
 	failure := errors.New("injected keyed stop failure")
 	lifecycle := &hostLifecycleStub{err: failure}
-	var released []string
+	projections := make(map[string]*workAdmissionProjection)
 	owners := make(map[string]*SessionRuntime)
 	for _, id := range []string{"first", "peer"} {
-		owner := &SessionRuntime{releaseWorkAdmissionProjection: func(id string) { released = append(released, id) }}
+		live := &factorysessions.LiveRuntime{}
+		projection := newWorkAdmissionProjectionForGeneration(id, live, nil, state.Clock())
+		projections[id] = projection
+		owner := &SessionRuntime{owner: &Assembly{workAdmissions: map[string][]*workAdmissionProjection{id: {projection}}}}
 		run := invocationQueryRun{record: &generationRuntimeRecord{service: &observeStubRuntime{}}}
-		state.Registry().Upsert(&livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Handle: run, Owner: owner}}, id == "peer")
+		state.Registry().Upsert(&livesession.LiveSession{ID: id, Runtime: live, Handle: &runtimebinding.SessionState{Handle: run, Owner: owner}}, id == "peer")
 		owner.runtimeState.SetActive(context.Background(), id, run)
 		owners[id] = owner
 	}
@@ -863,13 +862,13 @@ func TestProcessHostStopUsesCapturedOwnerAndPreservesRetryPeer(t *testing.T) {
 		return lifecycle.Stop(run)
 	}, zap.NewNop())
 	host := SessionServiceHost(state, nil, control, nil, "", nil, nil, nil, nil, nil)
-	if err := host.StopLiveSession("first"); !errors.Is(err, failure) || len(released) != 0 {
-		t.Fatalf("failed keyed stop = %v, releases = %v", err, released)
+	if err := host.StopLiveSession("first"); !errors.Is(err, failure) || projections["first"].closed || projections["peer"].closed {
+		t.Fatalf("failed keyed stop = %v, projections retired prematurely", err)
 	}
 	assertProcessHostStopRecords(t, host, owners, "first")
 	lifecycle.err = nil
-	if err := host.StopLiveSession("first"); err != nil || !reflect.DeepEqual(released, []string{"first"}) {
-		t.Fatalf("keyed retry = %v, releases = %v", err, released)
+	if err := host.StopLiveSession("first"); err != nil || !projections["first"].closed || projections["peer"].closed {
+		t.Fatalf("keyed retry = %v, projection ownership lost", err)
 	}
 	if _, err := host.SessionFactory("first"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("retired first read = %v", err)

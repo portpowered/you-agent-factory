@@ -236,7 +236,7 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 var _ roles.SessionGateway = (*Service)(nil)
 
 // Gateway returns the injected process gateway used by this runtime.
-func (fs *SessionRuntime) Gateway() roles.SessionGateway {
+func (a *Assembly) scopedGateway(fs *SessionRuntime) roles.SessionGateway {
 	return fs.requireSessionGateway()
 }
 
@@ -265,9 +265,25 @@ func SessionServiceHost(
 	}
 }
 
-func (fs *SessionRuntime) requireSessionGateway() roles.SessionGateway {
+func (a *Assembly) scopeRequireSessionGateway(fs *SessionRuntime) roles.SessionGateway {
 	if fs == nil {
 		return nil
 	}
-	return fs.sessionGateway
+	return a.SessionGateway
+}
+
+func (fs *SessionRuntime) Gateway() roles.SessionGateway {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedGateway(fs)
+}
+
+func (fs *SessionRuntime) requireSessionGateway() roles.SessionGateway {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeRequireSessionGateway(fs)
 }

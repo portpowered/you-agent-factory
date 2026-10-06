@@ -33,11 +33,11 @@ type (
 // BindRuntime publishes the opaque activation capability for one live
 // Factory Session. The session keeps the hosted service only as a migration
 // fallback; all subsequent domain operations resolve the binding first.
-func (fs *SessionRuntime) BindRuntime(sessionID string, binding factory.RuntimeBinding) error {
+func (a *Assembly) scopedBindRuntime(fs *SessionRuntime, sessionID string, binding factory.RuntimeBinding) error {
 	if fs == nil || fs.openingSession == nil || fs.openingSession.ID != sessionID {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
-	return fs.scopeActivation.Activate(context.Background(), SessionScope{Session: fs.openingSession, Binding: binding})
+	return a.scopeActivation.Activate(context.Background(), SessionScope{Session: fs.openingSession, Binding: binding})
 }
 
 // SessionScope is the captured registration and opaque capability published by
@@ -90,11 +90,11 @@ func (a *scopeActivation) Activate(ctx context.Context, scope SessionScope) erro
 	})
 }
 
-func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+func (a *Assembly) scopedSubmitWorkRequestForSession(fs *SessionRuntime, ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	if fs == nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	session, err := runtimebinding.RequireLiveSession(a.state, sessionID)
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
@@ -105,11 +105,11 @@ func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessi
 	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
 
-func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
+func (a *Assembly) scopedMoveWorkForSession(fs *SessionRuntime, ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	if fs == nil {
 		return work.OperatorMoveResult{}, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	session, err := runtimebinding.RequireLiveSession(a.state, sessionID)
 	if err != nil {
 		return work.OperatorMoveResult{}, err
 	}
@@ -130,11 +130,11 @@ func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, wor
 	}, nil
 }
 
-func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+func (a *Assembly) scopedSubscribeFactoryEventsForSession(fs *SessionRuntime, ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	session, err := runtimebinding.RequireLiveSession(a.state, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	}
 	stream.FactorySessionID = strings.TrimSpace(session.ID)
 	placement := session.Placement()
-	identity, identityErr := fs.identity.Normalize(ctx, identityservice.NormalizeRequest{
+	identity, identityErr := a.identity.Normalize(ctx, identityservice.NormalizeRequest{
 		BackendScopeID: strings.TrimSpace(session.Runtime.BackendScopeID),
 		FolderPath:     placement.FolderPath, Target: placement.Target,
 	})
@@ -168,7 +168,7 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	session, err := runtimebinding.RequireLiveSession(fs.owner.state, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
-func (fs *SessionRuntime) observeRuntimeForSession(
+func (a *Assembly) scopeObserveRuntimeForSession(fs *SessionRuntime,
 	ctx context.Context,
 	sessionID string,
 	req factory.ObserveRequest,
@@ -187,7 +187,7 @@ func (fs *SessionRuntime) observeRuntimeForSession(
 	if fs == nil {
 		return factory.ObserveResult{}, fmt.Errorf("factory session service is required")
 	}
-	session, err := runtimebinding.RequireLiveSession(fs.sessionState, sessionID)
+	session, err := runtimebinding.RequireLiveSession(a.state, sessionID)
 	if err != nil {
 		return factory.ObserveResult{}, err
 	}
@@ -198,12 +198,12 @@ func (fs *SessionRuntime) observeRuntimeForSession(
 	return runtime.Observe(ctx, req)
 }
 
-func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID string) error {
+func (a *Assembly) scopedCloseFactorySession(fs *SessionRuntime, ctx context.Context, sessionID string) error {
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
 //nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
-func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
+func (a *Assembly) scopedStartBackgroundSessionWithMetadata(fs *SessionRuntime,
 	ctx context.Context,
 	sessionID string,
 	runtimeBundle factoryRuntimeBundle,
@@ -217,7 +217,7 @@ func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
 	}
 	_, err := runtimebinding.Start(
 		ctx,
-		fs.sessionState,
+		a.state,
 		&fs.runtimeState,
 		fs.factoryRootDir,
 		sessionID,
@@ -231,20 +231,20 @@ func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
 	return err
 }
 
-func (fs *SessionRuntime) runSessionID() string {
+func (a *Assembly) scopeRunSessionID(fs *SessionRuntime) string {
 	if fs == nil {
 		return DefaultFactorySessionID
 	}
 	if runState := fs.runtimeState.Active(); runState != nil && strings.TrimSpace(runState.SessionID) != "" {
 		return runState.SessionID
 	}
-	if session := fs.sessionState.Default(); session != nil {
+	if session := a.state.Default(); session != nil {
 		return session.ID
 	}
 	return DefaultFactorySessionID
 }
 
-func (fs *SessionRuntime) requireIdleRuntimeForSession(
+func (a *Assembly) scopeRequireIdleRuntimeForSession(fs *SessionRuntime,
 	ctx context.Context,
 	sessionID string,
 ) error {
@@ -258,7 +258,7 @@ func (fs *SessionRuntime) requireIdleRuntimeForSession(
 }
 
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
-func (fs *SessionRuntime) ReplaceSessionRuntime(
+func (a *Assembly) scopedReplaceSessionRuntime(fs *SessionRuntime,
 	ctx context.Context,
 	session *livesession.LiveSession,
 	name string,
@@ -274,7 +274,7 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 	serviceMode := runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService
 	updated, err := runtimebinding.Replace(
 		ctx,
-		fs.sessionState,
+		a.state,
 		&fs.runtimeState,
 		session,
 		replacement,
@@ -290,9 +290,7 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 			fs.logger.Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
 		},
 		func(sessionID string, runtime *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
-			if fs.retireWorkAdmissionProjection != nil {
-				fs.retireWorkAdmissionProjection(sessionID, runtime, record)
-			}
+			a.retireWorkAdmissionProjection(sessionID, runtime, record)
 		},
 	)
 	if err != nil {
@@ -312,4 +310,101 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 		}
 	}
 	return nil
+}
+
+func (fs *SessionRuntime) BindRuntime(sessionID string, binding factory.RuntimeBinding) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedBindRuntime(fs, sessionID, binding)
+}
+
+func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSubmitWorkRequestForSession(fs, ctx, sessionID, request)
+}
+
+func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedMoveWorkForSession(fs, ctx, sessionID, workID, stateName, requestID)
+}
+
+func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedSubscribeFactoryEventsForSession(fs, ctx, sessionID, reconnect)
+}
+
+func (fs *SessionRuntime) observeRuntimeForSession(
+	ctx context.Context,
+	sessionID string,
+	req factory.ObserveRequest,
+) (factory.ObserveResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeObserveRuntimeForSession(fs, ctx, sessionID, req)
+}
+
+func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID string) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedCloseFactorySession(fs, ctx, sessionID)
+}
+
+func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
+	ctx context.Context,
+	sessionID string,
+	runtimeBundle factoryRuntimeBundle,
+	target FactorySessionTarget,
+) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedStartBackgroundSessionWithMetadata(fs, ctx, sessionID, runtimeBundle, target)
+}
+
+func (fs *SessionRuntime) runSessionID() string {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeRunSessionID(fs)
+}
+
+func (fs *SessionRuntime) requireIdleRuntimeForSession(
+	ctx context.Context,
+	sessionID string,
+) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeRequireIdleRuntimeForSession(fs, ctx, sessionID)
+}
+
+func (fs *SessionRuntime) ReplaceSessionRuntime(
+	ctx context.Context,
+	session *livesession.LiveSession,
+	name string,
+	replacement factoryRuntimeBundle,
+) error {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedReplaceSessionRuntime(fs, ctx, session, name, replacement)
 }

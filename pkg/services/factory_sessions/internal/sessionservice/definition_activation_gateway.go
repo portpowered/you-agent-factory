@@ -39,128 +39,37 @@ func NewNamedFactoryActivator(state *sessionruntime.Service) func(context.Contex
 	}
 }
 
-type definitionActivationGateway struct {
-	runtime *SessionRuntime
-}
+// definitionActivationGateway adapts the legacy Definition activation edge to
+// the fixed owner using a captured scope. T13's keyed authority remains separate.
+type definitionActivationGateway struct{ definitionHost }
 
-// NewDefinitionActivationGateway publishes the narrow Sessions-root activation
-// edge for definition save/activate/swap without the attach-capable SessionHost
-// bundle.
-func NewDefinitionActivationGateway(runtime *SessionRuntime) factorysessions.DefinitionActivationGateway {
-	if runtime == nil {
-		return nil
-	}
-	return definitionActivationGateway{runtime: runtime}
-}
-
-// DefinitionActivationGateway returns the activation gateway owned by this
-// Factory Session runtime.
 func (fs *SessionRuntime) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
-	return NewDefinitionActivationGateway(fs)
+	return definitionActivationGateway{definitionHost{runtime: fs}}
 }
-
-func (g definitionActivationGateway) callbacks() DefinitionHostCallbacks {
-	return DefinitionCallbacks(g.runtime)
+func (g definitionActivationGateway) RunSessionID() string { return g.runtime.runSessionID() }
+func (g definitionActivationGateway) SessionForActivation(id string) *factorydefinitions.DefinitionSession {
+	return projectDefinitionSession(g.runtime.owner.state.Resolve(id))
 }
-
-func (g definitionActivationGateway) RunSessionID() string {
-	return g.callbacks().RunSessionID()
-}
-
-func (g definitionActivationGateway) SessionForActivation(sessionID string) *factorydefinitions.DefinitionSession {
-	return projectDefinitionSession(g.callbacks().SessionForActivation(sessionID))
-}
-
-func (g definitionActivationGateway) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
-	session, err := g.callbacks().RequireSession(sessionID)
-	return projectDefinitionSession(session), err
-}
-
-func (g definitionActivationGateway) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
-	return g.callbacks().SessionFactoryPersistRoot(g.liveSession(session))
-}
-
 func (g definitionActivationGateway) NamedFactoryActivationPaths(session *factorydefinitions.DefinitionSession) (string, string) {
-	return g.callbacks().NamedFactoryActivationPaths(g.liveSession(session))
+	return NamedFactoryActivationPaths(g.runtime.factoryRootDir, g.runtime.dir, g.liveSession(session))
 }
-
-func (g definitionActivationGateway) SaveNow() time.Time {
-	return g.callbacks().SaveNow()
-}
-
+func (g definitionActivationGateway) SaveNow() time.Time { return g.runtime.clock.Now().UTC() }
 func (g definitionActivationGateway) WithActivationLock(fn func() error) error {
-	return g.callbacks().WithActivationLock(fn)
+	return g.runtime.owner.state.WithActivationLock(fn)
 }
-
-func (g definitionActivationGateway) RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error {
-	return g.callbacks().RequireIdleRuntimeForSession(ctx, sessionID)
+func (g definitionActivationGateway) RequireIdleRuntimeForSession(ctx context.Context, id string) error {
+	return g.runtime.requireIdleRuntimeForSession(ctx, id)
 }
-
-func (g definitionActivationGateway) RequireIdleBeforeNamedFactoryActivation(
-	ctx context.Context,
-	sessionID string,
-	session *factorydefinitions.DefinitionSession,
-) error {
-	return g.callbacks().RequireIdleBeforeNamedFactoryActivation(ctx, sessionID, g.liveSession(session))
+func (g definitionActivationGateway) RequireIdleBeforeNamedFactoryActivation(ctx context.Context, id string, session *factorydefinitions.DefinitionSession) error {
+	live := g.liveSession(session)
+	return RequireIdleBeforeNamedActivation(ctx, id, live, runtimebinding.HandleFromSession(live) != nil,
+		g.runtime.requireIdleRuntimeForSession, g.runtime.requireIdleRuntime)
 }
-
-func (g definitionActivationGateway) ActivateSessionEditableFactory(
-	ctx context.Context,
-	session *factorydefinitions.DefinitionSession,
-	sessionID string,
-	sessionRootDir string,
-	factoryDir string,
-	name string,
-	runtimeName string,
-) error {
-	return g.callbacks().ActivateSessionEditableFactory(
-		ctx,
-		g.liveSession(session),
-		sessionID,
-		sessionRootDir,
-		factoryDir,
-		name,
-		runtimeName,
-	)
+func (g definitionActivationGateway) ActivateSessionEditableFactory(ctx context.Context, session *factorydefinitions.DefinitionSession, id, root, dir, name, runtimeName string) error {
+	return g.runtime.activateSessionEditableFactory(ctx, g.liveSession(session), id, root, dir, name, runtimeName)
 }
-
-func (g definitionActivationGateway) SwapPersistedNamedFactoryRuntime(
-	ctx context.Context,
-	sessionID string,
-	session *factorydefinitions.DefinitionSession,
-	persistRoot string,
-	folderPath string,
-	factoryDir string,
-	name string,
-) error {
-	return g.callbacks().SwapPersistedNamedFactoryRuntime(
-		ctx,
-		sessionID,
-		g.liveSession(session),
-		persistRoot,
-		folderPath,
-		factoryDir,
-		name,
-	)
-}
-
-func (g definitionActivationGateway) liveSession(
-	session *factorydefinitions.DefinitionSession,
-) *livesession.LiveSession {
-	if session == nil {
-		return nil
-	}
-	if live, err := g.callbacks().RequireSession(session.ID); err == nil && live != nil {
-		return live
-	}
-	return &livesession.LiveSession{
-		ID: session.ID,
-		SessionState: livesession.SessionState{
-			FolderPath: session.FolderPath,
-			FactoryDir: session.FactoryDir,
-		},
-		IsDefault: session.IsDefault,
-	}
+func (g definitionActivationGateway) SwapPersistedNamedFactoryRuntime(ctx context.Context, id string, session *factorydefinitions.DefinitionSession, root, folder, dir, name string) error {
+	return g.runtime.swapPersistedNamedFactoryRuntime(ctx, id, g.liveSession(session), root, folder, dir, name)
 }
 
 var _ factorysessions.DefinitionActivationGateway = definitionActivationGateway{}

@@ -103,7 +103,7 @@ func (r sessionIdentityReader) LogicalSessionKeyID(session *livesession.LiveSess
 	return resolved.LogicalSessionKeyID
 }
 
-func (fs *SessionRuntime) buildSessionProjectionContext(
+func (a *Assembly) scopeBuildSessionProjectionContext(fs *SessionRuntime,
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
@@ -134,10 +134,10 @@ func (h keyedSessionHost) BuildSessionProjectionContext(ctx context.Context, ses
 	return reader.BuildSessionProjectionContext(ctx, session)
 }
 
-func (fs *SessionRuntime) projectionReader() sessionProjectionReader {
+func (a *Assembly) scopeProjectionReader(fs *SessionRuntime) sessionProjectionReader {
 	return sessionProjectionReader{
-		state: fs.sessionState, backendScope: fs.backendScopeID, identity: fs.identity,
-		clock: fs.clock, projector: fs.worldStateProjector, checkpoints: fs.newJavaScriptCheckpointStore,
+		state: a.state, backendScope: fs.backendScopeID, identity: a.identity,
+		clock: fs.clock, projector: a.worldStateProjector, checkpoints: a.newJavaScriptCheckpointStore,
 	}
 }
 
@@ -224,14 +224,14 @@ func (r sessionProjectionReader) readProjectionFacts(ctx context.Context, sessio
 
 // BuildSessionProjectionContext exposes the existing projection on the
 // session-owned runtime stored with its canonical registry entry.
-func (fs *SessionRuntime) BuildSessionProjectionContext(
+func (a *Assembly) scopedBuildSessionProjectionContext(fs *SessionRuntime,
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
 	return fs.buildSessionProjectionContext(ctx, session)
 }
 
-func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
+func (a *Assembly) scopeSessionPersistenceScopeFromSession(fs *SessionRuntime,
 	ctx context.Context,
 	session *livesession.LiveSession,
 ) (factorysessioncursors.IdentityScope, error) {
@@ -254,4 +254,45 @@ func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
 		scope.StreamGenerationID = strings.TrimSpace(runtime.StreamIdentity.StreamGenerationID)
 	}
 	return factorysessioncursors.NormalizeScope(scope), nil
+}
+
+func (fs *SessionRuntime) buildSessionProjectionContext(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeBuildSessionProjectionContext(fs, ctx, session)
+}
+
+func (fs *SessionRuntime) projectionReader() sessionProjectionReader {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeProjectionReader(fs)
+}
+
+func (fs *SessionRuntime) BuildSessionProjectionContext(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedBuildSessionProjectionContext(fs, ctx, session)
+}
+
+func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessioncursors.IdentityScope, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopeSessionPersistenceScopeFromSession(fs, ctx, session)
 }

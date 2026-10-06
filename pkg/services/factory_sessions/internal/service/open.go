@@ -91,11 +91,9 @@ type sessionRuntimeOpening struct {
 	restoredWorldState          *factorydefinitions.FactoryWorldState
 	restoredEventHistory        []factorydefinitions.FactoryEvent
 	boardHistoryOpening         currentBoardHistoryOpening
-	runtimebuildService         runtimeports.RuntimeReplacementBuilder
+	initial                     *factoryruntime.RuntimeInitialOpening
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
-	runtimeLifecycle            runtimeports.RuntimeLifecycle
-	runtimeSidecars             runtimeports.RuntimeSidecarService
 	activation                  *factoryruntime.RuntimeActivation
 }
 
@@ -367,11 +365,9 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 
 	initial, err := r.openInitialSessionEngine(ctx, opening)
 	if initial != nil {
-		opening.runtimebuildService = initial.ReplacementBuilder
+		opening.initial = initial
 		opening.startupRuntime = initial.Record
 		opening.completion = initial.Completion
-		opening.runtimeLifecycle = initial.Lifecycle
-		opening.runtimeSidecars = initial.Sidecars
 		opening.activation = initial.Activation
 		if initial.Activation != nil && initial.Activation.Close != nil {
 			cleanup.Add(func() error { return initial.Activation.Close(context.WithoutCancel(ctx)) })
@@ -390,6 +386,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	opening.completion.CanonicalSessionIDGenerated = opening.canonicalSessionIDGenerated &&
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
+	opening.initial.Completion = opening.completion
 	opening.warnMissingBoardHistory()
 	return nil
 }
@@ -476,27 +473,23 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if r.definitionRuntimeRouter == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
 	}
-	sessionRuntime, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
-		opening.root.FactoryRootDir,
-		opening.clock,
-		opening.startupRuntime.RuntimeLogger(),
-		opening.runtimebuildService,
-		opening.startupRuntime,
-		opening.modelsBind.Scope,
-		opening.completion,
-		opening.runtimeLifecycle,
-		opening.runtimeSidecars,
-		opening.sessionID,
-		opening.configured.Definition.Directory,
-		opening.configured.Definition.ExecutionBaseDir,
-		opening.configured.Runtime.Mode,
-		opening.sessionSelection.BackendScopeID,
-		opening.sessionSelection.WorkFile,
-		opening.configured.Recordings.WorkflowID,
+	sessionRuntime, definitionHost, definitionActivationGateway, release, err := r.factorySessionsRuntimeAssembly.RegisterOpening(
+		ctx, roles.SessionOpeningFacts{
+			FactorySessionID: opening.sessionID, RuntimeID: opening.configured.Runtime.RuntimeInstanceID,
+			GenerationID: opening.startupRuntime.StreamGeneration(), FactoryRootDir: opening.root.FactoryRootDir,
+			Directory: opening.configured.Definition.Directory, ExecutionBaseDir: opening.configured.Definition.ExecutionBaseDir,
+			RuntimeMode: opening.configured.Runtime.Mode, BackendScopeID: opening.sessionSelection.BackendScopeID,
+			WorkFile: opening.sessionSelection.WorkFile, WorkflowID: opening.configured.Recordings.WorkflowID,
+			ModelsScope: opening.modelsBind.Scope,
+		}, opening.initial, opening.clock, opening.startupRuntime.RuntimeLogger(),
 	)
+	if release != nil {
+		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
+	}
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+
 	if bound := runtimebinding.SessionStateFrom(r.factorySessionsRuntimeAssembly.Resolve(opening.sessionID)); bound != nil {
 		bound.SetMockWorkers(opening.configured.Workers.MockWorkers)
 	}
@@ -515,7 +508,11 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
 	}
 	cleanup.Add(func() error {
-		r.definitionRuntimeRouter.Unbind(opening.sessionID)
+		current := r.factorySessionsRuntimeAssembly.Resolve(opening.sessionID)
+		bound := runtimebinding.SessionStateFrom(current)
+		if current == nil || (bound != nil && any(bound.Owner) == any(sessionRuntime)) {
+			r.definitionRuntimeRouter.Unbind(opening.sessionID)
+		}
 		return nil
 	})
 	if r.processRuntimeFactory == nil {

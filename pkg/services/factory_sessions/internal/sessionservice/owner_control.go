@@ -18,11 +18,11 @@ import (
 
 // ApplyOwnedControl acts on this session's runtime without resolving a
 // per-session gateway. The process root serializes control IDs on the record.
-func (fs *SessionRuntime) ApplyOwnedControl(ctx context.Context, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+func (a *Assembly) scopedApplyOwnedControl(fs *SessionRuntime, ctx context.Context, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
 	if fs == nil {
 		return factorysessions.LifecycleControlResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
-	return applyScopedOwnedControl(ctx, fs.sessionState, fs.logger, sessionID, operation, request)
+	return applyScopedOwnedControl(ctx, a.state, fs.logger, sessionID, operation, request)
 }
 
 func applyScopedOwnedControl(ctx context.Context, state runtimebinding.LiveSessionResolver, logger *zap.Logger, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
@@ -203,4 +203,12 @@ func (s addressedControlSession) Resolve(id string) *livesession.LiveSession {
 		return s.session
 	}
 	return nil
+}
+
+func (fs *SessionRuntime) ApplyOwnedControl(ctx context.Context, sessionID string, operation factorysessions.LifecycleControlKind, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	var a *Assembly
+	if fs != nil {
+		a = fs.owner
+	}
+	return a.scopedApplyOwnedControl(fs, ctx, sessionID, operation, request)
 }
