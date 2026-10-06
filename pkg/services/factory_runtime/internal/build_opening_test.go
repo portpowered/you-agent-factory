@@ -409,7 +409,9 @@ func (*fixedEffectsSessions) BeginRuntimeAttempt(_ context.Context, _ workersess
 	_ workers.Service, _ platformclock.Source, _ platformclock.TimerSource,
 	_ func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
 ) (workersessions.RuntimeAttempt, error) {
-	return workersessions.RuntimeAttempt(func(context.Context, workers.WorkstationDispatchResult, error) error { return nil }), nil
+	return workersessions.RuntimeAttempt(func(_ context.Context, result workers.WorkstationDispatchResult, _ error) (workers.WorkstationDispatchResult, bool, error) {
+		return result, false, nil
+	}), nil
 }
 
 func captureSelectedOpeningSnapshot(sources *[]interfaces.LoadedFactorySource, snapshot *interfaces.FactorySnapshot) interfaces.InitialFactorySnapshotFactory {

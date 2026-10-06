@@ -38,8 +38,8 @@ type childWorkerExecutionBinding struct {
 
 type childWorkerAttemptStarter func(
 	context.Context,
-	workers.ExecuteRequest,
-) (func(context.Context, workers.ExecuteResult, error) error, error)
+	*workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 
 // SetWorkerInvoker attaches the Runtime capability used by durable live-change
 // control. Child execution deliberately does not use this broad capability;
@@ -172,10 +172,10 @@ func (s *JavaScriptRuntimeService) SetWorkerProgressPublisher(
 
 // SetWorkerAttemptStarter attaches the Runtime-owned Worker Session opening
 // boundary to the direct child Execute route. Runtime remains responsible for
-// admission and execution; the returned completion callback only commits the
-// durable Worker Session observation after Execute returns.
+// admission and execution; the returned completion callback commits the durable
+// observation and resolves the authoritative result before retry or output.
 func (s *JavaScriptRuntimeService) SetWorkerAttemptStarter(
-	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) {
 	if s == nil {
 		return
@@ -346,26 +346,24 @@ func (e *childWorkerExecutor) Execute(
 	if e.publish != nil {
 		progress = newChildWorkerProgressBridge(e.publish, workerDispatchID)
 	}
-	var completeAttempt func(context.Context, workers.ExecuteResult, error) error
 	for attemptNumber := 1; attemptNumber <= e.maxAttempts; attemptNumber++ {
 		request := e.executeRequest(req, base, workerDispatchID, attemptNumber, progress)
 		base.Attempt = request.Attempt.Number
-		var preStartResult workers.ExecuteResult
-		if attemptNumber == 1 {
-			completeAttempt, preStartResult, err = e.beginChildWorkerAttempt(ctx, request, progress)
-			if err != nil {
-				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
-			}
+		completeAttempt, preStartResult, beginErr := e.beginChildWorkerAttempt(ctx, &request, progress)
+		if beginErr != nil {
+			return e.failedChild(base, req, dispatchID, childIndex, preStartResult, beginErr)
 		}
 		invoked, err := executeChildAttempt(ctx, e.execute, request)
 		invoked = normalizeChildStructuredResult(req, invoked)
+		invoked, err = finishChildWorkerAttempt(ctx, completeAttempt, progress, invoked, err)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
+			// Retire this physical attempt before a retry admits a new observer.
+			// Logical dispatch identity stays stable across the child retry.
 			if progress != nil {
 				progress.resetAttempt()
 			}
 			continue
 		}
-		finishChildWorkerAttempt(completeAttempt, progress, invoked, err)
 		if err != nil || !childExecutionSucceeded(invoked.Outcome) {
 			return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
 		}
@@ -376,9 +374,9 @@ func (e *childWorkerExecutor) Execute(
 
 func (e *childWorkerExecutor) beginChildWorkerAttempt(
 	ctx context.Context,
-	request workers.ExecuteRequest,
+	request *workers.ExecuteRequest,
 	progress *childWorkerProgressBridge,
-) (func(context.Context, workers.ExecuteResult, error) error, workers.ExecuteResult, error) {
+) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), workers.ExecuteResult, error) {
 	if e == nil || e.attemptStarter == nil {
 		return nil, workers.ExecuteResult{}, nil
 	}
@@ -386,13 +384,14 @@ func (e *childWorkerExecutor) beginChildWorkerAttempt(
 	if err == nil {
 		return complete, workers.ExecuteResult{}, nil
 	}
-	result := failedChildWorkerExecuteResult(request, err)
+	result := failedChildWorkerExecuteResult(*request, err)
 	// A producer may have opened its lifecycle window before discovering a
 	// preparation failure. If it returned a completion handle alongside that
 	// error, close the window before returning the child error; dropping the
 	// handle recreates the response-bridge wait with no terminal record.
 	if complete != nil {
-		_ = complete(context.Background(), result, err)
+		_, completionErr := complete(context.WithoutCancel(ctx), result, err)
+		err = errors.Join(err, completionErr)
 	}
 	if progress != nil {
 		progress.publishTerminal(result, err)
@@ -541,20 +540,20 @@ func childAttemptTimeout(
 }
 
 func finishChildWorkerAttempt(
-	complete func(context.Context, workers.ExecuteResult, error) error,
+	ctx context.Context,
+	complete func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error),
 	progress *childWorkerProgressBridge,
 	result workers.ExecuteResult,
 	err error,
-) {
+) (workers.ExecuteResult, error) {
+	if complete != nil {
+		result, err = complete(context.WithoutCancel(ctx), result, err)
+	}
 	if progress != nil {
 		progress.publishResultContent(result)
-	}
-	if complete != nil {
-		_ = complete(context.Background(), result, err)
-	}
-	if progress != nil {
 		progress.publishTerminal(result, err)
 	}
+	return result, err
 }
 
 func childExecutionShouldRetry(
@@ -836,6 +835,13 @@ func (e *childWorkerExecutor) failedChild(
 ) (factory.JavaScriptChildExecutionResult, error) {
 	result = normalizeChildExecuteFailure(result, executeErr)
 	diagnostic := childFailureDiagnostic(result, executeErr, req)
+	failureErr := fmt.Errorf("%s", diagnostic)
+	if executeErr != nil {
+		failureErr = executeErr
+		if diagnostic != executeErr.Error() {
+			failureErr = fmt.Errorf("%s: %w", diagnostic, executeErr)
+		}
+	}
 	provider, providerSessionRef := childProviderSession(result)
 	if provider == "" {
 		provider = childProviderName(result)
@@ -876,7 +882,7 @@ func (e *childWorkerExecutor) failedChild(
 		Diagnostic:         diagnostic,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
-	}, fmt.Errorf("%s", diagnostic)
+	}, failureErr
 }
 
 // workerDispatchIdentity qualifies one child's dispatch identity with the

@@ -641,6 +641,25 @@ Cancel and terminate do not require the session to have published a Provider
 Session yet: a `RUNNING` session whose `providerSessionAvailable` is still
 `false` is cancelled by its `workerSessionId` like any other.
 
+To request force termination of a supported owned command attempt, use its
+observed physical attempt ID and a caller-owned request ID:
+
+```bash
+you worker-sessions terminate <worker-session-id> --force \
+  --request-id kill-001 --expected-attempt-id <attempt-id> --output json
+```
+
+Both identity flags require `--force`, and force requires both flags. Keep the
+same tuple when retrying an interrupted request; changing the tuple under the
+same request ID conflicts. A stale attempt conflicts before effects. The JSON
+result retains `action: TERMINATE` and adds `forced: true`. `APPLIED` requires
+confirmed completion of the exact owned process tree and execution attempt.
+
+An unsupported capability returns `UNSUPPORTED` without cancellation; an
+unconfirmed termination or service deadline returns a control failure. Windows
+force termination is unsupported. Ordinary terminate keeps its joined behavior.
+The selected-host and local owner-routing rules above also apply to force.
+
 Every ended Worker Session names why it ended. `show` reports the reason on its
 `Failure` line and `list` reports it in the failure column; the API returns the
 same value as `failure.kind` on the observation. The reasons that distinguish

@@ -184,6 +184,10 @@ func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	if received.OwnedProcessObserver == nil {
+		t.Fatal("native dispatch lost its Provider-owned process observer")
+	}
+	received.OwnedProcessObserver = nil
 	if !reflect.DeepEqual(received, request) {
 		t.Fatalf("native request = %#v, want %#v", received, request)
 	}

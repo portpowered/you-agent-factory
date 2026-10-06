@@ -170,6 +170,8 @@ func executeWithService(
 			progress(correlation, fragment)
 		}
 	}
+	retireControl := supervision.bindProviderAttemptControl(&executeRequest)
+	defer retireControl()
 	executeResult, executeErr := execution.Execute(ctx, executeRequest)
 	if supervision.processGoneObserved() {
 		executeResult = processGoneExecuteResult(executeRequest, executeResult)
@@ -302,6 +304,7 @@ func executeRequestFromSessionDispatch(
 			Resume:                   cloneSessionContinuation(execution.Continuation),
 			WorkflowContext:          execution.WorkflowContext.Clone(),
 			ProcessLifecycleObserver: execution.ProcessLifecycleObserver,
+			AttemptControlObserver:   execution.AttemptControlObserver,
 		},
 	}, nil
 }
@@ -543,6 +546,11 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 
 func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	snapshot := supervision.completionSnapshot()
+	if snapshot.forceConfirmed {
+		// Only a confirmed owned tree kill overrides the adapter's signal-exit
+		// classification. A failed or timed-out force keeps its natural result.
+		result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	}
 	if snapshot.deadlineExceeded {
 		result = timeoutDispatchResult(result)
 		dispatchErr = workers.ErrWorkstationDispatchTimeout
@@ -567,6 +575,7 @@ func (r *registry) completeSupervision(ctx context.Context, id string, supervisi
 
 type completionSnapshot struct {
 	action           workersessions.ControlAction
+	forceConfirmed   bool
 	continuing       bool
 	dispatchID       string
 	serverOwned      bool
@@ -578,8 +587,23 @@ type completionSnapshot struct {
 func (s *supervision) completionSnapshot() completionSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A force signal does not establish terminality. Wait for confirmed tree
+	// completion (or failure) before selecting the terminal control action.
+	for s.forcePending || (s.forceJournalPending != 0 && s.forceSafetyClaimed && !s.forceConfirmed && s.requestedAction == "" && s.controlAction == "") {
+		wait := s.controlDone
+		if !s.forcePending {
+			// A declined or failed force must acknowledge its journal before
+			// natural completion can select a retry. Confirmed force bypasses
+			// this gate so its authoritative join can precede result persistence.
+			wait = s.forceJournalDone
+		}
+		s.mu.Unlock()
+		<-wait
+		s.mu.Lock()
+	}
 	return completionSnapshot{
 		action:           s.requestedAction,
+		forceConfirmed:   s.forceConfirmed,
 		continuing:       s.continuing,
 		dispatchID:       s.dispatchID,
 		serverOwned:      s.serverOwned,
@@ -847,13 +871,14 @@ func (r *registry) BeginRuntimeAttempt(
 		return nil, err
 	}
 	opened = true
-	return workersessions.RuntimeAttempt(handle.Complete), nil
+	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
+	return workersessions.RuntimeAttempt(handle.Resolve), nil
 }
 
 func (r *registry) reserveRuntimeAttemptKey(key workersessions.RuntimeAttemptKey, workerID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.runtimeAttemptOwners[key]; exists {
+	if _, exists := r.runtimeAttemptOwners[key]; exists || r.runtimeForceJournals[key] != nil {
 		return false
 	}
 	if r.runtimeAttemptOwners == nil {

@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -264,5 +265,38 @@ func TestNewProviderCommandRunnerRetainsObserverFailureAndNativeError(t *testing
 	})
 	if !errors.Is(err, nativeFailure) || result.ExitCode != 9 || string(result.Stdout) != "partial" {
 		t.Fatalf("native failure: result=%#v error=%v", result, err)
+	}
+}
+
+type bridgeOwnedControl struct{}
+
+func (*bridgeOwnedControl) ForceKill(context.Context) (bool, error) { return false, nil }
+
+func TestProviderCommandBridgePublishesExactOwnedCapability(t *testing.T) {
+	t.Parallel()
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprint("streaming=", streaming), func(t *testing.T) {
+			t.Parallel()
+			control := &bridgeOwnedControl{}
+			var observed platformprocess.OwnedProcessControl
+			next := canonicalCommandRunnerFunc(func(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+				if request.OwnedProcessObserver == nil {
+					t.Fatal("Providers-to-platform bridge lost the owned capability observer")
+				}
+				request.OwnedProcessObserver(control)
+				return platformprocess.CommandResult{}, nil
+			})
+			request := providers.CommandRequest{AttemptID: "physical-attempt", OwnedProcessObserver: func(got platformprocess.OwnedProcessControl) { observed = got }}
+			runner := NewProviderCommandRunner(next)
+			var err error
+			if streaming {
+				_, err = runner.RunStreaming(t.Context(), request, nil)
+			} else {
+				_, err = runner.Run(t.Context(), request)
+			}
+			if err != nil || observed != control {
+				t.Fatalf("capability publication = %v, %v; want exact runner capability", observed, err)
+			}
+		})
 	}
 }

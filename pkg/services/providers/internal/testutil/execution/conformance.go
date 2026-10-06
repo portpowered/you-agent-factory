@@ -506,6 +506,12 @@ func assertObservation(
 		t.Fatalf("adapter observation = %#v, want calls/cleanups %d/%d", observation, wantCalls, wantCleanups)
 	}
 	for index, request := range observation.Requests {
+		if request.OwnedProcessObserver == nil {
+			t.Fatalf("adapter request[%d] lost its Provider-owned process observer", index)
+		}
+		// Providers adds its attempt capability at dispatch. Function values
+		// have no DeepEqual identity; compare all caller-owned data separately.
+		request.OwnedProcessObserver = nil
 		if !reflect.DeepEqual(request, wantRequest) {
 			t.Fatalf("adapter request[%d] = %#v, want %#v", index, request, wantRequest)
 		}

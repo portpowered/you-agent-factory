@@ -146,9 +146,11 @@
     {
       "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
       "stableIds": [
+        "cli/you.worker-sessions.terminate",
         "mcp/mcp.tool.you.worker_session.control",
         "mcp/mcp.tool.you.worker_session.list",
-        "mcp/mcp.tool.you.worker_session.read"
+        "mcp/mcp.tool.you.worker_session.read",
+        "rest/terminateWorkerSession"
       ]
     },
     {

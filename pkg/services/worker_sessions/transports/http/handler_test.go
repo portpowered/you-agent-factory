@@ -31,6 +31,108 @@ func TestInterruptUnavailableRecoveryIsNotInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestForceControlErrorsKeepFailureResponseBeforeContextSuppression(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"effect deadline", errors.Join(workersessions.ErrForceTerminationUnconfirmed, context.DeadlineExceeded), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"effect cancellation", errors.Join(workersessions.ErrForceTerminationUnconfirmed, context.Canceled), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"signal failure", errors.Join(workersessions.ErrForceTerminationUnconfirmed, errors.New("private process detail")), http.StatusServiceUnavailable, "WORKER_SESSION_CONTROL_FAILED"},
+		{"invalid force", errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl), http.StatusBadRequest, "WORKER_SESSION_CONTROL_INVALID"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			(&Handler{}).writeMappedControlError(response, test.err)
+			var body struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("control failure has no JSON error response: %v", err)
+			}
+			if response.Code != test.status || body.Code != test.code || strings.Contains(response.Body.String(), "private process detail") {
+				t.Fatalf("control failure response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestTerminateForceHTTPRejectsInvalidPayloadBeforeControl(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{
+		`{"force":true}`, `{"force":true,"requestId":"request"}`,
+		`{"force":true,"requestId":" ","expectedAttemptId":"attempt"}`,
+		`{"requestId":"request"}`, `{"force":false,"requestId":""}`,
+		`{"expectedAttemptId":"attempt"}`, `{"force":null}`, `{"requestId":null}`,
+		`{"force":"true"}`, `{"force":true,"requestId":1,"expectedAttemptId":"attempt"}`,
+		`{"unexpected":true}`, `null`, `[]`, `{"force":false} {}`, `{`,
+		`{"force":true,"force":false}`, `{"force":false,"force":false}`,
+		`{"force":true,"requestId":"first","requestId":"second","expectedAttemptId":"attempt"}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"stale","expectedAttemptId":"attempt"}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"attempt","\u0066orce":false}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"attempt","Force":false}`,
+		`{"force":true,"requestId":null,"requestId":"request","expectedAttemptId":"attempt"}`,
+	} {
+		t.Run(payload, func(t *testing.T) {
+			t.Parallel()
+			service := &controlHTTPServiceFake{}
+			handler := newForceHTTPHandler(service)
+			response := httptest.NewRecorder()
+			handler.TerminateWorkerSession(response, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker/terminate", strings.NewReader(payload)), "worker")
+			if response.Code != http.StatusBadRequest || service.controlAction != "" {
+				t.Fatalf("invalid payload dispatched: status=%d action=%s body=%s", response.Code, service.controlAction, response.Body.String())
+			}
+			var body factoryapi.ErrorResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || string(body.Code) != "WORKER_SESSION_CONTROL_INVALID" {
+				t.Fatalf("invalid payload response = %s, %v", response.Body.String(), err)
+			}
+		})
+	}
+}
+
+func newForceHTTPHandler(service *controlHTTPServiceFake) *Handler {
+	return NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+}
+
+func TestTerminateForceHTTPPreservesTupleAndOrdinaryCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{"", `{}`, `{"force":false}`, `{"force":true,"requestId":" request ","expectedAttemptId":" attempt "}`} {
+		t.Run(payload, func(t *testing.T) {
+			t.Parallel()
+			forced := strings.Contains(payload, "true")
+			service := &controlHTTPServiceFake{results: map[workersessions.ControlAction]workersessions.ControlResult{
+				workersessions.ControlActionTerminate: {Session: workersessions.Session{ID: "worker", State: workersessions.StateTerminated},
+					Action: workersessions.ControlActionTerminate, Outcome: workersessions.ControlOutcomeApplied, DispatchID: "dispatch", Forced: forced},
+			}}
+			response := httptest.NewRecorder()
+			newForceHTTPHandler(service).TerminateWorkerSession(response, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker/terminate", strings.NewReader(payload)), " worker ")
+			if response.Code != http.StatusOK || service.controlRequest.ID != "worker" || service.controlRequest.Force != forced || service.controlAction != workersessions.ControlActionTerminate {
+				t.Fatalf("terminate request = %#v, status=%d", service.controlRequest, response.Code)
+			}
+			if forced && (service.controlRequest.RequestID != "request" || service.controlRequest.ExpectedAttemptID != "attempt") {
+				t.Fatalf("force tuple = %#v", service.controlRequest)
+			}
+			var body factoryapi.WorkerSessionControlResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			assertForceHTTPResponse(t, body, forced)
+		})
+	}
+}
+
+func assertForceHTTPResponse(t *testing.T, body factoryapi.WorkerSessionControlResponse, forced bool) {
+	t.Helper()
+	if body.Action != factoryapi.WorkerSessionControlResponseActionTerminate || body.DispatchId != "dispatch" ||
+		(forced && (body.Forced == nil || !*body.Forced)) || (!forced && body.Forced != nil) {
+		t.Fatalf("terminate response = %#v", body)
+	}
+}
+
 func TestInterruptPersistenceErrorIsNotInvalidRequest(t *testing.T) {
 	t.Parallel()
 	cause := errors.Join(recordings.ErrWorkerRecordingPersistence, workersessions.ErrInterruptValidation, errors.New("private-storage-detail"))

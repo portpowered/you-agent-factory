@@ -380,9 +380,15 @@ func attemptTestRequest(dispatchID, attemptID string) workers.ExecuteRequest {
 	}
 }
 func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.T) {
+	owned := &projectedAttemptControl{identity: "owned-attempt"}
+	var captured providers.AttemptControl
 	var observed workers.ExecuteRequest
 	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		observed = request
+		if request.Input.AttemptControlObserver == nil {
+			t.Fatal("execution projection dropped the attempt observer")
+		}
+		request.Input.AttemptControlObserver(owned)
 		return workers.ExecuteResult{
 			Correlation:           request.Correlation,
 			Outcome:               workers.ExecutionOutcomeAccepted,
@@ -412,14 +418,15 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 	request := workers.WorkstationDispatchRequest{
 		WorkstationName: "workstation-a",
 		Execution: workers.WorkstationExecutionRequest{
-			WorkerName:       "worker-a",
-			WorkerType:       "agent",
-			RunnerID:         workers.RunnerIDCodex,
-			FactorySessionID: "session-1",
-			RecordingID:      "runtime-1",
-			GenerationID:     "generation-1",
-			Model:            "model-a",
-			ModelProvider:    "provider-a",
+			AttemptControlObserver: func(control providers.AttemptControl) { captured = control },
+			WorkerName:             "worker-a",
+			WorkerType:             "agent",
+			RunnerID:               workers.RunnerIDCodex,
+			FactorySessionID:       "session-1",
+			RecordingID:            "runtime-1",
+			GenerationID:           "generation-1",
+			Model:                  "model-a",
+			ModelProvider:          "provider-a",
 			Dispatch: work.WorkDispatch{
 				DispatchID:      "dispatch-1",
 				TransitionID:    "transition-a",
@@ -455,6 +462,9 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 		t.Fatalf("startThroughStatelessWorkers() error = %v", err)
 	}
 	assertDetachedDispatchResult(t, got, gotErr)
+	if captured != owned {
+		t.Fatal("workstation observer did not receive the executing attempt's handle")
+	}
 	assertDetachedCorrelation(t, observed)
 	assertDetachedWorkInput(t, observed)
 	if observed.Input.WorkflowContext == nil ||
@@ -470,6 +480,10 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 		t.Fatalf("runtime workflow context was mutated through Execute request: %#v", cfg.workflowContext)
 	}
 }
+
+type projectedAttemptControl struct{ identity string }
+
+func (*projectedAttemptControl) ForceKill(context.Context) (bool, error) { return false, nil }
 
 func assertDetachedDispatchResult(t *testing.T, got workers.WorkstationDispatchResult, gotErr error) {
 	t.Helper()

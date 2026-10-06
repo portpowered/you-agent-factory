@@ -83,6 +83,9 @@ type registry struct {
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts        map[string]struct{}
 	runtimeAttemptControls map[string]*runtimeAttempt
+	// Force journal acknowledgement outlives the live control handle. Keep the
+	// logical dispatch sealed through acknowledgement and after persistence loss.
+	runtimeForceJournals map[workersessions.RuntimeAttemptKey]*runtimeAttempt
 	// runtimeAttemptOwners reserves a scoped key before any opening effects.
 	runtimeAttemptOwners map[workersessions.RuntimeAttemptKey]string
 	// runtimeAdmissions fences opening effects against scoped runtime close.

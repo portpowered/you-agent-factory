@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -24,7 +25,7 @@ type liveAttemptKey struct {
 // liveAttemptControl is the control handle bound for one live attempt's
 // exact signal seam. Implementations report which actions have a truthful
 // signal for the attempt right now (supports) and, once claim has already
-// removed the registration for that seam, deliver the signal and block
+// consumed the registration's control seam, deliver the signal and block
 // (bounded by ctx) until the attempt's real recorded outcome is known
 // (signal). For acpAttemptControl, supports does not merely pre-filter: it
 // atomically claims the exact live execution generation (see
@@ -62,37 +63,50 @@ type liveAttemptControl interface {
 // waits on done, so a natural success can never be misreported as
 // ControlOutcomeCompleted merely because it won that race.
 type nativeAttemptControl struct {
-	cancel    context.CancelFunc
-	done      chan struct{}
-	cancelled bool
+	cancel         context.CancelFunc
+	done           chan struct{}
+	cancelled      bool
+	mu             sync.Mutex
+	allowKill      bool
+	finished       bool
+	attached       bool
+	process        platformprocess.OwnedProcessControl
+	claimedProcess platformprocess.OwnedProcessControl
 }
 
 var _ liveAttemptControl = (*nativeAttemptControl)(nil)
 
-// supports reports whether action has a truthful native signal seam. Cancel
-// and Terminate both resolve to the one force-kill mechanism every native
-// adapter already honors; there is no per-attempt pause seam, so Pause is
-// never supported here.
+// supports claims the attached capability for Kill. Cancel and Terminate
+// retain the existing context-cancellation seam; Pause remains unsupported.
 func (control *nativeAttemptControl) supports(action providers.ControlAction) bool {
+	control.mu.Lock()
+	defer control.mu.Unlock()
 	switch action {
 	case providers.ControlActionCancel, providers.ControlActionTerminate:
+		control.claimedProcess = nil
+		return true
+	case providers.ControlActionKill:
+		if !control.allowKill || control.finished || control.process == nil {
+			return false
+		}
+		control.claimedProcess = control.process
 		return true
 	default:
 		return false
 	}
 }
 
-// signal delivers the already-validated action to the bound attempt and
-// blocks (bounded by ctx) until the execution observes its terminal
-// behavior. Callers must only invoke signal after supports(action) reported
-// true. Native cancellation has no genuine-failure path of its own - cancel
-// is a plain context.CancelFunc - so signal only reports accepted=false,
-// err=ctx.Err() if the caller stops waiting before the execution returns.
-// The accepted result is grounded in control.cancelled (finish's recorded
-// outcome), not in the bare fact that done closed, so a claim that lands
-// after the attempt already succeeded naturally reports accepted=false
-// instead of a false completed.
+// signal invokes the captured kill capability or the existing cancellation
+// seam, then joins the authoritative provider execution. Kill never falls
+// back to cancellation. Ordinary cancellation remains grounded in the real
+// recorded canceled outcome, so a concurrent natural finish is not success.
 func (control *nativeAttemptControl) signal(ctx context.Context) (bool, error) {
+	control.mu.Lock()
+	process := control.claimedProcess
+	control.mu.Unlock()
+	if process != nil {
+		return control.killAndJoin(ctx, process)
+	}
 	control.cancel()
 	select {
 	case <-control.done:
@@ -109,8 +123,51 @@ func (control *nativeAttemptControl) signal(ctx context.Context) (bool, error) {
 // happens-before). Must be called exactly once, synchronously, as soon as
 // the bound Execute call returns.
 func (control *nativeAttemptControl) finish(cancelled bool) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	control.finished = true
+	control.process = nil
 	control.cancelled = cancelled
 	close(control.done)
+}
+
+// attachProcess retains only the first capability for this physical attempt.
+// A late callback cannot install authority after completion or substitute a
+// second process for the handle a concurrent control already captured.
+func (control *nativeAttemptControl) attachProcess(process platformprocess.OwnedProcessControl) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if process != nil && control.allowKill && !control.finished && !control.attached {
+		control.process = process
+		control.attached = true
+	}
+}
+
+func (control *nativeAttemptControl) killAndJoin(ctx context.Context, process platformprocess.OwnedProcessControl) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	accepted, err := process.ForceKill(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", providers.ErrControlSignalFailed, err)
+	}
+	if !accepted {
+		// A declined capability guarantees no effects. Retire it permanently;
+		// ordinary cancellation can still control this same live execution.
+		control.mu.Lock()
+		control.process = nil
+		control.claimedProcess = nil
+		control.mu.Unlock()
+		return false, nil
+	}
+	// Tree completion and provider completion are independent witnesses. Never
+	// turn a successful signal or a parent-only join into a completed attempt.
+	select {
+	case <-control.done:
+		return true, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
 }
 
 // liveAttemptEntry is the value held for one live identity. control is nil
@@ -118,6 +175,7 @@ func (control *nativeAttemptControl) finish(cancelled bool) {
 // production Execute path in this packet binds one (see bindLiveAttempt).
 type liveAttemptEntry struct {
 	control liveAttemptControl
+	claimed bool
 }
 
 // liveAttemptRegistry correlates in-flight Execute calls with their canonical
@@ -137,8 +195,8 @@ func newLiveAttemptRegistry() *liveAttemptRegistry {
 // bind fails with errAttemptAlreadyLive when key is already live, so a second
 // execution cannot replace or steal an existing live identity. release is
 // idempotent and safe to call from any terminal path, including a panic
-// unwind, exactly once per successful bind; it is a no-op once claim has
-// already removed key.
+// unwind, exactly once per successful bind. A claimed key stays reserved
+// until this release, so the closure cannot erase a replacement execution.
 func (registry *liveAttemptRegistry) bind(key liveAttemptKey, control liveAttemptControl) (func(), error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -159,16 +217,16 @@ func (registry *liveAttemptRegistry) bind(key liveAttemptKey, control liveAttemp
 	return release, nil
 }
 
-// contains reports whether key is currently live. Exposed for direct
-// same-package tests; peers observe liveness only indirectly through bind.
+// contains reports whether key still has an unclaimed control seam. A claimed
+// key remains reserved for execution until release, but cannot be claimed again.
 func (registry *liveAttemptRegistry) contains(key liveAttemptKey) bool {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	_, exists := registry.live[key]
-	return exists
+	entry, exists := registry.live[key]
+	return exists && !entry.claimed
 }
 
-// claim atomically removes key from the live set and returns its control
+// claim atomically consumes key's control seam and returns its control
 // handle, but only when key is currently live, bound a control handle, and
 // that handle truthfully supports action right now. It leaves key live and
 // reports ok=false for an unknown or already-terminal attempt, an attempt
@@ -178,22 +236,65 @@ func (registry *liveAttemptRegistry) contains(key liveAttemptKey) bool {
 // unintended side effect occurs and a later valid control for the same
 // identity can still succeed.
 //
-// Because removal happens under the same mutex bind/release use, at most one
-// caller ever wins a given identity: a concurrent duplicate control and a
-// racing natural release (registry.bind's returned release) both delete
-// under this lock, so exactly one of "a control claims it" or "it is already
-// gone" is observable, never both.
+// Claim and natural release share the registry lock, so at most one caller
+// obtains the seam. The owning execution keeps the identity reserved through
+// its join, including when the caller stops observing a claimed control.
 func (registry *liveAttemptRegistry) claim(
 	key liveAttemptKey,
 	action providers.ControlAction,
 ) (liveAttemptControl, bool) {
+	return registry.claimMatching(key, action, nil)
+}
+
+// A captured handle compares the registration before consuming its signal
+// seam. Reusing even the identical provider/attempt tuple grants no authority
+// to an observer retained from the previous execution.
+func (registry *liveAttemptRegistry) claimMatching(key liveAttemptKey, action providers.ControlAction, expected *nativeAttemptControl) (liveAttemptControl, bool) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
 	entry, exists := registry.live[key]
-	if !exists || entry.control == nil || !entry.control.supports(action) {
+	if !exists || entry.claimed || entry.control == nil || (expected != nil && entry.control != expected) || !entry.control.supports(action) {
 		return nil, false
 	}
-	delete(registry.live, key)
+	// Keep the identity reserved until the owning Execute call releases it.
+	// Otherwise a replacement can bind this key while the claimed signal is
+	// still joining, and the old release closure can erase its registration.
+	entry.claimed = true
+	registry.live[key] = entry
 	return entry.control, true
+}
+
+type nativeAttemptHandle struct {
+	service *Service
+	key     liveAttemptKey
+	control *nativeAttemptControl
+}
+
+func (handle nativeAttemptHandle) ForceKill(ctx context.Context) (bool, error) {
+	result, err := handle.service.controlAttempt(ctx, providers.ControlAttemptRequest{
+		Provider: handle.key.provider, AttemptID: handle.key.attemptID, Action: providers.ControlActionKill,
+	}, handle.control)
+	return err == nil && result.Outcome == providers.ControlOutcomeCompleted, err
+}
+
+func (s *Service) publishAttemptControl(request providers.ExecuteRequest, control *nativeAttemptControl) {
+	if request.AttemptControlObserver != nil && control.allowKill {
+		request.AttemptControlObserver(nativeAttemptHandle{
+			service: s, key: liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}, control: control,
+		})
+	}
+}
+
+// restoreDeclinedKill reopens ordinary control only for the registration that
+// declined a kill without effects. A natural release and replacement bind must
+// never let the old caller reopen the replacement's already-claimed seam.
+func (registry *liveAttemptRegistry) restoreDeclinedKill(key liveAttemptKey, control *nativeAttemptControl) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	entry, exists := registry.live[key]
+	if exists && entry.control == control {
+		entry.claimed = false
+		registry.live[key] = entry
+	}
 }

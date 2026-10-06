@@ -43,9 +43,24 @@ before treating the capture as complete. `nextToken` is accepted only with
 `view: logs`; `limit` is accepted with `events` and `logs`.
 
 Call `you.worker_session.control` with `workerSessionId` and `operation`:
-`CANCEL`, `TERMINATE`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
+`CANCEL`, `TERMINATE`, `KILL`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
 `successorWorkerSessionId`, and `replacementMessage`. Use the same values when
-retrying an interrupted request. Other operations reject these fields.
+retrying an interrupted request. `CANCEL` and `TERMINATE` reject these fields.
+
+`KILL` requires `requestId` and `expectedAttemptId` and rejects replacement fields.
+Other operations reject `expectedAttemptId`. Read the physical attempt identity
+from the Worker Session observation before submitting this request:
+
+```json
+{"workerSessionId":"direct-worker-001","operation":"KILL","requestId":"kill-001","expectedAttemptId":"attempt-001"}
+```
+
+`KILL` sends `force: true` to the selected host's existing terminate route.
+The response retains `action: TERMINATE` and includes `forced: true`.
+`APPLIED` confirms that the exact owned process tree and authoritative attempt
+have finished. `UNSUPPORTED` means the host has no supported owned capability;
+it does not confirm termination. Windows force termination is unsupported.
+Reuse the same request and attempt identities when recovering a disconnected request.
 
 A failed host connection returns retryable `worker_session.host_unavailable`.
 Worker Session tools use the selected host for every request.

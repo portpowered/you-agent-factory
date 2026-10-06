@@ -1575,10 +1575,11 @@ func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testi
 		clock:          testRuntimeClock{},
 	}
 	request := modelRecordingRequest()
-	prepared := prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	prepared := prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) {
 		previousCalled = true
-		return func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {
+		return func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
 			previousTerminalCalled = true
+			return result, err
 		}, nil
 	})
 	terminal, err := prepared(context.Background(), &request)
@@ -1917,7 +1918,7 @@ func TestPrepareDetachedModelRecordingPreservesDisabledAndPreviousErrors(t *test
 	t.Parallel()
 
 	previousCalled := false
-	previous := func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	previous := func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) {
 		previousCalled = true
 		return nil, nil
 	}
@@ -1936,7 +1937,7 @@ func TestPrepareDetachedModelRecordingPreservesDisabledAndPreviousErrors(t *test
 		clock:          testRuntimeClock{},
 	}
 	wantErr := errors.New("previous preparation failed")
-	prepared = prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	prepared = prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) {
 		return nil, wantErr
 	})
 	failedPreparationRequest := modelRecordingRequest()
@@ -2058,7 +2059,7 @@ func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
 		_ context.Context,
 		result workers.WorkstationDispatchResult,
 		_ error,
-	) error {
+	) (workers.WorkstationDispatchResult, bool, error) {
 		service.mu.Lock()
 		defer service.mu.Unlock()
 		session := service.sessions[request.ID]
@@ -2080,7 +2081,7 @@ func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
 			}
 		}
 		service.sessions[request.ID] = session
-		return nil
+		return result, false, nil
 	}), nil
 }
 

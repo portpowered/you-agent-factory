@@ -419,11 +419,16 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "expectedAttemptId": {
+            "minLength": 1,
+            "type": "string"
+          },
           "operation": {
             "enum": [
               "CANCEL",
               "TERMINATE",
-              "INTERRUPT"
+              "INTERRUPT",
+              "KILL"
             ],
             "type": "string"
           },

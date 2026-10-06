@@ -837,6 +837,10 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         },
@@ -1939,6 +1943,10 @@
       "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
+        {
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "boundary": "rest"
+        },
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
           "boundary": "rest"

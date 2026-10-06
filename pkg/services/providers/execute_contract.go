@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providercontracts "github.com/portpowered/infinite-you/pkg/services/providers/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -137,6 +138,9 @@ const (
 type ExecuteRequest struct {
 	Provider  ID
 	AttemptID string
+	// AttemptControlObserver receives a process-local handle for this physical
+	// execution before adapter startup. It never resolves an attempt by ID.
+	AttemptControlObserver AttemptControlObserver `json:"-"`
 	// Correlation carries detached replay/lineage keys used by effect
 	// implementations that must claim the exact recorded attempt. It is not
 	// provider session state and does not influence provider selection.
@@ -177,6 +181,10 @@ type ExecuteRequest struct {
 	EnvVars                     map[string]string
 	ProcessEnvironment          []string
 	ProcessLifecycleObserver    platformprocess.ProcessLifecycleObserver
+	// OwnedProcessObserver is bound by Providers for the exact native attempt.
+	// Command adapters forward it to the owned process effect; no provider
+	// session reference or durable PID is needed to publish the capability.
+	OwnedProcessObserver platformprocess.OwnedProcessObserver
 	// SessionObserver receives a detached exact Provider Session reference as
 	// soon as the native provider reports it, while the attempt is still live.
 	// It is an invocation-scoped observation hook rather than a selection or
@@ -200,6 +208,18 @@ type ExecuteRequest struct {
 	// construction-time logger in force.
 	ExecutionLogger logging.Logger
 }
+
+// AttemptControl is an ephemeral capability bound to one admitted execution.
+// ForceKill reports true only after its owned process tree and authoritative
+// Provider execution have joined. Unsupported, expired or already claimed
+// handles return false without effects; errors never establish completion.
+// No handle is persisted, restored, or retargeted to a successor.
+type AttemptControl = providercontracts.AttemptControl
+
+// AttemptControlObserver receives one exact execution handle before a Provider
+// Session reference is required. It must return promptly. An early handle may
+// decline force until the runner establishes process ownership.
+type AttemptControlObserver func(AttemptControl)
 
 // ExecuteCorrelation identifies caller-owned execution lineage relevant to
 // deterministic effect boundaries such as Recordings replay.
@@ -460,13 +480,14 @@ const (
 	ControlActionPause     ControlAction = "pause"
 	ControlActionCancel    ControlAction = "cancel"
 	ControlActionTerminate ControlAction = "terminate"
+	ControlActionKill      ControlAction = "kill"
 )
 
 // Validate checks that action is one of the closed, non-zero control-action
 // values.
 func (action ControlAction) Validate() error {
 	switch action {
-	case ControlActionPause, ControlActionCancel, ControlActionTerminate:
+	case ControlActionPause, ControlActionCancel, ControlActionTerminate, ControlActionKill:
 		return nil
 	default:
 		return fmt.Errorf("%w: unsupported control action %q", ErrInvalidControlRequest, string(action))
@@ -484,7 +505,7 @@ const (
 )
 
 // ControlAttemptRequest identifies one Providers-owned provider attempt and
-// the requested pause, cancel, or terminate action.
+// the requested pause, cancel, terminate, or capability-gated kill action.
 type ControlAttemptRequest struct {
 	Provider  ID
 	AttemptID string
@@ -697,6 +718,7 @@ type CommandRequest struct {
 	Execution                work.ExecutionMetadata
 	ExecutionLogger          logging.Logger
 	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
+	OwnedProcessObserver     platformprocess.OwnedProcessObserver
 }
 
 // CommandResult is the observable result of one provider subprocess effect.

@@ -1,14 +1,41 @@
 package workers_test
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
+
+func TestRequestClonesPreserveEphemeralAttemptObserverWithoutSerializingIt(t *testing.T) {
+	t.Parallel()
+	var calls int
+	observe := func(providers.AttemptControl) { calls++ }
+	workstation := workerexecution.CloneWorkstationExecutionRequest(workerexecution.WorkstationExecutionRequest{AttemptControlObserver: observe})
+	provider := workerexecution.CloneProviderInferenceRequest(workerexecution.ProviderInferenceRequest{AttemptControlObserver: observe})
+	detached := (workerexecution.ExecuteRequest{Input: workerexecution.ExecutionInput{AttemptControlObserver: observe}}).Clone()
+	for _, callback := range []providers.AttemptControlObserver{workstation.AttemptControlObserver, provider.AttemptControlObserver, detached.Input.AttemptControlObserver} {
+		if callback == nil {
+			t.Fatal("request clone lost its attempt observer")
+		}
+		callback(nil)
+	}
+	if calls != 3 {
+		t.Fatalf("observer calls = %d, want 3", calls)
+	}
+	for _, request := range []any{workstation, provider, detached} {
+		payload, err := json.Marshal(request)
+		if err != nil || strings.Contains(string(payload), "AttemptControl") {
+			t.Fatalf("ephemeral observer leaked into serialized request: %s, %v", payload, err)
+		}
+	}
+}
 
 func TestCloneProviderInferenceRequestDeeplyDetachesInputTokens(t *testing.T) {
 	t.Parallel()

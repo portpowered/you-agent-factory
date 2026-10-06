@@ -402,6 +402,26 @@ paths:
         are idempotent and return the canonical terminal snapshot.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Force terminate the exact owned attempt. Requires requestId
+                    and expectedAttemptId. Unsupported attempts have no effects.
+                requestId:
+                  type: string
+                  minLength: 1
+                expectedAttemptId:
+                  type: string
+                  minLength: 1
       responses:
         '200':
           description: The Worker Session control result.

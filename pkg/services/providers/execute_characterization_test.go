@@ -574,6 +574,7 @@ func TestControlActionValidate(t *testing.T) {
 		providers.ControlActionPause,
 		providers.ControlActionCancel,
 		providers.ControlActionTerminate,
+		providers.ControlActionKill,
 	} {
 		if err := action.Validate(); err != nil {
 			t.Fatalf("ControlAction(%q).Validate() = %v, want nil", action, err)

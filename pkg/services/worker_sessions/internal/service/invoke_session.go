@@ -12,6 +12,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -65,23 +66,30 @@ func cloneOptionalExecutionFact(value *string) *string {
 }
 
 type runtimeAttempt struct {
-	registry       *registry
-	key            workersessions.RuntimeAttemptKey
-	workerID       string
-	dispatchID     string
-	attemptID      string
-	correlation    workers.ExecutionCorrelation
-	once           sync.Once
-	mu             sync.Mutex
-	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
-	controlPending bool
-	controlDone    chan struct{}
-	controlAction  workersessions.ControlAction
-	controlOutcome workersessions.ControlOutcome
-	controlHistory *controlHistoryReservation
-	completing     bool
-	completed      chan struct{}
-	progress       workersessions.ProviderSessionObservationPublisher
+	registry               *registry
+	key                    workersessions.RuntimeAttemptKey
+	workerID               string
+	dispatchID             string
+	attemptID              string
+	correlation            workers.ExecutionCorrelation
+	once                   sync.Once
+	mu                     sync.Mutex
+	cancel                 func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	controlPending         bool
+	controlDone            chan struct{}
+	controlAction          workersessions.ControlAction
+	controlOutcome         workersessions.ControlOutcome
+	controlHistory         *controlHistoryReservation
+	completing             bool
+	completed              chan struct{}
+	progress               workersessions.ProviderSessionObservationPublisher
+	providerControl        providers.AttemptControl
+	providerControlRetired bool
+	forceConfirmed         bool
+	forceJournalPending    int
+	forceJournalDone       chan struct{}
+	controlPersistenceLost bool
+	forceSafetyClaimed     bool
 }
 
 // PublishRuntimeProgress resolves only the explicit scoped owner before any
@@ -663,13 +671,14 @@ func (r *registry) prepareRetryAttempt(id string, supervision *supervision) (wor
 
 	supervision.mu.Lock()
 	defer supervision.mu.Unlock()
-	if supervision.controlAction != "" || supervision.requestedAction != "" {
+	if supervision.controlPersistenceLost || supervision.controlAction != "" || supervision.requestedAction != "" {
 		return workers.WorkstationDispatchRequest{}, false
 	}
 	previousDispatchID := supervision.dispatchID
 	next := cloneWorkstationDispatchRequest(supervision.execution)
 	next.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", supervision.baseDispatchID(), supervision.attemptsMade+1)
 	supervision.dispatchID = next.Execution.Dispatch.DispatchID
+	supervision.providerAttempt = &providerAttemptControl{}
 	if supervision.runtimeKey.RuntimeID == "" {
 		delete(r.dispatchOwners, previousDispatchID)
 		r.dispatchOwners[supervision.dispatchID] = id
@@ -705,7 +714,7 @@ func (r *registry) claimRetryAttempt(
 	}
 	supervision.mu.Lock()
 	defer supervision.mu.Unlock()
-	if supervision.controlAction != "" || supervision.requestedAction != "" {
+	if supervision.controlPersistenceLost || supervision.controlAction != "" || supervision.requestedAction != "" {
 		return false
 	}
 	// A continuation is a resumed provider session, not a fresh attempt;

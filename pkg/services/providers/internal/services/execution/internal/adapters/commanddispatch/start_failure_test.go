@@ -1,6 +1,7 @@
 package commanddispatch_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -9,6 +10,27 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 )
+
+type ownedControl struct{}
+
+func (*ownedControl) ForceKill(context.Context) (bool, error) { return false, nil }
+
+func TestCommandRequestForwardsExactOwnedCapability(t *testing.T) {
+	t.Parallel()
+	control := &ownedControl{}
+	var observed platformprocess.OwnedProcessControl
+	request := providers.ExecuteRequest{AttemptID: "physical", OwnedProcessObserver: func(got platformprocess.OwnedProcessControl) {
+		observed = got
+	}}
+	command := commanddispatch.Request(request.Clone(), providers.CommandRequest{})
+	if command.OwnedProcessObserver == nil || command.AttemptID != request.AttemptID {
+		t.Fatal("command projection lost attempt identity or capability observer")
+	}
+	command.OwnedProcessObserver(control)
+	if observed != control {
+		t.Fatal("command projection substituted owned capability")
+	}
+}
 
 func TestStartFailureNamesAnOversizedCommandLine(t *testing.T) {
 	t.Parallel()

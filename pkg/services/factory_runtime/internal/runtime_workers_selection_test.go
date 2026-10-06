@@ -8,6 +8,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -200,8 +201,58 @@ func TestRuntimeWorkerResolutionRetainsDirectExecutionContext(t *testing.T) {
 	}
 }
 
-type directSelectionResolver struct{ context *workers.Context }
+func TestRuntimeWorkerResolutionDeliversAdmittedAttemptControl(t *testing.T) {
+	t.Parallel()
+	for _, withProgress := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without progress", true: "with progress"}[withProgress], func(t *testing.T) {
+			t.Parallel()
+			owned := &projectedAttemptControl{identity: "owned-attempt"}
+			var captured providers.AttemptControl
+			request := workers.ExecuteRequest{Input: workers.ExecutionInput{
+				AttemptControlObserver: func(control providers.AttemptControl) { captured = control },
+			}}
+			if withProgress {
+				request.Input.ProgressPublisher = func(workers.ProgressFragment) {}
+			}
+			selected := runtimeWorkersServiceWithProgress{
+				workstationResolver: directSelectionResolver{
+					context: &workers.Context{},
+					observe: func(projected workers.WorkstationExecutionRequest) {
+						if projected.AttemptControlObserver == nil {
+							t.Fatal("resolver request dropped the admitted attempt observer")
+						}
+					},
+				},
+				Service: selectionWorkers{execute: func(_ context.Context, resolved workers.ExecuteRequest) (workers.ExecuteResult, error) {
+					if resolved.Input.AttemptControlObserver == nil {
+						t.Fatal("target resolution dropped the admitted attempt observer")
+					}
+					resolved.Input.AttemptControlObserver(owned)
+					return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil
+				}},
+			}
+			if _, err := selected.Execute(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			if captured != owned {
+				t.Fatal("admitted observer did not receive the selected execution's handle")
+			}
+		})
+	}
+}
 
-func (resolver directSelectionResolver) ResolveExecutionRequest(workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error) {
+type projectedAttemptControl struct{ identity string }
+
+func (*projectedAttemptControl) ForceKill(context.Context) (bool, error) { return false, nil }
+
+type directSelectionResolver struct {
+	context *workers.Context
+	observe func(workers.WorkstationExecutionRequest)
+}
+
+func (resolver directSelectionResolver) ResolveExecutionRequest(request workers.WorkstationExecutionRequest) (workers.ExecuteRequest, error) {
+	if resolver.observe != nil {
+		resolver.observe(request)
+	}
 	return workers.ExecuteRequest{Input: workers.ExecutionInput{WorkflowContext: resolver.context}}, nil
 }

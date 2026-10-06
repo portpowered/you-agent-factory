@@ -12,6 +12,9 @@ description: >-
   session; UNSUPPORTED identifies a valid lifecycle state that does not admit
   the requested action.
 properties:
+  forced:
+    type: boolean
+    description: Present and true only for force requests. The action remains TERMINATE.
   workerSessionId:
     type: string
     description: Stable Worker Session identity targeted by the control.
