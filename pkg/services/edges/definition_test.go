@@ -892,3 +892,21 @@ func TestMergeProcessLogger(t *testing.T) {
 		})
 	}
 }
+
+func TestMergePreservesExactCodexPromptEffects(t *testing.T) {
+	t.Parallel()
+	files := platformfilesystem.Local{}
+	home := func() (string, error) { return "owned-codex-home", nil }
+	merged := Merge(Edges{}, Edges{ProvidersCodexPromptFiles: files, ProvidersCodexResolveHomeDirectory: home})
+	if merged.ProvidersCodexPromptFiles != files {
+		t.Fatal("Codex prompt file replacement lost")
+	}
+	got, err := merged.ProvidersCodexResolveHomeDirectory()
+	if err != nil || got != "owned-codex-home" {
+		t.Fatal("Codex home replacement lost")
+	}
+	retained := Merge(merged, Edges{})
+	if retained.ProvidersCodexPromptFiles != files || retained.ProvidersCodexResolveHomeDirectory == nil {
+		t.Fatal("Codex prompt defaults lost")
+	}
+}

@@ -278,3 +278,17 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 func provideInvocationWorkPolicy() factorysessionwire.InvocationWorkPolicy {
 	return work.NewInvocationPolicyService()
 }
+
+func provideProvidersCodexPromptFiles(edges serviceedges.Edges) providerswire.CodexPromptFileSystem {
+	if edges.ProvidersCodexPromptFiles != nil {
+		return edges.ProvidersCodexPromptFiles
+	}
+	return platformfilesystem.Local{}
+}
+
+func provideProvidersCodexHomeResolver(edges serviceedges.Edges) func() (string, error) {
+	if edges.ProvidersCodexResolveHomeDirectory != nil {
+		return edges.ProvidersCodexResolveHomeDirectory
+	}
+	return os.UserHomeDir
+}

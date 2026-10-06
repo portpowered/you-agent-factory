@@ -55,7 +55,7 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
-			}).commandEffect(), platformclock.Real{})
+			}).commandEffect(), platformclock.Real{}, nil, nil)
 			_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
@@ -77,7 +77,7 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 			ExitCode: 1,
 			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
 		},
-	}).commandEffect(), platformclock.Real{})
+	}).commandEffect(), platformclock.Real{}, nil, nil)
 	request := codexFailureRequest()
 	request.WorkingDirectory = workingDirectory
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), request)
@@ -115,7 +115,7 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 			ExitCode: 1,
 			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
 		},
-	}).commandEffect(), platformclock.Real{})
+	}).commandEffect(), platformclock.Real{}, nil, nil)
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 
 	var failure providers.ExecuteFailure
@@ -151,7 +151,7 @@ func TestCodexCommandEffectClassifiesServerOverloadedExitOutputAsThrottled(t *te
 			Stdout:   []byte(`{"type":"item.completed","item":{"type":"reasoning"}}` + "\n"),
 			Stderr:   []byte(`codex_error_info=server_overloaded`),
 		},
-	}).commandEffect(), platformclock.Real{})
+	}).commandEffect(), platformclock.Real{}, nil, nil)
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 
 	var failure providers.ExecuteFailure
