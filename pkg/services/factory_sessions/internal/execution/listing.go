@@ -870,9 +870,15 @@ func intPtr(value int) *int {
 	return &value
 }
 
-// SetDispatchDurability binds the completed-flush capability and stream
-// identity for live Factory Session dispatch reads.
-func (s *JavaScriptRuntimeService) SetDispatchDurability(
+type dispatchDurabilityBinding struct {
+	reader       recordings.CompletedFlushWatermarkReader
+	generationID string
+}
+
+// BindDispatchDurability registers the recording handle for one owning session.
+// Peer openings cannot replace its completed-flush reader or generation.
+func (s *JavaScriptRuntimeService) BindDispatchDurability(
+	sessionID string,
 	reader recordings.CompletedFlushWatermarkReader,
 	streamGenerationID string,
 ) {
@@ -880,12 +886,18 @@ func (s *JavaScriptRuntimeService) SetDispatchDurability(
 		return
 	}
 	s.dispatchDurabilityMu.Lock()
-	s.dispatchDurability = reader
-	s.dispatchStreamGenerationID = strings.TrimSpace(streamGenerationID)
-	s.dispatchDurabilityMu.Unlock()
+	defer s.dispatchDurabilityMu.Unlock()
+	if s.dispatchDurabilityScopes == nil {
+		s.dispatchDurabilityScopes = make(map[string]dispatchDurabilityBinding)
+	}
+	s.dispatchDurabilityScopes[strings.TrimSpace(sessionID)] = dispatchDurabilityBinding{
+		reader:       reader,
+		generationID: strings.TrimSpace(streamGenerationID),
+	}
 }
 
 func (s *JavaScriptRuntimeService) dispatchesForRead(
+	sessionID string,
 	dispatches []DispatchSummary,
 	events []json.RawMessage,
 ) []DispatchSummary {
@@ -893,10 +905,9 @@ func (s *JavaScriptRuntimeService) dispatchesForRead(
 		return dispatchesForRead(dispatches, events)
 	}
 	s.dispatchDurabilityMu.RLock()
-	reader := s.dispatchDurability
-	generationID := s.dispatchStreamGenerationID
+	binding := s.dispatchDurabilityScopes[strings.TrimSpace(sessionID)]
 	s.dispatchDurabilityMu.RUnlock()
-	return dispatchesForReadWithDurability(dispatches, events, reader, generationID)
+	return dispatchesForReadWithDurability(dispatches, events, binding.reader, binding.generationID)
 }
 
 func dispatchesForRead(dispatches []DispatchSummary, events []json.RawMessage) []DispatchSummary {

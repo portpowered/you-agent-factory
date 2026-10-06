@@ -266,16 +266,15 @@ type JavaScriptRuntimeService struct {
 	workerSessionsMu sync.RWMutex
 	workerSessions   map[string]string
 
-	mu                         sync.RWMutex
-	sessions                   map[string]*runtimeSessionState
-	startReplay                map[string]startReplayRecord
-	startInflight              map[string]*startInflightFlight
-	controlReplay              map[string]controlReplayRecord
-	liveChangeMu               sync.Mutex
-	dispatchDurabilityMu       sync.RWMutex
-	dispatchDurability         recording.CompletedFlushWatermarkReader
-	dispatchStreamGenerationID string
-	persistenceWarningLogger   *zap.Logger
+	mu                       sync.RWMutex
+	sessions                 map[string]*runtimeSessionState
+	startReplay              map[string]startReplayRecord
+	startInflight            map[string]*startInflightFlight
+	controlReplay            map[string]controlReplayRecord
+	liveChangeMu             sync.Mutex
+	dispatchDurabilityMu     sync.RWMutex
+	dispatchDurabilityScopes map[string]dispatchDurabilityBinding
+	persistenceWarningLogger *zap.Logger
 
 	runLifecycleMu sync.Mutex
 	runWaitGroup   sync.WaitGroup
@@ -605,7 +604,7 @@ func (s *JavaScriptRuntimeService) listDispatches(ctx context.Context, sessionID
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: s.dispatchesForRead(state.dispatches, state.events),
+		Dispatches: s.dispatchesForRead(id, state.dispatches, state.events),
 	}, nil
 }
 
@@ -625,7 +624,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	for _, summary := range s.dispatchesForRead(state.dispatches, state.events) {
+	for _, summary := range s.dispatchesForRead(id, state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			detail := DispatchDetail{
 				DispatchSummary:  summary,
