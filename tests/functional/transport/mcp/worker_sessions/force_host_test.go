@@ -90,11 +90,13 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 	dir := support.ScaffoldSingleStepFactory(t, "mcp-force-host")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := &forceHostRunner{started: make(chan (<-chan struct{}), 4)}
-	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	config := support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
-	})
+	}
+	host := support.StartFunctionalAPIServer(t, config)
 	session, ctx := startMCP(t, process, host.URL())
+	var completed []completedForceControl
 	admission := controlHostRunner{started: runner.started}
 	sibling := admitControlWorker(t, ctx, host.URL(), "force-sibling", admission)
 	for index, transport := range []string{"http", "cli", "mcp"} {
@@ -131,6 +133,7 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 		assertJSONEqual(t, result, callWorker(t, ctx, session, "control", args)["result"])
 		postHostJSON(t, ctx, endpoint, map[string]any{"force": true, "requestId": "kill-" + id, "expectedAttemptId": "changed-attempt"}, http.StatusConflict)
 		assertForceObservation(t, host, id)
+		completed = append(completed, completedForceControl{id: id, attempt: attempt, result: result})
 		select {
 		case <-sibling:
 			t.Fatal("force stopped sibling execution")
@@ -140,7 +143,7 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 	if runner.signals.Load() != 3 {
 		t.Fatalf("force/replays signaled %d times, want one per exact attempt", runner.signals.Load())
 	}
-	assertFactoryForceControl(t, host, dir, runner)
+	completed = append(completed, assertFactoryForceControl(t, host, dir, runner))
 	select {
 	case <-sibling:
 		t.Fatal("Factory force stopped direct sibling execution")
@@ -148,9 +151,20 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 	}
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "force-sibling", "operation": "TERMINATE"})
 	waitControlSignal(t, sibling)
+	// Join the original owner before reopening its durable profile. Recovery
+	// must read saved outcomes without reconstructing process capabilities.
+	host.Close(t)
+	reopened := support.StartFunctionalAPIServer(t, config)
+	recoveredSession, recoveredCtx := startMCP(t, process, reopened.URL())
+	for _, saved := range completed {
+		saved.assertRecovered(t, reopened, recoveredSession, recoveredCtx)
+	}
+	if runner.signals.Load() != 4 || runner.calls.Load() != 4 {
+		t.Fatalf("restart repeated force effects: calls=%d signals=%d", runner.calls.Load(), runner.signals.Load())
+	}
 }
 
-func assertFactoryForceControl(t *testing.T, host *support.FunctionalAPIServer, dir string, runner *forceHostRunner) {
+func assertFactoryForceControl(t *testing.T, host *support.FunctionalAPIServer, dir string, runner *forceHostRunner) completedForceControl {
 	t.Helper()
 	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
 	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "hold Factory force worker"})
@@ -183,6 +197,38 @@ func assertFactoryForceControl(t *testing.T, host *support.FunctionalAPIServer, 
 	if runner.signals.Load() != 4 {
 		t.Fatalf("Factory force/replay signaled %d times, want 4 total", runner.signals.Load())
 	}
+	return completedForceControl{id: id, attempt: attempt, result: result}
+}
+
+type completedForceControl struct {
+	id, attempt string
+	result      any
+}
+
+func (saved completedForceControl) assertRecovered(t *testing.T, host *support.FunctionalAPIServer, session *mcp.ClientSession, ctx context.Context) {
+	t.Helper()
+	assertForceObservation(t, host, saved.id)
+	endpoint := host.URL() + "/worker-sessions/" + saved.id + "/terminate"
+	payload := map[string]any{"force": true, "requestId": "kill-" + saved.id, "expectedAttemptId": saved.attempt}
+	args := map[string]any{"operation": "KILL", "workerSessionId": saved.id, "requestId": "kill-" + saved.id, "expectedAttemptId": saved.attempt}
+	assertJSONEqual(t, saved.result, postHostJSON(t, ctx, endpoint, payload, http.StatusOK))
+	assertJSONEqual(t, saved.result, executeForceCLI(t, host, saved.id, saved.attempt))
+	assertJSONEqual(t, saved.result, callWorker(t, ctx, session, "control", args)["result"])
+	assertForceObservation(t, host, saved.id)
+	// A committed outcome grants read-only authority for the original tuple.
+	// It cannot validate a changed tuple or create a fresh effect on an archive.
+	payload["expectedAttemptId"] = "changed-attempt"
+	postHostJSON(t, ctx, endpoint, payload, http.StatusConflict)
+	args["expectedAttemptId"] = "changed-attempt"
+	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	assertForceCLIErrorCode(t, host, saved.id, "WORKER_SESSION_CONTROL_CONFLICT",
+		"--force", "--request-id", "kill-"+saved.id, "--expected-attempt-id", "changed-attempt")
+	payload["expectedAttemptId"], payload["requestId"] = saved.attempt, "fresh-"+saved.id
+	postHostJSON(t, ctx, endpoint, payload, http.StatusNotFound)
+	args["expectedAttemptId"], args["requestId"] = saved.attempt, "fresh-"+saved.id
+	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+	assertForceCLIErrorCode(t, host, saved.id, "NOT_FOUND",
+		"--force", "--request-id", "fresh-"+saved.id, "--expected-attempt-id", saved.attempt)
 }
 
 func executeForceCLI(t *testing.T, host *support.FunctionalAPIServer, id, attempt string) any {
