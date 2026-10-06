@@ -24,6 +24,7 @@ import (
 const javascriptDurabilityResumeRequestID = "req-js-durability-resume-interrupt-001"
 
 func TestJavaScriptResourceChildResumesAfterProcessRestartInSameProject(t *testing.T) {
+	t.Parallel()
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	configPath := filepath.Join(projectRoot, factorydefinitions.FactoryConfigFile)
@@ -99,6 +100,7 @@ func TestJavaScriptResourceChildResumesAfterProcessRestartInSameProject(t *testi
 // only the remaining child dispatch continues, and the session reaches a
 // successful terminal outcome.
 func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t *testing.T) {
+	t.Parallel()
 	// C01 isolation reason: this row holds an injected provider command open,
 	// interrupts that live dispatch, and resumes the same durable session. Keep
 	// its cancellation gate and recovery lifecycle on a fresh process so it
@@ -200,6 +202,7 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 // (latest checkpoint and dispatch counts preserved, not a blank restart) and
 // reaches the expected terminal primary result for the completed workflow.
 func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
+	t.Parallel()
 	// C01 isolation reason: this row validates checkpoint identity and restored
 	// primary-result state after interruption. Keep its durable snapshot and
 	// replay lifecycle on a fresh process rather than sharing recovery state.

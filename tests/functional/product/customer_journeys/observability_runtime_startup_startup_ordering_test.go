@@ -41,6 +41,7 @@ func pathUnderDirectory(path, directory string) bool {
 // startup gate precedes the first operator-settings read beneath the resolved
 // product root, not only the later runtime log and metrics effects.
 func TestLocalStartupDisclosesHomeBeforeOperatorSettingsRead(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -104,6 +105,7 @@ func (filesystem *startupOrderingOperatorSettingsFileSystem) ReadFile(path strin
 // replay artifact below the resolved home is opened only after the process has
 // crossed the home-disclosure boundary and initialized runtime artifacts.
 func TestReplayArtifactUnderResolvedHomeStartsAfterDisclosure(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -184,6 +186,7 @@ func TestReplayArtifactUnderResolvedHomeStartsAfterDisclosure(t *testing.T) {
 // startup contention error is returned before runtime log/metrics creation or
 // listener readiness output can occur.
 func TestServerInitializationFailureStopsBeforeRuntimeArtifacts(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {

@@ -585,7 +585,7 @@ jobs:
           FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-compiler-cache.outputs.cache-matched-key }}
           FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-compiler-cache.outputs.cache-hit || 'false' }}
       - name: Capture bounded functional compiler archives
-        if: always() && !cancelled() && matrix.suite == 'functional'
+        if: always() && !cancelled() && matrix.suite == 'functional' && steps.functional-compiler-cache.outputs.cache-hit != 'true'
         id: functional-compiler-capture
         run: |
           python3 scripts/ci/functional-compile-cache.py capture "$(go env GOCACHE)" .artifacts/functional-compiler-cache/next --job-start "$JOB_START" --max-bytes 1073741824

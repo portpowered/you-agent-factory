@@ -104,6 +104,7 @@ test("functional compiler archives stay bounded and restore separately from the 
 	assert.match(restore, /path: \.artifacts\/functional-compiler-cache\/cache/);
 	assert.doesNotMatch(restore, /path: ~\/\.cache\/go-build/);
 	assert.match(restore, /functional-compiler-archives-v1/);
+	assert.match(capture, /steps\.functional-compiler-cache\.outputs\.cache-hit != 'true'/);
 	assert.match(capture, /--max-bytes 1073741824/);
 	assert.match(capture, /--job-start "\$JOB_START"/);
 	const apply = stepSection(job, "      - name: Apply bounded functional compiler archives", "      - uses: actions/setup-node@v4");

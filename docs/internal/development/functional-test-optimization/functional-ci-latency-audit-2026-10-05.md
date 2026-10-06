@@ -2385,3 +2385,58 @@ seconds, coverage-tool calls rose from 553 to 1157, and linker CPU rose from
 to 705.96/175.34 seconds. Host variance and a brief overlapping scoped lint run
 limit wall-time attribution, but the experiment does not justify adopting
 coverage-instrumented quarantine checks. Both retained the same coverage gates.
+
+
+### Owned fixtures: changed-source hosted measurement
+
+Head `0e227f2485c866234b2441cbac369e1bb4535c26`, run `37398418294`,
+functional job `112060950738`, passed all 68 packages and 751 results
+(749 pass, two skip) with no recovered failures. The complete job took
+**231 seconds** (01:22:24–01:26:15 UTC); the supervisor took **186.484 seconds**,
+and coverage invocation **175.850 seconds**. The restored archive came from
+`4492b4921d`; changed test sources required 23 compiler commands and 36 linker
+command observations. This is another valid above-target sample, not the
+three-minute checkpoint. The isolated MCP Factory fixture resolved the prior
+failure in this run.
+
+On exact archive hits, the next workflow skips filtering a snapshot that cannot
+be saved again under GitHub's immutable cache key. Fresh tests still execute;
+cold or fallback hits still capture and save the bounded archive. This removes
+otherwise redundant post-test copying on same-head verification.
+
+
+### Parallel execution of isolated customer scenarios
+
+Nineteen previously serial top-level scenarios now call `t.Parallel`: ten
+initialization scenarios, three JSON/YAML failure journeys, three CLI startup
+journeys, and three JavaScript restart/resume journeys. Each owns its temporary
+home/project, process, buffers, and external-effect mocks. Steps inside each
+restart/recovery scenario remain sequential; no process-wide environment or
+working directory is mutated. Registered test names and assertions are retained.
+
+The first sixteen-scenario full-lane sample passed in **117.96 seconds**, with
+751 results and a **55.980-second** customer-journeys package. Adding the three
+JavaScript scenarios passed in **121.92 seconds**, with **115.960 seconds**
+coverage invocation and a **54.948-second** customer-journeys package. Its fresh
+tool trace recorded 39 links, **54.524 seconds linker CPU**, **57.593 seconds
+active linker wall intervals**, and **159.173 seconds summed linker wall**.
+Summed overlapping wall intervals are not elapsed job time. Aggregate job
+user/system times were 329.91/77.72 seconds. Three focused JavaScript repetitions
+also passed. Existing private twelve-way cleanup samples ranged from 111.92 to
+162.52 seconds, so this experiment establishes a lower package serial tail,
+not a consistent whole-lane speedup. Hosted whole-job measurement is still needed.
+
+A preliminary private edit accidentally added `t.Parallel` to a test that already
+called it; that full run failed and is excluded from successful latency evidence.
+An interrupted repeat and a stale overlay lock also produced no valid latency
+sample. The duplicate call was removed before the successful full-lane checks.
+The final timing directory uses fresh tool records; earlier repeated harness
+output directories contained nested stale report copies and are not used for
+compiler/link totals.
+
+For timer-only asynchronous components, `testing/synctest` remains appropriate.
+Real file, pipe, and network I/O—including loopback HTTP—is not durably blocking
+inside a synctest bubble. Accordingly, these public REST/MCP recovery scenarios
+use observable completion and controlled clocks/edges rather than shortening
+wall-clock sleeps or wrapping real sockets in virtual time. See the Go team's
+[Testing Time](https://go.dev/blog/testing-time) explanation of these limits.
