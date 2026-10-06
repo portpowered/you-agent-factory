@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -142,6 +143,7 @@ func newConcurrencySharedProcessFixture(t *testing.T) *concurrencySharedProcessF
 			return err
 		},
 		ProviderCommandRunner:                  fixture.router,
+		FactorySessionsWorkingDirectory:        platformfilesystem.Local{WorkingDirectory: hostDir},
 		FactorySessionIDGenerator:              fixture.identities.nextSessionID,
 		FactorySessionResponseEventIDGenerator: fixture.identities.nextResponseEventID,
 	})

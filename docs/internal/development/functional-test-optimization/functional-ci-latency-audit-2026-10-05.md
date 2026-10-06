@@ -3035,3 +3035,70 @@ The next optimization should remove more repeated initialization inside
 isolated shared-session fixtures, then measure fresh CPU attribution on the
 current runtime. Archive restoration across PR/main/merge-queue scopes also
 needs hosted verification before promising consistent three-minute cold runs.
+
+
+### Current-runtime CPU profile and follow-up cleanup
+
+A fresh instrumented current-source run passed all 68 original packages / 755
+results without retries. Complete local supervisor: 212.92 s; coverage command:
+200.209 s; aggregate process CPU: 686.95 s. The consolidated test process used
+458.80 CPU seconds (349.78 user + 109.02 system) over 141.93 wall seconds.
+The profiler sampled 444.24 CPU seconds; 406.40 seconds (91.48%) carried package
+labels. Instrumentation and scheduling affect absolute performance; this is
+attribution evidence, not a paired savings estimate against an unprofiled run.
+
+| Combined original package | Label-attributed sampled CPU |
+| --- | ---: |
+| product/customer_lifecycles | 100.28 s |
+| product/customer_journeys | 85.31 s |
+| product/cli_rest_journeys | 35.36 s |
+| work/admission | 25.30 s |
+| factory/execution | 19.63 s |
+| transport/mcp/worker_sessions | 18.39 s |
+| models/inference | 17.29 s |
+| transport/cli/customer_commands | 15.29 s |
+| recordings/lifecycle | 11.67 s |
+| factory/definitions | 11.42 s |
+| factory/visualization/runtime_metrics | 8.03 s |
+
+Package labels can include background fixture goroutines inheriting the
+creator's label. They exclude native binaries and unlabeled process work.
+They are sampled CPU, not elapsed package windows. Cumulative stack costs
+nest: InitializeSystem 262.56 s (59.10%), packaged installation 261.88 s,
+managed Factory creation 232.94 s, layout preparation 157.93 s and JSON
+unmarshal 169.41 s must not be added. The immediate CPU target remains repeated
+initialization and Factory expansion, rather than further blanket link merging.
+
+Hosted head `968c90fe99` passed its functional job in **308 seconds**, with a
+230.527-second coverage command, 211 compiler calls and 21 linker calls, all
+68 original packages / 755 results and no failed tests. It restored the previous
+head's compiler archive through a prefix key, rather than an exact key. Its
+bounded capture reached 1,073,741,791 bytes and omitted 924 eligible cache
+entries. This establishes a cache-budget concern, but does not establish that
+all 211 compilations resulted from omission: source changes also invalidate
+archives. An exact-head successful rerun and a controlled cache-budget comparison
+are needed before changing the budget or promising a cold-run target.
+
+Follow-up removes three visualization service-root composition probes and their
+unused tracker/config fixture. Those tests directly invoked Activate/Join,
+Observe and Open/Present/Finalize/Close operations and asserted private method
+counts. Existing component/root-contract tests cover these outcomes under
+`pkg/services/factory_visualization`; customer CLI presentation, REST state and
+Factory Event journeys remain in the functional suite. Metrics costs,
+process-time and concurrency direct-process hosts now inject owned session
+working directories, preserving custom process-time overrides. This matches
+API-helper isolation and prevents implicit repository-directory storage.
+Coordinator output preserves panic/build-death headers even after an ordinary
+customer failure, so such crashes cannot be mistaken for retryable flakes.
+
+
+Follow-up full validation passed: 68 original packages, 752 results (750 pass,
+2 skip), no retry, unchanged coverage policy. The inventory decrease is exactly
+the three removed service-root visualization probes. Complete controlled Linux
+run: **198.36 s**, coverage command: 184.957 s, aggregate CPU: 612.96 s
+(468.42 user + 144.54 system), compiler calls: 12, linker calls: 26. Linker CPU:
+36.350 s; active linker wall: 33.104 s. This run is slower than the earlier
+174.09-second warm sample, so the cleanup is validated but no net latency win
+is established by these unpaired samples. Both scoped linters passed and the
+coordinator regression selection passed after the final panic-header change.
+The two-minute hosted checkpoint remains outstanding.

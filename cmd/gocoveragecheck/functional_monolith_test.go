@@ -194,3 +194,22 @@ func TestFunctionalMonolithUnattributedFailureRemainsVisible(t *testing.T) {
 		t.Fatalf("unattributed process failure hidden or retried: %s", output.String())
 	}
 }
+
+func TestFunctionalMonolithPanicAfterCustomerFailureRejectsRetry(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output, groups: map[string]string{"A": "original/a"}}
+	for _, event := range []string{
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A/TestCustomer","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"output","Output":"panic: cleanup died\n"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`,
+	} {
+		if _, err := writer.Write([]byte(event + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := decideFlakeRetry(output.String(), "", 2)
+	if decision.retry || !strings.Contains(decision.reason, "panic: cleanup died") {
+		t.Fatalf("actual coordinator panic was hidden by prior child failure: %+v; %s", decision, output.String())
+	}
+}

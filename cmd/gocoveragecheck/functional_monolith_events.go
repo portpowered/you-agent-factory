@@ -129,6 +129,9 @@ func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string, sta
 		if action == "fail" {
 			return line, nil
 		}
+		if action == "output" && json.Unmarshal(event["Output"], &output) == nil && firstBinaryDeathLine(output) != "" {
+			return line, nil
+		}
 		return nil, nil
 	}
 	group, original, nested := strings.Cut(wrapped, "/")

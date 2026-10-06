@@ -38,6 +38,7 @@ func TestCostsScopedReportsAndQueryRecovery(t *testing.T) {
 	group := &costsProcessGroup{listeners: make(map[int]net.Listener), ready: make(map[int]chan struct{}), files: support.NewCostsSettingsFiles(platformfilesystem.Local{})}
 	group.process = support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter: group.serve, ProviderCommandRunner: costsProviderRunner{}, OperatorSettingsFileSystem: group.files,
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
 	})
 	support.CleanupProcess(t, group.process)
 	for _, tc := range []struct{ name, model, status, amount string }{

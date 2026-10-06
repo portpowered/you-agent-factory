@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -189,6 +190,9 @@ func startTimeHost(t *testing.T, c *timeCohort, edges serviceedges.Edges) *timeC
 	support.ClearSeedInputs(t, idle)
 	api := support.NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
+	if edges.FactorySessionsWorkingDirectory == nil {
+		edges.FactorySessionsWorkingDirectory = platformfilesystem.Local{WorkingDirectory: idle}
+	}
 	process := support.BuildProcess(t, edges)
 	c.cli = process
 	home := t.TempDir()
