@@ -5253,3 +5253,45 @@ files; the private raw-index Git identity is stale. Main subsequently advances
 to a1f5c7a63c with confirmed-board restart recovery and new functional scenarios.
 This full result precedes that runtime change; rebase and verification on the
 new live base are required before pushing the batch.
+
+The clean rebase onto a1f5c7a63c passes complete consolidated verification in
+210.22s supervisor / 197.920s capture, using 591.47 CPU-seconds (459.36 user,
+132.11 system). All 67 packages / 766 results finish (764 pass, two skip),
+with a complete empty failure index and no retry ledger. Changed-source
+compilation executes 648 commands, consuming 148.201666 CPU-seconds /
+49.634970s active wall. Fifteen links consume 19.571482 CPU-seconds /
+14.722038s active wall. Evidence: board-main-parity-full/. Preserve this slower
+valid range alongside the earlier 91.25s warm result; neither comparison
+isolates the parity fixture's effect. Source is 9998f72985 on a1f5c7a63c; the
+private raw-index Git identity is stale.
+
+Build-excluded native profiles before the board-recovery rebase independently
+measure customer_lifecycles at 34.680674 CPU-seconds / 21.005309s wall,
+customer_journeys at 23.183550 / 15.104464, and cli_rest_journeys at 8.390345 /
+4.366449. Their separately measured build CPU/wall is 3.412548 / 2.425584,
+6.482796 / 3.005123, and 4.467684 / 2.267564 respectively. All three pass.
+Evidence: customer-package-e84-profiles/, source e84d14dd14 plus parity fixture
+changes. These are independent package execution costs, not reconstructed
+monolith group elapsed sums and not measurements of the later main revision.
+
+The lifecycle profile samples 34.17 CPU-seconds. JSON unmarshal accounts for
+15.52s / 45.42% cumulatively; the Work default-type resolver accounts for
+6.43s / 18.82%, serializing a full editable Factory through API representations
+before resolving one work type. The existing native Factory Session projection
+is a candidate to remove that conversion chain. Installation remains 6.08s /
+17.79% cumulatively. These samples overlap; do not sum their percentages.
+No resolver change or performance benefit is yet implemented or claimed.
+
+Hosted 2 GiB trial 37504542537 at 16c7729f90 passes Functional Coverage in
+171s complete / 109.233s capture: 67 packages / 765 results (763 pass, two
+skip), three compiler commands and 12 links, no failures or retries. It uses
+the v1 snapshot from 0a2bea7690, and captures 13397 files / 1008142845 bytes
+with zero omissions. Its capture actually fits below 1 GiB: this run does not
+establish that a larger transfer improves complete hosted timing. Other
+required jobs remain active; no fully green workflow or two-minute checkpoint
+is claimed. Evidence: two-gib-hosted/ and two-gib-hosted-job.log.
+
+Main next advances to d173d3b17f with factory workspace setup-script handling
+and its Python tests only. No Go source or functional Go test changes; the
+branch rebases that update before the next push. Fresh hosted checks remain
+the merge gate, and the complete-job two-minute checkpoint is still unmet.
