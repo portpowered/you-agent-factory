@@ -5,17 +5,22 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `21bde1452a`, passes hosted Functional Coverage in
-**146s complete / 102.318s coverage**, 68 packages / 740 results, no retries,
-six compiler commands and 19 links after a prefix b1 archive restore. The
-complete hosted two-minute checkpoint remains **unmet**, despite coverage
-execution now falling below two minutes. This head's contract job hit a
-concurrent regeneration/read failure; the corrective reader lock is pending.
-The earlier warm three-minute checkpoint is merged; this next checkpoint stays
-draft. Controlled CLI constructor pairs were neutral, so cache state and runner
-variance must accompany the faster full-job sample. Current CPU priorities are
-listed below and in the refreshed profile section.
+The latest published source, `deec6a6f0f`, passes the entire hosted workflow.
+Functional Coverage takes **198s complete / 142.217s coverage**, 68 packages /
+740 results, no retries, zero compiler commands and 19 links. The preceding
+functional-runtime-identical source `21bde1452a` took **146s / 102.318s**, with
+six compiler commands. Retain this **146–198s** observed range; the faster sample
+is not a reliable ceiling. The contract reader correction now passes hosted API
+validation. The complete hosted two-minute checkpoint remains **unmet** and the
+PR stays draft. The earlier warm three-minute checkpoint is merged.
 
+The current MCP candidate shares one initialized, owned client home and model
+cache across independent stdio connections. Six native repetitions per version
+use **42.5% less CPU / 34.1% less elapsed time**. Full local validation preserves
+all 740 results and coverage gates without retries at **143.62s supervisor /
+136.618s coverage**, using **453.12 CPU-seconds**. This full run is slower than
+the previous local 129.30s / 398.02s sample; the controlled package improvement
+must not be presented as a full-lane improvement.
 The published candidate shares one host across lifecycle, dispatch and eligibility
 journeys, retaining all 31 journey selectors with isolated Factory Sessions,
 command routes and owned home/model storage. Six native repetitions per version
@@ -3735,3 +3740,45 @@ Both scoped linters pass for the contract reader correction. This corrective
 push is authorized to unblock CI; the previous head's Backend Lint job was
 still running when the completed API failure was corrected. No latency checkpoint
 is inferred from the correction and the PR remains draft.
+
+
+### Owned MCP client home: measured package improvement
+
+The shared remote-client process previously allocated a new HOME for each MCP
+connection, repeatedly installing packaged Factories. It now completes public
+`you init --provider codex` once before parallel children, then binds all client
+commands to the parent's owned HOME/USERPROFILE and model cache. Each connection
+retains its own context, pipes and working directory. Real server hosts retain
+their independent stores, sessions, persistence and restart paths. Selected-host
+routing, cancellation, failure, lineage and public response assertions remain.
+
+Controlled native execution compares baseline/candidate in B3/C3/C3/B3 order,
+six repetitions per version on four CPUs, excluding build/link time:
+
+| Version | Total execution CPU | Total elapsed |
+| --- | ---: | ---: |
+| Baseline | 104.943s | 36.716s |
+| Owned client home | 60.330s | 24.204s |
+| Reduction | 42.5% | 34.1% |
+
+All repetitions pass. The final canonical full lane passes 68 packages / 740
+results (738 passes, two skips), no retries, unchanged coverage floors and
+quarantine gates. Supervisor 143.62s; coverage 136.618s; CPU 453.12s (360.31 user,
+92.81 system); maximum RSS 6,606,656 KiB. Four compiler commands consume 0.993s
+CPU. Twenty-two supervisor links consume 32.198s CPU and 29.095s union active
+wall; their overlapping elapsed durations must not be summed into total latency.
+The earlier local source sample was 129.30s / 398.02s CPU. Both are retained;
+full-lane variability prevents inferring a complete-job gain from this sample.
+Both scoped linters pass and all 160 reviewed scenario decisions remain current.
+Artifacts: `.artifacts/latency-audit/mcp-client-home-paired` and
+`.artifacts/latency-audit/mcp-client-home-full`.
+
+The corrective contract-reader head `deec6a6f0f` passes its entire hosted workflow
+37440563162, including API job 112193456824. Functional job 112193454540 takes
+198s complete (09:06:46–09:10:04 UTC), 142.217s coverage, zero compiler commands
+and 19 links after a prefix 21 archive restore. Source 21's 146s complete sample
+used six compilers; neither warming nor the component-test-only correction
+explains away the slower valid sample. The observed runtime-identical hosted
+range is 146–198s. Two-minute merge remains gated on the complete hosted job,
+not just coverage execution. Artifact:
+`.artifacts/latency-audit/pr2923-contract-reader-hosted`.

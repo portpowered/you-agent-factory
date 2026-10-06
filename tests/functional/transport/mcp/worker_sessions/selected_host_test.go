@@ -17,7 +17,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -37,7 +36,7 @@ func TestWorkerSessionMCPParity(t *testing.T) {
 }
 
 func runSelectedHostScenarios(t *testing.T) {
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: subagentScenarioRunner{t: t}})
+	process := newSelectedHostClientProcess(t)
 	t.Run("run subagent", func(t *testing.T) {
 		t.Parallel()
 		workDir := filepath.Join(t.TempDir(), "run-subagent")
@@ -301,15 +300,11 @@ func startCancellableMCP(t *testing.T, process support.Process, host string, wor
 	if len(workspace) > 0 {
 		workDir = workspace[0]
 	}
-	homeDir := filepath.Join(workDir, "home")
-	if err := os.MkdirAll(homeDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	go func() {
 		done <- process.Execute(root.Input{
 			Args: []string{"you", "--server", host, "server", "mcp"}, Context: ctx,
-			Env: append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir), WorkingDirectory: workDir,
-			Stdin: stdinRead, Stdout: stdoutWrite, Stderr: io.Discard,
+			WorkingDirectory: workDir,
+			Stdin:            stdinRead, Stdout: stdoutWrite, Stderr: io.Discard,
 		})
 	}()
 	t.Cleanup(func() {
