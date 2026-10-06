@@ -18,6 +18,24 @@ Before planning, read these files in full:
 The factory standards are authoritative for plan and task shape. Do not copy a
 conflicting pattern from an older PRD or from this prompt.
 
+## Lane size budget
+
+Plan at most ONE independently mergeable slice per lane.
+Use at most 2 stories, about 8 criteria total, and a PR under about 2,000 changed lines (added plus deleted).
+Keep JSON below 20 KB (20,000 UTF-8 bytes), including status updates.
+For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
+State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
+Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates.
+Never evade caps with compound scope or weakened acceptance; escalate indivisible scope. No runtime/routing change or invented approval.
+
+Each named successor must depend on this lane's merge before lead/operator
+admission; do not create successor Work or implement it in this lane.
+Count retained executable obligations once by criterion ID, including quality and
+delivery; later-owned Project criteria stay mapped without admitting successor scope.
+These budgets apply only to new lanes; never rewrite existing oversized artifacts.
+Measure UTF-8 bytes before publishing the JSON. If the complete immutable contract
+cannot fit, escalate to its authority without dropping requirements or proof.
+
 ## Step 1 — investigate and write the Markdown plan
 
 Inspect the customer ask, repository architecture, affected implementation,
@@ -107,7 +125,7 @@ behavioral evidence.
 
 ## Step 2 — create the implementation JSON
 
-Mechanically convert the Markdown plan into
+Mechanically convert only the retained slice of the Markdown plan into
 `tasks/todo/{{ (index .Inputs 0).Name }}.json`. The JSON **MUST** contain:
 
 - `project`
