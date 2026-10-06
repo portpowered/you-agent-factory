@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """setup-workspace.py — Create or reuse a git worktree for a PRD.
 
-Usage: python scripts/agents/setup-workspace.py <prd-name>
+Usage: python factory/scripts/setup-workspace.py <prd-name> [--recovery-worktree <path>]
 
 Reads the exact tasks/todo/<prd-name>.json packet from the main checkout or a
 Git-registered worktree, uses <prd-name> as the branch/worktree name, syncs
 main, creates or reuses a git worktree, copies the PRD (and optional .md) into
 the worktree root, and prints a JSON result to stdout.
+
+An optional context.recovery packet with a matching recovery-worktree tag
+adopts an open, unowned retained lane without synchronization. The new packet
+lives at tasks/todo/<successor>.json; root PRD and progress stay untouched.
 
 Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specific error).
 """
@@ -24,7 +28,9 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
@@ -60,6 +66,9 @@ _ROOT_SYNC_HELD = threading.local()
 MAX_REMOTE_MAIN_REFETCHES = 3
 _MISSING_PATH = object()
 _UNAVAILABLE_PATH = object()
+RECOVERY_SERVER = "http://127.0.0.1:7437"
+RECOVERY_CHECK_TIMEOUT = 15
+MAX_RECOVERY_PAGES = 32
 
 
 class DirtyRootError(RuntimeError):
@@ -1300,7 +1309,7 @@ def validate_nested_packet_freshness(repo_root, candidate, prd_name):
         )
 
 
-def select_prd_candidate(repo_root, prd_name, records):
+def select_prd_candidate(repo_root, prd_name, records, recovery_worktree=""):
     """Select and validate one exact packet before any setup mutation."""
     candidates = packet_candidates(repo_root, prd_name, records)
     if not candidates:
@@ -1308,6 +1317,16 @@ def select_prd_candidate(repo_root, prd_name, records):
             f"PRD not found: exact tasks/todo/{prd_name}.json was absent from "
             "the main checkout and all Git-registered worktrees"
         )
+    if len(candidates) == 2 and recovery_worktree:
+        destination = normalized_absolute_path(recovery_worktree)
+        adopted = [c for c in candidates if normalized_absolute_path(c["worktree_path"]) == destination]
+        source = [c for c in candidates if c not in adopted]
+        if len(adopted) == len(source) == 1:
+            first, second = source[0]["prd_json_path"], adopted[0]["prd_json_path"]
+            if first.read_bytes() == second.read_bytes():
+                # Only the exact adopted destination may coalesce with its
+                # byte-identical source. Other duplicates remain ambiguous.
+                candidates = source
     if len(candidates) > 1:
         raise RuntimeError(
             "ambiguous PRD: multiple exact candidates were found: "
@@ -1327,7 +1346,10 @@ def select_prd_candidate(repo_root, prd_name, records):
             f"{safe_identity_display(packet_branch)}"
         )
 
-    if not candidate["is_root"]:
+    if not candidate["is_root"] and not (
+        recovery_worktree and normalized_absolute_path(candidate["worktree_path"])
+        == normalized_absolute_path(recovery_worktree)
+    ):
         validate_nested_packet_freshness(repo_root, candidate, prd_name)
 
     packet_dir = candidate["prd_json_candidate_path"].parent
@@ -1339,6 +1361,203 @@ def select_prd_candidate(repo_root, prd_name, records):
     )
     candidate["prd_md_path"] = prd_md_path
     return candidate
+
+
+def validate_recovery_packet(prd, recovery_worktree):
+    """Validate the optional opaque planner handoff before any effects."""
+    context = prd.get("context", {})
+    if not isinstance(context, dict):
+        raise ValueError("PRD context must be an object")
+    if "recovery" not in context:
+        if recovery_worktree:
+            raise ValueError("recovery-worktree tag requires context.recovery")
+        return None
+    recovery = context["recovery"]
+    if not isinstance(recovery, dict):
+        raise ValueError("context.recovery must be an object")
+    for key in ("originalSessionId", "originalLaneWorkId", "predecessorWorkId"):
+        if not isinstance(recovery.get(key), str) or not recovery[key].strip():
+            raise ValueError(f"recovery requires {key}")
+    try:
+        uuid.UUID(recovery["originalSessionId"])
+    except ValueError as error:
+        raise ValueError("recovery originalSessionId must be a UUID") from error
+    if type(recovery.get("attempt")) is not int or recovery["attempt"] not in (1, 2):
+        raise ValueError("recovery attempt must be integer 1 or 2")
+    diagnosis = recovery.get("diagnosis")
+    if not isinstance(diagnosis, dict) or diagnosis.get("classification") not in (
+        "visit_cap_with_progress", "breaker_one_blocker", "deterministic_failure",
+    ):
+        raise ValueError("recovery requires a supported diagnosis classification")
+    for key in ("blocker", "correction"):
+        if not isinstance(diagnosis.get(key), str) or not diagnosis[key].strip():
+            raise ValueError(f"recovery diagnosis requires {key}")
+    evidence = diagnosis.get("evidence")
+    if not isinstance(evidence, list) or not evidence or any(
+        not isinstance(item, str) or not item.strip() for item in evidence
+    ):
+        raise ValueError("recovery diagnosis requires nonempty evidence")
+    if "workspace" not in recovery:
+        raise ValueError("recovery requires workspace (null for fresh setup)")
+    workspace = recovery["workspace"]
+    if workspace is None:
+        if recovery_worktree:
+            raise ValueError("fresh recovery cannot carry a recovery-worktree tag")
+        return recovery
+    if not isinstance(workspace, dict):
+        raise ValueError("recovery workspace must be an object or null")
+    for key in ("branch", "worktree", "prUrl", "headSha"):
+        if not isinstance(workspace.get(key), str) or not workspace[key].strip():
+            raise ValueError(f"recovery workspace requires {key}")
+    if not immutable_object_id(workspace["headSha"]):
+        raise ValueError("recovery headSha must be a complete immutable object ID")
+    if not Path(workspace["worktree"]).is_absolute():
+        raise ValueError("recovery worktree must be absolute")
+    if recovery_worktree != workspace["worktree"]:
+        raise ValueError("recovery-worktree tag must exactly match packet workspace")
+    return recovery
+
+
+def recovery_command_json(command, cwd):
+    """Bound read-only CLI checks; failures never fall back to fresh setup."""
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True,
+                            encoding="utf-8", timeout=RECOVERY_CHECK_TIMEOUT, check=False)
+    if result.returncode:
+        raise RuntimeError(f"recovery {command[0]} check failed: {command_failure_details(result)}")
+    return json.loads(result.stdout)
+
+
+def validate_recovery_pr(repo_root, workspace):
+    """Require an open PR in this repository whose remote head survives locally."""
+    repo = recovery_command_json(["gh", "repo", "view", "--json", "url"], repo_root)
+    pr_url = urlsplit(workspace["prUrl"])
+    repo_url = urlsplit(repo["url"])
+    if (pr_url.scheme != "https" or pr_url.netloc != repo_url.netloc
+            or not re.fullmatch(re.escape(repo_url.path.rstrip("/")) + r"/pull/[1-9][0-9]*", pr_url.path)
+            or pr_url.query or pr_url.fragment):
+        raise ValueError("recovery PR must belong to the local repository")
+    pr = recovery_command_json(["gh", "pr", "view", workspace["prUrl"], "--json",
+                                "url,state,headRefName,headRefOid,isCrossRepository"], repo_root)
+    if (pr.get("state") != "OPEN" or pr.get("url") != workspace["prUrl"]
+            or pr.get("headRefName") != workspace["branch"] or pr.get("isCrossRepository") is not False
+            or not immutable_object_id(pr.get("headRefOid", ""))):
+        raise ValueError("recovery requires the matching OPEN same-repository PR")
+    # Use bounded read-only Git commands rather than the ordinary sync/retry
+    # path. A local descendant retains unpublished commits; no fetch is needed.
+    result = subprocess.run(["git", "merge-base", "--is-ancestor", pr["headRefOid"],
+                             workspace["headSha"]], cwd=workspace["worktree"],
+                            capture_output=True, text=True, timeout=RECOVERY_CHECK_TIMEOUT)
+    if result.returncode:
+        raise ValueError("recovery PR remote head must be an ancestor of local HEAD")
+
+
+def recovery_owner(work, successor_name, workspace):
+    """Identify another live lane using the retained branch or directory."""
+    tags = work.get("tags") or {}
+    retained = tags.get("recovery-worktree")
+    matches = work.get("name") == workspace["branch"] or (
+        isinstance(retained, str) and normalized_absolute_path(retained)
+        == normalized_absolute_path(workspace["worktree"])
+    )
+    if not matches or work.get("name") == successor_name:
+        return False
+    state = work.get("state", {})
+    if state.get("type") not in ("INITIAL", "PROCESSING", "TERMINAL", "FAILED"):
+        raise ValueError("recovery ownership cannot classify retained Work")
+    return state["type"] in ("INITIAL", "PROCESSING")
+
+
+def validate_recovery_ownership(repo_root, successor_name, workspace):
+    """Read all live Sessions and paged Work; absence of evidence refuses."""
+    prefix = ["you", "--server", RECOVERY_SERVER, "--json"]
+    inventory = recovery_command_json([*prefix, "session", "list", "--live-only"], repo_root)
+    sessions = inventory.get("sessions")
+    if not isinstance(sessions, list) or not sessions or len(sessions) > MAX_RECOVERY_PAGES:
+        raise ValueError("recovery requires a bounded live Session inventory")
+    successor_sessions = set()
+    for session in sessions:
+        session_id = str(uuid.UUID(session["id"]))
+        token = None
+        seen = set()
+        for _ in range(MAX_RECOVERY_PAGES):
+            command = [*prefix, "work", "list", "--all", "--counts", "--session", session_id,
+                       "--max-results", "100"]
+            if token:
+                command.extend(["--next-token", token])
+            page = recovery_command_json(command, repo_root)
+            if not isinstance(page.get("results"), list):
+                raise ValueError("recovery requires a complete Work inventory")
+            for work in page["results"]:
+                if recovery_owner(work, successor_name, workspace):
+                    raise ValueError(f"recovery workspace has an active owner: {safe_identity_display(work.get('workId'))}")
+                if work.get("name") == successor_name and work.get("state", {}).get("type") in ("INITIAL", "PROCESSING"):
+                    successor_sessions.add(session_id)
+            pagination = page.get("paginationContext")
+            if not isinstance(pagination, dict):
+                raise ValueError("recovery requires Work pagination context")
+            token = pagination.get("nextToken")
+            if not token:
+                break
+            if not isinstance(token, str) or token in seen:
+                raise ValueError("recovery Work pagination did not advance")
+            seen.add(token)
+        else:
+            raise ValueError("recovery Work inventory exceeded its bounded page budget")
+    if len(successor_sessions) != 1:
+        raise ValueError("recovery successor must have one live Session owner")
+
+
+def recovery_destination(repo_root, workspace, prd_name):
+    """Refuse unmanaged, escaped, mismatched or unavailable retained checkouts."""
+    path = Path(workspace["worktree"])
+    managed = (repo_root / ".claude" / "worktrees").resolve(strict=True)
+    resolved = path.resolve(strict=True)
+    if path.is_symlink() or not resolved.is_relative_to(managed) or resolved == managed:
+        raise ValueError("recovery worktree must be a managed worktree without an escaped link")
+    if workspace["branch"] == prd_name:
+        raise ValueError("recovery requires a new successor name")
+    validate_registered_worktree(repo_root, resolved, workspace["branch"], expected_head=workspace["headSha"])
+    common = run_git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=resolved).stdout.strip()
+    root_common = run_git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo_root).stdout.strip()
+    if normalized_absolute_path(common) != normalized_absolute_path(root_common):
+        raise ValueError("recovery worktree belongs to a different repository")
+    return resolved
+
+
+def adopt_recovery_workspace(repo_root, prd_name, candidate, recovery):
+    """Install only new successor packets, preserving every retained artifact."""
+    workspace = recovery["workspace"]
+    destination = recovery_destination(repo_root, workspace, prd_name)
+    validate_recovery_pr(repo_root, workspace)
+    validate_recovery_ownership(repo_root, prd_name, workspace)
+    copies = []
+    for key, suffix in (("prd_json_path", ".json"), ("prd_md_path", ".md")):
+        source = candidate[key]
+        if source is None:
+            continue
+        target = destination / "tasks" / "todo" / f"{prd_name}{suffix}"
+        # Reject escaped parents even when the target does not exist yet.
+        if target.resolve().parent != destination / "tasks" / "todo":
+            raise ValueError("recovery packet destination escapes the retained workspace")
+        contents = source.read_bytes()
+        if os.path.lexists(target):
+            canonical_packet_file_path(target, destination, "Recovery packet")
+            if target.is_symlink() or target.read_bytes() != contents:
+                raise ValueError("recovery packet destination already contains different bytes")
+        else:
+            copies.append((contents, target))
+    # Every refusal above is read-only. Never invoke ordinary sync, prune,
+    # reset, rebase, stash, clean, or overwrite root PRD/progress/standing rules.
+    for contents, target in copies:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as output:
+            output.write(contents)
+    return {
+        "status": "ready", "worktree": str(destination), "branch": workspace["branch"],
+        "prd_path": str(destination / "tasks" / "todo" / f"{prd_name}.json"),
+        "prd_md_path": str(destination / "tasks" / "todo" / f"{prd_name}.md") if candidate["prd_md_path"] else None,
+        "standing_rules_path": None, "reused": True,
+    }
 
 
 def has_origin_remote(repo_root):
@@ -2116,11 +2335,12 @@ def copy_standing_rules(repo_root, worktree_path):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <prd-name>", file=sys.stderr)
+    if len(sys.argv) not in (2, 4) or (len(sys.argv) == 4 and sys.argv[2] != "--recovery-worktree"):
+        print(f"Usage: {sys.argv[0]} <prd-name> [--recovery-worktree <absolute-path-or-empty>]", file=sys.stderr)
         sys.exit(1)
 
     prd_name = sys.argv[1]
+    recovery_worktree = sys.argv[3] if len(sys.argv) == 4 else ""
 
     if not prd_name:
         print("PRD name must not be empty", file=sys.stderr)
@@ -2136,7 +2356,13 @@ def main():
     # mutation. Git's registered inventory is the only supported non-root source.
     try:
         records = list_registered_worktrees(repo_root)
-        selected_candidate = select_prd_candidate(repo_root, prd_name, records)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", prd_name):
+            raise ValueError("PRD name must be a single lane slug")
+        selected_candidate = select_prd_candidate(repo_root, prd_name, records, recovery_worktree)
+        recovery = validate_recovery_packet(read_prd(selected_candidate["prd_json_path"]), recovery_worktree)
+        if recovery and recovery["workspace"] is not None:
+            print(json.dumps(adopt_recovery_workspace(repo_root, prd_name, selected_candidate, recovery), indent=2))
+            return
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)

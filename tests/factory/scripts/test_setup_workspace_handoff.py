@@ -1,6 +1,7 @@
 """Local-real coverage for exact packet handoff and pre-mutation refusal."""
 
 import importlib.util
+import copy
 import io
 import json
 import os
@@ -575,6 +576,271 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("simulated inventory failure", stderr.getvalue())
         sync_main.assert_not_called()
+
+
+def recovery_packet(worktree="C:/fixture/repo/.claude/worktrees/lane", head="a" * 40):
+    return {"context": {"recovery": {
+        "originalSessionId": "11111111-1111-4111-8111-111111111111",
+        "originalLaneWorkId": "original-idea", "predecessorWorkId": "original-idea", "attempt": 1,
+        "diagnosis": {"classification": "visit_cap_with_progress", "evidence": ["worker-session:old"],
+                      "blocker": "Complete adoption proof", "correction": "Finish the same PR"},
+        "workspace": {"branch": "lane", "worktree": worktree,
+                      "prUrl": "https://github.com/example/repository/pull/99", "headSha": head},
+    }}}
+
+
+class RecoveryPacketValidationTest(unittest.TestCase):
+    """Unit proof of one packet validator with no Git or external processes."""
+
+    def setUp(self):
+        self.module = load_setup_workspace_module()
+        self.path = str(Path.cwd() / ".claude" / "worktrees" / "fixture")
+        self.packet = recovery_packet(self.path)
+
+    def test_ordinary_and_fresh_recovery_preserve_name_derived_setup(self):
+        self.assertIsNone(self.module.validate_recovery_packet({}, ""))
+        for attempt in (1, 2):
+            packet = copy.deepcopy(self.packet)
+            packet["context"]["recovery"].update(attempt=attempt, workspace=None)
+            self.assertEqual(self.module.validate_recovery_packet(packet, "")["attempt"], attempt)
+        with self.assertRaisesRegex(ValueError, "fresh recovery"):
+            self.module.validate_recovery_packet(packet, self.path)
+
+    def test_valid_retained_packet_is_forwarded_without_rewriting(self):
+        for classification in ("visit_cap_with_progress", "breaker_one_blocker", "deterministic_failure"):
+            packet = copy.deepcopy(self.packet)
+            packet["context"]["recovery"]["diagnosis"]["classification"] = classification
+            self.assertIs(self.module.validate_recovery_packet(packet, self.path), packet["context"]["recovery"])
+
+    def test_missing_lineage_diagnosis_and_bad_attempts_refuse(self):
+        paths = [("originalSessionId",), ("originalLaneWorkId",), ("predecessorWorkId",),
+                 ("workspace",), ("diagnosis", "classification"), ("diagnosis", "blocker"),
+                 ("diagnosis", "correction"), ("diagnosis", "evidence")]
+        for path in paths:
+            packet = copy.deepcopy(self.packet)
+            value = packet["context"]["recovery"]
+            for key in path[:-1]:
+                value = value[key]
+            del value[path[-1]]
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.module.validate_recovery_packet(packet, self.path)
+        for attempt in (0, 3, True, False, "1", 1.0, None):
+            packet = copy.deepcopy(self.packet)
+            packet["context"]["recovery"]["attempt"] = attempt
+            with self.subTest(attempt=attempt), self.assertRaisesRegex(ValueError, "integer 1 or 2"):
+                self.module.validate_recovery_packet(packet, self.path)
+
+    def test_missing_tag_invalid_workspace_or_unknown_diagnosis_refuse(self):
+        for field, value in (("branch", ""), ("worktree", "relative/lane"), ("prUrl", None),
+                             ("headSha", "a" * 39), ("headSha", "not-a-commit")):
+            packet = copy.deepcopy(self.packet)
+            packet["context"]["recovery"]["workspace"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.module.validate_recovery_packet(packet, self.path)
+        with self.assertRaisesRegex(ValueError, "exactly match"):
+            self.module.validate_recovery_packet(self.packet, "")
+        with self.assertRaisesRegex(ValueError, "context.recovery"):
+            self.module.validate_recovery_packet({}, self.path)
+        self.packet["context"]["recovery"]["diagnosis"]["classification"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "classification"):
+            self.module.validate_recovery_packet(self.packet, self.path)
+
+
+class RecoveryOwnershipValidationTest(unittest.TestCase):
+    """Unit proof of ownership/PR checks with controlled CLI and Git results."""
+
+    def setUp(self):
+        self.module = load_setup_workspace_module()
+        self.workspace = recovery_packet()["context"]["recovery"]["workspace"]
+        self.session = "11111111-1111-4111-8111-111111111111"
+        self.successor = {"name": "lane-r2", "workId": "new", "state": {"type": "INITIAL"}}
+
+    def test_paged_inventory_refuses_active_or_parked_owner(self):
+        for state in ("init", "awaiting-answer", "awaiting-ci"):
+            owner = {"name": "lane", "workId": "old", "state": {"type": "PROCESSING", "name": state}}
+            pages = [{"sessions": [{"id": self.session}]},
+                     {"results": [self.successor], "paginationContext": {"nextToken": "page2"}},
+                     {"results": [owner], "paginationContext": {}}]
+            with self.subTest(state=state), mock.patch.object(self.module, "recovery_command_json", side_effect=pages) as command:
+                with self.assertRaisesRegex(ValueError, "active owner"):
+                    self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+                self.assertIn("page2", command.call_args.args[0])
+
+    def test_terminal_predecessor_and_same_successor_allow_repeat(self):
+        works = [self.successor, {"name": "lane", "state": {"type": "FAILED"}},
+                 {"name": "healthy", "state": {"type": "PROCESSING"}},
+                 {"name": "older-r2", "tags": {"recovery-worktree": self.workspace["worktree"]},
+                  "state": {"type": "TERMINAL"}}]
+        with mock.patch.object(self.module, "recovery_command_json", side_effect=[
+            {"sessions": [{"id": self.session}]}, {"results": works, "paginationContext": {}},
+        ]):
+            self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_unverifiable_or_duplicate_session_ownership_refuses(self):
+        cases = [
+            [{"sessions": []}],
+            [{"sessions": [{"id": self.session}]}, {"results": [], "paginationContext": {}}],
+            [{"sessions": [{"id": self.session}]}, {"results": []}],
+            [{"sessions": [{"id": self.session}, {"id": "22222222-2222-4222-8222-222222222222"}]},
+             {"results": [self.successor], "paginationContext": {}},
+             {"results": [self.successor], "paginationContext": {}}],
+        ]
+        for pages in cases:
+            with self.subTest(pages=pages), mock.patch.object(self.module, "recovery_command_json", side_effect=pages):
+                with self.assertRaises(ValueError):
+                    self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_pr_mismatch_closed_merged_or_missing_head_refuses_without_git(self):
+        pr = {"url": self.workspace["prUrl"], "state": "OPEN", "headRefName": "lane",
+              "headRefOid": "a" * 40, "isCrossRepository": False}
+        for field, value in (("state", "CLOSED"), ("state", "MERGED"), ("headRefName", "other"),
+                             ("headRefOid", ""), ("isCrossRepository", True)):
+            invalid = dict(pr, **{field: value})
+            with self.subTest(field=field, value=value), mock.patch.object(self.module, "recovery_command_json", side_effect=[
+                {"url": "https://github.com/example/repository"}, invalid,
+            ]), mock.patch.object(self.module.subprocess, "run") as command:
+                with self.assertRaisesRegex(ValueError, "OPEN"):
+                    self.module.validate_recovery_pr(Path.cwd(), self.workspace)
+                command.assert_not_called()
+
+    def test_external_check_timeout_or_missing_executable_never_falls_back(self):
+        for error in (FileNotFoundError("gh unavailable"), subprocess.TimeoutExpired("gh", 15)):
+            with self.subTest(error=error), mock.patch.object(self.module.subprocess, "run", side_effect=error):
+                with self.assertRaises(type(error)):
+                    self.module.recovery_command_json(["gh", "repo", "view"], Path.cwd())
+
+
+class RecoveryWorkspacePreservationTest(unittest.TestCase):
+    """I1: real local Git/files, controlled read-only gh and live ownership CLI.
+
+    Two setup visits serialize because they adopt the same customer directory.
+    This proof makes no claim about compiled Factory routing or live judgment.
+    """
+
+    def test_I1_adoption_repeats_without_resetting_commits_dirty_files_or_scaffold(self):
+        module = load_setup_workspace_module()
+        with tempfile.TemporaryDirectory(prefix="retained-recovery-") as directory:
+            repo = Path(directory)
+            init_repository(repo)
+            retained = repo / ".claude" / "worktrees" / "lane"
+            retained.parent.mkdir(parents=True)
+            git(["worktree", "add", "-b", "lane", str(retained), "main"], repo)
+            remote_head = git(["rev-parse", "HEAD"], retained).stdout.strip()
+            (retained / "change.txt").write_bytes(b"committed improvement\n")
+            git(["add", "change.txt"], retained)
+            git(["commit", "-m", "useful unpublished work"], retained)
+            head = git(["rev-parse", "HEAD"], retained).stdout.strip()
+            saved = {"change.txt": b"dirty improvement\n", "untracked.txt": b"untracked\x00bytes",
+                     "prd.json": b'{"project":"old"}', "progress.txt": b"old progress\r\n"}
+            for name, data in saved.items():
+                (retained / name).write_bytes(data)
+            git(["add", "change.txt"], retained)
+            (retained / "change.txt").write_bytes(b"unstaged improvement\n")
+            saved["change.txt"] = b"unstaged improvement\n"
+            before = git(["status", "--porcelain=v1", "-z"], retained).stdout
+            index_before = git(["diff", "--cached", "--binary"], retained).stdout
+            packet = recovery_packet(str(retained), head)
+            packet["branchName"] = "lane-r2"
+            source = write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
+            def external(command, cwd):
+                if command[:3] == ["gh", "repo", "view"]:
+                    return {"url": "https://github.com/example/repository"}
+                if command[:3] == ["gh", "pr", "view"]:
+                    return {"url": packet["context"]["recovery"]["workspace"]["prUrl"], "state": "OPEN",
+                            "headRefName": "lane", "headRefOid": remote_head, "isCrossRepository": False}
+                if "session" in command:
+                    return {"sessions": [{"id": "11111111-1111-4111-8111-111111111111"}]}
+                return {"results": [{"name": "lane", "state": {"type": "FAILED"}},
+                                    {"name": "lane-r2", "state": {"type": "INITIAL"}}], "paginationContext": {}}
+            for visit in range(2):
+                with self.subTest(visit=visit), mock.patch.object(module, "get_repo_root", return_value=repo), \
+                     mock.patch.object(module, "recovery_command_json", side_effect=external), \
+                     mock.patch.object(module, "sync_main") as sync, mock.patch.object(module, "prune_worktrees") as prune, \
+                     mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", str(retained)]):
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        module.main()
+                    result = json.loads(stdout.getvalue())
+                    self.assertEqual(result["branch"], "lane")
+                    self.assertEqual(Path(result["worktree"]), retained)
+                    self.assertEqual(Path(result["prd_path"]), retained / "tasks/todo/lane-r2.json")
+                    self.assertTrue(result["reused"])
+                    sync.assert_not_called()
+                    prune.assert_not_called()
+                for name, data in saved.items():
+                    self.assertEqual((retained / name).read_bytes(), data)
+                self.assertEqual(git(["rev-parse", "HEAD"], retained).stdout.strip(), head)
+                self.assertEqual(git(["status", "--porcelain=v1", "-z"], retained).stdout, before)
+                self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
+                self.assertEqual(Path(result["prd_path"]).read_bytes(), source.read_bytes())
+            # A closed retained PR must refuse with no receipt or file/ref effects.
+            def closed_pr(command, cwd):
+                data = external(command, cwd)
+                if command[:3] == ["gh", "pr", "view"]:
+                    data["state"] = "CLOSED"
+                return data
+            snapshot = repository_snapshot(repo, (retained,))
+            with mock.patch.object(module, "get_repo_root", return_value=repo), \
+                 mock.patch.object(module, "recovery_command_json", side_effect=closed_pr), \
+                 mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", str(retained)]):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as refusal:
+                    module.main()
+                self.assertEqual(refusal.exception.code, 1)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("OPEN", stderr.getvalue())
+            self.assertEqual(repository_snapshot(repo, (retained,)), snapshot)
+            for name, data in saved.items():
+                self.assertEqual((retained / name).read_bytes(), data)
+            # A changed destination refuses before copying any new packet.
+            Path(result["prd_path"]).write_bytes(b"different successor")
+            inventory = module.list_registered_worktrees(repo)
+            with self.assertRaisesRegex(RuntimeError, "ambiguous PRD"):
+                module.select_prd_candidate(repo, "lane-r2", inventory, str(retained))
+
+
+class RecoveryCheckoutValidationTest(unittest.TestCase):
+    """Unit proof of registration validation with controlled Git identities."""
+
+    def test_locked_detached_mismatched_and_wrong_head_refuse(self):
+        module = load_setup_workspace_module()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / ".git").write_text("fixture", encoding="utf-8")
+            record = {"path": path, "branch_ref": "refs/heads/lane", "detached": False,
+                      "locked": False, "prunable": False}
+            for field, value in (("locked", True), ("prunable", True), ("detached", True),
+                                 ("branch_ref", "refs/heads/other")):
+                with self.subTest(field=field), mock.patch.object(module, "registered_worktree_record", return_value=dict(record, **{field: value})), \
+                     mock.patch.object(module, "resolve_checkout_head") as head:
+                    with self.assertRaises(RuntimeError):
+                        module.validate_registered_worktree(path, path, "lane", expected_head="a" * 40)
+                    head.assert_not_called()
+            with mock.patch.object(module, "registered_worktree_record", return_value=record), \
+                 mock.patch.object(module, "resolve_checkout_head", return_value="b" * 40), \
+                 mock.patch.object(module, "resolve_revision_head", return_value="b" * 40):
+                with self.assertRaisesRegex(RuntimeError, "expected"):
+                    module.validate_registered_worktree(path, path, "lane", expected_head="a" * 40)
+
+    def test_escaped_and_same_name_worktree_refuse_before_git(self):
+        module = load_setup_workspace_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            managed = root / ".claude/worktrees"
+            managed.mkdir(parents=True)
+            workspace = recovery_packet(str(root))["context"]["recovery"]["workspace"]
+            with mock.patch.object(module, "validate_registered_worktree") as validate:
+                with self.assertRaisesRegex(ValueError, "managed"):
+                    module.recovery_destination(root, workspace, "lane-r2")
+                workspace["worktree"] = str(managed)
+                with self.assertRaisesRegex(ValueError, "managed"):
+                    module.recovery_destination(root, workspace, "lane-r2")
+                retained = managed / "lane"
+                retained.mkdir()
+                workspace["worktree"] = str(retained)
+                with self.assertRaisesRegex(ValueError, "new successor name"):
+                    module.recovery_destination(root, workspace, "lane")
+                validate.assert_not_called()
 
 
 if __name__ == "__main__":
