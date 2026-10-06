@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"strings"
 	"sync"
@@ -269,6 +270,8 @@ type ExecCommandRunner struct {
 	Clock              Clock
 	NewCommand         CommandFactory
 	ProcessStateReader ProcessStateReader
+	// ProcFS supplies exact Linux group facts; nil disables owned force on Linux.
+	ProcFS fs.FS
 	// CommandLineLimit is the composed command-line bound the host process
 	// loader enforces for a single spawn, injected by the application injector
 	// because the running operating system is a policy this package must not
@@ -281,14 +284,14 @@ type ExecCommandRunner struct {
 
 // NewExecCommandRunner constructs a host command runner from exact external
 // effects. Missing effects fail closed rather than selecting ambient defaults.
-func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging.Logger, processStateReader ProcessStateReader) (ExecCommandRunner, error) {
+func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging.Logger, processStateReader ProcessStateReader, procFS fs.FS) (ExecCommandRunner, error) {
 	if newCommand == nil {
 		return ExecCommandRunner{}, errors.New("platform process command factory is required")
 	}
 	if clock == nil {
 		return ExecCommandRunner{}, errors.New("platform process clock is required")
 	}
-	return ExecCommandRunner{Logger: logger, Clock: clock, NewCommand: newCommand, ProcessStateReader: processStateReader}, nil
+	return ExecCommandRunner{Logger: logger, Clock: clock, NewCommand: newCommand, ProcessStateReader: processStateReader, ProcFS: procFS}, nil
 }
 
 // Run executes the command with process-tree cancellation, capturing stdout and stderr.
@@ -325,7 +328,7 @@ func (r ExecCommandRunner) run(
 	runDone := make(chan struct{})
 	waitDone := make(chan struct{})
 	defer close(runDone)
-	control := tree.ownedControl(runDone, r.Clock)
+	control := tree.ownedControl(runDone, r.Clock, r.ProcFS)
 	if control != nil {
 		control.waited = waitDone
 	}

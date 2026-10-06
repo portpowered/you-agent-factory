@@ -219,7 +219,7 @@ func (r fixedCommandRunnerWithError) Run(context.Context, CommandRequest) (Comma
 
 func testExecCommandRunner(t testing.TB, logger logging.Logger) ExecCommandRunner {
 	t.Helper()
-	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil)
+	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil, os.DirFS("/proc"))
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}

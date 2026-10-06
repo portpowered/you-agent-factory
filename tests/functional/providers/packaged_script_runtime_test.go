@@ -53,7 +53,7 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 
 func packagedScriptRuntimeEdges(t *testing.T) serviceedges.Edges {
 	t.Helper()
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("construct packaged script runtime command runner: %v", err)
 	}

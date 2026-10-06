@@ -531,7 +531,7 @@ func newASRLiveCorrelationModelsService(
 	if err != nil {
 		t.Fatalf("construct isolated asset coordination: %v", err)
 	}
-	commandRunner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
+	commandRunner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("construct Models runtime command runner: %v", err)
 	}

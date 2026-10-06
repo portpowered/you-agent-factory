@@ -2,7 +2,73 @@
 
 package process
 
-import "testing"
+import (
+	"errors"
+	"io/fs"
+	"testing"
+	"testing/fstest"
+)
+
+func TestOwnedLinuxGroupObservation(t *testing.T) {
+	t.Parallel()
+	unreadable := errors.New("procfs unavailable")
+	for _, test := range []struct {
+		name    string
+		procFS  fs.FS
+		live    bool
+		wantErr bool
+	}{
+		{name: "live owned descendant", procFS: fstest.MapFS{
+			"46/stat": {Data: []byte("46 (grandchild) S 45 42 42")},
+		}, live: true},
+		{name: "joined group and unrelated survivor", procFS: fstest.MapFS{
+			"42/stat":   {Data: []byte("42 (root) Z 1 42 42")},
+			"46/stat":   {Data: []byte("46 (grandchild) X 1 42 42")},
+			"52/stat":   {Data: []byte("52 (sibling) R 1 52 52")},
+			"self/stat": {Data: []byte("ignored nonnumeric entry")},
+		}},
+		{name: "disappeared process", procFS: fstest.MapFS{
+			"46": {Mode: fs.ModeDir},
+		}},
+		{name: "malformed process fact", procFS: fstest.MapFS{
+			"46/stat": {Data: []byte("not a process stat")},
+		}, wantErr: true},
+		{name: "unreadable directory", procFS: failingProcFS{path: ".", err: unreadable}, wantErr: true},
+		{name: "unreadable stat", procFS: failingProcFS{
+			FS:   fstest.MapFS{"46/stat": {Data: []byte("46 (child) R 1 42 42")}},
+			path: "46/stat", err: unreadable,
+		}, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			live, err := ownedLinuxGroupRunning(test.procFS, 42)
+			if live != test.live || (err != nil) != test.wantErr {
+				t.Fatalf("owned group running=%t error=%v; want running=%t error=%t", live, err, test.live, test.wantErr)
+			}
+		})
+	}
+}
+
+type failingProcFS struct {
+	fs.FS
+	path string
+	err  error
+}
+
+func (proc failingProcFS) Open(path string) (fs.File, error) {
+	if path == proc.path {
+		return nil, proc.err
+	}
+	return proc.FS.Open(path)
+}
+
+func TestOwnedLinuxControlRequiresProcessFacts(t *testing.T) {
+	t.Parallel()
+	tree := &commandProcessTree{pgid: 42}
+	if control := tree.ownedControl(make(chan struct{}), nil, nil); control != nil {
+		t.Fatal("missing process observation must not publish a force capability")
+	}
+}
 
 func TestOwnedLinuxGroupStat(t *testing.T) {
 	t.Parallel()

@@ -6,9 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,12 +15,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock) *ownedCommandControl {
-	if tree == nil || tree.pgid <= 0 {
+func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock, procFS fs.FS) *ownedCommandControl {
+	if tree == nil || tree.pgid <= 0 || procFS == nil {
 		return nil
 	}
 	return &ownedCommandControl{done: done, stop: func(ctx context.Context) (bool, error) {
-		return tree.forceKillAndJoin(ctx, clock)
+		return tree.forceKillAndJoin(ctx, clock, procFS)
 	}}
 }
 
@@ -42,7 +41,7 @@ func waitForOwnedCommandExit(cmd *exec.Cmd, control *ownedCommandControl) {
 	control.expire()
 }
 
-func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Clock) (bool, error) {
+func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Clock, procFS fs.FS) (bool, error) {
 	var info unix.Siginfo
 	if err := unix.Waitid(unix.P_PID, tree.pgid, &info, unix.WEXITED|unix.WNOWAIT|unix.WNOHANG, nil); err != nil {
 		return false, err
@@ -57,7 +56,7 @@ func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Cloc
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		running, err := ownedLinuxGroupRunning(tree.pgid)
+		running, err := ownedLinuxGroupRunning(procFS, tree.pgid)
 		if err != nil {
 			return false, err
 		}
@@ -76,8 +75,8 @@ func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Cloc
 // /proc is the Linux process boundary. A killed zombie cannot execute or fork;
 // reaping descendant zombies belongs to their parent/init, not this runner.
 // Unreadable or malformed process facts never become a successful tree join.
-func ownedLinuxGroupRunning(pgid int) (bool, error) {
-	entries, err := os.ReadDir("/proc")
+func ownedLinuxGroupRunning(procFS fs.FS, pgid int) (bool, error) {
+	entries, err := fs.ReadDir(procFS, ".")
 	if err != nil {
 		return false, err
 	}
@@ -85,8 +84,8 @@ func ownedLinuxGroupRunning(pgid int) (bool, error) {
 		if _, err := strconv.Atoi(entry.Name()); err != nil {
 			continue
 		}
-		stat, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "stat"))
-		if errors.Is(err, os.ErrNotExist) {
+		stat, err := fs.ReadFile(procFS, entry.Name()+"/stat")
+		if errors.Is(err, fs.ErrNotExist) {
 			continue // An unrelated process may disappear during enumeration.
 		}
 		if err != nil {

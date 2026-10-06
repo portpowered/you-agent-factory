@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"syscall"
 	"time"
@@ -35,7 +36,7 @@ type commandProcessTree struct {
 	root    windows.Handle
 }
 
-func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock) *ownedCommandControl {
+func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock, _ fs.FS) *ownedCommandControl {
 	if tree == nil || tree.job == 0 || tree.root == 0 || tree.rootPID != 0 {
 		return nil
 	}

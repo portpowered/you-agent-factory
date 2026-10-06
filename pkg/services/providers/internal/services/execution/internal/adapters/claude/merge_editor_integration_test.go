@@ -24,7 +24,7 @@ func TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt(t *testing.T) {
 		t.Skipf("git not available: %v", err)
 	}
 
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}

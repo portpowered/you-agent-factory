@@ -529,7 +529,7 @@ func (runner *largeStressRolloutRunner) RunStreaming(
 	runner.active.Add(1)
 	defer runner.active.Add(-1)
 
-	execRunner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
+	execRunner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil, nil)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
 	}
