@@ -44,7 +44,7 @@ type workerSessionTranscriptScenario struct {
 }
 
 // TestWorkerSessionWorkScopedTranscriptAndStreamUseStableIdentity proves the
-// public Work association survives retained/live delivery and exact provider
+// public Work association survives retained/live delivery and captured
 // transcript projection through HTTP and the Process.Execute CLI boundary.
 func TestWorkerSessionWorkScopedTranscriptAndStreamUseStableIdentity(t *testing.T) {
 	t.Parallel()
@@ -77,7 +77,7 @@ func startWorkerSessionTranscriptFixture(t *testing.T) workerSessionTranscriptFi
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
 			ProviderSessionResolveHomeDirectory: func() (string, error) {
-				return homeDir, nil
+				return filepath.Join(homeDir, "unavailable-native-root"), nil
 			},
 		},
 	})
@@ -169,7 +169,9 @@ func readWorkScopedTerminalTranscript(
 		observation.State != factoryapi.WorkerSessionObservationStateCompleted || observation.FactorySessionId == nil || *observation.FactorySessionId != scenario.sessionID ||
 		!reflect.DeepEqual(observation.WorkIds, []string{scenario.workID}) || !observation.ProviderSessionAvailable ||
 		observation.ProviderSession == nil || observation.ProviderSession.Id != remoteWorkerSessionProviderID ||
-		string(observation.Transcript) != "AVAILABLE" || observation.Parse.EventCount == 0 {
+		string(observation.Transcript) != "AVAILABLE" || observation.Parse.EventCount != 0 || observation.TurnUsage != nil ||
+		observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 8 ||
+		observation.TokenUsage.OutputTokens == nil || *observation.TokenUsage.OutputTokens != 12 {
 		t.Fatalf("Work-scoped terminal observation = %#v, want exact Work/attempt/provider and readable transcript projection", observation)
 	}
 

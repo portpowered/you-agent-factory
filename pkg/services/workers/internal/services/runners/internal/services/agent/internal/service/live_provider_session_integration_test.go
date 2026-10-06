@@ -13,21 +13,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-type unavailableProviderSessions struct {
-	providersessions.Service
-}
-
-func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
-}
 
 // TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation
 // supplies a completed Providers fake to the Agent runner and Worker Sessions
@@ -58,7 +49,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		t.Fatalf("events wire NewService() error = %v", err)
 	}
 	service := newLiveSessionService(runner)
-	sessions, err = workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, new(workersessionswire.HistorySnapshotBudget), nil)
+	sessions, err = workersessionswire.NewService(service, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, new(workersessionswire.HistorySnapshotBudget), nil)
 	if err != nil {
 		t.Fatalf("Worker Sessions wire NewService() error = %v", err)
 	}

@@ -59,7 +59,7 @@ func historyCapture(t *testing.T, id, factory, attempt string, ended bool) recor
 
 func TestArchivedHistoryMergesOwnedAndDurableScopedIdentities(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "live", true)
 	activeAttempt := r.observations["live"].attemptID
 	fake := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{
@@ -96,7 +96,7 @@ func TestArchivedHistoryMergesOwnedAndDurableScopedIdentities(t *testing.T) {
 
 func TestArchivedHistoryFiltersBeforeFrozenPages(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "active", true)
 	fake := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{
 		historyCapture(t, "active", "", r.observations["active"].attemptID, true),
@@ -125,7 +125,7 @@ func TestArchivedHistoryFiltersBeforeFrozenPages(t *testing.T) {
 
 func TestArchivedHistoryExcludesOwnersBeforeStateFiltering(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "active", true)
 	item := historyCapture(t, "active", "", r.observations["active"].attemptID, true)
 	r.logs = &LogReader{reader: &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}, logger: logging.NoopLogger{}}
@@ -142,7 +142,7 @@ func TestArchivedHistoryCannotInferLossOrChooseDuplicateCapture(t *testing.T) {
 	for _, kind := range []string{"unknown-owner", "duplicate", "private-storage-error", "wrong-opening"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			r := newObservationRegistry(nil, nil)
+			r := newObservationRegistry(nil)
 			item := historyCapture(t, "worker", "", "attempt", false)
 			fake := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}
 			switch kind {

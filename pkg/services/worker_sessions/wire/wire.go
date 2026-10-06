@@ -4,7 +4,7 @@
 // workersessions.Service root interface, and starts no lifecycle
 // components. It composes the implementation through direct single
 // injection of one request-scoped workers.Service and one
-// EventsAppender, clock, and Provider Sessions service, with no dependency
+// EventsAppender, clock, and captured Recordings reader, with no dependency
 // bag, service locator, or alternate construction path. Factory Runtime is the production consumer (W4
 // dispatch cutover), composed through pkg/services/factory_runtime/internal
 // and pkg/wire.
@@ -13,7 +13,6 @@ package wire
 import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
@@ -35,11 +34,9 @@ type HistorySnapshotBudget = internalservice.HistorySnapshotBudget
 // injected Workers execution service that Start publishes attempts
 // through, the one directly injected EventsAppender Start's before-handoff
 // publication barrier commits through, and the one directly injected
-// providersessions.Service the observation projection enriches transcript,
-// token, and parse facts through. logger is the direct, required
+// captured Recordings reader for observation facts. logger is the required
 // operation-logging abstraction; callers with no operation logging pass
-// logging.NoopLogger{}. Provider Sessions remains a required direct
-// dependency even when its implementation reports unavailable storage.
+// logging.NoopLogger{}.
 // clock supplies observation facts; scheduler supplies deadline timers.
 // operations is the required control store supplied from the same recording
 // writer; missing capabilities fail process construction before admission.
@@ -49,7 +46,6 @@ func NewService(
 	logger logging.Logger,
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
-	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
@@ -63,7 +59,6 @@ func NewService(
 		logger,
 		clock,
 		scheduler,
-		providerSessions,
 		recording,
 		captured,
 		operations,

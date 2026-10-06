@@ -20,7 +20,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -2764,7 +2763,6 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2814,7 +2812,6 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2874,7 +2871,6 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				logging.NoopLogger{},
 				platformclock.Real{},
 				platformclock.Real{},
-				unavailableProviderSessionsForCapture{},
 				terminalAwareRecordingService{recording: recording},
 				unavailableWorkerControlStore{},
 				unavailableWorkerControlStore{})
@@ -2910,7 +2906,6 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		terminalAwareRecordingService{recording: recording},
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2978,7 +2973,6 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		observedRecorder,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -3176,14 +3170,6 @@ func (service *failingRecordingService) StartWorkerSessionRecording(
 	recordings.WorkerSessionRecordingRequest,
 ) (recordings.WorkerSessionRecording, error) {
 	return nil, service.err
-}
-
-type unavailableProviderSessionsForCapture struct {
-	providersessions.Service
-}
-
-func (unavailableProviderSessionsForCapture) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 var _ recordings.WorkerSessionRecordingService = (*controlledRecordingService)(nil)

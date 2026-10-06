@@ -156,7 +156,7 @@ func TestCapturedAtReplayKeepsStoredTimeAndOmitsUnknown(t *testing.T) {
 		Next:     events.Cursor{Topic: topic, Position: 2},
 		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
 	}}}
-	r := newObservationRegistry(observationProjectorFake{}, reader)
+	r := newObservationRegistry(reader)
 	r.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	r.publications = map[string]*publication{"worker-1": {recordingID: "recording"}}
 	times := map[string]time.Time{"1": stamp}
