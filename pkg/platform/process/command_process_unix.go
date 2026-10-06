@@ -5,6 +5,7 @@ package process
 import (
 	"errors"
 	"os/exec"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -12,13 +13,8 @@ import (
 )
 
 type commandProcessTree struct {
-	pgid int
-}
-
-// A numeric process group alone does not fence PID reuse after cmd.Wait.
-// Keep force unsupported until an unreaped ownership lifetime is retained.
-func (*commandProcessTree) ownedControl(<-chan struct{}, Clock) *ownedCommandControl {
-	return nil
+	pgid   int
+	forced atomic.Bool
 }
 
 func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
@@ -115,6 +111,11 @@ func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock 
 }
 
 func closeCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) {
+	if tree != nil && tree.forced.Load() {
+		// The exact force already joined the group while its leader identity
+		// was retained. Never signal its numeric group after reaping it.
+		return
+	}
 	if cmd == nil {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "missing command")
 		return

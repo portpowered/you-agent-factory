@@ -6,12 +6,40 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
+	"testing"
 )
+
+func writeNativeForceFixture(t *testing.T, adapter string) cancelFixture {
+	t.Helper()
+	fixture, err := writeCancelFixture(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := filepath.Join(fixture.factoryDir, "scripts")
+	output := `{"type":"item.completed","item":{"id":"progress","type":"agent_message","text":"force fixture ready"}}`
+	input := "cat >/dev/null\n"
+	if adapter == "claude" {
+		output = `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"force fixture ready"}]}}`
+		input = ""
+	}
+	script := "#!/bin/sh\nset -eu\nstate=\"$FACTORY_RELIABILITY_CANCEL_STATE\"\nname=source\n" +
+		"if [ -d \"$state/source\" ]; then name=sibling; fi\n" +
+		"printf '%s\\n' \"$name\" >>\"$state/native-launches\"\n" + input +
+		"printf '%s\\n' '" + output + "'\n" +
+		"exec sh \"$(dirname \"$0\")/cancel-worker.sh\" \"$name\" \"$state\"\n"
+	if err := os.WriteFile(filepath.Join(provider, adapter), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fixture.environment = setCancelEnvironment(fixture.environment, "PATH", provider+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return fixture
+}
 
 type cancelProcessInfo struct {
 	parent int
@@ -90,6 +118,13 @@ func processParentPID(pid int) (int, error) {
 func processPIDPresent(pid int) (bool, error) {
 	if pid <= 0 {
 		return false, fmt.Errorf("invalid process ID %d", pid)
+	}
+	processes, snapshotErr := cancelProcessSnapshot()
+	if snapshotErr != nil {
+		return false, snapshotErr
+	}
+	if info, exists := processes[pid]; exists && strings.HasPrefix(info.state, "Z") {
+		return false, nil // Exited; only its parent's deferred reap remains.
 	}
 	err := syscall.Kill(pid, 0)
 	if err == nil || errors.Is(err, syscall.EPERM) {

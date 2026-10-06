@@ -335,6 +335,7 @@ func (r ExecCommandRunner) run(
 	}
 	waitCh := make(chan error, 1)
 	go func() {
+		waitForOwnedCommandExit(cmd, control)
 		waitErr := cmd.Wait()
 		close(waitDone)
 		waitCh <- waitErr
