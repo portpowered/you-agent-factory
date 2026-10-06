@@ -243,11 +243,18 @@ func (registry *liveAttemptRegistry) claim(
 	key liveAttemptKey,
 	action providers.ControlAction,
 ) (liveAttemptControl, bool) {
+	return registry.claimMatching(key, action, nil)
+}
+
+// A captured handle compares the registration before consuming its signal
+// seam. Reusing even the identical provider/attempt tuple grants no authority
+// to an observer retained from the previous execution.
+func (registry *liveAttemptRegistry) claimMatching(key liveAttemptKey, action providers.ControlAction, expected *nativeAttemptControl) (liveAttemptControl, bool) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
 	entry, exists := registry.live[key]
-	if !exists || entry.claimed || entry.control == nil || !entry.control.supports(action) {
+	if !exists || entry.claimed || entry.control == nil || (expected != nil && entry.control != expected) || !entry.control.supports(action) {
 		return nil, false
 	}
 	// Keep the identity reserved until the owning Execute call releases it.
@@ -256,6 +263,27 @@ func (registry *liveAttemptRegistry) claim(
 	entry.claimed = true
 	registry.live[key] = entry
 	return entry.control, true
+}
+
+type nativeAttemptHandle struct {
+	service *Service
+	key     liveAttemptKey
+	control *nativeAttemptControl
+}
+
+func (handle nativeAttemptHandle) ForceKill(ctx context.Context) (bool, error) {
+	result, err := handle.service.controlAttempt(ctx, providers.ControlAttemptRequest{
+		Provider: handle.key.provider, AttemptID: handle.key.attemptID, Action: providers.ControlActionKill,
+	}, handle.control)
+	return err == nil && result.Outcome == providers.ControlOutcomeCompleted, err
+}
+
+func (s *Service) publishAttemptControl(request providers.ExecuteRequest, control *nativeAttemptControl) {
+	if request.AttemptControlObserver != nil && control.allowKill {
+		request.AttemptControlObserver(nativeAttemptHandle{
+			service: s, key: liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}, control: control,
+		})
+	}
 }
 
 // restoreDeclinedKill reopens ordinary control only for the registration that

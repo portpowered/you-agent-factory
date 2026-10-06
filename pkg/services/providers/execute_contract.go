@@ -137,6 +137,9 @@ const (
 type ExecuteRequest struct {
 	Provider  ID
 	AttemptID string
+	// AttemptControlObserver receives a process-local handle for this physical
+	// execution before adapter startup. It never resolves an attempt by ID.
+	AttemptControlObserver AttemptControlObserver `json:"-"`
 	// Correlation carries detached replay/lineage keys used by effect
 	// implementations that must claim the exact recorded attempt. It is not
 	// provider session state and does not influence provider selection.
@@ -204,6 +207,20 @@ type ExecuteRequest struct {
 	// construction-time logger in force.
 	ExecutionLogger logging.Logger
 }
+
+// AttemptControl is an ephemeral capability bound to one admitted execution.
+// ForceKill reports true only after its owned process tree and authoritative
+// Provider execution have joined. Unsupported, expired or already claimed
+// handles return false without effects; errors never establish completion.
+// No handle is persisted, restored, or retargeted to a successor.
+type AttemptControl interface {
+	ForceKill(context.Context) (bool, error)
+}
+
+// AttemptControlObserver receives one exact execution handle before a Provider
+// Session reference is required. It must return promptly. An early handle may
+// decline force until the runner establishes process ownership.
+type AttemptControlObserver func(AttemptControl)
 
 // ExecuteCorrelation identifies caller-owned execution lineage relevant to
 // deterministic effect boundaries such as Recordings replay.

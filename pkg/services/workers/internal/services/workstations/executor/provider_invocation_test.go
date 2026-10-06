@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -20,6 +21,7 @@ func TestProviderInvocationExecutorResolvesEverySelectionFromRequest(t *testing.
 		Response: workerexecution.InferenceResponse{Content: `{"text":"done"}`},
 	}}
 	executor := NewProviderInvocationExecutor(invocation)
+	observed := false
 
 	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
 		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "t-1"},
@@ -27,16 +29,17 @@ func TestProviderInvocationExecutorResolvesEverySelectionFromRequest(t *testing.
 			WorkID:     "work-1",
 			InputNames: []string{"prerequisite"},
 		}},
-		WorkerType:       "worker-a",
-		ExecutorProvider: "codex",
-		ModelProvider:    "codex",
-		Model:            "codex-test-model",
-		ReasoningEffort:  "high",
-		SystemPrompt:     "be brief",
-		UserMessage:      "summarize",
-		OutputSchema:     `{"type":"object"}`,
-		WorkingDirectory: "/project",
-		SkipPermissions:  true,
+		WorkerType:             "worker-a",
+		ExecutorProvider:       "codex",
+		ModelProvider:          "codex",
+		Model:                  "codex-test-model",
+		ReasoningEffort:        "high",
+		SystemPrompt:           "be brief",
+		UserMessage:            "summarize",
+		OutputSchema:           `{"type":"object"}`,
+		WorkingDirectory:       "/project",
+		SkipPermissions:        true,
+		AttemptControlObserver: func(providers.AttemptControl) { observed = true },
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -46,6 +49,13 @@ func TestProviderInvocationExecutorResolvesEverySelectionFromRequest(t *testing.
 	}
 
 	request := invocation.input.Request
+	if request.AttemptControlObserver == nil {
+		t.Fatal("workstation lost attempt control observation")
+	}
+	request.AttemptControlObserver(nil)
+	if !observed {
+		t.Fatal("workstation replaced the attempt observer")
+	}
 	if request.WorkerType != "worker-a" || request.Model != "codex-test-model" || request.ModelProvider != "codex" {
 		t.Fatalf("selection = %#v, want caller's worker/model/provider", request)
 	}

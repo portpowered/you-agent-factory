@@ -278,6 +278,7 @@ func (s *Service) executeNativeAttempt(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
+	s.publishAttemptControl(request, control)
 	result, err = s.execution.Execute(attemptCtx, request)
 	return result, err
 }
@@ -291,6 +292,7 @@ func (s *Service) executeNativeContinuation(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
+	s.publishAttemptControl(request, control)
 	return s.execution.Continue(attemptCtx, execution.ContinuationRequest{
 		ExecuteRequest: request,
 		ResumeSession:  &reference,
@@ -634,6 +636,10 @@ func (s *Service) ControlAttempt(
 	ctx context.Context,
 	request providers.ControlAttemptRequest,
 ) (providers.ControlAttemptResult, error) {
+	return s.controlAttempt(ctx, request, nil)
+}
+
+func (s *Service) controlAttempt(ctx context.Context, request providers.ControlAttemptRequest, expected *nativeAttemptControl) (providers.ControlAttemptResult, error) {
 	if err := request.Validate(); err != nil {
 		s.logger.Info(
 			"provider control attempt rejected",
@@ -655,7 +661,14 @@ func (s *Service) ControlAttempt(
 		return providers.ControlAttemptResult{}, ctx.Err()
 	}
 	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
-	if control, claimed := s.attempts.claim(key, request.Action); claimed {
+	var control liveAttemptControl
+	var claimed bool
+	if expected == nil {
+		control, claimed = s.attempts.claim(key, request.Action)
+	} else {
+		control, claimed = s.attempts.claimMatching(key, request.Action, expected)
+	}
+	if claimed {
 		accepted, err := control.signal(ctx)
 		if err != nil {
 			s.logger.Info(

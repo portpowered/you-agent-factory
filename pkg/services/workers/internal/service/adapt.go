@@ -87,6 +87,7 @@ func adaptRunnerRequest(
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
 		TemporaryFiles:               temporaryFiles,
 		ExecutionLogger:              request.Input.ExecutionLogger,
+		AttemptControlObserver:       request.Input.AttemptControlObserver,
 		ProcessLifecycleObserver:     request.Input.ProcessLifecycleObserver,
 	}
 }

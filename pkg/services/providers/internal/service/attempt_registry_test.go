@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -16,6 +17,148 @@ import (
 
 	"go.uber.org/goleak"
 )
+
+func TestProviderAttemptObserverPublishesBeforeStartupAndJoinsExactExecution(t *testing.T) {
+	t.Parallel()
+	for _, continued := range []bool{false, true} {
+		t.Run(fmt.Sprint("continued=", continued), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			attached, signaled, finish := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			var handle providers.AttemptControl
+			var signals atomic.Int32
+			adapter := killExecutionStub{attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				if handle == nil {
+					t.Error("adapter started before exact handle publication")
+				}
+				request.OwnedProcessObserver(ownedProcessControlFunc(func(context.Context) (bool, error) {
+					signals.Add(1)
+					close(signaled)
+					return true, nil
+				}))
+				close(attached)
+				select {
+				case <-finish:
+					return providers.ExecuteResult{}, nil
+				case <-ctx.Done():
+					return providers.ExecuteResult{}, ctx.Err()
+				}
+			}}
+			service := &Service{catalog: killCatalogStub{}, acp: killACPStub{}, execution: adapter,
+				attempts: newLiveAttemptRegistry(), logger: logging.NoopLogger{}}
+			request := providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "physical", AttemptControlObserver: func(got providers.AttemptControl) {
+				handle = got
+				assertUnattachedAttemptDeclinesKill(t, ctx, got)
+			}}
+			executed := startObservedProviderAttempt(ctx, service, request, continued)
+			select {
+			case <-attached:
+			case <-ctx.Done():
+				t.Fatal("adapter did not attach")
+			}
+			completed := make(chan bool, 1)
+			go func() {
+				accepted, err := handle.ForceKill(ctx)
+				if err != nil {
+					t.Error(err)
+				}
+				completed <- accepted
+			}()
+			select {
+			case <-signaled:
+			case <-ctx.Done():
+				t.Fatal("exact handle did not signal")
+			}
+			select {
+			case <-completed:
+				t.Fatal("tree result reported completion before Provider execution joined")
+			default:
+			}
+			duplicate, err := handle.ForceKill(ctx)
+			if duplicate || err != nil || signals.Load() != 1 {
+				t.Fatalf("duplicate = %v, %v; signals = %d", duplicate, err, signals.Load())
+			}
+			close(finish)
+			assertObservedAttemptJoinedAndExpired(t, ctx, handle, completed, executed, &signals)
+		})
+	}
+}
+
+func assertUnattachedAttemptDeclinesKill(t *testing.T, ctx context.Context, handle providers.AttemptControl) {
+	t.Helper()
+	accepted, err := handle.ForceKill(ctx)
+	if accepted || err != nil {
+		t.Errorf("unattached handle = %v, %v", accepted, err)
+	}
+}
+
+func startObservedProviderAttempt(ctx context.Context, service *Service, request providers.ExecuteRequest, continued bool) <-chan error {
+	executed := make(chan error, 1)
+	go func() {
+		var err error
+		if continued {
+			_, err = service.dispatchContinuation(ctx, request, providers.SessionRef{})
+		} else {
+			_, err = service.Execute(ctx, request)
+		}
+		executed <- err
+	}()
+	return executed
+}
+
+func assertObservedAttemptJoinedAndExpired(t *testing.T, ctx context.Context, handle providers.AttemptControl, completed <-chan bool, executed <-chan error, signals *atomic.Int32) {
+	t.Helper()
+	if !<-completed {
+		t.Fatal("exact joined execution was not completed")
+	}
+	if err := <-executed; err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := handle.ForceKill(ctx)
+	if accepted || err != nil || signals.Load() != 1 {
+		t.Fatalf("expired handle = %v, %v; signals = %d", accepted, err, signals.Load())
+	}
+}
+
+func TestProviderAttemptHandleCannotClaimReusedIdentityOrConsumeCanceledObservation(t *testing.T) {
+	t.Parallel()
+	registry := newLiveAttemptRegistry()
+	key := liveAttemptKey{provider: providers.IDClaude, attemptID: "reused"}
+	service := &Service{attempts: registry, logger: logging.NoopLogger{}}
+	old := &nativeAttemptControl{allowKill: true, done: make(chan struct{}), cancel: func() { t.Error("kill canceled execution") }}
+	release, err := registry.bind(key, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle := nativeAttemptHandle{service: service, key: key, control: old}
+	old.finish(false)
+	release()
+	current := &nativeAttemptControl{allowKill: true, done: make(chan struct{}), cancel: func() { t.Error("kill canceled replacement") }}
+	var signals int
+	current.attachProcess(ownedProcessControlFunc(func(context.Context) (bool, error) {
+		signals++
+		current.finish(false)
+		return true, nil
+	}))
+	release, err = registry.bind(key, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if accepted, err := handle.ForceKill(t.Context()); accepted || err != nil || signals != 0 {
+		t.Fatalf("stale handle = %v, %v; replacement signals = %d", accepted, err, signals)
+	}
+	currentHandle := nativeAttemptHandle{service: service, key: key, control: current}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if accepted, err := currentHandle.ForceKill(ctx); accepted || !errors.Is(err, context.Canceled) || signals != 0 {
+		t.Fatalf("canceled observation = %v, %v; signals = %d", accepted, err, signals)
+	}
+	if accepted, err := currentHandle.ForceKill(t.Context()); !accepted || err != nil || signals != 1 {
+		t.Fatalf("replacement's own handle = %v, %v; signals = %d", accepted, err, signals)
+	}
+}
 
 func TestLiveAttemptRegistry_BindThenContainsThenRelease(t *testing.T) {
 	t.Parallel()
@@ -412,7 +555,8 @@ func TestProvidersNativeKillCapabilityRequiresSupportedAdapterAndExactOwnedHandl
 				}}
 				service := &Service{catalog: killCatalogStub{}, acp: killACPStub{}, execution: adapter,
 					attempts: newLiveAttemptRegistry(), logger: logging.NoopLogger{}}
-				request := providers.ExecuteRequest{Provider: id, AttemptID: "physical"}
+				var observed providers.AttemptControl
+				request := providers.ExecuteRequest{Provider: id, AttemptID: "physical", AttemptControlObserver: func(handle providers.AttemptControl) { observed = handle }}
 				executed := make(chan error, 1)
 				go func() {
 					var err error
@@ -424,6 +568,9 @@ func TestProvidersNativeKillCapabilityRequiresSupportedAdapterAndExactOwnedHandl
 					executed <- err
 				}()
 				<-started
+				if (observed != nil) != (id != providers.IDAntigravity) {
+					t.Errorf("observer handle for %s = %v", id, observed)
+				}
 				result, err := service.ControlAttempt(t.Context(), providers.ControlAttemptRequest{
 					Provider: id, AttemptID: request.AttemptID, Action: providers.ControlActionKill,
 				})

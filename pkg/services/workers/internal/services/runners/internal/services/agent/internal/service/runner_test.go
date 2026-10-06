@@ -12,6 +12,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestAgentProviderRequestPreservesAttemptControlObserver(t *testing.T) {
+	t.Parallel()
+	observed := false
+	request := workers.RunnerExecutionRequest{AttemptControlObserver: func(providers.AttemptControl) { observed = true }}
+	got := providerRequest(workers.CloneProviderInferenceRequest(request))
+	if got.AttemptControlObserver == nil {
+		t.Fatal("agent request lost attempt control observation")
+	}
+	got.AttemptControlObserver(nil)
+	if !observed {
+		t.Fatal("agent request replaced the attempt observer")
+	}
+}
+
 func TestNewRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
