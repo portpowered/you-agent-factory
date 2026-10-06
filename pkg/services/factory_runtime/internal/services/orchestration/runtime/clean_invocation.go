@@ -822,6 +822,15 @@ func restoredWorkToken(
 	if chainingTraceDepth == 0 && currentChainingTraceID != "" {
 		chainingTraceDepth = 1
 	}
+	// Recording projections retain canonical content, while prompt templates
+	// also consume the text payload derived during live admission. Rebuild that
+	// projection without trimming or re-encoding the saved UTF-8 text.
+	var payload []byte
+	for _, part := range item.Content {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
+			payload = append(payload, part.Text...)
+		}
+	}
 	return &factorytoken.Token{
 		ID:      item.ID,
 		PlaceID: placeID,
@@ -839,6 +848,7 @@ func restoredWorkToken(
 			Tags:                     work.CloneTags(item.Tags),
 			Relations:                restoredWorkRelations(relations),
 			Content:                  work.CloneWorkContentParts(item.Content),
+			Payload:                  payload,
 			StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 			StructuredResultPresent:  item.StructuredResultPresent,
 		},

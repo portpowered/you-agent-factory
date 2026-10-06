@@ -24,19 +24,34 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 	emptyDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 	corruptDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	boardDir := support.ScaffoldFactory(t, config)
+	support.WriteAgentConfig(t, boardDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
+	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
-	runner := &restartProbeUnexpectedRunner{}
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
 		FactorySessionRuntimePersistenceFileSystem: files,
 		ProviderCommandRunner:                      runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			starts.Add(1)
+			if request.Port == 23101 || request.Port == 23102 {
+				return boardAPIs[request.Port-23101].Start(ctx, request)
+			}
 			return api.Start(ctx, request)
 		},
 	})
 	support.CleanupProcess(t, process)
+	// A board's stop/reopen is ordered; independent empty/corrupt projects
+	// below remain parallel on the same reusable process graph.
+	t.Run("F1 F2 graceful DAG restart", func(t *testing.T) {
+		testRestartProbeDAG(t, process, boardDir, boardAPIs, runner)
+	})
 
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
 		t.Parallel()
@@ -45,7 +60,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		baseURL := api.WaitForURL(t)
 		session := support.GetDefaultSession(t, baseURL)
 		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, session.Id, "/work"))
-		if len(works.Results) != 0 || runner.calls.Load() != 0 {
+		if len(works.Results) != 0 || runner.calls.Load() != 3 {
 			t.Fatal("fresh opening recovered Work or dispatched a worker")
 		}
 		command.Stop(t)
@@ -67,7 +82,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			t.Fatalf("corrupt snapshot rejection = %v; stderr=%s", err, inputs.Stderr())
 		}
 		output := inputs.Stdout() + inputs.Stderr() + err.Error()
-		if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != 0 {
+		if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != 3 {
 			t.Fatalf("failed opening exposed payload, published readiness or dispatched: %s", output)
 		}
 		if got := mustReadSeededReplayArtifact(t, path); !bytes.Equal(got, artifact) || files.corruptWrites.Load() != 0 {
@@ -75,8 +90,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		}
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 1 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want one each", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 3 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want three and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }
@@ -122,10 +137,12 @@ func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.File
 }
 
 type restartProbeUnexpectedRunner struct {
-	calls atomic.Int32
+	calls    atomic.Int32
+	requests chan platformprocess.CommandRequest
 }
 
 func (runner *restartProbeUnexpectedRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.calls.Add(1)
-	return platformprocess.CommandResult{}, errors.New("unexpected probe provider attempt")
+	runner.requests <- request
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("restart COMPLETE")}, nil
 }
