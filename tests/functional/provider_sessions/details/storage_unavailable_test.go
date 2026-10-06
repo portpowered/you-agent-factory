@@ -6,11 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
-	"io"
-	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,23 +23,13 @@ import (
 func TestProviderSessionStorageFailuresReturnSafeAPIErrors(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	codexID := "session_fixture_codex_open_fault"
-	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(home), codexID, "{}\n")
-	files := &unavailableSessionFiles{blockedName: "rollout-" + codexID + ".jsonl"}
 	openID, pingID := "cursor-fixture-open-fault", "cursor-fixture-ping-fault"
 	writeCursorGoldenSuccessStorageFixture(t, home, openID)
 	writeCursorGoldenSuccessStorageFixture(t, home, pingID)
-	mixedID := "session_fixture_codex_mixed_corrupt"
-	// A truncated record ends at EOF; a newline-terminated malformed record
-	// intentionally receives the distinct invalid-JSON diagnostic.
-	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(home), mixedID,
-		"{\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"message\":\"retained fixture answer\"}}\n"+
-			"{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"content\":[{\"text\":\"partial")
 	ping := &unavailableSessionConnector{}
 	var openCalls atomic.Int32
 	edges := serviceedges.Edges{
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
-		ProviderSessionFileSystem:           files,
 		ProviderSessionCursorOpenDatabase: func(name, dsn string) (*sql.DB, error) {
 			switch {
 			case strings.Contains(dsn, openID):
@@ -57,19 +43,10 @@ func TestProviderSessionStorageFailuresReturnSafeAPIErrors(t *testing.T) {
 		},
 	}
 	server := startStorageFailureHost(t, home, edges)
-	t.Run("F11-U3 truncated record retains valid transcript", func(t *testing.T) {
-		t.Parallel()
-		assertMixedCorruptDetail(t, server.URL(), mixedID, home)
-	})
 	for _, test := range []struct {
 		name, provider, id string
 		observed           func(*testing.T)
 	}{
-		{"F11-U5 Codex file open", "codex", codexID, func(t *testing.T) {
-			if files.opens.Load() != 1 {
-				t.Fatalf("faulted file opens = %d, want 1", files.opens.Load())
-			}
-		}},
 		{"F11-U6 Cursor database open", "cursor", openID, func(t *testing.T) {
 			if openCalls.Load() != 1 {
 				t.Fatalf("faulted database opens = %d, want 1", openCalls.Load())
@@ -88,24 +65,6 @@ func TestProviderSessionStorageFailuresReturnSafeAPIErrors(t *testing.T) {
 			test.observed(t)
 		})
 	}
-}
-
-func assertMixedCorruptDetail(t *testing.T, baseURL, id, home string) {
-	t.Helper()
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](t, codexProviderSessionDetailURL(baseURL, id))
-	assertProviderSessionDetailIdentity(t, detail, id, factoryapi.Codex, factoryapi.LoadableProviderSessionKindSessionID)
-	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 ||
-		detail.Parse.ParseErrors[0].Message != "truncated JSON event record" {
-		t.Fatalf("mixed rollout parse = %#v, want exactly one truncated record", detail.Parse)
-	}
-	if len(detail.Transcript) != 1 || detail.Transcript[0].Text == nil || *detail.Transcript[0].Text != "retained fixture answer" {
-		t.Fatalf("mixed rollout transcript = %#v, want retained valid answer", detail.Transcript)
-	}
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "mixed-corrupt", string(encoded), home)
 }
 
 func startStorageFailureHost(t *testing.T, home string, edges serviceedges.Edges) *support.FunctionalAPIServer {
@@ -143,23 +102,6 @@ func assertStorageFailureResponse(t *testing.T, body, home string) {
 
 func privateStorageFault() error {
 	return errors.New("private-storage-fault: /private/operator/session-store")
-}
-
-type unavailableSessionFiles struct {
-	blockedName string
-	opens       atomic.Int32
-}
-
-func (files *unavailableSessionFiles) Open(path string) (io.ReadCloser, error) {
-	if filepath.Base(path) == files.blockedName {
-		files.opens.Add(1)
-		return nil, privateStorageFault()
-	}
-	return os.Open(path)
-}
-
-func (*unavailableSessionFiles) Stat(path string) (fs.FileInfo, error) {
-	return os.Stat(path)
 }
 
 // OpenDB accepts a connector directly, avoiding process-global SQL driver

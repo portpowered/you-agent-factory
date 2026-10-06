@@ -1,209 +1,28 @@
 package details
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
-	codexGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
-	codexGoldenRolloutFile                       = "rollout.jsonl"
-	codexCorruptTranscriptFixtureDir             = "tests/functional/internal/support/testdata/provider-sessions/codex/corrupt-transcript"
-	codexCorruptTranscriptRolloutFile            = "corrupt-rollout.jsonl"
-	codexCorruptTranscriptSessionID              = "session_fixture_codex_corrupt_transcript"
-	codexMissingTranscriptSessionID              = "session_fixture_codex_missing_transcript"
-)
-
-// TestCodexProviderSessionDetailsLoadFromGoldenMetadata proves Codex Provider
-// Session detail activates through the public GET /provider-sessions/detail surface
-// after runtime lifecycle starts on a process composed only via
-// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
-// sanitized Codex success rollout and proves identity/provider/kind plus readable
-// transcript structurally match checked-in expected Provider Session metadata.
-// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
-func TestCodexProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "codex-message-tool-success" {
-		t.Fatalf("manifest.ID = %q, want codex-message-tool-success", loaded.Manifest.ID)
-	}
-
-	var request struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.SessionID == "" {
-		t.Fatal("request.session_id must be non-empty")
-	}
-
-	rolloutPath := filepath.Join(caseDir, codexGoldenRolloutFile)
-	rolloutContent, err := os.ReadFile(rolloutPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", codexGoldenRolloutFile, err)
-	}
-
-	homeDir := t.TempDir()
-	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(homeDir), request.SessionID, string(rolloutContent))
-
-	server := startCodexProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
-		t,
-		codexProviderSessionDetailURL(server.URL(), request.SessionID),
-	)
-	assertProviderSessionDetailIdentity(
-		t,
-		detail,
-		request.SessionID,
-		factoryapi.Codex,
-		factoryapi.LoadableProviderSessionKindSessionID,
-	)
-	if len(detail.Transcript) == 0 {
-		t.Fatal("provider session detail transcript is empty, want readable success-session content")
-	}
-
-	observed := observeCodexProviderSessionDetailGolden(detail)
-	if err := compareOrUpdateCodexProviderSessionDetailGolden(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("compareOrUpdateCodexProviderSessionDetailGolden: %v", err)
-	}
-}
-
-// TestCodexProviderSessionMissingTranscriptReturnsNotFound proves that requesting
-// Codex Provider Session details for a session_id with no stored rollout returns
-// a distinguishable not-found outcome instead of fabricating session detail.
-func TestCodexProviderSessionMissingTranscriptReturnsNotFound(t *testing.T) {
-	homeDir := t.TempDir()
-
-	server := startCodexProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexMissingTranscriptSessionID,
-		http.StatusNotFound,
-	)
-	if !strings.Contains(body, "provider session not found") {
-		t.Fatalf("error body = %q, want not-found message", body)
-	}
-
-	var failure factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(body), &failure); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if failure.Code != factoryapi.ErrorResponseCodeNOTFOUND {
-		t.Fatalf("error code = %q, want NOT_FOUND", failure.Code)
-	}
-	if failure.Message == "" {
-		t.Fatal("error message is empty, want customer-readable not-found diagnostic")
-	}
-	if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
-		t.Fatalf("not-found response fabricated provider session detail: %s", body)
-	}
-
-	assertCodexProviderSessionErrorBodySafe(t, "missing-transcript", body, homeDir)
-}
-
-// TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic proves that a
-// corrupt Codex rollout transcript remains inspectable through the public Provider
-// Session detail surface with client-safe parse diagnostics instead of fabricated
-// transcript content or unsafe host-path leakage.
-func TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	fixturePath := filepath.Join(repoRoot, filepath.FromSlash(codexCorruptTranscriptFixtureDir), codexCorruptTranscriptRolloutFile)
-	rolloutContent, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", codexCorruptTranscriptRolloutFile, err)
-	}
-	if err := support.ValidateProviderSessionFixtureContent(
-		"codex-corrupt-transcript",
-		codexCorruptTranscriptRolloutFile,
-		rolloutContent,
-	); err != nil {
-		t.Fatalf("corrupt rollout fixture must stay sanitized: %v", err)
-	}
-
-	homeDir := t.TempDir()
-	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(homeDir), codexCorruptTranscriptSessionID, string(rolloutContent))
-
-	server := startCodexProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
-		t,
-		codexProviderSessionDetailURL(server.URL(), codexCorruptTranscriptSessionID),
-	)
-	assertProviderSessionDetailIdentity(
-		t,
-		detail,
-		codexCorruptTranscriptSessionID,
-		factoryapi.Codex,
-		factoryapi.LoadableProviderSessionKindSessionID,
-	)
-	if detail.Parse.MalformedLineCount == 0 && len(detail.Parse.ParseErrors) == 0 {
-		t.Fatalf("parse summary = %#v, want malformed-line or parse-error diagnostics", detail.Parse)
-	}
-	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 {
-		t.Fatalf("parse summary = %#v, want one malformed-line diagnostic", detail.Parse)
-	}
-	if detail.Parse.ParseErrors[0].Message != "truncated JSON event record" {
-		t.Fatalf("parse error = %#v, want truncated JSON diagnostic", detail.Parse.ParseErrors[0])
-	}
-	if len(detail.Transcript) != 0 {
-		t.Fatalf("transcript = %#v, want no fabricated entries for corrupt rollout", detail.Transcript)
-	}
-
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatalf("marshal detail: %v", err)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "corrupt-transcript", string(encoded), homeDir)
-}
-
-func startCodexProviderSessionDetailServer(
-	t *testing.T,
-	homeDir string,
-	edges serviceedges.Edges,
-) *support.FunctionalAPIServer {
-	t.Helper()
-
-	if edges.ProviderSessionResolveHomeDirectory == nil {
-		edges.ProviderSessionResolveHomeDirectory = func() (string, error) { return homeDir, nil }
-	}
-	dir := support.ScaffoldSingleStepFactory(t, "codex-provider-session-detail")
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
-	})
-}
+const codexGoldenRolloutFile = "rollout.jsonl"
 
 func codexSessionsRoot(homeDir string) string {
 	return filepath.Join(homeDir, ".codex", "sessions")
@@ -271,201 +90,218 @@ func writeCodexGoldenRolloutFixtureAt(t *testing.T, root, relativeDir, sessionID
 	}
 }
 
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func observeCodexProviderSessionDetailGolden(
-	detail factoryapi.ProviderSessionDetailResponse,
-) json.RawMessage {
-	transcript := make([]map[string]any, 0, len(detail.Transcript))
-	for _, entry := range detail.Transcript {
-		record := map[string]any{
-			"order": entry.Order,
-			"type":  string(entry.Type),
-		}
-		if entry.SourceType != nil {
-			record["sourceType"] = *entry.SourceType
-		}
-		if entry.Text != nil {
-			record["text"] = *entry.Text
-		}
-		if entry.Timestamp != nil {
-			record["timestamp"] = entry.Timestamp.UTC().Format(time.RFC3339Nano)
-		}
-		if entry.CallId != nil {
-			record["callId"] = *entry.CallId
-		}
-		if entry.Name != nil {
-			record["name"] = *entry.Name
-		}
-		if entry.Arguments != nil {
-			record["arguments"] = *entry.Arguments
-		}
-		if entry.Output != nil {
-			record["output"] = *entry.Output
-		}
-		if entry.Status != nil {
-			record["status"] = *entry.Status
-		}
-		transcript = append(transcript, record)
-	}
-
-	functionCalls := make([]map[string]any, 0, len(detail.Parse.FunctionCalls))
-	for _, call := range detail.Parse.FunctionCalls {
-		record := map[string]any{
-			"order": call.Order,
-		}
-		if call.CallId != nil {
-			record["callId"] = *call.CallId
-		}
-		if call.Name != nil {
-			record["name"] = *call.Name
-		}
-		if call.Arguments != nil {
-			record["arguments"] = *call.Arguments
-		}
-		if call.Output != nil {
-			record["output"] = *call.Output
-		}
-		if call.Status != nil {
-			record["status"] = *call.Status
-		}
-		if call.Type != "" {
-			record["type"] = call.Type
-		}
-		if call.TurnIndex != nil {
-			record["turnIndex"] = *call.TurnIndex
-		}
-		functionCalls = append(functionCalls, record)
-	}
-
-	var tokenUsage map[string]any
-	if detail.Parse.TokenUsage != nil {
-		tokenUsage = map[string]any{}
-		if detail.Parse.TokenUsage.InputTokens != nil {
-			tokenUsage["inputTokens"] = *detail.Parse.TokenUsage.InputTokens
-		}
-		if detail.Parse.TokenUsage.OutputTokens != nil {
-			tokenUsage["outputTokens"] = *detail.Parse.TokenUsage.OutputTokens
-		}
-		if detail.Parse.TokenUsage.CachedInputTokens != nil {
-			tokenUsage["cachedInputTokens"] = *detail.Parse.TokenUsage.CachedInputTokens
-		}
-		if detail.Parse.TokenUsage.CacheWriteTokens != nil {
-			tokenUsage["cacheWriteTokens"] = *detail.Parse.TokenUsage.CacheWriteTokens
-		}
-		if detail.Parse.TokenUsage.ReasoningOutputTokens != nil {
-			tokenUsage["reasoningOutputTokens"] = *detail.Parse.TokenUsage.ReasoningOutputTokens
-		}
-		if detail.Parse.TokenUsage.TotalTokens != nil {
-			tokenUsage["totalTokens"] = *detail.Parse.TokenUsage.TotalTokens
-		}
-	}
-
-	turns := make([]map[string]any, 0, len(detail.Parse.Turns))
-	for _, turn := range detail.Parse.Turns {
-		record := map[string]any{
-			"index": turn.Index,
-		}
-		record["eventCount"] = turn.EventCount
-		record["functionCallCount"] = turn.FunctionCallCount
-		record["reasoningCount"] = turn.ReasoningCount
-		record["responseItemCount"] = turn.ResponseItemCount
-		if turn.StartedAt != nil {
-			record["startedAt"] = turn.StartedAt.UTC().Format(time.RFC3339Nano)
-		}
-		turns = append(turns, record)
-	}
-
-	record := map[string]any{
-		"providerSession": map[string]any{
-			"provider": string(detail.ProviderSession.Provider),
-			"kind":     string(detail.ProviderSession.Kind),
-			"id":       detail.ProviderSession.Id,
-		},
-		"source": map[string]any{
-			"relativePath": detail.Source.RelativePath,
-			"sizeBytes":    detail.Source.SizeBytes,
-		},
-		"parse": map[string]any{
-			"eventCount":    detail.Parse.EventCount,
-			"lineCount":     detail.Parse.LineCount,
-			"functionCalls": functionCalls,
-			"turns":         turns,
-		},
-		"transcript": transcript,
-	}
-	if detail.Source.ModifiedAt != nil {
-		record["source"].(map[string]any)["modifiedAt"] = detail.Source.ModifiedAt.UTC().Format(time.RFC3339Nano)
-	}
-	if tokenUsage != nil {
-		record["parse"].(map[string]any)["tokenUsage"] = tokenUsage
-	}
-	return mustMarshalJSON(record)
-}
-
-func compareOrUpdateCodexProviderSessionDetailGolden(
-	loaded support.ProviderSessionCase,
-	observed json.RawMessage,
-) error {
-	expectedPath := filepath.Join(loaded.CaseDir, codexGoldenExpectedProviderSessionDetailFile)
-	expected, err := os.ReadFile(expectedPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if !support.ProviderSessionFunctionalGoldensUpdateEnabled() {
-			return &support.ProviderSessionLoadError{
-				CaseID: loaded.Manifest.ID,
-				Role:   "expected-provider-session-detail",
-				Path:   expectedPath,
-				Detail: "required expected-provider-session-detail fixture is missing",
-			}
-		}
-		encoded, err := json.MarshalIndent(json.RawMessage(observed), "", "  ")
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(expectedPath, append(encoded, '\n'), 0o644); err != nil {
-			return err
-		}
-		return &support.ProviderSessionGoldensUpdatedError{
-			CaseID: loaded.Manifest.ID,
-			Paths:  []string{codexGoldenExpectedProviderSessionDetailFile},
-		}
-	}
-
-	normalizedFields := append([]string(nil), loaded.Manifest.NormalizedFields...)
-	normalizedFields = append(normalizedFields, "modifiedAt", "sizeBytes", "timestamp", "startedAt")
-
-	err = support.CompareProviderSessionJSON(
-		loaded.Manifest.ID,
-		"expected-provider-session-detail",
-		normalizedFields,
-		expected,
-		observed,
-	)
-	if err == nil {
-		return nil
-	}
-	if !support.ProviderSessionFunctionalGoldensUpdateEnabled() {
-		return err
-	}
-	encoded, marshalErr := json.MarshalIndent(json.RawMessage(observed), "", "  ")
-	if marshalErr != nil {
-		return marshalErr
-	}
-	if writeErr := os.WriteFile(expectedPath, append(encoded, '\n'), 0o644); writeErr != nil {
-		return writeErr
-	}
-	return &support.ProviderSessionGoldensUpdatedError{
-		CaseID: loaded.Manifest.ID,
-		Paths:  []string{codexGoldenExpectedProviderSessionDetailFile},
-	}
-}
-
 func mustMarshalJSON(value any) json.RawMessage {
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		panic(err)
 	}
 	return encoded
+}
+
+// This API-owned matrix uses real capture/storage through root.BuildProcess and
+// Process.Execute. One graph owns the compatible direct cohort. Reload/profile
+// selection require separate graphs because their durable roots are immutable.
+func TestCodexCapturedDetails(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "captured-codex")
+	support.ClearSeedInputs(t, dir)
+	support.WriteAgentConfig(t, dir, "processor", "---\ntype: MODEL_WORKER\nmodel: functional-model\nmodelProvider: CODEX\nexecutorProvider: CODEX\nstopToken: COMPLETE\n---\nProcess the public fixture.\n")
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexOutput("captured-direct")}, platformprocess.CommandResult{Stdout: capturedCodexOutput("captured-factory")})
+	host := startCapturedCodexHost(t, home, dir, capturedCodexRunner{runner}, nil)
+	invokeCapturedCodex(t, host, home, dir, "direct", "")
+	detail := awaitCapturedCodexDetail(t, host, "captured-direct")
+	assertCapturedCodexDetail(t, detail, "captured-direct")
+	t.Run("F-CD2 Factory association", func(t *testing.T) {
+		opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+		if opened.Session == nil || opened.Session.Id == "" || opened.Session.Id == "~default" {
+			t.Fatalf("Factory session not explicit: %#v", opened)
+		}
+		session := opened.Session.Id
+		defer support.CloseFactorySessionAt(t, host.URL(), session)
+		name := "captured-factory-work"
+		support.SubmitSessionWorkAt(t, host.URL(), session, factoryapi.SubmitWorkRequest{Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": "public fixture"}})
+		support.WaitForSessionTerminalStatus(t, host.URL(), session, 15*time.Second)
+		assertCapturedCodexDetail(t, awaitCapturedCodexDetail(t, host, "captured-factory"), "captured-factory")
+	})
+	t.Run("F-CD4 unknown", func(t *testing.T) {
+		for _, id := range []string{"unknown"} {
+			body := getCodexProviderSessionDetailErrorBody(t, host.URL(), id, http.StatusNotFound)
+			assertCapturedCodexFailure(t, body, factoryapi.ErrorResponseCodeNOTFOUND, home)
+		}
+	})
+	// Joined shutdown precedes copying durable history into a new selected root.
+	host.Close(t)
+	freshHome, freshDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "captured-reload")
+	support.ClearSeedInputs(t, freshDir)
+	copyCapturedCodexStore(t, dir, freshDir)
+	fresh := startCapturedCodexHost(t, freshHome, freshDir, testutil.NewProviderCommandRunner(), nil)
+	reloaded := support.GetJSON[factoryapi.ProviderSessionDetailResponse](t, codexProviderSessionDetailURL(fresh.URL(), "captured-direct"))
+	if !reflect.DeepEqual(detail, reloaded) {
+		t.Fatalf("F-CD3 reload changed captured detail: %#v / %#v", detail, reloaded)
+	}
+	otherHome, otherDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "captured-other-profile")
+	support.ClearSeedInputs(t, otherDir)
+	other := startCapturedCodexHost(t, otherHome, otherDir, testutil.NewProviderCommandRunner(), nil)
+	body := getCodexProviderSessionDetailErrorBody(t, other.URL(), "captured-direct", http.StatusNotFound)
+	assertCapturedCodexFailure(t, body, factoryapi.ErrorResponseCodeNOTFOUND, otherHome)
+}
+
+func startCapturedCodexHost(t *testing.T, home, dir string, runner platformprocess.CommandRunner, readFile func(string) ([]byte, error)) *support.FunctionalAPIServer {
+	t.Helper()
+	// Codex native roots are inaccessible; capture storage remains real.
+	if err := os.WriteFile(filepath.Join(home, ".codex"), []byte("inaccessible native root"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, RecordingReadFile: readFile,
+			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
+		},
+	})
+	t.Cleanup(func() { host.Close(t) })
+	return host
+}
+
+func invokeCapturedCodex(t *testing.T, host *support.FunctionalAPIServer, home, dir, id, session string) {
+	t.Helper()
+	document := map[string]any{"requestId": id + "-request", "workerSessionId": id,
+		"execution": map[string]any{"workstationName": "direct", "workingDirectory": dir,
+			"factorySessionId": session, "workerType": "direct-worker", "runnerId": "codex",
+			"executorProvider": "codex", "modelProvider": "codex", "model": "functional-model",
+			"userMessage": "public input", "dispatch": map[string]any{"dispatchId": id + "-attempt", "workstationName": "direct", "workerType": "direct-worker"}}}
+	path := filepath.Join(dir, id+".json")
+	if err := os.WriteFile(path, mustMarshalJSON(document), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
+	input.Input.Env, input.Input.WorkingDirectory = []string{"HOME=" + home, "USERPROFILE=" + home}, dir
+	if err := host.Execute(t, input.Input); err != nil {
+		t.Fatalf("invoke: %v stdout=%s stderr=%s", err, input.Stdout(), input.Stderr())
+	}
+	var result struct {
+		Accepted bool   `json:"accepted"`
+		State    string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(input.Stdout()), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Accepted || result.State != "COMPLETED" {
+		t.Fatalf("invoke did not join completion: %s", input.Stdout())
+	}
+}
+
+func capturedCodexOutput(id string) []byte {
+	return []byte(`{"type":"thread.started","thread_id":"` + id + `"}
+{"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"captured answer COMPLETE"}}
+{"type":"item.started","item":{"id":"tool","type":"command_execution","command":"inspect public fixture"}}
+{"type":"item.updated","item":{"id":"tool","type":"command_execution","aggregated_output":"public result"}}
+{"type":"item.completed","item":{"id":"tool","type":"command_execution","command":"inspect public fixture","aggregated_output":"public result","exit_code":0}}
+{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":3,"output_tokens":4}}
+`)
+}
+
+func awaitCapturedCodexDetail(t *testing.T, host *support.FunctionalAPIServer, id string) factoryapi.ProviderSessionDetailResponse {
+	t.Helper()
+	// Capture commits asynchronously after execution joins; the public endpoint
+	// is the only observer, so poll its completion instead of sleeping or probing internals.
+	detail, err := support.WaitForObservation(15*time.Second, func() (factoryapi.ProviderSessionDetailResponse, error) {
+		response, err := http.Get(codexProviderSessionDetailURL(host.URL(), id))
+		if err != nil {
+			return factoryapi.ProviderSessionDetailResponse{}, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return factoryapi.ProviderSessionDetailResponse{}, nil
+		}
+		var detail factoryapi.ProviderSessionDetailResponse
+		err = json.NewDecoder(response.Body).Decode(&detail)
+		return detail, err
+	}, func(detail factoryapi.ProviderSessionDetailResponse) bool { return detail.ProviderSession.Id == id })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return detail
+}
+
+func assertCapturedCodexDetail(t *testing.T, detail factoryapi.ProviderSessionDetailResponse, id string) {
+	t.Helper()
+	assertProviderSessionDetailIdentity(t, detail, id, factoryapi.Codex, factoryapi.LoadableProviderSessionKindSessionID)
+	if len(detail.Transcript) != 3 || detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != "captured answer COMPLETE" {
+		t.Fatalf("captured message/tools lost: %#v", detail.Transcript)
+	}
+	for i, entry := range detail.Transcript {
+		if entry.Order != i+1 || entry.Timestamp == nil || entry.LineNumber != nil {
+			t.Fatalf("captured entry facts fabricated/lost: %#v", entry)
+		}
+	}
+	if detail.Source.RelativePath != "" || detail.Source.SizeBytes != 0 || detail.Source.ModifiedAt != nil || detail.Parse.LineCount != 0 {
+		t.Fatalf("uncaptured native facts fabricated: %#v", detail)
+	}
+	usage := detail.Parse.TokenUsage
+	if usage == nil || usage.InputTokens == nil || *usage.InputTokens != 10 || usage.OutputTokens == nil || *usage.OutputTokens != 4 || usage.CachedInputTokens == nil || *usage.CachedInputTokens != 3 {
+		t.Fatalf("captured usage lost: %#v", usage)
+	}
+	if len(detail.Parse.FunctionCalls) != 2 || detail.Transcript[0].Name == nil || detail.Transcript[1].Output == nil {
+		t.Fatalf("captured tool facts lost: %#v", detail)
+	}
+}
+
+func assertCapturedCodexFailure(t *testing.T, body string, code factoryapi.ErrorResponseCode, home string) {
+	t.Helper()
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(body), &failure); err != nil {
+		t.Fatal(err)
+	}
+	if failure.Code != code {
+		t.Fatalf("error = %#v, want %s", failure, code)
+	}
+	for _, forbidden := range []string{`"transcript"`, `"providerSession"`, "native-private-history", "captured answer", home} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("failure leaked content: %s", body)
+		}
+	}
+}
+
+func copyCapturedCodexStore(t *testing.T, source, target string) {
+	t.Helper()
+	source = filepath.Join(source, ".you-agent-factory", "worker-recordings")
+	target = filepath.Join(target, ".you-agent-factory", "worker-recordings")
+	err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		destination := filepath.Join(target, relative)
+		if entry.IsDir() {
+			return os.MkdirAll(destination, 0700)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destination, data, 0600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Streaming is the provider command effect that records progress observations.
+// The queued command result remains the sole controlled external dependency.
+type capturedCodexRunner struct {
+	*testutil.ProviderCommandRunner
+}
+
+func (runner capturedCodexRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if observer != nil {
+		observer(platformprocess.OutputStreamStdout, result.Stdout)
+	}
+	return result, err
 }
