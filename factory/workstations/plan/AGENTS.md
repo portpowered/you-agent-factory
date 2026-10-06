@@ -37,10 +37,28 @@ proof gates; preserve old oversized artifacts. Remaining slices are Markdown
 names only, admitted by lead/operator after retained merge. Never submit
 successors, repair Work state, invoke equivalent controls or operatorOverride.
 
+## Criterion ownership
+
+Every project and story criterion MUST carry an explicit `owner`: `process` or
+`review` in new planner output. Hosted/terminal CI results, merge, independent
+or post-merge validation, and reviewer judgment are review-owned. Direct
+implementation proof and the implementation-stage delivery criterion are
+process-owned. A composite immutable criterion requiring review evidence is
+review-owned as a whole; retain its implementation work and later gates.
+Preserve IDs, requirements, source-plan alignment and evidence gates. Never
+reassign ownership during execution to escape a failed obligation.
+
+Missing owner defaults to process, including legacy string criteria. Invalid
+explicit owners (unknown, null or non-string) are malformed metadata and never
+bypass a blocker; report the criterion and smallest metadata correction.
+Missing proof status remains unproved. Story passes reports retained process
+completion only, never review proof. Process never marks review-owned criteria
+true; unproved review-owned criteria remain false at handoff.
+
 ## Lane size budget
 
 Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 criteria total, and a PR under about 2,000 changed lines (added plus deleted).
+Use at most 2 stories, about 8 unique process-owned criteria total, and a PR under about 2,000 changed lines (added plus deleted).
 Keep JSON below 20 KB (20,000 UTF-8 bytes), including status updates.
 For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
@@ -49,8 +67,9 @@ Never evade caps with compound scope or weakened acceptance; escalate indivisibl
 
 Each named successor must depend on this lane's merge before lead/operator
 admission; do not create successor Work or implement it in this lane.
-Count retained executable obligations once by criterion ID, including quality and
-delivery; later-owned Project criteria stay mapped without admitting successor scope.
+Count only process-owned criteria toward the criterion cap, once by criterion ID,
+including process quality and delivery. Review-owned criteria stay visible and
+mapped to later gates; other caps and immutable requirements remain intact.
 These budgets apply only to new lanes; never rewrite existing oversized artifacts.
 Measure UTF-8 bytes before publishing the JSON. If the complete immutable contract
 cannot fit, escalate to its authority without dropping requirements or proof.
@@ -183,8 +202,9 @@ Each user story **MUST** contain:
 - `scope.in` and `scope.out`;
 - `contractChanges` containing the exact relevant before/after excerpts when
   the story changes a contract or configuration shape;
-- `acceptanceCriteria` with at least one behavioral assertion and applicable
-  failure behavior;
+- `acceptanceCriteria` as objects with stable `id`, `owner`, `passes: false`,
+  requirement (or requirement reference) and evidence/later gate IDs, with at
+  least one behavioral assertion and applicable failure behavior;
 - `verification.behavioralWitness`;
 - `verification.executableSpineEffect`;
 - `verification.requiredEvidence`, including scope, dependency fidelity,
@@ -208,6 +228,21 @@ criterion requiring a real artifact or dependency.
 Use this exact delivery criterion:
 
 > Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
+
+Example ownership at both project and story levels (reuse IDs, count once):
+
+```json
+{
+  "acceptanceCriteria": {"projectToSlice": [
+    {"id": "C-1", "requirement": "Focused behavior proof", "owner": "process", "passes": false, "localCriteria": ["C-1"], "evidenceGates": ["U-1"]},
+    {"id": "C-2", "requirement": "Terminal own-head CI and independent review", "owner": "review", "passes": false, "localCriteria": [], "laterVerificationGates": ["R-1"]}
+  ]},
+  "userStories": [{"id": "lane-001", "acceptanceCriteria": [
+    {"id": "C-1", "requirementRef": "acceptanceCriteria.projectToSlice:C-1", "owner": "process", "passes": false, "gateIds": ["U-1"]},
+    {"id": "C-2", "requirementRef": "acceptanceCriteria.projectToSlice:C-2", "owner": "review", "passes": false, "gateIds": ["R-1"]}
+  ], "passes": false}]
+}
+```
 
 ## Step 3 — self-review and finish
 
