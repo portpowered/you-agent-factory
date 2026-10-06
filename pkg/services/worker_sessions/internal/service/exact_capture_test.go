@@ -681,3 +681,60 @@ func TestInterruptContinuationPolicyRefusalPreservesSource(t *testing.T) {
 		})
 	}
 }
+
+func TestTerminalContinuationPolicyPrecedesReservation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"unsupported", "query-error", "supported"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+			source := r.sessions[req.SourceWorkerSessionID].Clone()
+			fake := &interruptContinuationSupportFake{supported: cell == "supported"}
+			if cell == "query-error" {
+				fake.err = providers.ErrUnknownProvider
+			}
+			r.continuationSupport = fake
+			replay, owner, err := r.reserveContinuation(req)
+			if cell == "supported" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if replay == nil || !owner {
+					t.Fatalf("supported reservation: replay=%#v owner=%v err=%v", replay, owner, err)
+				}
+				assertContinuationReplayRetainsOriginalPolicy(t, r, req, replay, fake)
+				return
+			}
+			if !errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid) || replay != nil || owner {
+				t.Fatalf("unsupported reservation: replay=%#v owner=%v err=%v", replay, owner, err)
+			}
+			assertTerminalContinuationPolicyNoEffects(t, r, req, source, fake.reference)
+		})
+	}
+}
+
+func assertContinuationReplayRetainsOriginalPolicy(t *testing.T, r *registry, req workersessions.ContinueRequest, original *continueReplay, support *interruptContinuationSupportFake) {
+	t.Helper()
+	support.supported = false
+	support.err = providers.ErrUnknownProvider
+	support.reference = providers.SessionRef{}
+	replay, owner, err := r.reserveContinuation(req)
+	if err != nil || owner || replay != original || support.reference != (providers.SessionRef{}) {
+		t.Fatalf("exact replay queried changed policy: replay=%p owner=%v err=%v", replay, owner, err)
+	}
+}
+
+func assertTerminalContinuationPolicyNoEffects(t *testing.T, r *registry, req workersessions.ContinueRequest, source workersessions.Session, reference providers.SessionRef) {
+	t.Helper()
+	if reference != source.ProviderSessionAssociation.Reference || !reflect.DeepEqual(r.sessions[source.ID], source) {
+		t.Fatal("policy query lost exact reference or changed terminal source")
+	}
+	if r.activeStarts != 0 || len(r.continueReplays) != 0 || len(r.continuationSources) != 0 {
+		t.Fatal("policy refusal reserved continuation")
+	}
+	if _, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SuccessorWorkerSessionID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("successor reserved: %v", err)
+	}
+}

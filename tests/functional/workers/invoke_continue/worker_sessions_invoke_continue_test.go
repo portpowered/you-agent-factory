@@ -415,9 +415,9 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	continuation.Input.Env = scenario.environment()
 	continuation.Input.WorkingDirectory = scenario.workingDirectory
 	if err := process.Execute(continuation.Input); err == nil {
-		t.Fatal("unsupported provider continuation succeeded, want one terminal failure")
+		t.Fatal("unsupported provider continuation succeeded, want preflight refusal")
 	}
-	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")
+	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
 	if got := scenario.providerRunner.CallCount(); got != 1 {
 		t.Fatalf("provider command calls after unsupported continuation = %d, want initial call only", got)
 	}

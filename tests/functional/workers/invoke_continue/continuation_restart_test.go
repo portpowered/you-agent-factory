@@ -576,4 +576,22 @@ func assertUnsupportedProviderInterrupt(t *testing.T, scenario *invokeContinueSc
 	stopNativeContinuationWorker(t, scenario, source, true)
 	assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", "")
 	assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
+	assertUnsupportedTerminalContinuation(t, scenario, runner, source, sibling, successor)
+}
+
+func assertUnsupportedTerminalContinuation(t *testing.T, scenario *invokeContinueScenario, runner *nativeContinuationRunner, source, sibling, successor string) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "continue", source,
+			"--request-id", scenarioScopedID(scenario, "continue"), "--successor-worker-session-id", successor,
+			"--user-message", "native follow-up", "--async"})
+		assertDirectWorkerSessionCLIError(t, request, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
+		assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", "")
+		assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
+		absent := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "show", "--worker-session-id", successor})
+		assertDirectWorkerSessionCLIError(t, absent, "WORKER_SESSION_NOT_FOUND")
+	}
+	if runner.CallCount() != 2 {
+		t.Fatalf("terminal policy refusal admitted provider: calls=%d", runner.CallCount())
+	}
 }

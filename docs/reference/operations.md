@@ -490,6 +490,11 @@ the write acknowledgement, exact committed readback can confirm that first
 request. Missing, corrupt, or mismatched readback prevents admission. Missing
 provider identity, unavailable execution input, or unsupported continuation
 also fails explicitly. A provider rejection never starts a fresh conversation.
+Before reserving a successor, the server checks configured provider policy and
+already negotiated continuation capability. Unsupported terminal continuation
+returns `WORKER_SESSION_PROVIDER_CONTINUATION_INVALID` without creating a
+successor. Exact retries of previously admitted requests retain their original
+outcome.
 
 To replace an active direct Worker Session, interrupt its admitted dispatch and
 provide a distinct successor identity and replacement input. The server first

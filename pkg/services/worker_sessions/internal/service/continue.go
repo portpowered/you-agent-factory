@@ -235,11 +235,31 @@ func (r *registry) reserveContinuation(
 	if err != nil {
 		return nil, false, err
 	}
+	if err := r.validateContinuationSupportLocked(snapshot.session.ProviderSessionAssociation.Reference); err != nil {
+		return nil, false, err
+	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
 	if archived != nil {
 		r.publications[req.SourceWorkerSessionID] = &publication{capture: archived.target}
 	}
 	return replay, true, nil
+}
+
+// Replays return their original result before this query. A new reservation
+// must use current policy and already negotiated facts before recording input
+// or opening a successor, including when the source came from durable capture.
+func (r *registry) validateContinuationSupportLocked(reference providers.SessionRef) error {
+	if r.continuationSupport == nil {
+		return nil
+	}
+	supported, err := r.continuationSupport.SupportsContinuation(controlContext(r.lifecycleCtx), reference)
+	if err != nil {
+		return fmt.Errorf("%w: %w", workersessions.ErrContinuationProviderSessionInvalid, err)
+	}
+	if !supported {
+		return workersessions.ErrContinuationProviderSessionInvalid
+	}
+	return nil
 }
 
 func (r *registry) snapshotContinuationSourceLocked(

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -79,7 +80,7 @@ func TestContinuationInputLostAcknowledgementRequiresExactReadback(t *testing.T)
 // cells prove reservation and refusal without an executor or application graph.
 func TestContinuationArchivedSourceReservation(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "incomplete", "wrong-scope", "wrong-attempt", "wrong-terminal", "missing-recipe", "unknown", "successor"} {
+	for _, cell := range []string{"captured", "incomplete", "wrong-scope", "wrong-attempt", "wrong-terminal", "missing-recipe", "unknown", "successor", "unsupported", "policy-error"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -94,6 +95,7 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 			r.logs = &LogReader{reader: reader}
 			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1"), reference: ref}
 			want := configureArchivedContinuationCell(cell, reader, store)
+			r.continuationSupport = archivedContinuationSupport(cell)
 			r.restart = &retainedContinuationStore{restartRecipeStore: *store, readErr: os.ErrNotExist}
 			replay, owner, err := r.reserveContinuation(req)
 			if want != nil {
@@ -111,6 +113,14 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func archivedContinuationSupport(cell string) *interruptContinuationSupportFake {
+	support := &interruptContinuationSupportFake{supported: cell != "unsupported"}
+	if cell == "policy-error" {
+		support.err = providers.ErrUnknownProvider
+	}
+	return support
 }
 
 func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
@@ -170,6 +180,8 @@ func configureCompletedContinuationEvidence(cell string, page *recordings.Worker
 
 func configureArchivedContinuationCell(cell string, reader *capturedActivityFake, store *restartRecipeStore) error {
 	switch cell {
+	case "unsupported", "policy-error":
+		return workersessions.ErrContinuationProviderSessionInvalid
 	case "captured":
 		return nil
 	case "incomplete":
