@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -305,6 +308,136 @@ func restartProbeInputs(t *testing.T, dir string) *support.CapturedInputs {
 }
 
 const restartProbeSecret = "private-snapshot-secret-marker"
+
+func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	home := t.TempDir()
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	repos := []string{t.TempDir(), t.TempDir()}
+	var before [2]factoryapi.Work
+	var references [2][]byte
+	var artifacts [2]string
+	for i, repo := range repos {
+		config := seededReplayResumeFactoryConfig()
+		types := config["workTypes"].([]map[string]any)
+		types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+		station := config["workstations"].([]map[string]any)[0]
+		station["type"] = "LOGICAL_MOVE"
+		delete(station, "worker")
+		if err := os.Rename(support.ScaffoldFactory(t, config), filepath.Join(repo, "factory")); err != nil {
+			t.Fatal(err)
+		}
+		support.WriteWorkstationConfig(t, filepath.Join(repo, "factory"), "process", "---\ntype: LOGICAL_MOVE\n---\n")
+		writeRestartProbeFile(t, filepath.Join(repo, "worktrees", "sentinel.txt"), []byte("untouched § —"))
+		command, url := startPlainBoardInRepository(t, process, repo, home, apis[i])
+		seedPlainBoardSiblingWork(t, url, repo)
+		before[i] = waitForPlainBoardWorkConfirmed(t, url)
+		restartProbeShutdown(t, url, command)
+		references[i] = mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json"))
+		var reference struct{ ArtifactReference string }
+		if err := json.Unmarshal(references[i], &reference); err != nil {
+			t.Fatal(err)
+		}
+		artifacts[i] = reference.ArtifactReference
+	}
+	// The first repository is now legacy; the more recently used sibling
+	// still shares its profile. Adoption must preserve the sibling's bytes.
+	siblingRecording := mustReadSeededReplayArtifact(t, artifacts[1])
+	if err := os.Remove(filepath.Join(repos[0], ".you-agent-factory", "current-board.json")); err != nil {
+		t.Fatal(err)
+	}
+	for i, repo := range repos {
+		command, url := startPlainBoardInRepository(t, process, repo, home, apis[i+2])
+		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
+		if len(works.Results) != 2 {
+			t.Fatalf("repository %d recovered %d Work, want two", i, len(works.Results))
+		}
+		after := support.GetDefaultSessionWorkByID(t, url, "same-id")
+		if !reflect.DeepEqual(before[i].Content, after.Content) || !reflect.DeepEqual(before[i].Tags, after.Tags) || !reflect.DeepEqual(before[i].WorkId, after.WorkId) || after.State == nil || after.State.Name != "waiting" {
+			t.Fatalf("repository recovered the wrong board: before=%#v after=%#v", before[i], after)
+		}
+		restartProbeShutdown(t, url, command)
+		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")); !bytes.Equal(got, references[i]) {
+			t.Fatal("repository selected a different recording")
+		}
+		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, "worktrees", "sentinel.txt")); !bytes.Equal(got, []byte("untouched § —")) {
+			t.Fatal("restart mutated a worktree sentinel")
+		}
+		if i == 0 && !bytes.Equal(mustReadSeededReplayArtifact(t, artifacts[1]), siblingRecording) {
+			t.Fatal("legacy adoption mutated the sibling recording")
+		}
+	}
+	if runner.calls.Load() != 0 {
+		t.Fatal("waiting sibling Work dispatched a provider or process mutation")
+	}
+}
+
+func seedPlainBoardSiblingWork(t *testing.T, url, repo string) {
+	t.Helper()
+	// Deliberately reuse the Work ID: repository scope, rather than ID or
+	// profile recency, must disambiguate these two confirmed boards.
+	batch, err := json.Marshal(map[string]any{"requestId": "sibling-board", "type": "FACTORY_REQUEST_BATCH", "works": []map[string]any{
+		{"workId": "same-id", "name": "same-id", "workTypeName": "task", "state": "waiting", "payload": repo + " § —", "tags": map[string]string{"repo": repo}},
+		{"workId": "anchor", "name": "anchor", "workTypeName": "task", "state": "init", "payload": "durable snapshot anchor"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putPlainBoardBatch(t, url, "sibling-board", batch)
+}
+
+func putPlainBoardBatch(t *testing.T, url, requestID string, batch []byte) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url+"/factory-sessions/~default/work-requests/"+requestID, bytes.NewReader(batch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		t.Fatalf("sibling batch admission returned %d", response.StatusCode)
+	}
+}
+
+func startPlainBoardInRepository(t *testing.T, process support.Process, repo, home string, api *support.ProcessAPIServer) (*support.ProcessCommand, string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = repo
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	return command, restartProbeReadyURL(t, api, command)
+}
+
+func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {
+	t.Helper()
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.TotalTokens == 2 && status.Categories.Terminal == 1
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	for ctx.Err() == nil {
+		work := support.GetDefaultSessionWorkByID(t, url, "same-id")
+		if work.ConfirmationState != nil && *work.ConfirmationState == factoryapi.CONFIRMED {
+			return work
+		}
+	}
+	t.Fatal("sibling Work did not become CONFIRMED")
+	return factoryapi.Work{}
+}
 
 type restartProbeFiles struct {
 	corruptRoot   string
