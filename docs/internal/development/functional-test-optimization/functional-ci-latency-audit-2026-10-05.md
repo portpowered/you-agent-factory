@@ -5210,3 +5210,46 @@ Factory jobs remain active at preparation time; do not call this workflow
 fully green. This changed-base run is not two-minute checkpoint evidence.
 The larger-cache candidate requires fresh hosted verification; local build-only
 savings exclude hosted transfer cost and do not establish the merge checkpoint.
+
+
+### October 6: reuse the owned CLI/REST parity fixture
+
+Main advances to f1516fc7d2 with architecture visualization documentation only.
+The branch rebases cleanly, preserving a pre-rebase backup. Hosted run
+37503527863 is subsequently terminal/cancelled; its completed passing functional
+job remains useful timing evidence, but the workflow is not fully green.
+The 2 GiB cache trial 37504542537 remains queued while this batch is prepared.
+
+Five CLI/REST primary-outcome parity cases previously gave each CLI invocation
+an uninitialized home and newly constructed process, despite their parent
+owning an initialized isolated root. They now reuse that owned home/model cache
+and process, with a unique explicit Factory Session for every CLI invocation.
+The separately materialized named-Factory home and server homes stay distinct.
+Each case retains its Factory directory and its positional/stdin/named, empty,
+conflicting-source or unresolved-output behavior and public parity assertions.
+Cleanup removes only a child-owned home; the parent's owned home survives
+until the parent's process and all parallel children finish. No test, timeout
+or retry allowance changes.
+
+Build-excluded four-CPU B/C/C/B comparisons all pass. Three complete parity-group
+repetitions per run, twice per side, consume 11.524597 CPU-seconds / 12.528129s
+wall on baseline versus 7.591057 / 11.117733 on candidate: 34.1% less CPU and
+11.3% less wall. Whole customer_lifecycles package totals are 73.034523 /
+42.926787 versus 72.395691 / 42.843807, a nearly unchanged package result.
+Do not claim a material whole-lane improvement from that difference. Evidence:
+parity-home-paired/. Three complete native Windows parity-group repetitions
+pass in 19.394s, and both scoped linters pass. The native first compile attempt
+exposed a newly unused import; it is removed before those passing results.
+The full consolidated candidate lane remains to be measured on the live base.
+
+The consolidated candidate passes on f1516fc7d2 in 91.25s supervisor / 87.639s
+capture, using 253.63 CPU-seconds (193.41 user, 60.22 system). All 67 packages /
+765 results finish: 763 pass, two skip, a complete empty raw-failure index and
+no retry ledger. Two compiler commands consume 3.640080 CPU-seconds / 3.502894s
+active wall; 15 links consume 19.025817 CPU-seconds / 12.915302s active wall.
+Evidence: parity-home-live-full/. This is warmer verification, not a controlled
+whole-lane speedup claim. Source is e84d14dd14 plus the three parity fixture
+files; the private raw-index Git identity is stale. Main subsequently advances
+to a1f5c7a63c with confirmed-board restart recovery and new functional scenarios.
+This full result precedes that runtime change; rebase and verification on the
+new live base are required before pushing the batch.

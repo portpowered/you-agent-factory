@@ -215,7 +215,7 @@ func runPackagedOutcomeParityCase1(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		goalText,
 	)
@@ -247,7 +247,7 @@ func runPackagedOutcomeParityCase2(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		strings.NewReader(goalText),
 	)
 	if err != nil {
@@ -309,7 +309,7 @@ func runPackagedOutcomeParityCase4(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		"   ",
 	)
@@ -334,7 +334,7 @@ func runPackagedOutcomeParityCase5(t *testing.T) {
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		strings.NewReader("from stdin"),
 		"from positional",
 	)
@@ -383,7 +383,7 @@ func runPackagedOutcomeParityCase6(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		goalText,
 	)

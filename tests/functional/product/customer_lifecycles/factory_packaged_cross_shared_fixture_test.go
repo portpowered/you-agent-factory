@@ -25,6 +25,7 @@ const crossSharedFixtureShutdownTimeout = 15 * time.Second
 // servers; Factory Session state remains scoped to each explicit session.
 type crossSharedProcessFixture struct {
 	rootDir    string
+	homeDir    string
 	factoryDir string
 	process    support.ApplicationProcess
 	router     *crossAPIServerRouter
@@ -140,7 +141,7 @@ func startCrossSharedProcessFixture() (*crossSharedProcessFixture, error) {
 	}
 
 	return &crossSharedProcessFixture{
-		rootDir: rootDir, factoryDir: factoryDir, process: process, router: router,
+		rootDir: rootDir, homeDir: homeDir, factoryDir: factoryDir, process: process, router: router,
 	}, nil
 }
 
