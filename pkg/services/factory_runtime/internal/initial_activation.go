@@ -6,13 +6,12 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 // InitialAssembly is the bounded initial-opening behavior; scheduler and replay
-// hook capabilities stay on the private compatibility assembly.
+// hook capabilities stay on the private assembly.
 type InitialAssembly interface {
 	AssembleInitial(context.Context, factoryruntime.RuntimeActivationRequest,
 		factorydefinitions.MutableLoadedFactorySource, factoryruntime.Clock, *zap.Logger,
@@ -53,41 +52,6 @@ func (a *InitialActivation) Open(ctx context.Context, request factoryruntime.Run
 		}
 	}
 	return a.assembly.AssembleInitial(ctx, request, loaded, a.clock, a.logger, observations)
-}
-
-// AssembleInitial derives only scoped selections from the initial value request.
-func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.RuntimeActivationRequest,
-	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
-	observations factoryruntime.SessionObservations,
-) (*factoryruntime.RuntimeInitialOpening, error) {
-	recovery := request.Inputs.RecoveryInput
-	if clock == nil && recovery.ReplayArtifact != nil {
-		clock = a.recordingsRuntime.ReplayClock(recovery.ReplayArtifact)
-	}
-	var resumeInput *recordings.LoadResumeInputResult
-	if request.Inputs.Recordings.ResumePath != "" {
-		resumeInput = &request.Inputs.ResumeInput
-	}
-	metricsID := request.Inputs.Session.CanonicalSessionID
-	if metricsID == "" {
-		metricsID = request.FactorySessionID
-	}
-	// Sessions normalizes Definition.Directory to the opening workspace root.
-	// Snapshot.FactoryDir identifies the loaded definition, which may be nested.
-	return a.Assemble(ctx,
-		request.Inputs.OperatorDefaults.WorkerModelProvider, request.Inputs.OperatorDefaults.WorkerModel, recovery.ReplayArtifact == nil && !recovery.CheckpointContinuation,
-		request.Inputs.Recordings.RecordPath, request.Inputs.Recordings.WorkflowID,
-		request.FactorySessionID, metricsID, activationMockWorkers(request.Inputs.Workers.MockWorkers),
-		request.Runtime.Mode, nil, false,
-		request.Runtime.LogDirectory, request.Runtime.LogConfig, request.Runtime.FileLoggingPolicy,
-		request.Runtime.MetricsPolicy, request.Runtime.MetricsDirectory, request.Runtime.MetricsConfig,
-		request.Inputs.Recordings.FlushInterval, request.Inputs.Session.BackendScopeID,
-		request.Inputs.Workers.RunnerID, request.Runtime.Verbose,
-		request.Inputs.Workers.SkipBuiltInPrerequisiteValidation, request.Inputs.Workers.InvocationSkipPermissionsOverride,
-		clock, logger, !recovery.CheckpointContinuation, observations,
-		request.Inputs.Definition.Directory, request.Inputs.Definition.Directory, request.Inputs.Definition.ExecutionBaseDir,
-		loaded, request.RuntimeID, recovery.ReplayArtifact, resumeInput, recovery.WorldState, recovery.EventHistory,
-		request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation)
 }
 
 func cloneInt64Pointer(value *int64) *int64 {

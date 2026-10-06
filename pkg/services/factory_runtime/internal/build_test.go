@@ -467,7 +467,7 @@ func assembleTestRuntimeRecord(
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
 ) (factory.RuntimeReplacementBuilder, factory.RuntimeRecord, factory.RuntimeInitialCompletion, error) {
-	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request, nil)
+	opening, err := assembleTestInitialOpening(ctx, assembly, dir, loaded, clock, request)
 	if opening == nil {
 		return nil, nil, factory.RuntimeInitialCompletion{}, err
 	}
@@ -478,53 +478,19 @@ func assembleTestInitialOpening(
 	ctx context.Context, assembly *factoryinternal.Assembly, dir string,
 	loaded interfaces.MutableLoadedFactorySource,
 	clock factory.Clock, request factory.RuntimeActivationRequest,
-	mockWorkers *workers.MockWorkersConfig,
 	observations ...factory.SessionObservations,
 ) (*factory.RuntimeInitialOpening, error) {
 	var observe factory.SessionObservations
 	if len(observations) > 0 {
 		observe = observations[0]
 	}
-	return assembly.Assemble(
-		ctx,
-		"",
-		"",
-		false,
-		"recording.json",
-		"",
-		request.FactorySessionID,
-		request.FactorySessionID,
-		mockWorkers,
-		interfaces.RuntimeModeBatch,
-		nil,
-		false,
-		"",
-		factory.RuntimeLogStorageConfig{},
-		factory.RuntimeFileLoggingPolicyDisabled,
-		factory.RuntimeMetricsPolicyDisabled,
-		"",
-		factory.RuntimeMetricsStorageConfig{},
-		0,
-		"",
-		"",
-		false,
-		false,
-		nil,
-		clock,
-		zap.NewNop(),
-		true,
-		observe,
-		dir,
-		dir,
-		dir,
-		loaded,
-		request.RuntimeID,
-		nil,
-		nil,
-		nil,
-		nil,
-		false,
-	)
+	request.Inputs.Definition.Directory = dir
+	request.Inputs.Definition.ExecutionBaseDir = dir
+	request.Inputs.Recordings.RecordPath = "recording.json"
+	request.Runtime.Mode = interfaces.RuntimeModeBatch
+	request.Runtime.FileLoggingPolicy = factory.RuntimeFileLoggingPolicyDisabled
+	request.Runtime.MetricsPolicy = factory.RuntimeMetricsPolicyDisabled
+	return assembly.AssembleInitial(ctx, request, loaded, clock, zap.NewNop(), observe)
 }
 
 func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) {

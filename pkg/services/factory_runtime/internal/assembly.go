@@ -33,7 +33,7 @@ type Assembly struct {
 	completionFactory func(string) func(string)
 }
 
-// NewAssembly constructs the inert compatibility assembly selected by Wire.
+// NewAssembly constructs the inert assembly selected by Wire.
 // Opening and replacement consume fixed process behavior. Only invocation
 // selections and scoped resources are allocated when a session opens.
 func NewAssembly(
@@ -61,141 +61,53 @@ func NewAssembly(
 	}, nil
 }
 
-// Assemble creates one session-owned runtime from invocation values and the
-// product-policy dependencies already selected by Wire.
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-func (a *Assembly) Assemble(
-	ctx context.Context,
-	defaultWorkerModelProvider string,
-	defaultWorkerModel string,
-	applyOperatorDefaults bool,
-	recordPath string,
-	workflowID string,
-	defaultSessionID string,
-	metricsSessionID string,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	runtimeMode factorydefinitions.RuntimeMode,
-	runtimeScheduler factoryruntime.Scheduler,
-	inlineDispatch bool,
-	runtimeLogDir string,
-	runtimeLogConfig factoryruntime.RuntimeLogStorageConfig,
-	runtimeFileLoggingPolicy factoryruntime.RuntimeFileLoggingPolicy,
-	runtimeMetricsPolicy factoryruntime.RuntimeMetricsPolicy,
-	runtimeMetricsDir string,
-	runtimeMetricsConfig factoryruntime.RuntimeMetricsStorageConfig,
-	recordFlushInterval time.Duration,
-	backendScopeID string,
-	factoryRunnerID string,
-	verbose bool,
-	skipBuiltInPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	clock factoryruntime.Clock,
-	baseLogger *zap.Logger,
-	publishRuntimeStreams bool,
+// AssembleInitial derives only scoped selections from the initial value request.
+func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.RuntimeActivationRequest,
+	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
 	observations factoryruntime.SessionObservations,
-	dir string,
-	factoryRootDir string,
-	executionBaseDir string,
-	loadedFactory factorydefinitions.MutableLoadedFactorySource,
-	runtimeInstanceID string,
-	replayArtifact *factorydefinitions.ReplayArtifact,
-	resumeInput *recordings.LoadResumeInputResult,
-	restoredWorldState *factorydefinitions.FactoryWorldState,
-	restoredEventHistory []factorydefinitions.FactoryEvent,
-	serviceMode bool,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
-	if a == nil || a.bundleOpening == nil {
-		return nil,
-			fmt.Errorf("Factory Runtime assembly service is required")
+	recovery := request.Inputs.RecoveryInput
+	if clock == nil && recovery.ReplayArtifact != nil {
+		clock = a.recordingsRuntime.ReplayClock(recovery.ReplayArtifact)
 	}
+	mockWorkersConfig := activationMockWorkers(request.Inputs.Workers.MockWorkers)
+	publishRuntimeStreams := !recovery.CheckpointContinuation
 	var petriMutationRecorder factoryruntime.PetriMutationRecorder
 	if observations != nil {
 		petriMutationRecorder = observations.RecordPetriTokenMutations
 	}
-	// Replay hooks consume the same detached event history as world-state
-	// reconstruction. A successor recording can legitimately reset its local
-	// logical clock, but the replay engine must observe that history in one
-	// monotonic generation order. Keep spec.ReplayEvents raw below so the
-	// read-only canonical ledger remains byte-equivalent to the source.
-	replayExecutionArtifact := normalizedReplayArtifactForExecution(replayArtifact)
-	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := a.recordingsRuntime.ReplayExecution(
-		replayExecutionArtifact,
-	)
+	spec, err := a.prepareInitialOpening(ctx, request, loaded, clock, logger, petriMutationRecorder, mockWorkersConfig)
 	if err != nil {
-		return nil, err
-	}
-	// Recordings owns replay as a platform process effect. Factory Runtime keeps
-	// that low-level effect at the composition boundary and Workers adapts it
-	// privately when Execute receives the runtime-scoped override.
-	replayCommandRunner := replayProcessRunner
-	spec, err := a.prepareOpeningSpec(ctx,
-		runtimebuild.BuildDefaults{
-			WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-			ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
-		},
-		runtimebuild.SessionBuildValues{
-			Dir: dir, FolderPath: factoryRootDir, SessionID: defaultSessionID,
-			ExecutionBaseDir: executionBaseDir, LoadedFactoryCfg: loadedFactory,
-			RuntimeInstanceID: runtimeInstanceID, PreserveCompatibilityDefaultRecordPath: true,
-		},
-		factoryruntime.SessionBuildSpec{
-			BaseLogger: baseLogger, Clock: clock, ProviderOverride: replayProvider,
-			ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
-			CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
-		},
-		mockWorkersConfig)
-	if err != nil {
-		return nil, err
-	}
-	spec.MetricsSessionID = firstNonEmptySessionID(metricsSessionID, defaultSessionID)
-	if resumeInput != nil {
-		spec.ResumeSourceCanonicalSessionID = strings.TrimSpace(resumeInput.SourceCanonicalSessionID)
-	}
-	if _, ok := replayProvider.(interface {
-		InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
-	}); ok {
-		spec.ModelInvocationOverride = replayProvider
-	}
-	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
-	if err := a.configureRestoredWorldState(
-		&spec,
-		replayArtifact,
-		resumeInput,
-		restoredWorldState,
-		restoredEventHistory,
-		a.recordingsRuntime,
-	); err != nil {
 		return nil, err
 	}
 	// The callback retains this session's selections, not a secondary service
 	// graph. Both initial and replacement resources use the fixed opening owner.
 	open := func(ctx context.Context, spec factoryruntime.SessionBuildSpec) (factoryruntime.RuntimeRecord, error) {
-		progressPublisher := a.sessionProgressPublisher(spec.SessionID, baseLogger, publishRuntimeStreams, observations)
+		progressPublisher := a.sessionProgressPublisher(spec.SessionID, logger, publishRuntimeStreams, observations)
 		var dispatchCompleted func(string)
 		if publishRuntimeStreams && a.completionFactory != nil {
 			dispatchCompleted = a.completionFactory(spec.SessionID)
 		}
 		return a.bundleOpening(
-			ctx, spec, runtimeLogDir, runtimeLogConfig, runtimeFileLoggingPolicy,
-			runtimeMetricsPolicy, runtimeMetricsDir, runtimeMetricsConfig, recordFlushInterval,
-			defaultSessionID, runtimeMode, runtimeScheduler, inlineDispatch,
-			backendScopeID, factoryRunnerID, verbose,
-			skipBuiltInPrerequisiteValidation, invocationSkipPermissionsOverride, mockWorkersConfig,
+			ctx, spec, request.Runtime.LogDirectory, request.Runtime.LogConfig, request.Runtime.FileLoggingPolicy,
+			request.Runtime.MetricsPolicy, request.Runtime.MetricsDirectory, request.Runtime.MetricsConfig, request.Inputs.Recordings.FlushInterval,
+			request.FactorySessionID, request.Runtime.Mode, nil, false,
+			request.Inputs.Session.BackendScopeID, request.Inputs.Workers.RunnerID, request.Runtime.Verbose,
+			request.Inputs.Workers.SkipBuiltInPrerequisiteValidation, request.Inputs.Workers.InvocationSkipPermissionsOverride, mockWorkersConfig,
 			progressPublisher, dispatchCompleted,
 		)
 	}
 	builder := runtimeReplacementOperation(func(ctx context.Context, folderPath, factoryDir, sessionID, executionBaseDir string) (factoryruntime.RuntimeRecord, error) {
 		replacementSpec, err := a.prepareOpeningSpec(ctx,
 			runtimebuild.BuildDefaults{
-				WorkerModelProvider: defaultWorkerModelProvider, WorkerModel: defaultWorkerModel,
-				ApplyOperatorDefaults: applyOperatorDefaults, RecordPath: recordPath, WorkflowID: workflowID,
+				WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider, WorkerModel: request.Inputs.OperatorDefaults.WorkerModel,
+				ApplyOperatorDefaults: recovery.ReplayArtifact == nil && !recovery.CheckpointContinuation, RecordPath: request.Inputs.Recordings.RecordPath, WorkflowID: request.Inputs.Recordings.WorkflowID,
 			},
 			runtimebuild.SessionBuildValues{
 				Dir: factoryDir, FolderPath: folderPath, SessionID: sessionID, ExecutionBaseDir: executionBaseDir,
 			},
 			factoryruntime.SessionBuildSpec{
-				Clock: clock, BaseLogger: baseLogger, PetriMutationRecorder: petriMutationRecorder,
+				Clock: clock, BaseLogger: logger, PetriMutationRecorder: petriMutationRecorder,
 			},
 			mockWorkersConfig)
 		if err != nil {
@@ -210,8 +122,82 @@ func (a *Assembly) Assemble(
 	}
 	attachInvocationScheduleFactory(ctx, a.automationService, instance)
 	result.Lifecycle = a.instanceHost.Scope(clock)
-	result.Sidecars = a.sidecars.Scope(serviceMode)
+	result.Sidecars = a.sidecars.Scope(request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation)
 	return result, nil
+}
+
+// prepareInitialOpening preserves detached replay history and initial invocation paths.
+func (a *Assembly) prepareInitialOpening(ctx context.Context, request factoryruntime.RuntimeActivationRequest,
+	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
+	petriMutationRecorder factoryruntime.PetriMutationRecorder, mockWorkersConfig *workers.MockWorkersConfig,
+) (factoryruntime.SessionBuildSpec, error) {
+	recovery := request.Inputs.RecoveryInput
+	var resumeInput *recordings.LoadResumeInputResult
+	if request.Inputs.Recordings.ResumePath != "" {
+		resumeInput = &request.Inputs.ResumeInput
+	}
+	metricsID := request.Inputs.Session.CanonicalSessionID
+	if metricsID == "" {
+		metricsID = request.FactorySessionID
+	}
+	// Replay hooks consume the same detached event history as world-state
+	// reconstruction. A successor recording can legitimately reset its local
+	// logical clock, but the replay engine must observe that history in one
+	// monotonic generation order. Keep spec.ReplayEvents raw below so the
+	// read-only canonical ledger remains byte-equivalent to the source.
+	replayExecutionArtifact := normalizedReplayArtifactForExecution(recovery.ReplayArtifact)
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := a.recordingsRuntime.ReplayExecution(
+		replayExecutionArtifact,
+	)
+	if err != nil {
+		return factoryruntime.SessionBuildSpec{}, err
+	}
+	// Recordings owns replay as a platform process effect. Factory Runtime keeps
+	// that low-level effect at the composition boundary and Workers adapts it
+	// privately when Execute receives the runtime-scoped override.
+	replayCommandRunner := replayProcessRunner
+	spec, err := a.prepareOpeningSpec(ctx,
+		runtimebuild.BuildDefaults{
+			WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider, WorkerModel: request.Inputs.OperatorDefaults.WorkerModel,
+			ApplyOperatorDefaults: recovery.ReplayArtifact == nil && !recovery.CheckpointContinuation, RecordPath: request.Inputs.Recordings.RecordPath, WorkflowID: request.Inputs.Recordings.WorkflowID,
+		},
+		runtimebuild.SessionBuildValues{
+			Dir: request.Inputs.Definition.Directory, FolderPath: request.Inputs.Definition.Directory, SessionID: request.FactorySessionID,
+			ExecutionBaseDir: request.Inputs.Definition.ExecutionBaseDir, LoadedFactoryCfg: loaded,
+			RuntimeInstanceID: request.RuntimeID,
+		},
+		factoryruntime.SessionBuildSpec{
+			BaseLogger: logger, Clock: clock, ProviderOverride: replayProvider,
+			ReplayCommandRunner: replayCommandRunner, SubmissionHooks: replayhooks.Adapt(replayHooks),
+			CompletionPlanner: completionPlanner, PetriMutationRecorder: petriMutationRecorder,
+		},
+		mockWorkersConfig)
+	if err != nil {
+		return factoryruntime.SessionBuildSpec{}, err
+	}
+	// Initial recording paths retain the invocation selection; replacements are session-scoped.
+	spec.RecordPath = runtimebuild.SessionScopedRecordPath(request.Inputs.Recordings.RecordPath, "~default")
+	spec.MetricsSessionID = firstNonEmptySessionID(metricsID, request.FactorySessionID)
+	if resumeInput != nil {
+		spec.ResumeSourceCanonicalSessionID = strings.TrimSpace(resumeInput.SourceCanonicalSessionID)
+	}
+	if _, ok := replayProvider.(interface {
+		InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
+	}); ok {
+		spec.ModelInvocationOverride = replayProvider
+	}
+	spec.ReplayEvents = cloneReplayArtifactEvents(recovery.ReplayArtifact)
+	if err := a.configureRestoredWorldState(
+		&spec,
+		recovery.ReplayArtifact,
+		resumeInput,
+		recovery.WorldState,
+		recovery.EventHistory,
+		a.recordingsRuntime,
+	); err != nil {
+		return factoryruntime.SessionBuildSpec{}, err
+	}
+	return spec, nil
 }
 
 // sessionProgressPublisher retains only the addressed opening's observations.
