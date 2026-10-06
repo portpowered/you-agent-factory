@@ -1,6 +1,8 @@
 package runtimepersist_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -14,6 +16,169 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 )
+
+type boardReferenceFiles struct {
+	data                  []byte
+	readErr, writeErr     error
+	afterRead             func()
+	reads, writes, mkdirs int
+	path                  string
+	mode                  fs.FileMode
+}
+
+func (files *boardReferenceFiles) MkdirAll(string, fs.FileMode) error {
+	files.mkdirs++
+	return nil
+}
+
+func (files *boardReferenceFiles) ReadFile(path string) ([]byte, error) {
+	files.reads++
+	files.path = path
+	if files.afterRead != nil {
+		files.afterRead()
+	}
+	return append([]byte(nil), files.data...), files.readErr
+}
+
+func (files *boardReferenceFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	files.writes++
+	if files.writeErr != nil {
+		return files.writeErr
+	}
+	files.path, files.mode = path, mode
+	files.data = append([]byte(nil), data...)
+	return nil
+}
+
+func newBoardReferenceStore(t *testing.T, files *boardReferenceFiles) (runtimepersist.CurrentBoardStore, string) {
+	t.Helper()
+	root := t.TempDir()
+	store, err := runtimepersist.NewLazyProjectStore(root, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.(runtimepersist.CurrentBoardStore), root
+}
+
+func TestCurrentBoardReferenceRoundTripAndScope(t *testing.T) {
+	t.Parallel()
+	files := &boardReferenceFiles{readErr: fs.ErrNotExist}
+	store, root := newBoardReferenceStore(t, files)
+	factory := filepath.Join(root, "factory")
+	artifact := filepath.Join(t.TempDir(), "recording-§-—.json")
+	path, err := store.LoadCurrentBoard(t.Context(), factory)
+	if err != nil || path != "" || files.writes != 0 || files.mkdirs != 0 {
+		t.Fatalf("absent reference = %q/%v; writes=%d mkdirs=%d", path, err, files.writes, files.mkdirs)
+	}
+	if err := store.SaveCurrentBoard(t.Context(), factory, artifact); err != nil {
+		t.Fatal(err)
+	}
+	if files.path != filepath.Join(root, ".you-agent-factory", "current-board.json") || files.mode != 0o600 {
+		t.Fatalf("reference path/mode = %s/%o", files.path, files.mode)
+	}
+	files.readErr = nil
+	path, err = store.LoadCurrentBoard(t.Context(), filepath.Join(factory, "."))
+	if err != nil || path != artifact {
+		t.Fatalf("round trip = %q/%v", path, err)
+	}
+	prior := append([]byte(nil), files.data...)
+	if _, err := store.LoadCurrentBoard(t.Context(), filepath.Join(root, "sibling", "factory")); err == nil {
+		t.Fatal("foreign Factory reference was accepted")
+	}
+	if !bytes.Equal(prior, files.data) || files.writes != 1 {
+		t.Fatal("read rewrote the reference")
+	}
+}
+
+func TestCurrentBoardReferenceRejectsInvalidContractWithoutWriting(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"duplicate", "unknown", "case", "null", "missing", "version", "session", "relative", "remote", "trailing", "malformed"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := &boardReferenceFiles{}
+			store, root := newBoardReferenceStore(t, files)
+			factory := filepath.Join(root, "factory")
+			if err := store.SaveCurrentBoard(t.Context(), factory, filepath.Join(root, "recording.json")); err != nil {
+				t.Fatal(err)
+			}
+			data := string(files.data)
+			switch name {
+			case "duplicate":
+				data = strings.TrimSuffix(data, "}") + `,"schemaVersion":"secret"}`
+			case "unknown":
+				data = strings.TrimSuffix(data, "}") + `,"secret":"private"}`
+			case "case":
+				data = strings.Replace(data, `"schemaVersion"`, `"SchemaVersion"`, 1)
+			case "null":
+				data = strings.Replace(data, `"factory-sessions.current-board.v1"`, `null`, 1)
+			case "missing":
+				data = `{}`
+			case "version":
+				data = strings.Replace(data, "current-board.v1", "current-board.secret", 1)
+			case "session":
+				data = strings.Replace(data, "~default", "foreign-secret", 1)
+			case "relative", "remote":
+				var fields map[string]any
+				if err := json.Unmarshal(files.data, &fields); err != nil {
+					t.Fatal(err)
+				}
+				fields["artifactReference"] = "secret.json"
+				if name == "remote" {
+					fields["artifactReference"] = "https://secret.example/board.json"
+				}
+				encoded, err := json.Marshal(fields)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = string(encoded)
+			case "trailing":
+				data += ` {"secret":true}`
+			case "malformed":
+				data = `{"secret":`
+			}
+			files.data = []byte(data)
+			path, err := store.LoadCurrentBoard(t.Context(), factory)
+			if err == nil || path != "" || files.writes != 1 || string(files.data) != data {
+				t.Fatalf("invalid reference = %q/%v; writes=%d", path, err, files.writes)
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Fatalf("validation leaked contents: %v", err)
+			}
+		})
+	}
+}
+
+func TestCurrentBoardReferenceCancellationAndWriteFailure(t *testing.T) {
+	t.Parallel()
+	files := &boardReferenceFiles{}
+	store, root := newBoardReferenceStore(t, files)
+	factory, artifact := filepath.Join(root, "factory"), filepath.Join(root, "recording.json")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := store.LoadCurrentBoard(ctx, factory); !errors.Is(err, context.Canceled) || files.reads != 0 {
+		t.Fatalf("canceled read = %v", err)
+	}
+	if err := store.SaveCurrentBoard(ctx, factory, artifact); !errors.Is(err, context.Canceled) || files.writes != 0 {
+		t.Fatalf("canceled write = %v", err)
+	}
+	if err := store.SaveCurrentBoard(t.Context(), factory, artifact); err != nil {
+		t.Fatal(err)
+	}
+	prior := append([]byte(nil), files.data...)
+	ctx, cancel = context.WithCancel(t.Context())
+	defer cancel()
+	files.afterRead = cancel
+	if _, err := store.LoadCurrentBoard(ctx, factory); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel during read = %v", err)
+	}
+	fault := errors.New("credential=secret")
+	files.writeErr = fault
+	err := store.SaveCurrentBoard(t.Context(), factory, filepath.Join(root, "successor.json"))
+	var diagnostic interface{ CLIErrorMessage() string }
+	if !errors.Is(err, fault) || !errors.As(err, &diagnostic) || strings.Contains(diagnostic.CLIErrorMessage(), "secret") || !bytes.Equal(prior, files.data) {
+		t.Fatalf("failed replacement lost prior bytes/cause/safe message: %v", err)
+	}
+}
 
 type failingFileSystem struct {
 	mkdirErr error

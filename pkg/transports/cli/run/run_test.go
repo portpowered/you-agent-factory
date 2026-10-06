@@ -421,6 +421,37 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 	}
 }
 
+func TestPrepareRunConfigSelectsOnlyImplicitContinuousDefaultBoard(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		config RunConfig
+		want   bool
+	}{
+		{"continuous server", RunConfig{Continuously: true, Port: 7437}, true},
+		{"batch", RunConfig{Port: 7437}, false},
+		{"no server", RunConfig{Continuously: true}, false},
+		{"explicit record", RunConfig{Continuously: true, Port: 7437, RecordPath: "selected.json"}, false},
+		{"resume", RunConfig{Continuously: true, Port: 7437, ResumePath: "selected.json"}, false},
+		{"replay", RunConfig{Continuously: true, Port: 7437, ReplayPath: "selected.json"}, false},
+		{"no record", RunConfig{Continuously: true, Port: 7437, DisableDefaultRecording: true}, false},
+		{"peer session", RunConfig{Continuously: true, Port: 7437, FactorySessionID: "peer-session"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := ensureTestRecordingsCLI(test.config)
+			cfg.HomeDir = t.TempDir()
+			cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				return recordings.LiveRecordingTarget{ServicePath: "automatic.json", ReportedPath: "automatic.json"}, nil
+			})
+			prepared, _, _, _, err := prepareRunConfig(cfg, nil)
+			if err != nil || prepared.ImplicitCurrentBoard != test.want {
+				t.Fatalf("implicit board selection = %v/%v, want %v", prepared.ImplicitCurrentBoard, err, test.want)
+			}
+		})
+	}
+}
+
 func recordOrReplayPathCases() []recordOrReplayPathCase {
 	return []recordOrReplayPathCase{
 		{

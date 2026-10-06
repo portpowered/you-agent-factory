@@ -28,10 +28,19 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	types := config["workTypes"].([]map[string]any)
 	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
 	boardDir := support.ScaffoldFactory(t, config)
+	implicitDir := support.ScaffoldFactory(t, config)
+	implicitRepo := t.TempDir()
+	implicitFactory := filepath.Join(implicitRepo, "factory")
+	if err := os.Rename(implicitDir, implicitFactory); err != nil {
+		t.Fatal(err)
+	}
+	implicitDir = implicitFactory
+	support.WriteAgentConfig(t, implicitDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	support.WriteWorkstationConfig(t, implicitDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	support.WriteAgentConfig(t, boardDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
-	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
@@ -40,7 +49,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		ProviderCommandRunner:                      runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			starts.Add(1)
-			if request.Port == 23101 || request.Port == 23102 {
+			if request.Port >= 23101 && request.Port <= 23104 {
 				return boardAPIs[request.Port-23101].Start(ctx, request)
 			}
 			return api.Start(ctx, request)
@@ -52,6 +61,28 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("F1 F2 graceful DAG restart", func(t *testing.T) {
 		testRestartProbeDAG(t, process, boardDir, boardAPIs, runner)
 	})
+	t.Run("PlainBoard graceful DAG restart without selector", func(t *testing.T) {
+		// Both journeys exercise local ~default ownership, so run this smallest
+		// cohort in order before the independent parallel projects below.
+		runner.calls.Store(0)
+		home := t.TempDir()
+		invocations := 0
+		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+			if invocations > 0 {
+				if _, err := os.Stat(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json")); err != nil {
+					t.Fatalf("implicit opening did not publish its repository reference: %v", err)
+				}
+			}
+			invocations++
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--continuously", "--with-server", "--quiet",
+				"--provider", "CODEX", "--model", "gpt-5-codex",
+			})
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = implicitRepo
+			return inputs
+		}, 23103)
+	})
 
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
 		t.Parallel()
@@ -62,8 +93,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 3 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want three and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 5 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want five and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }

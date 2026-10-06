@@ -91,6 +91,7 @@ type sessionRuntimeOpening struct {
 	restoredWorldState          *factorydefinitions.FactoryWorldState
 	restoredEventHistory        []factorydefinitions.FactoryEvent
 	boardHistoryOpening         currentBoardHistoryOpening
+	hasCurrentBoardReference    bool
 	initial                     *factoryruntime.RuntimeInitialOpening
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
@@ -314,6 +315,9 @@ func (opening *sessionRuntimeOpening) bindSessionObservations() error {
 
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
+	if err := opening.selectCurrentBoardReference(ctx); err != nil {
+		return err
+	}
 	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
 		input := opening.configured.Recordings.ResumeInput
 		opening.resumeInput = &input
@@ -323,7 +327,8 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
 	canonicalSessionIDWasProvided := opening.providedCanonicalSessionID != "" && !opening.canonicalSessionIDGenerated
-	if opening.load.ReplayArtifact == nil && opening.resumeInput == nil && !canonicalSessionIDWasProvided {
+	if opening.load.ReplayArtifact == nil && opening.resumeInput == nil &&
+		(!canonicalSessionIDWasProvided || opening.hasCurrentBoardReference) {
 		if strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" {
 			opening.boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
@@ -339,7 +344,7 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 			r.recordingsService,
 			opening.configured.Recordings.RecordPath,
 			opening.sessionID,
-			opening.boardHistoryOpening.allowMissingHistory,
+			opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
 		)
 		if err != nil {
 			logCurrentBoardHistoryFailure(
@@ -387,6 +392,9 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.initial.Completion = opening.completion
+	if err := opening.publishCurrentBoardReference(ctx); err != nil {
+		return err
+	}
 	opening.warnMissingBoardHistory()
 	return nil
 }

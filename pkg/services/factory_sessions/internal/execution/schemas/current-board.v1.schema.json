@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repository current board recording reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "factoryDirectory", "factorySessionId", "artifactReference"],
+  "properties": {
+    "schemaVersion": {"const": "factory-sessions.current-board.v1"},
+    "factoryDirectory": {"type": "string", "minLength": 1},
+    "factorySessionId": {"const": "~default"},
+    "artifactReference": {"type": "string", "minLength": 1}
+  },
+  "examples": [{
+    "schemaVersion": "factory-sessions.current-board.v1",
+    "factoryDirectory": "C:/isolated/repo/factory",
+    "factorySessionId": "~default",
+    "artifactReference": "C:/isolated/profile/.you-agent-factory/recordings/2026/10/06/11111111-1111-4111-8111-111111111111.json"
+  }]
+}

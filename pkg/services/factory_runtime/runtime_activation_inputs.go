@@ -44,6 +44,9 @@ type RuntimeActivationDefinitionInputs struct {
 }
 
 type RuntimeActivationSessionInputs struct {
+	// ImplicitCurrentBoard preserves the Sessions-owned startup selection
+	// intent while Runtime coordinates activation.
+	ImplicitCurrentBoard bool
 	// CanonicalSessionID is the preallocated runtime identity for an automatic
 	// default recording and its runtime metrics; the public session alias
 	// remains separate.

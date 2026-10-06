@@ -79,6 +79,7 @@ type Config struct {
 	ReplayPath                    string
 	ResumePath                    string
 	DisableDefaultRecording       bool
+	ImplicitCurrentBoard          bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
 	CanonicalSessionID            string
 	FactorySessionID              string

@@ -15,12 +15,135 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+type boardReferenceSource struct {
+	factorydefinitions.MutableLoadedFactorySource
+	directory string
+}
+
+func (source boardReferenceSource) FactoryDir() string { return source.directory }
+
+type boardReferenceOwner struct {
+	durableexecution.Service
+	path                        string
+	failure                     error
+	durable                     bool
+	loads, saves                int
+	savedFactory, savedArtifact string
+}
+
+func (owner *boardReferenceOwner) LoadCurrentBoard(context.Context, string) (string, error) {
+	owner.loads++
+	return owner.path, owner.failure
+}
+
+func (owner *boardReferenceOwner) SaveCurrentBoard(_ context.Context, factory, artifact string) error {
+	owner.saves++
+	owner.savedFactory, owner.savedArtifact = factory, artifact
+	return owner.failure
+}
+
+func (owner *boardReferenceOwner) HasDurableState(context.Context, string) (bool, error) {
+	return owner.durable, owner.failure
+}
+
+func TestCurrentBoardIntentSurvivesRuntimeActivation(t *testing.T) {
+	t.Parallel()
+	selected := factorysessions.SessionStartRequest{
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode:      factorysessions.SessionRuntimeModeService,
+			Host:      factorysessions.RuntimeHostRequest{Port: 1234},
+			Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+		},
+	}
+	inputs := runtimeActivationInputs(factorydefinitions.RuntimeSelection{}, selected, false,
+		workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorconfig.ResolvedDefaults{}, nil)
+	restored := sessionRequestFromActivation(factoryruntime.RuntimeActivationRequest{
+		Inputs: inputs, Runtime: factoryruntime.RuntimeSelection{Mode: factorydefinitions.RuntimeModeService},
+	})
+	if !restored.RuntimeSelection.Recording.ImplicitCurrentBoard ||
+		restored.RuntimeSelection.Mode != selected.RuntimeSelection.Mode ||
+		restored.RuntimeSelection.Host.Port != selected.RuntimeSelection.Host.Port {
+		t.Fatalf("activation lost startup selection: %#v", restored.RuntimeSelection)
+	}
+}
+
+func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"selected", "fresh", "legacy requires history", "read failure", "explicit", "batch", "peer", "resume", "replay"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			owner := &boardReferenceOwner{path: "retained.json"}
+			selection := &factorysessions.SessionRuntimeSelection{
+				Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+				Mode:      factorysessions.SessionRuntimeModeService,
+				Host:      factorysessions.RuntimeHostRequest{Port: 1234},
+			}
+			opening := &sessionRuntimeOpening{
+				sessionID: "~default", sessionSelection: selection,
+				load:             RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: "factory-directory"}},
+				durableExecution: DurableExecution{Service: owner},
+				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "fresh.json"}},
+			}
+			bypass, wantError := false, false
+			switch name {
+			case "fresh":
+				owner.path = ""
+			case "legacy requires history":
+				owner.path, owner.durable, wantError = "", true, true
+			case "read failure":
+				owner.failure, wantError = errors.New("controlled reference failure"), true
+			case "explicit":
+				selection.Recording.ImplicitCurrentBoard, bypass = false, true
+			case "batch":
+				selection.Mode, bypass = factorysessions.SessionRuntimeModeBatch, true
+			case "peer":
+				opening.sessionID, bypass = "peer-session", true
+			case "resume":
+				opening.configured.Recordings.ResumePath, bypass = "resume.json", true
+			case "replay":
+				opening.configured.Recordings.ReplayPath, bypass = "replay.json", true
+			}
+			err := opening.selectCurrentBoardReference(t.Context())
+			if (err != nil) != wantError {
+				t.Fatalf("selection error = %v, want error %v", err, wantError)
+			}
+			if bypass {
+				if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.loads != 0 || owner.saves != 0 {
+					t.Fatal("explicit/peer/batch opening touched reference")
+				}
+				return
+			}
+			if wantError {
+				if opening.configured.Recordings.RecordPath != "fresh.json" || owner.saves != 0 {
+					t.Fatal("failed selection changed opening or reference")
+				}
+				return
+			}
+			wantPath := owner.path
+			if name == "fresh" {
+				wantPath = "fresh.json"
+			}
+			if opening.configured.Recordings.RecordPath != wantPath || opening.hasCurrentBoardReference != (name == "selected") {
+				t.Fatalf("selected path/presence = %s/%v", opening.configured.Recordings.RecordPath, opening.hasCurrentBoardReference)
+			}
+			if owner.saves != 0 {
+				t.Fatal("selection prematurely published reference")
+			}
+			if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.saves != 1 || owner.savedFactory != "factory-directory" || owner.savedArtifact != wantPath {
+				t.Fatalf("publication = %s/%s/%v", owner.savedFactory, owner.savedArtifact, err)
+			}
+		})
+	}
+}
 
 func TestReplayRequestsHistoricalInspectionUsesEffectiveListenerPort(t *testing.T) {
 	t.Parallel()

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,15 +20,20 @@ import (
 
 func testRestartProbeDAG(t *testing.T, process support.Process, dir string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
+	testRestartProbeDAGWithInputs(t, process, dir, apis, runner, restartProbeInputs, 23101)
+}
+
+func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner, inputs func(*testing.T, string) *support.CapturedInputs, port int) {
+	t.Helper()
 	batch := `{"requestId":"restart-dag","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"restart-A","name":"A","workTypeName":"task","state":"init","payload":"restart A"},{"workId":"restart-B","name":"B","workTypeName":"task","state":"waiting","tags":{"witness":"§ —"},"payload":"restart § — B"},{"workId":"restart-C","name":"C","workTypeName":"task","state":"init","tags":{"witness":"§ —"},"payload":"restart § — C"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"B","targetWorkName":"A","requiredState":"complete"},{"type":"DEPENDS_ON","sourceWorkName":"C","targetWorkName":"B","requiredState":"complete"}]}`
 	workPath := filepath.Join(dir, "dag.json")
 	writeRestartProbeFile(t, workPath, []byte(batch))
 	sentinel := filepath.Join(dir, "worktrees", "sentinel.txt")
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
-	first := restartProbeInputs(t, dir)
-	first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:23101", "--work", workPath)
+	first := inputs(t, dir)
+	first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
 	command := support.StartProcessCommand(t, process, first.Input)
-	url := apis[0].WaitForURL(t)
+	url := restartProbeReadyURL(t, apis[0], command)
 	// Public status observes the asynchronous projection after all three
 	// admissions and A's completion, rather than padding with a sleep.
 	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
@@ -37,10 +43,10 @@ func testRestartProbeDAG(t *testing.T, process support.Process, dir string, apis
 	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
-	second := restartProbeInputs(t, dir)
-	second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:23102")
+	second := inputs(t, dir)
+	second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
 	reopened := support.StartProcessCommand(t, process, second.Input)
-	url = apis[1].WaitForURL(t)
+	url = restartProbeReadyURL(t, apis[1], reopened)
 	after := restartProbeBoardReads(t, url)
 	assertRestartProbeStates(t, after)
 	for i := range before {
@@ -61,6 +67,30 @@ func testRestartProbeDAG(t *testing.T, process support.Process, dir string, apis
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
 	}
+}
+
+func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *support.ProcessCommand) string {
+	t.Helper()
+	ready := make(chan string, 1)
+	go func() {
+		url, err := api.WaitForBaseURL(60 * time.Second)
+		if err == nil {
+			ready <- url
+		}
+	}()
+	select {
+	case url := <-ready:
+		return url
+	case <-command.Done():
+		var causes []string
+		for err := command.Err(); err != nil; err = errors.Unwrap(err) {
+			causes = append(causes, err.Error())
+		}
+		t.Fatalf("restart command ended before readiness: %s", strings.Join(causes, "; "))
+	case <-time.After(support.ScaledTimeout(60 * time.Second)):
+		t.Fatal("restart command did not publish API readiness")
+	}
+	return ""
 }
 
 func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.FactoryEvent) {
