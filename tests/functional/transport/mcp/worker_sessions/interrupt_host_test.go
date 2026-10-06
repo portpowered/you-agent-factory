@@ -99,10 +99,7 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	assertInterruptAdmission(t, admitted)
 	waitControlSignal(t, runner.sourceStopped)
 	request := waitProviderRequest(t, ctx, runner)
-	resumes := strings.Contains(strings.Join(request.Args, " "), "resume "+interruptProviderID)
-	if resumes != (mode != "recorded") || request.WorkDir != dir || !strings.Contains(strings.Join(request.Args, " "), "test-model") || !strings.Contains(string(request.Stdin), "replace the initial instruction") || (mode == "recorded" && !strings.Contains(string(request.Stdin), "initial instruction")) {
-		t.Fatalf("successor provider request lost resume identity or replacement: args=%v stdin=%s", request.Args, request.Stdin)
-	}
+	assertInterruptProviderRequest(t, request, dir, mode)
 	assertJSONEqual(t, admitted, postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("replace the initial instruction", mode), http.StatusAccepted))
 	assertInterruptCLIParity(t, host, admitted, mode)
 	assertJSONEqual(t, admitted, callWorker(t, ctx, session, "control", args)["result"])
@@ -141,6 +138,14 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	assertFactoryCLIParity(t, host, "successor", successor)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "successor", "operation": "TERMINATE"})
 	assertInterruptMetadataRecovery(t, process, host, runner, dir)
+}
+
+func assertInterruptProviderRequest(t *testing.T, request platformprocess.CommandRequest, dir, mode string) {
+	t.Helper()
+	resumes := strings.Contains(strings.Join(request.Args, " "), "resume "+interruptProviderID)
+	if resumes != (mode != "recorded") || request.WorkDir != dir || !strings.Contains(strings.Join(request.Args, " "), "test-model") || !strings.Contains(string(request.Stdin), "replace the initial instruction") || (mode == "recorded" && !strings.Contains(string(request.Stdin), "initial instruction")) {
+		t.Fatalf("successor provider request lost resume identity or replacement: args=%v stdin=%s", request.Args, request.Stdin)
+	}
 }
 
 func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host *support.FunctionalAPIServer, runner *interruptHostRunner, dir string) {
