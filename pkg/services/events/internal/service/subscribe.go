@@ -20,9 +20,11 @@ import (
 type liveSubscriber struct {
 	records chan events.Record
 
-	mu     sync.Mutex
-	closed bool
-	kind   events.DeliveryKind
+	mu           sync.Mutex
+	closed       bool
+	kind         events.DeliveryKind
+	maxBytes     int
+	pendingBytes int
 }
 
 func newLiveSubscriber(capacity int) *liveSubscriber {
@@ -35,10 +37,15 @@ func newLiveSubscriber(capacity int) *liveSubscriber {
 // must remove s from the topic's live registration so no further record is
 // ever offered to it.
 func (s *liveSubscriber) deliver(rec events.Record) bool {
+	if !s.reserve(rec) {
+		s.terminate(events.DeliveryBackpressure)
+		return false
+	}
 	select {
-	case s.records <- rec:
+	case s.records <- rec.Detached():
 		return true
 	default:
+		s.release(rec)
 		s.terminate(events.DeliveryBackpressure)
 		return false
 	}
@@ -76,7 +83,7 @@ func (s *liveSubscriber) terminalKind() events.DeliveryKind {
 // fixed terminal outcome. Callers hold ts.mu.
 func (ts *topicState) notifySubscribersLocked(st *Store, topic events.Topic, rec events.Record) {
 	for id, sub := range ts.subscribers {
-		if !sub.deliver(rec.Detached()) {
+		if !sub.deliver(rec) {
 			delete(ts.subscribers, id)
 			st.logSubscribeBackpressure(topic)
 		}
@@ -92,7 +99,7 @@ func (ts *topicState) notifySubscribersLocked(st *Store, topic events.Topic, rec
 // since Subscribe's Delivery contract has no cursor-carrying InvalidCursor
 // analogue and must instead recover deterministically on the caller's
 // behalf. Callers hold ts.mu.
-func (ts *topicState) catchupLocked(topic events.Topic, from events.AggregateSequence) ([]events.Record, *events.GapFacts) {
+func (ts *topicState) catchupLocked(topic events.Topic, from events.AggregateSequence, budgets ...*liveSubscriber) ([]events.Record, *events.GapFacts) {
 	head := ts.head
 	earliest := ts.earliestLocked()
 
@@ -111,9 +118,13 @@ func (ts *topicState) catchupLocked(topic events.Topic, from events.AggregateSeq
 
 	startIndex := int(startAfter + 1 - earliest)
 	src := ts.records[startIndex:]
-	out := make([]events.Record, len(src))
-	for i, rec := range src {
-		out[i] = rec.Detached()
+	out := make([]events.Record, 0)
+	for _, rec := range src {
+		if len(budgets) > 0 && !budgets[0].reserve(rec) {
+			budgets[0].terminate(events.DeliveryBackpressure)
+			break
+		}
+		out = append(out, rec.Detached())
 	}
 	return out, gap
 }
@@ -146,10 +157,13 @@ func (st *Store) Subscribe(ctx context.Context, req events.SubscribeRequest) (ev
 		return nil, events.ErrUnresolvableCursor
 	}
 
-	catchup, gap := ts.catchupLocked(req.Topic, req.From.Position)
 	sub := newLiveSubscriber(req.Limit)
+	sub.maxBytes = req.MaxPendingBytes
+	catchup, gap := ts.catchupLocked(req.Topic, req.From.Position, sub)
 	var subID uint64
-	if ts.closed {
+	if sub.terminalKind() != events.DeliveryUnspecified {
+		st.logSubscribeBackpressure(req.Topic)
+	} else if ts.closed {
 		sub.terminate(events.DeliveryClosed)
 	} else {
 		ts.nextSubID++
@@ -189,6 +203,7 @@ type subscriptionState struct {
 	gap      *events.GapFacts
 	catchup  []events.Record
 	canceled bool
+	inFlight events.Record
 }
 
 // next observes the next Delivery: once this subscription has ever observed
@@ -212,6 +227,8 @@ func (s *subscriptionState) next(ctx context.Context) events.Delivery {
 	}
 
 	s.mu.Lock()
+	s.sub.release(s.inFlight)
+	s.inFlight = events.Record{}
 	if s.gap != nil {
 		gap := s.gap
 		s.gap = nil
@@ -220,7 +237,9 @@ func (s *subscriptionState) next(ctx context.Context) events.Delivery {
 	}
 	if len(s.catchup) > 0 {
 		rec := s.catchup[0]
+		s.catchup[0] = events.Record{}
 		s.catchup = s.catchup[1:]
+		s.inFlight = rec
 		s.mu.Unlock()
 		return events.Delivery{Kind: events.DeliveryRecord, Record: rec, Cursor: events.Cursor{Topic: s.topic, Position: rec.ID.Position}}
 	}
@@ -231,6 +250,9 @@ func (s *subscriptionState) next(ctx context.Context) events.Delivery {
 		if !ok {
 			return events.Delivery{Kind: s.sub.terminalKind()}
 		}
+		s.mu.Lock()
+		s.inFlight = rec
+		s.mu.Unlock()
 		return events.Delivery{Kind: events.DeliveryRecord, Record: rec, Cursor: events.Cursor{Topic: s.topic, Position: rec.ID.Position}}
 	case <-ctx.Done():
 		return s.cancel()

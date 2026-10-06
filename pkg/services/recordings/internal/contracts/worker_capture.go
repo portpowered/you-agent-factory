@@ -12,6 +12,7 @@ import (
 type WorkerCaptureClock interface{ Now() time.Time }
 
 type WorkerCapturedActivityReader interface {
+	ListWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
 	ReadWorkerCapturedActivity(context.Context, workerrecording.WorkerCapturedActivityRequest) (workerrecording.WorkerCapturedActivityPage, error)
 }

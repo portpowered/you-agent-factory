@@ -25,6 +25,9 @@ func (r *registry) ListWorkerSessionObservations(
 	ctx context.Context,
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
+	if req.History != "" {
+		return r.listHistory(ctx, req)
+	}
 	listStartedAt := r.clock.Now()
 	query, err := r.parseObservationListQuery(ctx, req)
 	if err != nil {
@@ -94,6 +97,11 @@ func decodeObservationListCursor(value string) (string, error) {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
+		return "", workersessions.ErrInvalidObservationPagination
+	}
+	// A snapshot token is not a compatibility last-identity cursor. Reject the
+	// structured token rather than silently treating its JSON as a Worker ID.
+	if IsHistoryCursor(value) {
 		return "", workersessions.ErrInvalidObservationPagination
 	}
 	return string(decoded), nil
@@ -550,6 +558,7 @@ func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
 		WorkerSessionID:            publicWorkerID(id),
+		Provider:                   metadata.provider,
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 		Model:                      cloneOptionalExecutionFact(session.Model),

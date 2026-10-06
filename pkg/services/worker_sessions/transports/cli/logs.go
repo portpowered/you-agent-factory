@@ -39,6 +39,9 @@ func readLogs(config ReadConfig, jsonOutput bool) error {
 		parsed.RawQuery = query.Encode()
 		return readLogsArtifact(config, parsed.String(), jsonOutput)
 	}
+	if config.Follow {
+		return followLogs(config, *parsed)
+	}
 	return readLogsPage(config, parsed.String(), jsonOutput)
 }
 

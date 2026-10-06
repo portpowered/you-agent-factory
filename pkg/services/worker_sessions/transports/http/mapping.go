@@ -638,6 +638,9 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 }
 
 func mapWorkerSessionIdentity(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
+	result.PredecessorWorkerSessionId = stringPointer(observation.PredecessorWorkerSessionID)
+	result.SuccessorWorkerSessionId = stringPointer(observation.SuccessorWorkerSessionID)
+	result.Provider = stringPointer(observation.Provider)
 	if observation.FactorySessionID != "" {
 		result.FactorySessionId = stringPtr(observation.FactorySessionID)
 	}

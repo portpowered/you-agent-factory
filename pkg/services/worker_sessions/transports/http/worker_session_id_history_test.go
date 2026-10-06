@@ -18,13 +18,16 @@ import (
 
 func TestGetWorkerSessionObservationByWorkerSessionIDProjectsProviderNeutralHistory(t *testing.T) {
 	service := &fakeObservationService{getByWorkerResult: workersessions.Observation{
-		WorkerSessionID:          "worker-no-provider",
-		ProviderSessionAvailable: false,
-		WorkIDs:                  []string{"work-1"},
-		AttemptID:                "dispatch-1",
-		State:                    workersessions.StateCompleted,
-		DurationBasis:            workersessions.DurationBasisUnavailable,
-		Transcript:               workersessions.TranscriptAvailabilityUnavailable,
+		WorkerSessionID:            "worker-no-provider",
+		Provider:                   "codex",
+		PredecessorWorkerSessionID: "prior-worker",
+		SuccessorWorkerSessionID:   "next-worker",
+		ProviderSessionAvailable:   false,
+		WorkIDs:                    []string{"work-1"},
+		AttemptID:                  "dispatch-1",
+		State:                      workersessions.StateCompleted,
+		DurationBasis:              workersessions.DurationBasisUnavailable,
+		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
@@ -44,6 +47,9 @@ func TestGetWorkerSessionObservationByWorkerSessionIDProjectsProviderNeutralHist
 	}
 	if response.WorkerSessionId != "worker-no-provider" || response.ProviderSession != nil || response.ProviderSessionAvailable {
 		t.Fatalf("response = %#v, want provider-neutral Worker observation", response)
+	}
+	if response.Provider == nil || *response.Provider != "codex" || response.PredecessorWorkerSessionId == nil || *response.PredecessorWorkerSessionId != "prior-worker" || response.SuccessorWorkerSessionId == nil || *response.SuccessorWorkerSessionId != "next-worker" {
+		t.Fatalf("recorded provider and lineage lost: %#v", response)
 	}
 	if response.Model != nil || response.ReasoningEffort != nil {
 		t.Fatalf("legacy execution facts = model:%#v reasoningEffort:%#v, want absent", response.Model, response.ReasoningEffort)

@@ -766,6 +766,7 @@ func (r *registry) publishProviderBindingLocked(
 		return workersessions.ProviderBindingResult{}, err
 	}
 	pub.provider = provider
+	r.rememberObservationProvider(ownerID, provider)
 	outcome := workersessions.ProviderBindingOutcomeAccepted
 	if appendResult.Outcome == events.AppendOutcomeDuplicate {
 		outcome = workersessions.ProviderBindingOutcomeDuplicate

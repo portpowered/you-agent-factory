@@ -182,8 +182,8 @@ func provideShowWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.Sh
 	return workersessionscli.BindShow(transport.Protocol)
 }
 
-func provideReadWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ReadWorkerSessionOperation {
-	return workersessionscli.BindRead(transport.Protocol)
+func provideReadWorkerSessionOperation(transport standardCLIHTTPProtocol, streaming streamingCLIHTTPProtocol) cli.ReadWorkerSessionOperation {
+	return workersessionscli.BindRead(transport.Protocol, streaming.Protocol)
 }
 
 func provideStreamWorkerSessionOperation(transport streamingCLIHTTPProtocol) cli.StreamWorkerSessionOperation {

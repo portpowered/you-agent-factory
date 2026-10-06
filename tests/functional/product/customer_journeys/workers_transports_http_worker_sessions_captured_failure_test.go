@@ -113,6 +113,8 @@ func TestWorkerSessionCapturedLogsTerminalWriteFailure(t *testing.T) {
 	if !reflect.DeepEqual(cli, ended) {
 		t.Fatal("CLI/HTTP degraded prefixes differ")
 	}
+	assertCapturedFollowFailure(t, server, "midrun-worker", "", "WORKER_SESSION_LOGS_GAP", ended.Events)
+	assertCapturedFollowFailure(t, server, "midrun-worker", "invalid", "BAD_REQUEST", nil)
 	repeated := postWorkerSessionControl(t, server.URL(), "midrun-worker", "cancel")
 	_ = repeated.Body.Close()
 	if repeated.StatusCode != http.StatusOK {

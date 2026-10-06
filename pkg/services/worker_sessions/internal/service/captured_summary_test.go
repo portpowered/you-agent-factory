@@ -84,3 +84,21 @@ func TestCapturedArchivedSummaryDoesNotInferLiveState(t *testing.T) {
 		})
 	}
 }
+
+func TestCapturedArchivedSummaryMatchesIncompleteHistory(t *testing.T) {
+	t.Parallel()
+	item := historyCapture(t, "worker", "factory", "attempt", false)
+	reader := &LogReader{reader: &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+		Catalog: item.Catalog, Opening: item.Opening, Health: item.Health, OwnerLost: item.OwnerLost,
+	}}}
+	got, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+	want, wantErr := capturedHistoryIdentity(item, nil)
+	if err != nil || wantErr != nil || got.State != want.State || got.ConfirmationState != want.ConfirmationState || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone || got.RecordingHealth != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("selected incomplete capture differs from history: %+v %v", got, err)
+	}
+	assertArchivedUnknownFacts(t, got)
+	_, err = reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "other"})
+	if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("foreign Factory scope: %v", err)
+	}
+}
