@@ -519,6 +519,54 @@ func TestControlInputDurableImmutableScopedReference(t *testing.T) {
 	}
 }
 
+// The input writer's directory collaborator proves absence before creation.
+// An unavailable blob reader must still prevent reuse of an existing input.
+func TestControlInputMissingBlobDoesNotRequireReplacementRead(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	intent := controlIntent(t, writer, "recording", "worker", "request")
+	key := operationKey(intent)
+	identity := controlInputArtifact{Key: key, Generation: intent.Target.RecordingGenerationID}
+	ref := controlInputRef(identity)
+	reader := &controlInputReadRefusal{Local: platformreplay.NewLocal(runtime.GOOS), refuse: true}
+	writer.storage = reader
+	if _, err := writer.ReadWorkerControlInput(t.Context(), key, ref); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("absent input = %v, want not found", err)
+	}
+	input := json.RawMessage(`{"replacementMessage":"complete redirect"}`)
+	if created, err := writer.PersistWorkerControlInput(t.Context(), key, input); err != nil || created != ref {
+		t.Fatalf("new immutable input = %q, %v", created, err)
+	}
+	for _, read := range []bool{true, false} {
+		var err error
+		if read {
+			_, err = writer.ReadWorkerControlInput(t.Context(), key, ref)
+		} else {
+			_, err = writer.PersistWorkerControlInput(t.Context(), key, input)
+		}
+		if !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("existing input read=%t bypassed storage refusal: %v", read, err)
+		}
+	}
+	reader.refuse = false
+	got, err := writer.ReadWorkerControlInput(t.Context(), key, ref)
+	if err != nil || !bytes.Equal(got, input) {
+		t.Fatalf("acknowledged input = %s, %v", got, err)
+	}
+}
+
+type controlInputReadRefusal struct {
+	platformreplay.Local
+	refuse bool
+}
+
+func (reader *controlInputReadRefusal) ReadFile(path string) ([]byte, error) {
+	if reader.refuse && strings.HasSuffix(path, ".control.json") {
+		return nil, os.ErrPermission
+	}
+	return reader.Local.ReadFile(path)
+}
+
 func TestControlInputRefusesCorruptBlobAndSymlink(t *testing.T) {
 	t.Parallel()
 	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))

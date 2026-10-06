@@ -40,10 +40,18 @@ func (writer *FileWriter) persistWorkerControlInputLocked(ctx context.Context, e
 	}
 	ref := controlInputRef(artifact)
 	path := writer.controlInputPath(ref)
-	if err := writer.checkControlInputPath(path); err != nil {
-		return "", err
+	pathErr := writer.checkControlInputPath(path)
+	if pathErr != nil && !errors.Is(pathErr, os.ErrNotExist) {
+		return "", pathErr
 	}
-	data, err := writer.storage.ReadFile(path)
+	// This writer owns immutable creation under entry.mu. The directory check
+	// already establishes absence; reading a new blob would invoke replacement
+	// retries on Windows while every sibling control waits on the recording.
+	var data []byte
+	err = pathErr
+	if pathErr == nil {
+		data, err = writer.storage.ReadFile(path)
+	}
 	if err == nil {
 		previous, err := decodeControlInput(data, artifact)
 		if err != nil {
@@ -174,11 +182,17 @@ func decodeControlInput(data []byte, identity controlInputArtifact) (json.RawMes
 // payload directory and blob through the injected filesystem scanner as well.
 // The configured profile's ancestors remain the composition boundary's trust.
 func (writer *FileWriter) checkControlInputPath(path string) error {
+	exists := false
 	for _, candidate := range []string{filepath.Clean(writer.root), filepath.Dir(path), path} {
 		err := writer.directory.ScanDirectory(filepath.Dir(candidate), 64, func(files []os.DirEntry) error {
 			for _, file := range files {
-				if file.Name() == filepath.Base(candidate) && file.Type()&os.ModeSymlink != 0 {
-					return recordings.ErrInvalidWorkerControlOperation
+				if file.Name() == filepath.Base(candidate) {
+					if file.Type()&os.ModeSymlink != 0 {
+						return recordings.ErrInvalidWorkerControlOperation
+					}
+					if candidate == path {
+						exists = true
+					}
 				}
 			}
 			return nil
@@ -186,6 +200,9 @@ func (writer *FileWriter) checkControlInputPath(path string) error {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+	}
+	if !exists {
+		return os.ErrNotExist
 	}
 	return nil
 }
