@@ -71,9 +71,9 @@ func (r *interruptHostRunner) RunStreaming(ctx context.Context, req platformproc
 	return platformprocess.CommandResult{}, ctx.Err()
 }
 
-func runRealHostInterrupt(t *testing.T, process support.Process) {
+func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	t.Helper()
-	host, runner, dir := startInterruptHost(t, nil)
+	host, runner, dir := startInterruptHost(t, nil, mode != "")
 	session, ctx := startMCP(t, process, host.URL())
 	admitInterruptSource(t, ctx, host.URL(), dir, runner)
 	before := getHost(t, host.URL()+"/worker-sessions/source").(map[string]any)
@@ -85,22 +85,43 @@ func runRealHostInterrupt(t *testing.T, process support.Process) {
 	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
 	assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
 	args["requestId"] = "interrupt-request"
+	for _, invalid := range []any{"", "unknown", "Provider", nil, 1, true} {
+		args["resumeMode"] = invalid
+		assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+		assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/source"))
+		assertProviderCallCount(t, runner, 1)
+	}
+	delete(args, "resumeMode")
+	if mode != "" {
+		args["resumeMode"] = mode
+	}
 	admitted := callWorker(t, ctx, session, "control", args)["result"].(map[string]any)
 	assertInterruptAdmission(t, admitted)
 	waitControlSignal(t, runner.sourceStopped)
 	request := waitProviderRequest(t, ctx, runner)
-	if !strings.Contains(strings.Join(request.Args, " "), "resume "+interruptProviderID) || !strings.Contains(string(request.Stdin), "replace the initial instruction") {
-		t.Fatalf("successor provider request lost resume identity or replacement: args=%v stdin=%s", request.Args, request.Stdin)
-	}
-	assertJSONEqual(t, admitted, postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptPayload("replace the initial instruction"), http.StatusAccepted))
-	assertInterruptCLIParity(t, host, admitted)
+	assertInterruptProviderRequest(t, request, dir, mode)
+	assertJSONEqual(t, admitted, postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("replace the initial instruction", mode), http.StatusAccepted))
+	assertInterruptCLIParity(t, host, admitted, mode)
 	assertJSONEqual(t, admitted, callWorker(t, ctx, session, "control", args)["result"])
+	args["resumeMode"] = "recorded"
+	if mode == "recorded" {
+		args["resumeMode"] = "provider"
+	}
+	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
+	delete(args, "resumeMode")
+	if mode != "" {
+		args["resumeMode"] = mode
+	}
 	args["replacementMessage"] = "changed immutable tuple"
 	// Changed accepted tuples retain their specific conflict meaning across
 	// transports rather than being classified as malformed requests.
 	assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.conflict", false)
-	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptPayload("changed immutable tuple"), http.StatusConflict)
-	assertTerminalTranscriptParity(t, ctx, session, host)
+	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("changed immutable tuple", mode), http.StatusConflict)
+	// Live transcript compatibility still uses native readers until T8.
+	// Explicit-mode cells deny those readers and prove captured replay instead.
+	if mode == "" {
+		assertTerminalTranscriptParity(t, ctx, session, host)
+	}
 	assertTerminalReplayParity(t, ctx, session, host, "source")
 	listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"].(map[string]any)
 	workers := listed["sessions"].([]any)
@@ -110,13 +131,21 @@ func runRealHostInterrupt(t *testing.T, process support.Process) {
 	assertProviderCallCount(t, runner, 2)
 	source := getHost(t, host.URL()+"/worker-sessions/source").(map[string]any)
 	successor := getHost(t, host.URL()+"/worker-sessions/successor").(map[string]any)
-	if source["successorWorkerSessionId"] != "successor" || successor["predecessorWorkerSessionId"] != "source" || source["provider"] != "codex" || successor["provider"] != "codex" {
+	if source["terminalCause"] != "OPERATOR_CANCEL" || source["successorWorkerSessionId"] != "successor" || successor["predecessorWorkerSessionId"] != "source" || source["provider"] != "codex" || successor["provider"] != "codex" {
 		t.Fatalf("admitted lineage/provider lost: source=%v successor=%v", source, successor)
 	}
 	assertRuntimeObservationParity(t, source, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "source"})["result"].(map[string]any)["session"])
 	assertFactoryCLIParity(t, host, "successor", successor)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "successor", "operation": "TERMINATE"})
 	assertInterruptMetadataRecovery(t, process, host, runner, dir)
+}
+
+func assertInterruptProviderRequest(t *testing.T, request platformprocess.CommandRequest, dir, mode string) {
+	t.Helper()
+	resumes := strings.Contains(strings.Join(request.Args, " "), "resume "+interruptProviderID)
+	if resumes != (mode != "recorded") || request.WorkDir != dir || !strings.Contains(strings.Join(request.Args, " "), "test-model") || !strings.Contains(string(request.Stdin), "replace the initial instruction") || (mode == "recorded" && !strings.Contains(string(request.Stdin), "initial instruction")) {
+		t.Fatalf("successor provider request lost resume identity or replacement: args=%v stdin=%s", request.Args, request.Stdin)
+	}
 }
 
 func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host *support.FunctionalAPIServer, runner *interruptHostRunner, dir string) {
@@ -219,17 +248,28 @@ func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.
 	}
 }
 
-func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter) (*support.FunctionalAPIServer, *interruptHostRunner, string) {
+func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter, denyNative ...bool) (*support.FunctionalAPIServer, *interruptHostRunner, string) {
 	t.Helper()
 	home := t.TempDir()
 	output := installNativeTranscript(t, home)
 	runner := &interruptHostRunner{output: output, started: make(chan platformprocess.CommandRequest, 3), sourceStopped: make(chan struct{})}
 	dir := support.ScaffoldSingleStepFactory(t, "mcp-interrupt-host")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	var native interface {
+		Open(string) (io.ReadCloser, error)
+		Stat(string) (fs.FileInfo, error)
+	}
+	if len(denyNative) > 0 && denyNative[0] {
+		native = &deniedMetadataProviderFiles{}
+	}
+	var observe func(recordings.WorkerRecordingStore)
+	if failing, ok := writer.(*failingSuccessorStore); ok {
+		observe = func(store recordings.WorkerRecordingStore) { failing.WorkerRecordingStore = store }
+	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: writer, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: writer, WorkerRecordingStoreObserver: observe, ProviderSessionFileSystem: native, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
 	})
 	return host, runner, dir
 }
@@ -265,14 +305,14 @@ func interruptPayload(message string) map[string]any {
 	return map[string]any{"requestId": "interrupt-request", "successorWorkerSessionId": "successor", "replacementMessage": message}
 }
 
-func runRealHostPartialInterrupt(t *testing.T, process support.Process) {
+func runRealHostPartialInterrupt(t *testing.T, process support.Process, mode string) {
 	t.Helper()
 	// A separate immutable recording edge rejects successor opening. This
 	// proves the real admission failure path, not durability of accepted data.
-	host, runner, dir := startInterruptHost(t, failingSuccessorStore{})
+	host, runner, dir := startInterruptHost(t, &failingSuccessorStore{})
 	session, ctx := startMCP(t, process, host.URL())
 	admitInterruptSource(t, ctx, host.URL(), dir, runner)
-	args := interruptPayload("replace the initial instruction")
+	args := interruptModePayload("replace the initial instruction", mode)
 	args["workerSessionId"], args["operation"] = "source", "INTERRUPT"
 	first := callTool(t, ctx, session, "you.worker_session.control", args)
 	assertToolError(t, first, "worker_session.unavailable", true)
@@ -292,7 +332,7 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process) {
 	retry := callTool(t, ctx, session, "you.worker_session.control", args)
 	assertToolError(t, retry, "worker_session.unavailable", true)
 	assertJSONEqual(t, first.StructuredContent, retry.StructuredContent)
-	httpFailure := postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptPayload("replace the initial instruction"), http.StatusServiceUnavailable).(map[string]any)
+	httpFailure := postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("replace the initial instruction", mode), http.StatusServiceUnavailable).(map[string]any)
 	if httpFailure["phase"] != details["phase"] || httpFailure["code"] != details["upstreamCode"] {
 		t.Fatalf("HTTP partial error differs: %v", httpFailure)
 	}
@@ -309,18 +349,14 @@ func runRealHostPartialInterrupt(t *testing.T, process support.Process) {
 }
 
 type failingSuccessorStore struct {
-	unavailableWorkerControlStore
+	recordings.WorkerRecordingStore
 }
 
-func (failingSuccessorStore) PersistWorkerRecord(_ context.Context, record recordings.WorkerRecordingRecord) error {
+func (s *failingSuccessorStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
 	if record.WorkerSessionID == "successor" {
 		return fmt.Errorf("controlled successor storage failure")
 	}
-	return nil
-}
-
-func (failingSuccessorStore) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
-	return recordings.WorkerRecordingSnapshot{}, recordings.ErrWorkerRecordingIncomplete
+	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
 func installNativeTranscript(t *testing.T, home string) []byte {
@@ -394,9 +430,13 @@ func assertInterruptAdmission(t *testing.T, result map[string]any) {
 	}
 }
 
-func assertInterruptCLIParity(t *testing.T, host *support.FunctionalAPIServer, expected any) {
+func assertInterruptCLIParity(t *testing.T, host *support.FunctionalAPIServer, expected any, mode string) {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "interrupt", "source", "--server", host.URL(), "--json", "--remote", "--async", "--request-id", "interrupt-request", "--successor-worker-session-id", "successor", "--replacement-message", "replace the initial instruction"})
+	argv := []string{"you", "worker-sessions", "interrupt", "source", "--server", host.URL(), "--json", "--remote", "--async", "--request-id", "interrupt-request", "--successor-worker-session-id", "successor", "--replacement-message", "replace the initial instruction"}
+	if mode != "" {
+		argv = append(argv, "--resume-mode", mode)
+	}
+	inputs := support.FakeInputs(t.Context(), argv)
 	if err := host.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("CLI interrupt: %v stderr=%s", err, inputs.Stderr())
 	}
@@ -497,4 +537,12 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func interruptModePayload(message, mode string) map[string]any {
+	payload := interruptPayload(message)
+	if mode != "" {
+		payload["resumeMode"] = mode
+	}
+	return payload
 }

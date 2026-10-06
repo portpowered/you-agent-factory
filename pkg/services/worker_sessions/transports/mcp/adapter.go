@@ -162,8 +162,13 @@ func (a *Adapter) control(ctx context.Context, input controlInput) (any, *toolEr
 			Force: &force, RequestId: input.RequestID, ExpectedAttemptId: input.ExpectedAttemptID,
 		})
 	case "INTERRUPT":
+		var mode *client.WorkerSessionInterruptRequestResumeMode
+		if input.ResumeMode != nil {
+			value := client.WorkerSessionInterruptRequestResumeMode(*input.ResumeMode)
+			mode = &value
+		}
 		response, err = a.host.InterruptWorkerSession(ctx, input.WorkerSessionID, client.InterruptWorkerSessionJSONRequestBody{
-			RequestId: *input.RequestID, SuccessorWorkerSessionId: *input.SuccessorWorkerSessionID, ReplacementMessage: *input.ReplacementMessage,
+			ResumeMode: mode, RequestId: *input.RequestID, SuccessorWorkerSessionId: *input.SuccessorWorkerSessionID, ReplacementMessage: *input.ReplacementMessage,
 		})
 	}
 	if response != nil && response.Body != nil {

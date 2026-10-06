@@ -440,6 +440,14 @@
             "minLength": 1,
             "type": "string"
           },
+          "resumeMode": {
+            "default": "provider",
+            "enum": [
+              "provider",
+              "recorded"
+            ],
+            "type": "string"
+          },
           "successorWorkerSessionId": {
             "minLength": 1,
             "type": "string"
