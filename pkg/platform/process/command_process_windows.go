@@ -3,6 +3,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -18,17 +19,71 @@ import (
 // jobobjectBasicAccountingInformation mirrors JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
 // (see golang.org/x/sys/windows JobObjectBasicAccountingInformation).
 type jobobjectBasicAccountingInformation struct {
-	TotalUserTime            int64
-	TotalKernelTime          int64
-	TotalPageFaultCount      uint32
-	TotalProcesses           uint32
-	ActiveProcesses          uint32
-	TotalTerminatedProcesses uint32
+	TotalUserTime             int64
+	TotalKernelTime           int64
+	ThisPeriodTotalUserTime   int64
+	ThisPeriodTotalKernelTime int64
+	TotalPageFaultCount       uint32
+	TotalProcesses            uint32
+	ActiveProcesses           uint32
+	TotalTerminatedProcesses  uint32
 }
 
 type commandProcessTree struct {
 	job     windows.Handle
 	rootPID uint32
+	root    windows.Handle
+}
+
+func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock) *ownedCommandControl {
+	if tree == nil || tree.job == 0 || tree.root == 0 || tree.rootPID != 0 {
+		return nil
+	}
+	return &ownedCommandControl{stop: func(ctx context.Context) (bool, error) {
+		return tree.forceKillAndJoin(ctx, clock)
+	}, done: done}
+}
+
+func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Clock) (bool, error) {
+	// The root handle was opened while suspended and remains retained even
+	// after os/exec reaps it. Never resolve its numeric PID again.
+	state, err := windows.WaitForSingleObject(tree.root, 0)
+	if err != nil {
+		return false, err
+	}
+	if state == windows.WAIT_OBJECT_0 {
+		return false, nil
+	}
+	if state != uint32(windows.WAIT_TIMEOUT) {
+		return false, fmt.Errorf("unexpected owned root wait state: %d", state)
+	}
+	if err := windows.TerminateJobObject(tree.job, 1); err != nil {
+		return false, err
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		active, err := tree.activeProcesses()
+		if err != nil {
+			return false, err
+		}
+		if active == 0 {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-clock.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func (tree *commandProcessTree) activeProcesses() (uint32, error) {
+	var info jobobjectBasicAccountingInformation
+	err := windows.QueryInformationJobObject(tree.job, windows.JobObjectBasicAccountingInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil)
+	return info.ActiveProcesses, err
 }
 
 func configureCommandProcessTree(_ *exec.Cmd) {}
@@ -51,6 +106,7 @@ func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 		killErr := cmd.Process.Kill()
 		if tree != nil {
 			_ = windows.CloseHandle(tree.job)
+			_ = windows.CloseHandle(tree.root)
 		}
 		waitErr := cmd.Wait()
 		return nil, errors.Join(err, killErr, waitErr)
@@ -124,7 +180,7 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	}
 
 	process, err := windows.OpenProcess(
-		windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE,
+		windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.SYNCHRONIZE,
 		false,
 		uint32(cmd.Process.Pid),
 	)
@@ -132,13 +188,12 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 		windows.CloseHandle(job)
 		return nil, err
 	}
-	defer windows.CloseHandle(process)
-
 	if err := windows.AssignProcessToJobObject(job, process); err != nil {
 		windows.CloseHandle(job)
+		_ = windows.CloseHandle(process)
 		return nil, err
 	}
-	return &commandProcessTree{job: job, rootPID: uint32(cmd.Process.Pid)}, nil
+	return &commandProcessTree{job: job, rootPID: uint32(cmd.Process.Pid), root: process}, nil
 }
 
 // terminateCommandJobGroup waits up to grace for job members to exit, then
@@ -240,6 +295,8 @@ func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, clock platfo
 		)
 	}
 	windows.CloseHandle(tree.job)
+	_ = windows.CloseHandle(tree.root)
+	tree.root = 0
 	tree.job = 0
 }
 

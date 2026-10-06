@@ -322,8 +322,18 @@ func (r ExecCommandRunner) run(
 	if err != nil {
 		return CommandResult{}, r.reportCommandStartFailure(cleanupLogger, req, err)
 	}
-	waitCh := make(chan error, 1)
+	runDone := make(chan struct{})
 	waitDone := make(chan struct{})
+	defer close(runDone)
+	control := tree.ownedControl(runDone, r.Clock)
+	if control != nil {
+		control.waited = waitDone
+	}
+	defer control.expire()
+	if req.OwnedProcessObserver != nil && control != nil {
+		req.OwnedProcessObserver(control)
+	}
+	waitCh := make(chan error, 1)
 	go func() {
 		waitErr := cmd.Wait()
 		close(waitDone)
@@ -352,6 +362,7 @@ func (r ExecCommandRunner) run(
 		cancelCleanup.cancellationReason = cancellationReason
 		_ = terminateCommandProcessTree(cmd, tree, r.Clock, cancelCleanup)
 		waitForCommandCancellation(waitCh, r.Clock, cleanupLogger, req)
+		control.expire()
 		closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 		return CommandResult{
 			Stdout:             stdout.Bytes(),
@@ -359,6 +370,7 @@ func (r ExecCommandRunner) run(
 			CancellationReason: cancellationReason,
 		}, ctx.Err()
 	}
+	control.expire()
 	closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 
 	result := CommandResult{

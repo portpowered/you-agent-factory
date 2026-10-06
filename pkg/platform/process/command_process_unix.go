@@ -15,6 +15,12 @@ type commandProcessTree struct {
 	pgid int
 }
 
+// A numeric process group alone does not fence PID reuse after cmd.Wait.
+// Keep force unsupported until an unreaped ownership lifetime is retained.
+func (*commandProcessTree) ownedControl(<-chan struct{}, Clock) *ownedCommandControl {
+	return nil
+}
+
 func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	configureCommandProcessTree(cmd)
 	if err := cmd.Start(); err != nil {
