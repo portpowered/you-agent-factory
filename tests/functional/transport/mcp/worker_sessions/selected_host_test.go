@@ -47,6 +47,16 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostForceControls(t, process)
 	})
+	for _, mode := range []string{"unattached", "declined", "failed"} {
+		t.Run("real host force "+mode, func(t *testing.T) {
+			t.Parallel()
+			runForceHostFailure(t, process, mode)
+		})
+	}
+	t.Run("real host force caller disconnect", func(t *testing.T) {
+		t.Parallel()
+		runDetachedForceControl(t, process)
+	})
 	t.Run("real host history snapshots", func(t *testing.T) {
 		t.Parallel()
 		runRealHostHistory(t, process)
