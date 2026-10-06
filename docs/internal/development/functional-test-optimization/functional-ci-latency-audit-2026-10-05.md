@@ -4965,3 +4965,54 @@ precedes a behavior-preserving extraction of command classification to satisfy
 the complexity lint limit; monolith component checks and both scoped linters
 pass after that extraction. Fresh hosted verification is required on the pushed
 head before evaluating the two-minute merge checkpoint.
+
+### October 6: detach packaged Workers and file bodies without JSON copying
+
+Hosted run 37495204012 at head 6183caec73 passes Backend Functional Coverage
+in 201s complete / 142.883s coverage, 67 packages / 764 results, 762 passes
+and two skips. It restores a compiler-cache prefix from head 912c4ba874 and
+executes 848 compiler commands and 23 links. This includes one recovered
+TestInterruptInputByteRefusalLeavesSourceControllable failure: the source
+Worker Session falls outside the first fleet-wide page as unrelated scenarios
+accumulate on the shared host. Retain the raw failure instead of claiming a
+retry-free result. The supervisor takes 156.717s and quarantine takes 47.775s.
+The complete hosted workflow, including Backend Lint, subsequently passes.
+
+The refusal helper now reads its exact source Worker Session before and after
+termination and verifies the proposed successor's exact public ID returns
+WORKER_SESSION_NOT_FOUND. The original provider admission/cancellation checks
+remain. An attempted Work-scoped list fails because these direct invocations
+do not create admitted Work records; it is discarded. Exact-ID lookup also
+passes the oversized successor identity case, preserving that input-budget
+coverage. The complete native Windows invoke_continue package passes in
+24.181s after the correction. No paging limits, timeouts or retry allowances
+are increased.
+
+CloneFactoryConfig previously serialized and decoded Worker prompts, portable
+file bodies and the rest of the definition on every detached copy. It now uses
+the existing typed Worker clone and a detached portable-manifest copy for those
+fields, retaining JSON copying for the remaining configuration. Worker runtime
+Session/concurrency/model-fallback metadata is still omitted, prompt-source
+identity is preserved, and nested argument, description, operation and tool
+argument storage remains detached. This extends immutable packaged-data reuse
+without caching mutable Factory Sessions or skipping install validation,
+selected writers, file restoration or atomic publication.
+
+A build-excluded B/C/C/B comparison runs the entire customer_journeys package
+twice per side on four pinned Linux CPUs, GOMAXPROCS=4 and GOGC=100. All runs
+pass. Baseline consumes 53.450528 CPU-seconds / 31.776384s combined wall;
+candidate consumes 49.571702 / 30.659223: 7.3% less CPU and 3.5% less wall.
+This is a package comparison, not a whole-lane improvement claim. Contracts,
+authored mapping and Factory Definitions Wire suites pass, including the new
+targeted detachment/runtime-metadata regression test. Both scoped linters pass.
+Evidence: factory-clone-paired/ under the ignored local latency-audit directory.
+
+The full candidate lane on live base d6151587f0 passes in 121.60s supervisor /
+115.422s coverage, using 325.24 CPU-seconds (259.09 user, 66.15 system),
+67 packages / 764 results (762 passes, two skips), without a retry ledger or
+logged retries. It includes 438 compiler commands consuming 74.578896
+CPU-seconds / 31.655297s active wall and 17 links consuming 17.165646
+CPU-seconds / 11.855997s active wall. This changed-source rebuild
+cannot be compared directly to the preceding warmer 88.07s run. Evidence:
+typed-clone-exact-worker-full/. The hosted complete-job two-minute checkpoint
+remains unmet; fresh hosted checks are required for this candidate.

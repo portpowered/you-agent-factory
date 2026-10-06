@@ -11,7 +11,12 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	data, err := json.Marshal(cfg)
+	// Worker cloning is already typed, and portable file bodies are immutable
+	// strings. Keep those bytes out of the remaining JSON representation copy.
+	serialized := *cfg
+	serialized.Workers = nil
+	serialized.ResourceManifest = nil
+	data, err := json.Marshal(&serialized)
 	if err != nil {
 		return nil, fmt.Errorf("encode Factory definition clone: %w", err)
 	}
@@ -20,11 +25,18 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 		return nil, fmt.Errorf("decode Factory definition clone: %w", err)
 	}
 	cloned.SetIgnoredJSONPaths(cfg.IgnoredJSONPaths())
-	for index := range cloned.Workers {
-		if index < len(cfg.Workers) {
-			cloned.Workers[index].PromptSourcePath = cfg.Workers[index].PromptSourcePath
+	if cfg.Workers != nil {
+		cloned.Workers = make([]FactoryWorkerConfig, len(cfg.Workers))
+		for index, worker := range cfg.Workers {
+			cloned.Workers[index] = CloneWorkerConfig(worker)
+			// Preserve the existing Factory clone's runtime metadata boundary.
+			cloned.Workers[index].SessionID = ""
+			cloned.Workers[index].Concurrency = 0
+			cloned.Workers[index].RuntimeDefaultModelProvider = ""
+			cloned.Workers[index].RuntimeDefaultModel = ""
 		}
 	}
+	cloned.ResourceManifest = cloneFactoryResourceManifest(cfg.ResourceManifest)
 	for index := range cloned.Workstations {
 		if index < len(cfg.Workstations) {
 			cloned.Workstations[index].PromptSourcePath = cfg.Workstations[index].PromptSourcePath
@@ -32,6 +44,19 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 		}
 	}
 	return &cloned, nil
+}
+
+func cloneFactoryResourceManifest(source *PortableResourceManifestConfig) *PortableResourceManifestConfig {
+	if source == nil {
+		return nil
+	}
+	cloned := *source
+	cloned.BundledFiles = append([]BundledFileConfig(nil), source.BundledFiles...)
+	cloned.RequiredTools = append([]RequiredToolConfig(nil), source.RequiredTools...)
+	for index := range cloned.RequiredTools {
+		cloned.RequiredTools[index].VersionArgs = append([]string(nil), source.RequiredTools[index].VersionArgs...)
+	}
+	return &cloned
 }
 
 // CloneGuardMatchConfig returns a detached guard match definition.
