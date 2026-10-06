@@ -13,7 +13,7 @@ import (
 func TestControlFrozenAttemptRefusesReplacementAfterWait(t *testing.T) {
 	t.Parallel()
 	for _, action := range []workersessions.ControlAction{workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {
-		for _, replacement := range []string{"dispatch", "supervision"} {
+		for _, replacement := range []string{"dispatch", "supervision", "generation"} {
 			t.Run(string(action)+"/"+replacement, func(t *testing.T) {
 				t.Parallel()
 				r := newTestRegistry(t)
@@ -36,6 +36,8 @@ func TestControlFrozenAttemptRefusesReplacementAfterWait(t *testing.T) {
 				s.controlActive = false
 				if replacement == "dispatch" {
 					s.dispatchID = "new-attempt"
+				} else if replacement == "generation" {
+					s.providerAttempt = &providerAttemptControl{}
 				} else {
 					s = newSupervision("old-attempt", "")
 					s.accepted = true

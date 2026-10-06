@@ -43,7 +43,7 @@ func runtimeAttemptPreparation(
 	execution := cfg.workerExecution
 	scheduler := cfg.workerAttemptScheduler
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	return func(ctx context.Context, executing *workers.ExecuteRequest) (attemptCompletionFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		admissionRequest := request
 		if strings.TrimSpace(request.WorkstationName) != workers.ProviderInvocationRoute {
@@ -51,6 +51,9 @@ func runtimeAttemptPreparation(
 		}
 		if strings.TrimSpace(admissionRequest.Execution.RuntimeID) == "" {
 			admissionRequest.Execution.RuntimeID = strings.TrimSpace(executeRequest.Correlation.RuntimeID)
+		}
+		if executing != nil {
+			admissionRequest.Execution.AttemptControlObserver = executing.Input.AttemptControlObserver
 		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
@@ -61,6 +64,7 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
+				BindAttemptControl:          bindRuntimeAttemptControl(executing),
 			},
 			execution,
 			clock,
@@ -75,7 +79,7 @@ func runtimeAttemptPreparation(
 		if err != nil {
 			return nil, err
 		}
-		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) (workers.ExecuteResult, error) {
 			result = normalizeAttemptResult(
 				executeRequest,
 				result,
@@ -88,8 +92,24 @@ func runtimeAttemptPreparation(
 				result,
 				executeErr,
 			)
-			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
+			_, forced, completionErr := attempt.Resolve(callbackCtx, dispatchResult, dispatchErr)
+			if forced {
+				result.Failure = nil
+				result.ProposedOutputPresent = false
+				result = canceledAttemptResult(executeRequest, result, workers.DispatchCancellationReasonCanceled)
+				return result, completionErr
+			}
+			return result, errors.Join(executeErr, completionErr)
 		}, nil
+	}
+}
+
+func bindRuntimeAttemptControl(executing *workers.ExecuteRequest) func(providers.AttemptControlObserver) {
+	return func(observe providers.AttemptControlObserver) {
+		if executing == nil || observe == nil {
+			return
+		}
+		executing.Input.AttemptControlObserver = observe
 	}
 }
 

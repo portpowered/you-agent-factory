@@ -238,6 +238,10 @@ func (r *registry) snapshotContinuationSourceLocked(
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationExecutionUnavailable
 	}
 	supervision.mu.Lock()
+	if supervision.forceJournalPending != 0 || supervision.controlPersistenceLost {
+		supervision.mu.Unlock()
+		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
+	}
 	interruptContinuation := interruptContinuationRequestID(supervision.interruptRequestID)
 	if supervision.interrupting && (supervision.interruptRequestID == "" || req.RequestID != interruptContinuation) {
 		supervision.mu.Unlock()

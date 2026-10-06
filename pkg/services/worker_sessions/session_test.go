@@ -25,14 +25,14 @@ func TestRuntimeAttempt_CompleteDelegatesAndRejectsUnavailable(t *testing.T) {
 	var gotResult workers.WorkstationDispatchResult
 	var gotDispatchErr error
 	called := false
-	attempt := workersessions.RuntimeAttempt(func(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) error {
+	attempt := workersessions.RuntimeAttempt(func(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) (workers.WorkstationDispatchResult, bool, error) {
 		called = true
 		if ctx.Value(key) != "present" {
 			t.Errorf("callback context value = %v, want present", ctx.Value(key))
 		}
 		gotResult = result
 		gotDispatchErr = dispatchErr
-		return wantDispatchErr
+		return result, false, wantDispatchErr
 	})
 
 	wantResult := workers.WorkstationDispatchResult{}

@@ -71,6 +71,7 @@ func Request(
 	}
 	command.ExecutionLogger = request.ExecutionLogger
 	command.ProcessLifecycleObserver = request.ProcessLifecycleObserver
+	command.OwnedProcessObserver = request.OwnedProcessObserver
 	return command
 }
 

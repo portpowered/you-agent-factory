@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +21,20 @@ type stopOperationStore struct {
 	unavailableWorkerControlStore
 	begin      func(context.Context, recordings.WorkerControlOperationRecord) error
 	advanceErr error
+	advance    func(context.Context, recordings.WorkerControlOperationRecord) error
 	records    []recordings.WorkerControlOperationRecord
 	failures   []recordings.WorkerRecordingFailure
+}
+
+func (s *stopOperationStore) LoadWorkerControlOperation(_ context.Context, key recordings.WorkerControlOperationKey) (recordings.WorkerControlOperationRecord, error) {
+	if len(s.records) == 0 {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	record := s.records[len(s.records)-1]
+	if interruptOperationKey(record) != key {
+		return recordings.WorkerControlOperationRecord{}, os.ErrNotExist
+	}
+	return record.Detached(), nil
 }
 
 func (s *stopOperationStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
@@ -44,7 +57,12 @@ func (s *stopOperationStore) BeginWorkerControlOperation(ctx context.Context, re
 	return record.Detached(), true, nil
 }
 
-func (s *stopOperationStore) AdvanceWorkerControlOperation(_ context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+func (s *stopOperationStore) AdvanceWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord, expected uint64) (recordings.WorkerControlOperationRecord, error) {
+	if s.advance != nil {
+		if err := s.advance(ctx, record); err != nil {
+			return record, err
+		}
+	}
 	if s.advanceErr != nil {
 		return record, s.advanceErr
 	}

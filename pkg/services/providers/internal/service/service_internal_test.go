@@ -251,6 +251,10 @@ func TestRootDispatchContinuationUsesCompletedCapabilities(t *testing.T) {
 				request := providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "continued-attempt", UserMessage: "next turn"}
 				observe := func(got providers.ExecuteRequest, ref providers.SessionRef) (providers.ExecuteResult, error) {
 					calls++
+					if (got.OwnedProcessObserver != nil) != (route == "native") {
+						t.Fatal("continuation process ownership observer disagrees with selected route")
+					}
+					got.OwnedProcessObserver = nil
 					if !reflect.DeepEqual(got, request) || ref != reference {
 						t.Fatalf("continuation input = (%#v, %#v), want (%#v, %#v)", got, ref, request, reference)
 					}

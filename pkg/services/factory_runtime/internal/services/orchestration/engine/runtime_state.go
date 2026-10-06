@@ -55,8 +55,15 @@ func workResultForCompletedDispatch(result workerexecution.WorkResult, completed
 		result.FailureMetadata = nil
 		result.RecordedOutputWork = nil
 		result.Output = ""
+		result.OutputContent = nil
+		result.Feedback = ""
+		result.SelectedClassificationLabel = ""
+		result.Continuation = nil
 		result.StructuredResult = nil
 		result.StructuredResultPresent = false
+		// Cancellation owns the response even when the completion carried stale
+		// classifier or failure data. Those facts cannot authorize routing/retry.
+		return result
 	}
 	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
 	if completed.FailureDetail != nil {

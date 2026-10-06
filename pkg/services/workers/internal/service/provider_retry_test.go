@@ -205,7 +205,17 @@ func TestHasProviderCompletionEvidenceAcceptsProviderMetadata(t *testing.T) {
 func TestAdaptRunnerRequestPreservesDetachedInputIdentityAndDispatchFacts(t *testing.T) {
 	t.Parallel()
 
-	got := adaptRunnerRequest(detachedAdaptRequest(), runners.ScriptIdentity, nil)
+	request := detachedAdaptRequest()
+	observed := false
+	request.Input.AttemptControlObserver = func(providers.AttemptControl) { observed = true }
+	got := adaptRunnerRequest(request, runners.ScriptIdentity, nil)
+	if got.AttemptControlObserver == nil {
+		t.Fatal("detached request lost attempt control observation")
+	}
+	got.AttemptControlObserver(nil)
+	if !observed {
+		t.Fatal("adapted request replaced the attempt observer")
+	}
 	token := onlyAdaptedInputToken(t, got)
 	assertAdaptedTokenIdentity(t, token)
 	assertAdaptedTokenProductFacts(t, token)

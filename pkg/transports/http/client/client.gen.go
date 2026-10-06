@@ -8912,9 +8912,12 @@ type WorkerSessionControlResponse struct {
 	Action WorkerSessionControlResponseAction `json:"action"`
 
 	// DispatchId Exact admitted dispatch identity, or empty before admission.
-	DispatchId string                              `json:"dispatchId"`
-	Outcome    WorkerSessionControlResponseOutcome `json:"outcome"`
-	State      WorkerSessionControlResponseState   `json:"state"`
+	DispatchId string `json:"dispatchId"`
+
+	// Forced Present and true only for force requests. The action remains TERMINATE.
+	Forced  *bool                               `json:"forced,omitempty"`
+	Outcome WorkerSessionControlResponseOutcome `json:"outcome"`
+	State   WorkerSessionControlResponseState   `json:"state"`
 
 	// WorkerSessionId Stable Worker Session identity targeted by the control.
 	WorkerSessionId string `json:"workerSessionId"`
@@ -10042,8 +10045,20 @@ type ReadWorkerSessionLogsParams struct {
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
 
+// TerminateWorkerSessionJSONBody defines parameters for TerminateWorkerSession.
+type TerminateWorkerSessionJSONBody struct {
+	ExpectedAttemptId *string `json:"expectedAttemptId,omitempty"`
+
+	// Force Force terminate the exact owned attempt. Requires requestId and expectedAttemptId. Unsupported attempts have no effects.
+	Force     *bool   `json:"force,omitempty"`
+	RequestId *string `json:"requestId,omitempty"`
+}
+
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
+
+// TerminateWorkerSessionJSONRequestBody defines body for TerminateWorkerSession for application/json ContentType.
+type TerminateWorkerSessionJSONRequestBody TerminateWorkerSessionJSONBody
 
 // Getter for additional properties for BundledFile. Returns the specified
 // element and whether it was found
@@ -18726,8 +18741,10 @@ type ClientInterface interface {
 	// ReadWorkerSessionLogs request
 	ReadWorkerSessionLogs(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// TerminateWorkerSession request
-	TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// TerminateWorkerSessionWithBody request with any body
+	TerminateWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body TerminateWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReadWorkerSessionTranscriptByWorkerSessionId request
 	ReadWorkerSessionTranscriptByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -18901,8 +18918,20 @@ func (c *Client) ReadWorkerSessionLogs(ctx context.Context, workerSessionId Work
 	return c.Client.Do(req)
 }
 
-func (c *Client) TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTerminateWorkerSessionRequest(c.Server, workerSessionId)
+func (c *Client) TerminateWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTerminateWorkerSessionRequestWithBody(c.Server, workerSessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TerminateWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body TerminateWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTerminateWorkerSessionRequest(c.Server, workerSessionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -19784,8 +19813,19 @@ func NewReadWorkerSessionLogsRequest(server string, workerSessionId WorkerSessio
 	return req, nil
 }
 
-// NewTerminateWorkerSessionRequest generates requests for TerminateWorkerSession
-func NewTerminateWorkerSessionRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
+// NewTerminateWorkerSessionRequest calls the generic TerminateWorkerSession builder with application/json body
+func NewTerminateWorkerSessionRequest(server string, workerSessionId WorkerSessionID, body TerminateWorkerSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTerminateWorkerSessionRequestWithBody(server, workerSessionId, "application/json", bodyReader)
+}
+
+// NewTerminateWorkerSessionRequestWithBody generates requests for TerminateWorkerSession with any type of body
+func NewTerminateWorkerSessionRequestWithBody(server string, workerSessionId WorkerSessionID, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19810,10 +19850,12 @@ func NewTerminateWorkerSessionRequest(server string, workerSessionId WorkerSessi
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	req, err := http.NewRequest("POST", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -19936,8 +19978,10 @@ type ClientWithResponsesInterface interface {
 	// ReadWorkerSessionLogsWithResponse request
 	ReadWorkerSessionLogsWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *ReadWorkerSessionLogsParams, reqEditors ...RequestEditorFn) (*ReadWorkerSessionLogsClientResponse, error)
 
-	// TerminateWorkerSessionWithResponse request
-	TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error)
+	// TerminateWorkerSessionWithBodyWithResponse request with any body
+	TerminateWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error)
+
+	TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body TerminateWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error)
 
 	// ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse request
 	ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse, error)
@@ -20447,9 +20491,17 @@ func (c *ClientWithResponses) ReadWorkerSessionLogsWithResponse(ctx context.Cont
 	return ParseReadWorkerSessionLogsClientResponse(rsp)
 }
 
-// TerminateWorkerSessionWithResponse request returning *TerminateWorkerSessionClientResponse
-func (c *ClientWithResponses) TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error) {
-	rsp, err := c.TerminateWorkerSession(ctx, workerSessionId, reqEditors...)
+// TerminateWorkerSessionWithBodyWithResponse request with arbitrary body returning *TerminateWorkerSessionClientResponse
+func (c *ClientWithResponses) TerminateWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error) {
+	rsp, err := c.TerminateWorkerSessionWithBody(ctx, workerSessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTerminateWorkerSessionClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) TerminateWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body TerminateWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*TerminateWorkerSessionClientResponse, error) {
+	rsp, err := c.TerminateWorkerSession(ctx, workerSessionId, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

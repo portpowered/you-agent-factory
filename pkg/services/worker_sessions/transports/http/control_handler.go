@@ -20,7 +20,7 @@ import (
 // the route, so callers cannot submit an arbitrary action payload or identity.
 func (a *Adapter) ControlWorkerSession(
 	ctx context.Context,
-	workerSessionID string,
+	request workersessions.ControlRequest,
 	action workersessions.ControlAction,
 ) (factoryapi.WorkerSessionControlResponse, error) {
 	if a == nil || a.controller == nil {
@@ -29,7 +29,7 @@ func (a *Adapter) ControlWorkerSession(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	request := workersessions.ControlRequest{ID: strings.TrimSpace(workerSessionID)}
+	request.ID = strings.TrimSpace(request.ID)
 	if err := request.Validate(); err != nil {
 		return factoryapi.WorkerSessionControlResponse{}, err
 	}
@@ -148,12 +148,114 @@ func (h *Handler) controlWorkerSession(
 		writeError(w, http.StatusBadRequest, "worker session id is required", "WORKER_SESSION_CONTROL_INVALID")
 		return
 	}
-	response, err := h.adapter.ControlWorkerSession(r.Context(), string(workerSessionID), action)
+	request := workersessions.ControlRequest{ID: strings.TrimSpace(string(workerSessionID))}
+	if action == workersessions.ControlActionTerminate {
+		var err error
+		request, err = decodeTerminateControl(r.Body, request)
+		if err != nil {
+			h.writeMappedControlError(w, workersessions.ErrInvalidForceControl)
+			return
+		}
+	}
+	response, err := h.adapter.ControlWorkerSession(r.Context(), request, action)
 	if err != nil {
 		h.writeMappedControlError(w, err)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, response)
+}
+
+// Force tuples are strict: unknown fields, nulls, and identities without force
+// cannot silently become an ordinary terminate against the selected session.
+func decodeTerminateControl(body io.Reader, request workersessions.ControlRequest) (workersessions.ControlRequest, error) {
+	if body == nil {
+		return request, nil
+	}
+	decoder := json.NewDecoder(body)
+	fields, err := decodeTerminateObject(decoder)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return request, nil
+		}
+		return request, err
+	}
+	if fields == nil {
+		return request, workersessions.ErrInvalidForceControl
+	}
+	payload, err := decodeTerminateFields(fields)
+	if err != nil {
+		return request, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return request, workersessions.ErrInvalidForceControl
+	}
+	request.Force = payload.Force != nil && *payload.Force
+	if !request.Force && (payload.RequestId != nil || payload.ExpectedAttemptId != nil) {
+		return request, workersessions.ErrInvalidForceControl
+	}
+	request.RequestID = strings.TrimSpace(optionalString(payload.RequestId))
+	request.ExpectedAttemptID = strings.TrimSpace(optionalString(payload.ExpectedAttemptId))
+	return request, request.Validate()
+}
+
+// Decode keys before storing values so duplicate members (including escaped
+// spellings) cannot replace the mode or either identity before validation.
+func decodeTerminateObject(decoder *json.Decoder) (map[string]json.RawMessage, error) {
+	opening, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if opening != json.Delim('{') {
+		return nil, workersessions.ErrInvalidForceControl
+	}
+	fields := make(map[string]json.RawMessage)
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		if _, exists := fields[key]; exists {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		fields[key] = value
+	}
+	if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
+		return nil, workersessions.ErrInvalidForceControl
+	}
+	return fields, nil
+}
+
+func decodeTerminateFields(fields map[string]json.RawMessage) (factoryapi.TerminateWorkerSessionJSONBody, error) {
+	var payload factoryapi.TerminateWorkerSessionJSONBody
+	for key, value := range fields {
+		if string(value) == "null" {
+			return payload, workersessions.ErrInvalidForceControl
+		}
+		var destination any
+		switch key {
+		case "force":
+			destination = &payload.Force
+		case "requestId":
+			destination = &payload.RequestId
+		case "expectedAttemptId":
+			destination = &payload.ExpectedAttemptId
+		default:
+			return payload, workersessions.ErrInvalidForceControl
+		}
+		if err := json.Unmarshal(value, destination); err != nil {
+			return payload, err
+		}
+	}
+	return payload, nil
 }
 
 func decodeWorkerSessionStartRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest], error) {
@@ -244,9 +346,11 @@ func interruptErrorResponse(err error) (int, string, string) {
 
 func (h *Handler) writeMappedControlError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrForceTerminationUnconfirmed):
+		writeError(w, http.StatusServiceUnavailable, "Workers could not apply the Worker Session control", "WORKER_SESSION_CONTROL_FAILED")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return
-	case errors.Is(err, workersessions.ErrInvalidSessionID):
+	case errors.Is(err, workersessions.ErrInvalidSessionID), errors.Is(err, workersessions.ErrInvalidForceControl):
 		writeError(w, http.StatusBadRequest, "invalid Worker Session control request", "WORKER_SESSION_CONTROL_INVALID")
 	case errors.Is(err, workersessions.ErrSessionNotFound):
 		writeError(w, http.StatusNotFound, "Worker Session not found", "NOT_FOUND")

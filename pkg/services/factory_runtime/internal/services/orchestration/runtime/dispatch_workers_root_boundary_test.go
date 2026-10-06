@@ -879,7 +879,12 @@ func TestAttemptShutdownJoinsTerminalPublicationAfterCapacityRelease(t *testing.
 			terminal := attemptTerminalFunc(block)
 			var prepare attemptPreparation
 			if prepared {
-				prepare = func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) { return block, nil }
+				prepare = func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) {
+					return func(ctx context.Context, req workers.ExecuteRequest, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
+						block(ctx, req, result, err)
+						return result, err
+					}, nil
+				}
 				terminal = func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}
 			}
 			if err := lifecycle.startWithPreparation(context.Background(), attemptTestRequest("dispatch", "attempt"), true, terminal, false, prepare); err != nil {
@@ -918,7 +923,7 @@ func TestAttemptShutdownDrainsRejectedPreparation(t *testing.T) {
 	want := errors.New("recording unavailable")
 	err := lifecycle.startWithPreparation(context.Background(), attemptTestRequest("dispatch", "attempt"), true,
 		func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}, false,
-		func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) { return nil, want })
+		func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) { return nil, want })
 	if !errors.Is(err, want) {
 		t.Fatalf("prepare = %v, want %v", err, want)
 	}

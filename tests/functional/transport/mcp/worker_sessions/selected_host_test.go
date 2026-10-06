@@ -33,7 +33,8 @@ const interruptJSON = `{"accepted":true,"phase":"SUCCESSOR_ADMISSION","requestId
 
 func TestWorkerSessionMCPParity(t *testing.T) {
 	t.Run("parity", runSelectedHostScenarios)
-	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control")
+	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control",
+		"cli/you.worker-sessions.terminate", "rest/terminateWorkerSession")
 }
 
 func runSelectedHostScenarios(t *testing.T) {
@@ -42,6 +43,28 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostControls(t, process)
 	})
+	t.Run("real host force target controls", func(t *testing.T) {
+		t.Parallel()
+		runRealHostForceControls(t, process)
+	})
+	for _, mode := range []string{"unattached", "declined", "failed"} {
+		t.Run("real host force "+mode, func(t *testing.T) {
+			t.Parallel()
+			runForceHostFailure(t, process, mode)
+		})
+	}
+	t.Run("real host force caller disconnect", func(t *testing.T) {
+		t.Parallel()
+		runDetachedForceControl(t, process)
+	})
+	for _, phase := range []string{"intent", "result"} {
+		for _, mode := range []string{"confirmed", "failed"} {
+			t.Run("real host force persistence "+phase+" "+mode, func(t *testing.T) {
+				t.Parallel()
+				runForcePersistenceFailure(t, process, phase, mode)
+			})
+		}
+	}
 	t.Run("real host history snapshots", func(t *testing.T) {
 		t.Parallel()
 		runRealHostHistory(t, process)
@@ -280,6 +303,11 @@ func assertJSONEqual(t *testing.T, actual, expected any) {
 	left, _ := json.Marshal(actual)
 	right, _ := json.Marshal(expected)
 	var normalized any
+	if err := json.Unmarshal(left, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	left, _ = json.Marshal(normalized)
+	normalized = nil
 	if err := json.Unmarshal(right, &normalized); err != nil {
 		t.Fatal(err)
 	}

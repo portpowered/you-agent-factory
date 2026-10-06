@@ -124,6 +124,7 @@ func TestControlAttempt_DeterministicUnsupportedForEveryAction(t *testing.T) {
 		providers.ControlActionPause,
 		providers.ControlActionCancel,
 		providers.ControlActionTerminate,
+		providers.ControlActionKill,
 	} {
 		result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 			Provider:  providers.IDCodex,

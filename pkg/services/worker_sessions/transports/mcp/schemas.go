@@ -89,7 +89,11 @@ func controlSchema() map[string]any {
 			},
 			"operation": map[string]any{
 				"type": "string",
-				"enum": []any{"CANCEL", "TERMINATE", "INTERRUPT"},
+				"enum": []any{"CANCEL", "TERMINATE", "INTERRUPT", "KILL"},
+			},
+			"expectedAttemptId": map[string]any{
+				"type":      "string",
+				"minLength": 1,
 			},
 			"requestId": map[string]any{
 				"type":      "string",

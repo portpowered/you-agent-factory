@@ -182,6 +182,8 @@ func (s *Service) dispatch(
 	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
+	control.allowKill = canonicalProvider == providers.IDCodex || canonicalProvider == providers.IDClaude
+	request.OwnedProcessObserver = control.attachProcess
 	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
 	if bindErr != nil {
 		cancelAttempt()
@@ -245,6 +247,8 @@ func (s *Service) dispatchContinuation(
 	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
+	control.allowKill = canonicalProvider == providers.IDCodex || canonicalProvider == providers.IDClaude
+	request.OwnedProcessObserver = control.attachProcess
 	release, bindErr := s.bindLiveAttempt(canonicalProvider, request.AttemptID, control)
 	if bindErr != nil {
 		cancelAttempt()
@@ -274,6 +278,7 @@ func (s *Service) executeNativeAttempt(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
+	s.publishAttemptControl(request, control)
 	result, err = s.execution.Execute(attemptCtx, request)
 	return result, err
 }
@@ -287,6 +292,7 @@ func (s *Service) executeNativeContinuation(
 	defer func() {
 		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
 	}()
+	s.publishAttemptControl(request, control)
 	return s.execution.Continue(attemptCtx, execution.ContinuationRequest{
 		ExecuteRequest: request,
 		ResumeSession:  &reference,
@@ -619,7 +625,7 @@ func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descrip
 	return s.catalog.RegistrationProvider(provider)
 }
 
-// ControlAttempt routes a valid cancel or terminate request to the exact
+// ControlAttempt routes a valid cancel, terminate or capability-gated kill request to the exact
 // live native provider attempt it names, or a valid cancel request to the
 // exact live ACP attempt it names, when one is bound and truthfully
 // supports the requested action right now, and otherwise answers with the
@@ -630,6 +636,10 @@ func (s *Service) ControlAttempt(
 	ctx context.Context,
 	request providers.ControlAttemptRequest,
 ) (providers.ControlAttemptResult, error) {
+	return s.controlAttempt(ctx, request, nil)
+}
+
+func (s *Service) controlAttempt(ctx context.Context, request providers.ControlAttemptRequest, expected *nativeAttemptControl) (providers.ControlAttemptResult, error) {
 	if err := request.Validate(); err != nil {
 		s.logger.Info(
 			"provider control attempt rejected",
@@ -647,8 +657,18 @@ func (s *Service) ControlAttempt(
 		"action", string(request.Action),
 	)
 	outcome := providers.ControlOutcomeUnsupported
+	if request.Action == providers.ControlActionKill && ctx.Err() != nil {
+		return providers.ControlAttemptResult{}, ctx.Err()
+	}
 	key := liveAttemptKey{provider: request.Provider, attemptID: request.AttemptID}
-	if control, claimed := s.attempts.claim(key, request.Action); claimed {
+	var control liveAttemptControl
+	var claimed bool
+	if expected == nil {
+		control, claimed = s.attempts.claim(key, request.Action)
+	} else {
+		control, claimed = s.attempts.claimMatching(key, request.Action, expected)
+	}
+	if claimed {
 		accepted, err := control.signal(ctx)
 		if err != nil {
 			s.logger.Info(
@@ -666,6 +686,10 @@ func (s *Service) ControlAttempt(
 		// rather than a false Completed.
 		if accepted {
 			outcome = providers.ControlOutcomeCompleted
+		} else if request.Action == providers.ControlActionKill {
+			if native, ok := control.(*nativeAttemptControl); ok {
+				s.attempts.restoreDeclinedKill(key, native)
+			}
 		}
 	}
 	result := providers.ControlAttemptResult{
@@ -821,7 +845,7 @@ var _ liveAttemptControl = (*acpAttemptControl)(nil)
 // supports atomically claims the bound attempt's exact live generation, if
 // its session/prompt turn is truthfully live right now, capturing it into
 // generation for signal to use. It is used only to decide whether the
-// registry should remove this identity's registration for a Cancel request
+// registry should consume this identity's control seam for a Cancel request
 // at all (so a Cancel that arrives before or after the live window leaves the
 // registration untouched for a later attempt); signal remains the atomic
 // source of truth for whether the resulting outcome was genuinely accepted,

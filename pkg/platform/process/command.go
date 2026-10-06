@@ -88,6 +88,7 @@ type CommandRequest struct {
 	ExecutionScopeID         string                   `json:"execution_scope_id,omitempty"`
 	ExecutionLogger          logging.Logger           `json:"-"`
 	ProcessLifecycleObserver ProcessLifecycleObserver `json:"-"`
+	OwnedProcessObserver     OwnedProcessObserver     `json:"-"`
 }
 
 // CommandResult captures the observable output and exit status from a command.

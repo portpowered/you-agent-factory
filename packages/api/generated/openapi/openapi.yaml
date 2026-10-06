@@ -344,6 +344,24 @@ paths:
       description: Requests termination of the exact admitted Worker Session dispatch and joins its completion before returning. Repeated and concurrent calls are idempotent and return the canonical terminal snapshot.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: Force terminate the exact owned attempt. Requires requestId and expectedAttemptId. Unsupported attempts have no effects.
+                requestId:
+                  type: string
+                  minLength: 1
+                expectedAttemptId:
+                  type: string
+                  minLength: 1
       responses:
         '200':
           description: The Worker Session control result.
@@ -3584,6 +3602,9 @@ components:
         - dispatchId
       description: Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action.
       properties:
+        forced:
+          type: boolean
+          description: Present and true only for force requests. The action remains TERMINATE.
         workerSessionId:
           type: string
           description: Stable Worker Session identity targeted by the control.

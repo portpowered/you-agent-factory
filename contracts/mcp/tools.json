@@ -4168,11 +4168,17 @@
             "requestId": "redirect-001",
             "successorWorkerSessionId": "direct-worker-002",
             "workerSessionId": "direct-worker-001"
+          },
+          {
+            "workerSessionId": "direct-worker-001",
+            "operation": "KILL",
+            "requestId": "kill-001",
+            "expectedAttemptId": "attempt-001"
           }
         ],
         "formatVersion": "1.0.0",
         "itemId": "mcp.tool.you.worker_session.control",
-        "sourceHash": "e57f6a8bfae236e653f29bb49a25cf809650662d673e9b80d9977517c8f43e0b",
+        "sourceHash": "6b0cbb4be380cd24655ff8f4811ae37a7c686d5ea002bb30e61016637f4ad290",
         "visibility": "public"
       },
       "execution": {
@@ -4189,7 +4195,8 @@
               "enum": [
                 "CANCEL",
                 "TERMINATE",
-                "INTERRUPT"
+                "INTERRUPT",
+                "KILL"
               ]
             },
             "id": "mcp.arg.you.worker_session.control.operation",
@@ -4227,6 +4234,14 @@
             "id": "mcp.arg.you.worker_session.control.worker_session_id",
             "name": "workerSessionId",
             "required": true
+          },
+          "mcp.arg.you.worker_session.control.expected_attempt_id": {
+            "constraints": {
+              "minLength": 1
+            },
+            "id": "mcp.arg.you.worker_session.control.expected_attempt_id",
+            "name": "expectedAttemptId",
+            "required": false
           }
         },
         "schema": {
@@ -4237,7 +4252,8 @@
               "enum": [
                 "CANCEL",
                 "TERMINATE",
-                "INTERRUPT"
+                "INTERRUPT",
+                "KILL"
               ],
               "type": "string"
             },
@@ -4256,6 +4272,10 @@
             "workerSessionId": {
               "minLength": 1,
               "type": "string"
+            },
+            "expectedAttemptId": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [

@@ -44,6 +44,42 @@ func replaceFrozenRuntimeOwner(r *registry, id string, a *runtimeAttempt, replac
 	}
 }
 
+func TestRuntimeProviderControlRetainsOnlyFirstLiveCapability(t *testing.T) {
+	t.Parallel()
+	r, id, a, _ := newFrozenRuntimeControlFixture(t)
+	owned := &projectedAttemptControl{identity: "owned"}
+	a.observeProviderAttemptControl(nil)
+	a.observeProviderAttemptControl(owned)
+	a.observeProviderAttemptControl(&projectedAttemptControl{identity: "substitute"})
+	if a.providerControl != owned {
+		t.Fatal("runtime attempt did not retain the first exact capability")
+	}
+	a.retireProviderAttemptControl()
+	a.observeProviderAttemptControl(owned)
+	if a.providerControl != nil || !a.providerControlRetired || r.sessions[id].State != workersessions.StateRunning {
+		t.Fatal("late callback revived retired control or changed lifecycle state")
+	}
+}
+
+func TestRuntimeProviderControlCannotAttachAfterOwnershipReplacement(t *testing.T) {
+	t.Parallel()
+	for _, replacement := range []string{"handle", "scope", "dispatch", "completing"} {
+		t.Run(replacement, func(t *testing.T) {
+			t.Parallel()
+			r, id, a, _ := newFrozenRuntimeControlFixture(t)
+			if replacement == "completing" {
+				a.completing = true
+			} else {
+				replaceFrozenRuntimeOwner(r, id, a, replacement)
+			}
+			a.observeProviderAttemptControl(&projectedAttemptControl{identity: "late"})
+			if a.providerControl != nil || r.runtimeAttemptControls[id].providerControl != nil {
+				t.Fatal("late capability attached to a stale or replacement runtime owner")
+			}
+		})
+	}
+}
+
 func TestControlFrozenRuntimeRefusesReplacementDuringHistory(t *testing.T) {
 	t.Parallel()
 	for _, action := range []workersessions.ControlAction{workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {

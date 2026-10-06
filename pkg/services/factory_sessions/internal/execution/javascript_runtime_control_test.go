@@ -122,12 +122,12 @@ func TestChildWorkerExecutor_TimeoutReleasesCapacityAndSuppressesLateSuccess(t *
 	var completed workers.ExecuteResult
 	var completeErr error
 	completeCalls := 0
-	executor.attemptStarter = func(_ context.Context, _ workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
-		return func(_ context.Context, result workers.ExecuteResult, err error) error {
+	executor.attemptStarter = func(_ context.Context, _ *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return func(_ context.Context, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
 			completeCalls++
 			completed = result
 			completeErr = err
-			return nil
+			return result, err
 		}, nil
 	}
 

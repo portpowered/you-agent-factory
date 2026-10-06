@@ -75,6 +75,9 @@ func TestControlLocalMapsAllActionsAndJSONResult(t *testing.T) {
 			if local.request.ID != "worker-1" || local.action != action {
 				t.Fatalf("local request = %#v action=%q, want worker-1/%q", local.request, local.action, action)
 			}
+			if result.Forced != nil || local.request.Force || local.request.RequestID != "" || local.request.ExpectedAttemptID != "" {
+				t.Fatalf("ordinary control unexpectedly selected force: request=%#v result=%#v", local.request, result)
+			}
 		})
 	}
 }

@@ -65,7 +65,13 @@ func (a *runtimeAttempt) Complete(
 	a.mu.Unlock()
 	a.once.Do(func() {
 		defer close(completed)
+		a.retireProviderAttemptControl()
 		action, controlOutcome, controlHistory := a.completionState()
+		a.mu.Lock()
+		if a.forceConfirmed {
+			result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+		}
+		a.mu.Unlock()
 		r := a.registry
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
 		state, terminal := dispatchedTerminal(action, result, dispatchErr)
@@ -95,7 +101,32 @@ func (a *runtimeAttempt) Complete(
 		r.mu.Unlock()
 		r.releaseRuntimeAttemptKey(a.key, a.workerID)
 	})
-	return nil
+	// The force join above must finish before saving its result. Runtime's
+	// completion callback, however, must not return and select a retry until
+	// that result has been acknowledged (or the logical dispatch is sealed).
+	return a.awaitForceJournal()
+}
+
+// Resolve preserves natural and unconfirmed outcomes; only this physical
+// attempt's confirmed force claim can replace its result with cancellation.
+func (a *runtimeAttempt) Resolve(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) (workers.WorkstationDispatchResult, bool, error) {
+	err := a.Complete(ctx, result, dispatchErr)
+	if a == nil {
+		return result, false, err
+	}
+	a.mu.Lock()
+	confirmed := a.forceConfirmed
+	a.mu.Unlock()
+	if !confirmed {
+		return result, false, err
+	}
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	result.ReconciliationReason = ""
+	result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+	result.Result = workers.WorkResult{DispatchID: result.Result.DispatchID, TransitionID: result.Result.TransitionID,
+		Outcome: workers.OutcomeCanceled, Cancellation: result.Cancellation.Clone(), Metrics: result.Result.Metrics}
+	result.ProposedOutput = nil
+	return result, true, err
 }
 
 func runtimeAttemptCancelOutcomeSupported(outcome workers.WorkstationDispatchCancelOutcome) bool {

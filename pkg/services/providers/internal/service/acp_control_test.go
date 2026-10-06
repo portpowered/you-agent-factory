@@ -251,7 +251,7 @@ func TestControlAttempt_ACPCancelUnsupportedBeforeSessionEstablishedThenSucceeds
 	}
 }
 
-func TestControlAttempt_ACPTerminateAndPauseAreNeverSupportedAndLeaveAttemptRunning(t *testing.T) {
+func TestControlAttempt_ACPTerminatePauseAndKillAreNeverSupportedAndLeaveAttemptRunning(t *testing.T) {
 	t.Parallel()
 
 	fake := newACPAwareAttempt("cursor-acp")
@@ -270,7 +270,7 @@ func TestControlAttempt_ACPTerminateAndPauseAreNeverSupportedAndLeaveAttemptRunn
 	close(fake.openCancelWindow)
 	<-fake.becameCancelable
 
-	for _, action := range []providers.ControlAction{providers.ControlActionTerminate, providers.ControlActionPause} {
+	for _, action := range []providers.ControlAction{providers.ControlActionTerminate, providers.ControlActionPause, providers.ControlActionKill} {
 		result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 			Provider:  "cursor-acp",
 			AttemptID: "acp-attempt-2",
@@ -284,10 +284,10 @@ func TestControlAttempt_ACPTerminateAndPauseAreNeverSupportedAndLeaveAttemptRunn
 		}
 	}
 	if fake.cancelCalls != 0 {
-		t.Fatalf("ACP cancel calls = %d, want 0 for terminate/pause", fake.cancelCalls)
+		t.Fatalf("ACP cancel calls = %d, want 0 for terminate/pause/kill", fake.cancelCalls)
 	}
 
-	// The unsupported terminate/pause attempts must not have consumed or
+	// The unsupported terminate/pause/kill attempts must not have consumed or
 	// corrupted the live registration: a supported cancel on the same
 	// identity must still reach it.
 	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{

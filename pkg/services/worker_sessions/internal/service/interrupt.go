@@ -867,6 +867,9 @@ func (r *registry) transitionToPaused(id string) bool {
 // The request carries the registry-owned reference unchanged so the Workers
 // provider runner must route only through Providers.Continue.
 func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	if req.Force {
+		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl)
+	}
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
 	}

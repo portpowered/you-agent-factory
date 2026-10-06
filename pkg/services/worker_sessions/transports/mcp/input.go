@@ -26,6 +26,7 @@ type controlInput struct {
 	WorkerSessionID          string  `json:"workerSessionId"`
 	Operation                string  `json:"operation"`
 	RequestID                *string `json:"requestId"`
+	ExpectedAttemptID        *string `json:"expectedAttemptId"`
 	SuccessorWorkerSessionID *string `json:"successorWorkerSessionId"`
 	ReplacementMessage       *string `json:"replacementMessage"`
 }
@@ -109,6 +110,9 @@ func decodeRead(raw json.RawMessage) (readInput, error) {
 
 func decodeControl(raw json.RawMessage) (controlInput, error) {
 	var input controlInput
+	if err := validateControlFields(raw); err != nil {
+		return input, err
+	}
 	_, err := decodeInput(raw, &input)
 	if err != nil {
 		return input, err
@@ -116,8 +120,14 @@ func decodeControl(raw json.RawMessage) (controlInput, error) {
 	if strings.TrimSpace(input.WorkerSessionID) == "" {
 		return input, fmt.Errorf("workerSessionId is required")
 	}
-	if !slices.Contains([]string{"CANCEL", "TERMINATE", "INTERRUPT"}, input.Operation) {
-		return input, fmt.Errorf("operation must be CANCEL, TERMINATE or INTERRUPT")
+	if !slices.Contains([]string{"CANCEL", "TERMINATE", "INTERRUPT", "KILL"}, input.Operation) {
+		return input, fmt.Errorf("operation must be CANCEL, TERMINATE, INTERRUPT or KILL")
+	}
+	if input.Operation == "KILL" {
+		return input, validateKillInput(input)
+	}
+	if input.ExpectedAttemptID != nil {
+		return input, fmt.Errorf("expectedAttemptId is accepted only with KILL")
 	}
 	if input.Operation != "INTERRUPT" {
 		if input.RequestID != nil || input.SuccessorWorkerSessionID != nil || input.ReplacementMessage != nil {
@@ -129,4 +139,44 @@ func decodeControl(raw json.RawMessage) (controlInput, error) {
 		return input, fmt.Errorf("INTERRUPT requires requestId, successorWorkerSessionId and replacementMessage")
 	}
 	return input, nil
+}
+
+// Control fields must have one canonical spelling and one value. Go's struct
+// decoder otherwise accepts case aliases and lets later members change the
+// operation or target before admission.
+func validateControlFields(raw json.RawMessage) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return fmt.Errorf("arguments must be one JSON object")
+	}
+	seen := make(map[string]bool)
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("invalid control arguments")
+		}
+		key, ok := token.(string)
+		if !ok || seen[key] || !slices.Contains([]string{"workerSessionId", "operation", "requestId", "expectedAttemptId", "successorWorkerSessionId", "replacementMessage"}, key) {
+			return fmt.Errorf("control arguments contain duplicate or unknown properties")
+		}
+		seen[key] = true
+		if err := decoder.Decode(new(json.RawMessage)); err != nil {
+			return fmt.Errorf("invalid control arguments")
+		}
+	}
+	if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
+		return fmt.Errorf("arguments must be one JSON object")
+	}
+	return nil
+}
+
+func validateKillInput(input controlInput) error {
+	if input.SuccessorWorkerSessionID != nil || input.ReplacementMessage != nil {
+		return fmt.Errorf("replacement fields are accepted only with INTERRUPT")
+	}
+	if input.RequestID == nil || strings.TrimSpace(*input.RequestID) == "" || input.ExpectedAttemptID == nil || strings.TrimSpace(*input.ExpectedAttemptID) == "" {
+		return fmt.Errorf("KILL requires requestId and expectedAttemptId")
+	}
+	return nil
 }

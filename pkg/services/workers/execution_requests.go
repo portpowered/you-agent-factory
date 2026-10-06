@@ -216,6 +216,7 @@ type WorkstationExecutionRequest struct {
 	Timeout                     time.Duration                            `json:"timeout,omitempty"`
 	EnvVars                     map[string]string                        `json:"env_vars,omitempty"`
 	ProcessEnvironment          []string                                 `json:"-"`
+	AttemptControlObserver      providers.AttemptControlObserver         `json:"-"`
 	ProcessLifecycleObserver    platformprocess.ProcessLifecycleObserver `json:"-"`
 	Worktree                    string                                   `json:"worktree,omitempty"`
 	WorkingDirectory            string                                   `json:"working_directory,omitempty"`
@@ -256,6 +257,7 @@ type ProviderInferenceRequest struct {
 	RequiredOptionalCapabilities []RunnerOptionalCapability               `json:"required_optional_capabilities,omitempty"`
 	EnvVars                      map[string]string                        `json:"env_vars,omitempty"`
 	ProcessEnvironment           []string                                 `json:"-"`
+	AttemptControlObserver       providers.AttemptControlObserver         `json:"-"`
 	ProcessLifecycleObserver     platformprocess.ProcessLifecycleObserver `json:"-"`
 	Worktree                     string                                   `json:"worktree,omitempty"`
 	WorkingDirectory             string                                   `json:"working_directory,omitempty"`
@@ -630,6 +632,9 @@ type ExecutionInput struct {
 	// uses it to record the effective execution target without moving resource
 	// preparation into the runtime boundary.
 	PreparedRequestObserver func(ExecuteRequest) `json:"-"`
+	// AttemptControlObserver receives the ephemeral Provider execution handle
+	// for this input. Workers forwards it without retaining control authority.
+	AttemptControlObserver providers.AttemptControlObserver `json:"-"`
 	// ProcessLifecycleObserver carries the dispatch-owned process lifecycle
 	// effect through the Runtime-to-Workers operation boundary. It is never
 	// serialized or retained by the process-scoped Workers service.

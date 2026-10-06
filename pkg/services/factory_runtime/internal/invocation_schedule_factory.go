@@ -157,16 +157,16 @@ func (wrapped *invocationScheduleFactory) BindModelsRuntimeScope(scope modelprov
 // opening capability through the automation schedule decorator.
 func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
 	ctx context.Context,
-	request workers.ExecuteRequest,
-) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	request *workers.ExecuteRequest,
+) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if wrapped == nil {
 		return nil, factory.ErrNotRunning
 	}
 	provider, _ := wrapped.Engine.(interface {
 		BeginWorkerAttempt(
 			context.Context,
-			workers.ExecuteRequest,
-		) (func(context.Context, workers.ExecuteResult, error) error, error)
+			*workers.ExecuteRequest,
+		) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	})
 	if provider == nil {
 		return nil, factory.ErrNotRunning

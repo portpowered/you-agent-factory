@@ -102,6 +102,34 @@ func malformedResponse(id string) *toolError {
 	return &toolError{Code: "worker_session.internal_error", Message: "Selected host returned an invalid Worker Session response", WorkerSessionID: id}
 }
 
+// An older host may ignore the optional force body and apply ordinary terminate.
+// Never present that response as a confirmed force result.
+func validateKillResponse(result any, id string) (any, *toolError) {
+	raw, ok := result.(json.RawMessage)
+	if !ok {
+		return nil, malformedResponse(id)
+	}
+	var value struct {
+		WorkerSessionID string  `json:"workerSessionId"`
+		Action          string  `json:"action"`
+		Forced          bool    `json:"forced"`
+		Outcome         string  `json:"outcome"`
+		State           string  `json:"state"`
+		DispatchID      *string `json:"dispatchId"`
+	}
+	if json.Unmarshal(raw, &value) != nil || value.WorkerSessionID != id || value.Action != "TERMINATE" || !value.Forced || value.DispatchID == nil {
+		return nil, malformedResponse(id)
+	}
+	if !slices.Contains([]string{"APPLIED", "NOOP", "UNSUPPORTED", "FAILED"}, value.Outcome) || !slices.Contains([]string{"RESERVED", "STARTING", "RUNNING", "PAUSED", "COMPLETED", "FAILED", "CANCELED", "TERMINATED"}, value.State) {
+		return nil, malformedResponse(id)
+	}
+	if (value.Outcome == "APPLIED" && value.State != "TERMINATED") ||
+		(value.Outcome == "NOOP" && !slices.Contains([]string{"COMPLETED", "FAILED", "CANCELED", "TERMINATED"}, value.State)) {
+		return nil, malformedResponse(id)
+	}
+	return result, nil
+}
+
 type eventPage struct {
 	Events    []json.RawMessage `json:"events"`
 	Truncated bool              `json:"truncated"`

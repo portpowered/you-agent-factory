@@ -1648,6 +1648,8 @@ export interface components {
     };
     /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
     WorkerSessionControlResponse: {
+      /** @description Present and true only for force requests. The action remains TERMINATE. */
+      forced?: boolean;
       /** @description Stable Worker Session identity targeted by the control. */
       workerSessionId: string;
       /** @enum {string} */
@@ -8531,7 +8533,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        "application/json": {
+          /**
+           * @description Force terminate the exact owned attempt. Requires requestId and expectedAttemptId. Unsupported attempts have no effects.
+           * @default false
+           */
+          force?: boolean;
+          requestId?: string;
+          expectedAttemptId?: string;
+        };
+      };
+    };
     responses: {
       /** @description The Worker Session control result. */
       200: {
