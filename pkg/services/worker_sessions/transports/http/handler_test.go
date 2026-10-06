@@ -70,6 +70,12 @@ func TestTerminateForceHTTPRejectsInvalidPayloadBeforeControl(t *testing.T) {
 		`{"expectedAttemptId":"attempt"}`, `{"force":null}`, `{"requestId":null}`,
 		`{"force":"true"}`, `{"force":true,"requestId":1,"expectedAttemptId":"attempt"}`,
 		`{"unexpected":true}`, `null`, `[]`, `{"force":false} {}`, `{`,
+		`{"force":true,"force":false}`, `{"force":false,"force":false}`,
+		`{"force":true,"requestId":"first","requestId":"second","expectedAttemptId":"attempt"}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"stale","expectedAttemptId":"attempt"}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"attempt","\u0066orce":false}`,
+		`{"force":true,"requestId":"request","expectedAttemptId":"attempt","Force":false}`,
+		`{"force":true,"requestId":null,"requestId":"request","expectedAttemptId":"attempt"}`,
 	} {
 		t.Run(payload, func(t *testing.T) {
 			t.Parallel()

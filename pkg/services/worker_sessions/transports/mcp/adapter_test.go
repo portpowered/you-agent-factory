@@ -334,10 +334,6 @@ func TestWorkerSessionHistorySelection(t *testing.T) {
 
 func TestWorkerSessionKillRejectsInvalidTupleBeforeHTTP(t *testing.T) {
 	t.Parallel()
-	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
-		t.Fatal("invalid kill tuple reached selected host")
-		return nil, nil
-	})
 	for _, input := range []string{
 		`{"workerSessionId":"w","operation":"KILL","requestId":"r"}`,
 		`{"workerSessionId":"w","operation":"KILL","expectedAttemptId":"a"}`,
@@ -348,11 +344,27 @@ func TestWorkerSessionKillRejectsInvalidTupleBeforeHTTP(t *testing.T) {
 		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","successorWorkerSessionId":"s"}`,
 		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","replacementMessage":"m"}`,
 		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","force":true}`,
+		`{"workerSessionId":"w","operation":"KILL","operation":"TERMINATE"}`,
+		`{"workerSessionId":"w","operation":"KILL","Operation":"TERMINATE"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","requestId":"other","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"stale","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"unrelated","workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a","\u006fperation":"TERMINATE"}`,
+		`{"WorkerSessionId":"w","operation":"KILL","requestId":"r","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","Operation":"KILL","requestId":"r","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","RequestId":"r","expectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":"r","ExpectedAttemptId":"a"}`,
+		`{"workerSessionId":"w","operation":"KILL","requestId":null,"requestId":"r","expectedAttemptId":"a"}`,
 		`{"workerSessionId":"w","operation":"CANCEL","expectedAttemptId":"a"}`,
 		`{"workerSessionId":"w","operation":"TERMINATE","expectedAttemptId":"a"}`,
 		`{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s","replacementMessage":"m","expectedAttemptId":"a"}`,
 	} {
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+			adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+				t.Fatal("invalid kill tuple reached selected host")
+				return nil, nil
+			})
 			value := workerCall(t, adapter, ToolControl, input)
 			if value["result"] != nil || value["error"].(map[string]any)["code"] != "worker_session.invalid_request" {
 				t.Fatalf("invalid tuple = %v", value)

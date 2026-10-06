@@ -171,9 +171,9 @@ func decodeTerminateControl(body io.Reader, request workersessions.ControlReques
 	if body == nil {
 		return request, nil
 	}
-	var fields map[string]json.RawMessage
 	decoder := json.NewDecoder(body)
-	if err := decoder.Decode(&fields); err != nil {
+	fields, err := decodeTerminateObject(decoder)
+	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return request, nil
 		}
@@ -197,6 +197,41 @@ func decodeTerminateControl(body io.Reader, request workersessions.ControlReques
 	request.RequestID = strings.TrimSpace(optionalString(payload.RequestId))
 	request.ExpectedAttemptID = strings.TrimSpace(optionalString(payload.ExpectedAttemptId))
 	return request, request.Validate()
+}
+
+// Decode keys before storing values so duplicate members (including escaped
+// spellings) cannot replace the mode or either identity before validation.
+func decodeTerminateObject(decoder *json.Decoder) (map[string]json.RawMessage, error) {
+	opening, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	if opening != json.Delim('{') {
+		return nil, workersessions.ErrInvalidForceControl
+	}
+	fields := make(map[string]json.RawMessage)
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		if _, exists := fields[key]; exists {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, workersessions.ErrInvalidForceControl
+		}
+		fields[key] = value
+	}
+	if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
+		return nil, workersessions.ErrInvalidForceControl
+	}
+	return fields, nil
 }
 
 func decodeTerminateFields(fields map[string]json.RawMessage) (factoryapi.TerminateWorkerSessionJSONBody, error) {
