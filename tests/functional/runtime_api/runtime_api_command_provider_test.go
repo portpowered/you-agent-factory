@@ -1,4 +1,4 @@
-package runtimeapifixture
+package runtime_api
 
 import (
 	"bufio"

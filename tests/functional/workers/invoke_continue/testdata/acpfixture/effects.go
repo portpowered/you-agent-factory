@@ -1,4 +1,4 @@
-package support
+package acpfixture
 
 import (
 	"io"
@@ -9,11 +9,11 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
 
-// ACPInMemoryCommandFactory supplies only an inert host process for the
+// CommandFactory supplies only an inert host process for the
 // supervisor's concrete exec.Cmd Start/Wait contract. Provider protocol and
-// output come exclusively from ACPInMemoryStdioFactory. It never invokes a
+// output come exclusively from StdioFactory. It never invokes a
 // provider or a test executable, and provides no OS control evidence.
-func ACPInMemoryCommandFactory() platformprocess.CommandFactory {
+func CommandFactory() platformprocess.CommandFactory {
 	return func(string, ...string) *exec.Cmd {
 		if runtime.GOOS == "windows" {
 			return exec.Command("cmd.exe", "/d", "/c", "exit", "0")
@@ -22,10 +22,10 @@ func ACPInMemoryCommandFactory() platformprocess.CommandFactory {
 	}
 }
 
-// ACPInMemoryStdioFactory gives each attempt independent in-memory streams and
+// StdioFactory gives each attempt independent in-memory streams and
 // selects an immutable peer route by the customer's working directory. The
 // callback must return when requests is closed. Close joins its owned peer.
-func ACPInMemoryStdioFactory(serve func(string, io.Reader, io.Writer)) platformprocess.StdioPipeFactory {
+func StdioFactory(serve func(string, io.Reader, io.Writer)) platformprocess.StdioPipeFactory {
 	return func() (platformprocess.StdioChannel, error) {
 		requestReader, requestWriter := io.Pipe()
 		responseReader, responseWriter := io.Pipe()

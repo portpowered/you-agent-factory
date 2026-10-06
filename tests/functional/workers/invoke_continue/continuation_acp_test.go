@@ -12,7 +12,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	acpfixture "github.com/portpowered/infinite-you/tests/functional/workers/invoke_continue/testdata/acpfixture"
 	"io"
 )
 
@@ -63,9 +63,9 @@ func runCapturedACPShape(t *testing.T, supported, changed bool) {
 		// that policy; the negative shape must still honor its actual handshake.
 		ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{Provider: providers.IDCursor,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}},
-		PlatformProcessCommandFactory: support.ACPInMemoryCommandFactory(),
+		PlatformProcessCommandFactory: acpfixture.CommandFactory(),
 		ProvidersExecutableLocator:    continuationACPLocator{},
-		ProvidersStdioPipeFactory: support.ACPInMemoryStdioFactory(func(dir string, reader io.Reader, writer io.Writer) {
+		ProvidersStdioPipeFactory: acpfixture.StdioFactory(func(dir string, reader io.Reader, writer io.Writer) {
 			if peer := routes[dir]; peer != nil {
 				peer.serve(reader, writer)
 			}

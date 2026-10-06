@@ -1,4 +1,4 @@
-package runtimeapifixture
+package runtime_api
 
 import (
 	"context"
@@ -226,15 +226,7 @@ func StartSharedFunctionalServer(t *testing.T, factoryDir string, scenario Scena
 	// Register route cleanup before opening the session. If session creation
 	// fails, testing.T cleanup still resets every scenario-owned effect lane.
 	t.Cleanup(func() {
-		if unregisterScript != nil {
-			unregisterScript()
-		}
-		if unregisterCommand != nil {
-			unregisterCommand()
-		}
-		if unregisterProvider != nil {
-			unregisterProvider()
-		}
+		releaseRuntimeAPIEffectRoutes(unregisterScript, unregisterCommand, unregisterProvider)
 	})
 
 	opened, err := openRuntimeAPIFactorySession(fixture.baseURL, factoryDir)
@@ -912,3 +904,11 @@ func runtimeAPIDirContains(parent, child string) bool {
 }
 
 var _ platformprocess.CommandRunner = (*runtimeAPICommandRouter)(nil)
+
+func releaseRuntimeAPIEffectRoutes(routes ...func()) {
+	for _, release := range routes {
+		if release != nil {
+			release()
+		}
+	}
+}
