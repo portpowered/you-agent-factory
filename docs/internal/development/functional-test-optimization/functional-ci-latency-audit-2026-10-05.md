@@ -5,6 +5,35 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
+The latest completed same-source hosted measurements are **241s** with a prefix
+compiler-cache restore and **212s** with an exact cache hit. The exact-hit run
+uses **160.286s** for the coverage invocation, zero compiler commands and 21
+linker commands. Both pass all 68 packages and 752 results without retries.
+The previously merged warm three-minute checkpoint remains historical evidence;
+the current two-minute checkpoint is **unmet**.
+
+The next published candidate shares one Work submission host across three
+isolated Factory Sessions, retaining 13 customer cases. A paired native-binary
+comparison across ten repetitions per version reduces aggregate CPU from
+10.298s to 6.414s (**37.7%**). Aggregate wall time rises from 6.660s to 7.762s;
+this proves a compute reduction, not a latency improvement. Its changed-source hosted
+measurement passes in **229s** complete / **175.035s** coverage, with 110
+compiler commands, 21 links and no retries. Local full-lane validation passes 68 packages / 750
+results; overlapping native validation makes that run unsuitable for latency
+comparison.
+
+The current runtime CPU profile puts repeated system initialization on the
+critical optimization path: InitializeSystem accounts for 262.56s cumulative
+sampled CPU (59.10% of samples), including packaged installation and managed
+Factory preparation. These nested costs must not be added together. The largest
+labelled package totals are Product customer lifecycles (100.28s), Product
+customer journeys (85.31s), CLI/REST journeys (35.36s), Work admission (25.30s),
+and Factory execution (19.63s). Labels include fixture background goroutines.
+Prioritize shared session hosts and simpler customer setups in those packages;
+linking is already consolidated substantially.
+
+### Prior checkpoint measurements
+
 The five-minute checkpoint merged in
 [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867), commit
 `0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Its merge-queue functional supervisor
@@ -3184,3 +3213,87 @@ This is a native cell-level comparison, not a coverage-instrumented whole-CI
 checkpoint. Fresh candidate hosted CI is required. The remaining priority is
 consolidating compatible initialized-session fixtures in the largest measured
 customer packages, without collapsing distinct persistence or recovery proofs.
+
+## Remove remaining legacy and internal-only functional probes
+
+Remove the legacy metadata mapper/serializer/clone/help-renderer probe and the
+invalid programmatic snapshot argument probe from Product customer journeys.
+They call internal operations rather than public customer boundaries. Existing
+Factory snapshot, mapping, and CLI renderer component tests retain their owned
+checks; current customer CLI invocation-help journeys remain in the functional
+suite.
+
+Remove the smoke probe that writes retired exhaustion_rules and calls the loader
+directly. Keep the long customer guarded-loop routing journey. Remove the five
+retired initialization command/flag cells; retain supported initialization,
+invalid current input, atomic failure, and normal-command bootstrap journeys.
+No customer behavior assertion is weakened and no production code changes.
+This cleanup is not claimed as a measured latency improvement.
+
+## Shared submission host hosted measurement and causal payload observation
+
+At ce93d0ef0d, hosted job 112147854840 passes 68 packages / 750 results
+(748 pass, two skip) without retries. It runs 06:57:17–07:01:06 UTC on
+2026-10-06: **229s complete**, **175.035s coverage invocation**. Its archive
+prefix restore is the prior 65ef head; 110 compiler commands and 21 linker
+commands execute. This differs from the prior source and cache state and does
+not establish a paired whole-job improvement. The two-minute checkpoint remains
+unmet. Evidence: .artifacts/latency-audit/pr2923-submission-host-hosted.
+
+Replace review-failure payload prompt polling with notification from the
+controlled ProviderCommandRunner boundary. Each observed prompt closes a
+mutex-protected notification channel and installs the next channel; observers
+check existing prompts and capture the channel under the same lock. This avoids
+lost wakeups and the fixed 50ms sampling delay. A real timeout remains as a
+failure ceiling. Customer admission and payload assertions are unchanged.
+
+### Incidental coverage audit for removed internal probes
+
+The first removal run executes every selected case successfully (68 packages,
+746 results, 744 pass / two skip) in 178.59s supervisor / 172.391s coverage,
+470.57s user plus 114.79s kernel CPU. The overall gate fails on three package
+floors; this is a failed validation, not a checkpoint.
+
+The direct localized metadata calls had covered NameValue validation/resolution
+(72.22% prior floor, 16/54 = 29.6296% after removal). Retained component proof is
+TestNameValueValidationAndResolution, including exact locale fallback and
+invalid locale handling, plus canonical JSON/YAML structured example roundtrip
+checks. Customer CLI invocation help remains. The programmatically invalid
+snapshot mapping call had covered the mapper error return (75.00% prior floor,
+11/16 = 68.75% after removal); retained component proof is
+TestObjectFromFactoryConfigRejectsUnrepresentableExampleArguments. These focused
+component checks pass. That argument-shape error is rejected before customer
+snapshot creation, so reintroducing an internal mapper call into functional
+coverage would recreate the invalid test layer.
+
+Reconcile only these two incidental functional floors to 29.62% and 68.75%,
+respectively, under factory/docs/standards/testing-standards.md's explicit
+requirement to audit retained guarantees and reconcile incidental coverage when
+removing an invalid functional test. Other floors and remediation holds stay
+unchanged. Do not report these floor changes as performance gains.
+
+The third regression affects the public CLI config output handler. Its floor
+stays 62.22%; extend the existing invalid-Factory CLI journey with current
+flatten rejection and a closed customer output stream. Reuse its process and
+use explicit input paths/working directories instead of process-wide Chdir.
+
+Hosted lint on ce93 also finds three new generic support helpers in its
+non-test deadcode inventory. Keep the session-specific observation helpers
+local to Work admission test files instead of growing the support API or its
+deadcode allowance. The existing support API returns to its previous shape.
+
+### Final cleanup validation
+
+The final full Linux supervisor passes **68 packages / 746 results**, 744 pass
+and two skip, without retries. Coverage gates pass with only the two audited
+incidental floors reconciled above. Supervisor wall is 178.66s and coverage
+invocation is 170.727s. Concurrent native linter build/check work overlapped;
+this is **validation-only**, not a comparable performance result or hosted
+checkpoint. Evidence: .artifacts/latency-audit/legacy-customer-final.
+
+Both scoped built-in and freshly rebuilt repository linters report zero issues.
+The causal payload observer passes three focused repetitions. Current CLI
+Factory validation/flatten errors pass, as do retained localized metadata,
+canonical structured JSON/YAML examples, snapshot rejection and invocation-help
+component proofs. Hosted CI still must validate the new source and deadcode
+inventory. The last measured hosted source remains ce93 at 229s.

@@ -123,12 +123,7 @@ func WaitForTerminalStatus(
 
 func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkResponse {
 	t.Helper()
-	return ListSessionWork(t, baseURL, factorysessions.DefaultSessionID)
-}
-
-func ListSessionWork(t testing.TB, baseURL, sessionID string) factoryapi.ListWorkResponse {
-	t.Helper()
-	return GetJSON[factoryapi.ListWorkResponse](t, SessionWorkURL(baseURL, sessionID, "/work"))
+	return GetJSON[factoryapi.ListWorkResponse](t, DefaultSessionWorkURL(baseURL, "/work"))
 }
 
 // ListDefaultSessionWorkerSessions reads the public Worker Session
@@ -169,19 +164,13 @@ func UpsertDefaultSessionWorkRequest(
 	request factoryapi.WorkRequest,
 ) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
-	return UpsertSessionWorkRequest(t, baseURL, factorysessions.DefaultSessionID, request)
-}
-
-// UpsertSessionWorkRequest submits one canonical batch to an explicit session.
-func UpsertSessionWorkRequest(t testing.TB, baseURL, sessionID string, request factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
-	t.Helper()
 
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal Work request: %v", err)
 	}
-	endpoint := SessionWorkURL(
-		baseURL, sessionID,
+	endpoint := DefaultSessionWorkURL(
+		baseURL,
 		"/work-requests/"+url.PathEscape(request.RequestId),
 	)
 	httpRequest, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(payload))
@@ -212,18 +201,12 @@ func SubmitDefaultSessionWork(
 	request factoryapi.SubmitWorkRequest,
 ) factoryapi.SubmitWorkResponse {
 	t.Helper()
-	return SubmitSessionWork(t, baseURL, factorysessions.DefaultSessionID, request)
-}
-
-// SubmitSessionWork submits one Work to an explicit Factory Session.
-func SubmitSessionWork(t testing.TB, baseURL, sessionID string, request factoryapi.SubmitWorkRequest) factoryapi.SubmitWorkResponse {
-	t.Helper()
 
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal submit Work request: %v", err)
 	}
-	endpoint := SessionWorkURL(baseURL, sessionID, "/work")
+	endpoint := DefaultSessionWorkURL(baseURL, "/work")
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)

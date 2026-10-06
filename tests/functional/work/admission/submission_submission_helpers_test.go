@@ -171,7 +171,7 @@ func waitForWorkByTraceAtPlace(
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListSessionWork(t, baseURL, sessionID), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			for _, item := range listed.Results {
@@ -223,7 +223,7 @@ func submissionWaitForWorkIDsComplete(
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListSessionWork(t, baseURL, sessionID), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			currentFound := make(map[string]factoryapi.Work, len(want))
@@ -266,7 +266,7 @@ func waitForWorkByNameComplete(
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListSessionWork(t, baseURL, sessionID), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			matches := 0

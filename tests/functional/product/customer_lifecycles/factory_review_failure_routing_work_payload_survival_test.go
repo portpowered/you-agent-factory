@@ -26,19 +26,23 @@ func structuredPayload(marker string) map[string]any {
 type promptCapture struct {
 	mu      sync.Mutex
 	prompts []string
+	changed chan struct{}
 }
 
 func (capture *promptCapture) respond(_ context.Context, request platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
 	capture.mu.Lock()
 	capture.prompts = append(capture.prompts, providerCommandPrompt(request))
+	close(capture.changed)
+	capture.changed = make(chan struct{})
 	capture.mu.Unlock()
 	return reviewFailureAccepted("captured"), nil
 }
 
 func (capture *promptCapture) awaitContaining(t *testing.T, sentinel string) string {
 	t.Helper()
-	deadline := time.Now().Add(reviewFailureEventTimeout)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(reviewFailureEventTimeout)
+	defer deadline.Stop()
+	for {
 		capture.mu.Lock()
 		for _, prompt := range capture.prompts {
 			if strings.Contains(prompt, sentinel) {
@@ -46,18 +50,23 @@ func (capture *promptCapture) awaitContaining(t *testing.T, sentinel string) str
 				return prompt
 			}
 		}
+		changed := capture.changed
 		capture.mu.Unlock()
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-changed:
+		case <-deadline.C:
+			capture.mu.Lock()
+			prompts := append([]string(nil), capture.prompts...)
+			capture.mu.Unlock()
+			t.Fatalf("no worker prompt contained %q; prompts = %q", sentinel, prompts)
+			return ""
+		}
 	}
-	capture.mu.Lock()
-	defer capture.mu.Unlock()
-	t.Fatalf("no worker prompt contained %q; prompts = %q", sentinel, capture.prompts)
-	return ""
 }
 
 func openPayloadScenario(t *testing.T) (*reviewFailureScenario, *promptCapture) {
 	t.Helper()
-	capture := &promptCapture{}
+	capture := &promptCapture{changed: make(chan struct{})}
 	return openReviewFailureScenario(t, reviewFailureRouteConfig{provider: capture.respond}), capture
 }
 

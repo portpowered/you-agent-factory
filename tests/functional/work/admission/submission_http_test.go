@@ -183,7 +183,7 @@ func assertCLIWorkTypeNameReachesLiveAPIHandler(
 // identity and payload without a second transport.
 func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
 	workTypeName := batchInputsWorkType
-	submitted := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, factoryapi.WorkRequest{
+	submitted := upsertSubmissionSessionWorkRequest(t, server.URL(), sessionID, factoryapi.WorkRequest{
 		RequestId: httpSubmitListGetRequestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{{
@@ -215,7 +215,7 @@ func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.Functi
 		)
 	}
 
-	listed := support.ListSessionWork(t, server.URL(), sessionID)
+	listed := listSubmissionSessionWork(t, server.URL(), sessionID)
 	item, ok := findListedWorkByNameAndID(listed, httpSubmitListGetWorkName, httpSubmitListGetWorkID)
 	if !ok {
 		t.Fatalf(
@@ -275,7 +275,7 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 		}},
 	}
 
-	first := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
+	first := upsertSubmissionSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
 	if first.RequestId != httpUpsertCanonicalRequestID {
 		t.Fatalf("first PUT /work-requests requestId = %q, want %q", first.RequestId, httpUpsertCanonicalRequestID)
 	}
@@ -290,7 +290,7 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 		)
 	}
 
-	second := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
+	second := upsertSubmissionSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
 	if second.RequestId != first.RequestId {
 		t.Fatalf(
 			"repeat PUT /work-requests requestId = %q, want canonical %q",

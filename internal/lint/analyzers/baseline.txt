@@ -2287,7 +2287,6 @@ testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/fun
 testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_packaged_cross_characterization_assertions_test.go::assertCrossListenerClosed::sleep::1
 testsleep-sleep-test|tests/functional/factory/packaged/invocation_test|tests/functional/factory/packaged/invocation/full_flow_invocation_test.go::fullFlowRunner.awaitConcurrentImplementation::sleep::1
 testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_review_failure_routing_helpers_test.go::awaitReviewFailureWorkStates::sleep::1
-testsleep-sleep-test|tests/functional/product/customer_lifecycles_test|tests/functional/product/customer_lifecycles/factory_review_failure_routing_work_payload_survival_test.go::promptCapture.awaitContaining::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/basic_factory_run_test.go::holdACPHelperUntilReleased::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/basic_factory_run_test.go::holdACPHelperUntilReleased::sleep::2
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::waitForACPTestFile::sleep::1
@@ -2496,7 +2495,6 @@ functional-test-missing-subsection|tests/functional/sessionparity|tests/function
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/cli_docs_smoke_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/doc.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/guarded_loop_breaker_long_test.go
-functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/guarded_loop_breaker_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/packaged_goal_public_contract_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/service_lifecycle_smoke_long_test.go
 functional-test-missing-subsection|tests/functional/smoke|tests/functional/smoke/service_pipeline_config_helpers_test.go

@@ -78,7 +78,7 @@ func assertAPIStageAndSubmitFileCreatesExpectedWork(
 		stageAndSubmitFileName,
 		stageAndSubmitMediaType,
 	)
-	submitted := support.SubmitSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+	submitted := submitSubmissionSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         submissionStringPtr(stageAndSubmitWorkName),
 		WorkTypeName: batchInputsWorkType,
 		Items:        &[]factoryapi.SubmitWorkItem{imageItem},
@@ -241,7 +241,7 @@ func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.Fu
 			if err := json.Unmarshal(payload, &item); err != nil {
 				t.Fatal(err)
 			}
-			submitted := support.SubmitSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+			submitted := submitSubmissionSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 				Name: submissionStringPtr("stage-and-submit-" + scenario.itemType), WorkTypeName: batchInputsWorkType,
 				Items: &[]factoryapi.SubmitWorkItem{item},
 			})
