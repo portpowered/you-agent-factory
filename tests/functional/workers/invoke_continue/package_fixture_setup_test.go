@@ -324,6 +324,11 @@ func startInvokeContinuePackageProcess(
 // shape shared by its source, sibling, and local/remote control requests.
 func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, hostDir, homeDir string, route *invokeContinueStaticCommandRoute, overrides []providerswire.CatalogCapabilityOverride) (invokeContinueStartedProcess, error) {
 	t.Helper()
+	return startInvokeContinuePackageProcessWithEdges(t, hostDir, homeDir, route, serviceedges.Edges{ProviderCatalogCapabilityOverrides: overrides})
+}
+
+func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir string, route *invokeContinueStaticCommandRoute, replacements serviceedges.Edges) (invokeContinueStartedProcess, error) {
+	t.Helper()
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
@@ -331,7 +336,7 @@ func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, ho
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
 	ackStore := &interruptPhaseAckStore{}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
 		WorkerRecordingWriter: ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
 			ackStore.WorkerRecordingStore = store
@@ -339,8 +344,7 @@ func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, ho
 		FactorySessionsWorkingDirectory: invokeContinueRecordingDirectory(hostDir),
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
-		ProviderCommandRunner:              route,
-		ProviderCatalogCapabilityOverrides: overrides,
+		ProviderCommandRunner: route,
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return homeDir, nil
 		},
@@ -350,7 +354,7 @@ func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, ho
 			apiStopOnce.Do(func() { close(apiStopped) })
 			return err
 		},
-	})
+	}, replacements))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("BuildProcess: %w", err)
 	}

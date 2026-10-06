@@ -754,6 +754,12 @@ func (a *attempt) openSession(
 ) (acpsdk.NewSessionResponse, error) {
 	if resume != nil {
 		if resumeID := strings.TrimSpace(resume.ID); resumeID != "" {
+			if !initialized.AgentCapabilities.LoadSession {
+				return acpsdk.NewSessionResponse{}, providers.ExecuteFailure{
+					Kind:    providers.ExecuteFailureKindInvalidRequest,
+					Message: fmt.Sprintf("ACP provider %q does not support session loading on this attempt", a.provider.id),
+				}
+			}
 			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 			if err != nil {
 				return acpsdk.NewSessionResponse{}, a.sessionOpenFailure(ctx, "session/load", err, initialized, request)
