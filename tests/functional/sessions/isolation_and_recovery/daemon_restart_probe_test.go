@@ -508,6 +508,9 @@ func assertPlainBoardRejectedSelection(t *testing.T, name, home, recording, refP
 		t.Fatalf("startup error code = %s, want %s", code, wantCode)
 	}
 	output := inputs.Stdout() + inputs.Stderr()
+	if strings.Count(inputs.Stderr(), "cause[0]=") != 1 {
+		t.Fatalf("implicit board %s failure hid or repeated its cause: %q", name, inputs.Stderr())
+	}
 	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") ||
 		newStarts != 0 || newCalls != 0 {
 		t.Fatalf("rejected selection exposed contents or activated runtime: %s", output)

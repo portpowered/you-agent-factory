@@ -473,7 +473,8 @@ func runHostedRuntime(
 		// still describe startup even after the runner has been constructed.
 		var inputFailure *recordings.ReplayInputError
 		var hostFailure *initializer.RuntimeHostStartupError
-		if !started || errors.As(resultErr, &inputFailure) || errors.As(resultErr, &hostFailure) {
+		if !started || errors.As(resultErr, &inputFailure) || errors.As(resultErr, &hostFailure) ||
+			errors.Is(resultErr, interfaces.ErrRuntimeSnapshotResolutionFailed) || errors.Is(resultErr, interfaces.ErrFactoryLayoutNotFound) {
 			resultErr = clidiag.WithStartupCause(resultErr)
 		}
 	}()
