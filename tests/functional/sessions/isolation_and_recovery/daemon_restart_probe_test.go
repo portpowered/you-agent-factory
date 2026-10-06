@@ -55,45 +55,55 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
 		t.Parallel()
-		inputs := restartProbeInputs(t, emptyDir)
-		command := support.StartProcessCommand(t, process, inputs.Input)
-		baseURL := api.WaitForURL(t)
-		session := support.GetDefaultSession(t, baseURL)
-		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, session.Id, "/work"))
-		if len(works.Results) != 0 || runner.calls.Load() != 3 {
-			t.Fatal("fresh opening recovered Work or dispatched a worker")
-		}
-		command.Stop(t)
-		if strings.Contains(inputs.Stderr(), "CORRUPT") || strings.Contains(inputs.Stderr(), "recovery") {
-			t.Fatalf("fresh opening reported recovery failure: %s", inputs.Stderr())
-		}
+		testRestartProbeFreshBoard(t, process, emptyDir, api, runner)
 	})
 	t.Run("F4 corrupt snapshot rejects selected board safely", func(t *testing.T) {
 		t.Parallel()
-		artifact := seededReplayResumeArtifactPayload(t, true)
-		path := filepath.Join(corruptDir, "current-board.json")
-		if err := os.WriteFile(path, artifact, 0600); err != nil {
-			t.Fatal(err)
-		}
-		inputs := restartProbeInputs(t, corruptDir)
-		err := process.Execute(inputs.Input)
-		var resumeErr *factorysessions.ResumeError
-		if !errors.As(err, &resumeErr) || resumeErr.Outcome != factorysessions.ResumeOutcomeCorruptedPersistence {
-			t.Fatalf("corrupt snapshot rejection = %v; stderr=%s", err, inputs.Stderr())
-		}
-		output := inputs.Stdout() + inputs.Stderr() + err.Error()
-		if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != 3 {
-			t.Fatalf("failed opening exposed payload, published readiness or dispatched: %s", output)
-		}
-		if got := mustReadSeededReplayArtifact(t, path); !bytes.Equal(got, artifact) || files.corruptWrites.Load() != 0 {
-			t.Fatal("failed opening mutated selected source or durable snapshot")
-		}
+		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
 		if starts.Load() != 3 || files.corruptReads.Load() != 1 {
 			t.Errorf("startup attempts=%d corrupt probe reads=%d; want three and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
+}
+
+func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir string, api *support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	inputs := restartProbeInputs(t, dir)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	baseURL := api.WaitForURL(t)
+	session := support.GetDefaultSession(t, baseURL)
+	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, session.Id, "/work"))
+	if len(works.Results) != 0 || runner.calls.Load() != 3 {
+		t.Fatal("fresh opening recovered Work or dispatched a worker")
+	}
+	command.Stop(t)
+	if strings.Contains(inputs.Stderr(), "CORRUPT") || strings.Contains(inputs.Stderr(), "recovery") {
+		t.Fatalf("fresh opening reported recovery failure: %s", inputs.Stderr())
+	}
+}
+
+func testRestartProbeCorruptBoard(t *testing.T, process support.Process, dir string, files *restartProbeFiles, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	artifact := seededReplayResumeArtifactPayload(t, true)
+	path := filepath.Join(dir, "current-board.json")
+	if err := os.WriteFile(path, artifact, 0600); err != nil {
+		t.Fatal(err)
+	}
+	inputs := restartProbeInputs(t, dir)
+	err := process.Execute(inputs.Input)
+	var resumeErr *factorysessions.ResumeError
+	if !errors.As(err, &resumeErr) || resumeErr.Outcome != factorysessions.ResumeOutcomeCorruptedPersistence {
+		t.Fatalf("corrupt snapshot rejection = %v; stderr=%s", err, inputs.Stderr())
+	}
+	output := inputs.Stdout() + inputs.Stderr() + err.Error()
+	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != 3 {
+		t.Fatalf("failed opening exposed payload, published readiness or dispatched: %s", output)
+	}
+	if got := mustReadSeededReplayArtifact(t, path); !bytes.Equal(got, artifact) || files.corruptWrites.Load() != 0 {
+		t.Fatal("failed opening mutated selected source or durable snapshot")
+	}
 }
 
 func restartProbeInputs(t *testing.T, dir string) *support.CapturedInputs {
