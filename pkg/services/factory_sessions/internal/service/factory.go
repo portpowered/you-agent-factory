@@ -61,7 +61,6 @@ type Root struct {
 	workerService                  workers.Service
 	modelService                   models.Service
 	automationService              automations.Service
-	factorySessionExecutionFactory FactorySessionExecutionFactory
 	recordingsService              recordings.Service
 	recordingsRuntime              recordings.RuntimeScopeService
 	replayInputs                   recordings.ReplayInputLoader
@@ -123,7 +122,6 @@ func NewRoot(
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly roles.RuntimeAssembly,
 	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
@@ -153,7 +151,6 @@ func NewRoot(
 		modelService:                   modelService,
 		automationService:              automationService,
 		factorySessionsRuntimeAssembly: assembly,
-		factorySessionExecutionFactory: factorySessionExecutionFactory,
 		recordingsService:              recordingsService,
 		recordingsRuntime:              recordingsRuntime,
 		replayInputs:                   recordingsRuntime,

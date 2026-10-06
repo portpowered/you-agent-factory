@@ -279,7 +279,7 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
 		durableExecutionFactory: func(definition factorydefinitions.RuntimeSelection, persistence factorysessions.PersistencePolicy,
 			home, configPath string, defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
-			provider providers.Service, mock *workers.MockWorkersConfig, _ FactorySessionExecutionFactory,
+			provider providers.Service, mock *workers.MockWorkersConfig,
 			_ factorysessions.ProviderIdentityResolver) (DurableExecution, error) {
 			return NewDurableExecution(
 				func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },

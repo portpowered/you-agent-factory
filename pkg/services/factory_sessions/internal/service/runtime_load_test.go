@@ -1015,3 +1015,30 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
 	}
 }
+
+func TestNewDurableExecutionPreservesPartialOwnerOnAcquisitionFailure(t *testing.T) {
+	t.Parallel()
+	owner := &portableReplayRuntimeOwner{}
+	failure := errors.New("resource acquisition failed")
+	opened, err := NewDurableExecution(
+		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
+		factorydefinitions.RuntimeSelection{Directory: "/selected"},
+		factorysessions.PersistencePolicyDisabled, "/operator", "", operatorconfig.ResolvedDefaults{},
+		RuntimeRoot{FactoryRootDir: "/selected", BaseLogger: zap.NewNop()}, nil, nil, nil,
+		func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
+			map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
+			[]operatorconfig.ACPIntegration, *zap.Logger) (durableexecution.Service, error) {
+			return owner, failure
+		},
+		func(identity string) (string, error) { return identity, nil },
+	)
+	if !errors.Is(err, failure) {
+		t.Fatalf("opening error = %v, want acquisition failure", err)
+	}
+	if opened.Service != owner {
+		t.Fatal("failed opening lost the acquired owner needed for cleanup")
+	}
+	if opened.WorkerSettings != nil || opened.ACPIntegrations != nil || opened.OperatorModels != nil {
+		t.Fatal("failed opening published successful execution settings")
+	}
+}

@@ -451,7 +451,6 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		_ factoryruntime.Clock,
 		_ providers.Service,
 		_ *workers.MockWorkersConfig,
-		_ FactorySessionExecutionFactory,
 		_ factorysessions.ProviderIdentityResolver,
 	) (DurableExecution, error) {
 		return DurableExecution{Service: owner}, nil
@@ -800,7 +799,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 			acquire := func(_ factorydefinitions.RuntimeSelection, _ factorysessions.PersistencePolicy,
 				_, _ string, _ operatorconfig.ResolvedDefaults, _ RuntimeRoot, _ factoryruntime.Clock,
 				provider providers.Service, mocks *workers.MockWorkersConfig,
-				_ FactorySessionExecutionFactory, _ factorysessions.ProviderIdentityResolver,
+				_ factorysessions.ProviderIdentityResolver,
 			) (DurableExecution, error) {
 				if provider != tc.provider {
 					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
@@ -813,7 +812,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 				}
 				return DurableExecution{Service: owner}, nil
 			}
-			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire, nil, nil)
+			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire, nil)
 			if !errors.Is(err, tc.failure) {
 				t.Fatalf("error = %v, want %v", err, tc.failure)
 			}

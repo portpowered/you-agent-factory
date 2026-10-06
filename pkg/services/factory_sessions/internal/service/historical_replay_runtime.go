@@ -174,7 +174,6 @@ func (r *Root) openPortableReplayDurableOwner(
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	resolveClock factoryruntime.ClockResolver,
 ) (durableexecution.Service, func() error, error) {
@@ -191,7 +190,6 @@ func (r *Root) openPortableReplayDurableOwner(
 		clock,
 		providerOverride,
 		durableExecutionFactory,
-		factorySessionExecutionFactory,
 		providerIdentities,
 	)
 	if err != nil {
@@ -277,7 +275,6 @@ func constructPortableReplayDurableOwner(
 	clock factoryruntime.Clock,
 	providerOverride providers.Service,
 	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, providers.Service, error) {
 	providerForDurable := providerOverride
@@ -291,7 +288,6 @@ func constructPortableReplayDurableOwner(
 		clock,
 		providerForDurable,
 		configured.Workers.MockWorkers,
-		factorySessionExecutionFactory,
 		providerIdentities,
 	)
 	if err != nil {

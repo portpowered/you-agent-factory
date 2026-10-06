@@ -431,8 +431,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v110 := provideLoadedFactorySourceFactory()
 	replayRuntimeConfigDecoder := provideReplayRuntimeConfigDecoder()
 	v111 := provideLoadedFactorySnapshotCapturer()
-	v112 := provideDurableExecutionFactory(configLoader)
-	v113 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v27, v23, v24, v13, responseEventIDGenerator, v11, v74, v75, v73, liveChangeCoordinator, workersService)
+	v112 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v27, v23, v24, v13, responseEventIDGenerator, v11, v74, v75, v73, liveChangeCoordinator, workersService)
+	v113 := provideDurableExecutionFactory(configLoader, v112)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v114, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
@@ -595,7 +595,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v164 := provideRuntimeModelFactoryConfigReader(v88)
 	v165 := provideRuntimeModelWorkerExecution(workersService)
 	v166 := wire3.NewRuntimeModelInvocation(modelsService, v164, v165)
-	v167, err := wire3.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v90, clockResolver, sessionLoggerFactory, source, v73, v91, v92, v101, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v109, v110, replayRuntimeConfigDecoder, v111, v88, v112, v113, factoryScaffoldInitializer, editableFactoryValidator, v117, v13, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, v82, workService, root, webhooksService, modelsService, recordingsService, v149, workersService, v150, v71, backendScopeEnsurer, initialRuntimeActivationOperation, v166)
+	v167, err := wire3.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v90, clockResolver, sessionLoggerFactory, source, v73, v91, v92, v101, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v109, v110, replayRuntimeConfigDecoder, v111, v88, v113, factoryScaffoldInitializer, editableFactoryValidator, v117, v13, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, v82, workService, root, webhooksService, modelsService, recordingsService, v149, workersService, v150, v71, backendScopeEnsurer, initialRuntimeActivationOperation, v166)
 	if err != nil {
 		return nil, err
 	}

@@ -206,7 +206,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.providerOverride,
 			r.providerCommandRunner,
 			r.durableExecutionFactory,
-			r.factorySessionExecutionFactory,
 			r.providerIdentities,
 			r.resolveClock,
 		)
@@ -254,7 +253,6 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 		opening.clock,
 		opening.providerForDurable,
 		opening.configured.Workers.MockWorkers,
-		r.factorySessionExecutionFactory,
 		r.providerIdentities,
 	)
 	if closer, ok := opening.durableExecution.Service.(interface{ Close() error }); ok {

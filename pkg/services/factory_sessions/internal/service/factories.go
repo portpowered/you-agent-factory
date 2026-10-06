@@ -57,6 +57,5 @@ type DurableExecutionFactory func(
 	factoryruntime.Clock,
 	providers.Service,
 	*workers.MockWorkersConfig,
-	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, error)
