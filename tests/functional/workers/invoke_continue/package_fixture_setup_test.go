@@ -193,6 +193,10 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
+	noReferenceRunner := newNativeContinuationRunner("no-reference")
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "native-no-reference", noReferenceRunner, noReferenceRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	for _, name := range []string{"continuation-input-ack-lost", "continuation-input-write-failure", "restart-recipe-write-failure", "unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
 		runner := testutil.NewProviderCommandRunner()
 		if name == "continuation-input-write-failure" {

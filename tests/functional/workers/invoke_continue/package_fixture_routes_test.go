@@ -170,6 +170,9 @@ func (runner *nativeContinuationRunner) RunStreaming(ctx context.Context, reques
 }
 
 func (runner *nativeContinuationRunner) output(id string, completed bool) []byte {
+	if runner.provider == "no-reference" && !completed {
+		return nil
+	}
 	if runner.provider == "claude" {
 		initial := fmt.Sprintf("{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":%q}\n", id)
 		if completed {

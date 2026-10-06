@@ -27,6 +27,72 @@ func TestCapturedNativeProviderStopThenContinue(t *testing.T) {
 	}
 }
 
+// F7-C4: a running provider command can be controlled before it emits a native
+// identity. Refused redirection must preserve that source and its live sibling.
+func TestCapturedProviderMissingReferencePreservesControls(t *testing.T) {
+	t.Parallel()
+	scenario := ensureInvokeContinuePackageFixture(t).scenario(t, "native-no-reference")
+	runner := scenario.providerRunner.(*nativeContinuationRunner)
+	source, sibling, successor := scenarioScopedID(scenario, "source"), scenarioScopedID(scenario, "sibling"), scenarioScopedID(scenario, "successor")
+	invokeNativeContinuationWorker(t, scenario, "codex", source, "native source", runner.sourceReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, source, true) })
+	invokeNativeContinuationWorker(t, scenario, "codex", sibling, "native sibling", runner.siblingReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, sibling, true) })
+	for _, remote := range []bool{false, true} {
+		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "interrupt", source,
+			"--request-id", scenarioScopedID(scenario, "interrupt"), "--successor-worker-session-id", successor,
+			"--replacement-message", "native follow-up", "--async"})
+		assertDirectWorkerSessionCLIError(t, request, "WORKER_SESSION_INTERRUPT_CONFLICT")
+		var failure struct {
+			Phase string `json:"phase"`
+		}
+		decodeDirectWorkerSessionResult(t, request.Stderr(), &failure)
+		if failure.Phase != "VALIDATION" {
+			t.Fatalf("missing-reference interrupt phase = %q", failure.Phase)
+		}
+		assertMissingReferenceObservation(t, scenario, source, "RUNNING")
+		assertMissingReferenceObservation(t, scenario, sibling, "RUNNING")
+	}
+	stopNativeContinuationWorker(t, scenario, source, true)
+	for _, remote := range []bool{false, true} {
+		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "continue", source,
+			"--request-id", scenarioScopedID(scenario, "continue"), "--successor-worker-session-id", successor,
+			"--user-message", "native follow-up", "--async"})
+		assertDirectWorkerSessionCLIError(t, request, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
+	}
+	assertMissingReferenceObservation(t, scenario, source, "TERMINATED")
+	assertMissingReferenceObservation(t, scenario, sibling, "RUNNING")
+	missing := missingReferenceRequest(t, scenario, true, []string{"worker-sessions", "show", "--worker-session-id", successor})
+	assertDirectWorkerSessionCLIError(t, missing, "WORKER_SESSION_NOT_FOUND")
+	if runner.CallCount() != 2 {
+		t.Fatalf("missing-reference controls admitted provider: calls=%d", runner.CallCount())
+	}
+}
+
+func missingReferenceRequest(t *testing.T, scenario *invokeContinueScenario, remote bool, args []string) *support.CapturedInputs {
+	t.Helper()
+	flags := []string{"you", "--json"}
+	if remote {
+		flags = append(flags, "--remote", "--server", scenario.fixture.baseURL)
+	}
+	request := support.FakeInputs(t.Context(), append(flags, args...))
+	request.Input.Env, request.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(request.Input); err == nil {
+		t.Fatalf("missing-reference command succeeded: %v stdout=%s", args, request.Stdout())
+	}
+	return request
+}
+
+func assertMissingReferenceObservation(t *testing.T, scenario *invokeContinueScenario, id, state string) {
+	t.Helper()
+	request := executeNativeContinuationCLI(t, scenario, []string{"worker-sessions", "show", "--worker-session-id", id}, true)
+	var observation factoryapi.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, request.Stdout(), &observation)
+	if string(observation.State) != state || observation.ProviderSession != nil || observation.SuccessorWorkerSessionId != nil {
+		t.Fatalf("missing-reference observation %s: %#v", id, observation)
+	}
+}
+
 func runCapturedNativeProviderStopThenContinue(t *testing.T, fixture *invokeContinuePackageFixture, provider string) {
 	scenario := fixture.scenario(t, "native-stop-continue-"+provider)
 	runner := scenario.providerRunner.(*nativeContinuationRunner)

@@ -278,16 +278,16 @@ func TestInterruptFailure(t *testing.T) {
 		})
 		scenario.runner.waitStarted(t, scenario.repositoryB.path, s8InterruptCallBInitial, scenario.fixture.router.requests)
 		status, body, apiErr := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.workerB, s8ReplacementMessage)
-		if status != http.StatusBadRequest {
+		if status != http.StatusConflict {
 			t.Fatalf("successor conflict status = %d body=%s", status, body)
 		}
-		assertS8InterruptError(t, apiErr, "BAD_REQUEST", "VALIDATION", ids.workerA, ids.workerB)
+		assertS8InterruptError(t, apiErr, "WORKER_SESSION_INTERRUPT_CONFLICT", "VALIDATION", ids.workerA, ids.workerB)
 
 		code, phase, cliErr := executeS8InterruptCLIError(ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.workerB)
 		if cliErr != nil {
 			t.Fatalf("CLI replay transport: %v", cliErr)
 		}
-		if code != "BAD_REQUEST" || phase != string(factoryapi.WorkerSessionInterruptErrorPhaseValidation) {
+		if code != "WORKER_SESSION_INTERRUPT_CONFLICT" || phase != string(factoryapi.WorkerSessionInterruptErrorPhaseValidation) {
 			t.Fatalf("CLI successor conflict error = %s/%s, want typed code/phase", code, phase)
 		}
 		if got := scenario.runner.CallCount(); got != 2 {
