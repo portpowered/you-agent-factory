@@ -82,38 +82,6 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 		"--provider", test.provider, "--kind", "session_id", "--id", test.id, "--output", "json"}
 	showArgs := append([]string(nil), args...)
 	showArgs[3] = "show"
-<<<<<<< HEAD
-	for range 2 {
-		shownInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
-		var shown workerSessionJSON
-		decodeCLIJSON(t, shownInputs, &shown)
-		assertProviderSessionTerminalIdentity(t, shown, terminal, sessionID, workID)
-		assertProviderSessionReadSafe(t, shownInputs.Stdout(), fixture.homeDir)
-		if shown.Transcript != "UNAVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || len(shown.Parse.Errors) != 0 {
-			t.Fatalf("canonical show copied optional native transcript diagnostics: %#v", shown)
-		}
-		// Compatibility lists now use the same captured projection as reads.
-		// Native truncated files cannot contribute parse diagnostics.
-		if terminal.Parse.MalformedLineCount != 0 || len(terminal.Parse.Errors) != 0 {
-			t.Fatalf("captured parse = %#v, want no native diagnostics", terminal.Parse)
-		}
-		inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
-		var transcript struct {
-			transcriptJSON
-			FactorySessionID *string `json:"factorySessionId"`
-		}
-		decodeCLIJSON(t, inputs, &transcript)
-		if transcript.FactorySessionID == nil || *transcript.FactorySessionID != sessionID {
-			t.Fatalf("read Factory Session = %#v, want %s", transcript.FactorySessionID, sessionID)
-		}
-		if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || transcript.State != "COMPLETED" || len(transcript.WorkIDs) != 1 || transcript.WorkIDs[0] != workID {
-			t.Fatalf("read changed terminal association: %#v", transcript)
-		}
-		if len(transcript.Entries) != 2 || transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Text != test.text || transcript.Entries[1].Type != "assistant_message" {
-			t.Fatalf("captured transcript = %#v, want ordered tool call and captured answer", transcript.Entries)
-		}
-		assertProviderSessionReadSafe(t, inputs.Stdout()+shownInputs.Stdout(), fixture.homeDir)
-=======
 	shownInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
 	var shown workerSessionJSON
 	decodeCLIJSON(t, shownInputs, &shown)
@@ -121,12 +89,11 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 	assertProviderSessionReadSafe(t, shownInputs.Stdout(), fixture.homeDir)
 	if shown.Transcript != "UNAVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || len(shown.Parse.Errors) != 0 {
 		t.Fatalf("canonical show copied optional native transcript diagnostics: %#v", shown)
->>>>>>> ec775b8fbb (Reuse invocation output processes and observe terminal capture)
 	}
-	// The Work-scoped compatibility list retains native diagnostics, while
-	// canonical show and captured usage remain independent of that file.
-	if test.id == "session_fixture_codex_truncated_read" && (terminal.Parse.MalformedLineCount != 1 || len(terminal.Parse.Errors) != 1 || terminal.Parse.Errors[0].Message != "truncated JSON event record") {
-		t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", terminal.Parse)
+	// Compatibility lists now use the same captured projection as reads.
+	// Native truncated files cannot contribute parse diagnostics.
+	if terminal.Parse.MalformedLineCount != 0 || len(terminal.Parse.Errors) != 0 {
+		t.Fatalf("captured parse = %#v, want no native diagnostics", terminal.Parse)
 	}
 	inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
 	var transcript struct {

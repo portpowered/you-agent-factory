@@ -5523,3 +5523,51 @@ runtime/recovery source. The earlier af907 workflow 37511920959 is terminal
 canceled (functional job succeeded with its recorded retry); output-fixture
 workflow 37513430783 remained queued at this observation. No checkpoint merge
 is claimed. Evidence: writer-render-paired/ and writer-render-full/.
+
+
+### October 6: remove fixture census and mock-router self-tests
+
+Provider fixture construction now calls the canonical support BuildProcess
+boundary directly. Remove the constructor-count wrappers, listener-start
+counters, aggregate Codex route/call census, unused topology assertions and
+two direct self-tests of the fake command router. These checked harness
+implementation rather than customer behavior. Remove the Automations host's
+BeforeStart constructor-effect census and its counting submission wrapper;
+the selected external submission recorder still receives the same records.
+Public provider responses, refusal behavior, transcripts, Factory Events,
+Work output, distinct Factory Session identities and HTTP deletion observations
+remain. Fixture cleanup still joins process/listener completion and releases
+owned routes. Codex's retained identity check is named assertSessionIsolation.
+The three fixture files lose 221 lines and add 19; no customer Test registration
+is removed, no timeout/retry limit is increased, and no percentage CPU speedup
+is attributed to this cleanup.
+
+Both complete provider packages pass three Windows repetitions (providers
+14.610s, Codex 12.787s). The Automations recovery/ingress group passes three
+repetitions in 6.875s. Both scoped linters report zero issues.
+
+The complete functional measurement on recovery base 903fce4694 passes 67
+selected packages / 766 results (764 pass, two skip), an empty complete raw
+failure index and no retry ledger. Supervisor wall is 114.08s, main capture
+108.051s, user CPU 260.40s and system CPU 72.51s (332.91 total). 147 compiler
+commands consume 71.739026 CPU-seconds / 25.763867 active wall; 15 links consume
+25.087029 CPU-seconds / 15.172275 active wall. Active walls are interval unions,
+not additive overlapping tool durations. Source is the Windows f5e79654cf
+archive plus the three candidate fixture files, not the private Linux Git head.
+No concurrent measurements or lint work overlap this run. The different base
+and compiler workload prevent comparison to the preceding warm 92.15s run.
+
+Investigation of the Work staged-content session scope found that replacing
+the editable Factory lookup with the existing native detail lookup would also
+add runtime observation and world projection failure conditions. Leave that
+candidate unshipped; a narrowly owned existence/configuration capability would
+need its own behavioral evidence.
+
+Hosted workflow 37514240019 at f5e796 remained pending without assigned jobs.
+Its superseded predecessor 37513430783 at 4720f2 was confirmed live and an
+explicit cancellation request was accepted to free the PR concurrency group.
+Do not claim that cancellation is terminal until a later authoritative poll.
+Commit this cleanup locally and let verification of the already-pushed source
+finish before superseding it again. Complete hosted two-minute evidence and
+required-check success remain missing; PR #2923 remains draft. Evidence:
+fixture-census-full/ and fixture-census-baseline/.
