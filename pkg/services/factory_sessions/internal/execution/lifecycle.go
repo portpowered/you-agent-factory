@@ -77,15 +77,15 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		}
 	}
 
-	var persisted PersistedRuntimeSessionState
-	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+	persistedSessionID, err := inspectDurableSnapshot(snapshot)
+	if err != nil {
 		return false, &ResumeError{
 			Outcome:   ResumeOutcomeCorruptedPersistence,
 			SessionID: id,
 			Message:   "persisted session snapshot is corrupted and cannot be inspected",
 		}
 	}
-	if strings.TrimSpace(persisted.Session.SessionID) != id {
+	if strings.TrimSpace(persistedSessionID) != id {
 		return false, &ResumeError{
 			Outcome:   ResumeOutcomeCorruptedPersistence,
 			SessionID: id,
