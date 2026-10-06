@@ -5,16 +5,25 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `d9e4f57e8e`, passes hosted Functional
+The latest measured published source, `f367362e37`, passes all hosted checks.
+Functional Coverage takes **147s complete / 92.644s coverage**, with 67 packages /
+762 results, 760 pass, two skip and no failures or retries. Its restored compiler
+archive is a prefix hit from d9e4f57e8e; coverage runs zero compiler commands and
+16 links. Complete job steps include 98s for the coverage supervisor, 6s checkout,
+8s Go setup, 4s module restore, 4s archive restore, 3s Node setup and 7s compiler
+archive capture/save. Those rounded step durations are not physical CPU data.
+This static-fixture-only revision's faster runtime demonstrates substantial
+cache/machine timing variation; do not attribute its 42s difference to the fixture
+asset. Earlier `d9e4f57e8e` passes hosted Functional
 Coverage in **189s complete / 139.494s coverage**, 67 packages / 762 results,
 760 pass and two skip, with no failures or retries. Its compiler archive is a
 prefix hit from c8b026366d; coverage runs two compiler commands and 16 linker
 commands. Every other executed job passes except Backend Lint: its migration
 smoke fixture publication predates native conversion assets and reports one
-missing conversion in the default clean-source cell. Regenerate that tiny
-fixture through the canonical catalog generator; retain its assertions. All
-16 packaged-source and 11 catalog smoke scenarios pass locally. Fresh hosted validation
-is required for the fixture correction. Parent c8b026366d passes Functional
+missing conversion in the default clean-source cell. f367362e37 regenerates that
+tiny fixture through the canonical catalog generator with assertions retained.
+All 16 packaged-source and 11 catalog smoke scenarios pass locally, and the
+fresh hosted Backend Lint check passes. Parent c8b026366d passes Functional
 Coverage in 209s / 143.728s but fails the earlier catalog drift expectations,
 corrected in d9e4f57e8e. Earlier source `643e6f3b7b` passes every hosted workflow check in
 201s complete / 142.303s functional coverage with one recovered interrupt
@@ -4439,3 +4448,56 @@ Evidence: `serialized-cache-read-probe/`, `canonical-cache-read-probe/`,
 `canonical-cache-alias-read-probe/`, `canonical-cache-paired/`,
 `canonical-cache-candidate.patch`, `pr2923-identity-hosted/`,
 `identity-hosted-functional.log` and `identity-hosted-lint-failed.log`.
+
+## Work CLI scenarios share installation through explicit Factory Sessions
+
+The Work CLI group originally owns one command process plus four server
+processes and four server homes. Each parallel scenario also uses a separate
+CLI home and targets its server's default Factory Session. The scenarios test
+Work filters/counts, three-page REST traversal versus CLI aggregation, exact
+detail lookup beyond the first page, and same-name supersession history.
+
+The parent now starts one root-built host in one initialized owned home and
+uses that host's Process.Execute for CLI requests. Each child still scaffolds
+its own Factory directory, opens a distinct public Factory Session, supplies
+its exact --session to every CLI submission/move/read and scopes its independent
+REST page walk to that ID. Child cleanup terminates/deletes only its own session;
+the parent's existing server/process cleanup runs after all parallel children.
+Overlapping Work IDs remain deliberately present. All original customer output,
+count, state, pagination and history assertions remain. No global environment
+mutation, binary invocation, timeout change or retry allowance is added.
+
+Six fresh Linux processes per side pass in B3/C6/B3 order. The first pair totals
+10.645610 CPU-seconds / 3.765948623s baseline versus 4.193485 / 2.921788809s
+candidate, but baseline wall varies 0.387-1.193s. Retain that variance rather
+than using its large percentage as the headline. A fresh confirmation pair
+totals **6.619411 CPU-seconds / 2.541354250s baseline versus 3.448197 /
+2.495368699s candidate**, saving **47.9% CPU / 1.8% elapsed**. Per-process elapsed
+is 0.393-0.460s baseline and 0.387-0.466s candidate. Builds are excluded from
+execution totals. Windows customer scenarios and both scoped lint suites pass.
+
+The exact Work CLI candidate passes the complete lane at 103.05s supervisor /
+98.240s coverage / 310.37 CPU-seconds (247.17 user, 63.20 kernel), with 67/762,
+760 pass/two skip, no failures or retries. Two compilers consume 2.468672 CPU
+seconds; 19 links consume 22.714726 CPU seconds / 22.053s active link wall.
+A subsequent same-budget previous-source full run also passes without retries
+at 123.34s / 118.506s / 374.89 CPU-seconds. This single full pair improves, but
+the focused Work group cannot explain the whole difference. Do not extrapolate
+its small package saving into a reliable full-suite ceiling or a hosted claim.
+
+Additional cleanup-hook experiments preserve all finalizers and pass native
+tests, scoped lint and full coverage, but do not change the 39-group monolith
+inventory. After custom TestMain is handled, metadata exposes additional
+constraints: packaged Fix and Codex have executable Git fixtures, AGY has a
+live quarantined selector, and base Providers uses the Go test executable as a
+mock script child. Preserve those constraints; restore all ineffective hook
+changes. The broader hook probe takes 121.99s / 113.638s coverage / 368.19 CPU
+seconds; the base Providers hook probe takes 110.43s / 305.86 CPU-seconds. They are retained
+experiments, not linker reductions. Future consolidation requires resolving
+the actual executable/quarantine construction, not bypassing native selection.
+
+Evidence: `work-cli-sessions-paired/`, `work-cli-sessions-confirmation/`,
+`work-cli-sessions-full/`, `work-cli-sessions-baseline-full/`,
+`compatible-cleanup-hooks-full/`, `provider-cleanup-hook-full/`,
+`pr2923-smoke-fixture-hosted/` and `smoke-fixture-hosted-functional.log`.
+Complete hosted timing remains above 120s, so PR #2923 stays draft.
