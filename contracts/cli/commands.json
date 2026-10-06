@@ -11693,6 +11693,34 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.interrupt.flag.resume-mode": {
+          "id": "you.worker-sessions.interrupt.flag.resume-mode",
+          "long": "resume-mode",
+          "usage": "Restart mode: provider (default) or recorded",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "provider",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.resume-mode",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "enum": [
+            "provider",
+            "recorded"
+          ]
+        },
         "you.worker-sessions.interrupt.flag.output": {
           "id": "you.worker-sessions.interrupt.flag.output",
           "long": "output",

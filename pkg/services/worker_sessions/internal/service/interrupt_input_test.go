@@ -109,7 +109,7 @@ func TestInterruptRecipeOverflowRefusesBeforeIntentAndCancellation(t *testing.T)
 // The contract subject is the actual persisted recipe, not a file inventory.
 func assertInterruptInputSchema(t *testing.T, payload []byte) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "recordings", "internal", "services", "worker_capture", "schemas", "control-input.v1.schema.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "recordings", "internal", "services", "worker_capture", "schemas", "control-input.v2.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,10 +121,32 @@ func assertInterruptInputSchema(t *testing.T, payload []byte) {
 		t.Fatal(err)
 	}
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("control-input.v1.schema.json", schemaDocument); err != nil {
+	schemaDir := filepath.Join("..", "..", "..", "recordings", "internal", "services", "worker_capture", "schemas")
+	entries, err := os.ReadDir(schemaDir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	schema, err := compiler.Compile("control-input.v1.schema.json")
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "control-input.v2.schema.json" || !strings.HasSuffix(entry.Name(), ".schema.json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(schemaDir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		if err := compiler.AddResource(entry.Name(), document); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := compiler.AddResource("control-input.v2.schema.json", schemaDocument); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("control-input.v2.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +321,7 @@ func mutateInterruptRecipe(store *interruptInputStore, plan interruptPlan, scena
 func injectDuplicateInterruptRecipeField(payload json.RawMessage, scenario string) json.RawMessage {
 	switch scenario {
 	case "duplicate-version":
-		return bytes.Replace(payload, []byte(`"version":1`), []byte(`"version":2,"version":1`), 1)
+		return bytes.Replace(payload, []byte(`"version":2`), []byte(`"version":3,"version":2`), 1)
 	case "duplicate-reference":
 		return bytes.Replace(payload, []byte(`"id":"exact-provider-session"`), []byte(`"id":"private-recipe-secret","id":"exact-provider-session"`), 1)
 	case "duplicate-token-key":
@@ -320,7 +342,7 @@ func injectDuplicateInterruptRecipeField(payload json.RawMessage, scenario strin
 func injectInterruptRecipeAlias(payload json.RawMessage, scenario string) json.RawMessage {
 	switch scenario {
 	case "alias-version":
-		return bytes.Replace(payload, []byte(`"version":1`), []byte(`"Version":2,"version":1`), 1)
+		return bytes.Replace(payload, []byte(`"version":2`), []byte(`"Version":3,"version":2`), 1)
 	case "alias-replacement":
 		return bytes.Replace(payload, []byte(`"replacementMessage":`), []byte(`"ReplacementMessage":"private-recipe-secret","replacementMessage":`), 1)
 	case "alias-reference":

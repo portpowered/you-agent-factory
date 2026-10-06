@@ -89,6 +89,7 @@ type continuePlan struct {
 	direct    bool
 	lineage   *workers.SessionLineage
 	archived  bool
+	interrupt bool
 }
 
 type continuationSourceSnapshot struct {
@@ -357,7 +358,7 @@ func (r *registry) storeContinuationReservationLocked(
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
 		State:                      workersessions.StateReserved,
-		ProviderSessionAssociation: continuationAssociation(req, continuation, snapshot.turnID, source.ProviderSessionAssociation.Reference),
+		ProviderSessionAssociation: interruptContinuationAssociation(req, continuation, snapshot),
 	}
 	if r.continuationSources == nil {
 		r.continuationSources = make(map[string]string)
@@ -473,7 +474,7 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 		invocationPreparationOptions{
 			serverOwned:      true,
 			direct:           plan.direct,
-			continuation:     true,
+			continuation:     plan.execution.Execution.Continuation != nil,
 			requestID:        plan.request.RequestID,
 			verifyTopicReady: true,
 			lineage:          plan.lineage,
@@ -536,26 +537,23 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 		return
 	}
 	source, err := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
-	if err != nil || source.ProviderSessionAssociation == nil {
+	if err != nil {
 		r.releaseContinuationReservation(plan)
 		return
 	}
-	association := source.ProviderSessionAssociation.Clone()
-	reference := association.Reference.Clone()
-	continuation := workers.SessionContinuation{
-		Provider: string(reference.Provider),
-		Kind:     reference.Kind,
-		ID:       reference.ID,
-	}
-	lineage := workers.SessionLineage{SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID}
 	payload := workers.SessionPayload{
-		Status:          string(source.State),
-		WorkerSessionID: source.ID,
-		TurnID:          association.TurnID,
-		DispatchID:      association.DispatchID,
-		AttemptID:       association.AttemptID,
-		Continuation:    &continuation,
-		Lineage:         &lineage,
+		Status: string(source.State), WorkerSessionID: source.ID,
+		Lineage: &workers.SessionLineage{SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID},
+	}
+	if association := source.ProviderSessionAssociation; association != nil {
+		payload.TurnID = association.TurnID
+		payload.DispatchID, payload.AttemptID = association.DispatchID, association.AttemptID
+		payload.Continuation = &workers.SessionContinuation{
+			Provider: string(association.Reference.Provider), Kind: association.Reference.Kind, ID: association.Reference.ID,
+		}
+	}
+	if source.ProviderSessionAssociation == nil && plan.lineage != nil {
+		payload.DispatchID, payload.AttemptID = plan.lineage.PreviousDispatchID, plan.lineage.PreviousAttemptID
 	}
 	identity := events.AppendIdentity{
 		SourceType:     continuationLineageSourceType,

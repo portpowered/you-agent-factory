@@ -131,7 +131,7 @@ func readPendingInterruptOpeningJSON(payload []byte, decoded any) error {
 // Read failures are normalized so filesystem/provider details stay private.
 func (r *registry) validateInterruptReplayInput(ctx context.Context, key recordings.WorkerControlOperationKey, req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord, payload []byte) error {
 	operation := record.Operation
-	if operation.Version != 1 || operation.ResumeMode != "provider" || operation.RequestID != req.RequestID ||
+	if operation.Version != 1 || (operation.ResumeMode != "provider" && operation.ResumeMode != "recorded") || operation.RequestID != req.RequestID ||
 		operation.WorkerSessionID != req.SourceWorkerSessionID || operation.ExpectedAttemptID == "" ||
 		operation.ExpectedAttemptID != record.Target.ExpectedAttemptID || record.InputArtifactRef == "" {
 		return recordings.ErrWorkerRecordingPersistence
@@ -143,6 +143,13 @@ func (r *registry) validateInterruptReplayInput(ctx context.Context, key recordi
 	digest := sha256.Sum256(stored)
 	if operation.InputDigest != hex.EncodeToString(digest[:]) {
 		return recordings.ErrWorkerRecordingPersistence
+	}
+	var input durableInterruptInput
+	if json.Unmarshal(stored, &input) == nil && input.Version == 2 && input.ResumeMode != operation.ResumeMode {
+		return recordings.ErrWorkerRecordingPersistence
+	}
+	if operation.ResumeMode != req.Normalize().ResumeMode {
+		return workersessions.ErrInterruptRequestIDConflict
 	}
 	return validateCapturedInterruptInput(stored, payload, req, record.Target.ExpectedAttemptID)
 }

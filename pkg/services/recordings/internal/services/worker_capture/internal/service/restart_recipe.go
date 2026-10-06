@@ -107,6 +107,23 @@ type workerRestartRecipe struct {
 	Execution workers.WorkstationDispatchRequest `json:"execution"`
 }
 
+// ValidateWorkerRestartRecipe checks the same serializer used by admission,
+// without opening capture or persisting input. New capture generations are
+// SHA-256 hex strings; their contents do not change the serialized size.
+func (writer *FileWriter) ValidateWorkerRestartRecipe(ctx context.Context, workerID string, execution workers.WorkstationDispatchRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target := recordings.WorkerControlTarget{
+		RecordingID: execution.Execution.RecordingID, WorkerSessionID: workerID,
+		FactorySessionID:      execution.Execution.FactorySessionID,
+		RecordingGenerationID: strings.Repeat("0", 64), OwnerEpoch: writer.captureOwnerEpoch(),
+		ExpectedAttemptID: execution.Execution.Dispatch.DispatchID,
+	}
+	_, err := encodeWorkerRestartRecipe(target, execution)
+	return err
+}
+
 // SaveWorkerRestartRecipe shares the journal's sync acknowledgement and keeps
 // capture validation locked through persistence. No caller-selected path or
 // independent ledger is introduced. The attempt is part of the immutable key.

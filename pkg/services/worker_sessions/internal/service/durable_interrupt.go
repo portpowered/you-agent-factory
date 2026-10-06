@@ -18,6 +18,13 @@ import (
 // Caller cancellation only stops waiting for this sequence.
 func (r *registry) runDurableInterrupt(plan interruptPlan) (workersessions.InterruptResult, error) {
 	ctx := context.WithoutCancel(r.serverOwnedContext())
+	plan, err := r.freezeInterruptInput(ctx, plan)
+	if err != nil {
+		finishInterruptExecution(plan.supervision, false)
+		finishInterruptOperation(plan.supervision)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false)
+		return result, newInterruptError(result.Phase, result, err)
+	}
 	operation, err := r.beginInterruptIntent(ctx, plan)
 	if err != nil {
 		finishInterruptExecution(plan.supervision, false)
@@ -50,10 +57,6 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		}
 		return nil, nil
 	}
-	plan, err = r.capturedInterruptPlan(ctx, plan, target.capture)
-	if err != nil {
-		return nil, err
-	}
 	if !interruptInputSafe(plan) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
@@ -65,7 +68,7 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 	digest := sha256.Sum256(payload)
 	intent.Operation.InputDigest = hex.EncodeToString(digest[:])
 	intent.Operation.SuccessorWorkerSessionID = plan.request.SuccessorWorkerSessionID
-	intent.Operation.ResumeMode = "provider"
+	intent.Operation.ResumeMode = plan.request.Normalize().ResumeMode
 	key := interruptOperationKey(intent)
 	ref, err := r.syncInterruptInput(ctx, key, payload)
 	if err != nil {

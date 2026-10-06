@@ -143,19 +143,23 @@ const (
 )
 
 // InterruptRequest identifies one active source and the distinct successor
-// that should receive the replacement message. The source's exact provider
-// session is always resolved from Worker Sessions state; callers cannot
-// substitute a provider reference or ask for a fresh session implicitly.
+// that should receive the replacement message. Provider mode resolves the
+// source association from Worker Sessions state. Recorded mode starts fresh
+// from captured context; neither mode accepts a caller-supplied reference.
 type InterruptRequest struct {
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
 	ReplacementMessage       string
+	ResumeMode               string
 }
 
 // Normalize trims only request identities. ReplacementMessage is intentionally
 // preserved byte-for-byte because it becomes the successor's user message.
 func (req InterruptRequest) Normalize() InterruptRequest {
+	if req.ResumeMode == "" {
+		req.ResumeMode = "provider"
+	}
 	req.RequestID = strings.TrimSpace(req.RequestID)
 	req.SourceWorkerSessionID = strings.TrimSpace(req.SourceWorkerSessionID)
 	req.SuccessorWorkerSessionID = strings.TrimSpace(req.SuccessorWorkerSessionID)
@@ -166,6 +170,9 @@ func (req InterruptRequest) Normalize() InterruptRequest {
 // does not inspect Worker Sessions or cause any downstream effect.
 func (req InterruptRequest) Validate() error {
 	normalized := req.Normalize()
+	if normalized.ResumeMode != "provider" && normalized.ResumeMode != "recorded" {
+		return errors.Join(ErrInvalidInterruptMessage, fmt.Errorf("worker session: invalid interrupt resume mode"))
+	}
 	if normalized.RequestID == "" {
 		return ErrInvalidInterruptRequestID
 	}

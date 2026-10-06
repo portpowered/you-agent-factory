@@ -1601,6 +1601,12 @@ export interface components {
       successorWorkerSessionId: string;
       /** @description Non-empty replacement input delivered to the admitted successor. */
       replacementMessage: string;
+      /**
+       * @description provider continues the recorded Provider Session; recorded starts a fresh provider execution from bounded recorded context and replacementMessage. There is no automatic fallback between modes.
+       * @default provider
+       * @enum {string}
+       */
+      resumeMode: WorkerSessionInterruptRequestResumeMode;
     };
     /** @description Detached lifecycle snapshot captured at an interrupt operation boundary. */
     WorkerSessionInterruptSnapshot: {
@@ -10562,6 +10568,12 @@ export const WorkerSessionContinueResponseState = {
 } as const;
 export type WorkerSessionContinueResponseState =
   (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
+export const WorkerSessionInterruptRequestResumeMode = {
+  provider: "provider",
+  recorded: "recorded",
+} as const;
+export type WorkerSessionInterruptRequestResumeMode =
+  (typeof WorkerSessionInterruptRequestResumeMode)[keyof typeof WorkerSessionInterruptRequestResumeMode];
 export const WorkerSessionInterruptSnapshotState = {
   WorkerSessionInterruptSnapshotStateReserved: "RESERVED",
   WorkerSessionInterruptSnapshotStateStarting: "STARTING",
