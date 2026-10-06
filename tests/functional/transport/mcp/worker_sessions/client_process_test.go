@@ -24,7 +24,7 @@ func (process selectedHostClientProcess) Execute(input root.Input) error {
 	return process.Process.Execute(input)
 }
 
-func newSelectedHostClientProcess(t *testing.T) support.Process {
+func newSelectedHostClientProcess(t *testing.T) selectedHostClientProcess {
 	t.Helper()
 	home := t.TempDir()
 	environment := make([]string, 0, len(os.Environ())+3)

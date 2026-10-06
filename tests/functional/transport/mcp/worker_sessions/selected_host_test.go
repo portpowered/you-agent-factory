@@ -40,11 +40,10 @@ func runSelectedHostScenarios(t *testing.T) {
 	t.Run("run subagent", func(t *testing.T) {
 		t.Parallel()
 		workDir := filepath.Join(t.TempDir(), "run-subagent")
-		home := filepath.Join(workDir, "home")
-		if err := os.MkdirAll(home, 0o755); err != nil {
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+		env := append([]string(nil), process.environment...)
 		source := support.InstallPackagedFactoryWithProcess(t, process, env, workDir, "@you/subagent")
 		support.CreateNamedFactoryAtRootWithProcess(t, process, env, workDir, filepath.Join(workDir, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
 		session, ctx, _ := startCancellableMCP(t, process, "http://127.0.0.1:1", workDir)
