@@ -14,7 +14,7 @@ flowchart TB
   end
   subgraph coordination["Factory coordination"]
     s_services_factory_runtime["factory runtime<br/>48747 LOC · 4 subservices"]
-    s_services_factory_sessions["factory sessions<br/>58098 LOC · 3 subservices"]
+    s_services_factory_sessions["factory sessions<br/>58352 LOC · 3 subservices"]
   end
   subgraph execution["Execution"]
     s_services_models["models<br/>38225 LOC · 5 subservices"]
@@ -128,7 +128,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`events`](services/events.md) | — |
 | [`factory_definitions`](services/factory_definitions.md) | (subservice) authoring layout (2136 LOC)<br/>(subservice) catalog (1376 LOC)<br/>(subservice) compilation (1673 LOC)<br/>(subservice) distribution (2845 LOC)<br/>(subservice) invocation policy (2994 LOC)<br/>(subservice) runtime snapshot (419 LOC)<br/>(subservice) snapshots portability (2370 LOC)<br/>(subservice) validation (5996 LOC) |
 | [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (857 LOC)<br/>(subservice) instance host (714 LOC)<br/>(subservice) orchestration (33327 LOC) |
-| [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (164 LOC)<br/>(subservice) identity (142 LOC)<br/>(subservice) response stream (402 LOC) |
+| [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (94 LOC)<br/>(subservice) identity (142 LOC)<br/>(subservice) response stream (402 LOC) |
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (444 LOC)<br/>(subservice) live view projection (530 LOC)<br/>(subservice) response event presentation (329 LOC) |
 | [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (738 LOC)<br/>(subservice) resolution (302 LOC) |
