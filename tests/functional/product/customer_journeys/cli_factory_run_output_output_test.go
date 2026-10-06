@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -19,11 +21,14 @@ const (
 
 func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Parallel()
+	fixture := newInvocationOutputFixture(t, platformprocess.CommandResult{
+		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+	})
 
 	t.Run("human lifecycle followed by final response", func(t *testing.T) {
 		t.Parallel()
 
-		stdout, stderr := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
+		stdout, stderr := runGoalInvocation(t, fixture, nil, []string{"--output", "response-stream"})
 		assertStableWorkerProgress(t, stderr)
 
 		lines := nonEmptyLines(stdout)
@@ -46,7 +51,7 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Run("quiet raw final result", func(t *testing.T) {
 		t.Parallel()
 
-		stdout, stderr := runGoalInvocation(t, nil, []string{"--quiet"})
+		stdout, stderr := runGoalInvocation(t, fixture, nil, []string{"--quiet"})
 
 		if stdout != primaryResult {
 			t.Fatalf("stdout = %q, want only raw final result %q", stdout, primaryResult)
@@ -57,23 +62,34 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	})
 }
 
-func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, string) {
-	t.Helper()
+// invocationOutputFixture finishes installation before parallel output scenarios
+// open independent Factory Sessions. The parent owns the home and process.
+type invocationOutputFixture struct {
+	process     support.ApplicationProcess
+	environment []string
+}
 
+func newInvocationOutputFixture(t *testing.T, result platformprocess.CommandResult) invocationOutputFixture {
+	t.Helper()
 	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+	process := support.BuildProcess(t, serviceedges.Edges{
+		// Both parallel output modes receive the same provider outcome.
+		ProviderCommandRunner: support.NewShapedProviderCommandRunner(result, result),
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: providerRunner})
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, "models"))
-	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, CliFactoryRunOutputGoalFactoryName)
+	support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), CliFactoryRunOutputGoalFactoryName)
+	return invocationOutputFixture{process: process, environment: env}
+}
+
+func runGoalInvocation(t *testing.T, fixture invocationOutputFixture, globalArgs, runArgs []string) (string, string) {
+	t.Helper()
+	workingDirectory := t.TempDir()
 
 	args := []string{"you"}
 	args = append(args, globalArgs...)
 	args = append(args,
-		"run", "--named", CliFactoryRunOutputGoalFactoryName,
+		"run", "--session", uuid.NewString(), "--named", CliFactoryRunOutputGoalFactoryName,
 		"--executor-provider", "codex",
 		"--executor-model", "gpt-5-codex",
 		"--no-record",
@@ -81,10 +97,10 @@ func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, stri
 	args = append(args, runArgs...)
 	args = append(args, "deterministic output contract")
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = env
+	inputs.Input.Env = fixture.environment
 	inputs.Input.WorkingDirectory = workingDirectory
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs.Stdout(), inputs.Stderr()

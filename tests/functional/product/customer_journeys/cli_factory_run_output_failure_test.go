@@ -3,25 +3,26 @@ package customer_journeys_test
 import (
 	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestInvocationFailureOutputContracts(t *testing.T) {
 	t.Parallel()
+	fixture := newInvocationOutputFixture(t, platformprocess.CommandResult{
+		Stderr: []byte("deterministic provider rejection"), ExitCode: 7,
+	})
 
 	t.Run("terminal failure emits failed result and standard error", func(t *testing.T) {
 		t.Parallel()
 
-		result := executeFailureInvocation(t, []string{
+		result := executeFailureInvocation(t, fixture, []string{
 			"you", "--json", "run", "--named", CliFactoryRunOutputGoalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
 		})
@@ -84,7 +85,7 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	t.Run("human lifecycle presents canonical failed dispatch", func(t *testing.T) {
 		t.Parallel()
 
-		result := executeFailureInvocation(t, []string{
+		result := executeFailureInvocation(t, fixture, []string{
 			"you", "run", "--named", CliFactoryRunOutputGoalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
 		})
@@ -121,27 +122,19 @@ type failureInvocationResult struct {
 
 func executeFailureInvocation(
 	t *testing.T,
+	fixture invocationOutputFixture,
 	args []string,
 ) failureInvocationResult {
 	t.Helper()
-	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir,
-		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, "models"))
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-			Stderr: []byte("deterministic provider rejection"), ExitCode: 7,
-		}),
-	})
-	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, CliFactoryRunOutputGoalFactoryName)
 	args = append(args[:len(args)-1], append([]string{
-		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
+		"--session", uuid.NewString(), "--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 	}, args[len(args)-1:]...)...)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = env
+	inputs.Input.Env = fixture.environment
 	inputs.Input.WorkingDirectory = workingDirectory
 
-	err := process.Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	return failureInvocationResult{stdout: inputs.Stdout(), stderr: inputs.Stderr(), err: err}
 }
 

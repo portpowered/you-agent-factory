@@ -5413,3 +5413,68 @@ The branch rebases that update before pushing this batch. No Go source or
 functional Go tests change in that main update; the complete verification above
 covers the same Go sources. Fresh hosted complete-job timing and required checks
 remain the merge gate for the workstation clone optimization.
+
+
+### October 6: output modes reuse installed Factory definitions
+
+Successful invocation output modes now share one parent-owned initialized
+process/home/model cache; failure output modes share another. Each of the four
+parallel scenarios uses its own explicit UUID Factory Session and working
+directory. Installation finishes before children run, and parent cleanup keeps
+the fixture alive until they finish. All human/JSON lifecycle, terminal failure,
+error envelope and quiet-result assertions remain. No installation/restart
+behavior is removed and no production cache, writer bypass or timing change is
+introduced. Four identical installations become two.
+
+The initial focused probe failed because the shared queued provider edge
+contained only one intended result and the second invocation consumed its
+default response. The corrected fixture supplies the same outcome to both
+parallel scenarios. Three focused Windows repetitions then pass (7.451s); both
+scoped built-in and repository linters pass with zero issues.
+
+Whole customer_journeys binaries are built separately from the same af9077 source
+archive, with only the two output files differing. Fresh B/C/C/B execution uses
+four pinned CPUs, GOGC=100 and GOMAXPROCS=4; build time is excluded. The initial
+comparison overlapped Windows lint work and is retained but excluded from the
+performance claim. The uncontended confirmation reuses those same binaries;
+all four complete package runs pass. Baseline totals 51.017334
+CPU-seconds / 31.887844376s elapsed; candidate
+49.834589 / 31.260729055: 2.3% less CPU and
+2.0% less elapsed. Baseline wall samples span 15.816-16.072s, candidate
+15.589-15.671s. This is a modest whole-package improvement.
+
+A focused three-repetition B/C/C/B comparison, after the full run has exited,
+also passes every scenario. Baseline totals 5.767888
+CPU-seconds / 3.918184996s elapsed; candidate
+3.881844 / 3.785110168: 32.7% less CPU
+and 3.4% less elapsed. Baseline wall samples span 1.865-2.053s, candidate
+1.835-1.950s. Profiling overhead is included in both sides. An earlier focused
+probe accidentally overlapped the still-running full monolith and is excluded;
+its observed totals (baseline 7.657599 CPU / 8.239196s, candidate 5.354548 CPU /
+9.560033s) provide no uncontended wall-latency claim.
+
+The complete candidate functional run passes 67 selected packages / 766 results
+(764 pass, two skip), empty complete raw failures and no retry ledger. It records
+147.37s supervisor / 142.602s capture / 349.37 CPU-seconds (259.34 user, 90.03
+system). Four compilers consume 6.723546 CPU-seconds / 4.994958 active wall; 15
+links consume 19.926497 CPU-seconds / 14.038410 active wall. This warm-cache full
+run briefly overlapped the discarded focused probe, so it establishes coverage
+but is not a controlled speedup. Source provenance is Windows archive af9077
+plus the two output-mode candidate files; private Linux Git identity is stale.
+
+Hosted run 37511920959 at af9077 passes Functional Coverage in 258 complete-job
+seconds, with 185.093s main capture, 67 packages / 766 results, 764 pass and two
+skip. It recovers one TestInterruptRace HTTP 503 admission failure on same-head
+retry; this is not a clean first-pass result. The diagnostics record 866 compile
+commands and 23 links, restoring the v2 cache from 967582d. Coverage/quarantine
+step wall time is 206s; cache restore/apply takes seven seconds, capture/save
+13 seconds. Keep the recovered admission race as a follow-up latency/correctness
+target rather than increasing retry limits. Other required checks were still
+active at this observation. The two-minute complete hosted checkpoint remains
+unmet and PR #2923 remains draft.
+
+The new main 4efd1f3 changes only factory/workstations/review/AGENTS.md prompt
+text, with no Go or functional source changes. Rebase this tested candidate to
+that live base before the next push. Evidence: output-home-paired/,
+output-home-paired-confirmation/, output-home-focused/, output-home-full/,
+workstation-text-hosted/ and workstation-text-hosted-ledger/.
