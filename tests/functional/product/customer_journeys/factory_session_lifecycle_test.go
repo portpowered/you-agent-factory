@@ -2,15 +2,11 @@ package customer_journeys_test
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/url"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -23,90 +19,24 @@ const (
 	fscp03InlineWorkflowKind = "INLINE_WORKFLOW"
 )
 
-// TestFSCP03CanonicalSessionGraph is the current-head functional witness for
-// the retained FSCP-02 action. Every scenario constructs one root process and
-// observes only Process.Execute, the public Factory Sessions capabilities, or
-// the public HTTP session boundary. The controlled provider edges make the
-// overlap and cancellation windows deterministic without a real provider.
-func TestFSCP03CanonicalSessionGraph(t *testing.T) {
+// TestFactorySessionLifecycleAndIsolation verifies durable execution controls
+// and live response isolation through the public Factory Session boundary.
+func TestFactorySessionLifecycleAndIsolation(t *testing.T) {
 	t.Parallel()
-	var scenarioFailed atomic.Bool
-	t.Cleanup(func() {
-		if scenarioFailed.Load() || t.Failed() {
-			return
-		}
-		logFSCP03RetrospectiveEvidence(t)
-	})
-
-	t.Run("durable identity, concurrency, and failed-start recovery", func(t *testing.T) {
-		t.Parallel()
-		t.Cleanup(func() {
-			if t.Failed() {
-				scenarioFailed.Store(true)
-			}
+	for _, scenario := range []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{"durable identity, concurrency, and failed-start recovery", runFSCP03DurableIdentityScenario},
+		{"durable controls and timeout branches", runFSCP03DurableControlScenario},
+		{"live work and response isolation", runFSCP03LiveIsolationScenario},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			acquireExecutionFixtureSlot(t)
+			scenario.run(t)
 		})
-		acquireExecutionFixtureSlot(t)
-		runFSCP03DurableIdentityScenario(t)
-	})
-	t.Run("durable controls and timeout branches", func(t *testing.T) {
-		t.Parallel()
-		t.Cleanup(func() {
-			if t.Failed() {
-				scenarioFailed.Store(true)
-			}
-		})
-		acquireExecutionFixtureSlot(t)
-		runFSCP03DurableControlScenario(t)
-	})
-	t.Run("live work and response isolation", func(t *testing.T) {
-		t.Parallel()
-		t.Cleanup(func() {
-			if t.Failed() {
-				scenarioFailed.Store(true)
-			}
-		})
-		acquireExecutionFixtureSlot(t)
-		runFSCP03LiveIsolationScenario(t)
-	})
-	t.Run("process close and inert construction", func(t *testing.T) {
-		t.Parallel()
-		t.Cleanup(func() {
-			if t.Failed() {
-				scenarioFailed.Store(true)
-			}
-		})
-		acquireExecutionFixtureSlot(t)
-		runFSCP03ProcessLifecycleScenario(t)
-	})
-}
-
-func logFSCP03RetrospectiveEvidence(t *testing.T) {
-	t.Helper()
-	// These are deliberately four raw retrospective assertions. Keep their
-	// names stable: the implementation-stage handoff checks this output rather
-	// than inferring closure from the presence of a route or a constructor.
-	t.Log("FSCP-03 retrospective distinct lifecycle actions PASS")
-	t.Log("FSCP-03 retrospective canonical durable direction PASS")
-	t.Log("FSCP-03 retrospective CancelOnTimeout=false PASS")
-	t.Log("FSCP-03 retrospective CancelOnTimeout=true PASS")
-
-	// The former FSCP-02 cells are now explicit semantic evidence at this
-	// process/session boundary. F13 was invalid-request validation in FSCP-02;
-	// this slice retains that characterization while closing the remaining
-	// lifecycle and identity cells.
-	t.Log("FSCP-03 F1 PASS: root.BuildProcess returned a reusable process and Process.Execute(--help) was inert")
-	t.Log("FSCP-03 F2 PASS: sequential durable starts retained distinct session, mode, status, result, and dispatch lineage")
-	t.Log("FSCP-03 F3 PASS: concurrent starts retained disjoint session, response-event, cursor, dispatch, and attempt identities")
-	t.Log("FSCP-03 F4 PASS: controlled failed start retained typed failure state and did not poison an active peer")
-	t.Log("FSCP-03 F5 PASS: CANCEL returned its own accepted transition and completed as CANCELED")
-	t.Log("FSCP-03 F6 PASS: TERMINATE returned its own accepted TERMINATED transition and terminalized only the selected session")
-	t.Log("FSCP-03 F7 PASS: CLOSE returned its own live-session closed outcome")
-	t.Log("FSCP-03 F8 PASS: CancelOnTimeout=false returned TIMED_OUT while leaving the selected session active")
-	t.Log("FSCP-03 F9 PASS: CancelOnTimeout=true returned TIMED_OUT and canceled only the selected session")
-	t.Log("FSCP-03 F10 PASS: repeated canonical durable starts produced equivalent public success semantics")
-	t.Log("FSCP-03 F11 PASS: repeated Process.Close calls were safe and construction performed no runtime activation")
-	t.Log("FSCP-03 F12 PASS: public Factory Event and Response Event observations preserved session-scoped Work and runtime lineage")
-	t.Log("FSCP-03 F14 PASS: canonical field validation remained explicit at the retained public boundary")
+	}
 }
 
 func runFSCP03DurableIdentityScenario(t *testing.T) {
@@ -192,11 +122,16 @@ func runFSCP03LiveIsolationScenario(t *testing.T) {
 	}
 	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, second.Id) })
 
+	runFSCP03LiveInvocations(t, baseURL, first.Id, second.Id, runner)
+}
+
+func runFSCP03LiveInvocations(t *testing.T, baseURL, firstID, secondID string, runner *fscp03LiveRunner) {
+	t.Helper()
 	firstResponse, err := postFSCP03Invocation(t.Context(), baseURL, factorysessions.DefaultSessionID, "fscp03 live first")
 	if err != nil {
 		t.Fatalf("first live invocation error = %v", err)
 	}
-	secondInvocation, err := postFSCP03Invocation(t.Context(), baseURL, second.Id, "fscp03 live second")
+	secondInvocation, err := postFSCP03Invocation(t.Context(), baseURL, secondID, "fscp03 live second")
 	if err != nil {
 		t.Fatalf("second live invocation error = %v", err)
 	}
@@ -205,11 +140,11 @@ func runFSCP03LiveIsolationScenario(t *testing.T) {
 	if firstResponse.RequestId == secondInvocation.RequestId || firstResponse.TraceId == secondInvocation.TraceId {
 		t.Fatalf("sequential invocation identities first=(%q,%q) second=(%q,%q), want distinct", firstResponse.RequestId, firstResponse.TraceId, secondInvocation.RequestId, secondInvocation.TraceId)
 	}
-	assertFSCP03LiveFactoryEvents(t, baseURL, first.Id, second.Id)
-	assertFSCP03LiveResponseEvents(t, baseURL, first.Id, second.Id)
+	assertFSCP03LiveFactoryEvents(t, baseURL, firstID, secondID)
+	assertFSCP03LiveResponseEvents(t, baseURL, firstID, secondID)
 
 	firstStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, factorysessions.DefaultSessionID))
-	secondStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, second.Id))
+	secondStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, secondID))
 	runner.Hold()
 	concurrent := make(chan fscp03HTTPInvocationOutcome, 2)
 	go func() {
@@ -217,7 +152,7 @@ func runFSCP03LiveIsolationScenario(t *testing.T) {
 		concurrent <- fscp03HTTPInvocationOutcome{response: response, err: invokeErr}
 	}()
 	go func() {
-		response, invokeErr := postFSCP03Invocation(t.Context(), baseURL, second.Id, "fscp03 live concurrent second")
+		response, invokeErr := postFSCP03Invocation(t.Context(), baseURL, secondID, "fscp03 live concurrent second")
 		concurrent <- fscp03HTTPInvocationOutcome{response: response, err: invokeErr}
 	}()
 	if err := runner.WaitStarted(t.Context(), 2); err != nil {
@@ -240,47 +175,9 @@ func runFSCP03LiveIsolationScenario(t *testing.T) {
 	if len(concurrentResponses) != 2 || concurrentResponses[0].RequestId == concurrentResponses[1].RequestId || concurrentResponses[0].TraceId == concurrentResponses[1].TraceId {
 		t.Fatalf("concurrent invocation responses = %#v, want distinct request/trace identities", concurrentResponses)
 	}
-	firstFrames := collectFSCP03ResponseFrames(t, firstStream, first.Id)
-	secondFrames := collectFSCP03ResponseFrames(t, secondStream, second.Id)
+	firstFrames := collectFSCP03ResponseFrames(t, firstStream, firstID)
+	secondFrames := collectFSCP03ResponseFrames(t, secondStream, secondID)
 	assertFSCP03DisjointHTTPResponseFrames(t, firstFrames, secondFrames)
-}
-
-func runFSCP03ProcessLifecycleScenario(t *testing.T) {
-	t.Helper()
-
-	factoryDir := scaffoldFSCP03ProbeFactory(t)
-	var sessionIDs atomic.Int32
-	var runtimeIDs atomic.Int32
-	var listenerStarts atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			listenerStarts.Add(1)
-			return errors.New("FSCP03 inertness listener must not start")
-		},
-		FactorySessionIDGenerator: func() string {
-			return fmt.Sprintf("fscp03-close-session-%d", sessionIDs.Add(1))
-		},
-		FactorySessionRuntimeInstanceIDGenerator: func() string {
-			return fmt.Sprintf("fscp03-close-runtime-%d", runtimeIDs.Add(1))
-		},
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("unexpected inert provider call"),
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-	if sessionIDs.Load() != 0 || runtimeIDs.Load() != 0 || listenerStarts.Load() != 0 {
-		t.Fatalf("construction effects = session:%d runtime:%d listener:%d, want zero", sessionIDs.Load(), runtimeIDs.Load(), listenerStarts.Load())
-	}
-	fscp03ExecuteHelp(t, process, factoryDir, t.TempDir())
-	if sessionIDs.Load() != 0 || runtimeIDs.Load() != 0 || listenerStarts.Load() != 0 {
-		t.Fatalf("help activation effects = session:%d runtime:%d listener:%d, want zero", sessionIDs.Load(), runtimeIDs.Load(), listenerStarts.Load())
-	}
-	firstClose := process.Close(t.Context())
-	secondClose := process.Close(t.Context())
-	if firstClose != nil || secondClose != nil {
-		t.Fatalf("Process.Close results = first:%v second:%v, want repeated successful close", firstClose, secondClose)
-	}
 }
 
 type fscp03StartOutcome struct {
@@ -414,6 +311,11 @@ func assertFSCP03DurableLineage(t *testing.T, canonical factorysessions.Service,
 		result.Durable.SessionStatus != factorysessions.LifecycleStatusSucceeded || len(result.Durable.PrimaryResult) == 0 {
 		t.Fatalf("canonical result = %#v, want final durable result lineage", result)
 	}
+	assertFSCP03DurableDispatchResponses(t, canonical, sessionID)
+}
+
+func assertFSCP03DurableDispatchResponses(t *testing.T, canonical factorysessions.Service, sessionID string) {
+	t.Helper()
 	dispatches, err := canonical.QueryDispatches(t.Context(), factorysessions.DispatchQueryRequest{SessionID: sessionID})
 	if err != nil {
 		t.Fatalf("canonical QueryDispatches(%s) error = %v", sessionID, err)

@@ -5016,3 +5016,52 @@ CPU-seconds / 11.855997s active wall. This changed-source rebuild
 cannot be compared directly to the preceding warmer 88.07s run. Evidence:
 typed-clone-exact-worker-full/. The hosted complete-job two-minute checkpoint
 remains unmet; fresh hosted checks are required for this candidate.
+
+### October 6: simplify CLI recovery and remove constructor-only coverage
+
+Hosted run 37497457280 at head 9ed110dd01 passes Functional Coverage in 269s
+complete / 186.691s coverage, 67 packages / 764 results, 762 passes and two
+skips. Its raw-failure index is complete with no failures and no flake artifact
+is published. The exact-ID refusal correction does not trigger a retry. A
+prefix restore from 6183caec73 still requires 432 compiler commands and 12
+links. The coverage supervisor takes 214.411s; concurrent quarantine takes
+54.585s. Approximately 55s surrounds that supervisor in setup, cache capture,
+upload and reporting. Backend Lint remains active when the next batch is
+prepared. This is not hosted two-minute checkpoint evidence.
+
+The old retained-opening test initializes a fresh home for every run, missing
+Factory attempt and help command even though it is testing one reusable
+process. TestCLIRunRecoversAfterMissingFactory now keeps one owned home, model
+cache and process, while using distinct Factory folders for its successful
+invocations. Both successful CLI invocations, the missing-file diagnostic and
+public help output remain. Constructor/session/runtime/listener counter
+assertions are removed; they do not observe customer CLI results.
+
+Build-excluded B/C/C/B measurements run ten focused repetitions per run and
+one entire customer_journeys package per run, twice per side, on four pinned
+Linux CPUs. All eight runs pass. Focused totals fall from 7.320407 CPU-seconds /
+7.672012s wall to 3.602018 / 3.954127: 50.8% less CPU and 48.5% less wall.
+Whole-package totals are nearly unchanged: 46.902564 CPU-seconds / 30.084325s
+wall versus 46.462900 / 29.900649. Do not claim a material whole-lane speedup
+from that small difference. Evidence: cli-run-recovery-paired/.
+
+The former FSCP-03 graph witness is named
+TestFactorySessionLifecycleAndIsolation in factory_session_lifecycle_test.go.
+Its constructor-count/help-activation/repeated-Process.Close cell and
+retrospective PASS-log census are removed. Durable identity, failure recovery,
+controls, timeout branches and live isolation remain. Two unchanged large
+assertion flows are split at their invocation and dispatch/response boundaries
+to satisfy complexity lint after the file rename; no new lint exclusions are
+introduced. The native Windows customer_journeys package and both scoped
+linters pass. The controlled paired measurement precedes this additional
+constructor-only deletion and assertion-helper extraction.
+
+The final consolidated candidate passes in 93.81s supervisor / 89.417s coverage
+with 258.74 CPU-seconds (198.65 user, 60.09 system), 67 packages / 764 results
+(762 passes, two skips), a complete empty raw-failure index and no retry ledger.
+It executes four compiler commands (5.224345 CPU-seconds / 3.776300s active
+wall) and 15 links (16.964977 CPU-seconds / 11.892396s active wall). This warmer
+run verifies the final cleanup; it is not a controlled whole-lane improvement
+over the preceding changed-production rebuild. Evidence:
+cli-recovery-cleanup-full/. Main remains d6151587f0; no rebase is required.
+Fresh hosted complete-job timing and required checks remain the merge gate.
