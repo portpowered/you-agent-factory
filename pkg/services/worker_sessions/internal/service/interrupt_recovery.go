@@ -34,6 +34,15 @@ func (r *registry) replayDurableInterrupt(ctx context.Context, req workersession
 	}
 	key := recordings.WorkerControlOperationKey{RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, FactorySessionID: target.FactorySessionID, RequestID: req.RequestID}
 	record, err := r.operations.LoadWorkerControlOperation(ctx, key)
+	// Journal IO can overlap a new live reservation and its intent write.
+	// Let normal admission join that owner and validate the request tuple;
+	// a pending record is recovery authority only when no live owner exists.
+	r.mu.RLock()
+	_, liveReplay = r.interruptReplays[req.RequestID]
+	r.mu.RUnlock()
+	if liveReplay {
+		return workersessions.InterruptResult{}, false, nil
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return workersessions.InterruptResult{}, false, nil
 	}

@@ -3,9 +3,8 @@ package customer_lifecycles_test
 import "testing"
 
 // TestFactoryDispatchJourneys owns its immutable fixture until all customer scenarios finish.
-func TestFactoryDispatchJourneys(t *testing.T) {
+func runFactoryDispatchJourneys(t *testing.T) {
 	t.Parallel()
-	resetorchestrationpetridispatch5State()
 	initializeOrchestrationpetridispatchFixture(t)
 	t.Run("TestPetriIndependentWorkDispatchesConcurrently", testOrchestrationpetridispatchPetriIndependentWorkDispatchesConcurrently)
 	t.Run("TestPetriConcurrentResultsCorrelateToOriginalWork", testOrchestrationpetridispatchPetriConcurrentResultsCorrelateToOriginalWork)

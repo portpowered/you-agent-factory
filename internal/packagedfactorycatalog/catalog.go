@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 const (
@@ -114,6 +116,11 @@ func buildCatalogOnce(
 		}
 		files[jsonPath] = artifact.JSON
 		files[yamlPath] = artifact.YAML
+		serialized, err := serializeFactoryConversion(artifact.JSON)
+		if err != nil {
+			return nil, fmt.Errorf("serialize packaged Factory %s: %w", artifact.Slug, err)
+		}
+		files[factorydefinitions.SerializedFactoryConfigInput(artifact.JSON).Path()] = serialized
 	}
 	if err := validateManifestHashes(manifest.Manifest, files); err != nil {
 		return nil, err

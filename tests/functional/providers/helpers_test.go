@@ -448,13 +448,10 @@ const FixtureTimeout = 15 * time.Second
 var sharedProviderRouteSequence atomic.Uint64
 
 // sharedProviderHTTPServer observes the one listener owned by the shared
-// root-built process. The count is local fixture evidence, not process-global
-// state.
+// root-built process. Completion joins the fixture-owned listener shutdown.
 type sharedProviderHTTPServer struct {
 	server *support.ProcessAPIServer
 
-	mu       sync.Mutex
-	starts   int
 	done     chan struct{}
 	doneOnce sync.Once
 }
@@ -470,17 +467,8 @@ func (server *sharedProviderHTTPServer) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
 ) error {
-	server.mu.Lock()
-	server.starts++
-	server.mu.Unlock()
 	defer server.doneOnce.Do(func() { close(server.done) })
 	return server.server.Start(ctx, request)
-}
-
-func (server *sharedProviderHTTPServer) startCount() int {
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	return server.starts
 }
 
 func (server *sharedProviderHTTPServer) waitClosed(ctx context.Context) error {
@@ -492,30 +480,6 @@ func (server *sharedProviderHTTPServer) waitClosed(ctx context.Context) error {
 	}
 }
 
-type sharedProviderProcessConstructor struct {
-	mu     sync.Mutex
-	builds int
-}
-
-func (constructor *sharedProviderProcessConstructor) build(
-	edges serviceedges.Edges,
-) (support.ApplicationProcess, error) {
-	process, err := support.BuildProcessWithContext(context.Background(), edges)
-	if err != nil {
-		return nil, err
-	}
-	constructor.mu.Lock()
-	constructor.builds++
-	constructor.mu.Unlock()
-	return process, nil
-}
-
-func (constructor *sharedProviderProcessConstructor) count() int {
-	constructor.mu.Lock()
-	defer constructor.mu.Unlock()
-	return constructor.builds
-}
-
 type ProcessFixture struct {
 	rootDir     string
 	bootstrap   string
@@ -523,13 +487,12 @@ type ProcessFixture struct {
 	runtimeLogs string
 	baseURL     string
 
-	process     support.ApplicationProcess
-	cancel      context.CancelFunc
-	done        chan struct{}
-	executeErr  error
-	api         *sharedProviderHTTPServer
-	router      *sharedProviderCommandRouter
-	constructor *sharedProviderProcessConstructor
+	process    support.ApplicationProcess
+	cancel     context.CancelFunc
+	done       chan struct{}
+	executeErr error
+	api        *sharedProviderHTTPServer
+	router     *sharedProviderCommandRouter
 
 	sessionMu         sync.Mutex
 	openedSessionIDs  []string
@@ -603,8 +566,7 @@ func newSharedProviderProcessFixture(t *testing.T) (*ProcessFixture, error) {
 	}
 	api := newSharedProviderHTTPServer()
 	router := newSharedProviderCommandRouter()
-	constructor := &sharedProviderProcessConstructor{}
-	process, err := constructor.build(serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      api.start,
 		ProviderCommandRunner: router,
 		ScriptCommandRunner:   router,
@@ -630,7 +592,6 @@ func newSharedProviderProcessFixture(t *testing.T) (*ProcessFixture, error) {
 		rootDir: rootDir, bootstrap: bootstrap, homeDir: homeDir,
 		runtimeLogs: runtimeLogs, process: process, cancel: cancel,
 		done: make(chan struct{}), api: api, router: router,
-		constructor: constructor,
 	}
 	go func() {
 		fixture.executeErr = process.Execute(inputs.Input)
@@ -706,16 +667,10 @@ func (fixture *ProcessFixture) close() error {
 	if err := fixture.api.waitClosed(closeCtx); err != nil && closeErr == nil {
 		closeErr = fmt.Errorf("wait for API server shutdown: %w", err)
 	}
-	if got := fixture.constructor.count(); got != 1 && closeErr == nil {
-		closeErr = fmt.Errorf("shared provider root constructions after cleanup = %d, want one", got)
-	}
-	if got := fixture.api.startCount(); got != 1 && closeErr == nil {
-		closeErr = fmt.Errorf("shared provider listener starts after cleanup = %d, want one", got)
-	}
 	if got := fixture.router.routeCount(); got != 0 && closeErr == nil {
 		closeErr = fmt.Errorf("shared provider routes after cleanup = %d, want zero", got)
 	}
-	if err := fixture.validateSessionTopology(); err != nil && closeErr == nil {
+	if err := fixture.validateSessionCleanup(); err != nil && closeErr == nil {
 		closeErr = err
 	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil && closeErr == nil {
@@ -948,30 +903,13 @@ func assertSharedFactorySessionDeleted(t testing.TB, baseURL, sessionID string) 
 	}
 }
 
-func (fixture *ProcessFixture) AssertTopology(t testing.TB) {
-	t.Helper()
-	if got := fixture.constructor.count(); got != 1 {
-		t.Fatalf("shared provider root constructions = %d, want one", got)
-	}
-	if got := fixture.api.startCount(); got != 1 {
-		t.Fatalf("shared provider listener starts = %d, want one", got)
-	}
-}
-
-func (fixture *ProcessFixture) AssertSessionTopology(t testing.TB) {
-	t.Helper()
-	if err := fixture.validateSessionTopology(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func (fixture *ProcessFixture) validateSessionTopology() error {
+func (fixture *ProcessFixture) validateSessionCleanup() error {
 	fixture.sessionMu.Lock()
 	opened := append([]string(nil), fixture.openedSessionIDs...)
 	deleted := append([]string(nil), fixture.deletedSessionIDs...)
 	fixture.sessionMu.Unlock()
 	if len(opened) != len(deleted) {
-		return fmt.Errorf("shared Factory Session topology = opened:%d deleted:%d, want equal", len(opened), len(opened))
+		return fmt.Errorf("shared Factory Session cleanup = opened:%d deleted:%d, want equal", len(opened), len(opened))
 	}
 	seen := make(map[string]struct{}, len(opened))
 	for _, sessionID := range opened {

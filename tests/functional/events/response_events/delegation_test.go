@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -27,9 +26,6 @@ func TestFactoryResponseEventsSurviveTheEventsAuthoritativePublishPath(t *testin
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: host, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, ProcessLogger: zap.New(core)},
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	for _, mode := range []string{"success", "failure"} {

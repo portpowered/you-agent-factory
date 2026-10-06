@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -74,11 +73,6 @@ func startStorageFailureHost(t *testing.T, home string, edges serviceedges.Edges
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: edges,
 		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
-		// First-run installation is fixture setup, not the reader behavior.
-		// Complete it before starting the host's observable readiness window.
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	return server

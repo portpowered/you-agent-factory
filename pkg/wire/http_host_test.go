@@ -27,7 +27,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -543,78 +542,82 @@ func TestProvideRunRuntimeRunnerBuilderRejectsMissingDependencies(t *testing.T) 
 }
 
 type defaultWorkTypePolicy struct {
-	id  string
-	err error
+	id          string
+	err         error
+	factoryName string
 }
 
-func (policy defaultWorkTypePolicy) DefaultWorkType(*factorydefinitions.FactoryConfig) (string, error) {
+func (policy defaultWorkTypePolicy) DefaultWorkType(config *factorydefinitions.FactoryConfig) (string, error) {
+	if policy.factoryName != "" && (config == nil || config.Name != policy.factoryName) {
+		return "", errors.New("selected Factory configuration is missing")
+	}
 	return policy.id, policy.err
 }
 
-type currentFactoryForSessionAPI struct {
-	apisurface.FactorySaveAPI
-	factoryapi.Factory
-	err error
+type currentFactorySessionRead struct {
+	factorysessions.LiveControlService
+	config *factorydefinitions.FactoryConfig
+	err    error
 }
 
-func (api currentFactoryForSessionAPI) GetCurrentFactoryForSession(
+func (api currentFactorySessionRead) GetFactorySession(
 	context.Context,
 	string,
-) (factoryapi.Factory, error) {
-	return api.Factory, api.err
+) (factorysessions.LiveControlSnapshot, error) {
+	return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactoryCfg: api.config}}, api.err
 }
 
 // TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy pins the
 // omitted-work-type policy the Work HTTP adapter is composed with: a missing
 // collaborator, an unknown session, an unset current Factory, or a policy that
 // cannot name a default all resolve to the empty work type rather than failing
-// admission, while an opaque Factory Definitions failure is surfaced verbatim.
+// admission, while an opaque Factory Session projection failure is surfaced verbatim.
 func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
 	t.Parallel()
 
 	checks := []struct {
-		name        string
-		definitions apisurface.FactorySaveAPI
-		invocation  factorydefinitions.InvocationWorkTypeService
-		want        string
-		wantErr     string
+		name       string
+		sessions   factorysessions.LiveControlService
+		invocation factorydefinitions.InvocationWorkTypeService
+		want       string
+		wantErr    string
 	}{
 		{name: "missing dependencies"},
-		{name: "missing invocation policy", definitions: currentFactoryForSessionAPI{}},
+		{name: "missing invocation policy", sessions: currentFactorySessionRead{}},
 		// Both not-found rows supply an invocation policy that would name a
 		// work type, so reaching the empty result proves the not-found
 		// fallback rather than the missing-collaborator short circuit above.
 		{
-			name:        "session not found",
-			definitions: currentFactoryForSessionAPI{err: apisurface.ErrFactorySessionNotFound},
-			invocation:  defaultWorkTypePolicy{id: "default-task"},
+			name:       "session not found",
+			sessions:   currentFactorySessionRead{err: apisurface.ErrFactorySessionNotFound},
+			invocation: defaultWorkTypePolicy{id: "default-task"},
 		},
 		{
-			name:        "current factory not found",
-			definitions: currentFactoryForSessionAPI{err: apisurface.ErrCurrentFactoryNotFound},
-			invocation:  defaultWorkTypePolicy{id: "default-task"},
+			name:       "current factory not found",
+			sessions:   currentFactorySessionRead{err: apisurface.ErrCurrentFactoryNotFound},
+			invocation: defaultWorkTypePolicy{id: "default-task"},
 		},
 		{
-			name:        "opaque definition error",
-			definitions: currentFactoryForSessionAPI{err: errors.New("definition failed")},
-			invocation:  defaultWorkTypePolicy{},
-			wantErr:     "definition failed",
+			name:       "opaque definition error",
+			sessions:   currentFactorySessionRead{err: errors.New("definition failed")},
+			invocation: defaultWorkTypePolicy{},
+			wantErr:    "definition failed",
 		},
 		{
-			name:        "invocation policy error",
-			definitions: currentFactoryForSessionAPI{},
-			invocation:  defaultWorkTypePolicy{err: errors.New("policy failed")},
+			name:       "invocation policy error",
+			sessions:   currentFactorySessionRead{},
+			invocation: defaultWorkTypePolicy{err: errors.New("policy failed")},
 		},
 		{
-			name:        "default type",
-			definitions: currentFactoryForSessionAPI{},
-			invocation:  defaultWorkTypePolicy{id: "default-task"},
-			want:        "default-task",
+			name:       "default type",
+			sessions:   currentFactorySessionRead{config: &factorydefinitions.FactoryConfig{Name: "selected-factory"}},
+			invocation: defaultWorkTypePolicy{id: "default-task", factoryName: "selected-factory"},
+			want:       "default-task",
 		},
 	}
 	for _, check := range checks {
 		t.Run(check.name, func(t *testing.T) {
-			resolver := newDefaultWorkTypeResolver(check.definitions, check.invocation)
+			resolver := newDefaultWorkTypeResolver(check.sessions, check.invocation)
 			got, err := resolver(context.Background(), "session-alpha")
 			if check.wantErr != "" {
 				if err == nil || err.Error() != check.wantErr {

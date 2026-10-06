@@ -145,7 +145,7 @@ func runPolicyDeniedJavaScriptInvocation(
 		"hello",
 	})
 	inputs.Input.WorkingDirectory = dir
-	home := t.TempDir()
+	home := fixture.homeDir
 	inputs.Input.Env = policyCustomerEnvironment(home)
 
 	err := fixture.process.Execute(inputs.Input)

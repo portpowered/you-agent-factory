@@ -52,13 +52,10 @@ type workListFiltersCountsMoveResponse struct {
 func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
+	server := workCLIServer
 
 	process := workCLIProcess
-	home := t.TempDir()
+	sessionID := openWorkCLISession(t, factoryDir)
 
 	works := []workListFiltersCountsWork{
 		{Name: "task-initial", WorkID: "work-task-initial", WorkTypeName: "task"},
@@ -68,7 +65,7 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 		{Name: "other-initial", WorkID: "work-other-initial", WorkTypeName: "other"},
 		{Name: "other-terminal", WorkID: "work-other-terminal", WorkTypeName: "other"},
 	}
-	submitWorkListFiltersCountsBatch(t, process, home, server.URL(), works)
+	submitWorkListFiltersCountsBatch(t, process, sessionID, server.URL(), works)
 
 	for _, move := range []struct {
 		workID string
@@ -79,10 +76,10 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 		{workID: "work-task-failed", state: "failed"},
 		{workID: "work-other-terminal", state: "complete"},
 	} {
-		moveWorkListFiltersCountsWork(t, process, home, server.URL(), move.workID, move.state)
+		moveWorkListFiltersCountsWork(t, process, sessionID, server.URL(), move.workID, move.state)
 	}
 
-	filtered := listWorkListFiltersCounts(t, process, home, server.URL(),
+	filtered := listWorkListFiltersCounts(t, process, sessionID, server.URL(),
 		"--non-terminal", "--work-type", "task", "--counts")
 	assertWorkListFiltersCountsSummary(t, filtered, 2, 2)
 	assertWorkListFiltersCountsIDs(t, filtered, map[string]bool{
@@ -97,7 +94,7 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 		}
 	}
 
-	page := listWorkListFiltersCounts(t, process, home, server.URL(),
+	page := listWorkListFiltersCounts(t, process, sessionID, server.URL(),
 		"--non-terminal", "--work-type", "task", "--counts", "--max-results", "1")
 	assertWorkListFiltersCountsSummary(t, page, 2, 2)
 	assertWorkListFiltersCountsIDs(t, page, map[string]bool{
@@ -108,7 +105,7 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 		t.Fatalf("aggregate filtered list retained a continuation token: %#v", page.PaginationContext)
 	}
 
-	terminal := listWorkListFiltersCounts(t, process, home, server.URL(),
+	terminal := listWorkListFiltersCounts(t, process, sessionID, server.URL(),
 		"--terminal", "--work-type", "task", "--counts")
 	assertWorkListFiltersCountsSummary(t, terminal, 2, 2)
 	assertWorkListFiltersCountsIDs(t, terminal, map[string]bool{
@@ -116,21 +113,21 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 		"work-task-failed":   true,
 	})
 
-	byState := listWorkListFiltersCounts(t, process, home, server.URL(),
+	byState := listWorkListFiltersCounts(t, process, sessionID, server.URL(),
 		"--state", "init", "--work-type", "task", "--counts")
 	assertWorkListFiltersCountsSummary(t, byState, 1, 1)
 	assertWorkListFiltersCountsIDs(t, byState, map[string]bool{"work-task-initial": true})
 
-	zero := listWorkListFiltersCounts(t, process, home, server.URL(),
+	zero := listWorkListFiltersCounts(t, process, sessionID, server.URL(),
 		"--non-terminal", "--work-type", "other", "--state", "complete", "--counts")
 	assertWorkListFiltersCountsSummary(t, zero, 0, 0)
 
-	human := executeWorkListFiltersCountsCLI(t, process, home,
+	human := executeWorkListFiltersCountsCLI(t, process, sessionID,
 		"--server", server.URL(), "work", "list", "--non-terminal", "--work-type", "task", "--counts")
 	if !strings.Contains(human, "Total: 2") {
 		t.Fatalf("human filtered list missing stable total:\n%s", human)
 	}
-	zeroHuman := executeWorkListFiltersCountsCLI(t, process, home,
+	zeroHuman := executeWorkListFiltersCountsCLI(t, process, sessionID,
 		"--server", server.URL(), "work", "list", "--non-terminal", "--work-type", "other", "--state", "complete", "--counts")
 	if !strings.Contains(zeroHuman, "Total: 0") || !strings.Contains(zeroHuman, "No work found.") {
 		t.Fatalf("human zero-match list missing total or empty treatment:\n%s", zeroHuman)
@@ -143,12 +140,9 @@ func testWorktransportscliWorkListFiltersAndCounts(t *testing.T) {
 func testWorktransportscliWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
+	server := workCLIServer
 	process := workCLIProcess
-	home := t.TempDir()
+	sessionID := openWorkCLISession(t, factoryDir)
 
 	works := make([]workListFiltersCountsWork, 0, 51)
 	wantIDs := make([]string, 0, 51)
@@ -161,12 +155,12 @@ func testWorktransportscliWorkListPublicCLITraversesThreeRESTPages(t *testing.T)
 		})
 		wantIDs = append(wantIDs, workID)
 	}
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(), "work-list-three-pages", works)
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, server.URL(), "work-list-three-pages", works)
 
-	manualPages := manualWorkListRESTWalk(t, server.URL(), 17)
+	manualPages := manualWorkListRESTWalk(t, server.URL(), sessionID, 17)
 	manualIDs := assertThreeWorkRESTPages(t, manualPages, wantIDs)
 
-	jsonOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+	jsonOutput := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", server.URL(),
 		"--json", "work", "list", "--counts", "--max-results", "17")
 	var listed factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(jsonOutput)), &listed); err != nil {
@@ -186,7 +180,7 @@ func testWorktransportscliWorkListPublicCLITraversesThreeRESTPages(t *testing.T)
 		t.Fatalf("aggregate pagination = %#v, want maxResults=17 and exhausted continuation", listed.PaginationContext)
 	}
 
-	humanOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+	humanOutput := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", server.URL(),
 		"work", "list", "--max-results", "17")
 	if strings.Count(humanOutput, "WORK ID\tNAME\tWORK TYPE") != 1 {
 		t.Fatalf("human header count = %d, want one", strings.Count(humanOutput, "WORK ID\tNAME\tWORK TYPE"))
@@ -203,12 +197,9 @@ func testWorktransportscliWorkListPublicCLITraversesThreeRESTPages(t *testing.T)
 func testWorktransportscliWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *testing.T) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
+	server := workCLIServer
 	process := workCLIProcess
-	home := t.TempDir()
+	sessionID := openWorkCLISession(t, factoryDir)
 
 	works := make([]workListFiltersCountsWork, 0, 51)
 	for index := 1; index <= 51; index++ {
@@ -218,9 +209,9 @@ func testWorktransportscliWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *tes
 			WorkTypeName: "task",
 		})
 	}
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(), "work-show-large-board", works)
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, server.URL(), "work-show-large-board", works)
 
-	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+	output := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", server.URL(),
 		"--json", "work", "show", "work-page-51")
 	var shown factoryapi.Work
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &shown); err != nil {
@@ -238,13 +229,10 @@ func testWorktransportscliWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *tes
 func testWorktransportscliWorkListAllAnnotatesSupersededSameName(t *testing.T) {
 	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-	})
+	server := workCLIServer
 
 	process := workCLIProcess
-	home := t.TempDir()
+	sessionID := openWorkCLISession(t, factoryDir)
 	oldWork := workListFiltersCountsWork{
 		Name:         "retryable-task",
 		WorkID:       "work-retryable-old",
@@ -255,27 +243,27 @@ func testWorktransportscliWorkListAllAnnotatesSupersededSameName(t *testing.T) {
 		WorkID:       "work-retryable-new",
 		WorkTypeName: oldWork.WorkTypeName,
 	}
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, server.URL(),
 		"work-list-superseded-old", []workListFiltersCountsWork{oldWork})
-	moveWorkListFiltersCountsWork(t, process, home, server.URL(), oldWork.WorkID, "failed")
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+	moveWorkListFiltersCountsWork(t, process, sessionID, server.URL(), oldWork.WorkID, "failed")
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, server.URL(),
 		"work-list-superseded-new", []workListFiltersCountsWork{newWork})
 	freshFailure := workListFiltersCountsWork{
 		Name:         "fresh-failure",
 		WorkID:       "work-fresh-failure",
 		WorkTypeName: "task",
 	}
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(),
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, server.URL(),
 		"work-list-fresh-failure", []workListFiltersCountsWork{freshFailure})
-	moveWorkListFiltersCountsWork(t, process, home, server.URL(), freshFailure.WorkID, "failed")
-	assertWorkListSupersessionDefault(t, process, home, server.URL(), oldWork, newWork, freshFailure)
-	assertWorkListSupersessionHistory(t, process, home, server.URL(), oldWork, newWork)
+	moveWorkListFiltersCountsWork(t, process, sessionID, server.URL(), freshFailure.WorkID, "failed")
+	assertWorkListSupersessionDefault(t, process, sessionID, server.URL(), oldWork, newWork, freshFailure)
+	assertWorkListSupersessionHistory(t, process, sessionID, server.URL(), oldWork, newWork)
 }
 
 func assertWorkListSupersessionDefault(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	oldWork workListFiltersCountsWork,
 	newWork workListFiltersCountsWork,
@@ -283,7 +271,7 @@ func assertWorkListSupersessionDefault(
 ) {
 	t.Helper()
 
-	defaultOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+	defaultOutput := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", serverURL,
 		"--json", "work", "list", "--name", oldWork.Name, "--counts")
 	var defaultList factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(defaultOutput)), &defaultList); err != nil {
@@ -295,7 +283,7 @@ func assertWorkListSupersessionDefault(
 		t.Fatalf("default same-name list exposed superseded Work: %s", defaultOutput)
 	}
 
-	freshFailureList := listWorkListFiltersCounts(t, process, home, serverURL,
+	freshFailureList := listWorkListFiltersCounts(t, process, sessionID, serverURL,
 		"--terminal", "--name", freshFailure.Name, "--counts")
 	assertWorkListFiltersCountsSummary(t, freshFailureList, 1, 1)
 	assertWorkListFiltersCountsIDs(t, freshFailureList, map[string]bool{freshFailure.WorkID: true})
@@ -304,23 +292,23 @@ func assertWorkListSupersessionDefault(
 func assertWorkListSupersessionHistory(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	oldWork workListFiltersCountsWork,
 	newWork workListFiltersCountsWork,
 ) {
 	t.Helper()
 
-	terminal := listWorkListFiltersCounts(t, process, home, serverURL,
+	terminal := listWorkListFiltersCounts(t, process, sessionID, serverURL,
 		"--all", "--name", oldWork.Name, "--terminal", "--counts")
 	assertWorkListFiltersCountsSummary(t, terminal, 1, 1)
 	assertWorkListFiltersCountsIDs(t, terminal, map[string]bool{oldWork.WorkID: true})
-	nonTerminal := listWorkListFiltersCounts(t, process, home, serverURL,
+	nonTerminal := listWorkListFiltersCounts(t, process, sessionID, serverURL,
 		"--all", "--name", oldWork.Name, "--non-terminal", "--counts")
 	assertWorkListFiltersCountsSummary(t, nonTerminal, 1, 1)
 	assertWorkListFiltersCountsIDs(t, nonTerminal, map[string]bool{newWork.WorkID: true})
 
-	allPage := listWorkListFiltersCounts(t, process, home, serverURL,
+	allPage := listWorkListFiltersCounts(t, process, sessionID, serverURL,
 		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1")
 	assertWorkListFiltersCountsSummary(t, allPage, 2, 2)
 	assertWorkListFiltersCountsIDs(t, allPage, map[string]bool{oldWork.WorkID: true, newWork.WorkID: true})
@@ -328,7 +316,7 @@ func assertWorkListSupersessionHistory(
 		t.Fatalf("--all aggregate retained a continuation token: %#v", allPage.PaginationContext)
 	}
 
-	allOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+	allOutput := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", serverURL,
 		"--json", "work", "list", "--all", "--name", oldWork.Name, "--counts")
 	var allList factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(allOutput)), &allList); err != nil {
@@ -358,7 +346,7 @@ func assertWorkListSupersessionHistory(
 		t.Fatalf("--all response missing old/new annotation: %s", allOutput)
 	}
 
-	human := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+	human := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", serverURL,
 		"work", "list", "--all", "--name", oldWork.Name)
 	if !strings.Contains(human, oldWork.WorkID) || !strings.Contains(human, newWork.WorkID) ||
 		!strings.Contains(human, "Superseded by: "+newWork.WorkID) {
@@ -386,18 +374,18 @@ func workListFiltersCountsFactoryConfig() map[string]any {
 func submitWorkListFiltersCountsBatch(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	works []workListFiltersCountsWork,
 ) {
-	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, serverURL,
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, sessionID, serverURL,
 		workListFiltersCountsRequestID, works)
 }
 
 func submitWorkListFiltersCountsBatchWithRequestID(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	requestID string,
 	works []workListFiltersCountsWork,
@@ -420,7 +408,7 @@ func submitWorkListFiltersCountsBatchWithRequestID(
 	if err != nil {
 		t.Fatalf("marshal Work list scenario batch: %v", err)
 	}
-	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+	output := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", serverURL,
 		"--json", "submit", "batch", string(payload))
 	var submitted workListFiltersCountsSubmitResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &submitted); err != nil {
@@ -439,13 +427,13 @@ func submitWorkListFiltersCountsBatchWithRequestID(
 func moveWorkListFiltersCountsWork(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	workID string,
 	state string,
 ) {
 	t.Helper()
-	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
+	output := executeWorkListFiltersCountsCLI(t, process, sessionID, "--server", serverURL,
 		"--json", "work", "move", workID, state)
 	var moved workListFiltersCountsMoveResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &moved); err != nil {
@@ -459,13 +447,13 @@ func moveWorkListFiltersCountsWork(
 func listWorkListFiltersCounts(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	serverURL string,
 	flags ...string,
 ) factoryapi.ListWorkResponse {
 	t.Helper()
 	args := append([]string{"--server", serverURL, "--json", "work", "list"}, flags...)
-	output := executeWorkListFiltersCountsCLI(t, process, home, args...)
+	output := executeWorkListFiltersCountsCLI(t, process, sessionID, args...)
 	var listed factoryapi.ListWorkResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &listed); err != nil {
 		t.Fatalf("decode Work list response: %v\noutput:\n%s", err, output)
@@ -476,6 +464,7 @@ func listWorkListFiltersCounts(
 func manualWorkListRESTWalk(
 	t *testing.T,
 	serverURL string,
+	sessionID string,
 	maxResults int,
 ) []factoryapi.ListWorkResponse {
 	t.Helper()
@@ -486,7 +475,7 @@ func manualWorkListRESTWalk(
 	seenTokens := make(map[string]bool)
 	pages := make([]factoryapi.ListWorkResponse, 0, 3)
 	for {
-		endpoint := support.DefaultSessionWorkURL(serverURL, "/work") + "?" + query.Encode()
+		endpoint := support.SessionWorkURL(serverURL, sessionID, "/work") + "?" + query.Encode()
 		page := support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 		pages = append(pages, page)
 		if page.PaginationContext == nil || page.PaginationContext.NextToken == nil ||
@@ -517,13 +506,15 @@ func equalWorkIDs(left, right []string) bool {
 func executeWorkListFiltersCountsCLI(
 	t *testing.T,
 	process support.Process,
-	home string,
+	sessionID string,
 	args ...string,
 ) string {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
-	inputs.Input.Env = workListFiltersCountsEnvironment(home)
-	inputs.Input.WorkingDirectory = home
+	command := append([]string{"you"}, args...)
+	command = append(command, "--session", sessionID)
+	inputs := support.FakeInputs(t.Context(), command)
+	inputs.Input.Env = workListFiltersCountsEnvironment(workCLIHome)
+	inputs.Input.WorkingDirectory = workCLIHome
 	stdinIsTTY := true
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 	inputs.Input.Stdin = strings.NewReader("")

@@ -9468,6 +9468,9 @@ func TestInterrupt_LateOutputCharacterizationPreservesReplayAndPublicationBounda
 		ReplacementMessage:       "replacement",
 	}
 	accepted := requireAcceptedInterrupt(t, registry, request)
+	// Acceptance reserves the successor before its asynchronous execution starts.
+	// Observe that execution before asserting the boundary's publication count.
+	boundary.requestFor(t, accepted.Successor.ProviderSessionAssociation.DispatchID)
 	baseline := captureCanceledSourceSnapshot(t, registry, eventsSvc, sourceTopic, request.SourceWorkerSessionID)
 	deliverLateSourceEffects(t, registry, boundary, eventsSvc, sourceTopic, request)
 	assertLateSourceUnchanged(t, registry, eventsSvc, sourceTopic, request, accepted, baseline)

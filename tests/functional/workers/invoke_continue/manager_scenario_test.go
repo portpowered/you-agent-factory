@@ -359,15 +359,17 @@ type s8InvokeResult struct {
 }
 
 type s8WorkerObservation struct {
-	WorkerSessionID          string             `json:"workerSessionId"`
-	FactorySessionID         *string            `json:"factorySessionId"`
-	Direct                   bool               `json:"direct"`
-	ProviderSessionAvailable bool               `json:"providerSessionAvailable"`
-	ProviderSession          *s8ProviderSession `json:"providerSession"`
-	AttemptID                string             `json:"attemptId"`
-	State                    string             `json:"state"`
-	Transcript               string             `json:"transcript"`
-	WorkIDs                  []string           `json:"workIds"`
+	WorkerSessionID            string             `json:"workerSessionId"`
+	PredecessorWorkerSessionID *string            `json:"predecessorWorkerSessionId"`
+	SuccessorWorkerSessionID   *string            `json:"successorWorkerSessionId"`
+	FactorySessionID           *string            `json:"factorySessionId"`
+	Direct                     bool               `json:"direct"`
+	ProviderSessionAvailable   bool               `json:"providerSessionAvailable"`
+	ProviderSession            *s8ProviderSession `json:"providerSession"`
+	AttemptID                  string             `json:"attemptId"`
+	State                      string             `json:"state"`
+	Transcript                 string             `json:"transcript"`
+	WorkIDs                    []string           `json:"workIds"`
 }
 
 type s8ProviderSession struct {

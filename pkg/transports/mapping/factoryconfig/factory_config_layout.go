@@ -3,7 +3,6 @@ package factoryconfig
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -11,12 +10,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func validatePortableLayoutBoundaryJSON(data []byte) error {
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("decode layout validation payload: %w", err)
-	}
-
+func validatePortableLayoutBoundary(root map[string]any) error {
 	layoutValue, ok := root["layout"]
 	if !ok || layoutValue == nil {
 		return nil

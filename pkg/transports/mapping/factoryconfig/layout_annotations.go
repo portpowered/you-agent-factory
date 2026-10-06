@@ -2,6 +2,7 @@ package factoryconfig
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -54,7 +55,13 @@ func PortableLayoutValidationTarget(err error) (interfaces.ValidationTarget, boo
 // ValidatePortableLayoutBoundaryJSON validates inert layout metadata directly
 // from its authored JSON representation.
 func ValidatePortableLayoutBoundaryJSON(data []byte) error {
-	err := validatePortableLayoutBoundaryJSON(data)
+	var root map[string]any
+	err := json.Unmarshal(data, &root)
+	if err != nil {
+		err = fmt.Errorf("decode layout validation payload: %w", err)
+	} else {
+		err = validatePortableLayoutBoundary(root)
+	}
 	if err == nil {
 		return nil
 	}

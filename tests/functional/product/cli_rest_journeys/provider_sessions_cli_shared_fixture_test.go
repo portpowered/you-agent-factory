@@ -244,7 +244,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	})
 	inputs.Input.Env = functionalEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostFactory
-	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostFactory)
+
 	hosted := startWorkerSessionsCLIHostedCommand(process, inputs.Input)
 	fixture := &workerSessionsCLISharedFixture{
 		rootDir:          rootDir,

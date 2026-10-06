@@ -148,16 +148,17 @@ func assertInterruptModeReplay(t *testing.T, ctx context.Context, scenario s8Int
 func assertInterruptModeLineage(t *testing.T, ctx context.Context, scenario s8InterruptScenario) {
 	t.Helper()
 	ids := scenario.ids
-	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
-	if source := findS8Observation(t, listed, ids.workerA); source.State != "CANCELED" {
+	// These are exact identities. A fleet list's first page cannot prove their
+	// absence once this shared host retains more than one page of sessions.
+	source := showS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, ids.workerA)
+	successor := showS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, ids.successor)
+	if source.State != "CANCELED" {
 		t.Fatalf("source = %#v", source)
 	}
-	if successor := findS8Observation(t, listed, ids.successor); successor.State != "RUNNING" {
+	if successor.State != "RUNNING" {
 		t.Fatalf("successor = %#v", successor)
 	}
-	sourceObservation := support.GetJSON[factoryapi.WorkerSessionObservation](t, scenario.serverURL+"/worker-sessions/"+ids.workerA)
-	successorObservation := support.GetJSON[factoryapi.WorkerSessionObservation](t, scenario.serverURL+"/worker-sessions/"+ids.successor)
-	if sourceObservation.SuccessorWorkerSessionId == nil || *sourceObservation.SuccessorWorkerSessionId != ids.successor || successorObservation.PredecessorWorkerSessionId == nil || *successorObservation.PredecessorWorkerSessionId != ids.workerA {
+	if source.SuccessorWorkerSessionID == nil || *source.SuccessorWorkerSessionID != ids.successor || successor.PredecessorWorkerSessionID == nil || *successor.PredecessorWorkerSessionID != ids.workerA {
 		t.Fatal("public observations lost interrupt lineage")
 	}
 }

@@ -134,6 +134,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Packag
 		sourceResolver,
 		inspection,
 		requiredToolChecker,
+		nil,
 	)
 	pruneRemovedDocs, err := factorydefinitionswire.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
@@ -155,6 +156,8 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Packag
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideFactoryDefinitionPersistence() error = %v", err)

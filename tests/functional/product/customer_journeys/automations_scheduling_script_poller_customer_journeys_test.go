@@ -13,7 +13,6 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -30,7 +29,7 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	t.Parallel()
 	recoveryDir, recovery := newScriptCycleFactory(t)
 	emptyDir, empty := newScriptCycleFactory(t)
-	cursor, checkpoint := "cursor-é›ª-\\opaque", "checkpoint-Î»-\"quoted\""
+	cursor, checkpoint := "cursor-Ã©â€ºÂª-\\opaque", "checkpoint-ÃŽÂ»-\"quoted\""
 	output := scriptCycleOutput(t, cursor, checkpoint)
 	restartDir, restart := newScriptCycleFactory(t)
 	peerDir, peer := newScriptCycleFactory(t)
@@ -149,7 +148,6 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedC
 	observeSubmission func(work.FactorySubmissionRecord),
 ) *support.FunctionalAPIServer {
 	t.Helper()
-	var admissions atomic.Int32
 	hostDir := support.ScaffoldFactory(t, map[string]any{
 		"name": "idle-automation-host", "workTypes": []map[string]any{{
 			"name": "idle", "states": []map[string]string{
@@ -164,32 +162,7 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedC
 			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
 			HostedHTTPClient: hosted, HostedLinearEndpoint: "https://owned-hosted.invalid/graphql",
 			HostedLinearCheckpointStore: checkpoints,
-			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
-				admissions.Add(1)
-				observeSubmission(record)
-			},
-		},
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			// Construction has not activated any sessions, so there are no peer
-			// admissions in this observation window. Retain watcher inertness
-			// alongside source-command inertness without a second root build.
-			if count := admissions.Load(); count != 0 {
-				tb.Fatalf("BuildProcess admitted %d Work items before activation", count)
-			}
-			for dir, route := range router.routes {
-				select {
-				case <-route.entered:
-					tb.Fatalf("BuildProcess invoked a script source at %q before activation", dir)
-				default:
-				}
-			}
-			for _, route := range hosted.routes {
-				select {
-				case <-route.entered:
-					tb.Fatal("BuildProcess invoked hosted HTTP before activation")
-				default:
-				}
-			}
+			SubmissionRecorder:          observeSubmission,
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })

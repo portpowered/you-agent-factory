@@ -93,23 +93,28 @@ func stripTopLevelLayoutJSON(data []byte) ([]byte, bool, error) {
 	return stripped, true, nil
 }
 
-func normalizeFactoryInputJSON(data []byte) ([]byte, error) {
+func normalizeFactoryInputJSON(data []byte) ([]byte, map[string]any, error) {
 	var decoded any
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return nil, fmt.Errorf("decode factory input payload: %w", err)
+		return nil, nil, fmt.Errorf("decode factory input payload: %w", err)
+	}
+	root, _ := decoded.(map[string]any)
+	if err := retiredboundary.RejectGeneratedBoundaryAliases(root); err != nil {
+		return nil, nil, err
 	}
 	normalized, err := normalizeCanonicalFactoryInputFields(decoded)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := mapLegacyInvocationExamples(normalized); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	raw, err := json.Marshal(normalized)
 	if err != nil {
-		return nil, fmt.Errorf("normalize factory input payload: %w", err)
+		return nil, nil, fmt.Errorf("normalize factory input payload: %w", err)
 	}
-	return raw, nil
+	normalizedRoot, _ := normalized.(map[string]any)
+	return raw, normalizedRoot, nil
 }
 
 func normalizeFactoryOutputJSONKeys(v any) any {

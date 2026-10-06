@@ -31,9 +31,25 @@ func (r attributionMarkerRunner) RunStreaming(ctx context.Context, request platf
 	return r.Run(ctx, request)
 }
 
-func TestArchivedWorkAttributionEmptyAndLegacy(t *testing.T) {
+func TestArchivedWorkAttributionJourneys(t *testing.T) {
 	t.Parallel()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
+	process := newSelectedHostClientProcess(t)
+	for _, scenario := range []struct {
+		name string
+		run  func(*testing.T, support.Process)
+	}{
+		{"empty and legacy", runArchivedWorkAttributionEmptyAndLegacy},
+		{"damaged history", runArchivedWorkAttributionDamagedHistory},
+		{"reused Work identity", runArchivedWorkAttributionReusedWorkID},
+		{"profile isolation", runArchivedWorkAttributionProfileIsolation},
+		{"named close", runArchivedWorkAttributionNamedCloseJourneys},
+	} {
+		t.Run(scenario.name, func(t *testing.T) { scenario.run(t, process) })
+	}
+}
+
+func runArchivedWorkAttributionEmptyAndLegacy(t *testing.T, process support.Process) {
+	t.Parallel()
 	host, _, _, _ := startRecordedAttributionHost(t)
 	session, ctx := startMCP(t, process, host.URL())
 	page := historyParityPage(t, ctx, session, host, "archived", "all", "")
@@ -45,9 +61,8 @@ func TestArchivedWorkAttributionEmptyAndLegacy(t *testing.T) {
 	runCapturedMetadataRecovery(t, process)
 }
 
-func TestArchivedWorkAttributionDamagedHistory(t *testing.T) {
+func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Process) {
 	t.Parallel()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	for _, damage := range []string{"missing", "corrupt"} {
 		t.Run(damage, func(t *testing.T) {
 			t.Parallel()
@@ -117,9 +132,8 @@ func assertArchivedAttributionListFailure(t *testing.T, ctx context.Context, hos
 // HTTP Open has no recording selector. The public session Start contract admits
 // two distinct recorded scopes on one root-built host; all observations remain
 // CLI/HTTP/MCP customer reads. Their reused Work ID is deliberately identical.
-func TestArchivedWorkAttributionReusedWorkID(t *testing.T) {
+func runArchivedWorkAttributionReusedWorkID(t *testing.T, process support.Process) {
 	t.Parallel()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	host, sessions, runner, dir := startRecordedAttributionHost(t)
 	session, ctx := startMCP(t, process, host.URL())
 	expected := make(map[string]string)
@@ -188,9 +202,8 @@ func startRecordedAttributionHost(t *testing.T) (*support.FunctionalAPIServer, s
 
 // Two durable profiles are different immutable storage shapes. Their public
 // fleet reads own isolated observation windows while sharing one MCP process.
-func TestArchivedWorkAttributionProfileIsolation(t *testing.T) {
+func runArchivedWorkAttributionProfileIsolation(t *testing.T, process support.Process) {
 	t.Parallel()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	var hosts []*support.FunctionalAPIServer
 	var ids []string
 	for _, name := range []string{"profile-alpha", "profile-beta"} {
@@ -264,7 +277,7 @@ func assertReusedWorkAttribution(t *testing.T, row map[string]any, name string, 
 // is global, so the scenario owns its host/profile observation window. The
 // reusable MCP process can serve peers; only this scenario's lifecycle is
 // sequential. Reuse the existing parity helpers rather than a second harness.
-func TestArchivedWorkAttributionNamedClose(t *testing.T) {
+func runArchivedWorkAttributionNamedCloseJourneys(t *testing.T, process support.Process) {
 	t.Parallel()
 	for _, recorded := range []bool{false, true} {
 		name := "unrecorded"
@@ -273,14 +286,13 @@ func TestArchivedWorkAttributionNamedClose(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runArchivedWorkAttributionNamedClose(t, recorded)
+			runArchivedWorkAttributionNamedClose(t, process, recorded)
 		})
 	}
 }
 
-func runArchivedWorkAttributionNamedClose(t *testing.T, recorded bool) {
+func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process, recorded bool) {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}})
 	dir := support.ScaffoldSingleStepFactory(t, "archived-attribution")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 1)}

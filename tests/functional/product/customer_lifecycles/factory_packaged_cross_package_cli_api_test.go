@@ -17,7 +17,8 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/google/uuid"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -1099,6 +1100,7 @@ func runPackagedGoalInvocationCLIWithMode(
 	cmdArgs = append(
 		cmdArgs,
 		"--no-record",
+		"--session", uuid.NewString(),
 		"--server", baseURL,
 		"--provider", "CODEX",
 		"--model", packagedGoalProviderModel,
@@ -1117,19 +1119,17 @@ func runPackagedGoalInvocationCLIWithMode(
 		inputs.Input.StdinIsTTY = &stdinIsTTY
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(packagedGoalAcceptedProviderOutput),
-	})
-	support.CleanupProcess(t, process)
-
-	runErr := process.Execute(inputs.Input)
+	fixture := factorypackagedcrossSharedCrossProcess(t)
+	runErr := fixture.process.Execute(inputs.Input)
 
 	var response factoryapi.InvocationResponse
 	if jsonMode && strings.TrimSpace(inputs.Stdout()) != "" {
 		response = support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	}
 	removeCrossOwnedPath(t, "parity CLI working directory", workingDirectory)
-	removeCrossOwnedPath(t, "parity CLI home", crossHomeFromEnvironment(env))
+	if home := crossHomeFromEnvironment(env); home != fixture.homeDir {
+		removeCrossOwnedPath(t, "parity CLI home", home)
+	}
 	return response, inputs.Stdout(), inputs.Stderr(), runErr
 }
 

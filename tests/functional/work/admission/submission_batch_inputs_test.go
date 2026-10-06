@@ -75,31 +75,27 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 	})
 }
 
-// TestWorkBatchHTTPSubmission preserves the independent HTTP Work and staged
+// runWorkBatchHTTPSubmission preserves the independent HTTP Work and staged
 // file witnesses on one same-configuration fixture. Each case owns unique
 // request and Work identities, so the shared list and event history remain
 // unambiguous.
-func TestWorkBatchHTTPSubmission(t *testing.T) {
-	t.Parallel()
-	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
-	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
-	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
-	defer server.Stop(t)
+func runWorkBatchHTTPSubmission(t *testing.T, server *support.FunctionalAPIServer) {
+	_, sessionID := openSubmissionSession(t, server)
 
 	t.Run("TestAPISubmitBatchThenListAndGetWork", func(t *testing.T) {
-		assertAPISubmitBatchThenListAndGetWork(t, server)
+		assertAPISubmitBatchThenListAndGetWork(t, server, sessionID)
 	})
 	t.Run("TestAPIUpsertWorkRequestUsesCanonicalIdentity", func(t *testing.T) {
-		assertAPIUpsertWorkRequestUsesCanonicalIdentity(t, server)
+		assertAPIUpsertWorkRequestUsesCanonicalIdentity(t, server, sessionID)
 	})
 	t.Run("TestAPIUnknownWorkReturnsTypedNotFound", func(t *testing.T) {
-		assertAPIUnknownWorkReturnsTypedNotFound(t, server)
+		assertAPIUnknownWorkReturnsTypedNotFound(t, server, sessionID)
 	})
 	t.Run("TestAPIStageAndSubmitFileCreatesExpectedWork", func(t *testing.T) {
-		assertAPIStageAndSubmitFileCreatesExpectedWork(t, server)
+		assertAPIStageAndSubmitFileCreatesExpectedWork(t, server, sessionID)
 	})
 	t.Run("TestAPIStageAndSubmitMediaPreservesTypes", func(t *testing.T) {
-		assertAPIStageAndSubmitMediaPreservesTypes(t, server)
+		assertAPIStageAndSubmitMediaPreservesTypes(t, server, sessionID)
 	})
 }
 
@@ -284,7 +280,7 @@ func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal POST /work request: %v", err)
 	}
-	submitted := postSubmitWork(t, baseURL, body)
+	submitted := postSubmitWork(t, baseURL, body, submissionDefaultSessionID)
 	if submitted.TraceId == "" {
 		t.Fatal("POST /work returned an empty trace ID")
 	}
@@ -472,7 +468,7 @@ func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 		t.Fatalf("replayed PUT /work-requests response = %#v, want original %#v", replayed, response)
 	}
 
-	items := submissionWaitForWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
+	items := submissionWaitForWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second, submissionDefaultSessionID)
 	for _, item := range items {
 		if support.StringPointerValue(item.WorkTypeName) != workTypeName {
 			t.Fatalf(

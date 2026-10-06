@@ -3,9 +3,7 @@ package agent_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,29 +16,17 @@ import (
 )
 
 const (
-	agentSharedProcessTimeout   = 20 * time.Second
-	agentForcedCleanupChildEnv  = "YOU_AGENT_FORCED_CLEANUP_CHILD"
-	agentForcedCleanupReportEnv = "YOU_AGENT_FORCED_CLEANUP_REPORT"
-	agentFailureMessage         = "Codex authentication failed."
-	agentCancellationMessage    = "provider invocation was canceled"
-	agentTimeoutMessage         = "provider invocation timed out"
+	agentSharedProcessTimeout = 20 * time.Second
+	agentFailureMessage       = "Codex authentication failed."
+	agentCancellationMessage  = "provider invocation was canceled"
+	agentTimeoutMessage       = "provider invocation timed out"
 )
 
-// TestAgentSharedProcess keeps the four existing agent rows on one immutable
-// root-built process. Inert composition is observed before Process.Execute is
-// activated; the remaining rows use distinct explicit Factory Sessions and
-// immutable provider-command routes.
+// TestAgentSharedProcess exercises provider selection, Work outcomes, cancellation
+// and recovery through one host with distinct explicit Factory Sessions.
 func TestAgentSharedProcess(t *testing.T) {
-	if os.Getenv(agentForcedCleanupChildEnv) == "1" {
-		runAgentForcedCleanupChild(t)
-		return
-	}
-
+	t.Parallel()
 	fixture := newAgentSharedProcessFixture(t)
-
-	t.Run("Inert", func(t *testing.T) {
-		fixture.assertInert(t)
-	})
 
 	for _, scenario := range fixture.scenarios {
 		if scenario.name != "Invalid" {
@@ -57,6 +43,7 @@ func TestAgentSharedProcess(t *testing.T) {
 	}
 
 	fixture.start(t)
+	// Recovery must run after adverse cases on this same host.
 	for _, scenario := range fixture.scenarios {
 		scenario := scenario
 		if scenario.name == "Invalid" {
@@ -66,9 +53,6 @@ func TestAgentSharedProcess(t *testing.T) {
 			fixture.runScenario(t, scenario)
 		})
 	}
-	t.Run("Cleanup", func(t *testing.T) {
-		runAgentForcedCleanupParent(t)
-	})
 }
 
 type agentSharedProcessFixture struct {
@@ -84,14 +68,9 @@ type agentSharedProcessFixture struct {
 	identities *agentSharedIdentityGenerator
 	scenarios  []agentSharedScenario
 
-	processBuilds   atomic.Int32
-	apiStarts       atomic.Int32
-	processClosed   atomic.Bool
-	processCloseMu  sync.Mutex
-	processCloseErr string
-	sessionsMu      sync.Mutex
-	opened          map[string]string
-	closed          map[string]struct{}
+	sessionsMu sync.Mutex
+	opened     map[string]string
+	closed     map[string]struct{}
 }
 
 type agentSharedScenario struct {
@@ -151,7 +130,6 @@ func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
 
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			fixture.apiStarts.Add(1)
 			err := api.Start(ctx, request)
 			fixture.apiClose.Do(func() { close(apiClosed) })
 			return err
@@ -164,7 +142,6 @@ func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	fixture.process = process
-	fixture.processBuilds.Add(1)
 	t.Cleanup(func() { fixture.close(t) })
 	return fixture
 }

@@ -395,33 +395,39 @@ func (seed *packagedFixGitSeed) close() error {
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	if err := closePackagedFixFixtures(); err != nil {
+		fmt.Fprintf(os.Stderr, "close packaged Fix fixtures: %v\n", err)
+		code = 1
+	}
+	os.Exit(code)
+}
+
+// FunctionalMonolithCleanup preserves the native finalizer after all children.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closePackagedFixFixtures(); err != nil {
+		t.Errorf("close packaged Fix fixtures: %v", err)
+	}
+}
+
+func closePackagedFixFixtures() error {
+	var errs []error
 	if packagedFixCLIProcessFixtureInstance != nil {
 		if err := packagedFixCLIProcessFixtureInstance.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared packaged Fix CLI process: %v\n", err)
-			if code == 0 {
-				code = 1
-			}
+			errs = append(errs, fmt.Errorf("CLI process: %w", err))
 		}
 	}
-	var closeErr error
 	if packagedFixFixture != nil {
-		closeErr = packagedFixFixture.close()
-		if closeErr != nil {
-			fmt.Fprintf(os.Stderr, "close shared packaged Fix fixture: %v\n", closeErr)
-			if code == 0 {
-				code = 1
-			}
+		if err := packagedFixFixture.close(); err != nil {
+			errs = append(errs, fmt.Errorf("host fixture: %w", err))
 		}
 	}
 	if packagedFixGitSeedInstance != nil {
 		if err := packagedFixGitSeedInstance.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close packaged Fix Git seed: %v\n", err)
-			if code == 0 {
-				code = 1
-			}
+			errs = append(errs, fmt.Errorf("Git seed: %w", err))
 		}
 	}
-	os.Exit(code)
+	return errors.Join(errs...)
 }
 
 func sharedPackagedFixFixture(t *testing.T) *packagedFixSharedFixture {

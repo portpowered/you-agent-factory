@@ -2,11 +2,13 @@ package inference_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,48 +21,64 @@ import (
 var (
 	functionalDefaultProcess     support.ApplicationProcess
 	functionalDefaultEnvironment []string
+	functionalDefaultFixtureRoot string
+	functionalDefaultFixtureOnce sync.Once
+	functionalDefaultFixtureErr  error
 )
 
 func TestMain(m *testing.M) {
+	code := m.Run()
+	if closeFunctionalDefaultFixture() != nil {
+		code = 1
+	}
+	os.Exit(code)
+}
+
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeFunctionalDefaultFixture(); err != nil {
+		t.Errorf("close shared Models fixture: %v", err)
+	}
+}
+
+func initializeFunctionalDefaultFixture() {
 	fixtureRoot, err := os.MkdirTemp("", "models-local-inference-")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "create shared models fixture:", err)
-		os.Exit(1)
+		functionalDefaultFixtureErr = err
+		return
 	}
+	functionalDefaultFixtureRoot = fixtureRoot
 	homeDir := filepath.Join(fixtureRoot, "home")
 	cacheDir := filepath.Join(fixtureRoot, "model-cache")
 	for _, path := range []string{homeDir, cacheDir} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
-			fmt.Fprintln(os.Stderr, "create shared models fixture path:", err)
-			_ = os.RemoveAll(fixtureRoot)
-			os.Exit(1)
+			functionalDefaultFixtureErr = err
+			return
 		}
 	}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "build shared models process:", err)
-		_ = os.RemoveAll(fixtureRoot)
-		os.Exit(1)
+		functionalDefaultFixtureErr = err
+		return
 	}
 	functionalDefaultProcess = process
-	functionalDefaultEnvironment = append(
-		functionalHomeEnvironment(homeDir),
-		runcli.ModelCacheDirEnvironment+"="+cacheDir,
-	)
+	functionalDefaultEnvironment = append(functionalHomeEnvironment(homeDir), runcli.ModelCacheDirEnvironment+"="+cacheDir)
+}
 
-	code := m.Run()
-
-	ctx, cancelClose := context.WithTimeout(context.Background(), 15*time.Second)
-	if err := process.Close(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "close shared models process:", err)
-		code = 1
+func closeFunctionalDefaultFixture() error {
+	var closeErr error
+	if functionalDefaultProcess != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		closeErr = functionalDefaultProcess.Close(ctx)
+		cancel()
 	}
-	cancelClose()
-	if err := os.RemoveAll(fixtureRoot); err != nil {
-		fmt.Fprintln(os.Stderr, "remove shared models fixture:", err)
-		code = 1
+	if functionalDefaultFixtureRoot != "" {
+		closeErr = errors.Join(closeErr, os.RemoveAll(functionalDefaultFixtureRoot))
 	}
-	os.Exit(code)
+	if closeErr != nil {
+		fmt.Fprintln(os.Stderr, "close shared Models fixture:", closeErr)
+	}
+	return closeErr
 }
 
 func functionalBuildProcess(t testing.TB, edges serviceedges.Edges) support.ApplicationProcess {
@@ -75,13 +93,16 @@ func functionalBuildProcess(t testing.TB, edges serviceedges.Edges) support.Appl
 // still owns its profile, working directory, inputs, and server endpoint.
 func functionalSharedDefaultProcess(t testing.TB) support.ApplicationProcess {
 	t.Helper()
-	if functionalDefaultProcess == nil {
-		t.Fatal("shared Models process is not initialized")
+	functionalDefaultFixtureOnce.Do(initializeFunctionalDefaultFixture)
+	if functionalDefaultFixtureErr != nil {
+		t.Fatalf("initialize shared Models fixture: %v", functionalDefaultFixtureErr)
 	}
 	return functionalDefaultProcess
 }
 
-func functionalSharedDefaultEnvironment() []string {
+func functionalSharedDefaultEnvironment(t testing.TB) []string {
+	t.Helper()
+	functionalSharedDefaultProcess(t)
 	return append([]string(nil), functionalDefaultEnvironment...)
 }
 

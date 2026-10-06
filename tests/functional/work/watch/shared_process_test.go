@@ -2,6 +2,7 @@ package watch_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -101,42 +102,64 @@ func watchAPIStarter(ctx context.Context, request platformhttpserver.StartReques
 	return platformhttpserver.Serve(ctx, request.Handler, host.listener, request.Logger)
 }
 
-func TestMain(m *testing.M) {
+var watchFixtureOnce sync.Once
+var watchFixtureErr error
+
+func ensureWatchFixture(t *testing.T) {
+	t.Helper()
+	watchFixtureOnce.Do(func() { watchFixtureErr = initializeWatchProcesses() })
+	if watchFixtureErr != nil {
+		t.Fatalf("initialize Work watch fixture: %v", watchFixtureErr)
+	}
+}
+
+func initializeWatchProcesses() error {
 	var err error
 	watchProfileRoot, err = os.MkdirTemp("", "work-watch-profiles-")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	workWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		Clock: &legacyWatchSource, APIServerStarter: watchAPIStarter,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "build work watch process: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("build work watch process: %w", err)
 	}
-	workWatchProcess = process
 	selectedWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		Clock: &selectedWatchSource, ProcessScheduler: selectedWatchScheduler, APIServerStarter: watchAPIStarter,
 	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "build selected watch process: %v\n", err)
-		os.Exit(1)
-	}
-	exitCode := m.Run()
+	return err
+}
+
+func closeWatchProcesses() error {
+	//nolint:testsleep // Failure ceiling for real process teardown after every customer command has joined.
 	closeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := process.Close(closeContext); err != nil {
-		fmt.Fprintf(os.Stderr, "close work watch process: %v\n", err)
-		exitCode = 1
+	var errs []error
+	for _, process := range []support.ApplicationProcess{workWatchProcess, selectedWatchProcess} {
+		if process != nil {
+			errs = append(errs, process.Close(closeContext))
+		}
 	}
-	if err := selectedWatchProcess.Close(closeContext); err != nil {
-		fmt.Fprintf(os.Stderr, "close selected watch process: %v\n", err)
-		exitCode = 1
+	if watchProfileRoot != "" {
+		errs = append(errs, os.RemoveAll(watchProfileRoot))
 	}
-	if err := os.RemoveAll(watchProfileRoot); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	return errors.Join(errs...)
+}
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+	if err := closeWatchProcesses(); err != nil {
+		fmt.Fprintf(os.Stderr, "close Work watch fixture: %v\n", err)
 		exitCode = 1
 	}
 	os.Exit(exitCode)
+}
+
+// FunctionalMonolithCleanup follows all customer children, matching TestMain.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeWatchProcesses(); err != nil {
+		t.Errorf("close Work watch fixture: %v", err)
+	}
 }

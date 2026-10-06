@@ -3,26 +3,29 @@ package customer_journeys_test
 import (
 	"encoding/json"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/google/uuid"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestInvocationFailureOutputContracts(t *testing.T) {
 	t.Parallel()
+	fixture := newInvocationOutputFixture(t, platformprocess.CommandResult{
+		Stderr: []byte("deterministic provider rejection"), ExitCode: 7,
+	})
 
 	t.Run("terminal failure emits failed result and standard error", func(t *testing.T) {
 		t.Parallel()
 
-		result := executeFailureInvocation(t, []string{
+		result := executeFailureInvocation(t, fixture, []string{
 			"you", "--json", "run", "--named", CliFactoryRunOutputGoalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
-		}, CliFactoryRunOutputGoalFactoryName, rejectingGoalWorker())
+		})
 
 		if result.err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
@@ -82,10 +85,10 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	t.Run("human lifecycle presents canonical failed dispatch", func(t *testing.T) {
 		t.Parallel()
 
-		result := executeFailureInvocation(t, []string{
+		result := executeFailureInvocation(t, fixture, []string{
 			"you", "run", "--named", CliFactoryRunOutputGoalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
-		}, CliFactoryRunOutputGoalFactoryName, rejectingGoalWorker())
+		})
 
 		if result.err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
@@ -111,22 +114,6 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	})
 }
 
-func rejectingGoalWorker() *workers.MockWorkersConfig {
-	exitCode := 7
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stderr:   "deterministic worker rejection",
-				ExitCode: &exitCode,
-			},
-		}},
-	}
-}
-
 type failureInvocationResult struct {
 	stdout string
 	stderr string
@@ -135,25 +122,19 @@ type failureInvocationResult struct {
 
 func executeFailureInvocation(
 	t *testing.T,
+	fixture invocationOutputFixture,
 	args []string,
-	packagedFactoryName string,
-	mockWorkers *workers.MockWorkersConfig,
 ) failureInvocationResult {
 	t.Helper()
-	homeDir := t.TempDir()
-	if packagedFactoryName != "" {
-		support.InstallPackagedFactory(t, homeDir, packagedFactoryName)
-	}
-	if mockWorkers != nil {
-		mockWorkersPath := support.WriteMockWorkersConfig(t, mockWorkers)
-		outputFlag := len(args) - 1
-		args = append(args[:outputFlag], append([]string{"--with-mock-workers", mockWorkersPath}, args[outputFlag:]...)...)
-	}
+	workingDirectory := t.TempDir()
+	args = append(args[:len(args)-1], append([]string{
+		"--session", uuid.NewString(), "--executor-provider", "codex", "--executor-model", "gpt-5-codex",
+	}, args[len(args)-1:]...)...)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = fixture.environment
+	inputs.Input.WorkingDirectory = workingDirectory
 
-	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	return failureInvocationResult{stdout: inputs.Stdout(), stderr: inputs.Stderr(), err: err}
 }
 

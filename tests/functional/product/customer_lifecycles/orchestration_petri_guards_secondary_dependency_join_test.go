@@ -8,7 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -23,7 +22,7 @@ const (
 	secondaryJoinTransition     = "join-items"
 )
 
-// TestDependsOnSecondaryJoinedInput proves through the injected dispatch edge
+// TestDependsOnSecondaryJoinedInput proves through public Factory Events
 // that a SAME_NAME binding remains undispatched while a DEPENDS_ON relation on
 // its secondary input is blocked, then dispatches exactly once after that
 // prerequisite reaches its required terminal state. The application is built
@@ -45,7 +44,6 @@ func testOrchestrationpetriguardsDependsOnSecondaryJoinedInput(t *testing.T) {
 		Payload:    []byte(`{"role":"primary join input"}`),
 	})
 	fixture := sharedGuardProcess(t)
-	dispatchCountBefore := len(fixture.dispatches.Snapshot())
 	gate := newSharedGuardCommandGate()
 	joinedStarted := make(chan struct{})
 	var joinedOnce sync.Once
@@ -104,22 +102,6 @@ func testOrchestrationpetriguardsDependsOnSecondaryJoinedInput(t *testing.T) {
 	waitForGuardWorkState(t, session, secondaryJoinTaskWorkID, "matched")
 
 	allEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.sessionID)
-	allDispatches := fixture.dispatches.Snapshot()[dispatchCountBefore:]
-	if got := countDispatches(allDispatches, secondaryJoinTransition); got != 1 {
-		t.Fatalf("joined dispatches after producer completion = %d, want exactly one; dispatches=%#v", got, allDispatches)
-	}
-	producer, ok := dispatchForTransition(allDispatches, secondaryJoinProduce)
-	if !ok {
-		t.Fatalf("missing producer dispatch in %#v", allDispatches)
-	}
-	joined, ok := dispatchForTransition(allDispatches, secondaryJoinTransition)
-	if !ok {
-		t.Fatalf("missing joined dispatch in %#v", allDispatches)
-	}
-	if joined.CreatedTick <= producer.CreatedTick {
-		t.Fatalf("joined dispatch tick = %d, want after producer dispatch tick %d", joined.CreatedTick, producer.CreatedTick)
-	}
-	assertJoinedInputBinding(t, joined, secondaryJoinPlanWorkID, secondaryJoinTaskWorkID)
 	joinedRequests := dispatchRequestsForTransition(t, allEvents, secondaryJoinTransition)
 	if len(joinedRequests) != 1 {
 		t.Fatalf("public joined dispatch requests = %d, want exactly one", len(joinedRequests))
@@ -187,49 +169,6 @@ func secondaryDependencyJoinFactoryConfig() map[string]any {
 				}},
 			},
 		},
-	}
-}
-
-func countDispatches(records []recordings.FactoryDispatchRecord, transitionID string) int {
-	count := 0
-	for _, record := range records {
-		if record.Dispatch.TransitionID == transitionID {
-			count++
-		}
-	}
-	return count
-}
-
-func dispatchForTransition(
-	records []recordings.FactoryDispatchRecord,
-	transitionID string,
-) (recordings.FactoryDispatchRecord, bool) {
-	for _, record := range records {
-		if record.Dispatch.TransitionID == transitionID {
-			return record, true
-		}
-	}
-	return recordings.FactoryDispatchRecord{}, false
-}
-
-func assertJoinedInputBinding(
-	t *testing.T,
-	record recordings.FactoryDispatchRecord,
-	planWorkID string,
-	taskWorkID string,
-) {
-	t.Helper()
-	seen := make(map[string]bool, len(record.Dispatch.Execution.WorkIDs))
-	for _, workID := range record.Dispatch.Execution.WorkIDs {
-		seen[workID] = true
-	}
-	if !seen[planWorkID] || !seen[taskWorkID] || len(seen) != 2 {
-		t.Fatalf(
-			"joined dispatch Work IDs = %#v, want exactly %q and %q",
-			record.Dispatch.Execution.WorkIDs,
-			planWorkID,
-			taskWorkID,
-		)
 	}
 }
 

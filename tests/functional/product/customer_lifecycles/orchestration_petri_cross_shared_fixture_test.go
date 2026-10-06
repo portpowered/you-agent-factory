@@ -14,11 +14,13 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -54,11 +56,13 @@ type sharedCrossProcessFixture struct {
 	bootstrapDir string
 	baseURL      string
 
-	process    support.ApplicationProcess
-	command    *sharedCrossHostedCommand
-	api        *support.ProcessAPIServer
-	apiStarter *sharedCrossAPIServerStarter
-	router     *sharedCrossCommandRouter
+	process        support.ApplicationProcess
+	command        *sharedCrossHostedCommand
+	api            *support.ProcessAPIServer
+	apiStarter     *sharedCrossAPIServerStarter
+	router         *sharedCrossCommandRouter
+	dispatchRouter *sharedPetriCommandRouter
+	guardRouter    *sharedGuardCommandRouter
 
 	requestSequence  atomic.Uint64
 	sessionMu        sync.Mutex
@@ -131,10 +135,16 @@ func newSharedCrossProcessFixture(t testing.TB) (*sharedCrossProcessFixture, err
 	api := support.NewProcessAPIServer()
 	apiStarter := &sharedCrossAPIServerStarter{api: api}
 	router := newSharedCrossCommandRouter()
+	dispatchRouter := newSharedPetriCommandRouter()
+	guardRouter := newSharedGuardCommandRouter()
+	commands := sharedSessionRuntimeCommands{cross: router, dispatch: dispatchRouter, guards: guardRouter}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      apiStarter.Start,
-		ProviderCommandRunner: router,
-		ScriptCommandRunner:   router,
+		APIServerStarter:                   apiStarter.Start,
+		FactorySessionsWorkingDirectory:    platformfilesystem.Local{WorkingDirectory: bootstrapDir},
+		FactorySessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		FactoryRuntimeWorkflowHome:         func() (string, error) { return homeDir, nil },
+		ProviderCommandRunner:              commands,
+		ScriptCommandRunner:                commands,
 	})
 	if err != nil {
 		cleanupRoot()
@@ -149,6 +159,8 @@ func newSharedCrossProcessFixture(t testing.TB) (*sharedCrossProcessFixture, err
 		api:              api,
 		apiStarter:       apiStarter,
 		router:           router,
+		dispatchRouter:   dispatchRouter,
+		guardRouter:      guardRouter,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}
@@ -161,7 +173,7 @@ func newSharedCrossProcessFixture(t testing.TB) (*sharedCrossProcessFixture, err
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir, runcli.ModelCacheDirEnvironment + "=" + filepath.Join(homeDir, ".agent-factory", "models")}
 	inputs.Input.WorkingDirectory = bootstrapDir
 	fixture.command = startSharedCrossHostedCommand(process, inputs.Input)
 

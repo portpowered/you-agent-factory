@@ -18,13 +18,14 @@ import (
 )
 
 // lifecycleSharedProcessFixture owns a package-local concurrent cohort. Every
-// invocation owns a fresh
-// working directory, HOME, streams, route, provider runner, and (when used)
-// API server, while immutable root wiring is built once for the cohort.
+// invocation owns its session, working directory, streams, command route and
+// provider runner. Finite commands share an initialized operator home/cache;
+// hosted adverse scenarios retain their independently owned homes.
 type lifecycleSharedProcessFixture struct {
 	process support.ApplicationProcess
 	router  *lifecycleCommandRouter
 	label   string
+	homeDir string
 
 	builds     atomic.Int32
 	executions atomic.Int32
@@ -44,6 +45,9 @@ var lifecycleSharedFixtureState lifecycleSharedFixtureRegistry
 var lifecycleAdverseFixtureState lifecycleSharedFixtureRegistry
 
 func initializeWorkerstransportsclirunlifecycleFixture(t *testing.T) {
+	home := t.TempDir()
+	fixture := sharedLifecycleProcess(t)
+	fixture.homeDir = home
 	t.Cleanup(func() {
 		exitCode := 0
 
@@ -66,6 +70,13 @@ func initializeWorkerstransportsclirunlifecycleFixture(t *testing.T) {
 			t.Error("customer fixture cleanup failed; see preceding diagnostic")
 		}
 	})
+	// Complete public bootstrap before parallel commands can use the shared home.
+	inputs := support.FakeInputs(t.Context(), []string{"you", "init", "--provider", "codex"})
+	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = isolatedLifecycleEnvironment(inputs.Input.Env, home)
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("initialize finite worker CLI home: %v\n%s", err, inputs.Stderr())
+	}
 }
 
 func sharedLifecycleProcess(t testing.TB) *lifecycleSharedProcessFixture {
@@ -128,7 +139,11 @@ func newSharedLifecycleInputs(t testing.TB, args []string) *support.CapturedInpu
 	// directory therefore preserves the customer-facing invocation contract
 	// while proving that route selection and cwd state cannot leak between runs.
 	inputs.Input.WorkingDirectory = t.TempDir()
-	inputs.Input.Env = isolatedLifecycleEnvironment(inputs.Input.Env, t.TempDir())
+	home := sharedLifecycleProcess(t).homeDir
+	if home == "" {
+		t.Fatal("finite worker CLI home was not initialized by the parent journey")
+	}
+	inputs.Input.Env = isolatedLifecycleEnvironment(inputs.Input.Env, home)
 	return inputs
 }
 

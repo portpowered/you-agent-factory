@@ -2,11 +2,9 @@ package cli_rest_journeys_test
 
 import "testing"
 
-// TestNamedFactoryCLIJourneys owns its immutable fixture until all customer scenarios finish.
-func TestNamedFactoryCLIJourneys(t *testing.T) {
+// Named Factory journeys retain separate customer profiles on the shared process.
+func runNamedFactoryCLIJourneys(t *testing.T) {
 	t.Parallel()
-	resetfactorydefinitionstransportsclinamedlifecycle2State()
-	initializeFactorydefinitionstransportsclinamedlifecycleFixture(t)
 	t.Run("TestFactoryListAndInitKeepConcurrentProfilesSeparate", testFactorydefinitionstransportsclinamedlifecycleFactoryListAndInitKeepConcurrentProfilesSeparate)
 	t.Run("TestMissingHomeRejectsFactoryEffectsButKeepsHelpAvailable", testFactorydefinitionstransportsclinamedlifecycleMissingHomeRejectsFactoryEffectsButKeepsHelpAvailable)
 	t.Run("TestCLIFactoryNamedCreateListUpdateDelete", testFactorydefinitionstransportsclinamedlifecycleCLIFactoryNamedCreateListUpdateDelete)

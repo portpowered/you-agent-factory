@@ -123,10 +123,10 @@ func competingPipelineFactoryConfig() map[string]any {
 	return config
 }
 
-func postSubmitWork(t *testing.T, baseURL string, body []byte) factoryapi.SubmitWorkResponse {
+func postSubmitWork(t *testing.T, baseURL string, body []byte, sessionID string) factoryapi.SubmitWorkResponse {
 	t.Helper()
 
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work")
+	endpoint := support.SessionWorkURL(baseURL, sessionID, "/work")
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -143,10 +143,10 @@ func postSubmitWork(t *testing.T, baseURL string, body []byte) factoryapi.Submit
 	return submitted
 }
 
-func postSubmitWorkExpectStatus(t *testing.T, baseURL string, body []byte, wantStatus int) {
+func postSubmitWorkExpectStatus(t *testing.T, baseURL string, body []byte, wantStatus int, sessionID string) {
 	t.Helper()
 
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work")
+	endpoint := support.SessionWorkURL(baseURL, sessionID, "/work")
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -164,13 +164,14 @@ func waitForWorkByTraceAtPlace(
 	traceID string,
 	placeID string,
 	timeout time.Duration,
+	sessionID string,
 ) factoryapi.ListWorkResponse {
 	t.Helper()
 
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListDefaultSessionWork(t, baseURL), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			for _, item := range listed.Results {
@@ -199,9 +200,10 @@ func waitForWorkByTraceComplete(
 	baseURL string,
 	traceID string,
 	timeout time.Duration,
+	sessionID string,
 ) factoryapi.ListWorkResponse {
 	t.Helper()
-	return waitForWorkByTraceAtPlace(t, baseURL, traceID, "task:complete", timeout)
+	return waitForWorkByTraceAtPlace(t, baseURL, traceID, "task:complete", timeout, sessionID)
 }
 
 func submissionWaitForWorkIDsComplete(
@@ -209,6 +211,7 @@ func submissionWaitForWorkIDsComplete(
 	baseURL string,
 	workIDs []string,
 	timeout time.Duration,
+	sessionID string,
 ) []factoryapi.Work {
 	t.Helper()
 
@@ -220,7 +223,7 @@ func submissionWaitForWorkIDsComplete(
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListDefaultSessionWork(t, baseURL), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			currentFound := make(map[string]factoryapi.Work, len(want))
@@ -255,6 +258,7 @@ func waitForWorkByNameComplete(
 	workName string,
 	workType string,
 	timeout time.Duration,
+	sessionID string,
 ) factoryapi.Work {
 	t.Helper()
 
@@ -262,7 +266,7 @@ func waitForWorkByNameComplete(
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListDefaultSessionWork(t, baseURL), nil
+			return listSubmissionSessionWork(t, baseURL, sessionID), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			matches := 0

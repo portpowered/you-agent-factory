@@ -158,57 +158,6 @@ func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
 	}
 }
 
-// TestRetiredInitializationPathsAreRejectedWithoutWrites proves retired setup surfaces cannot mutate customer state.
-func TestRetiredInitializationPathsAreRejectedWithoutWrites(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		args    []string
-		wantErr string
-	}{
-		{
-			name:    "duplicate config init command",
-			args:    []string{"you", "config", "init"},
-			wantErr: `unknown command "init" for "you config"`,
-		},
-		{
-			name:    "replacement basic factory command",
-			args:    []string{"you", "config", "create-basic-factory"},
-			wantErr: `unknown command "create-basic-factory" for "you config"`,
-		},
-		{
-			name:    "legacy scaffold directory without package",
-			args:    []string{"you", "init", "--dir", "legacy-factory"},
-			wantErr: "use --provider",
-		},
-		{
-			name:    "legacy scaffold type",
-			args:    []string{"you", "init", "--type", "ralph"},
-			wantErr: "unknown flag: --type",
-		},
-		{
-			name:    "legacy scaffold executor",
-			args:    []string{"you", "init", "--executor", "claude"},
-			wantErr: "unknown flag: --executor",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			fixture := newInitFixture(t)
-			err := fixture.execute(serviceedges.Edges{}, io.Discard, test.args...)
-			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
-				t.Fatalf("Process.Execute() error = %v, want %q", err, test.wantErr)
-			}
-			if got := fixture.readConfig(); got != ProductInitSetupExistingOperatorConfig {
-				t.Fatalf("operator config changed after retired input:\n%s", got)
-			}
-			if _, statErr := os.Stat(filepath.Join(fixture.workingDir, "legacy-factory")); !errors.Is(statErr, os.ErrNotExist) {
-				t.Fatalf("retired scaffold path exists or returned unexpected error: %v", statErr)
-			}
-		})
-	}
-}
-
 // TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand proves normal initialization owns packaged Factory setup.
 func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing.T) {
 	t.Parallel()

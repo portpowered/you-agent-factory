@@ -5,19 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -25,86 +22,20 @@ import (
 const (
 	policyFixtureTimeout       = 15 * time.Second
 	policyBehaviorSessionCount = 3
-	policyHostWorkflow         = `return "javascript-policy-host";`
 )
-
-// policyStreamLifecycle observes the actual public SSE handler lifetime at
-// the injected HTTP edge rather than maintaining a private application map.
-type policyStreamLifecycle struct {
-	active          atomic.Int32
-	opened          atomic.Int32
-	closed          atomic.Int32
-	sessionRequests atomic.Int32
-}
-
-func (lifecycle *policyStreamLifecycle) wrap(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if strings.Contains(request.URL.Path, "/factory-sessions") {
-			lifecycle.sessionRequests.Add(1)
-		}
-		isStream := strings.HasSuffix(request.URL.Path, "/events") ||
-			strings.HasSuffix(request.URL.Path, "/response-events")
-		if !isStream {
-			next.ServeHTTP(writer, request)
-			return
-		}
-		lifecycle.opened.Add(1)
-		lifecycle.active.Add(1)
-		defer func() {
-			lifecycle.active.Add(-1)
-			lifecycle.closed.Add(1)
-		}()
-		next.ServeHTTP(writer, request)
-	})
-}
-
-// policyProviderCommandRunner instruments the immutable provider command edge
-// while retaining the shared recording runner's customer-visible behavior.
-type policyProviderCommandRunner struct {
-	inner  *support.RecordingCommandRunner
-	mu     sync.Mutex
-	active int
-}
-
-func newPolicyProviderCommandRunner(stdout string) *policyProviderCommandRunner {
-	return &policyProviderCommandRunner{inner: support.NewRecordingCommandRunner(stdout)}
-}
-
-func (runner *policyProviderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	runner.mu.Lock()
-	runner.active++
-	runner.mu.Unlock()
-	defer func() {
-		runner.mu.Lock()
-		runner.active--
-		runner.mu.Unlock()
-	}()
-	return runner.inner.Run(ctx, request)
-}
-
-func (runner *policyProviderCommandRunner) CallCount() int {
-	return runner.inner.CallCount()
-}
-
-func (runner *policyProviderCommandRunner) ActiveCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return runner.active
-}
 
 var (
 	policyFixtureMu     sync.Mutex
 	sharedPolicyFixture *policyFixture
 )
 
-// initializePolicyFixture keeps its process alive until all customer journeys finish.
+// The parent owns the process and home until all CLI policy journeys finish.
 func initializePolicyFixture(t *testing.T) {
 	sharedPolicyFixture = nil
 	t.Cleanup(func() {
-		fixture := sharedPolicyFixture
-		if fixture != nil {
+		if fixture := sharedPolicyFixture; fixture != nil {
 			if err := fixture.shutdown(); err != nil {
-				t.Errorf("close workflow fixture: %v", err)
+				t.Errorf("close policy fixture: %v", err)
 			}
 		}
 	})
@@ -112,7 +43,6 @@ func initializePolicyFixture(t *testing.T) {
 
 func policyFixtureForTest(t *testing.T) *policyFixture {
 	t.Helper()
-
 	policyFixtureMu.Lock()
 	defer policyFixtureMu.Unlock()
 	if sharedPolicyFixture == nil {
@@ -123,31 +53,11 @@ func policyFixtureForTest(t *testing.T) *policyFixture {
 
 type policyFixture struct {
 	process        support.ApplicationProcess
-	api            *support.ProcessAPIServer
-	providerRunner *policyProviderCommandRunner
-	baseURL        string
-	hostDir        string
+	providerRunner *support.RecordingCommandRunner
 	homeDir        string
-
-	rootBuilds    atomic.Int32
-	processStarts atomic.Int32
-	processStops  atomic.Int32
-	apiStarts     atomic.Int32
-	serverStarted atomic.Bool
-
-	processCancel context.CancelFunc
-	processDone   chan struct{}
-	processMu     sync.Mutex
-	processErr    error
-	apiStopped    chan struct{}
-	apiStopOnce   sync.Once
-	stream        policyStreamLifecycle
-
-	startMu sync.Mutex
-
-	sessionMu sync.Mutex
-	sessions  map[string]policySession
-	closed    map[string]struct{}
+	sessionMu      sync.Mutex
+	sessions       map[string]policySession
+	closed         map[string]struct{}
 }
 
 type policySession struct {
@@ -158,142 +68,38 @@ type policySession struct {
 
 func newPolicyFixture(t *testing.T) *policyFixture {
 	t.Helper()
-
 	homeDir, err := os.MkdirTemp("", "you-functional-policy-home-")
 	if err != nil {
 		t.Fatalf("create policy home: %v", err)
 	}
-	hostDir, err := os.MkdirTemp("", "you-functional-policy-factory-")
-	if err != nil {
-		_ = os.RemoveAll(homeDir)
-		t.Fatalf("create policy factory: %v", err)
-	}
-	if err := writePolicyHostFactory(hostDir); err != nil {
-		_ = os.RemoveAll(hostDir)
-		_ = os.RemoveAll(homeDir)
-		t.Fatalf("write policy host factory: %v", err)
-	}
-
-	api := support.NewProcessAPIServer()
-	runner := newPolicyProviderCommandRunner("unexpected live provider execution")
-	fixture := &policyFixture{
-		api:            api,
-		providerRunner: runner,
-		hostDir:        hostDir,
-		homeDir:        homeDir,
-		processDone:    make(chan struct{}),
-		apiStopped:     make(chan struct{}),
-		sessions:       make(map[string]policySession, policyBehaviorSessionCount),
-		closed:         make(map[string]struct{}, policyBehaviorSessionCount),
-	}
-
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      fixture.startAPIServer,
-		ProviderCommandRunner: runner,
+		FactorySessionsWorkingDirectory:    platformfilesystem.Local{WorkingDirectory: homeDir},
+		FactorySessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		FactoryRuntimeWorkflowHome:         func() (string, error) { return homeDir, nil },
+		ProviderCommandRunner:              runner,
 	})
 	if err != nil {
-		_ = os.RemoveAll(hostDir)
 		_ = os.RemoveAll(homeDir)
-		t.Fatalf("BuildProcess(policy): %v", err)
+		t.Fatalf("build policy process: %v", err)
 	}
-	fixture.process = process
-	fixture.rootBuilds.Add(1)
-	return fixture
-}
-
-func writePolicyHostFactory(dir string) error {
-	cfg := map[string]any{
-		"name": "javascript-policy-host",
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"sourceRef": "policy-host.workflow.js",
-			},
-		},
+	return &policyFixture{
+		process: process, providerRunner: runner, homeDir: homeDir,
+		sessions: make(map[string]policySession, policyBehaviorSessionCount),
+		closed:   make(map[string]struct{}, policyBehaviorSessionCount),
 	}
-	raw, err := json.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "factory.json"), raw, 0o600); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "policy-host.workflow.js"), []byte(policyHostWorkflow), 0o600)
-}
-
-func (fixture *policyFixture) startAPIServer(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	fixture.apiStarts.Add(1)
-	request.Handler = fixture.stream.wrap(request.Handler)
-	err := fixture.api.Start(ctx, request)
-	fixture.apiStopOnce.Do(func() { close(fixture.apiStopped) })
-	return err
-}
-
-func (fixture *policyFixture) startHostedProcess() error {
-	fixture.startMu.Lock()
-	defer fixture.startMu.Unlock()
-	if fixture.serverStarted.Load() {
-		return nil
-	}
-
-	processContext, cancel := context.WithCancel(context.Background())
-	fixture.processCancel = cancel
-	inputs := support.FakeInputs(processContext, []string{
-		"you", "run", "--dir", fixture.hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
-	})
-	inputs.Input.Env = policyCustomerEnvironment(fixture.homeDir)
-	inputs.Input.WorkingDirectory = fixture.hostDir
-	fixture.processStarts.Add(1)
-	go func() {
-		err := fixture.process.Execute(inputs.Input)
-		fixture.processMu.Lock()
-		fixture.processErr = err
-		fixture.processMu.Unlock()
-		fixture.processStops.Add(1)
-		close(fixture.processDone)
-	}()
-
-	baseURL, err := fixture.api.WaitForBaseURL(policyFixtureTimeout)
-	if err != nil {
-		cancel()
-		<-fixture.processDone
-		return fmt.Errorf("wait for policy API: %w", err)
-	}
-	fixture.baseURL = baseURL
-	fixture.serverStarted.Store(true)
-	return nil
-}
-
-func scaffoldPolicyHostFactory(t *testing.T) string {
-	t.Helper()
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "javascript-policy-host",
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"sourceRef": "policy-host.workflow.js",
-			},
-		},
-	})
-	if err := os.WriteFile(filepath.Join(dir, "policy-host.workflow.js"), []byte(policyHostWorkflow), 0o600); err != nil {
-		t.Fatalf("write policy host workflow: %v", err)
-	}
-	return dir
 }
 
 func policyCustomerEnvironment(homeDir string) []string {
-	environment := make([]string, 0, len(os.Environ())+2)
+	environment := make([]string, 0, len(os.Environ())+3)
 	for _, entry := range os.Environ() {
 		name := strings.SplitN(entry, "=", 2)[0]
-		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") {
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") || strings.EqualFold(name, runcli.ModelCacheDirEnvironment) {
 			continue
 		}
 		environment = append(environment, entry)
 	}
-	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir, runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, ".agent-factory", "models"))
 }
 
 func (fixture *policyFixture) trackInvocationSession(
@@ -410,139 +216,14 @@ func (fixture *policyFixture) trackedSessionCount() int {
 }
 
 func (fixture *policyFixture) shutdown() error {
-	if fixture.processCancel != nil {
-		fixture.processCancel()
-	}
-	if fixture.processDone != nil && fixture.processStarts.Load() > 0 {
-		<-fixture.processDone
-	}
-
-	closeContext, cancel := context.WithTimeout(context.Background(), policyFixtureTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), policyFixtureTimeout)
 	defer cancel()
-	closeErr := fixture.process.Close(closeContext)
-
-	fixture.processMu.Lock()
-	processErr := fixture.processErr
-	fixture.processMu.Unlock()
-	var shutdownErr error
-	if processErr != nil && !errors.Is(processErr, context.Canceled) {
-		shutdownErr = fmt.Errorf("policy Process.Execute shutdown: %w", processErr)
-	}
-	if closeErr != nil {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("close policy process: %w", closeErr))
-	}
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy root builds = %d, want one", got))
-	}
-	if got := fixture.processStarts.Load(); got > 1 {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy process starts = %d, want at most one", got))
-	}
-	if got := fixture.processStarts.Load(); got > 0 && fixture.processStops.Load() != got {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy process stops = %d/%d", fixture.processStops.Load(), got))
-	}
-	if got := fixture.apiStarts.Load(); got > 1 {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API starts = %d, want at most one", got))
-	}
-	listenerClosed := fixture.apiStarts.Load() == 0
-	if fixture.apiStarts.Load() > 0 {
-		<-fixture.apiStopped
-		listenerClosed = true
-	}
-	if got := fixture.providerRunner.CallCount(); got != 0 {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy provider command calls = %d, want zero", got))
-	}
-
+	closeErr := fixture.process.Close(ctx)
 	fixture.sessionMu.Lock()
-	tracked := len(fixture.sessions)
-	closed := len(fixture.closed)
+	tracked, closed := len(fixture.sessions), len(fixture.closed)
 	fixture.sessionMu.Unlock()
 	if tracked != closed {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy sessions closed = %d/%d", closed, tracked))
+		closeErr = errors.Join(closeErr, fmt.Errorf("policy sessions closed = %d/%d", closed, tracked))
 	}
-	// Go's -count flag repeats m.Run inside one TestMain process. Retain every
-	// closed session in this ledger so repeated executions still prove unique
-	// identities and balanced cleanup; a single-run count is not a leak limit.
-
-	if strings.TrimSpace(fixture.baseURL) != "" {
-		client := http.Client{Timeout: time.Second}
-		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
-		if err == nil {
-			listenerClosed = false
-			body, _ := io.ReadAll(response.Body)
-			response.Body.Close()
-			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
-		}
-	}
-	if err := os.RemoveAll(fixture.hostDir); err != nil {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove policy factory: %w", err))
-	}
-	if err := os.RemoveAll(fixture.homeDir); err != nil {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove policy home: %w", err))
-	}
-	streamActive := fixture.stream.active.Load()
-	if streamActive != 0 || fixture.stream.opened.Load() != fixture.stream.closed.Load() {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy SSE streams active=%d opened=%d closed=%d", streamActive, fixture.stream.opened.Load(), fixture.stream.closed.Load()))
-	}
-	processClosed := fixture.processStarts.Load() == fixture.processStops.Load() && closeErr == nil
-	processActive := policyBoolToInt(!processClosed)
-	portActive := policyBoolToInt(!listenerClosed)
-	sessionActive := policyMaxInt(tracked-closed, 0)
-	streamActiveCount := int(streamActive)
-	routeActive := fixture.providerRunner.ActiveCount()
-	rootActive := policyMaxInt(int(fixture.rootBuilds.Load())-policyBoolToInt(processClosed), 0)
-	worktreeActive := fixture.activePolicyRoots()
-	mutableStateActive := sessionActive + streamActiveCount + routeActive + rootActive + worktreeActive
-	if processActive != 0 || portActive != 0 || sessionActive != 0 || streamActiveCount != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive))
-	}
-	fmt.Fprintf(os.Stderr, "policy lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.providerRunner.CallCount(), processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive)
-	return shutdownErr
-}
-
-func (fixture *policyFixture) activePolicyRoots() int {
-	fixture.sessionMu.Lock()
-	defer fixture.sessionMu.Unlock()
-	seen := make(map[string]struct{}, len(fixture.sessions))
-	active := 0
-	for _, session := range fixture.sessions {
-		rootDir := strings.TrimSpace(session.rootDir)
-		if rootDir == "" {
-			continue
-		}
-		rootDir = filepath.Clean(rootDir)
-		if _, ok := seen[rootDir]; ok {
-			continue
-		}
-		seen[rootDir] = struct{}{}
-		if _, err := os.Stat(rootDir); err == nil || !errors.Is(err, os.ErrNotExist) {
-			active++
-		}
-	}
-	return active
-}
-
-func policyBoolToInt(value bool) int {
-	if value {
-		return 1
-	}
-	return 0
-}
-
-func policyMaxInt(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
-}
-
-func policyRemoveAndObservePath(path string) (int, error) {
-	if err := os.RemoveAll(path); err != nil {
-		return 1, err
-	}
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return 0, nil
-	} else if err != nil {
-		return 1, err
-	}
-	return 1, nil
+	return errors.Join(closeErr, os.RemoveAll(fixture.homeDir))
 }

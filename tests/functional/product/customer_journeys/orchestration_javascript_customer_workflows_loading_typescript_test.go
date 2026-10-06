@@ -50,7 +50,7 @@ func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadin
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	assertTypeScriptSourceMapFailureOutcome(
 		t,
 		err,
