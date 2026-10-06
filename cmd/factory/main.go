@@ -29,6 +29,7 @@ var runProcess = func() int {
 	}
 
 	workingDirectory, err := os.Getwd()
+	diagnostics := clidiag.NewDiagnosticWriter(os.Stderr)
 	if err == nil {
 		process, buildErr := root.BuildProcess(ctx, modelBackendEdgesFromEnvironment())
 		err = buildErr
@@ -38,15 +39,30 @@ var runProcess = func() int {
 			stderrIsTTY := streamIsTerminal(os.Stderr)
 			err = process.Execute(root.Input{
 				Args: os.Args, Env: os.Environ(), Stdin: os.Stdin, Stdout: os.Stdout,
-				Stderr: os.Stderr, Context: ctx, WorkingDirectory: workingDirectory,
+				Stderr: diagnostics, Context: ctx, WorkingDirectory: workingDirectory,
 				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY, StderrIsTTY: &stderrIsTTY,
 			})
+			if err != nil && !diagnostics.DiagnosticRendered() {
+				clidiag.WriteTerminalFailure(diagnostics, err)
+			}
 			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
-			err = errors.Join(err, process.Close(closeCtx))
+			closeErr := process.Close(closeCtx)
+			reportProcessCloseFailure(diagnostics, err, closeErr)
+			err = errors.Join(err, closeErr)
 			cancelClose()
 		}
 	}
+	if err != nil && !diagnostics.DiagnosticRendered() {
+		clidiag.WriteTerminalFailure(diagnostics, err)
+	}
 	return processExitCode(err, ctx.Err(), os.Args)
+}
+
+func reportProcessCloseFailure(output *clidiag.DiagnosticWriter, executeErr, closeErr error) {
+	if closeErr == nil || (executeErr != nil && errors.Is(executeErr, closeErr)) {
+		return
+	}
+	clidiag.WriteTerminalFailure(output, closeErr)
 }
 
 func processExitCode(err, contextErr error, args []string) int {

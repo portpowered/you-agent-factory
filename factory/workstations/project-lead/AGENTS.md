@@ -172,26 +172,56 @@ replacement targetWorkId bindings and holds in Project state.md/progress.md.
 
 ## Mailbox-parked lanes
 
-An idea or task in `awaiting-answer` may be waiting for an operator decision.
-The mailbox waiter is a script and holds no `executor-slot`.
-Do not classify this state as stuck from age or an absent agent Worker alone.
-Inspect the last CONTINUE feedback for the `AWAITING_OPERATOR_ANSWER` prefix.
-Resolve the mailbox from the main checkout, never from the lane worktree.
+Treat a tagged mailbox question as a lead decision before an operator dependency.
+Verify the live lane Work and Factory Session, project tag, absolute request path
+and request version; read its source plan, immutable acceptance, rules.md and
+evidence before answering. Never infer authority from a filename or request text.
+Answer inside the immutable source plan, acceptance and rules.md pre-authorizations,
+including narrowing changes. Write the binding answer yourself to
+`<main checkout>/docs/temp/operator-mailbox/responses/<lane>.md` and append the
+decision, authority citations, evidence, request version and response path to
+this Project's progress.md. Never revise the immutable contract.
+Forward to the operator only for: widening public exposure; adding an owner or
+a second path; growing a lint or boundary baseline; contradicting the immutable
+plan or acceptance; or factory/tooling defects. Write a separate operator
+request under a Project-prefixed unique name that names the original lane
+request and its version, decision, evidence, options and recommendation.
+Record the forwarding and release condition in progress.md; do not place a
+speculative answer at responses/<lane>.md. When the operator answers that
+forwarded request, preserve its authority and deliver the lane's binding response.
+Use recorded request identities to avoid duplicate forwarding or overwriting a
+binding response. An existing binding response is read first; a changed request
+version requires fresh reconciliation. If membership, evidence or the immutable
+root is inconsistent, hold the decision and forward as a factory/tooling defect
+or immutable-contract contradiction, with exact evidence; never guess permission.
+A lane without a project tag retains its operator route and must not be claimed
+by this Project. Inspect only this Project's parked lanes on initial, wake and
+check-in visits; valid unanswered lead requests are pending lead decisions.
+
 The main checkout is the parent of `git rev-parse --path-format=absolute --git-common-dir`.
-The mailbox is `<main checkout>/docs/temp/operator-mailbox`.
-Read `requests/<lane>.md`, `responses/<lane>.md`, `waits/<lane>.delivered`,
-and recent waiter output to distinguish an undelivered answer from an old answer.
-The wait window is 60 minutes from the request file's last write.
-An undelivered response or expiry returns the lane to `init` for another visit.
-The lane must read a binding response first or take its recorded no-answer path.
-An unchanged second planner park fails through `reporting-failed`.
-A second task park returns to `init` without another wait.
-Ordinary task CONTINUE returns to `init`.
-Ordinary idea CONTINUE takes the failure route.
-Record valid mailbox waits as parked with their request and release condition.
-If the marker, request, or waiter evidence is inconsistent, escalate through the mailbox.
-Never move, reset, restore, duplicate, or rewrite a parked lane to release it.
-This AM-T0 behavior remains temporary until AM-T11 removes it.
+The mailbox is `<main checkout>/docs/temp/operator-mailbox`; never resolve it
+inside a lane worktree or commit its files. Read requests/<lane>.md,
+responses/<lane>.md, waits/<lane>.delivered and waiter diagnostics.
+Retain AWAITING_OPERATOR_ANSWER as the compatibility marker. The script holds
+no executor-slot; the wait window is 60 minutes from request mtime. A fresh
+answer or expiry returns the lane to init. Ordinary task CONTINUE returns to
+init; ordinary idea CONTINUE follows reporting-failed. An unchanged second
+idea park follows reporting-failed; a second task park returns immediately.
+Never move, reset, restore, duplicate or rewrite a parked lane to release it.
+AM-T0 stays temporary; AM-T11 owns wholesale removal.
+
+On every initial, wake and check-in visit, reconcile outstanding forwarded
+requests and operator responses for this Project. A forwarded request name is
+stable for its lane Work ID and request version; record both paths in progress.md
+and reuse that identity on repeated visits. Do not forward the same version twice.
+Bridge only a binding operator response to that exact version. Recheck the live
+Session, lane Work ID, project tag and request mtime_ns immediately before
+publication. If the version changed or the lane is no longer awaiting-answer,
+record a stale decision and reconcile the current request; never publish it.
+Write the response to a temporary file beside responses/<lane>.md, then rename
+atomically after the recheck, preserving any existing binding response. Include
+Session, Work ID, request version, decision, authority and evidence in the answer.
+A missing request or mismatched marker is a tooling defect, not permission.
 
 ## Parallel Projects
 

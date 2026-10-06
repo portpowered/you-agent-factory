@@ -1439,7 +1439,11 @@
         "factory/scripts/mailbox-wait.py",
         "{{ (index .Inputs 0).Name }}",
         "{{ (index .Inputs 0).WorkTypeID }}",
-        "{{ printf \"%.512s\" (index (index .Inputs 0).Tags \"continue_feedback\") }}"
+        "{{ printf \"%.512s\" (index (index .Inputs 0).Tags \"continue_feedback\") }}",
+        "{{ index (index .Inputs 0).Tags \"project\" }}",
+        "{{ (index .Inputs 0).WorkID }}",
+        "{{.Context.SessionID}}",
+        "http://127.0.0.1:7437"
       ],
       "command": "python",
       "description": {

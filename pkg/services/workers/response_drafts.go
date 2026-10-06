@@ -355,7 +355,8 @@ func validateRetryLineage(payload SessionPayload) error {
 }
 
 func validateResumeLineage(payload SessionPayload) error {
-	if payload.Continuation == nil || payload.Lineage == nil || payload.Lineage.PreviousDispatchID == "" {
+	if payload.Lineage == nil || payload.Lineage.PreviousDispatchID == "" ||
+		(payload.Continuation == nil && payload.Lineage.PredecessorWorkerSessionID == "") {
 		return ErrInvalidSessionLineage
 	}
 	return nil

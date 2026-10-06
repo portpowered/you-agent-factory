@@ -211,13 +211,18 @@ func interruptS8RemoteWorker(
 	process support.Process,
 	env []string,
 	workingDirectory, serverURL, sourceWorkerSessionID, requestID, successorWorkerSessionID string,
+	modes ...string,
 ) s8InterruptResult {
 	t.Helper()
-	inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL,
+	args := []string{
 		"--json", "worker-sessions", "interrupt", sourceWorkerSessionID,
 		"--request-id", requestID,
 		"--successor-worker-session-id", successorWorkerSessionID,
-		"--replacement-message", s8ReplacementMessage, "--async")
+		"--replacement-message", s8ReplacementMessage, "--async"}
+	if len(modes) != 0 {
+		args = append(args, "--resume-mode", modes[0])
+	}
+	inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, args...)
 	var result s8InterruptResult
 	decodeS8JSON(t, inputs.Stdout(), &result)
 	return result
@@ -302,16 +307,19 @@ const (
 )
 
 type s8InterruptProviderCall struct {
-	kind               string
-	sessionID          string
-	output             string
-	started            chan struct{}
-	release            chan struct{}
-	canceled           chan struct{}
-	startOnce          sync.Once
-	releaseOnce        sync.Once
-	cancelOnce         sync.Once
-	cancellationReturn <-chan struct{}
+	kind                   string
+	sessionID              string
+	output                 string
+	started                chan struct{}
+	release                chan struct{}
+	canceled               chan struct{}
+	startOnce              sync.Once
+	releaseOnce            sync.Once
+	cancelOnce             sync.Once
+	cancellationReturn     <-chan struct{}
+	initialContext         string
+	contextBatchContinue   <-chan struct{}
+	omitInitialObservation bool
 }
 
 type s8InterruptProviderCase struct {
@@ -425,8 +433,19 @@ func (runner *s8InterruptProviderRunner) run(
 	} else {
 		lineEnd++
 	}
-	if observer != nil && lineEnd > 0 {
+	if observer != nil && lineEnd > 0 && !call.omitInitialObservation {
 		observer(platformprocess.OutputStreamStdout, append([]byte(nil), output[:lineEnd]...))
+	}
+	if observer != nil && call.initialContext != "" {
+		// Separate native items keep each observation below capture's record
+		// bound while letting the scenario prove the aggregate context bound.
+		text := []rune(call.initialContext)
+		for index := 0; len(text) > 0; index++ {
+			length := min(len(text), 512)
+			payload := fmt.Sprintf("{\"type\":\"item.updated\",\"item\":{\"id\":\"captured-context-%d\",\"type\":\"agent_message\",\"text\":%q}}\n", index, string(text[:length]))
+			observer(platformprocess.OutputStreamStdout, []byte(payload))
+			text = text[length:]
+		}
 	}
 	runner.recordStarted(call)
 

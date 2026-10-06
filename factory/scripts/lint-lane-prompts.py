@@ -117,6 +117,33 @@ def check_recovery_policy(prompts):
             if clause not in normalized:
                 diagnostics.append(f'{owner}:recovery-{name}: missing policy clause: {clause}')
     return diagnostics
+MAILBOX_RULES = (
+    ('lead-first', 'address the request to its project lead first'),
+    ('untagged', 'A lane without a project tag keeps the current operator route'),
+    ('decision', 'one explicit decision'),
+    ('evidence', 'source/acceptance/rules citations and evidence'),
+    ('recommendation', 'A recommended with evidence and tradeoffs'),
+    ('identity', 'Project tag (or none), Factory Session, Work ID and addressed decision owner'),
+    ('no-answer', 'no unauthorized widening or contract change'),
+)
+LEAD_RULES = (
+    ('authority', 'Answer inside the immutable source plan, acceptance and rules.md pre-authorizations, including narrowing changes'),
+    ('response', 'responses/<lane>.md'),
+    ('progress', "this Project's progress.md"),
+    ('exposure', 'widening public exposure'),
+    ('owner', 'adding an owner or a second path'),
+    ('baseline', 'growing a lint or boundary baseline'),
+    ('contract', 'contradicting the immutable plan or acceptance'),
+    ('tooling', 'factory/tooling defects'),
+    ('forward', 'Write a separate operator request'),
+    ('version', 'original lane request and its version'),
+    ('no-speculation', 'do not place a speculative answer'),
+    ('bridge', "preserve its authority and deliver the lane's binding response"),
+    ('deduplicate', 'Use recorded request identities to avoid duplicate forwarding'),
+    ('reconcile', 'reconcile outstanding forwarded requests and operator responses'),
+    ('recheck', 'Recheck the live Session, lane Work ID, project tag and request mtime_ns'),
+    ('atomic', 'rename atomically'),
+)
 
 
 def check_policy(plan, process):
@@ -135,6 +162,19 @@ def check_policy(plan, process):
     return diagnostics
 
 
+def check_mailbox_policy(plan, process, lead):
+    """Diagnose supplied answer/forward policy; no repository scan or runtime."""
+    diagnostics = []
+    for owner, text, rules in (('plan', plan, MAILBOX_RULES),
+                               ('process', process, MAILBOX_RULES),
+                               ('project-lead', lead, LEAD_RULES)):
+        normalized = ' '.join(text.split())
+        for name, clause in rules:
+            if clause not in normalized:
+                diagnostics.append(f'{owner}:{name}: missing policy clause: {clause}')
+    return diagnostics
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', nargs='?', type=Path, default=Path('.'))
@@ -142,7 +182,7 @@ def main(argv=None):
     try:
         texts = [
             (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
-            for owner in ('plan', 'process')
+            for owner in ('plan', 'process', 'project-lead')
         ]
         recovery = {
             owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
@@ -151,7 +191,8 @@ def main(argv=None):
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
-    diagnostics = check_policy(*texts) + check_recovery_policy(recovery)
+    diagnostics = (check_policy(*texts[:2]) + check_mailbox_policy(*texts)
+                   + check_recovery_policy(recovery))
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1

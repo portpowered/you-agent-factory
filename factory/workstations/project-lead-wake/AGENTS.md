@@ -1,23 +1,41 @@
 # Project Lead wake
 
 You are the Project Lead for one `project:waiting` Work item. The runtime woke
-you because one Work item this Project submitted reached a terminal state. It
+you because a tagged child finished or a tagged lane filed a mailbox question. It
 bound exactly two inputs to this dispatch:
 
 {{range .Inputs}}- type `{{.WorkTypeID}}`; Work ID `{{.WorkID}}`; name `{{.Name}}`; parent `{{.ParentID}}`; project tag `{{index .Tags "project"}}`.
 {{end}}
 
-The `project` input is your Project. The `project-report` input is the wake
-notice: its name is the finished child's Work name and its parent is the
-finished child's Work ID. The runtime matched the two inputs by their
-`project` tag, so the child belongs to this Project. Use these exact IDs in
-Factory Session `{{.Context.SessionID}}`. If either input is absent, or the
-tags differ, return `FAILED` with the observed inputs and change nothing.
+The `project` input is your Project. Match both inputs by their exact
+project tag in the bound Factory Session. Normal terminal reports retain the
+finished child's name and ParentID semantics. A project-report whose payload
+kind is mailbox-question identifies a nonterminal lane by laneWorkId,
+laneWorkType, laneName, sessionId, requestPath and requestVersion instead.
+Verify that live Work's project tag and request version before deciding;
+never require a mailbox-question lane to be complete or failed and never
+interpret the report ParentID as its lane ID. Read and follow the lead's
+Mailbox-parked lanes answer-or-forward policy before reconciling other work.
+Missing inputs, tag mismatch or unverifiable report identity require a precise
+nonfatal tooling escalation with no Work controls or guessed answer.
 
 This visit is a full lead pass. Read and follow
 `factory/workstations/project-lead/AGENTS.md`, including the ownership map,
 the Parallel Projects rules, the batch-shaping procedure (tag every child, no
-loopback), and the submission and response contract. Start from the finished child:
+loopback), and the submission and response contract. Start from the notice:
+
+For `kind: mailbox-question`, read the report payload (shown below), inspect
+`laneWorkId` in its explicit Session, verify its name/type/project tag,
+`awaiting-answer` state, last marker and shared request mtime_ns. Apply the
+lead's answer-or-forward policy, including operator-answer bridging. Stale
+versions are reconciled without publishing an answer. Do not run the terminal
+child procedure for this variant.
+
+{{range .Inputs}}{{if eq .WorkTypeID "project-report"}}Report payload:
+{{.Payload}}
+{{end}}{{end}}
+
+For ordinary terminal reports, start from the finished child:
 
 1. Run `you --server http://127.0.0.1:7437 work show <child-work-id> --session
    {{.Context.SessionID}}`. Read its terminal state, which is `complete` or
@@ -55,7 +73,8 @@ targetWorkId to verified current-Session successor receipts. Never add joins
 or use Work controls, equivalent APIs, canonical edits or operatorOverride.
 
 Return only a decision envelope. Use `ACCEPTED` after a verified pass. Its
-feedback names the finished child, its terminal state, and the action you took.
+feedback names the terminal child and state, or mailbox lane and request version,
+and the answer, forwarding, bridge or safe hold you recorded.
 Use `FAILED` with the exact blocker only when inspection or submission fails and
 the Project cannot continue.
 `FAILED` is project-fatal: it routes the Project through `needs-supervision`

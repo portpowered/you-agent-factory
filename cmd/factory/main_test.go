@@ -1,14 +1,53 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
+
+func TestProcessCloseFailureReportsSafeCauseWithoutRepeatingCommandDiagnostic(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name       string
+		executeErr error
+		closeErr   error
+		want       string
+	}{
+		{name: "quiet success"},
+		{name: "close-only", closeErr: errors.New("close application: persistence unavailable"), want: "Error: close application: persistence unavailable\n"},
+		{name: "command already rendered", executeErr: errors.New("command fault"), closeErr: errors.New("close application: cleanup fault"), want: "Error: close application: cleanup fault\n"},
+		{name: "sanitized cleanup", closeErr: errors.New("close application: token=secret-value\npath=C:\\private\\data"), want: "Error:"},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			var output bytes.Buffer
+			writer := clidiag.NewDiagnosticWriter(&output)
+			if cell.executeErr != nil {
+				writer.MarkDiagnosticRendered()
+			}
+			reportProcessCloseFailure(writer, cell.executeErr, cell.closeErr)
+			if !strings.HasPrefix(output.String(), cell.want) || strings.Contains(output.String(), "secret-value") || strings.Contains(output.String(), "private") {
+				t.Fatalf("stderr = %q", output.String())
+			}
+			if cell.closeErr == nil && output.Len() != 0 {
+				t.Fatal("success emitted stderr")
+			}
+		})
+	}
+	var output bytes.Buffer
+	fault := errors.New("already rendered")
+	reportProcessCloseFailure(clidiag.NewDiagnosticWriter(&output), fmt.Errorf("execute: %w", fault), fault)
+	if output.Len() != 0 {
+		t.Fatal("same cause rendered twice")
+	}
+}
 
 func TestMainDelegatesExitCodeToRootProcess(t *testing.T) {
 	originalRun := runProcess

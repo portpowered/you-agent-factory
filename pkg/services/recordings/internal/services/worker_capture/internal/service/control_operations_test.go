@@ -644,3 +644,22 @@ func TestContinuationInputResolvesRetainedIdentityAcrossReopen(t *testing.T) {
 		}
 	}
 }
+
+// Preflight invokes the admission serializer without requiring an opening.
+func TestRestartRecipePreflightBoundsSuccessorArtifact(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+	execution.Execution.RecordingID = "recording"
+	execution.Execution.Dispatch.WorkstationName = "direct"
+	execution.Execution.Dispatch.DispatchID = "source/continue/successor"
+	execution.Execution.UserMessage = "complete replacement"
+	if err := writer.ValidateWorkerRestartRecipe(t.Context(), "successor", execution); err != nil {
+		t.Fatalf("usable successor refused: %v", err)
+	}
+	id := strings.Repeat("s", recordings.WorkerControlInputMaxBytes/2)
+	execution.Execution.Dispatch.DispatchID = "source/continue/" + id
+	if err := writer.ValidateWorkerRestartRecipe(t.Context(), id, execution); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
+		t.Fatalf("oversized successor artifact accepted: %v", err)
+	}
+}

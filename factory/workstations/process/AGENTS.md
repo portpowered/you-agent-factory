@@ -206,7 +206,7 @@ record the blocker in this same entry and leave unproved criteria unsatisfied.
 Never claim evidence was published when it was not. Retry publication through
 the existing route; do not dump evidence into either scaffolding file.
 
-## Operator questions (mailbox)
+## Decision questions (lead-first mailbox)
 
 Before asking, check whether the standing rules already answer the question.
 Questions about evidence, authority, or untouched-package CI are answered by
@@ -230,21 +230,29 @@ continue. Ask the mailbox only when no such reading exists. Examples:
 - A criterion assumes an ID is globally unique when the contract makes it
   session-scoped: assert uniqueness within the session.
 
-Some questions are owned by the operator, not by you: an ambiguous or
-contradictory acceptance contract, a scope or authority decision, a policy
-choice. Never settle one with your own guess, and never treat a guess as
-operator authority. Do not end the visit with `FAILED` over one. Ask, wait, then
-continue.
+Some questions need a decision beyond the lane's authority. Check standing
+rules first; take a conservative reading only when it weakens no acceptance,
+raises no baseline and widens no scope. Never treat a guess as authority.
+For a lane carrying a project tag, address the request to its project lead first.
+The lead answers inside the immutable source plan, acceptance and rules.md
+pre-authorizations, including narrowing changes. The lead forwards only widening
+public exposure, adding an owner or a second path, growing a lint or boundary
+baseline, contradicting the immutable plan or acceptance, or factory/tooling
+defects. A lane without a project tag keeps the current operator route.
 
 1. Find the main checkout: the parent of
-   `git rev-parse --path-format=absolute --git-common-dir`. Your worktree lives
-   under `<main checkout>/.claude/worktrees/<lane>`, and `docs/temp` is
-   gitignored, so the mailbox is NOT inside the worktree. Use absolute paths.
+   `git rev-parse --path-format=absolute --git-common-dir`. Use absolute paths;
+   docs/temp in the lane worktree is not the shared mailbox.
 2. Write `<main checkout>/docs/temp/operator-mailbox/requests/<lane-name>.md`:
-   `# <lane>`, Status, Written (UTC), PR, then `## What I need decided`,
-   `## What I already verified`, `## Why I cannot decide this myself`,
-   `## Options` (A recommended, then B...), `## What I will do with each answer`,
-   `## What I will do if there is no answer`. Take the time from `date -u`.
+   `# <lane>`, Status, Written (UTC), PR, Project tag (or none), Factory Session,
+   Work ID and addressed decision owner (project lead when tagged; operator otherwise).
+   Include `## What I need decided` (one explicit decision),
+   `## What I already verified` (source/acceptance/rules citations and evidence),
+   `## Why I cannot decide this myself`, `## Options` (A recommended with
+   evidence and tradeoffs, then B...), `## What I will do with each answer`,
+   `## What I will do if there is no answer` (no unauthorized widening or contract change).
+   Take the time from `date -u`. The waiter notifies the tagged lead through
+   the existing project-report path; do not create a second request or move Work.
 3. Temporary (AM-T0 stopgap, removed by AM-T11): do not poll in the visit.
    Commit the unblocked work locally and push only if eligible under the push rule,
    then end the visit with

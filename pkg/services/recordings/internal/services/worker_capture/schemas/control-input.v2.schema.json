@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you.worker-session-control-input.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "resumeMode",
+    "replacementMessage",
+    "execution"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "resumeMode": {
+      "enum": [
+        "provider",
+        "recorded"
+      ]
+    },
+    "replacementMessage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "execution": {
+      "$ref": "./restart-recipe.v1.schema.json#/properties/execution"
+    },
+    "providerReference": {
+      "$ref": "./control-input.v1.schema.json#/properties/providerReference"
+    },
+    "recordedContext": {
+      "type": "string"
+    },
+    "contextTruncated": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "resumeMode": {
+            "const": "provider"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "providerReference"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "recordedContext"
+              ]
+            },
+            {
+              "required": [
+                "contextTruncated"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "recordedContext",
+          "contextTruncated"
+        ],
+        "not": {
+          "required": [
+            "providerReference"
+          ]
+        }
+      }
+    }
+  ],
+  "$comment": "Runtime: UTF-8 context<=65536; serialized input<=1048576; full replacement."
+}

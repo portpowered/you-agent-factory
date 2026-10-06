@@ -36,6 +36,7 @@ type WorkerRecordingStore interface {
 }
 
 type WorkerRestartInputStore interface {
+	ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
 	ReadWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)

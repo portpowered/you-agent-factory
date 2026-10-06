@@ -21,6 +21,43 @@ type failingFileSystem struct {
 	writeErr error
 }
 
+func TestPersistenceFailurePreservesCauseAndPublishesSafeOperation(t *testing.T) {
+	t.Parallel()
+	fault := errors.New("private-path and credential=secret")
+	for _, test := range []struct {
+		name    string
+		files   failingFileSystem
+		read    bool
+		message string
+	}{
+		{"mkdir", failingFileSystem{mkdirErr: fault}, false, "create durable session persistence directory failed"},
+		{"write", failingFileSystem{writeErr: fault}, false, "write durable session snapshot failed"},
+		{"read", failingFileSystem{readErr: fault}, true, "read durable session snapshot failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, err := runtimepersist.NewLazyProjectStore("project", test.files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.read {
+				_, err = store.Load("~default")
+			} else {
+				err = store.Save("~default", []byte(`{}`))
+			}
+			var diagnostic interface {
+				CLIErrorCode() string
+				CLIErrorMessage() string
+			}
+			if !errors.Is(err, fault) || !errors.As(err, &diagnostic) {
+				t.Fatalf("persistence error lost cause or safe diagnostic: %v", err)
+			}
+			if diagnostic.CLIErrorCode() != "DURABLE_SESSION_PERSISTENCE_FAILED" || diagnostic.CLIErrorMessage() != test.message {
+				t.Fatalf("diagnostic = %s/%s", diagnostic.CLIErrorCode(), diagnostic.CLIErrorMessage())
+			}
+		})
+	}
+}
+
 func (f failingFileSystem) MkdirAll(string, fs.FileMode) error { return f.mkdirErr }
 func (f failingFileSystem) ReadFile(string) ([]byte, error)    { return nil, f.readErr }
 func (f failingFileSystem) WriteFile(string, []byte, fs.FileMode) error {

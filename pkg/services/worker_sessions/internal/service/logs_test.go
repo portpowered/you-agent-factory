@@ -133,6 +133,10 @@ func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, rec
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
 
+func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+	return recordings.ErrMissingWorkerRestartInputStore
+}
+
 func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
 	return recordings.ErrWorkerRecordingPersistence
 }

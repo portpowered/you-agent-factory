@@ -230,12 +230,32 @@ func TestCloneDraftDetachesDeclaredSecretLocations(t *testing.T) {
 	}
 }
 
+func TestSessionPayloadRecordedRestartLineage(t *testing.T) {
+	t.Parallel()
+	payload := SessionPayload{
+		WorkerSessionID: "successor", DispatchID: "new-attempt", AttemptID: "new-attempt",
+		AttemptReason: AttemptReasonResume,
+		Lineage:       &SessionLineage{PredecessorWorkerSessionID: "source", PreviousDispatchID: "old-attempt", PreviousAttemptID: "old-attempt"},
+	}
+	if err := payload.ValidateLineage(); err != nil {
+		t.Fatalf("fresh recorded successor lineage: %v", err)
+	}
+}
+
 func TestSessionPayloadValidateLineageRejectsContradictoryRelationships(t *testing.T) {
 	validContinuation := &SessionContinuation{Provider: "codex", Kind: "session_id", ID: "opaque"}
 	tests := []struct {
 		name    string
 		payload SessionPayload
 	}{
+		{
+			name: "same-session resume without provider continuation",
+			payload: SessionPayload{
+				WorkerSessionID: "current", DispatchID: "dispatch-current", AttemptID: "dispatch-current",
+				AttemptReason: AttemptReasonResume,
+				Lineage:       &SessionLineage{PreviousDispatchID: "dispatch-old", PreviousAttemptID: "dispatch-old"},
+			},
+		},
 		{
 			name: "missing resume lineage",
 			payload: SessionPayload{

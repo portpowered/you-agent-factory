@@ -7,6 +7,13 @@ TEMPORARY (AM-T0 stopgap): removed by AM-T11 together with the
 
 Usage:
   python3 factory/scripts/mailbox-wait.py <lane-name> <work-type> <continue-feedback>
+    [<project-tag> <work-id> <session-id> <server-url>]
+
+An active tagged park submits one version-keyed mailbox-question project-report
+through the explicit local Session's Work Request boundary. Its owning lead
+answers or forwards under existing authority. Untagged calls retain the operator
+route. Notification failure keeps the original wait and check-in recovery;
+re-entry uses the same idempotent request identity, never a per-poll retry.
 
 The `process` and `plan` workstations route every CONTINUE through an
 `awaiting-answer` state that this SCRIPT_RUN poller consumes. It holds no
@@ -22,7 +29,8 @@ through at once so the authored behavior is unchanged:
 
 For a marked CONTINUE with a request file present:
 
-  an undelivered response appears       -> exit 0 (work returns to init)
+  an undelivered response at least as
+  new as the request appears            -> exit 0 (work returns to init)
   only an already-delivered response,
   not older than the request            -> task: exit 0 (init, no wait);
                                            idea: exit 1 (reporting-failed)
@@ -46,10 +54,14 @@ overrides it (tests).
 """
 
 import os
+import json
 import subprocess
 import sys
 import time
 from pathlib import Path
+import urllib.request
+import urllib.parse
+import uuid
 
 PARK_MARKER = "AWAITING_OPERATOR_ANSWER"
 POLL_INTERVAL_SECONDS = 30
@@ -131,7 +143,68 @@ def pass_through(work_type, reason):
     return 1
 
 
-def run(argv, now=time.time, sleep=time.sleep):
+def http_json(method, url, body, timeout):
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method=method,
+                                     headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def notify_lead(argv, lane, work_type, request, deadline, now, http):
+    """One bounded admission per entry; replay uses the existing request identity."""
+    project = argv[4].strip() if len(argv) > 4 else ""
+    if not project or project == "<no value>":
+        return
+    identity = f"project={project} lane={lane}"
+    try:
+        if len(argv) != 8 or not all(argv[5:]):
+            raise ValueError("tagged park requires Work ID, Session ID and local endpoint")
+        work_id, session, server = argv[5:]
+        endpoint = urllib.parse.urlsplit(server)
+        if (endpoint.scheme != "http" or endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}
+                or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment
+                or endpoint.path not in {"", "/"}):
+            raise ValueError("notification endpoint must be an explicit local HTTP server")
+        version = str(request.stat().st_mtime_ns)
+        key = uuid.uuid5(uuid.NAMESPACE_URL, f"mailbox:{session}:{work_id}:{version}")
+        request_id = f"mailbox-{key}"
+        identity += f" session={session} work={work_id} version={version} request={request_id}"
+        payload = {"kind": "mailbox-question", "laneName": lane, "laneWorkId": work_id,
+                   "laneWorkType": work_type, "sessionId": session,
+                   "requestPath": str(request.resolve()), "requestVersion": version}
+        name = f"{lane}-mailbox-{key.hex[:12]}"
+        body = {"requestId": request_id, "type": "FACTORY_REQUEST_BATCH", "works": [
+            {"name": name, "workTypeName": "project-report", "state": "pending",
+             "tags": {"project": project}, "payload": payload}]}
+        # One total network budget, also charged to the original wait window.
+        network_deadline = min(deadline, now() + 10)
+
+        def call(method, path, data=None):
+            remaining = network_deadline - now()
+            if remaining <= 0:
+                raise TimeoutError("notification budget expired")
+            return http(method, server.rstrip("/") + path, data, remaining)
+
+        prefix = "/factory-sessions/" + urllib.parse.quote(session, safe="")
+        receipt = call("PUT", prefix + "/work-requests/" + request_id, body)
+        works = receipt.get("works", [])
+        if (receipt.get("requestId") != request_id or len(works) != 1
+                or works[0].get("name") != name or works[0].get("workTypeName") != "project-report"
+                or not works[0].get("workId")):
+            raise ValueError("notification receipt identity mismatch")
+        admitted = call("GET", prefix + "/work/" + urllib.parse.quote(works[0]["workId"], safe=""))
+        if (admitted.get("name") != name or admitted.get("workTypeName") != "project-report"
+                or admitted.get("workId") != works[0]["workId"]
+                or admitted.get("tags", {}).get("project") != project or admitted.get("payload") != payload):
+            raise ValueError("admitted notification identity mismatch")
+        print(f"mailbox-wait: lead notified {identity}", file=sys.stderr, flush=True)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        print(f"mailbox-wait: lead notification failed {identity}: {error}; "
+              "retain wait; lead check-in can reconcile", file=sys.stderr, flush=True)
+
+
+def run(argv, now=time.time, sleep=time.sleep, mailbox=None, settings=None, http=http_json):
     if len(argv) < 3:
         print(
             "usage: mailbox-wait.py <lane-name> <work-type> [continue-feedback]",
@@ -149,7 +222,7 @@ def run(argv, now=time.time, sleep=time.sleep):
     if not is_safe_lane(lane):
         return pass_through(work_type, f"unsafe lane name {lane!r}")
 
-    mailbox = mailbox_dir()
+    mailbox = mailbox if mailbox is not None else mailbox_dir()
     if mailbox is None:
         return pass_through(work_type, "operator mailbox directory not found")
     request = mailbox / "requests" / f"{lane}.md"
@@ -158,7 +231,11 @@ def run(argv, now=time.time, sleep=time.sleep):
     delivered = mailbox / "waits" / f"{lane}.delivered"
 
     def fresh_response():
-        return response.exists() and not already_delivered(delivered, response)
+        try:
+            return (response.exists() and not already_delivered(delivered, response)
+                    and (not request.exists() or response.stat().st_mtime_ns >= request.stat().st_mtime_ns))
+        except OSError:
+            return False
 
     if fresh_response():
         return deliver(delivered, response)
@@ -175,8 +252,9 @@ def run(argv, now=time.time, sleep=time.sleep):
             "act on it instead of parking again",
         )
 
-    window = env_seconds("MAILBOX_WAIT_WINDOW_SECONDS", WAIT_WINDOW_SECONDS)
-    poll = env_seconds("MAILBOX_WAIT_POLL_SECONDS", POLL_INTERVAL_SECONDS)
+    window, poll = settings if settings is not None else (
+        env_seconds("MAILBOX_WAIT_WINDOW_SECONDS", WAIT_WINDOW_SECONDS),
+        env_seconds("MAILBOX_WAIT_POLL_SECONDS", POLL_INTERVAL_SECONDS))
     deadline = request_mtime + window
     if now() >= deadline:
         return pass_through(
@@ -185,6 +263,7 @@ def run(argv, now=time.time, sleep=time.sleep):
             "take the stated no-answer path",
         )
 
+    notify_lead(argv, lane, work_type, request, deadline, now, http)
     print(f"mailbox-wait: parked on {request}", file=sys.stderr, flush=True)
     while True:
         if fresh_response():

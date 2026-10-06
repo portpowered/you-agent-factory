@@ -17,6 +17,18 @@ func isNonFatalPetriMutationPersistenceError(err error) bool {
 	return errors.As(err, &marker)
 }
 
+func petriPersistenceErrorFields(dispatchID string, err error) []any {
+	fields := []any{"dispatch_id", dispatchID, "error", err}
+	var diagnostic interface{ SnapshotSizeLimitDiagnostics() (string, int, int) }
+	if errors.As(err, &diagnostic) {
+		sessionID, actualBytes, maxBytes := diagnostic.SnapshotSizeLimitDiagnostics()
+		fields = append(fields, "code", "durable_session_snapshot_size_limit",
+			"session_id", sessionID, "observed_bytes", actualBytes,
+			"max_bytes", maxBytes, "persistence_degraded", true)
+	}
+	return fields
+}
+
 // applyMutations applies a batch of mutations to a marking atomically.
 // It returns an error if any mutation references a non-existent token or place.
 func applyMutations(marking *petri.Marking, places map[string]*petri.Place, mutations []interfaces.MarkingMutation, now time.Time) error {

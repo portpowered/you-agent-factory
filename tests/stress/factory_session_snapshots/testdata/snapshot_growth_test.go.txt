@@ -1,9 +1,13 @@
 package factorysessionexecution
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"strconv"
@@ -11,6 +15,88 @@ import (
 	"testing"
 	"time"
 )
+
+// Fixed identity workload: latest feedback is 50 KiB, independently of N. The
+// overlay keeps scale-sized evidence out of the default unit execution lane.
+func TestPetriFeedbackSnapshotGrowthScale(t *testing.T) {
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: store})
+	output := strings.Repeat("x", 50<<10)
+	var baseline int
+	for visit := 1; visit <= 1000; visit++ {
+		if err := service.RecordPetriTokenMutations("~default", []interfaces.TokenMutationRecord{snapshotFeedbackMutation("feedback", output)}); err != nil {
+			t.Fatal(err)
+		}
+		if visit != 10 && visit != 100 && visit != 1000 {
+			continue
+		}
+		encoded, err := store.Load("~default")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if baseline == 0 {
+			baseline = len(encoded)
+		}
+		var snapshot PersistedRuntimeSessionState
+		if err := json.Unmarshal(encoded, &snapshot); err != nil {
+			t.Fatal(err)
+		}
+		loaded := runtimeStateFromPersistedSnapshot(snapshot)
+		if len(encoded)-baseline > 4<<10 || len(loaded.petriMutations) != 1 || loaded.petriMutations[0].Token.Color.Tags["_last_output"] != output {
+			t.Fatalf("N=%d bytes=%d mutations=%d", visit, len(encoded), len(loaded.petriMutations))
+		}
+		t.Logf("same_token N=%d bytes=%d full_tokens=1", visit, len(encoded))
+	}
+}
+
+func TestPetriFeedbackActualCapRecoveryScale(t *testing.T) {
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, logs := observer.New(zap.WarnLevel)
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: store})
+	service.persistenceWarningLogger = zap.New(core)
+	small := snapshotFeedbackMutation("feedback", "last-good")
+	if err := service.RecordPetriTokenMutations("~default", []interfaces.TokenMutationRecord{small}); err != nil {
+		t.Fatal(err)
+	}
+	lastGood, err := store.Load("~default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = service.RecordPetriTokenMutations("~default", []interfaces.TokenMutationRecord{
+		snapshotFeedbackMutation("feedback", strings.Repeat("x", defaultPersistedSnapshotMaxBytes)),
+		snapshotFeedbackMutation("sibling", "pending latest"),
+	})
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) || sizeErr.MaxBytes != 64<<20 || sizeErr.ActualBytes <= sizeErr.MaxBytes {
+		t.Fatalf("default cap error = %v", err)
+	}
+	unchanged, err := store.Load("~default")
+	if err != nil || !bytes.Equal(unchanged, lastGood) {
+		t.Fatalf("last-good file changed: %v", err)
+	}
+	if err := service.RecordPetriTokenMutations("~default", []interfaces.TokenMutationRecord{small}); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := store.Load("~default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot PersistedRuntimeSessionState
+	if err := json.Unmarshal(encoded, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	loaded := runtimeStateFromPersistedSnapshot(snapshot)
+	if len(loaded.petriMutations) != 2 || len(service.pendingPetriHistory) != 0 || logs.FilterMessage("durable Factory Session persistence degraded").Len() != 1 || logs.FilterMessage("durable Factory Session persistence recovered").Len() != 1 {
+		t.Fatal("fitting save lost pending state or episode diagnostics")
+	}
+	t.Logf("actual_bytes=%d default_cap=%d recovered_bytes=%d retained_tokens=%d", sizeErr.ActualBytes, sizeErr.MaxBytes, len(encoded), len(loaded.petriMutations))
+}
 
 func TestDurablePetriFailureHistorySnapshotGrowthStress(t *testing.T) {
 	retryCounts := []int{10, 100, 1000}

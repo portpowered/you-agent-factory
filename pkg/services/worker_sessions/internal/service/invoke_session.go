@@ -888,6 +888,7 @@ func openingSessionPayload(
 	if len(lineages) > 0 && lineages[0] != nil {
 		lineage := lineages[0].Clone()
 		payload.Lineage = &lineage
+		payload.AttemptReason = workers.AttemptReasonResume
 	}
 	return payload
 }

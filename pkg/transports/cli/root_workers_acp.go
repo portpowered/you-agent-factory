@@ -527,7 +527,7 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 	return interrupt(workersessionscli.InterruptConfig{
 		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
-		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage,
+		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage, ResumeMode: inputs.resumeMode,
 		Prompt: inputs.replacementInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
 		Async: inputs.async, OutputFormat: inputs.outputFormat,
 		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(inputs.outputFormat), "json"),
@@ -538,7 +538,7 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 
 type generatedWorkerSessionsInterruptInputs struct {
 	sourceWorkerSessionID, requestID, successorWorkerSessionID string
-	userMessage, outputFormat                                  string
+	userMessage, outputFormat, resumeMode                      string
 	replacementInput                                           []string
 	async                                                      bool
 }
@@ -568,6 +568,10 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		}
 	}
 	var err error
+	inputs.resumeMode, err = optionalCommandInputValue[string](values, "you.worker-sessions.interrupt.flag.resume-mode")
+	if err != nil {
+		return generatedWorkerSessionsInterruptInputs{}, err
+	}
 	inputs.replacementInput, err = optionalCommandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
 	if err != nil {
 		return generatedWorkerSessionsInterruptInputs{}, err

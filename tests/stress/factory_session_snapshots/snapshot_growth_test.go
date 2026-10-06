@@ -37,10 +37,10 @@ func TestSnapshotGrowthStress(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "go", "test", "-p=2", "-vet=off", "-count=1", "-timeout=4m", "-v", "-overlay="+path,
-		"-run=^(TestDurablePetriFailureHistorySnapshotGrowthStress|TestPersistSessionSnapshotWarningScale|TestCompactPetriTokenHistoryScale)$", "./pkg/services/factory_sessions/internal/execution")
+		"-run=^(TestDurablePetriFailureHistorySnapshotGrowthStress|TestPersistSessionSnapshotWarningScale|TestCompactPetriTokenHistoryScale|TestPetriFeedbackSnapshotGrowthScale|TestPetriFeedbackActualCapRecoveryScale)$", "./pkg/services/factory_sessions/internal/execution")
 	cmd.Dir = root
 	output, err := cmd.CombinedOutput()
-	t.Logf("workload: 10/100/1000 retries, 64/128 MiB limits, 500/1000 terminal lifecycles; budget: five minutes; retain linear snapshot growth, exact warning boundaries and 5 MiB compacted bounds\n%s", output)
+	t.Logf("workload: 10/100/1000 retries and same-token 50 KiB feedback, 64/128 MiB limits and actual-cap recovery, 500/1000 terminal lifecycles; budget: five minutes; preserve failure-log bounds and constant same-token history\n%s", output)
 	if err != nil {
 		t.Fatalf("snapshot growth stress: %v", err)
 	}
