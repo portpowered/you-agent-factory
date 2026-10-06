@@ -87,6 +87,12 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	}
 	request, _ := json.Marshal(factoryapi.MoveWorkRequest{StateName: "init"})
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/restart-B/move"), request)
+	if runner.fail.Load() {
+		assertRestartProbeFailedPrerequisite(t, url, runner, after)
+		waitForRestartProbeConfirmed(t, url)
+		restartProbeShutdown(t, url, reopened)
+		return
+	}
 	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 3 })
 	assertRestartProbeCompletions(t, url, runner)
 	waitForRestartProbeConfirmed(t, url)
@@ -112,6 +118,50 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
+	}
+}
+
+func assertRestartProbeFailedPrerequisite(t *testing.T, url string, runner *restartProbeUnexpectedRunner, recovered []factoryapi.Work) {
+	t.Helper()
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Failed == 2 && status.Categories.Terminal == 1
+	})
+	works := restartProbeBoardReads(t, url)
+	// Existing dependency policy propagates prerequisite failure to C's
+	// failed state; it must never release C to a provider attempt.
+	for i, state := range []string{"complete", "failed", "failed"} {
+		work := works[i]
+		if work.State == nil || work.State.Name != state || !reflect.DeepEqual(work.WorkId, recovered[i].WorkId) ||
+			!reflect.DeepEqual(work.Relations, recovered[i].Relations) || !reflect.DeepEqual(work.Tags, recovered[i].Tags) {
+			t.Fatalf("provider failure changed recovered identity/dependency: before=%#v after=%#v", recovered[i], work)
+		}
+	}
+	// Only A before shutdown and B after recovery may reach the provider.
+	// Drain both observations so a later journey cannot consume their prompts.
+	for _, text := range []string{"restart A", "restart § — B"} {
+		select {
+		case prompt := <-runner.requests:
+			if !strings.Contains(strings.Join(prompt.Args, " ")+string(prompt.Stdin), text) {
+				t.Fatalf("failed journey provider did not receive %q", text)
+			}
+		case <-time.After(15 * time.Second):
+			t.Fatal("failed journey provider prompt missing")
+		}
+	}
+	if runner.calls.Load() != 2 {
+		t.Fatalf("failed prerequisite released descendant: provider calls=%d, want two", runner.calls.Load())
+	}
+	for _, event := range support.GetFactoryEventsForSessionAt(t, url, "~default") {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(encoded, []byte("restart-C")) {
+			t.Fatalf("failed prerequisite released descendant: %s", encoded)
+		}
 	}
 }
 

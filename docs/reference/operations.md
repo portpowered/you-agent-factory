@@ -46,24 +46,43 @@ the addressed Factory Session is still live.
 
 ## Reopen a recorded board after a graceful stop
 
-Use an explicit recording path for a board that must survive a restart.
-Plain continuous hosting without that path does not select a previous board.
+Continuous hosting automatically retains the local board for the same repository and operator profile.
+The default command selects the Current Factory at `./factory/factory.json` and hosts Factory Session `~default`.
 
 1. Start the board with this command:
 
    ```bash
-   you run --dir ./factory --continuously --with-server --record ./recordings/current-board.json
+   you run --continuously --with-server
    ```
 
-2. Stop the selected server with `you server stop`, or send `POST /shutdown`.
-3. Wait for the owning process to exit.
-4. Run the same startup command with the same Factory directory and recording path.
-5. Read the Work through the Factory Session API before submitting new Work.
+2. Wait until the Work reads report `CONFIRMED` for the facts you need to retain.
+3. Stop the selected server with `you server stop`, or send `POST /shutdown`.
+4. Wait for the owning process to exit.
+5. Run the same startup command from the same repository with the same operator profile.
+6. Read the Work through the Factory Session API before submitting new Work.
 
 The reopened board retains recorded Work identities, states, tags, content, and relations.
 Blocked Work stays blocked until its dependency reaches the required state.
 Completed Work does not dispatch again.
-This procedure covers graceful restart with a selected recording; it does not establish recovery after forced termination.
+This procedure covers graceful restart of confirmed Work.
+Recovery after forced termination has a separate verification boundary.
+
+The first launch creates a dated recording in the operator profile and starts an empty board.
+The repository's `.you-agent-factory/current-board.json` reference selects that recording on later launches.
+Startup restores the board before readiness and publishes the reference atomically.
+
+For an older installation without a reference, startup adopts a uniquely matching retained history from the same profile.
+Repository identity and recorded facts determine the selection; file dates do not determine it.
+Missing, corrupt, foreign, or ambiguous history stops startup without activating workers or replacing retained files.
+
+Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace the automatic board reference.
+Batch runs continue to create separate dated recordings.
+To use a selected recording during rollback, run the explicit command below with its actual path.
+Preserve the reference, recordings, and durable state files.
+
+```bash
+you run --dir ./factory --continuously --with-server --record ./recordings/current-board.json
+```
 
 ## Stop a local server gracefully on Windows
 

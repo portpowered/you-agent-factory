@@ -42,6 +42,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
 	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	failureAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
@@ -53,6 +54,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			// the exact-command journey without changing its default listener.
 			if index := starts.Add(1); index <= int32(len(boardAPIs)) {
 				return boardAPIs[index-1].Start(ctx, request)
+			} else if index <= int32(len(boardAPIs)+len(failureAPIs)) {
+				return failureAPIs[index-int32(len(boardAPIs))-1].Start(ctx, request)
 			}
 			return api.Start(ctx, request)
 		},
@@ -116,6 +119,27 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	}) {
 		return
 	}
+	t.Run("PlainBoard F8 recovered prerequisite failure", func(t *testing.T) {
+		runner.calls.Store(0)
+		t.Cleanup(func() { runner.fail.Store(false) })
+		repo, home := t.TempDir(), t.TempDir()
+		dir := filepath.Join(repo, "factory")
+		if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+			t.Fatal(err)
+		}
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+		invocations := 0
+		testRestartProbeDAGWithInputs(t, process, dir, failureAPIs, runner, func(t *testing.T, _ string) *support.CapturedInputs {
+			runner.fail.Store(invocations > 0)
+			invocations++
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = repo
+			return inputs
+		}, 0)
+		runner.fail.Store(false)
+	})
 	t.Run("PlainBoard invalid selection rejects without activation", func(t *testing.T) {
 		// These exact commands share Current Factory/~default ownership with
 		// the graceful journeys. Keep this cohort ordered on the same graph.
@@ -135,8 +159,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 9 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want nine and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 11 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want eleven and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }
@@ -230,12 +254,13 @@ func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name
 
 func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir string, api *support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
+	beforeCalls := runner.calls.Load()
 	inputs := restartProbeInputs(t, dir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := api.WaitForURL(t)
 	session := support.GetDefaultSession(t, baseURL)
 	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, session.Id, "/work"))
-	if len(works.Results) != 0 || runner.calls.Load() != 3 {
+	if len(works.Results) != 0 || runner.calls.Load() != beforeCalls {
 		t.Fatal("fresh opening recovered Work or dispatched a worker")
 	}
 	command.Stop(t)
@@ -246,6 +271,7 @@ func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir strin
 
 func testRestartProbeCorruptBoard(t *testing.T, process support.Process, dir string, files *restartProbeFiles, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
+	beforeCalls := runner.calls.Load()
 	artifact := seededReplayResumeArtifactPayload(t, true)
 	path := filepath.Join(dir, "current-board.json")
 	if err := os.WriteFile(path, artifact, 0600); err != nil {
@@ -258,7 +284,7 @@ func testRestartProbeCorruptBoard(t *testing.T, process support.Process, dir str
 		t.Fatalf("corrupt snapshot rejection = %v; stderr=%s", err, inputs.Stderr())
 	}
 	output := inputs.Stdout() + inputs.Stderr() + err.Error()
-	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != 3 {
+	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != beforeCalls {
 		t.Fatalf("failed opening exposed payload, published readiness or dispatched: %s", output)
 	}
 	if got := mustReadSeededReplayArtifact(t, path); !bytes.Equal(got, artifact) || files.corruptWrites.Load() != 0 {
@@ -308,11 +334,15 @@ func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.File
 
 type restartProbeUnexpectedRunner struct {
 	calls    atomic.Int32
+	fail     atomic.Bool
 	requests chan platformprocess.CommandRequest
 }
 
 func (runner *restartProbeUnexpectedRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.calls.Add(1)
 	runner.requests <- request
+	if runner.fail.Load() {
+		return platformprocess.CommandResult{Stderr: []byte("controlled provider unavailable"), ExitCode: 1}, nil
+	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("restart COMPLETE")}, nil
 }
