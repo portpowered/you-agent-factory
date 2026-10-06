@@ -5689,3 +5689,63 @@ required checks pass, and continue reducing repeated initialization through
 owned homes and explicit Factory Sessions. Immutable pre-rendered file caching
 remains a measured follow-up hypothesis; no additional production cache or
 shared live session state is introduced in this batch.
+
+
+## October 6: reuse run-scoped server/site installations
+
+Hosted run 37518562040 on c72a4bd925 passes Backend Functional Coverage in
+244 complete job seconds (19:26:50–19:30:54 UTC). Main capture is 158.696s,
+67 packages / 763 results, 761 pass and two skip. Complete raw failure
+evidence contains no failures. Restored compiler archives come from f5e79654cf;
+the live-main rebase invalidates 465 compiler commands. Twelve links run.
+Supervisor coverage duration is 174.86s; reported phases are list 5.460s,
+plan 7.083s, test 161.382s, canonicalize 0.244s, evaluate 0.023s and
+manifest 0.025s. Do not add overlapping capture, supervisor or phase times.
+Browser and unit coverage both pass; at this observation only Backend Lint
+remains live. The complete hosted two-minute checkpoint remains unmet.
+
+The named/file and raw-JavaScript server/site groups now each own one
+initialized process, installed home and model cache before their parallel
+children execute. Each invocation receives an explicit UUID Factory Session,
+its own working directory and its own listener-start/stop/browser observation.
+The selected external-effect callbacks receive that observation through the
+invocation context, preserving per-scenario effect assertions without an
+aggregate counter that could mask one scenario's failure with another's success.
+The parent process outlives its children. The pure JavaScript workflow no longer
+passes the unrelated mock-worker flag. Dashboard-handler behavior remains
+asserted for raw-JavaScript hosting. No customer scenario or assertion is removed.
+
+Three focused native Windows repetitions pass. The initial editing probe
+did not compile because it referenced another test package's home helper and
+retained an unused import; correct those before all measured executions.
+Both scoped linters subsequently pass with zero issues.
+
+Uncontended B/C/C/B executions on pinned four-CPU native Linux binaries,
+GOMAXPROCS4 and GOGC100 exclude builds/linking. Each sample runs both complete
+groups three fresh times. All six repetitions per side pass.
+
+| Side | CPU seconds, summed samples | Wall seconds, summed samples | Wall range per sample |
+| --- | ---: | ---: | ---: |
+| Baseline | 3.983277 | 3.342539487 | 1.619870424–1.722669063 |
+| Candidate | 2.674118 | 3.108522997 | 1.514310516–1.594212481 |
+
+Observed savings are 32.9% CPU / 7.0% elapsed for these two groups. The earlier
+named/file-only pilot is retained separately; its wall ranges overlap and
+must not be substituted for this final candidate. Source is c72a4bd925 plus
+the single candidate test file. Private artifacts remain in scoped-host-both-paired.
+
+The complete functional supervisor and quarantine pass locally in 100.69s,
+95.973s main capture, with 280.96 CPU-seconds (209.87 user / 71.09 system).
+All 67 packages finish: 763 results, 761 pass and two skip. Complete failure
+capture is empty and no retry ledger is created. Three compiler commands
+consume 5.955994 CPU-seconds / 4.614339s active wall. Fifteen links consume
+19.889146 CPU-seconds / 14.204202s active wall. This is a warm candidate run,
+not a controlled whole-suite comparison with the preceding rebase's 470
+compiles or a hosted checkpoint. Full artifacts remain in scoped-host-full.
+
+Do not supersede the preceding workflow while its last required gate is live.
+Keep the reviewed batch ready for publication after that outcome is recorded;
+keep PR #2923 draft until the complete hosted two-minute target and required
+checks pass. Broader installation reuse and compatible binary consolidation
+remain the next targets; saved local fixture CPU does not erase hosted setup,
+cache transfer or changed-source compilation costs.
