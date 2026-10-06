@@ -1,6 +1,10 @@
 package providers
 
-import platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+import (
+	"io/fs"
+
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+)
 
 // CodexPromptFileSystem supplies the exact file effects for an attempt-owned
 // instruction profile. CreateTemp must create exclusively with private file
@@ -8,4 +12,6 @@ import platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/file
 type CodexPromptFileSystem interface {
 	platformfilesystem.TemporaryFileSystem
 	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+	EvalSymlinks(string) (string, error)
 }

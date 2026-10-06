@@ -28,6 +28,9 @@ type profileFiles struct {
 	createErr, writeErr, closeErr, removeErr error
 	short                                    bool
 	projectConfig                            bool
+	root                                     string
+	baseConfig                               string
+	statErr                                  error
 }
 
 func (f *profileFiles) CreateTemp(dir, pattern string) (platformfilesystem.TemporaryFile, error) {
@@ -56,11 +59,64 @@ func (f *profileFiles) Remove(name string) error {
 	f.removed++
 	return f.removeErr
 }
-func (f *profileFiles) ReadFile(string) ([]byte, error) {
+func (f *profileFiles) ReadFile(path string) ([]byte, error) {
+	if path == filepath.Join(filepath.Dir(f.name), "config.toml") && f.baseConfig != "" {
+		return []byte(f.baseConfig), nil
+	}
+	if f.root != "" && path == filepath.Join(filepath.Dir(f.root), ".codex", "config.toml") {
+		return []byte("developer_instructions=\"unrelated ancestor\""), nil
+	}
 	if f.projectConfig {
 		return []byte("developer_instructions=\"other\""), nil
 	}
 	return nil, fs.ErrNotExist
+}
+
+func (f *profileFiles) Stat(path string) (fs.FileInfo, error) {
+	if f.statErr != nil {
+		return nil, f.statErr
+	}
+	if f.root != "" && path == filepath.Join(f.root, ".git") {
+		return nil, nil
+	}
+	return nil, fs.ErrNotExist
+}
+
+func (f *profileFiles) EvalSymlinks(path string) (string, error) { return path, nil }
+
+func TestPromptProfileProjectRootPreservesPrecedence(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"git-root", "custom-root", "cd", "root-stat-error"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			files, request := profileFixture(t)
+			files.root = request.WorkingDirectory
+			switch scenario {
+			case "custom-root":
+				files.baseConfig = "project_root_markers=[\".custom\"]"
+			case "cd":
+				request.Args = append(request.Args, "--cd", filepath.Dir(request.WorkingDirectory))
+			case "root-stat-error":
+				files.statErr = fs.ErrPermission
+			}
+			command, err := buildCommand(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cleanup, err := (promptPreparation{files: files}).prepare(&command, request.ExecuteRequest)
+			if scenario == "git-root" {
+				if err != nil {
+					t.Fatal("unrelated ancestor prevented bounded delivery: ", err)
+				}
+				cleanup()
+			} else {
+				var rejected *platformprocess.CommandStartError
+				if !errors.As(err, &rejected) || files.created != 0 {
+					t.Fatalf("incompatible root launched: %v", err)
+				}
+			}
+		})
+	}
 }
 
 type profileRunner struct {

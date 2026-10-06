@@ -40,7 +40,7 @@ func (p promptPreparation) prepare(command *providerservice.CommandRequest, requ
 	if err != nil {
 		return reject("cannot resolve an absolute Codex home for the instruction profile")
 	}
-	if !p.compatible(command.Args, command.WorkDir) {
+	if !p.compatible(command.Args, command.WorkDir, home) {
 		return reject("selected profile or project configuration prevents equivalent instruction-file delivery")
 	}
 	file, err := p.files.CreateTemp(home, "you-prompt-*.config.toml")
@@ -94,15 +94,26 @@ func (p promptPreparation) codexHome(environment []string) (string, error) {
 	return filepath.Join(home, ".codex"), nil
 }
 
-func (p promptPreparation) compatible(args []string, directory string) bool {
-	for _, arg := range args {
-		if arg == "--ignore-user-config" || arg == "--profile" || strings.HasPrefix(arg, "-p") || strings.HasPrefix(arg, "--profile=") {
-			return false
-		}
+func (p promptPreparation) compatible(args []string, directory, home string) bool {
+	if incompatibleProfileArgs(args) {
+		return false
+	}
+	// A custom root-marker policy can include config above .git. Without a
+	// supported project-root resolver, preserve that policy by rejecting spill.
+	base, err := p.files.ReadFile(filepath.Join(home, "config.toml"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	if strings.Contains(string(base), "project_root_markers") {
+		return false
 	}
 	// Without an absolute working root, the project configuration search cannot
 	// be reproduced using only the injected effects.
 	if !filepath.IsAbs(directory) {
+		return false
+	}
+	directory, err = p.files.EvalSymlinks(directory)
+	if err != nil || !filepath.IsAbs(directory) {
 		return false
 	}
 	for {
@@ -112,12 +123,30 @@ func (p promptPreparation) compatible(args []string, directory string) bool {
 				return false
 			}
 		}
+		// Codex's default project root marker is .git, including worktree files.
+		// User config above that root has lower precedence than our profile.
+		_, err := p.files.Stat(filepath.Join(directory, ".git"))
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return false
+		}
 		parent := filepath.Dir(directory)
 		if parent == directory {
 			return true
 		}
 		directory = parent
 	}
+}
+
+func incompatibleProfileArgs(args []string) bool {
+	for _, arg := range args {
+		if arg == "--ignore-user-config" || arg == "--profile" || strings.HasPrefix(arg, "-p") || strings.HasPrefix(arg, "--profile=") || arg == "--cd" || strings.HasPrefix(arg, "--cd=") || strings.HasPrefix(arg, "-C") || strings.Contains(arg, "project_root_markers") {
+			return true
+		}
+	}
+	return false
 }
 
 // profileCommandArgs changes only the generated override pair and remeasures
