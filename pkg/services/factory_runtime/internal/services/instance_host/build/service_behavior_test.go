@@ -27,7 +27,7 @@ func TestPrepareExecutionSpecCarriesSessionInputsAndAppliesOperatorDefaults(t *t
 	fixture := newSelectedBuildFixture(t)
 	spec, err := fixture.service.PrepareExecutionSpec(t.Context(), fixture.defaults,
 		runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
-			ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: fixture.loaded, PreserveCompatibilityDefaultRecordPath: true},
+			ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: fixture.loaded},
 		runtimebuild.SessionBuildSpec{Clock: platformclock.Real{}, BaseLogger: zap.NewNop(), ProviderOverride: fixture.replayProvider,
 			ReplayCommandRunner: fixture.replayRunner, SubmissionHooks: []factory.SubmissionHook{fixture.hook}, CompletionPlanner: fixture.planner,
 			PetriMutationRecorder: func(string, []factorydefinitions.TokenMutationRecord) error { return nil }},
@@ -165,8 +165,8 @@ func assertSelectedBuildIdentity(t *testing.T, spec runtimebuild.SessionBuildSpe
 	if spec.RuntimeInstanceID != testRuntimeID() {
 		t.Fatalf("RuntimeInstanceID = %q, want generated test identity", spec.RuntimeInstanceID)
 	}
-	if spec.RecordPath != "/recordings/factory-~default.json" {
-		t.Fatalf("compatibility RecordPath = %q", spec.RecordPath)
+	if spec.RecordPath != "/recordings/factory-session-selected.json" {
+		t.Fatalf("session RecordPath = %q", spec.RecordPath)
 	}
 	if spec.WorkflowID != "workflow-selected" || spec.LoadedFactoryCfg != fixture.loaded {
 		t.Fatalf("definition identity fields = %#v", spec)
@@ -371,7 +371,7 @@ func TestPrepareSuppliedCandidateKeepsPriorGenerationAndDetachedValues(t *testin
 	defaults := runtimebuild.BuildDefaults{WorkerModelProvider: " CODEX ", WorkerModel: " gpt-5 ", ApplyOperatorDefaults: true,
 		RecordPath: "/recordings/factory-__factory_session_id__.json", WorkflowID: "workflow-selected"}
 	values := runtimebuild.SessionBuildValues{Dir: "/factories/selected", FolderPath: "/workspace/project", SessionID: "session-selected",
-		ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: candidate, PreserveCompatibilityDefaultRecordPath: true}
+		ExecutionBaseDir: "/runtime/session-selected", LoadedFactoryCfg: candidate}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	prepared, err := preparation.Prepare(ctx, defaults, values)
@@ -390,7 +390,7 @@ func TestPrepareSuppliedCandidateKeepsPriorGenerationAndDetachedValues(t *testin
 	}
 	defaults.RecordPath = "/changed"
 	values.SessionID = "changed"
-	if prepared.SessionID != "session-selected" || prepared.RecordPath != "/recordings/factory-~default.json" {
+	if prepared.SessionID != "session-selected" || prepared.RecordPath != "/recordings/factory-session-selected.json" {
 		t.Fatal("prepared values alias caller data")
 	}
 }
@@ -399,10 +399,9 @@ func TestPrepareLoadsSelectedCandidateAndSelectsIdentityAndRecordingPath(t *test
 	t.Parallel()
 	for _, test := range []struct {
 		name, runtimeID, sessionID, wantID, wantPath string
-		compatibility                                bool
 	}{
-		{"generated default", "  ", "session-a", "generated", "/recording.json", true},
-		{"trimmed explicit", " runtime-b ", "session-b", "runtime-b", "/recording.session-b.json", false},
+		{"generated default", "  ", "session-a", "generated", "/recording.session-a.json"},
+		{"trimmed explicit", " runtime-b ", "session-b", "runtime-b", "/recording.session-b.json"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -418,7 +417,7 @@ func TestPrepareLoadsSelectedCandidateAndSelectsIdentityAndRecordingPath(t *test
 			}, func() string { ids++; return "generated" }, zap.NewNop(), nil, nil, nil, nil)
 			prepared, err := preparation.Prepare(context.Background(), runtimebuild.BuildDefaults{RecordPath: "/recording.json"},
 				runtimebuild.SessionBuildValues{Dir: "/selected", SessionID: test.sessionID, RuntimeInstanceID: test.runtimeID,
-					ExecutionBaseDir: "/runtime", PreserveCompatibilityDefaultRecordPath: test.compatibility})
+					ExecutionBaseDir: "/runtime"})
 			if err != nil {
 				t.Fatal(err)
 			}

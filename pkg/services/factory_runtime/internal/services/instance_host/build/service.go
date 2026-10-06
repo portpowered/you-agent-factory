@@ -26,13 +26,12 @@ type BuildDefaults struct {
 
 // SessionBuildValues contains an exclusively owned candidate and session facts.
 type SessionBuildValues struct {
-	Dir                                    string
-	FolderPath                             string
-	SessionID                              string
-	ExecutionBaseDir                       string
-	RuntimeInstanceID                      string
-	LoadedFactoryCfg                       factorydefinitions.MutableLoadedFactorySource
-	PreserveCompatibilityDefaultRecordPath bool
+	Dir               string
+	FolderPath        string
+	SessionID         string
+	ExecutionBaseDir  string
+	RuntimeInstanceID string
+	LoadedFactoryCfg  factorydefinitions.MutableLoadedFactorySource
 }
 
 // PreparedSessionValues contains prepared data without activation effects.
@@ -98,10 +97,6 @@ func (s *Service) prepare(ctx context.Context, defaults BuildDefaults, values Se
 			return PreparedSessionValues{}, err
 		}
 	}
-	recordSessionID := values.SessionID
-	if values.PreserveCompatibilityDefaultRecordPath {
-		recordSessionID = "~default"
-	}
 	runtimeID := strings.TrimSpace(values.RuntimeInstanceID)
 	if runtimeID == "" {
 		runtimeID = s.newID()
@@ -109,7 +104,7 @@ func (s *Service) prepare(ctx context.Context, defaults BuildDefaults, values Se
 	return PreparedSessionValues{
 		Dir: values.Dir, FolderPath: values.FolderPath, SessionID: values.SessionID,
 		ExecutionBaseDir: values.ExecutionBaseDir, RuntimeInstanceID: runtimeID,
-		LoadedFactoryCfg: loaded, RecordPath: SessionScopedRecordPath(defaults.RecordPath, recordSessionID), WorkflowID: defaults.WorkflowID,
+		LoadedFactoryCfg: loaded, RecordPath: SessionScopedRecordPath(defaults.RecordPath, values.SessionID), WorkflowID: defaults.WorkflowID,
 	}, nil
 }
 

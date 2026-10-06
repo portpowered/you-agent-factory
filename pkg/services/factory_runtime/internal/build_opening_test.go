@@ -242,12 +242,14 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	script := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("selected script")})
 	provider.Queue(platformprocess.CommandResult{Stdout: []byte("selected provider")})
 	script.Queue(platformprocess.CommandResult{Stdout: []byte("selected script")})
-	mock := &workers.MockWorkersConfig{}
+	mock := &factory.RuntimeActivationMockWorkersConfig{}
+	var selectedMock *workers.MockWorkersConfig
 	decorations := 0
 	decorate := func(selected *workers.MockWorkersConfig, _ interfaces.RuntimeDefinitionLookup, next platformprocess.CommandRunner) platformprocess.CommandRunner {
-		if selected != mock {
+		if selected == nil || (selectedMock != nil && selected != selectedMock) {
 			t.Fatal("preparation changed the selected mock configuration")
 		}
+		selectedMock = selected
 		output := "selected script"
 		if next == provider {
 			output = "selected provider"
@@ -276,7 +278,8 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 		t.Fatal(err)
 	}
 	initial, err := assembleTestInitialOpening(t.Context(), assembly, dir, loaded, clockwork.NewFakeClock(),
-		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial"}, mock)
+		factory.RuntimeActivationRequest{FactorySessionID: "candidate", RuntimeID: "initial",
+			Inputs: factory.RuntimeActivationInputs{Workers: factory.RuntimeActivationWorkerInputs{MockWorkers: mock}}})
 	assertUnpublishedOpeningFailure(t, initial, err, resources.failure)
 	if _, err := initial.ReplacementBuilder.BuildReplacement(t.Context(), dir, dir, "successor", dir); !errors.Is(err, resources.failure) {
 		t.Fatalf("replacement error = %v, want controlled resource failure", err)
