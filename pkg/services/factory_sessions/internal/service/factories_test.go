@@ -146,12 +146,22 @@ func TestNewFactoryRemainsInert(t *testing.T) {
 	t.Parallel()
 	calls := 0
 	dependencies := validRuntimeOpeningCollaborators(&calls)
+	materializer := &selectedOpeningMaterializer{}
+	dependencies.WorkService = work.MaterializationService(materializer)
 	factory, err := dependencies.newFactory()
 	if err != nil || factory == nil {
 		t.Fatalf("NewRoot() = (%v, %v)", factory, err)
 	}
 	if calls != 0 {
 		t.Fatalf("construction invoked %d collaborator functions", calls)
+	}
+	path, cleanup, err := factory.workService.MaterializeContentURL(t.Context(), "file:///identity.png")
+	if err != nil || path != "/tmp/identity.png" || cleanup == nil {
+		t.Fatalf("selected Work materialization = (%q, %v, %v)", path, cleanup, err)
+	}
+	cleanup()
+	if materializer.calls != 1 || materializer.input != "file:///identity.png" {
+		t.Fatalf("selected materializer calls = %d with %q", materializer.calls, materializer.input)
 	}
 }
 
@@ -336,3 +346,14 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 
 var _ recordings.Service = (*recordingsRootConstructionStub)(nil)
 var _ recordings.RuntimeScopeService = (*recordingsRootConstructionStub)(nil)
+
+type selectedOpeningMaterializer struct {
+	calls int
+	input string
+}
+
+func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
+	materializer.calls++
+	materializer.input = rawURL
+	return "/tmp/identity.png", func() {}, nil
+}
