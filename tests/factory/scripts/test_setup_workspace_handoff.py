@@ -147,9 +147,9 @@ def create_remote_clone(base_path):
     return operator_path
 
 
-def run_setup_workspace(repo_path, prd_name):
+def run_setup_workspace(repo_path, prd_name, *args):
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH), prd_name],
+        [sys.executable, str(SCRIPT_PATH), prd_name, *args],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -195,6 +195,62 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_null_recovery_creates_ordinary_workspace_with_exact_packet(self):
+        init_repository(self.repo_path)
+        prd_name = "null-recovery-fresh"
+        source = write_packet(self.repo_path, prd_name, {
+            "branchName": prd_name, "context": {"recovery": None},
+        }, markdown="# ordinary fresh lane\n")
+        packet_bytes = source.read_bytes()
+        markdown_bytes = source.with_suffix(".md").read_bytes()
+
+        result = run_setup_workspace(self.repo_path, prd_name, "--recovery-worktree", "")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        destination = self.repo_path / ".claude/worktrees" / prd_name
+        self.assertEqual(set(output), {"status", "worktree", "branch", "prd_path",
+                                     "prd_md_path", "standing_rules_path", "reused"})
+        self.assertEqual(output["status"], "ready")
+        self.assertFalse(output["reused"])
+        self.assertEqual(output["branch"], prd_name)
+        self.assertEqual(Path(output["worktree"]).resolve(), destination.resolve())
+        self.assertEqual(Path(output["prd_path"]), destination / "prd.json")
+        self.assertEqual(Path(output["prd_md_path"]), destination / "prd.md")
+        self.assertEqual(Path(output["prd_path"]).read_bytes(), packet_bytes)
+        self.assertEqual(Path(output["prd_md_path"]).read_bytes(), markdown_bytes)
+        self.assertEqual(git(["branch", "--show-current"], destination).stdout.strip(), prd_name)
+        self.assertEqual(source.read_bytes(), packet_bytes)
+
+    def test_tagged_null_recovery_refuses_before_setup_or_adoption_mutations(self):
+        init_repository(self.repo_path)
+        prd_name = "null-recovery-tagged"
+        _, retained = create_nested_worktree(self.repo_path, "retained")
+        sentinel = retained / "sentinel.txt"
+        sentinel.write_bytes(b"preserve retained bytes\x00\r\n")
+        git(["add", sentinel.name], retained)
+        packet = write_packet(self.repo_path, prd_name, {
+            "branchName": prd_name, "context": {"recovery": None},
+        })
+        packet_bytes = packet.read_bytes()
+        before = repository_snapshot(self.repo_path, (retained,))
+        root_index = (self.repo_path / ".git/index").read_bytes()
+        retained_index = git(["diff", "--cached", "--binary"], retained).stdout
+
+        result = run_setup_workspace(self.repo_path, prd_name, "--recovery-worktree",
+                                     ".claude/worktrees/fixture")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Failed to read PRD: recovery-worktree tag requires context.recovery", result.stderr)
+        self.assertNotIn("Root sync:", result.stderr)
+        self.assertEqual(repository_snapshot(self.repo_path, (retained,)), before)
+        self.assertEqual((self.repo_path / ".git/index").read_bytes(), root_index)
+        self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, retained_index)
+        self.assertEqual(packet.read_bytes(), packet_bytes)
+        self.assertEqual(sentinel.read_bytes(), b"preserve retained bytes\x00\r\n")
+        self.assertFalse((self.repo_path / ".claude/worktrees" / prd_name).exists())
 
     def test_handoff_reuses_exact_nested_packet_and_preserves_content(self):
         init_repository(self.repo_path)
@@ -596,6 +652,31 @@ class RecoveryPacketValidationTest(unittest.TestCase):
         self.module = load_setup_workspace_module()
         self.path = ".claude/worktrees/fixture"
         self.packet = recovery_packet(self.path)
+
+    def test_missing_or_null_recovery_without_tag_returns_none(self):
+        for packet in ({}, {"context": {}}, {"context": {"recovery": None}}):
+            with self.subTest(packet=packet):
+                self.assertIsNone(self.module.validate_recovery_packet(packet, ""))
+
+    def test_missing_or_null_recovery_with_tag_requires_packet(self):
+        for packet in ({}, {"context": {}}, {"context": {"recovery": None}}):
+            with self.subTest(packet=packet), self.assertRaisesRegex(
+                ValueError, "^recovery-worktree tag requires context.recovery$",
+            ):
+                self.module.validate_recovery_packet(packet, self.path)
+
+    def test_non_null_non_object_recovery_still_refuses(self):
+        for value in ("invalid", "", [], 0, False):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError, "^context.recovery must be an object$",
+            ):
+                self.module.validate_recovery_packet({"context": {"recovery": value}}, "")
+
+    def test_invalid_context_and_empty_recovery_object_still_refuse(self):
+        with self.assertRaisesRegex(ValueError, "^PRD context must be an object$"):
+            self.module.validate_recovery_packet({"context": None}, "")
+        with self.assertRaisesRegex(ValueError, "^recovery requires originalSessionId$"):
+            self.module.validate_recovery_packet({"context": {"recovery": {}}}, "")
 
     def test_ordinary_and_fresh_recovery_preserve_name_derived_setup(self):
         self.assertIsNone(self.module.validate_recovery_packet({}, ""))

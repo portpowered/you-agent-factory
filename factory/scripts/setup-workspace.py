@@ -1378,11 +1378,11 @@ def validate_recovery_packet(prd, recovery_worktree):
     context = prd.get("context", {})
     if not isinstance(context, dict):
         raise ValueError("PRD context must be an object")
-    if "recovery" not in context:
+    recovery = context.get("recovery")
+    if recovery is None:
         if recovery_worktree:
             raise ValueError("recovery-worktree tag requires context.recovery")
         return None
-    recovery = context["recovery"]
     if not isinstance(recovery, dict):
         raise ValueError("context.recovery must be an object")
     for key in ("originalSessionId", "originalLaneWorkId", "predecessorWorkId"):
