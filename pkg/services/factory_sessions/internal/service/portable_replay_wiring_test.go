@@ -152,10 +152,10 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			attempts := 0
 			factory.durableOpening = durableOpeningFixture(retryOwner, func(ctx context.Context,
 				facts durableexecution.ScopeFacts, clock factoryruntime.Clock, logger *zap.Logger,
-			) (func(context.Context) error, error) {
+			) (durableexecution.Service, func(context.Context) error, error) {
 				attempts++
 				if attempts == 1 {
-					return func(context.Context) error { return failedOwner.Close() }, failure
+					return nil, func(context.Context) error { return failedOwner.Close() }, failure
 				}
 				return acquire(ctx, facts, clock, logger)
 			})
@@ -509,8 +509,8 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	}
 	dependencies.WorkerService = &portableReplayWorkerService{}
 	owner.workerExecution = dependencies.WorkerService
-	dependencies.DurableOpening = durableOpeningFixture(owner, func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error) {
-		return func(context.Context) error { return owner.Close() }, nil
+	dependencies.DurableOpening = durableOpeningFixture(owner, func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+		return nil, func(context.Context) error { return owner.Close() }, nil
 	})
 	factory, err := dependencies.newFactory()
 	if err != nil {
@@ -855,7 +855,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 			configured := preparedRuntime{Session: factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigHome: "/controlled-home"}}}
 			configured.Workers.MockWorkers = &workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough}
 			owner := &portableReplayRuntimeOwner{}
-			acquire := func(_ context.Context, facts durableexecution.ScopeFacts, _ factoryruntime.Clock, _ *zap.Logger) (func(context.Context) error, error) {
+			acquire := func(_ context.Context, facts durableexecution.ScopeFacts, _ factoryruntime.Clock, _ *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 				wantMode := factorysessions.ChildExecutorModeFake
 				if tc.provider != nil {
 					wantMode = factorysessions.ChildExecutorModeLive
@@ -863,7 +863,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 				if facts.ChildExecutorMode != wantMode {
 					t.Fatalf("mode = %s, want %s", facts.ChildExecutorMode, wantMode)
 				}
-				return func(context.Context) error { return owner.Close() }, tc.failure
+				return nil, func(context.Context) error { return owner.Close() }, tc.failure
 			}
 			factory := &Root{
 				clock: openingCoordinatorClock{}, providerOverride: tc.provider,

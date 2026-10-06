@@ -347,7 +347,13 @@ func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context
 func durableOpeningFixture(execution durableexecution.Service, acquire durableexecution.ScopeAcquisition) *DurableOpening {
 	return NewDurableOpening(
 		func(string) (operatorsettings.Config, error) { return operatorsettings.Config{}, nil },
-		execution, acquire,
+		func(ctx context.Context, facts durableexecution.ScopeFacts, clock factoryruntime.Clock, logger *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+			owned, release, err := acquire(ctx, facts, clock, logger)
+			if owned == nil && err == nil {
+				owned = execution
+			}
+			return owned, release, err
+		},
 		func(identity string) (string, error) { return identity, nil }, false,
 	)
 }

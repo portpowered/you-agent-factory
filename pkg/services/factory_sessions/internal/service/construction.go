@@ -164,7 +164,6 @@ func (r *Root) prepareRuntime(
 // Each Open call retains only its request's settings and acquired resource owner.
 type DurableOpening struct {
 	loadOperatorConfig operatorconfig.ConfigLoader
-	execution          durableexecution.Service
 	acquire            durableexecution.ScopeAcquisition
 	providerReachable  bool
 	providerIdentities factorysessions.ProviderIdentityResolver
@@ -172,12 +171,11 @@ type DurableOpening struct {
 
 func NewDurableOpening(
 	loadOperatorConfig operatorconfig.ConfigLoader,
-	execution durableexecution.Service,
 	acquire durableexecution.ScopeAcquisition,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	providerReachable bool,
 ) *DurableOpening {
-	return &DurableOpening{loadOperatorConfig: loadOperatorConfig, execution: execution, acquire: acquire, providerIdentities: providerIdentities, providerReachable: providerReachable}
+	return &DurableOpening{loadOperatorConfig: loadOperatorConfig, acquire: acquire, providerIdentities: providerIdentities, providerReachable: providerReachable}
 }
 
 func (opening *DurableOpening) Open(
@@ -211,7 +209,7 @@ func (opening *DurableOpening) Open(
 	if providerOverride != nil || (mockAllowsLive && opening.providerReachable) {
 		mode = factorysessions.ChildExecutorModeLive
 	}
-	release, err := opening.acquire(ctx, durableexecution.ScopeFacts{
+	execution, release, err := opening.acquire(ctx, durableexecution.ScopeFacts{
 		FactorySessionID: sessionID, RuntimeID: root.RuntimeInstanceID,
 		ProjectRoot: projectRoot, Persistence: persistence, ChildExecutorMode: mode,
 		WorkerPresetIDs: workerPresetIDs, WorkerSettings: workerSettings,
@@ -223,7 +221,7 @@ func (opening *DurableOpening) Open(
 		return DurableExecution{Release: release}, fmt.Errorf("compose durable session persistence: %w", err)
 	}
 	return DurableExecution{
-		Service:         opening.execution,
+		Service:         execution,
 		Release:         release,
 		WorkerSettings:  workersettings.Clone(&workerSettings),
 		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),

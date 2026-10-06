@@ -768,7 +768,7 @@ func TestJavaScriptRuntimeService_FactoryEventObserverDeliversOnlyUnseenEvents(t
 		result:  ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusRunning},
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-	service := &JavaScriptRuntimeService{sessions: map[string]*runtimeSessionState{sessionID: state}}
+	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{sessionID: state}}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	var delivered []interfaces.FactoryEvent
 	stop := service.observeFactoryEvents(state, func(events []interfaces.FactoryEvent) {
 		delivered = append(delivered, events...)

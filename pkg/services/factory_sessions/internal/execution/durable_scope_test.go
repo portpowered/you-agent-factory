@@ -22,12 +22,11 @@ func TestDurableLiveChangeScopesIsolatePeersAndOwnedRelease(t *testing.T) {
 	const first = "dur-sess-capacity-first"
 	const peer = "dur-sess-capacity-peer"
 	service := &JavaScriptRuntimeService{
-		clock:                 runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
-		liveChangeCoordinator: livechange.NewCoordinator(),
-		sessions: map[string]*runtimeSessionState{
+		clock: runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 			first: {session: SessionReadResult{SessionID: first, Status: LifecycleStatusRunning}},
 			peer:  {session: SessionReadResult{SessionID: peer, Status: LifecycleStatusRunning}},
-		},
+		}}, durableRuntimeBehavior: &durableRuntimeBehavior{liveChangeCoordinator: livechange.NewCoordinator()},
 	}
 	firstRuntime := newDurableLiveChangeAdmissionTestRuntime(t)
 	peerRuntime := newDurableLiveChangeAdmissionTestRuntime(t)
@@ -76,6 +75,127 @@ func TestDurableLiveChangeScopesIsolatePeersAndOwnedRelease(t *testing.T) {
 	}
 }
 
+func TestDurableScopeDefaultOpeningsPreserveProbeIdentityAndPeerState(t *testing.T) {
+	t.Parallel()
+	peerStore := &runtimeRecordingStore{}
+	corruptStore := &runtimeRecordingStore{payload: []byte(`{"session":`)}
+	stores := map[string]*runtimeRecordingStore{"/peer": peerStore, "/corrupt": corruptStore}
+	owner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		Persistence: NewScopePersistence(func(root string) (runtimepersist.Store, error) { return stores[root], nil }),
+	})
+	peerFacts := durableexecution.ScopeFacts{FactorySessionID: "~default", RuntimeID: "peer-runtime", ProjectRoot: "/peer", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}
+	peer, peerRelease, err := owner.Acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupDurableScope(t, peerRelease)
+	failedFacts := peerFacts
+	failedFacts.RuntimeID, failedFacts.ProjectRoot = "corrupt-runtime", "/corrupt"
+	candidate, release, err := owner.Acquire(t.Context(), failedFacts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("peer blocked selected default opening before its persistence probe: %v", err)
+	}
+	cleanupDurableScope(t, release)
+	_, err = candidate.(*JavaScriptRuntimeService).HasDurableState(t.Context(), "~default")
+	var resumeErr *ResumeError
+	if !errors.As(err, &resumeErr) || resumeErr.Outcome != ResumeOutcomeCorruptedPersistence || resumeErr.SessionID != "~default" {
+		t.Fatalf("selected corrupt probe = %v", err)
+	}
+	if err := peer.(*JavaScriptRuntimeService).RecordPetriSessionCompletion("~default", PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+		t.Fatal(err)
+	}
+	if err := release(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	assertDefaultPeerState(t, peer, peerStore)
+	// A retired handle cannot remove the replacement's admission or state.
+	stores["/corrupt"] = &runtimeRecordingStore{}
+	replacement, replacementRelease, err := owner.Acquire(t.Context(), failedFacts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupDurableScope(t, replacementRelease)
+	if err := release(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := replacement.(*JavaScriptRuntimeService).RecordPetriSessionCompletion("~default", PetriSessionCompletion{Status: LifecycleStatusFailed}); err != nil {
+		t.Fatal(err)
+	}
+	if _, duplicateRelease, err := owner.Acquire(t.Context(), failedFacts, durableFixedClock{}, zap.NewNop()); err == nil || duplicateRelease != nil {
+		t.Fatalf("duplicate live scope admitted: %v", err)
+	}
+	assertDefaultPeerState(t, peer, peerStore)
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := owner.Acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop()); !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("closed owner admitted scope: %v", err)
+	}
+}
+
+func assertDefaultPeerState(t *testing.T, peer durableexecution.Service, store *runtimeRecordingStore) {
+	t.Helper()
+	read, err := peer.GetSession(t.Context(), "~default")
+	if err != nil || read.SessionID != "~default" || read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("peer read after candidate retirement = %#v, %v", read, err)
+	}
+	var snapshot PersistedRuntimeSessionState
+	if err := json.Unmarshal(store.payload, &snapshot); err != nil || snapshot.Session.SessionID != "~default" || snapshot.Session.Status != LifecycleStatusSucceeded {
+		t.Fatalf("peer persisted identity/state changed: %#v, %v", snapshot.Session, err)
+	}
+}
+
+func TestDurableScopeAcquisitionFailureRetriesAlongsideDefaultPeer(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("selected store unavailable")
+	ctx, cancel := context.WithCancel(t.Context())
+	attempts := 0
+	owner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		Persistence: NewScopePersistence(func(string) (runtimepersist.Store, error) {
+			attempts++
+			if attempts == 1 {
+				return nil, failure
+			}
+			if attempts == 2 {
+				cancel()
+			}
+			return &runtimeRecordingStore{}, nil
+		}),
+	})
+	facts := durableexecution.ScopeFacts{FactorySessionID: "~default", RuntimeID: "candidate", ProjectRoot: "/candidate", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}
+	peerFacts := facts
+	peerFacts.RuntimeID, peerFacts.Persistence = "peer", PersistencePolicyDisabled
+	peer, peerRelease, err := owner.Acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupDurableScope(t, peerRelease)
+	for _, attempt := range []struct {
+		ctx   context.Context
+		cause error
+	}{{t.Context(), nil}, {ctx, context.Canceled}} {
+		candidate, release, err := owner.Acquire(attempt.ctx, facts, durableFixedClock{}, zap.NewNop())
+		if candidate != nil {
+			t.Fatal("failed candidate published execution")
+		}
+		assertFailedDurableAcquisition(t, release, err, attempt.cause)
+		if attempt.cause == nil {
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) || validationErr.Field != "persistence" {
+				t.Fatalf("store acquisition lost existing validation error: %v", err)
+			}
+		}
+		if err := peer.(*JavaScriptRuntimeService).RecordPetriSessionCompletion("~default", PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+			t.Fatalf("failed candidate retired default peer: %v", err)
+		}
+	}
+	candidate, release, err := owner.Acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
+	if err != nil || candidate == nil {
+		t.Fatalf("same scoped identity retry = %v", err)
+	}
+	cleanupDurableScope(t, release)
+}
+
 func TestDurableScopeRoutesSelectedPolicyClockAndPreActivationReads(t *testing.T) {
 	t.Parallel()
 	stores := map[string]*runtimeRecordingStore{"/first": {}, "/second": {}}
@@ -93,7 +213,7 @@ func TestDurableScopeRoutesSelectedPolicyClockAndPreActivationReads(t *testing.T
 		root := []string{"/first", "/second", "/second"}[index]
 		selectedTime := baseTime.Add(time.Duration(index) * time.Hour)
 		settings := factory.JavaScriptWorkerSettings{Presets: map[string]factory.JavaScriptWorkerPreset{"review": {Model: id}}}
-		release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+		release, err := service.acquire(t.Context(), durableexecution.ScopeFacts{
 			FactorySessionID: id, RuntimeID: "runtime-" + id, ProjectRoot: root,
 			Persistence: policy, ChildExecutorMode: ChildExecutorModeFake,
 			WorkerPresetIDs: map[string]struct{}{"review": {}}, WorkerSettings: settings,
@@ -151,7 +271,7 @@ func TestDurableScopeFailedAndCancelledAcquisitionCanRetryWithoutRetiringPeer(t 
 	facts := durableexecution.ScopeFacts{FactorySessionID: "candidate", ProjectRoot: "/candidate", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}
 	peerFacts := facts
 	peerFacts.FactorySessionID, peerFacts.Persistence = "peer", PersistencePolicyDisabled
-	peerRelease, err := service.Acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop())
+	peerRelease, err := service.acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,20 +280,20 @@ func TestDurableScopeFailedAndCancelledAcquisitionCanRetryWithoutRetiringPeer(t 
 		ctx   context.Context
 		cause error
 	}{{t.Context(), nil}, {ctx, context.Canceled}} {
-		release, err := service.Acquire(attempt.ctx, facts, durableFixedClock{}, zap.NewNop())
+		release, err := service.acquire(attempt.ctx, facts, durableFixedClock{}, zap.NewNop())
 		assertFailedDurableAcquisition(t, release, err, attempt.cause)
 		if err := service.RecordPetriSessionCompletion("peer", PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
 			t.Fatalf("peer retired: %v", err)
 		}
 	}
-	oldRelease, err := service.Acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
+	oldRelease, err := service.acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := oldRelease(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	replacementRelease, err := service.Acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
+	replacementRelease, err := service.acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +314,7 @@ func TestDurableScopeReleaseKeepsTerminalPersistenceUntilRunJoins(t *testing.T) 
 	store := &runtimeRecordingStore{}
 	router := NewScopePersistence(func(string) (runtimepersist.Store, error) { return store, nil })
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: router})
-	release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{FactorySessionID: "owned", ProjectRoot: "/owned", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}, durableFixedClock{}, zap.NewNop())
+	release, err := service.acquire(t.Context(), durableexecution.ScopeFacts{FactorySessionID: "owned", ProjectRoot: "/owned", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}, durableFixedClock{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +386,7 @@ func TestDurableScopeChildResultsReloadOnlyFromEnabledRoot(t *testing.T) {
 		return id
 	}
 	for index, policy := range []PersistencePolicy{PersistencePolicyEnabled, PersistencePolicyDisabled} {
-		release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+		release, err := service.acquire(t.Context(), durableexecution.ScopeFacts{
 			FactorySessionID: ids[index], RuntimeID: "runtime-" + ids[index], ProjectRoot: roots[index],
 			Persistence: policy, ChildExecutorMode: ChildExecutorModeLive,
 		}, durableFixedClock{now: time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)}, zap.NewNop())
@@ -304,7 +424,7 @@ func TestDurableScopeChildResultsReloadOnlyFromEnabledRoot(t *testing.T) {
 func assertDurableChildReload(t *testing.T, service *JavaScriptRuntimeService, ids, roots []string) {
 	t.Helper()
 
-	release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+	release, err := service.acquire(t.Context(), durableexecution.ScopeFacts{
 		FactorySessionID: ids[0], ProjectRoot: roots[0], Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeLive,
 	}, durableFixedClock{}, zap.NewNop())
 	if err != nil {

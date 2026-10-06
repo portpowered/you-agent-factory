@@ -24,6 +24,89 @@ type durableScope struct {
 	controlReplay map[string]controlReplayRecord
 }
 
+type durableScopeKey struct {
+	runtimeID string
+	sessionID string
+}
+
+// Acquire allocates an execution handle's state, retaining the fixed behavior
+// constructed by Wire. Canonical IDs are local to the selected runtime: two
+// default openings must both probe and persist ~default in their own stores.
+func (s *JavaScriptRuntimeService) Acquire(ctx context.Context, facts durableexecution.ScopeFacts, clock factory.Clock, logger *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	id, err := NormalizeSessionID(facts.FactorySessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	key := durableScopeKey{runtimeID: facts.RuntimeID, sessionID: id}
+	s.runLifecycleMu.Lock()
+	if s.runClosed {
+		s.runLifecycleMu.Unlock()
+		return nil, nil, ErrDurableExecutionClosed
+	}
+	if s.acquiredScopes[key] != nil {
+		s.runLifecycleMu.Unlock()
+		return nil, nil, errors.New("durable Factory Session scope is already acquired")
+	}
+	owned := s.allocateScopeState(facts)
+	if s.acquiredScopes == nil {
+		s.acquiredScopes = make(map[durableScopeKey]*JavaScriptRuntimeService)
+	}
+	s.acquiredScopes[key] = owned
+	s.runLifecycleMu.Unlock()
+	releaseOwned, acquireErr := owned.acquire(ctx, facts, clock, logger)
+	release := func(ctx context.Context) error {
+		return s.releaseRuntimeScope(ctx, key, owned, releaseOwned)
+	}
+	if acquireErr == nil {
+		acquireErr = s.ensureOpen()
+	}
+	if acquireErr != nil {
+		return nil, release, acquireErr
+	}
+	return owned, release, nil
+}
+
+// allocateScopeState copies only fixed behavior and replaces every mutable
+// runtime map/lock with owned state. Request selections are immutable facts.
+func (s *JavaScriptRuntimeService) allocateScopeState(facts durableexecution.ScopeFacts) *JavaScriptRuntimeService {
+	// All synchronization and mutable runtime data live behind this pointer.
+	// Copying the fixed behavior retains collaborators without reconstruction.
+	owned := *s
+	owned.durableRuntimeState = &durableRuntimeState{
+		sessions:      make(map[string]*runtimeSessionState),
+		startReplay:   make(map[string]startReplayRecord),
+		startInflight: make(map[string]*startInflightFlight),
+		controlReplay: make(map[string]controlReplayRecord),
+	}
+	owned.projectRoot = facts.ProjectRoot
+	owned.childExecutorMode = facts.ChildExecutorMode
+	owned.workerPresetIDs = clonePresentedEventIDs(facts.WorkerPresetIDs)
+	owned.workerSettings = *workersettings.Clone(&facts.WorkerSettings)
+	owned.scopePersistence = &ScopePersistence{stores: s.scopePersistence.stores, scopes: make(map[string]*durableScope)}
+	owned.persistence = owned.scopePersistence
+	if s.workerExecution != nil {
+		owned.workerExecution = owned.newChildWorkerExecutionBinding(s.workerExecution.execute, nil, facts.RuntimeID, "", nil, nil, nil, nil, nil)
+	}
+	return &owned
+}
+
+func (s *JavaScriptRuntimeService) releaseRuntimeScope(ctx context.Context, key durableScopeKey, owned *JavaScriptRuntimeService, release func(context.Context) error) error {
+	if release != nil {
+		if err := release(ctx); err != nil {
+			return err
+		}
+	}
+	s.runLifecycleMu.Lock()
+	defer s.runLifecycleMu.Unlock()
+	if s.acquiredScopes[key] == owned {
+		delete(s.acquiredScopes, key)
+	}
+	return nil
+}
+
 // ScopePersistence routes the fixed runtime's persistence operations by the
 // explicit session key, including probes that precede runtime activation.
 // It owns resources and selections; it never constructs execution behavior.
@@ -75,7 +158,7 @@ func (p *ScopePersistence) SnapshotPath(id string) string {
 
 // Acquire retains a unique registration even when store acquisition fails.
 // The caller owns the returned release before interpreting the error.
-func (s *JavaScriptRuntimeService) Acquire(
+func (s *JavaScriptRuntimeService) acquire(
 	ctx context.Context,
 	facts durableexecution.ScopeFacts,
 	clock factory.Clock,

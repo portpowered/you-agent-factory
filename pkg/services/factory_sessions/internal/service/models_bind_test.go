@@ -261,13 +261,12 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 	recordingRoot := &recordingsRootConstructionStub{}
 	opening := NewDurableOpening(
 		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
-		execution,
-		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error) {
+		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 			release := func(context.Context) error { return execution.(interface{ Close() error }).Close() }
 			if durableFailure {
-				return release, openingErr
+				return nil, release, openingErr
 			}
-			return release, nil
+			return execution, release, nil
 		},
 		func(identity string) (string, error) { return identity, nil }, false,
 	)

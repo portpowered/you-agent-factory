@@ -19,7 +19,7 @@ type ScopeFacts struct {
 	WorkerSettings    factoryruntime.JavaScriptWorkerSettings
 }
 
-type ScopeAcquisition = func(context.Context, ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error)
+type ScopeAcquisition = func(context.Context, ScopeFacts, factoryruntime.Clock, *zap.Logger) (Service, func(context.Context) error, error)
 
 // Service owns durable Factory Session start, lifecycle, inspection, replay,
 // and restart behavior behind the Factory Sessions private capability boundary.

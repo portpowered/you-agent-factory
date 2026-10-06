@@ -25,13 +25,13 @@ func TestDurableOpeningCanonicalizesAndSnapshotsRequestFacts(t *testing.T) {
 	clock, logger := openingCoordinatorClock{}, zap.NewNop()
 	owner := &portableReplayRuntimeOwner{}
 	opening := NewDurableOpening(
-		func(string) (operatorconfig.Config, error) { return configured, nil }, owner,
-		func(_ context.Context, selected durableexecution.ScopeFacts, selectedClock factoryruntime.Clock, selectedLogger *zap.Logger) (func(context.Context) error, error) {
+		func(string) (operatorconfig.Config, error) { return configured, nil },
+		func(_ context.Context, selected durableexecution.ScopeFacts, selectedClock factoryruntime.Clock, selectedLogger *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 			if selectedClock != clock || selectedLogger != logger {
 				t.Fatal("selected clock/logger lost")
 			}
 			facts = append(facts, selected)
-			return func(context.Context) error { return nil }, nil
+			return owner, func(context.Context) error { return nil }, nil
 		},
 		openingTestProviderIdentity, false,
 	)
@@ -69,9 +69,9 @@ func TestDurableOpeningRetainsOnlyReleaseOnAcquisitionFailure(t *testing.T) {
 	failure, cleanupFailure := errors.New("acquisition failed"), errors.New("release failed")
 	calls := 0
 	opening := NewDurableOpening(
-		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil }, &portableReplayRuntimeOwner{},
-		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error) {
-			return func(context.Context) error {
+		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
+		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+			return nil, func(context.Context) error {
 				calls++
 				if calls == 1 {
 					return cleanupFailure
@@ -109,12 +109,12 @@ func TestDurableOpeningPreservesChildModeSelection(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			opening := NewDurableOpening(func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil }, nil,
-				func(_ context.Context, facts durableexecution.ScopeFacts, _ factoryruntime.Clock, _ *zap.Logger) (func(context.Context) error, error) {
+			opening := NewDurableOpening(func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
+				func(_ context.Context, facts durableexecution.ScopeFacts, _ factoryruntime.Clock, _ *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 					if facts.ChildExecutorMode != tc.want {
 						t.Fatalf("mode = %s, want %s", facts.ChildExecutorMode, tc.want)
 					}
-					return nil, nil
+					return nil, nil, nil
 				}, func(id string) (string, error) { return id, nil }, tc.reachable)
 			_, err := opening.Open(t.Context(), tc.name, factorydefinitions.RuntimeSelection{Directory: "/selected"},
 				factorysessions.PersistencePolicyDisabled, "/operator", "", operatorconfig.ResolvedDefaults{}, RuntimeRoot{}, nil, tc.provider, tc.mocks)

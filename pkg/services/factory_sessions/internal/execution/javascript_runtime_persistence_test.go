@@ -133,11 +133,10 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 	const sessionID = "dur-sess-live-capacity-admission"
 	runtime := newDurableLiveChangeAdmissionTestRuntime(t)
 	service := &JavaScriptRuntimeService{
-		clock:                 runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
-		liveChangeCoordinator: livechange.NewCoordinator(),
-		sessions: map[string]*runtimeSessionState{
+		clock: runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 			sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
-		},
+		}}, durableRuntimeBehavior: &durableRuntimeBehavior{liveChangeCoordinator: livechange.NewCoordinator()},
 	}
 	releaseScope := service.BindLiveChangeScope(sessionID, runtimebinding.NewLiveChangeApplication(runtime),
 		runtimebinding.NewLiveChangeAdmission(runtime), true, nil)
@@ -882,7 +881,7 @@ func TestJavaScriptRuntimeService_HasDurableStateReadsFreshOwnerAndRejectsCorrup
 
 func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 	t.Parallel()
-	if err := (&JavaScriptRuntimeService{}).persistTerminalSessionState(runtimeSessionState{}); err != nil {
+	if err := (&JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}).persistTerminalSessionState(runtimeSessionState{}); err != nil {
 		t.Fatalf("persistTerminalSessionState(no dir) = %v, want nil", err)
 	}
 

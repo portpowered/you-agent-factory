@@ -718,11 +718,10 @@ func TestWaitSyncCompletionUsesInjectedClockAndRecurringScheduler(t *testing.T) 
 	t.Parallel()
 	clock := newControlledSyncWaitClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	service := &JavaScriptRuntimeService{
-		clock:     clock,
-		syncWaits: clock,
-		sessions: map[string]*runtimeSessionState{
+		clock: clock,
+		durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 			"session-1": {session: SessionReadResult{SessionID: "session-1", Status: LifecycleStatusRunning}},
-		},
+		}}, durableRuntimeBehavior: &durableRuntimeBehavior{syncWaits: clock},
 	}
 
 	result := make(chan SyncStartResult, 1)

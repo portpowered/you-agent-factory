@@ -239,23 +239,36 @@ type JavaScriptRuntimeService struct {
 	persistenceProjectRoot  func() string
 	resumeRuntimeScope      func(string) (ResumeRuntimeScope, error)
 	durableSnapshotBounds
-	clock                   factory.Clock
+	clock           factory.Clock
+	workerPresetIDs map[string]struct{}
+	workerSettings  factory.JavaScriptWorkerSettings
+	*durableRuntimeBehavior
+	workerExecution          *childWorkerExecutionBinding
+	persistenceWarningLogger *zap.Logger
+	*durableRuntimeState
+}
+
+// durableRuntimeBehavior is constructed once. Every acquired handle points to
+// this same behavior; runtime operations allocate only selections and state.
+type durableRuntimeBehavior struct {
 	syncWaits               SyncWaitScheduler
 	checkpointSummaries     factory.JavaScriptCheckpointSummaries
 	workflowDefinitions     factory.JavaScriptWorkflowDefinitions
 	orchestration           factory.OrchestrationJavaScriptExecution
 	childValues             factory.JavaScriptChildValues
-	workerPresetIDs         map[string]struct{}
-	workerSettings          factory.JavaScriptWorkerSettings
 	recordingWriter         recording.PortableRecordingWriter
 	generateSessionID       internalcontracts.SessionIDGenerator
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
 	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
+}
+
+// durableRuntimeState owns one execution handle's mutable state. Acquisition
+// shares fixed behavior while allocating this state; it never copies locks.
+type durableRuntimeState struct {
 	// Request bindings use a separate lock from durable session state.
 	invokerMu             sync.RWMutex
 	liveChangeScopes      map[string]*durableLiveChangeBinding
-	workerExecution       *childWorkerExecutionBinding
 	workerExecutionScopes map[string]*childWorkerExecutionBinding
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
@@ -274,13 +287,13 @@ type JavaScriptRuntimeService struct {
 	liveChangeMu             sync.Mutex
 	dispatchDurabilityMu     sync.RWMutex
 	dispatchDurabilityScopes map[string]*dispatchDurabilityBinding
-	persistenceWarningLogger *zap.Logger
 
 	runLifecycleMu sync.Mutex
 	runWaitGroup   sync.WaitGroup
 	runClosed      bool
 	closeOnce      sync.Once
 	closeErr       error
+	acquiredScopes map[durableScopeKey]*JavaScriptRuntimeService
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)
@@ -311,26 +324,30 @@ func NewJavaScriptRuntimeService(
 	}
 	projectRoot = strings.TrimSpace(projectRoot)
 	service := &JavaScriptRuntimeService{
-		projectRoot:             projectRoot,
-		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		clock:                   clock,
-		syncWaits:               syncWaits,
-		checkpointSummaries:     checkpointSummaries,
-		workflowDefinitions:     workflowDefinitions,
-		orchestration:           orchestration,
-		childValues:             childValues,
-		workerPresetIDs:         workerPresetIDs,
-		workerSettings:          *workersettings.Clone(&workerSettings),
-		recordingWriter:         recordingWriter,
-		generateSessionID:       generateSessionID,
-		generateResponseEventID: generateResponseEventID,
-		responseStreams:         responseStreams,
-		liveChangeCoordinator:   liveChangeCoordinator,
-		persistence:             persistence,
-		sessions:                make(map[string]*runtimeSessionState),
-		startReplay:             make(map[string]startReplayRecord),
-		startInflight:           make(map[string]*startInflightFlight),
-		controlReplay:           make(map[string]controlReplayRecord),
+		projectRoot:       projectRoot,
+		childExecutorMode: normalizeChildExecutorMode(childExecutorMode),
+		clock:             clock,
+		workerPresetIDs:   workerPresetIDs,
+		workerSettings:    *workersettings.Clone(&workerSettings),
+		persistence:       persistence,
+		durableRuntimeState: &durableRuntimeState{
+			sessions:      make(map[string]*runtimeSessionState),
+			startReplay:   make(map[string]startReplayRecord),
+			startInflight: make(map[string]*startInflightFlight),
+			controlReplay: make(map[string]controlReplayRecord),
+		},
+		durableRuntimeBehavior: &durableRuntimeBehavior{
+			syncWaits:               syncWaits,
+			checkpointSummaries:     checkpointSummaries,
+			workflowDefinitions:     workflowDefinitions,
+			orchestration:           orchestration,
+			childValues:             childValues,
+			recordingWriter:         recordingWriter,
+			generateSessionID:       generateSessionID,
+			generateResponseEventID: generateResponseEventID,
+			responseStreams:         responseStreams,
+			liveChangeCoordinator:   liveChangeCoordinator,
+		},
 	}
 	service.scopePersistence, _ = persistence.(*ScopePersistence)
 	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil, nil, nil)

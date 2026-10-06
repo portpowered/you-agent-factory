@@ -444,7 +444,7 @@ func provideDurableOpening(
 	providerOverride providerOverrideService,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) *factorysessionwire.DurableOpening {
-	return factorysessionwire.NewDurableOpening(loadOperatorConfig, execution, execution.Acquire, providerIdentities,
+	return factorysessionwire.NewDurableOpening(loadOperatorConfig, execution.Acquire, providerIdentities,
 		providerOverride == nil && adaptRunner != nil && allocator != nil)
 }
 

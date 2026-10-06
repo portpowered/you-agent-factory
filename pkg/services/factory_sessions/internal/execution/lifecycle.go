@@ -110,7 +110,14 @@ func (s *JavaScriptRuntimeService) closeWithTimeout(timeout time.Duration) error
 	s.closeOnce.Do(func() {
 		s.runLifecycleMu.Lock()
 		s.runClosed = true
+		owned := make([]*JavaScriptRuntimeService, 0, len(s.acquiredScopes))
+		for _, scope := range s.acquiredScopes {
+			owned = append(owned, scope)
+		}
 		s.runLifecycleMu.Unlock()
+		for _, scope := range owned {
+			s.closeErr = errors.Join(s.closeErr, scope.closeWithTimeout(timeout))
+		}
 
 		s.cancelAsyncRuns()
 		done := make(chan struct{})
@@ -124,10 +131,10 @@ func (s *JavaScriptRuntimeService) closeWithTimeout(timeout time.Duration) error
 		select {
 		case <-done:
 		case <-timer.C:
-			s.closeErr = fmt.Errorf(
+			s.closeErr = errors.Join(s.closeErr, fmt.Errorf(
 				"close durable session execution: %w",
 				ErrDurableExecutionShutdownTimeout,
-			)
+			))
 		}
 	})
 	return s.closeErr
