@@ -127,19 +127,8 @@ func normalizeCanonicalFactory(
 	if err != nil {
 		return nil, fmt.Errorf("parse factory config: %w", err)
 	}
-	authoredFactoryConfig, err := authoredmapping.AuthoredFactoryConfigForExpandedLayout(
-		factoryConfig,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("normalize authored factory config: %w", err)
-	}
-	canonical, err := mapper.Flatten(authoredFactoryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("normalize factory config: %w", err)
-	}
-	if len(canonical) == 0 {
-		return nil, fmt.Errorf("normalize factory config: empty canonical representation")
-	}
+	// Expand validates and normalizes the public representation. Loading keeps
+	// that effective config; authored-output normalization belongs to persistence.
 	return factoryConfig, nil
 }
 

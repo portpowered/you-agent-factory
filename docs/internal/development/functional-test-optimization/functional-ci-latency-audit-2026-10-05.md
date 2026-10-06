@@ -5,6 +5,140 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
+### Remove discarded canonical loading serialization
+
+Canonical loading used Expand to validate/map its public input, then cloned the
+result through JSON, removed authored-only inline content, flattened the clone
+to canonical JSON, discarded both clone and bytes, and returned the original
+configuration. The loader subsequently performs its blocking-definition and
+canonical-file checks. Remove the unused authored-output round trip; retain
+Expand and all subsequent selected validation and loading capabilities.
+Persistence still normalizes and serializes authored output when it writes it.
+
+Two complete `product/customer_journeys` executions per side in B/C/C/B order
+all pass. Baseline totals **70.199821 CPU-seconds / 37.198240684s elapsed**;
+candidate **61.468967 / 34.483024415**, saving **12.4% CPU / 7.3% elapsed**.
+Baseline individual wall is 18.512-18.686s; candidate 17.125-17.358s.
+Builds are excluded. The smaller three-journey comparison also passes all six
+repetitions per side, saving 5.3% CPU / 4.0% elapsed. These package measurements
+are not complete hosted checkpoint evidence.
+
+The discarded clone also converted repeated example arguments from []string to
+[]interface{}, causing the output mapper to reject an otherwise valid public
+input. Focused component tests cover repeated argument preservation, independent
+loads, forward-compatible field diagnostics and invalid name/description/
+arguments/trailing-input rejection. The complete Wire, compilation loader and
+two public mapping test packages pass, as do both scoped lint suites.
+Evidence: `canonical-load-cleanup-paired/` and
+`canonical-load-cleanup-full-package/` in `.artifacts/latency-audit/`.
+
+### Cached serialization versus pre-rendered packaged layouts
+
+The current implementation already ships generated native Factory configurations
+and canonical-output bytes for the 20 published packaged Factories. Exact input
+hashes and the serialization version govern hits; customer edits and unsupported
+inputs take the ordinary conversion path. Returned configurations remain owned by
+each operation. These caches avoid conversion work, but do not eliminate layout
+preparation, validation, rendering or destination filesystem writes.
+
+The fresh customer-package profile below supports investigating an immutable
+pre-rendered file manifest next: installation consumes 74.01% of sampled CPU,
+fresh creation 58.46%, and preparation 38.52%. These are overlapping cumulative
+figures for one package, not independent savings or whole-CI attribution.
+Existing managed installations are reconciled rather than blindly reinstalled:
+the service caches expected content identities, rechecks installed files and
+management evidence, and preserves customer modifications. Fresh test homes
+still materialize the publications repeatedly.
+
+A generated manifest should contain relative file paths, bytes and modes, keyed
+by exact publication input plus layout-generator version and output format.
+Reuse immutable rendering, retain independent destination homes and Factory
+Sessions, and keep selected validator/pruning/persistence capabilities, portable
+file handling, atomic replacement and customer-edit detection. A global cache of
+mutable PreparedFactoryLayoutPayload or live session state cannot provide those
+ownership guarantees. The current prepared-payload contract contains Config,
+Canonical and RootFileName; it does not yet expose a rendered-file manifest.
+Measure that larger change against the same customer journeys and full lane
+before attributing a speedup or merging a checkpoint.
+
+Additional small-cache experiments do not justify production changes:
+
+- Memoizing the native envelope initially saves 3.9% CPU / 1.5% elapsed:
+  baseline 12.125798 CPU-seconds / 17.268215101s elapsed, candidate
+  11.651659 / 17.001907400. The subsequent typed-reader approach, which
+  parses envelopes once at catalog loading, regresses in confirmation:
+  baseline 13.973658 / 18.914790433, candidate 14.242807 / 19.381321658,
+  or 1.9% more CPU / 2.5% more elapsed. All six repetitions per side in the
+  confirmation pass. An earlier baseline-only portability failure and a
+  subsequent passing diagnostic are retained; no candidate ran in that failed
+  comparison, and its cause is not established.
+- Reusing canonical-output caching in the loading normalizer initially saves
+  6.1% CPU / 4.2% elapsed, but confirmation is nearly flat: baseline
+  12.601696 CPU-seconds / 17.918361247s elapsed, candidate
+  12.715114 / 17.803706988, or 0.90% more CPU / 0.64% less elapsed.
+  Both six-repetition-per-side comparisons pass.
+
+Builds are excluded from these execution comparisons. All prototype source is
+restored in both checkouts. Evidence is retained in `native-envelope-cache-paired/`,
+`parsed-native-reader-paired/`, `parsed-native-startup-diagnostic/`,
+`parsed-native-reader-confirmation/`, `normalizer-encoder-cache-paired/` and
+`normalizer-encoder-cache-confirmation/` under `.artifacts/latency-audit/`.
+
+### Hosted canonical-cache result and follow-up experiments
+
+Published source `d2b1f09cc0` passes every executed hosted check in run
+37474546433. Functional Coverage takes **270s complete / 204.848s coverage**,
+67 packages / 763 results, 761 pass and two skip. Its prefix compiler archive
+comes from 47760cc66d and it executes **409 compiler commands / 16 links**.
+This is substantially more rebuild work than the preceding 138-compiler run;
+neither sample isolates the canonical cache's execution-time effect. The
+complete two-minute checkpoint remains unmet and PR #2923 remains draft.
+
+Three additional approaches were tested and discarded:
+
+- One initialized CLI process/home for packaged CLI/REST parity, with local
+  invocations serialized, saves 33.7% CPU but increases group elapsed 27.0%.
+  Baseline totals 13.541772 CPU-seconds / 14.249476 elapsed; candidate
+  8.975320 / 18.101596. Six full journey repetitions per side all pass.
+- Sharing just the initialized CLI home, retaining independent parallel CLI
+  processes, initially saves 11.8% CPU / 3.8% elapsed. Its simplified final
+  confirmation regresses: baseline 12.862909 CPU-seconds / 13.565003 elapsed,
+  candidate 13.965284 / 14.094856, or **8.6% more CPU / 3.9% more elapsed**.
+  The initial favorable pair and final unfavorable pair are both retained.
+- A bounded successful-output-schema compilation cache initially saves 4.6%
+  CPU / 3.2% elapsed, but its production confirmation is nearly flat:
+  baseline 12.132046 CPU-seconds / 17.425941 elapsed, candidate
+  12.247028 / 17.324233, or **0.95% more CPU / 0.58% less elapsed**.
+  Both six-per-side customer comparisons pass. The candidate's complete
+  validation package, concurrent-use, error, external-reference and memory-bound
+  tests and both scoped lint suites pass. Correctness alone does not justify
+  keeping an optimization whose performance benefit does not repeat.
+
+All three source experiments are restored in both the shared Windows worktree
+and private Linux checkout. Their data lives under `cross-cli-fixture-paired/`,
+`cross-cli-home-paired/`, `cross-cli-home-confirmation/`,
+`output-schema-cache-paired/` and `output-schema-cache-production-paired/`
+inside `.artifacts/latency-audit/`.
+
+A fresh native profile of the complete `product/customer_journeys` suite on
+d2b1f09cc0 passes at **17.036389s elapsed / 29.826053 CPU-seconds** (22.418198
+user / 7.407855 system). Profiling is enabled; this is diagnostic evidence, not
+a clean speedup measurement. Of 29.44 sampled CPU-seconds, initialization
+accounts for **21.87s / 74.29%**, packaged installation **21.79s / 74.01%**,
+fresh managed creation **17.21s / 58.46%**, preparation **11.34s / 38.52%**,
+JSON unmarshalling **11.49s / 39.03%**, and the uncached mapper's Expand stack
+**7.33s / 24.90%**. These cumulative stacks overlap and cannot be added.
+Syscalls account for 6.57s / 22.32% of flat samples. This profile covers one
+customer package; do not present its percentages as whole-lane attribution.
+Data and cumulative/flat reports are in `canonical-cache-customer-profile/`.
+
+The next substantial target is redundant packaged-definition parsing and fresh
+installation preparation, preserving selected validation and filesystem ports.
+In particular, the serialized decoder still parses its native envelope and then
+parses the contained config again, while preparation and staged validation still
+reach uncached mapping paths. The fresh profile supports inspecting those paths
+before adding more fixture complexity or relying on small favorable samples.
+
 ## Packaged Factory cache follow-up, October 6
 
 Rebased source `47760cc66d` includes live-main subagent MCP and daemon-restart
