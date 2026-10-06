@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
@@ -27,7 +26,6 @@ func NewSessionRuntime(
 	modelsScope models.RuntimeScopeRef,
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars RuntimeSidecars,
-	durableExecution durableexecution.Service,
 	factoryDefinitions interfaces.Service,
 	dir string,
 	executionBaseDir string,
@@ -73,7 +71,6 @@ func NewSessionRuntime(
 		logger:                    logger, clock: clock,
 		runtimeBuild: runtimeBuild, modelsScope: modelsScope,
 		runtimeLifecycle: runtimeLifecycle, runtimeSidecars: runtimeSidecars,
-		durableExecution:             durableExecution,
 		definitions:                  factoryDefinitions,
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		sessionResultProjection:      sessionResultProjection,
