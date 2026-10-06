@@ -4439,10 +4439,20 @@
                   ],
                   "properties": {
                     "workerSessions": {
-                      "type": "array"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "nextToken": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
-                  "additionalProperties": true
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -4451,10 +4461,23 @@
                   ],
                   "properties": {
                     "session": {
-                      "type": "object"
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "logs": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "transcript": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "events": {
+                      "type": "object",
+                      "additionalProperties": true
                     }
                   },
-                  "additionalProperties": true
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -4464,9 +4487,27 @@
                   "properties": {
                     "workerSessionId": {
                       "type": "string"
+                    },
+                    "action": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "forced": {
+                      "type": "boolean"
+                    },
+                    "dispatchId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
-                  "additionalProperties": true
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -4476,11 +4517,33 @@
                   "properties": {
                     "accepted": {
                       "type": "boolean"
+                    },
+                    "phase": {
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "sourceWorkerSessionId": {
+                      "type": "string"
+                    },
+                    "successorWorkerSessionId": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "successor": {
+                      "type": "object",
+                      "additionalProperties": true
                     }
                   },
-                  "additionalProperties": true
+                  "additionalProperties": false
                 }
-              ]
+              ],
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object"
             }
           }
         },

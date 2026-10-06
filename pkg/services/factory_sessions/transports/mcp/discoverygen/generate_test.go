@@ -35,7 +35,7 @@ func testArtifactStore() generatedartifacts.LocalStore {
 	return store
 }
 
-const canonicalToolCount = 14
+const canonicalToolCount = 11
 
 func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
@@ -58,7 +58,7 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 		if tool.ID != id {
 			t.Errorf("tool map key %q does not match stable id %q", id, tool.ID)
 		}
-		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent && !strings.HasPrefix(tool.Name, "you.worker_session.") {
+		if !strings.HasPrefix(tool.Name, "you.factory_session.") && tool.Name != mcpfactorysession.ToolSubagent {
 			t.Errorf("tool %q name = %q, want canonical Factory Session name", id, tool.Name)
 		}
 		if strings.TrimSpace(tool.Description) == "" {
