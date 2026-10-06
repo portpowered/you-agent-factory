@@ -20,6 +20,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -28,6 +29,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -35,6 +38,73 @@ import (
 
 type scaffoldNamedPaths struct {
 	factorydefinitions.NamedPathResolver
+}
+
+type registrationRuntimeConfig struct {
+	factorydefinitions.LoadedFactorySource
+}
+
+func (registrationRuntimeConfig) RuntimeBaseDir() string { return "/factory" }
+
+type registrationRuntimeRecord struct{ factoryruntime.RuntimeRecord }
+
+func (registrationRuntimeRecord) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
+	return registrationRuntimeConfig{}
+}
+func (registrationRuntimeRecord) Directory() string                                              { return "/factory" }
+func (registrationRuntimeRecord) FolderDirectory() string                                        { return "/factory" }
+func (registrationRuntimeRecord) BackendScope() string                                           { return "backend" }
+func (registrationRuntimeRecord) RuntimeService() factoryruntime.Service                         { return nil }
+func (registrationRuntimeRecord) RuntimeLogger() *zap.Logger                                     { return nil }
+func (registrationRuntimeRecord) RecordingLedger() recordings.Ledger                             { return nil }
+func (registrationRuntimeRecord) AddEventTypeRecorder(func(factorydefinitions.FactoryEventType)) {}
+
+type registrationResponseStreams struct{ responsestreamservice.Service }
+
+func (registrationResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	return nil, nil
+}
+
+type registrationInvoker struct{ roles.InvocationService }
+
+func (registrationInvoker) ResolveInvocationInput(_ *factorydefinitions.FactoryConfig, _ factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
+	return factorysessions.ResolvedInvocationInput{Source: "registered"}, nil
+}
+
+type registrationObserver struct {
+	sessionregistry.Service
+	publish func(*livesession.LiveSession)
+}
+
+func (r registrationObserver) Upsert(session *livesession.LiveSession, _ bool) { r.publish(session) }
+
+func TestCompletePublishesSessionWithRegisteredInputResolver(t *testing.T) {
+	t.Parallel()
+	publications := 0
+	assembly := &Assembly{
+		state: &sessionruntime.Service{}, invoker: registrationInvoker{},
+		responseStreams: registrationResponseStreams{},
+		sessionIDs:      func() string { return "session" }, eventIDs: func() string { return "event" },
+		resolveHome:         func() (string, error) { return "/home", nil },
+		directoryInspection: scaffoldDirectories{}, namedPaths: scaffoldNamedPaths{},
+		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		sessionResultProjection: &canonicalInspectionResultProjectionFake{}, identity: scopedIdentityStub{},
+		registry: registrationObserver{publish: func(session *livesession.LiveSession) {
+			publications++
+			bound := runtimebinding.SessionStateFrom(session)
+			if bound == nil || bound.InputResolver == nil {
+				t.Fatal("session published before its invocation input resolver was registered")
+			}
+			got, err := bound.InputResolver.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
+			if err != nil || got.Source != "registered" {
+				t.Fatalf("published input = %+v, %v", got, err)
+			}
+		}},
+	}
+	_, _, _, err := assembly.Complete("/factory", platformclock.Real{}, nil, nil, registrationRuntimeRecord{}, models.RuntimeScopeRef{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, "session", "/factory", "/factory", "", "backend", "", "")
+	if err != nil || publications != 1 {
+		t.Fatalf("Complete = %v, publications = %d", err, publications)
+	}
 }
 
 func (scaffoldNamedPaths) ResolveCurrentDir(root string) (string, error) {

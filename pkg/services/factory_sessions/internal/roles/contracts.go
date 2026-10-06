@@ -13,7 +13,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -181,7 +180,6 @@ type RuntimeAssembly interface {
 		completion factoryruntime.RuntimeInitialCompletion,
 		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
-		durableExecution durableexecution.Service,
 		factorySessionID string,
 		dir string,
 		executionBaseDir string,
@@ -189,7 +187,7 @@ type RuntimeAssembly interface {
 		backendScopeID string,
 		workFile string,
 		workflowID string,
-	) (ApplicationRuntime, SessionGateway, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
+	) (ApplicationRuntime, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }
 
 // SessionGateway exposes bound session operations; live startup belongs to Root.

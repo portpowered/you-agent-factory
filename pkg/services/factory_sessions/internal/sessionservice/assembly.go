@@ -18,7 +18,6 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -352,7 +351,6 @@ func (a *Assembly) Complete(
 	completion factoryruntime.RuntimeInitialCompletion,
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
-	durableExecution durableexecution.Service,
 	factorySessionID string,
 	dir string,
 	executionBaseDir string,
@@ -362,22 +360,20 @@ func (a *Assembly) Complete(
 	workflowID string,
 ) (
 	roles.ApplicationRuntime,
-	roles.SessionGateway,
-	roles.SessionInvoker,
 	factorysessions.DefinitionHost,
 	factorydefinitions.DefinitionActivationGateway,
 	error,
 ) {
 	if a == nil || a.state == nil || a.registry == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
+		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Sessions assembly is required")
 	}
 	if startupRuntime == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+		return nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
 	identity := selectCompletionSessionIdentity(factorySessionID, completion)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
+		return nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
 	session := livesession.NewWithRuntimeID(
 		identity.id,
@@ -394,7 +390,7 @@ func (a *Assembly) Complete(
 		identity.runtimeID,
 	)
 	if session == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
+		return nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
 	session.RuntimeEventSessionID = completionEventScopeID(identity.id, completion)
 	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
@@ -404,7 +400,7 @@ func (a *Assembly) Complete(
 	session.InvocationMetricsRecorder = a.invocationMetricsRecorder
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
+		return nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
 	}
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
@@ -432,7 +428,6 @@ func (a *Assembly) Complete(
 		modelsScope,
 		runtimeLifecycle,
 		runtimeSidecars,
-		durableExecution,
 		a.factoryDefinitions,
 		dir,
 		executionBaseDir,
@@ -460,11 +455,11 @@ func (a *Assembly) Complete(
 		a.SessionGateway,
 	)
 	if runtime == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
+		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Sessions runtime is required")
 	}
 	bound := runtimebinding.SessionStateFrom(session)
 	if bound == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
+		return nil, nil, nil, fmt.Errorf("construct runtime scope: Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
 	bound.Clock = clock
@@ -476,8 +471,9 @@ func (a *Assembly) Complete(
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	invoker := a.invoker
 	bound.Invoker = invoker
+	bound.InputResolver = invoker
 	a.registry.Upsert(session, true)
-	return runtime, a.SessionGateway, invoker, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
+	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, nil
 }
 
 type completionSessionIdentity struct {

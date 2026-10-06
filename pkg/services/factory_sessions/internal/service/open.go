@@ -476,7 +476,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if r.definitionRuntimeRouter == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
 	}
-	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
+	sessionRuntime, definitionHost, definitionActivationGateway, err := r.factorySessionsRuntimeAssembly.Complete(
 		opening.root.FactoryRootDir,
 		opening.clock,
 		opening.startupRuntime.RuntimeLogger(),
@@ -486,7 +486,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		opening.completion,
 		opening.runtimeLifecycle,
 		opening.runtimeSidecars,
-		opening.durableExecution.Service,
 		opening.sessionID,
 		opening.configured.Definition.Directory,
 		opening.configured.Definition.ExecutionBaseDir,
@@ -535,7 +534,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, service4, invocationDomain, processRuntime)
+	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, processRuntime)
 }
 
 func (r *Root) bindSessionOpeningProducts(
@@ -543,8 +542,6 @@ func (r *Root) bindSessionOpeningProducts(
 	opening *sessionRuntimeOpening,
 	cleanup *runtimeOpeningCleanup,
 	sessionRuntime roles.ApplicationRuntime,
-	service4 roles.SessionGateway,
-	invocationDomain roles.SessionInvoker,
 	processRuntime roles.ProcessRuntime,
 ) (runtimeProducts, error) {
 	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
@@ -579,16 +576,9 @@ func (r *Root) bindSessionOpeningProducts(
 	cleanup.Add(func() error { releaseScope(); return nil })
 	opened := assembleRuntimeProducts(
 		ctx,
-		r.factoryDefinitions,
-		service4,
-		invocationDomain,
+		r.SessionGateway,
 		rootRuntime,
-		r.factoryWorkflows,
-		r.workflowPreview,
-		r.workService,
-		r.workerService,
-		opening.modelsBind,
-		r.providerSessions,
+		opening.modelsBind.Scope,
 		opening.startupRuntime,
 		sessionRuntime,
 		processRuntime,

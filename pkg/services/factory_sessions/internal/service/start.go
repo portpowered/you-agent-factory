@@ -399,7 +399,6 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.Process = products.process
 	bound.Diagnostics = products.diagnostics
 	bound.ModelInvocation = products.modelInvocation
-	bound.InputResolver = products.inputResolver
 	bound.FactoryRuntime = products.factoryRuntime
 	bound.ModelsScope = products.modelsScope
 	bound.SetWorkerSessions(products.workerSessions)
