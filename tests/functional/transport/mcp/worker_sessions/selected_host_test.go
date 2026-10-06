@@ -137,12 +137,40 @@ func runSelectedHostScenarios(t *testing.T) {
 	})
 	t.Run("discovery and reads", func(t *testing.T) {
 		t.Parallel()
-		host := httptest.NewServer(http.HandlerFunc(readHost))
+		queries := make(chan string, 2)
+		host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/worker-sessions" && r.URL.Query().Has("history") {
+				if r.Method != http.MethodGet || r.URL.Query().Get("scope") != "all" {
+					t.Errorf("documented LIST request = %s %s", r.Method, r.URL)
+				}
+				queries <- r.URL.Query().Get("history")
+			}
+			readHost(w, r)
+		}))
 		t.Cleanup(host.Close)
+		args := packagedOperationsListInput(t, process)
 		session, ctx := startMCP(t, process, host.URL)
 		assertWorkerDiscovery(t, ctx, session)
-		listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "all"})
-		assertJSONEqual(t, listed["result"], getHost(t, host.URL+"/worker-sessions"))
+		for _, history := range []string{"archived", "all"} {
+			result := callTool(t, ctx, session, "you.subagent", args)
+			if result.IsError || len(result.Content) != 1 {
+				t.Fatalf("packaged LIST history=%s: %#v", history, result)
+			}
+			var listed map[string]any
+			if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &listed); err != nil {
+				t.Fatal(err)
+			}
+			assertJSONEqual(t, listed["result"], getHost(t, host.URL+"/worker-sessions"))
+			select {
+			case got := <-queries:
+				if got != history {
+					t.Fatalf("selected host history=%q, want %q", got, history)
+				}
+			default:
+				t.Fatal("documented LIST did not query the selected host")
+			}
+			delete(args, "history")
+		}
 		for _, view := range []string{"summary", "transcript", "events"} {
 			result := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "host-worker", "view": view})["result"].(map[string]any)
 			assertJSONEqual(t, result["session"], getHost(t, host.URL+"/worker-sessions/host-worker"))
@@ -308,6 +336,34 @@ func startCancellableMCP(t *testing.T, process support.Process, host string, wor
 	}
 	t.Cleanup(func() { _ = session.Close() })
 	return session, ctx, cancel
+}
+
+func packagedOperationsListInput(t *testing.T, process support.Process) map[string]any {
+	t.Helper()
+	workDir := t.TempDir()
+	home := filepath.Join(workDir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := process.Execute(root.Input{
+		Args: []string{"you", "docs", "operations"}, Context: context.Background(),
+		Env: append(os.Environ(), "HOME="+home, "USERPROFILE="+home), WorkingDirectory: workDir,
+		Stdin: strings.NewReader(""), Stdout: &output, Stderr: io.Discard,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range strings.Split(output.String(), "```json\n")[1:] {
+		var args map[string]any
+		if err := json.Unmarshal([]byte(strings.SplitN(block, "```", 2)[0]), &args); err == nil && args["action"] == "LIST" {
+			if args["history"] != "archived" || args["scope"] != "all" {
+				t.Fatalf("packaged archived LIST input = %v", args)
+			}
+			return args
+		}
+	}
+	t.Fatal("packaged operations has no JSON LIST example")
+	return nil
 }
 
 func readHost(w http.ResponseWriter, r *http.Request) {
