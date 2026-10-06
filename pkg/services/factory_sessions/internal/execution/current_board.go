@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -192,6 +193,28 @@ func (s *JavaScriptRuntimeService) SaveCurrentBoard(ctx context.Context, factory
 		return err
 	}
 	return store.SaveCurrentBoard(ctx, factoryDirectory, artifact)
+}
+
+// QuarantineCurrentBoard preserves only this acquired default board's evidence.
+// It never consults the process-global or another session's persistence route.
+func (s *JavaScriptRuntimeService) QuarantineCurrentBoard(ctx context.Context, at time.Time, identity string) (string, string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", err
+	}
+	store, err := s.currentBoardStore()
+	if err != nil {
+		return "", "", err
+	}
+	quarantine, ok := store.(runtimepersist.CurrentBoardQuarantineStore)
+	paths, hasPaths := store.(runtimepersist.SnapshotPathResolver)
+	if !ok || !hasPaths {
+		return "", "", errors.New("current board quarantine persistence is unavailable")
+	}
+	archive, err := quarantine.QuarantineCurrentBoard(ctx, at, identity)
+	if err != nil {
+		return "", "", err
+	}
+	return paths.SnapshotPath("~default"), archive, nil
 }
 
 func (s *JavaScriptRuntimeService) currentBoardStore() (runtimepersist.CurrentBoardStore, error) {

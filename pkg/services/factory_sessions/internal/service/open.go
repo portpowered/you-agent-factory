@@ -93,6 +93,7 @@ type sessionRuntimeOpening struct {
 	boardHistoryOpening         currentBoardHistoryOpening
 	hasCurrentBoardReference    bool
 	emptyCurrentBoard           bool
+	startupRecovery             *currentBoardStartupRecovery
 	initial                     *factoryruntime.RuntimeInitialOpening
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
@@ -416,6 +417,11 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	opening.initial.Completion = opening.completion
 	if err := opening.publishCurrentBoardReference(ctx); err != nil {
 		return err
+	}
+	if recovery := opening.startupRecovery; recovery != nil && opening.logger != nil {
+		opening.logger.Warn("unreadable durable state quarantined; started an empty board",
+			zap.String("file", recovery.file), zap.String("quarantined_file", recovery.quarantinedFile),
+			zap.String("cause", recovery.cause))
 	}
 	opening.warnMissingBoardHistory()
 	return nil

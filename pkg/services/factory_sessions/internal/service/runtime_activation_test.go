@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -319,6 +320,73 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t 
 			}
 			if got.allowMissingHistory != true || got.hasDurableState == tc.wantUninitialized {
 				t.Fatalf("opening = %#v, want allowMissingHistory=true and hasDurableState=%t", got, !tc.wantUninitialized)
+			}
+		})
+	}
+}
+
+type classifiedBoardFailure string
+
+func (failure classifiedBoardFailure) Error() string                { return "safe probe failure" }
+func (failure classifiedBoardFailure) SnapshotFailureCause() string { return string(failure) }
+
+type quarantineOpeningOwner struct {
+	durableexecution.Service
+	calls      int
+	failure    error
+	onPreserve func()
+}
+
+func (owner *quarantineOpeningOwner) QuarantineCurrentBoard(ctx context.Context, _ time.Time, _ string) (string, string, error) {
+	owner.calls++
+	if owner.onPreserve != nil {
+		owner.onPreserve()
+	}
+	if owner.failure != nil {
+		return "", "", owner.failure
+	}
+	return "selected.json", "selected.json.unreadable.archive", nil
+}
+
+func TestCurrentBoardQuarantineDispositionRequiresSafeCauseAndPreservation(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []string{"INVALID_JSON", "INVALID_SCHEMA", "SIZE_LIMIT", "READ_FAILED", "UNKNOWN", "unclassified", "preservation failure", "canceled preservation"} {
+		t.Run(cause, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			owner := &quarantineOpeningOwner{}
+			opening := &sessionRuntimeOpening{clock: openingCoordinatorClock{}, durableExecution: DurableExecution{Service: owner}, sessionSelection: &factorysessions.SessionRuntimeSelection{}}
+			opening.configured.Recordings.RecordPath = "retained-history"
+			opening.sessionSelection.Recording.RecordPath = "retained-history"
+			var failure error = classifiedBoardFailure(cause)
+			wantCalls, wantSuccess := 1, true
+			switch cause {
+			case "UNKNOWN":
+				wantCalls, wantSuccess = 0, false
+			case "unclassified":
+				failure = errors.New("unclassified probe failure")
+				wantCalls, wantSuccess = 0, false
+			case "preservation failure":
+				failure = classifiedBoardFailure("INVALID_JSON")
+				owner.failure = errors.New("preservation failed")
+				wantSuccess = false
+			case "canceled preservation":
+				failure = classifiedBoardFailure("INVALID_JSON")
+				owner.onPreserve = cancel
+				wantSuccess = false
+			}
+			root := &Root{generateSessionID: func() string { return "identity" }}
+			err := root.quarantineUnreadableCurrentBoard(ctx, opening, fmt.Errorf("probe: %w", failure))
+			if (err == nil) != wantSuccess || owner.calls != wantCalls {
+				t.Fatalf("error=%v, preservation calls=%d", err, owner.calls)
+			}
+			if wantSuccess {
+				if !opening.emptyCurrentBoard || opening.startupRecovery == nil || opening.startupRecovery.cause != cause || opening.configured.Recordings.RecordPath != "" || opening.sessionSelection.Recording.RecordPath != "" {
+					t.Fatal("successful preservation did not select diagnosed fresh board")
+				}
+			} else if opening.emptyCurrentBoard || opening.startupRecovery != nil || opening.configured.Recordings.RecordPath != "retained-history" {
+				t.Fatal("failed preservation published fresh-board success")
 			}
 		})
 	}

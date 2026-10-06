@@ -420,7 +420,88 @@ func plainBoardSelectedRecording(t *testing.T, repo string) string {
 	return reference.ArtifactReference
 }
 
+func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	repo, home := t.TempDir(), t.TempDir()
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	station := config["workstations"].([]map[string]any)[0]
+	station["type"] = "LOGICAL_MOVE"
+	delete(station, "worker")
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: LOGICAL_MOVE\n---\n")
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	command, url := startPlainBoardInRepository(t, process, repo, home, apis[0])
+	seedPlainBoardSiblingWork(t, url, repo)
+	waitForPlainBoardWorkConfirmed(t, url)
+	restartProbeShutdown(t, url, command)
+	snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+	reference := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	// Repeated damage to the same board is intentionally ordered: the second
+	// opening must preserve archives and fresh Work produced by the first.
+	for index, damaged := range [][]byte{[]byte(`{"secret":"fixture-private-prompt",`), []byte(`{"Session":42,"secret":"fixture-private-prompt"}`)} {
+		oldPath := plainBoardSelectedRecording(t, repo)
+		oldHistory := mustReadSeededReplayArtifact(t, oldPath)
+		oldReference := mustReadSeededReplayArtifact(t, reference)
+		writeRestartProbeFile(t, snapshot, damaged)
+		command, url, inputs := startEmptyPlainBoard(t, process, repo, home, apis[index+1])
+		assertUnreadableArchive(t, snapshot, damaged, index+1)
+		assertUnreadableArchive(t, reference, oldReference, index+1)
+		seedPlainBoardSiblingWork(t, url, repo+" fresh § —")
+		waitForPlainBoardWorkConfirmed(t, url)
+		restartProbeShutdown(t, url, command)
+		assertUnreadableArchive(t, snapshot, damaged, index+1)
+		if oldPath == plainBoardSelectedRecording(t, repo) || !bytes.Equal(oldHistory, mustReadSeededReplayArtifact(t, oldPath)) {
+			t.Fatal("fallback reused or changed retained history")
+		}
+		if strings.Contains(inputs.Stdout()+inputs.Stderr(), "fixture-private-prompt") {
+			t.Fatal("startup exposed damaged content")
+		}
+	}
+	if runner.calls.Load() != 0 {
+		t.Fatal("unreadable snapshot dispatched stale Work")
+	}
+}
+
+func assertUnreadableArchive(t *testing.T, path string, want []byte, count int) {
+	t.Helper()
+	archives, err := filepath.Glob(path + ".unreadable.*")
+	if err != nil || len(archives) != count {
+		t.Fatalf("archive count=%d, want %d: %v", len(archives), count, err)
+	}
+	for _, archive := range archives {
+		if bytes.Equal(want, mustReadSeededReplayArtifact(t, archive)) {
+			return
+		}
+	}
+	t.Fatal("quarantine did not preserve exact bytes")
+}
+
 func startQuietEmptyPlainBoard(t *testing.T, process support.Process, repo, home string, api *support.ProcessAPIServer) (*support.ProcessCommand, string, *support.CapturedInputs) {
+	t.Helper()
+	command, url, inputs := startEmptyPlainBoard(t, process, repo, home, api)
+	raw := support.GetJSON[map[string]any](t, url+"/status")
+	if _, present := raw["startupRecovery"]; present {
+		t.Fatal("missing snapshot reported a recovery diagnostic")
+	}
+	return command, url, inputs
+}
+
+func startEmptyPlainBoard(t *testing.T, process support.Process, repo, home string, api *support.ProcessAPIServer) (*support.ProcessCommand, string, *support.CapturedInputs) {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
@@ -430,11 +511,7 @@ func startQuietEmptyPlainBoard(t *testing.T, process support.Process, repo, home
 	status := support.GetJSON[factoryapi.StatusResponse](t, url+"/status")
 	works := support.GetJSON[factoryapi.ListWorkResponse](t, url+"/factory-sessions/~default/work")
 	if status.TotalTokens != 0 || len(works.Results) != 0 {
-		t.Fatal("missing snapshot replayed stale Work")
-	}
-	raw := support.GetJSON[map[string]any](t, url+"/status")
-	if _, present := raw["startupRecovery"]; present {
-		t.Fatal("missing snapshot reported a recovery diagnostic")
+		t.Fatal("empty startup replayed stale Work")
 	}
 	return command, url, inputs
 }
