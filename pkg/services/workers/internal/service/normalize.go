@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -124,7 +123,7 @@ func normalizeFailedResult(
 	executionCanceled bool,
 ) workers.ExecuteResult {
 	switch {
-	case executionCanceled, errors.Is(runErr, context.Canceled), errors.Is(runErr, providers.ErrExecuteCancelled):
+	case executionCanceled:
 		return canceledResult(result, request, runErr)
 	case errors.Is(runErr, context.DeadlineExceeded):
 		return timeoutResult(result, runErr)

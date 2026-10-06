@@ -35,6 +35,34 @@ func TestCanonicalCanceledDispatchDropsRoutingAndWorkOutput(t *testing.T) {
 	}
 }
 
+func TestReplayPlannedCompletionPreservesCancellationAndLiveFailures(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		planned    workers.WorkOutcome
+		usePlanned bool
+	}{
+		{"recorded cancellation", workers.OutcomeCanceled, true},
+		{"recorded failure", workers.OutcomeFailed, true},
+		{"recorded success cannot hide failure", workers.OutcomeAccepted, false},
+		{"recorded continuation cannot hide failure", workers.OutcomeContinue, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			live := workers.WorkResult{Outcome: workers.OutcomeFailed, Error: "native cancellation error"}
+			planned := workers.WorkResult{Outcome: test.planned}
+			result, applied, err := choosePlannedWorkersResult(workers.WorkstationDispatchRequest{}, live, planned)
+			want := live
+			if test.usePlanned {
+				want = planned
+			}
+			if err != nil || applied != test.usePlanned || !reflect.DeepEqual(result, want) {
+				t.Fatalf("completion = %#v, applied=%t, err=%v; want %#v, applied=%t", result, applied, err, want, test.usePlanned)
+			}
+		})
+	}
+}
+
 func TestCanceledMaterializationDropsRoutingWithoutCreatingWork(t *testing.T) {
 	t.Parallel()
 	service := &countingMaterializationWorkService{}

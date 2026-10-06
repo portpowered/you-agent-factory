@@ -1020,7 +1020,7 @@ func waitForFactoryForceResponse(t *testing.T, ctx context.Context, fixture canc
 		select {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
-		case <-deadline.C:
+		case <-deadline.C: //nolint:testsleep // Failure ceiling for public dispatch publication from the real prebuilt daemon.
 			t.Fatalf("Factory force dispatch response unavailable: %v; events=%v", err, cancelDaemonEventDiagnostic(fixture.serverURL, session))
 		case <-time.After(50 * time.Millisecond):
 		}

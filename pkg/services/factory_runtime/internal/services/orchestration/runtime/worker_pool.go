@@ -941,7 +941,10 @@ func choosePlannedWorkersResult(
 	request workers.WorkstationDispatchRequest,
 	live, planned workers.WorkResult,
 ) (workers.WorkResult, bool, error) {
-	if live.Outcome == workers.OutcomeFailed && planned.Outcome != workers.OutcomeFailed {
+	// A recorded cancellation is terminal truth, even when its replayed
+	// provider error is classified as a failed attempt without a live cancel.
+	// Keep execution failures from being replaced by recorded success.
+	if live.Outcome == workers.OutcomeFailed && planned.Outcome != workers.OutcomeFailed && planned.Outcome != workers.OutcomeCanceled {
 		return live, false, nil
 	}
 	planned.DispatchID = request.Execution.Dispatch.DispatchID

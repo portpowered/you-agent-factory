@@ -3,7 +3,6 @@ package providers
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -11,9 +10,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -34,7 +30,6 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
-		Edges:      packagedScriptRuntimeEdges(t),
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
@@ -51,15 +46,6 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "complete", "packaged runtime success")
 }
 
-func packagedScriptRuntimeEdges(t *testing.T) serviceedges.Edges {
-	t.Helper()
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("construct packaged script runtime command runner: %v", err)
-	}
-	return serviceedges.Edges{ScriptCommandRunner: runner}
-}
-
 // TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome is isolated
 // because it proves real shell exit-code and stderr mapping through exec.
 func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.T) {
@@ -73,7 +59,6 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
-		Edges:      packagedScriptRuntimeEdges(t),
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
