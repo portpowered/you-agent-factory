@@ -56,7 +56,7 @@ func (b *Behavior) Inspection(s *Scope) factorysessions.HistoricalReplayInspecti
 	if s.projection.FactoryProjection != nil {
 		inspection.FactoryProjection = factorysessions.HistoricalReplayFactoryProjection{
 			Availability: factorysessions.HistoricalReplayFactoryProjectionAvailable,
-			State:        s.projection.FactoryProjection,
+			State:        copyFactoryProjection(s.projection.FactoryProjection),
 		}
 	} else {
 		inspection.FactoryProjection = factorysessions.HistoricalReplayFactoryProjection{

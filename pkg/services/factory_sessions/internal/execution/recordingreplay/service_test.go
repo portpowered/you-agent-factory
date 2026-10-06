@@ -12,7 +12,59 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+func TestServiceLegacyFactoryViewsRemainDetachedAcrossEqualIDOpenings(t *testing.T) {
+	t.Parallel()
+	stamp := time.Date(2026, 10, 6, 12, 0, 0, 123, time.FixedZone("recorded", 3600))
+	snapshot := factorydefinitions.FactorySnapshot(`{"unknown":{"retained":true}}`)
+	state := recording.FactoryWorldState{
+		EventTime: stamp, Factory: &snapshot,
+		WorkItemsByID: map[string]work.FactoryWorkItem{"work": {
+			ID: "work", Tags: map[string]string{"selected": "original"},
+			StructuredResult: map[string]any{"number": json.Number("9007199254740993"), "items": []any{"original"}},
+			Content:          []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "original", Metadata: map[string]any{"selected": "original"}}},
+		}},
+		PlaceOccupancyByID: map[string]factorydefinitions.FactoryPlaceOccupancy{"place": {WorkItemIDs: []string{"work"}}},
+		ScriptRequestsByDispatchID: map[string]map[string]factorydefinitions.FactoryWorldScriptRequest{
+			"dispatch": {"request": {Args: []string{"original"}}},
+		},
+		Artifacts: []factorydefinitions.FactorySessionArtifactState{{ID: "artifact", CaptureMetadata: map[string]string{"selected": "original"}}},
+		SessionBracket: &factorydefinitions.FactoryWorldSessionBracketState{
+			SessionID: "same-recorded-id", StartedAt: stamp, ArtifactIDs: []string{"artifact"},
+			ResultSummary: []work.WorkContentPart{{Text: "original", JSON: json.RawMessage(`{"selected":true}`)}},
+		},
+	}
+	projection, err := ReplayLegacyRecording(recording.ReplayArtifact{}, "requested", state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	behavior := NewBehavior()
+	first, peer := behavior.Acquire(projection, nil), behavior.Acquire(projection, nil)
+	expected := peer.Inspection().FactoryProjection.State
+	for _, view := range []*recording.FactoryWorldState{&state, projection.FactoryProjection, first.Inspection().FactoryProjection.State} {
+		(*view.Factory)[0] = ' '
+		view.WorkItemsByID["work"].Tags["selected"] = "mutated"
+		view.WorkItemsByID["work"].StructuredResult.(map[string]any)["items"].([]any)[0] = "mutated"
+		view.WorkItemsByID["work"].Content[0].Metadata["selected"] = "mutated"
+		view.PlaceOccupancyByID["place"].WorkItemIDs[0] = "mutated"
+		view.ScriptRequestsByDispatchID["dispatch"]["request"].Args[0] = "mutated"
+		view.Artifacts[0].CaptureMetadata["selected"] = "mutated"
+		view.SessionBracket.ArtifactIDs[0] = "mutated"
+		view.SessionBracket.ResultSummary[0].JSON[0] = ' '
+		view.SessionBracket.StartedAt = time.Time{}
+	}
+	for _, scope := range []*Scope{first, peer} {
+		actual := scope.Inspection().FactoryProjection.State
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf("selected Factory facts changed after mutation: %#v", actual)
+		}
+		if !actual.EventTime.Equal(stamp) || actual.EventTime.Location() != stamp.Location() {
+			t.Fatalf("recorded timestamp changed: %v", actual.EventTime)
+		}
+	}
+}
 
 func TestServiceAcquisitionAndReturnedReadsDoNotLendProjectionStorage(t *testing.T) {
 	t.Parallel()

@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testpath"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -835,57 +836,100 @@ func TestReadOnlyHistoricalInspection(t *testing.T) {
 	})
 }
 
-// F17F-1 and the ordinary release portion of F17F-7 use two simultaneously
+type selectedReplayPeer struct {
+	id, path string
+	payload  []byte
+	done     <-chan error
+	release  func()
+}
+
+func startSelectedReplayPeer(t *testing.T, process support.Process, id, sourceRef string) selectedReplayPeer {
+	t.Helper()
+	payload := functionalPortableReplayPayloadForSessionSource(t, id, sourceRef)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "selected.json")
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	var once sync.Once
+	release := func() { once.Do(func() { close(writer.release) }) }
+	inputs := recordingContinuationInputs(t, dir, t.TempDir(), []string{"--replay", path, "--no-record"}, false)
+	inputs.Input.Args = []string{"you", "run", "--dir", dir, "--session", uuid.NewString(), "--replay", path, "--no-record"}
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Stdout = writer
+	peer := selectedReplayPeer{id: id, path: path, payload: payload, release: release,
+		done: executeGatedRecordingCommand(t, process, inputs, release)}
+	select {
+	case <-writer.entered:
+	case err := <-peer.done:
+		t.Fatalf("selected inspection returned before readiness: %v; %s", err, inputs.Stderr())
+	case <-time.After(10 * time.Second):
+		t.Fatal("selected inspection did not become ready")
+	}
+	return peer
+}
+
+// F17F-1 and F17F-7 use two simultaneously
 // held CLI inspections on the same process, each with selected durable reads.
 func assertSelectedReplayPeers(t *testing.T, process support.Process, sessions factorysessions.Service) {
 	t.Helper()
-	type peer struct {
-		id, path string
-		payload  []byte
-		done     <-chan error
-		release  func()
-	}
-	peers := make([]peer, 2)
+	peers := make([]selectedReplayPeer, 2)
 	for i := range peers {
 		id := fmt.Sprintf("session-js-selected-%s-%d", filepath.Base(t.TempDir()), i)
-		payload := functionalPortableReplayPayloadForSessionSource(t, id, "workflow/"+id+".js")
-		dir := t.TempDir()
-		path := filepath.Join(dir, "selected.json")
-		if err := os.WriteFile(path, payload, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
-		var once sync.Once
-		release := func() { once.Do(func() { close(writer.release) }) }
-		inputs := recordingContinuationInputs(t, dir, t.TempDir(), []string{"--replay", path, "--no-record"}, false)
-		inputs.Input.Args = []string{"you", "run", "--dir", dir, "--session", id + "-inspection", "--replay", path, "--no-record"}
-		inputs.Input.WorkingDirectory = dir
-		inputs.Input.Stdout = writer
-		peers[i] = peer{id: id, path: path, payload: payload, release: release,
-			done: executeGatedRecordingCommand(t, process, inputs, release)}
-		select {
-		case <-writer.entered:
-		case err := <-peers[i].done:
-			t.Fatalf("selected inspection returned before readiness: %v; %s", err, inputs.Stderr())
-		case <-time.After(10 * time.Second):
-			t.Fatal("selected inspection did not become ready")
-		}
+		peers[i] = startSelectedReplayPeer(t, process, id, "workflow/"+id+".js")
 	}
 	for _, selected := range peers {
 		assertSelectedReplayRead(t, sessions, selected.id)
+		assertSelectedReplayErrors(t, sessions, selected.id)
 	}
-	// Releasing one owned opening must preserve the other selected route.
+	// Equal recorded identity already supports a later owned opening. Retiring
+	// the old CLI acquisition must not unbind that replacement or its peer.
+	replacement := startSelectedReplayPeer(t, process, peers[0].id, "workflow/replacement.js")
 	peers[0].release()
 	assertSelectedReplayCommandJoined(t, peers[0].done)
+	peers[0].release()
+	read, err := sessions.GetSession(t.Context(), replacement.id)
+	if err != nil || read.SessionID != replacement.id || read.ResolvedSource.SourceRef != "workflow/replacement.js" {
+		t.Fatalf("stale cleanup lost replacement: %#v, %v", read, err)
+	}
 	assertSelectedReplayRead(t, sessions, peers[1].id)
+	replacement.release()
+	assertSelectedReplayCommandJoined(t, replacement.done)
+	if _, err := sessions.GetSession(t.Context(), replacement.id); !errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+		t.Fatalf("released historical route: %v", err)
+	}
 	peers[1].release()
 	assertSelectedReplayCommandJoined(t, peers[1].done)
-	for _, selected := range peers {
+	for _, selected := range append(peers, replacement) {
 		after, err := os.ReadFile(selected.path)
 		if err != nil || !bytes.Equal(after, selected.payload) {
 			t.Fatalf("selected replay changed source %s: %v", selected.id, err)
 		}
 	}
+}
+
+func assertSelectedReplayErrors(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
+	if _, err := sessions.GetArtifact(t.Context(), id, "missing"); !errors.Is(err, factorysessions.ErrArtifactNotFound) {
+		t.Fatalf("selected missing artifact: %v", err)
+	}
+	if _, err := sessions.GetDispatch(t.Context(), id, "missing"); !errors.Is(err, factorysessions.ErrDispatchNotFound) {
+		t.Fatalf("selected missing dispatch: %v", err)
+	}
+	if _, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{AfterEventID: "stale"}); !errors.Is(err, factorysessions.ErrReconnectCursorNotFound) {
+		t.Fatalf("selected invalid cursor: %v", err)
+	}
+	var invalid *factorysessions.DurableValidationError
+	if _, err := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: "invalid"}); !errors.As(err, &invalid) {
+		t.Fatalf("selected invalid result mode lost validation type: %v", err)
+	}
+	// Terminal inspection with a checkpoint summary but no selected durable
+	// state must reject explicit continuation while keeping its read view usable.
+	if _, err := sessions.ResumeInterruptedSession(t.Context(), id, factorysessions.ResumeSessionRequest{RequestID: uuid.NewString()}); err == nil {
+		t.Fatal("inspection-only peer resumed without restorable state")
+	}
+	assertSelectedReplayRead(t, sessions, id)
 }
 
 func assertSelectedReplayCommandJoined(t *testing.T, done <-chan error) {

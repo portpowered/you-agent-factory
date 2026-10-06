@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/mohae/deepcopy"
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -107,5 +108,16 @@ func copyProjection(value RecordingReplayProjection) RecordingReplayProjection {
 	value.Artifacts = copyArtifacts(value.Artifacts)
 	value.Checkpoint = copyPointer(value.Checkpoint)
 	value.WorkerHistory = copyWorkerHistory(value.WorkerHistory)
+	value.FactoryProjection = copyFactoryProjection(value.FactoryProjection)
 	return value
+}
+
+func copyFactoryProjection(value *recording.FactoryWorldState) *recording.FactoryWorldState {
+	if value == nil {
+		return nil
+	}
+	// This read-only contract contains exported facts, native JSON values and
+	// time.Time values, without resource handles. Copy it without serialization
+	// so typed numbers, unknown snapshot fields and nil/empty shapes survive.
+	return deepcopy.Copy(value).(*recording.FactoryWorldState)
 }
