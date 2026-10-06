@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -179,8 +178,9 @@ func (a *Adapter) resolveWorkAttribution(
 		}
 		workID := strings.TrimSpace(observation.WorkIDs[0])
 		sessionID := strings.TrimSpace(observation.FactorySessionID)
+		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID}
 		if sessionID == "" {
-			sessionID = workers.DefaultSessionID
+			continue // An absent association cannot authorize default-scope enrichment.
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -219,6 +219,14 @@ func (a *Adapter) resolveWorkAttribution(
 		}
 	}
 	return attribution, nil
+}
+
+func (a *Adapter) presentWorkerSessionObservation(ctx context.Context, observation workersessions.Observation) (factoryapi.WorkerSessionObservation, error) {
+	attribution, err := a.resolveWorkAttribution(ctx, []workersessions.Observation{observation})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	return workerSessionObservationWithWorkToAPI(observation, attribution[observation.WorkerSessionID]), nil
 }
 
 // sortObservations gives the public list a chronological attempt order while

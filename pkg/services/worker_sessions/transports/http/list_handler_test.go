@@ -381,8 +381,8 @@ func TestFleetWorkAttributionMissingAndCanceledReads(t *testing.T) {
 			}
 			adapter := NewAdapter(&fakeObservationService{}, reader)
 			observations := []workersessions.Observation{
-				{WorkerSessionID: "worker-a", WorkIDs: []string{"missing"}},
-				{WorkerSessionID: "worker-b", WorkIDs: []string{"missing"}},
+				{WorkerSessionID: "worker-a", FactorySessionID: "scope", WorkIDs: []string{"missing"}},
+				{WorkerSessionID: "worker-b", FactorySessionID: "scope", WorkIDs: []string{"missing"}},
 			}
 			got, err := adapter.resolveWorkAttribution(ctx, observations)
 			if cancelRead {
@@ -399,10 +399,56 @@ func TestFleetWorkAttributionMissingAndCanceledReads(t *testing.T) {
 					}
 				}
 			}
-			if reader.reads["~default"] != 1 {
+			if reader.reads["scope"] != 1 {
 				t.Fatalf("reads = %#v", reader.reads)
 			}
 		})
+	}
+}
+
+func TestSelectedWorkAttributionMatchesList(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{"session-a", "session-b"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			observation := workersessions.Observation{
+				WorkerSessionID: "worker", FactorySessionID: scope, WorkIDs: []string{"work-0"},
+				State: workersessions.StateCompleted,
+			}
+			service := &fakeObservationService{
+				getByWorkerResult: observation,
+				topLevelResult:    workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{observation}},
+			}
+			reader := &fleetWorkReader{reads: make(map[string]int)}
+			adapter := NewAdapter(service, reader)
+			selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker")
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed, err := adapter.ListTopLevelWorkerSessions(t.Context(), "", "", nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selected.WorkName == nil || *selected.WorkName != scope+"/name-0" || selected.WorkId == nil || *selected.WorkId != "work-0" ||
+				len(listed.Sessions) != 1 || listed.Sessions[0].WorkName == nil || *listed.Sessions[0].WorkName != *selected.WorkName {
+				t.Fatalf("selected/listed attribution = %+v / %+v", selected, listed)
+			}
+			if reader.reads[scope] != 2 || len(reader.reads) != 1 {
+				t.Fatalf("unexpected Work scope reads: %v", reader.reads)
+			}
+		})
+	}
+}
+
+func TestWorkAttributionWithoutFactoryScopeNeverReadsDefaultWork(t *testing.T) {
+	t.Parallel()
+	reader := &fleetWorkReader{reads: make(map[string]int)}
+	adapter := NewAdapter(&fakeObservationService{}, reader)
+	got, err := adapter.presentWorkerSessionObservation(t.Context(), workersessions.Observation{
+		WorkerSessionID: "legacy-worker", WorkIDs: []string{"work-0"},
+	})
+	if err != nil || got.WorkName != nil || got.WorkId == nil || *got.WorkId != "work-0" || len(reader.reads) != 0 {
+		t.Fatalf("unscoped attribution = %+v, %v; reads = %v", got, err, reader.reads)
 	}
 }
 

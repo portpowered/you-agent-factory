@@ -52,7 +52,7 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	return WorkerSessionObservationToAPI(observation), nil
+	return a.presentWorkerSessionObservation(ctx, observation)
 }
 
 // GetWorkerSessionObservationByWorkerSessionID returns the canonical
@@ -92,7 +92,7 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
-	return WorkerSessionObservationToAPI(observation), nil
+	return a.presentWorkerSessionObservation(ctx, observation)
 }
 
 // ReadWorkerSessionTranscript returns the normalized transcript for one
@@ -326,7 +326,7 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
-	return WorkerSessionObservationToAPI(observation), nil
+	return a.presentWorkerSessionObservation(ctx, observation)
 }
 
 // ReadTopLevelWorkerSessionTranscript resolves the exact Provider Session

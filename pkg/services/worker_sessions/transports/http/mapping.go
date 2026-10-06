@@ -556,16 +556,7 @@ func listWorkerSessionObservationsResponseToAPI(
 ) factoryapi.ListWorkerSessionsResponse {
 	sessions := make([]factoryapi.WorkerSessionObservation, 0, len(result.Observations))
 	for _, observation := range result.Observations {
-		mapped := WorkerSessionObservationToAPI(observation)
-		if work, ok := attribution[observation.WorkerSessionID]; ok {
-			if work.WorkID != "" {
-				mapped.WorkId = stringPtr(work.WorkID)
-			}
-			if work.WorkName != "" {
-				mapped.WorkName = stringPtr(work.WorkName)
-			}
-		}
-		sessions = append(sessions, mapped)
+		sessions = append(sessions, workerSessionObservationWithWorkToAPI(observation, attribution[observation.WorkerSessionID]))
 	}
 	response := factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
 	if result.MaxResults > 0 {
@@ -575,6 +566,17 @@ func listWorkerSessionObservationsResponseToAPI(
 		}
 	}
 	return response
+}
+
+func workerSessionObservationWithWorkToAPI(observation workersessions.Observation, work workerSessionWorkAttribution) factoryapi.WorkerSessionObservation {
+	mapped := WorkerSessionObservationToAPI(observation)
+	if work.WorkID != "" {
+		mapped.WorkId = stringPtr(work.WorkID)
+	}
+	if work.WorkName != "" {
+		mapped.WorkName = stringPtr(work.WorkName)
+	}
+	return mapped
 }
 
 // WorkerSessionTranscriptToAPI maps a detached normalized transcript result to
