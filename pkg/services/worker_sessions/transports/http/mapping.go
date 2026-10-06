@@ -446,13 +446,17 @@ func WorkerSessionInterruptResponseToAPI(
 func WorkerSessionControlResponseToAPI(
 	result workersessions.ControlResult,
 ) factoryapi.WorkerSessionControlResponse {
-	return factoryapi.WorkerSessionControlResponse{
+	response := factoryapi.WorkerSessionControlResponse{
 		WorkerSessionId: result.Session.ID,
 		Action:          factoryapi.WorkerSessionControlResponseAction(result.Action),
 		Outcome:         factoryapi.WorkerSessionControlResponseOutcome(result.Outcome),
 		State:           factoryapi.WorkerSessionControlResponseState(result.Session.State),
 		DispatchId:      result.DispatchID,
 	}
+	if result.Forced {
+		response.Forced = &result.Forced
+	}
+	return response
 }
 
 func workerSessionInterruptSnapshotToAPI(

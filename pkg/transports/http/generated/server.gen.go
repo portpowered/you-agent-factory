@@ -8918,9 +8918,12 @@ type WorkerSessionControlResponse struct {
 	Action WorkerSessionControlResponseAction `json:"action"`
 
 	// DispatchId Exact admitted dispatch identity, or empty before admission.
-	DispatchId string                              `json:"dispatchId"`
-	Outcome    WorkerSessionControlResponseOutcome `json:"outcome"`
-	State      WorkerSessionControlResponseState   `json:"state"`
+	DispatchId string `json:"dispatchId"`
+
+	// Forced Present and true only for force requests. The action remains TERMINATE.
+	Forced  *bool                               `json:"forced,omitempty"`
+	Outcome WorkerSessionControlResponseOutcome `json:"outcome"`
+	State   WorkerSessionControlResponseState   `json:"state"`
 
 	// WorkerSessionId Stable Worker Session identity targeted by the control.
 	WorkerSessionId string `json:"workerSessionId"`
@@ -10219,6 +10222,15 @@ type ReadWorkerSessionLogsParams struct {
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
 
+// TerminateWorkerSessionJSONBody defines parameters for TerminateWorkerSession.
+type TerminateWorkerSessionJSONBody struct {
+	ExpectedAttemptId *string `json:"expectedAttemptId,omitempty"`
+
+	// Force Force terminate the exact owned attempt. Requires requestId and expectedAttemptId. Unsupported attempts have no effects.
+	Force     *bool   `json:"force,omitempty"`
+	RequestId *string `json:"requestId,omitempty"`
+}
+
 // PreviewFactoryJSONRequestBody defines body for PreviewFactory for application/json ContentType.
 type PreviewFactoryJSONRequestBody = FactoryPreviewRequest
 
@@ -10296,6 +10308,9 @@ type ContinueWorkerSessionJSONRequestBody = WorkerSessionContinueRequest
 
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
+
+// TerminateWorkerSessionJSONRequestBody defines body for TerminateWorkerSession for application/json ContentType.
+type TerminateWorkerSessionJSONRequestBody TerminateWorkerSessionJSONBody
 
 // Getter for additional properties for BundledFile. Returns the specified
 // element and whether it was found
