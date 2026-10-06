@@ -112,23 +112,9 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	if err = ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
-	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
+	scope, observations, err := a.transcriptSourceForScope(ctx, sessionID)
 	if err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
-	}
-	observations := a.observationsForScope(scope)
-	if observations == nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
-	}
-	observation, err := observations.GetObservation(ctx, workersessions.GetObservationRequest{
-		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
-		FactorySessionID: scope.observationID(),
-	})
-	if err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
-	}
-	if _, err := scopeWorkerSessionObservation(observation, scope); err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
 	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		ProviderSession:  providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
@@ -143,7 +129,7 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionID reads the normalized history
-// for the canonical Worker Session identity. A missing provider-native
+// for the canonical Worker Session identity. An incomplete captured
 // transcript remains an explicit service outcome; callers can use the Worker
 // Session event route for the canonical history in that case.
 func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
@@ -161,23 +147,9 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	if err = ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
-	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
+	scope, observations, err := a.transcriptSourceForScope(ctx, sessionID)
 	if err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
-	}
-	observations := a.observationsForScope(scope)
-	if observations == nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
-	}
-	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
-		WorkerSessionID:  workerSessionID,
-		FactorySessionID: scope.observationID(),
-	})
-	if err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
-	}
-	if _, err := scopeWorkerSessionObservation(observation, scope); err != nil {
-		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
 	result, err := observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		WorkerSessionID:  workerSessionID,
@@ -518,4 +490,26 @@ func validateWorkerSessionReference(a *Adapter, sessionID, workerSessionID strin
 		return "", errors.New("worker session id is required")
 	}
 	return workerSessionID, nil
+}
+
+// Transcript reads use captured identity as their scope proof. Native summary
+// enrichment cannot be a prerequisite for reading committed content. A closed
+// Factory Session can still be selected by its exact durable scope.
+func (a *Adapter) transcriptSourceForScope(ctx context.Context, sessionID string) (workerSessionScope, observationService, error) {
+	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
+	if err != nil {
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) || a.logs == nil {
+			return scope, nil, err
+		}
+		scope = workerSessionScope{requestedID: strings.TrimSpace(sessionID), effectiveID: strings.TrimSpace(sessionID)}
+		return scope, a.logs, nil
+	}
+	observations := a.observationsForScope(scope)
+	if observations == nil {
+		observations = a.logs
+	}
+	if observations == nil {
+		return scope, nil, errors.New("Worker Sessions service is required")
+	}
+	return scope, observations, nil
 }

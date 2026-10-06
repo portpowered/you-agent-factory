@@ -3,6 +3,8 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -386,6 +388,28 @@ func TestReadWorkerSessionTranscriptBySessionIDProjectsNormalizedEntries(t *test
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
 	assertTranscriptResponse(t, recorder.Body.Bytes(), service, text, toolName)
+}
+
+func TestTranscriptReadsRemainAvailableWhenNativeSummaryFails(t *testing.T) {
+	t.Parallel()
+	for _, byWorker := range []bool{false, true} {
+		t.Run(fmt.Sprintf("worker=%t", byWorker), func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{getErr: errors.New("native summary unavailable"), getByWorkerErr: errors.New("native summary unavailable"),
+				readResult: workersessions.ReadTranscriptResult{WorkerSessionID: "worker", AttemptID: "attempt", State: workersessions.StateCompleted}}
+			adapter := NewAdapter(service, workServiceStub{})
+			var response factoryapi.WorkerSessionTranscriptResponse
+			var err error
+			if byWorker {
+				response, err = adapter.ReadWorkerSessionTranscriptByWorkerSessionID(t.Context(), "factory", "worker")
+			} else {
+				response, err = adapter.ReadWorkerSessionTranscript(t.Context(), "factory", "codex", "session_id", "provider-session")
+			}
+			if err != nil || response.WorkerSessionId != "worker" || service.getCalled || service.getByWorkerCalled {
+				t.Fatalf("captured transcript depended on native summary: %+v %v", response, err)
+			}
+		})
+	}
 }
 
 func assertTranscriptResponse(t *testing.T, payload []byte, service *fakeObservationService, text, toolName string) {

@@ -188,6 +188,21 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 
 	directTranscript := getWSRFT012Transcript(t, workerObservationURL(providerServer.URL(), providerFactorySession, providerWorkerID)+"/transcript")
 	providerTranscript := getWSRFT012Transcript(t, providerTranscriptWSRFT012URL(providerServer.URL(), providerFactorySession, providerSession))
+	if directTranscript.status != http.StatusOK || directTranscript.transcript == nil || len(directTranscript.transcript.Entries) == 0 {
+		t.Fatalf("captured transcript was not readable without native roots: %+v", directTranscript)
+	}
+	cli := support.FakeInputs(t.Context(), []string{"you", "--server", providerServer.URL(), "--session", providerFactorySession, "--json", "worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", providerSession})
+	if err := providerServer.Execute(t, cli.Input); err != nil {
+		t.Fatalf("scoped tuple CLI read: %v %s", err, cli.Stderr())
+	}
+	var cliTranscript factoryapi.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal([]byte(cli.Stdout()), &cliTranscript); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cliTranscript, *directTranscript.transcript) {
+		t.Fatalf("CLI/HTTP transcript differs: %+v / %+v", cliTranscript, *directTranscript.transcript)
+	}
+
 	if directTranscript.status != providerTranscript.status || directTranscript.code != providerTranscript.code ||
 		!reflect.DeepEqual(directTranscript.transcript, providerTranscript.transcript) {
 		t.Fatalf("Worker-ID/provider transcripts differ:\ndirect=%#v\nprovider=%#v", directTranscript, providerTranscript)
@@ -569,7 +584,6 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 	providerSession := "session_fixture_codex_success"
 	factorySession := uuid.NewString()
 	homeDir := t.TempDir()
-	writeWSRFT012CodexRollout(t, homeDir, providerSession)
 	providerOutput := readWSRFT012ProviderFixture(t, "stdout.jsonl")
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: providerOutput})
 	env := append([]string(nil), os.Environ()...)
@@ -624,18 +638,6 @@ func readWSRFT012ProviderFixture(t *testing.T, fileName string) []byte {
 		t.Fatalf("read provider fixture %s: %v", path, err)
 	}
 	return contents
-}
-
-func writeWSRFT012CodexRollout(t *testing.T, homeDir, sessionID string) {
-	t.Helper()
-	directory := filepath.Join(homeDir, ".codex", "sessions", "2026", "07", "27")
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		t.Fatalf("create Codex rollout directory: %v", err)
-	}
-	path := filepath.Join(directory, "rollout-"+sessionID+".jsonl")
-	if err := os.WriteFile(path, readWSRFT012ProviderFixture(t, "rollout.jsonl"), 0o600); err != nil {
-		t.Fatalf("write Codex rollout fixture: %v", err)
-	}
 }
 
 func getWSRFT012ProviderObservation(t *testing.T, baseURL, factorySession, providerSession string) factoryapi.WorkerSessionObservation {

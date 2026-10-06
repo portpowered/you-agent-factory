@@ -5643,7 +5643,7 @@ func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
 	subscription.Close()
 }
 
-func TestReadTranscriptMapsProviderProjectionErrors(t *testing.T) {
+func TestReadTranscriptMapsCapturedReadErrors(t *testing.T) {
 	ref := observationProviderRef()
 	cases := []struct {
 		name string
@@ -5651,8 +5651,8 @@ func TestReadTranscriptMapsProviderProjectionErrors(t *testing.T) {
 		want error
 	}{
 		{"canceled", context.Canceled, workersessions.ErrObservationCanceled},
-		{"provider canceled", providersessions.ErrOperationCanceled, workersessions.ErrObservationCanceled},
-		{"source unavailable", providersessions.ErrSessionNotFound, workersessions.ErrObservationTranscriptUnavailable},
+		{"deadline", context.DeadlineExceeded, workersessions.ErrObservationCanceled},
+		{"source incomplete", recordings.ErrWorkerRecordingIncomplete, workersessions.ErrObservationTranscriptUnavailable},
 		{"projection failure", errors.New("projection failed"), workersessions.ErrObservationTranscriptProjectionUnavailable},
 	}
 	for _, test := range cases {
@@ -5660,6 +5660,7 @@ func TestReadTranscriptMapsProviderProjectionErrors(t *testing.T) {
 			registry := newObservationRegistry(observationProjectorFake{err: test.err}, nil)
 			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 			registry.observations["worker-1"] = observationMetadata()
+			registry.logs = &LogReader{reader: &capturedActivityFake{err: test.err}}
 			_, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
 			if !errors.Is(err, test.want) {
 				t.Fatalf("ReadTranscript() error = %v, want %v", err, test.want)

@@ -42,6 +42,7 @@ type (
 	WorkerCapturedCatalogPage                = workerrecording.WorkerCapturedCatalogPage
 	WorkerCapturedCatalogItem                = workerrecording.WorkerCapturedCatalogItem
 	WorkerCapturedRecord                     = workerrecording.WorkerCapturedRecord
+	WorkerTranscriptEntry                    = workerrecording.WorkerTranscriptEntry
 	WorkerCapturedActivityRequest            = workerrecording.WorkerCapturedActivityRequest
 	WorkerCapturedActivityPage               = workerrecording.WorkerCapturedActivityPage
 	WorkerSessionRecordingService            = recordingcontracts.WorkerSessionRecordingService
@@ -76,6 +77,11 @@ type (
 	WorkerRecordingCodec                     = workerrecording.WorkerRecordingCodec
 	WorkerRecordingService                   = workerrecording.Service
 )
+
+// ProjectWorkerTranscript presents committed public capture without native reads.
+func ProjectWorkerTranscript(records []WorkerCapturedRecord) ([]WorkerTranscriptEntry, error) {
+	return workerrecording.ProjectWorkerTranscript(records)
+}
 
 const (
 	WorkerRecordingStatusComplete             = workerrecording.WorkerRecordingStatusComplete
