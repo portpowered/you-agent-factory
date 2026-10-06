@@ -15,6 +15,14 @@ type commandProcessTree struct {
 	pgid int
 }
 
+func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
+	configureCommandProcessTree(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return attachCommandProcessTree(cmd)
+}
+
 func configureCommandProcessTree(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -31,6 +32,75 @@ type commandProcessTree struct {
 }
 
 func configureCommandProcessTree(_ *exec.Cmd) {}
+
+// Start suspended so no provider code can create descendants before Job
+// assignment. os/exec closes the initial thread handle, so recover that thread
+// while the suspended root still pins its identity. Never resume on failure.
+func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
+	configureSuspendedCommand(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	tree, err := attachCommandProcessTree(cmd)
+	if err == nil {
+		err = resumeCommandProcess(cmd.Process.Pid)
+	}
+	if err != nil {
+		// Nothing has executed yet. Kill the root and close any assigned Job
+		// before joining, including os/exec's stream-copy goroutines.
+		killErr := cmd.Process.Kill()
+		if tree != nil {
+			_ = windows.CloseHandle(tree.job)
+		}
+		waitErr := cmd.Wait()
+		return nil, errors.Join(err, killErr, waitErr)
+	}
+	// This Job contains every descendant from inception. No PID sweep is
+	// necessary or safe after the root has been reaped.
+	tree.rootPID = 0
+	return tree, nil
+}
+
+func configureSuspendedCommand(cmd *exec.Cmd) {
+	attributes := syscall.SysProcAttr{}
+	if cmd.SysProcAttr != nil {
+		attributes = *cmd.SysProcAttr
+	}
+	attributes.CreationFlags |= windows.CREATE_SUSPENDED
+	cmd.SysProcAttr = &attributes
+}
+
+func resumeCommandProcess(pid int) error {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(snapshot) }()
+	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
+	if err := windows.Thread32First(snapshot, &entry); err != nil {
+		return err
+	}
+	for {
+		if entry.OwnerProcessID == uint32(pid) {
+			thread, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = windows.CloseHandle(thread) }()
+			previous, err := windows.ResumeThread(thread)
+			if err != nil {
+				return err
+			}
+			if previous != 1 {
+				return fmt.Errorf("initial command thread suspension count = %d, want 1", previous)
+			}
+			return nil
+		}
+		if err := windows.Thread32Next(snapshot, &entry); err != nil {
+			return fmt.Errorf("find suspended command thread: %w", err)
+		}
+	}
+}
 
 func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	if cmd.Process == nil {

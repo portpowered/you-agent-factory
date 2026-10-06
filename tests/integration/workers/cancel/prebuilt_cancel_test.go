@@ -73,10 +73,11 @@ type cancelCommandResult struct {
 }
 
 type workerProcessTree struct {
-	WorkID   string
-	RootPID  int
-	ChildPID int
-	PIDs     []int
+	WorkID        string
+	RootPID       int
+	ChildPID      int
+	GrandchildPID int
+	PIDs          []int
 }
 
 type cancelProcessSample struct {

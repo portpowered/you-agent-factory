@@ -318,20 +318,9 @@ func (r ExecCommandRunner) run(
 	}
 
 	cleanupLogger := logging.EnsureLogger(r.Logger)
-	configureCommandProcessTree(cmd)
-	if err := cmd.Start(); err != nil {
+	tree, err := startCommandProcessTree(cmd)
+	if err != nil {
 		return CommandResult{}, r.reportCommandStartFailure(cleanupLogger, req, err)
-	}
-
-	tree, attachErr := attachCommandProcessTree(cmd)
-	if attachErr != nil {
-		cleanupLogger.Warn(
-			"command runner: process tree attach failed",
-			"event_name", "command_runner.process_tree_attach_failed",
-			"command", req.Command,
-			"args_count", len(req.Args),
-			"error", attachErr.Error(),
-		)
 	}
 	waitCh := make(chan error, 1)
 	waitDone := make(chan struct{})

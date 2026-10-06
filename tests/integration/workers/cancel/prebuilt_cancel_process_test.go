@@ -134,18 +134,19 @@ func readyFixtureProcessTree(workDir, workID string, excludedRootPIDs []int) (wo
 		attemptDir := filepath.Join(workDir, entry.Name())
 		rootPID, rootErr := readPositivePID(filepath.Join(attemptDir, "root.pid"))
 		childPID, childErr := readPositivePID(filepath.Join(attemptDir, "child.pid"))
+		grandchildPID, grandchildErr := readPositivePID(filepath.Join(attemptDir, "grandchild.pid"))
 		ready, readyErr := os.ReadFile(filepath.Join(attemptDir, "ready"))
 		childStarted, childStartedErr := os.ReadFile(filepath.Join(attemptDir, "child.started"))
 		lateOutputReady, lateOutputErr := os.ReadFile(filepath.Join(attemptDir, "late-output.ready"))
-		if rootErr != nil || childErr != nil || readyErr != nil || childStartedErr != nil || lateOutputErr != nil ||
+		if rootErr != nil || childErr != nil || grandchildErr != nil || readyErr != nil || childStartedErr != nil || lateOutputErr != nil ||
 			strings.TrimSpace(string(ready)) != "ready" || strings.TrimSpace(string(childStarted)) != "started" ||
 			strings.TrimSpace(string(lateOutputReady)) != "ready" || containsPID(excludedRootPIDs, rootPID) {
 			lastReadiness = fmt.Sprintf("attempt=%s root=%v child=%v ready=%v child_started=%v late_output=%v", entry.Name(), rootErr, childErr, readyErr, childStartedErr, lateOutputErr)
 			continue
 		}
 		pids, err := processTreePIDs(rootPID)
-		if err == nil && containsPID(pids, childPID) {
-			return workerProcessTree{WorkID: workID, RootPID: rootPID, ChildPID: childPID, PIDs: pids}, ""
+		if err == nil && containsPID(pids, childPID) && containsPID(pids, grandchildPID) {
+			return workerProcessTree{WorkID: workID, RootPID: rootPID, ChildPID: childPID, GrandchildPID: grandchildPID, PIDs: pids}, ""
 		}
 		if err != nil {
 			lastReadiness = fmt.Sprintf("attempt=%s process snapshot: %v", entry.Name(), err)
@@ -167,6 +168,10 @@ func assertObservedTreeAncestry(t *testing.T, tree workerProcessTree) {
 	}
 	if parent != tree.RootPID {
 		t.Fatalf("Work %q process ancestry child %d parent=%d, want worker root %d", tree.WorkID, tree.ChildPID, parent, tree.RootPID)
+	}
+	parent, err = processParentPID(tree.GrandchildPID)
+	if err != nil || parent != tree.ChildPID {
+		t.Fatalf("Work %q process ancestry grandchild %d parent=%d, error=%v, want child %d", tree.WorkID, tree.GrandchildPID, parent, err, tree.ChildPID)
 	}
 }
 
