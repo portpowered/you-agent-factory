@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // ControlAction identifies the lifecycle action requested for one Worker
@@ -173,7 +174,7 @@ func (req InterruptRequest) Validate() error {
 		normalized.SourceWorkerSessionID == normalized.SuccessorWorkerSessionID {
 		return ErrInvalidInterruptLineage
 	}
-	if strings.TrimSpace(normalized.ReplacementMessage) == "" {
+	if !utf8.ValidString(normalized.ReplacementMessage) || strings.TrimSpace(normalized.ReplacementMessage) == "" {
 		return ErrInvalidInterruptMessage
 	}
 	return nil

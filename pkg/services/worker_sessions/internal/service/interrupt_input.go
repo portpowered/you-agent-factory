@@ -43,7 +43,13 @@ func encodeInterruptInput(plan interruptPlan) ([]byte, error) {
 		return nil, recordings.ErrWorkerRecordingPersistence
 	}
 	payload, err := json.Marshal(input)
-	if err != nil || !interruptRecipeSafe(payload, execution.ProcessEnvironment) {
+	if err != nil {
+		return nil, recordings.ErrInvalidRecordingRedactionRequest
+	}
+	if len(payload) > recordings.WorkerControlInputMaxBytes {
+		return nil, workersessions.ErrInterruptInputTooLarge
+	}
+	if !interruptRecipeSafe(payload, execution.ProcessEnvironment) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
 	return payload, nil

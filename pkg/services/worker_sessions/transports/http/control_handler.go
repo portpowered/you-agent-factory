@@ -324,6 +324,7 @@ func interruptErrorResponse(err error) (int, string, string) {
 		errors.Is(err, workersessions.ErrInterruptServerStopping):
 		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt"
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
+		errors.Is(err, workersessions.ErrInterruptInputTooLarge),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage):
 		return http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request"

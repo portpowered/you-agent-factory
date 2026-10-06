@@ -809,9 +809,12 @@ var (
 	// ErrInvalidInterruptLineage reports missing or equal source and successor
 	// identities.
 	ErrInvalidInterruptLineage = errors.New("worker session: invalid interrupt lineage")
-	// ErrInvalidInterruptMessage reports an interrupt without replacement
+	// ErrInvalidInterruptMessage reports missing or invalid UTF-8 replacement
 	// content.
 	ErrInvalidInterruptMessage = errors.New("worker session: interrupt replacement message is required")
+	// ErrInterruptInputTooLarge reports a complete encoded input that exceeds
+	// the Recordings artifact budget before source cancellation.
+	ErrInterruptInputTooLarge = errors.New("worker session: interrupt input exceeds recording byte limit")
 	// ErrInterruptSourceNotFound reports an interrupt whose source is absent.
 	ErrInterruptSourceNotFound = errors.New("worker session: interrupt source not found")
 	// ErrInterruptSourceNotActive reports a source that is not currently

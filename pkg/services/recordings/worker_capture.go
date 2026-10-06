@@ -12,6 +12,10 @@ import (
 // before a host accepts controls or new execution. It never stops children.
 type WorkerOwnerRecoveryOperation func(context.Context) error
 
+// WorkerControlInputMaxBytes bounds the complete serialized control input,
+// including execution settings and replacement text, before artifact encoding.
+const WorkerControlInputMaxBytes = 1 << 20
+
 // WorkerRestartInputStore persists detached direct-execution settings in the
 // selected profile's existing captured-input store. A recipe conveys data only,
 // never live execution authority.

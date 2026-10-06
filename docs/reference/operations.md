@@ -545,6 +545,10 @@ Provider Session reference before stopping the source. Inherited environment
 values stay out of that recipe. Explicit environment overrides or prompts that
 require secret redaction prevent safe recipe recovery, so interruption refuses
 before stopping; ordinary cancel and terminate remain available.
+Replacement text must be valid UTF-8. The complete serialized recipe, including
+settings and replacement text, must fit within one MiB. JSON escaping counts
+toward this limit. Interruption refuses overflow before stopping the source;
+it preserves accepted replacement text in full.
 Saved recipes reject field-name case aliases, including aliases in execution
 settings and provider references. Customer token-map keys remain case-sensitive.
 The recipe also refuses inherited credentials embedded in replacement text,

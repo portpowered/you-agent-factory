@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-const controlInputLimit = 1 << 20
+const controlInputLimit = recordings.WorkerControlInputMaxBytes
 
 type controlInputArtifact struct {
 	Key        recordings.WorkerControlOperationKey `json:"key"`

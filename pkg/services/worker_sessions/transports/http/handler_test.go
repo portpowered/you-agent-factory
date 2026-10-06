@@ -158,6 +158,7 @@ func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
 		{workersessions.ErrInterruptSourceNotFound, http.StatusNotFound, "NOT_FOUND"},
 		{workersessions.ErrInterruptRequestIDConflict, http.StatusConflict, "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT"},
 		{workersessions.ErrInvalidInterruptMessage, http.StatusBadRequest, "BAD_REQUEST"},
+		{workersessions.ErrInterruptInputTooLarge, http.StatusBadRequest, "BAD_REQUEST"},
 		{workersessions.ErrInterruptValidation, http.StatusBadRequest, "BAD_REQUEST"},
 	} {
 		err := &workersessions.InterruptError{Phase: workersessions.InterruptPhaseValidation,

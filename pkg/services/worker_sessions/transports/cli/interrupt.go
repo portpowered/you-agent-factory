@@ -443,6 +443,7 @@ func mapInterruptServiceError(err error) error {
 		errors.Is(err, workersessions.ErrInterruptServerStopping):
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_ADMISSION_FAILED", "Workers could not admit the Worker Session interrupt", phase, err)
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
+		errors.Is(err, workersessions.ErrInterruptInputTooLarge),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage):
 		return newInterruptCLIError("BAD_REQUEST", "invalid Worker Session interrupt request", phase, err)

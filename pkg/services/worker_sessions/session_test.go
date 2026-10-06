@@ -540,6 +540,7 @@ func TestInterruptRequestNormalizeValidateAndClonePreserveObservableContract(t *
 		"missing request ID":        {SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "message"},
 		"invalid lineage":           {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "source", ReplacementMessage: "message"},
 		"blank replacement message": {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: " \t"},
+		"invalid UTF-8 replacement": {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "replace\xff"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := invalid.Validate(); err == nil {

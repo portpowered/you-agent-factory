@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -448,6 +449,41 @@ func assertRecipeRefusalStillAllowsTermination(t *testing.T, scenario s8Interrup
 	}
 }
 
+// The shared host uses real capture persistence and scenario-owned command
+// gates. Refusal must retain live control, independently of artifact storage.
+func TestInterruptInputByteRefusalLeavesSourceControllable(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"serialized-overflow", "invalid-utf8"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			scenario := newS8InterruptScenario(t, t.Context(), cell)
+			t.Cleanup(scenario.runner.releaseAll)
+			ids := scenario.ids
+			invokeS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+				requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+				factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+			})
+			scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+			replacement, want := "replacement\xff", "WORKER_SESSION_INTERRUPT_INVALID"
+			if cell == "serialized-overflow" {
+				// The message fits as raw text; its JSON escaping exceeds the
+				// entire input budget even before execution settings are added.
+				replacement = strings.Repeat("<", recordings.WorkerControlInputMaxBytes/6)
+				want = "BAD_REQUEST"
+				status, _, response := postS8InterruptError(t, scenario.ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, replacement)
+				if status != http.StatusBadRequest || string(response.Code) != want || string(response.Phase) != "VALIDATION" {
+					t.Fatalf("overflow HTTP status=%d code=%s phase=%s", status, response.Code, response.Phase)
+				}
+			}
+			code, phase, err := executeS8InterruptCLIError(scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, replacement)
+			if err != nil || code != want || phase != "VALIDATION" {
+				t.Fatalf("byte refusal CLI code=%s phase=%s err=%v", code, phase, err)
+			}
+			assertRecipeRefusalStillAllowsTermination(t, scenario, ids)
+		})
+	}
+}
+
 func postS8Interrupt(
 	t *testing.T,
 	ctx context.Context,
@@ -573,11 +609,16 @@ func executeS8InterruptCLIError(
 	process support.Process,
 	env []string,
 	workingDirectory, serverURL, sourceID, requestID, successorID string,
+	replacement ...string,
 ) (string, string, error) {
+	message := s8ReplacementMessage
+	if len(replacement) != 0 {
+		message = replacement[0]
+	}
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "--remote", "--server", serverURL, "--json", "worker-sessions", "interrupt", sourceID,
 		"--request-id", requestID, "--successor-worker-session-id", successorID,
-		"--replacement-message", s8ReplacementMessage, "--async",
+		"--replacement-message", message, "--async",
 	})
 	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = workingDirectory

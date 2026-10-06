@@ -55,6 +55,7 @@ func TestInterruptValidationPreservesSpecificRefusal(t *testing.T) {
 	}{
 		{workersessions.ErrInterruptFactoryUnsupported, "UNSUPPORTED"},
 		{workersessions.ErrInterruptContinuationUnsupported, "PROVIDER_UNSUPPORTED"},
+		{workersessions.ErrInterruptInputTooLarge, "BAD_REQUEST"},
 		{workersessions.ErrInterruptProviderSessionMissing, "WORKER_SESSION_INTERRUPT_CONFLICT"},
 		{workersessions.ErrInterruptProviderSessionInvalid, "WORKER_SESSION_INTERRUPT_CONFLICT"},
 		{workersessions.ErrInterruptSourceNotActive, "WORKER_SESSION_INTERRUPT_CONFLICT"},
