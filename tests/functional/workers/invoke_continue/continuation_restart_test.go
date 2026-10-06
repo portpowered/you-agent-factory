@@ -214,6 +214,9 @@ func assertNativeContinuationObservation(t *testing.T, scenario *invokeContinueS
 	if string(observation.State) != state || observation.ProviderSession == nil || observation.ProviderSession.Id != nativeID {
 		t.Fatalf("native observation %s: %#v", id, observation)
 	}
+	if observation.FactorySessionId == nil || *observation.FactorySessionId != scenario.session.id {
+		t.Fatalf("native continuation changed Factory Session scope: %#v", observation)
+	}
 	if predecessor != "" && (observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != predecessor) {
 		t.Fatalf("successor lost predecessor: %#v", observation)
 	}

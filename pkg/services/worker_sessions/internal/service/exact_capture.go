@@ -94,7 +94,8 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 
 func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
 	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
-	if err != nil || !directRestartRecipeSafe(captured.Execution) {
+	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
+		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
 	if captured.Reference != source.ProviderSessionAssociation.Reference || captured.Terminal.Status != string(source.State) {

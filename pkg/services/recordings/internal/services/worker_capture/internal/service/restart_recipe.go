@@ -140,7 +140,7 @@ func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution 
 		(redaction != nil && (redaction.FailClosed || redaction.RedactSystemPrompt || redaction.RedactUserMessage)) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
-	if execution.WorkstationName == "" || request.Dispatch.WorkstationName != execution.WorkstationName || target.ExpectedAttemptID == "" || request.Dispatch.DispatchID != target.ExpectedAttemptID {
+	if !restartRecipeIdentityMatches(target, execution) {
 		return nil, recordings.ErrInvalidWorkerControlOperation
 	}
 	// Empty input is a JSON array in the versioned recipe contract. Assigning
@@ -156,6 +156,13 @@ func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution 
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
 	return input, nil
+}
+
+func restartRecipeIdentityMatches(target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) bool {
+	request := execution.Execution
+	return execution.WorkstationName != "" && request.Dispatch.WorkstationName == execution.WorkstationName &&
+		target.ExpectedAttemptID != "" && request.Dispatch.DispatchID == target.ExpectedAttemptID &&
+		request.FactorySessionID == target.FactorySessionID
 }
 
 // Inspect decoded values so JSON escaping cannot conceal an inherited secret

@@ -359,7 +359,7 @@ func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, r
 // capture lookup collaborators, without opening a provider execution.
 func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "missing", "wrong-attempt", "wrong-scope", "wrong-reference"} {
+	for _, cell := range []string{"captured", "captured-scoped", "missing", "wrong-attempt", "wrong-scope", "recipe-scope", "wrong-reference"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -378,17 +378,23 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 			r.logs = &LogReader{reader: reader}
 			r.restart = store
 			switch cell {
+			case "captured-scoped":
+				store.execution.Execution.FactorySessionID = "factory"
+				r.supervisions[req.SourceWorkerSessionID].execution.Execution.FactorySessionID = "factory"
+				reader.entry.FactorySessionID = "factory"
 			case "missing":
 				store.err = errors.New("private missing artifact")
 			case "wrong-attempt":
 				store.execution.Execution.Dispatch.DispatchID = "other"
 			case "wrong-scope":
 				reader.entry.FactorySessionID = "other"
+			case "recipe-scope":
+				store.execution.Execution.FactorySessionID = "foreign"
 			case "wrong-reference":
 				store.reference.ID = "foreign-provider-session"
 			}
 			replay, owner, err := r.reserveContinuation(req)
-			if cell != "captured" {
+			if cell != "captured" && cell != "captured-scoped" {
 				expected := workersessions.ErrContinuationExecutionUnavailable
 				if cell == "wrong-reference" {
 					expected = workersessions.ErrContinuationProviderSessionInvalid
@@ -398,12 +404,12 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				}
 				return
 			}
-			assertCapturedContinuationPlan(t, replay, owner, err, req)
+			assertCapturedContinuationPlan(t, replay, owner, err, req, reader.entry.FactorySessionID)
 		})
 	}
 }
 
-func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner bool, err error, req workersessions.ContinueRequest) {
+func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner bool, err error, req workersessions.ContinueRequest, scope string) {
 	t.Helper()
 	if err != nil || !owner || replay.plan.execution.Execution.Model != "captured-model" || replay.plan.execution.Execution.WorkingDirectory != "captured-workspace" || replay.plan.execution.Execution.UserMessage != req.FollowUpInput {
 		t.Fatalf("captured settings lost: %+v, %t, %v", replay, owner, err)
@@ -413,6 +419,9 @@ func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner 
 	}
 	if environment := replay.plan.execution.Execution.ProcessEnvironment; len(environment) != 1 || environment[0] != "API_KEY=live-host-secret" {
 		t.Fatal("continuation lost the live host environment")
+	}
+	if replay.plan.execution.Execution.FactorySessionID != scope {
+		t.Fatal("continuation changed captured Factory Session scope")
 	}
 }
 

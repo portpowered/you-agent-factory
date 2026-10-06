@@ -215,6 +215,9 @@ func TestRestartRecipeRejectsUnsafeOrStaleInputs(t *testing.T) {
 		"attempt": func(target *recordings.WorkerControlTarget, _ *workers.WorkstationDispatchRequest) {
 			target.ExpectedAttemptID = "other"
 		},
+		"recipe-scope": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
+			execution.Execution.FactorySessionID = "foreign"
+		},
 		"environment": func(_ *recordings.WorkerControlTarget, execution *workers.WorkstationDispatchRequest) {
 			execution.Execution.EnvVars = map[string]string{"API_KEY": "secret"}
 		},
