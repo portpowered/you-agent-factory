@@ -18,6 +18,7 @@ import (
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -461,9 +462,19 @@ func runHostedRuntime(
 ) (resultErr error) {
 	started := false
 	defer func() {
+		if resultErr == nil {
+			return
+		}
 		if !started && resultErr != nil {
 			resultErr = classifyRunInputFailure(cfg, resultErr)
 			logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, resultErr)
+		}
+		// Runner construction can defer loading until Run. These typed failures
+		// still describe startup even after the runner has been constructed.
+		var inputFailure *recordings.ReplayInputError
+		var hostFailure *initializer.RuntimeHostStartupError
+		if !started || errors.As(resultErr, &inputFailure) || errors.As(resultErr, &hostFailure) {
+			resultErr = clidiag.WithStartupCause(resultErr)
 		}
 	}()
 	if err := validateHostedRuntimeBuilders(buildRunner, buildRuntimeRequest); err != nil {

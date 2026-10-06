@@ -79,6 +79,12 @@ For an older installation without a reference, startup adopts a uniquely matchin
 Repository identity and recorded facts determine the selection; file dates do not determine it.
 Missing, corrupt, foreign, or ambiguous history stops startup without activating workers or replacing retained files.
 
+Local startup and recording-load failures print safe cause lines to stderr without `--debug`.
+The coded error stays first, followed by bounded `cause[0]=...` lines.
+Cause lines redact credentials, prompt and body values, URL queries, and private filesystem paths.
+`--debug` does not repeat these cause lines.
+Preserve the selected recording before correcting a load failure.
+
 Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace the automatic board reference.
 Batch runs continue to create separate dated recordings.
 To use a selected recording during rollback, run the explicit command below with its actual path.
