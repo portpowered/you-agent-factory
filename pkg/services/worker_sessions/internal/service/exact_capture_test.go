@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -424,7 +425,7 @@ func (store *restartRecipeStore) ReadWorkerContinuationInput(context.Context, re
 
 func TestContinuationInputBarrierPreservesTupleOrRefusesAdmission(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"exact", "sync-failure", "conflict", "secret-input", "unsafe-override", "stale-capture"} {
+	for _, cell := range []string{"exact", "sync-failure", "conflict", "secret-input", "unsafe-override", "stale-capture", "wrong-dispatch", "wrong-scope", "missing-owner"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -445,18 +446,7 @@ func TestContinuationInputBarrierPreservesTupleOrRefusesAdmission(t *testing.T) 
 			r.logs = &LogReader{reader: &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
 				WorkerSessionID: req.SourceWorkerSessionID, RecordingID: "recording", RecordingGenerationID: "generation", OwnerEpoch: "owner",
 			}}}
-			switch cell {
-			case "sync-failure":
-				store.writeErr = errors.New("private persistence detail")
-			case "conflict":
-				store.writeErr = recordings.ErrWorkerControlConflict
-			case "secret-input":
-				plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=follow up"}
-			case "unsafe-override":
-				plan.execution.Execution.EnvVars = map[string]string{"API_KEY": "private"}
-			case "stale-capture":
-				r.publications[req.SourceWorkerSessionID].capture.RecordingGenerationID = "foreign-generation"
-			}
+			configureContinuationBarrierFailure(r, &plan, store, cell)
 			err := r.persistContinuationInput(plan)
 			if cell == "exact" {
 				assertContinuationInputTuple(t, store.input, req, ref.ID, err)
@@ -477,6 +467,28 @@ func TestContinuationInputBarrierPreservesTupleOrRefusesAdmission(t *testing.T) 
 	}
 }
 
+func configureContinuationBarrierFailure(r *registry, plan *continuePlan, store *interruptInputStore, cell string) {
+	switch cell {
+	case "sync-failure":
+		store.writeErr = errors.New("private persistence detail")
+	case "conflict":
+		store.writeErr = recordings.ErrWorkerControlConflict
+	case "secret-input":
+		plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=follow up"}
+	case "unsafe-override":
+		plan.execution.Execution.EnvVars = map[string]string{"API_KEY": "private"}
+	case "stale-capture":
+		r.publications[plan.request.SourceWorkerSessionID].capture.RecordingGenerationID = "foreign-generation"
+	case "wrong-dispatch":
+		plan.execution.Execution.Dispatch.DispatchID = "foreign-dispatch"
+	case "wrong-scope":
+		plan.execution.Execution.FactorySessionID = "foreign-scope"
+	case "missing-owner":
+		r.publications[plan.request.SourceWorkerSessionID].capture.OwnerEpoch = ""
+		r.logs.reader.(*controlCaptureReader).entry.OwnerEpoch = ""
+	}
+}
+
 func assertContinuationInputTuple(t *testing.T, payload []byte, req workersessions.ContinueRequest, referenceID string, err error) {
 	t.Helper()
 	var input durableContinuationInput
@@ -484,6 +496,107 @@ func assertContinuationInputTuple(t *testing.T, payload []byte, req workersessio
 		t.Fatalf("captured tuple lost identity: %+v, %v", input, err)
 	}
 	assertContinuationInputSchema(t, payload)
+}
+
+// The decoder observes retained data, not a live execution handle. Exercise
+// corruption and scope fencing before recovery can use any decoded execution.
+func TestContinuationInputDecoderRejectsCorruptionAndChangedTuple(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "formatted", "duplicate", "nested-duplicate", "alias", "unknown", "trailing", "version", "missing-reference", "wrong-reference", "wrong-dispatch", "wrong-scope", "unsafe-override", "missing-target", "stale-generation", "changed-input", "changed-successor"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req, plan, target, payload := continuationInputDecoderFixture(t)
+			payload = corruptContinuationInput(t, payload, cell)
+			expected := recordings.ErrWorkerRecordingPersistence
+			switch cell {
+			case "stale-generation":
+				target.RecordingGenerationID = "changed-generation"
+			case "changed-input":
+				req.FollowUpInput += " changed"
+				expected = workersessions.ErrContinuationRequestIDConflict
+			case "changed-successor":
+				req.SuccessorWorkerSessionID = "different-successor"
+				expected = workersessions.ErrContinuationRequestIDConflict
+			}
+			input, err := decodeContinuationInput(payload, req, target)
+			if cell == "exact" || cell == "formatted" {
+				if err != nil || input.Execution.Execution.Model != plan.execution.Execution.Model || input.FollowUpInput != req.FollowUpInput || len(input.Execution.Execution.ProcessEnvironment) != 0 || !reflect.DeepEqual(input.Execution.Execution.Continuation, plan.execution.Execution.Continuation) {
+					t.Fatalf("detached input lost settings or identity: %+v, %v", input, err)
+				}
+				return
+			}
+			if !errors.Is(err, expected) || !reflect.DeepEqual(input, durableContinuationInput{}) {
+				t.Fatalf("invalid retained tuple decoded: %+v, %v", input, err)
+			}
+		})
+	}
+}
+
+func continuationInputDecoderFixture(t *testing.T) (workersessions.ContinueRequest, continuePlan, recordings.WorkerControlTarget, []byte) {
+	t.Helper()
+	req := continuationReservationRequest()
+	target := exactCaptureIdentity()
+	target.WorkerSessionID, target.FactorySessionID, target.ExpectedAttemptID = req.SourceWorkerSessionID, "", "dispatch-1"
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "captured-native-id"}
+	plan := continuePlan{
+		request: req, direct: true,
+		execution: continuationExecution(continuationValidExecution("dispatch-1"), continuationDispatchID(target.ExpectedAttemptID, req.SuccessorWorkerSessionID), req.FollowUpInput, ref),
+		lineage:   &workers.SessionLineage{PreviousAttemptID: target.ExpectedAttemptID},
+	}
+	plan.execution.Execution.Model = "captured-model"
+	plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=private-host-credential"}
+	payload, err := encodeContinuationInput(plan, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req, plan, target, payload
+}
+
+func corruptContinuationInput(t *testing.T, payload []byte, cell string) []byte {
+	t.Helper()
+	switch cell {
+	case "formatted":
+		return []byte("\n " + string(payload) + " \n")
+	case "duplicate":
+		return []byte(strings.Replace(string(payload), `"version":1`, `"version":0,"version":1`, 1))
+	case "nested-duplicate":
+		return []byte(strings.Replace(string(payload), `"id":"captured-native-id"`, `"id":"foreign","id":"captured-native-id"`, 1))
+	case "alias":
+		return []byte(strings.Replace(string(payload), `"followUpInput"`, `"FollowUpInput"`, 1))
+	case "unknown":
+		return []byte(strings.Replace(string(payload), `"version":1`, `"version":1,"privateHandle":"secret"`, 1))
+	case "wrong-reference":
+		return []byte(strings.Replace(string(payload), `"Execution":{`, `"Execution":{"Continuation":{"ProviderSessionID":"foreign-native-id"},`, 1))
+	case "trailing":
+		return append(payload, []byte(`{}`)...)
+	}
+	var input durableContinuationInput
+	if err := json.Unmarshal(payload, &input); err != nil {
+		t.Fatal(err)
+	}
+	mutateContinuationInput(&input, cell)
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func mutateContinuationInput(input *durableContinuationInput, cell string) {
+	switch cell {
+	case "version":
+		input.Version++
+	case "missing-reference":
+		input.ProviderReference = interruptInputReference{}
+	case "wrong-dispatch":
+		input.Execution.Execution.Dispatch.DispatchID = "different-dispatch"
+	case "wrong-scope":
+		input.Execution.Execution.FactorySessionID = "foreign-scope"
+	case "unsafe-override":
+		input.Execution.Execution.EnvVars = map[string]string{"API_KEY": "private-credential"}
+	case "missing-target":
+		input.Target.OwnerEpoch = ""
+	}
 }
 
 // Contract proof for the encoder's actual detached output, including the
