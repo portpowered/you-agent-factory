@@ -194,85 +194,97 @@ func runCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes(t *testing.T, s
 	process := buildBatchContractProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 
-	for _, test := range []struct {
-		name   string
-		input  string
-		json   bool
-		dryRun bool
-	}{
+	for _, test := range []oversizedBatchInputCase{
 		{name: "file-human", input: "file"},
 		{name: "stdin-json", input: "stdin", json: true},
 		{name: "inline-human", input: "inline"},
 		{name: "dry-run-json", input: "file", json: true, dryRun: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			requestID := "batch-payload-limit-" + test.name
-			workName := "oversized-" + test.name
-			batch := oversizedBatchJSON(requestID, workName)
-			args := []string{"you"}
-			if test.dryRun {
-				args = append(args, "--server", "http://127.0.0.1:1")
-			} else {
-				args = append(args, "--server", server.URL())
-			}
-			if test.json {
-				args = append(args, "--json")
-			}
-			args = append(args, "submit", "batch", "--session", sessionID)
-
-			stdin := ""
-			stdinIsTTY := true
-			switch test.input {
-			case "file":
-				path := writeBatchContractInputFile(t, batch)
-				args = append(args, path)
-			case "stdin":
-				stdin = batch
-				stdinIsTTY = false
-			case "inline":
-				args = append(args, batch)
-			default:
-				t.Fatalf("unsupported test input %q", test.input)
-			}
-			if test.dryRun {
-				// Keep dry-run distinct from the live file case while still using
-				// the real file acquisition path.
-				if len(args) == 0 || !strings.HasSuffix(args[len(args)-1], ".json") {
-					t.Fatalf("dry-run args did not receive a batch file: %#v", args)
-				}
-				args = append(args[:len(args)-1], "--dry-run", args[len(args)-1])
-			}
-
-			stdout, stderr, err := executeSubmitBatchCLIExpectErrorWithInput(
-				t, process, args, stdin, stdinIsTTY,
-			)
-			if err == nil {
-				t.Fatal("oversized batch submission succeeded")
-			}
-			diagnostic := err.Error() + "\n" + stderr
-			for _, marker := range []string{
-				`Work "` + workName + `"`,
-				"payloadBytes=65537",
-				"payloadLimitBytes=65536",
-			} {
-				if !strings.Contains(diagnostic, marker) {
-					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
-				}
-			}
-			if stdout != "" {
-				t.Fatalf("oversized submission emitted success stdout: %q", stdout)
-			}
-			for _, marker := range []string{"requestId:", "traceId:", "work count:", "Submitted:"} {
-				if strings.Contains(stdout+stderr, marker) {
-					t.Fatalf("oversized submission emitted success marker %q:\nstdout:\n%s\nstderr:\n%s", marker, stdout, stderr)
-				}
-			}
+			runOversizedBatchInput(t, process, server.URL(), sessionID, test)
 		})
 	}
 
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(server.URL(), sessionID, "/work"))
 	if len(listed.Results) != 0 {
 		t.Fatalf("oversized batch submissions admitted Work: %#v", listed.Results)
+	}
+}
+
+type oversizedBatchInputCase struct {
+	name   string
+	input  string
+	json   bool
+	dryRun bool
+}
+
+func runOversizedBatchInput(t *testing.T, process support.Process, serverURL, sessionID string, test oversizedBatchInputCase) {
+	t.Helper()
+	requestID := "batch-payload-limit-" + test.name
+	workName := "oversized-" + test.name
+	batch := oversizedBatchJSON(requestID, workName)
+	args := []string{"you"}
+	if test.dryRun {
+		args = append(args, "--server", "http://127.0.0.1:1")
+	} else {
+		args = append(args, "--server", serverURL)
+	}
+	if test.json {
+		args = append(args, "--json")
+	}
+	args = append(args, "submit", "batch", "--session", sessionID)
+
+	stdin := ""
+	stdinIsTTY := true
+	switch test.input {
+	case "file":
+		path := writeBatchContractInputFile(t, batch)
+		args = append(args, path)
+	case "stdin":
+		stdin = batch
+		stdinIsTTY = false
+	case "inline":
+		args = append(args, batch)
+	default:
+		t.Fatalf("unsupported test input %q", test.input)
+	}
+	if test.dryRun {
+		// Keep dry-run distinct from the live file case while still using
+		// the real file acquisition path.
+		if len(args) == 0 || !strings.HasSuffix(args[len(args)-1], ".json") {
+			t.Fatalf("dry-run args did not receive a batch file: %#v", args)
+		}
+		args = append(args[:len(args)-1], "--dry-run", args[len(args)-1])
+	}
+
+	stdout, stderr, err := executeSubmitBatchCLIExpectErrorWithInput(
+		t, process, args, stdin, stdinIsTTY,
+	)
+	assertOversizedBatchDiagnostic(t, workName, stdout, stderr, err)
+}
+
+func assertOversizedBatchDiagnostic(t *testing.T, workName, stdout, stderr string, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("oversized batch submission succeeded")
+	}
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range []string{
+		`Work "` + workName + `"`,
+		"payloadBytes=65537",
+		"payloadLimitBytes=65536",
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+	if stdout != "" {
+		t.Fatalf("oversized submission emitted success stdout: %q", stdout)
+	}
+	for _, marker := range []string{"requestId:", "traceId:", "work count:", "Submitted:"} {
+		if strings.Contains(stdout+stderr, marker) {
+			t.Fatalf("oversized submission emitted success marker %q:\nstdout:\n%s\nstderr:\n%s", marker, stdout, stderr)
+		}
 	}
 }
 

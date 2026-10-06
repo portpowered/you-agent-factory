@@ -10,7 +10,7 @@ The five-minute checkpoint merged in
 `0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Its merge-queue functional supervisor
 passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
-below. The three- and two-minute hosted merge checkpoints remain outstanding.
+below. The three-minute warm-cache checkpoint merged in PR #2905; the two-minute checkpoint remains outstanding. Cold-cache hosted jobs remain above three minutes.
 
 Latest measured head `f5d203cad5` passes all 68 packages / 758 results with
 no retries. The [hosted functional job](https://github.com/portpowered/you-agent-factory/actions/runs/37416481644/job/112116898954)
@@ -2935,3 +2935,18 @@ and 25 timed linker processes use 48.838 CPU seconds, with 48.516s active linker
 intervals. Peak process RSS is 5,757,144 KiB. CI diagnostic command counts and
 local timed-process counts use different instrumentation and are reported
 separately.
+
+PR #2905 merged on October 6 at 05:39:06 UTC as
+`e9ab358719619483a270f9e32bec547b5af92e5b`, with all merge-queue checks passing.
+The admission-only follow-up is draft PR #2923, rebased onto that merged main
+commit. Its complete hosted 120s checkpoint remains pending; no two-minute
+result is claimed.
+
+The first admission PR full Backend Lint fails gocyclo at complexity 17 after a
+former top-level Test function becomes a private shared-host runner. The
+initial scoped repository-only lint did not run that built-in checker. Extract
+input acquisition and diagnostic assertions into separate helpers without
+changing assertions. Three post-rebase repetitions pass in 5.632s; both the
+built-in `.golangci.yml` and repository `.golangci-repository.yml` scoped runs
+now report zero issues. The hosted correction still needs its fresh full gate;
+no lint allowance is added.
