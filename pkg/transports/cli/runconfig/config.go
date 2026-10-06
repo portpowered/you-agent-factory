@@ -102,6 +102,9 @@ type Config struct {
 	JSON                          bool
 	CleanInvocationInputSource    InvocationInputSource
 	Output                        io.Writer
+	// FreshCurrentBoard preserves the server command's fresh-session behavior;
+	// continuous run and out-of-box startup may select the retained board.
+	FreshCurrentBoard bool
 	// ReplayMetadataOutput is the raw human stdout sink used for non-fatal
 	// replay drift disclosure even when quiet mode suppresses normal output.
 	ReplayMetadataOutput io.Writer

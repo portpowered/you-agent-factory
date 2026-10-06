@@ -518,7 +518,7 @@ func prepareRunConfig(
 }
 
 func isImplicitCurrentBoardRun(cfg RunConfig) bool {
-	return !cfg.DisableDefaultRecording && cfg.Continuously && cfg.Port > 0 &&
+	return !cfg.FreshCurrentBoard && !cfg.DisableDefaultRecording && cfg.Continuously && cfg.Port > 0 &&
 		strings.TrimSpace(cfg.RecordPath) == "" && strings.TrimSpace(cfg.ReplayPath) == "" &&
 		strings.TrimSpace(cfg.ResumePath) == "" &&
 		(strings.TrimSpace(cfg.FactorySessionID) == "" || cfg.FactorySessionID == defaultFactorySessionID)

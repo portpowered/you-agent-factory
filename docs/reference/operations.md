@@ -67,6 +67,10 @@ Completed Work does not dispatch again.
 This procedure covers graceful restart of confirmed Work.
 Recovery after forced termination has a separate verification boundary.
 
+Use the same continuous `you run` command to recover this board. `you server`
+starts a fresh Current Factory session and does not select the retained board;
+archived Worker Session history remains available without restarting its Work.
+
 The first launch creates a dated recording in the operator profile and starts an empty board.
 The repository's `.you-agent-factory/current-board.json` reference selects that recording on later launches.
 Startup restores the board before readiness and publishes the reference atomically.

@@ -429,6 +429,7 @@ func TestPrepareRunConfigSelectsOnlyImplicitContinuousDefaultBoard(t *testing.T)
 		want   bool
 	}{
 		{"continuous server", RunConfig{Continuously: true, Port: 7437}, true},
+		{"fresh server command", RunConfig{Continuously: true, Port: 7437, FreshCurrentBoard: true}, false},
 		{"batch", RunConfig{Port: 7437}, false},
 		{"no server", RunConfig{Continuously: true}, false},
 		{"explicit record", RunConfig{Continuously: true, Port: 7437, RecordPath: "selected.json"}, false},
