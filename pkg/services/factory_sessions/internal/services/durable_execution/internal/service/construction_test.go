@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"os"
-	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +39,8 @@ func TestNewDurable_DefaultPolicyDoesNotCreateProjectDurableSessions(t *testing.
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -74,6 +78,8 @@ func TestNewDurable_DisabledPolicyDoesNotCreateProjectDurableSessions(t *testing
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewDurable(disabled policy): %v", err)
@@ -98,12 +104,51 @@ func TestNewDurable_DisabledPolicyDoesNotCreateProjectDurableSessions(t *testing
 	}
 }
 
-func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
+func TestNewDurable_EnabledPolicyPersistsRequestRoots(t *testing.T) {
 	t.Parallel()
+	roots := []string{t.TempDir(), t.TempDir()}
+	var identities atomic.Uint32
+	owner := newPersistingDurable(t, roots[0], func() string {
+		return fmt.Sprintf("%032x", identities.Add(1))
+	})
+	for index, root := range roots {
+		t.Run(fmt.Sprintf("root-%d", index), func(t *testing.T) {
+			t.Parallel()
+			started, err := owner.StartSync(context.Background(), factorysessions.DurableStartRequest{
+				RequestID:   fmt.Sprintf("req-construction-persistence-%d", index),
+				ProjectRoot: root,
+				Source: factorysessions.Source{
+					Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
+					InlineWorkflow: &factorysessions.InlineWorkflowSource{
+						Dialect: "you-workflow-v1", InlineSource: `return { ok: true };`,
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("StartSync: %v", err)
+			}
+			peerRoot := roots[1-index]
+			if _, err := os.Stat(runtimepersist.SnapshotPathForProjectRoot(peerRoot, started.SessionID)); !os.IsNotExist(err) {
+				t.Fatalf("peer snapshot stat = %v, want absent", err)
+			}
+			// A fresh owner reads persisted customer state instead of the live
+			// owner's in-memory projection or the snapshot's file shape.
+			restarted := newPersistingDurable(t, root, func() string { return "cccccccccccccccccccccccccccccccc" })
+			got, err := restarted.GetSession(context.Background(), started.SessionID)
+			if err != nil {
+				t.Fatalf("GetSession after restart: %v", err)
+			}
+			if got.SessionID != started.SessionID || got.Status != factorysessions.LifecycleStatusSucceeded {
+				t.Fatalf("restarted session = %+v, want completed %s", got, started.SessionID)
+			}
+		})
+	}
+}
 
-	projectRoot := t.TempDir()
+func newPersistingDurable(t *testing.T, root string, generateID factorysessions.SessionIDGenerator) durableexecution.Service {
+	t.Helper()
 	owner, err := NewDurable(
-		projectRoot,
+		root,
 		factorysessions.PersistencePolicyEnabled,
 		projectPersistenceStoreFactory(),
 		factorysessions.ChildExecutorModeFake,
@@ -119,33 +164,21 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 		nil,
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
-		func() string { return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-		nil,
-		nil,
+		generateID,
+		nil, nil, nil, nil,
 		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewDurable(enabled policy): %v", err)
 	}
-
-	started, err := owner.StartSync(context.Background(), factorysessions.DurableStartRequest{
-		RequestID:   "req-construction-enabled-persistence-001",
-		ProjectRoot: projectRoot,
-		Source: factorysessions.Source{
-			Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
-			InlineWorkflow: &factorysessions.InlineWorkflowSource{
-				Dialect:      "you-workflow-v1",
-				InlineSource: `return { ok: true };`,
-			},
-		},
+	t.Cleanup(func() {
+		if closer, ok := owner.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				t.Errorf("Close: %v", err)
+			}
+		}
 	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
-	if _, err := os.Stat(snapshotPath); err != nil {
-		t.Fatalf("enabled persistence snapshot stat error = %v, want exist", err)
-	}
+	return owner
 }
 
 func projectPersistenceStoreFactory() roles.RuntimePersistenceStoreFactory {

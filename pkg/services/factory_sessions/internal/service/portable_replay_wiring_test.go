@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -110,6 +111,7 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{events: &events, closeErr: ownerErr}
 	cleanup := newPortableReplayRuntimeCleanup()
 	cleanup.SetOwner(owner)
+	cleanup.releaseScope = func() { events = append(events, "worker-scope-release") }
 	cleanup.Set(portableReplayCleanupOpening(&portableReplayRuntimeRecord{
 		closeArtifacts: func() error {
 			events = append(events, "runtime-artifacts-close")
@@ -121,14 +123,79 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	if !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
 		t.Fatalf("cleanup error = %v, want both owner and artifact errors", err)
 	}
-	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
 		t.Fatalf("cleanup ordering events = %v, want owner before artifacts", events)
 	}
 	if err := cleanup.Close(); !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
 		t.Fatalf("repeated cleanup error = %v, want the joined errors", err)
 	}
-	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
 		t.Fatalf("repeated cleanup ordering events = %v, want no duplicate closes", events)
+	}
+}
+
+func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries(t *testing.T) {
+	t.Parallel()
+	for _, failsClose := range []bool{false, true} {
+		t.Run(map[bool]string{false: "released", true: "cleanup error retained"}[failsClose], func(t *testing.T) {
+			t.Parallel()
+			failure := errors.New("durable acquisition failed after opening resources")
+			var closeErr error
+			if failsClose {
+				closeErr = errors.New("durable resource release failed")
+			}
+			var events []string
+			failedOwner := &portableReplayRuntimeOwner{events: &events, closeErr: closeErr}
+			retryOwner := &portableReplayRuntimeOwner{}
+			factory := newPortableCheckpointRuntimeOpeningFactory(t, retryOwner)
+			acquire := factory.durableOpening.executionFactory
+			attempts := 0
+			factory.durableOpening = durableOpeningFixture(func(projectRoot string,
+				policy factorysessions.PersistencePolicy, provider providers.Service, clock factoryruntime.Clock,
+				presets map[string]struct{}, settings factoryruntime.JavaScriptWorkerSettings,
+				mocks *workers.MockWorkersConfig, integrations []operatorconfig.ACPIntegration, logger *zap.Logger,
+			) (durableexecution.Service, error) {
+				attempts++
+				if attempts == 1 {
+					return failedOwner, failure
+				}
+				return acquire(projectRoot, policy, provider, clock, presets, settings, mocks, integrations, logger)
+			})
+			request := portableCheckpointOwnerFixture(t).startRequest()
+			failed, err := factory.openForRequest(t.Context(), request)
+			assertFailedReplayAcquisition(t, failed, err, failure, closeErr, events)
+			retried, err := factory.openForRequest(t.Context(), request)
+			if err != nil || retried.execution == nil || attempts != 2 {
+				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.execution != nil)
+			}
+			if err := retried.closeArtifacts(); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
+				t.Fatalf("stale cleanup or retry closed failed owner again: %v", events)
+			}
+		})
+	}
+}
+
+func assertFailedReplayAcquisition(t *testing.T, failed runtimeProducts, err, failure, closeErr error, events []string) {
+	t.Helper()
+	if !errors.Is(err, failure) || (closeErr != nil && !errors.Is(err, closeErr)) {
+		t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
+	}
+	if failed.execution != nil || failed.process != nil {
+		t.Fatal("failed acquisition published usable session roles")
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
+		t.Fatalf("failed owner cleanup = %v, want immediate release", events)
+	}
+	if closeErr != nil {
+		if failed.closeArtifacts == nil {
+			t.Fatal("failed release lost its owned cleanup handle")
+		}
+		if err := failed.closeArtifacts(); !errors.Is(err, closeErr) {
+			t.Fatalf("retained cleanup error = %v, want release cause", err)
+		}
 	}
 }
 
@@ -211,8 +278,8 @@ func testPortableReplayResume(t *testing.T) {
 	if owner.workerRuntimeID != "portable-replay-runtime" || owner.workerGenerationID != "portable-replay-generation" {
 		t.Fatalf("child execution identity = runtime:%q generation:%q, want portable replay identities", owner.workerRuntimeID, owner.workerGenerationID)
 	}
-	if owner.workerInvoker == nil || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
-		t.Fatalf("resumed child bindings = invoker:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.workerInvoker != nil, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
+	if !owner.liveChangeBound || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
+		t.Fatalf("resumed child bindings = liveChange:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.liveChangeBound, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
 	}
 }
 
@@ -387,6 +454,7 @@ func assertPortableReplayControlWalled(t *testing.T, execution factorysessions.D
 func portableCheckpointOwnerFixture(t *testing.T) *runtimeOwnerFixture {
 	t.Helper()
 	return &runtimeOwnerFixture{
+		FactorySession:    sessionOwnerFixture{SystemConfigHome: "/controlled-home"},
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
 		Recordings:        recordings.RuntimeSelection{ReplayPath: "checkpoint.json"},
 	}
@@ -438,21 +506,14 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		return "portable-replay-runtime"
 	}
 	dependencies.WorkerService = &portableReplayWorkerService{}
-	dependencies.DurableExecutionFactory = func(
-		_ factorydefinitions.RuntimeSelection,
-		_ factorysessions.PersistencePolicy,
-		_ string,
-		_ string,
-		_ operatorconfig.ResolvedDefaults,
-		_ RuntimeRoot,
-		_ factoryruntime.Clock,
-		_ providers.Service,
-		_ *workers.MockWorkersConfig,
-		_ FactorySessionExecutionFactory,
-		_ factorysessions.ProviderIdentityResolver,
-	) (DurableExecution, error) {
-		return DurableExecution{Service: owner}, nil
-	}
+	owner.workerExecution = dependencies.WorkerService
+	dependencies.DurableOpening = durableOpeningFixture(func(
+		_ string, _ factorysessions.PersistencePolicy, _ providers.Service, _ factoryruntime.Clock,
+		_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, _ *workers.MockWorkersConfig,
+		_ []operatorconfig.ACPIntegration, _ *zap.Logger,
+	) (durableexecution.Service, error) {
+		return owner, nil
+	})
 	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
@@ -475,7 +536,7 @@ type portableReplayRuntimeOwner struct {
 	listResult              factorysessions.ListDispatchesResult
 	queryResult             factorysessions.ListDispatchesResult
 	queryRequest            factorysessions.DispatchQueryRequest
-	workerInvoker           factoryruntime.Service
+	liveChangeBound         bool
 	workerExecution         interface {
 		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 	}
@@ -597,34 +658,27 @@ func (*portableReplayRuntimeOwner) RecordPetriTokenMutations(
 	return nil
 }
 
-func (owner *portableReplayRuntimeOwner) SetWorkerInvoker(runtime factoryruntime.Service) {
-	owner.workerInvoker = runtime
+func (owner *portableReplayRuntimeOwner) BindLiveChangeScope(string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int)) func() {
+	owner.liveChangeBound = true
+	return func() { owner.liveChangeBound = false }
 }
 
-func (owner *portableReplayRuntimeOwner) SetWorkerExecution(
-	execution interface {
-		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
-	},
+func (owner *portableReplayRuntimeOwner) BindWorkerScope(
+	_ string,
 	_ factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
 	_ providers.Service,
 	_ *workers.MockWorkersConfig,
 	_ platformprocess.CommandRunner,
-) {
-	owner.workerExecution = execution
+	publisher workers.ProgressPublisher,
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+) (func(), error) {
+	owner.progressPublisher = publisher
+	owner.attemptStarter = starter
 	owner.workerRuntimeID = runtimeID
 	owner.workerGenerationID = generationID
-}
-
-func (owner *portableReplayRuntimeOwner) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {
-	owner.progressPublisher = publisher
-}
-
-func (owner *portableReplayRuntimeOwner) SetWorkerAttemptStarter(
-	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
-) {
-	owner.attemptStarter = starter
+	return func() {}, nil
 }
 
 type portableReplayWorkerService struct {
@@ -784,4 +838,121 @@ func portableReplayCleanupOpening(record runtimeports.RuntimeInstance) *factoryr
 	return &factoryruntime.RuntimeInitialOpening{Record: record,
 		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error { return record.CloseArtifacts() }},
 	}
+}
+
+// Replay keeps explicit provider selection and request mock policy while nil
+// selection inherits the already composed Workers provider. Acquisition errors
+// still leave no usable durable owner.
+func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testing.T) {
+	t.Parallel()
+	selected := testutil.NewMockProvider(workers.InferenceResponse{Content: "selected"})
+	failure := errors.New("durable persistence unavailable")
+	for _, tc := range []struct {
+		name     string
+		provider providers.Service
+		failure  error
+	}{{name: "inherit"}, {name: "explicit", provider: selected}, {name: "acquisition failure", provider: selected, failure: failure}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			configured := preparedRuntime{Session: factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigHome: "/controlled-home"}}}
+			configured.Workers.MockWorkers = &workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough}
+			owner := &portableReplayRuntimeOwner{}
+			acquire := func(_ string, _ factorysessions.PersistencePolicy, provider providers.Service, _ factoryruntime.Clock,
+				_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, mocks *workers.MockWorkersConfig,
+				_ []operatorconfig.ACPIntegration, _ *zap.Logger,
+			) (durableexecution.Service, error) {
+				if provider != tc.provider {
+					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
+				}
+				if mocks == nil || !mocks.UnmatchedDispatchPolicy.PassthroughUnmatched() {
+					t.Fatal("request mock policy was lost")
+				}
+				if tc.failure != nil {
+					return nil, tc.failure
+				}
+				return owner, nil
+			}
+			factory := &Root{
+				clock: openingCoordinatorClock{}, providerOverride: tc.provider,
+				durableOpening: durableOpeningFixture(acquire),
+			}
+			durable, closeOwner, err := factory.openPortableReplayDurableOwner(configured, RuntimeRoot{})
+			if !errors.Is(err, tc.failure) {
+				t.Fatalf("error = %v, want %v", err, tc.failure)
+			}
+			if tc.failure != nil {
+				if durable != nil {
+					t.Fatal("failed acquisition returned usable owner")
+				}
+				if err := closeOwner(); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if replayOwner, ok := durable.(*portableReplayDurableOwner); !ok || replayOwner.Service != owner {
+				t.Fatalf("acquisition result = %v, want admitted owner", durable)
+			}
+			if err := closeOwner(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestDurableCapabilityRegistrationOwnsCompletedFlushRelease(t *testing.T) {
+	t.Parallel()
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "release", true: "failed worker registration"}[fail], func(t *testing.T) {
+			owner := &durabilityRegistrationOwner{workerErr: nil}
+			if fail {
+				owner.workerErr = errors.New("worker registration failed")
+			}
+			release, err := bindDurableExecutionCapabilities("session-owned-flush", owner, &portableReplayRuntimeService{}, nil,
+				"runtime-owned-flush", "generation-owned-flush", nil, nil, nil, nil, nil, nil)
+			if fail {
+				if !errors.Is(err, owner.workerErr) || release != nil || len(owner.events) != 0 {
+					t.Fatalf("failed registration = %v, release present %v, events %v", err, release != nil, owner.events)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			release()
+			if !reflect.DeepEqual(owner.events, []string{"live-change-register", "flush-register", "worker-release", "flush-release", "live-change-release"}) {
+				t.Fatalf("registration lifecycle = %v", owner.events)
+			}
+		})
+	}
+}
+
+type durabilityRegistrationOwner struct {
+	portableReplayRuntimeOwner
+	workerErr error
+	events    []string
+}
+
+func (owner *durabilityRegistrationOwner) BindWorkerScope(
+	string, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service,
+	*workers.MockWorkersConfig, platformprocess.CommandRunner, workers.ProgressPublisher,
+	func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+) (func(), error) {
+	if owner.workerErr != nil {
+		return nil, owner.workerErr
+	}
+	return func() { owner.events = append(owner.events, "worker-release") }, nil
+}
+
+func (owner *durabilityRegistrationOwner) BindDispatchDurability(
+	string, recordings.CompletedFlushWatermarkReader, string,
+) func() {
+	owner.events = append(owner.events, "flush-register")
+	return func() { owner.events = append(owner.events, "flush-release") }
+}
+
+func (owner *durabilityRegistrationOwner) BindLiveChangeScope(
+	string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int),
+) func() {
+	owner.events = append(owner.events, "live-change-register")
+	return func() { owner.events = append(owner.events, "live-change-release") }
 }

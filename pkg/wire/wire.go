@@ -17,6 +17,7 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
@@ -107,7 +108,7 @@ var servicesSet = wire.NewSet(
 	provideSystemInitializationInspectPath,
 	provideOperatorConfigLoader,
 	provideOperatorBackendScopeEnsurer,
-	provideDurableExecutionFactory,
+	provideDurableOpening,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
@@ -253,6 +254,9 @@ var servicesSet = wire.NewSet(
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	factorysessionwire.NewRuntimeAssembly,
 	factorysessionwire.NewGateway,
+	factorysessionwire.NewRuntimeModelInvocation,
+	provideRuntimeModelFactoryConfigReader,
+	provideRuntimeModelWorkerExecution,
 	provideFactorySessionReconnectValidator,
 	factorysessionwire.NewSessionHost,
 	factorysessionwire.NewNamedFactoryActivator,
@@ -272,8 +276,8 @@ var servicesSet = wire.NewSet(
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
+	factoryruntimewire.NewJavaScriptCheckpointSummaries,
 	provideFactorySessionExecutionFactory,
-	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingClock,
 	provideRecordingSnapshotWriter,
@@ -376,7 +380,7 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRoot,
-	provideFactorySessionsService,
+	wire.Bind(new(factorysessions.Service), new(*factorysessionwire.Root)),
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -418,7 +422,6 @@ var workerServiceSet = wire.NewSet(
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
-	provideProviderFromCommandRunnerFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )

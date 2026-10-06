@@ -320,8 +320,8 @@ func testRuntimeHookAndMarshalBranches(t *testing.T) {
 		t.Fatalf("fake hooks = %#v, want no child executor override", hooks)
 	}
 	liveService := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
-		ProjectRoot:        t.TempDir(),
-		InvocationExecutor: constructorInvocationExecutor{},
+		ProjectRoot:     t.TempDir(),
+		WorkerExecution: constructorWorkerExecution{},
 	})
 
 	if hooks := liveService.childExecutorHooks(ChildExecutorModeLive, "session-live"); hooks.NewChildExecutor == nil {

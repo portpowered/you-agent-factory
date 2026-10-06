@@ -11,6 +11,7 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
@@ -74,23 +75,23 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProviderOverrideService                = service.ProviderOverrideService
-	WorkFactory                            = service.WorkFactory
-	FactorySessionExecutionFactory         = service.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory = service.ConductorInvocationWithProgressFactory
-	DurableExecutionFactory                = service.DurableExecutionFactory
-	DurableExecution                       = service.DurableExecution
-	WorkerCommandRunnerAdapter             = service.WorkerCommandRunnerAdapter
-	ProviderCommandRunner                  = service.ProviderCommandRunner
-	ScriptCommandRunner                    = service.ScriptCommandRunner
-	ProviderFromCommandRunnerFactory       = service.ProviderFromCommandRunnerFactory
-	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
-	RuntimeRoot                            = service.RuntimeRoot
-	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
+	ProviderOverrideService        = service.ProviderOverrideService
+	FactorySessionExecutionFactory = service.FactorySessionExecutionFactory
+	DurableOpening                 = service.DurableOpening
+	DurableExecution               = service.DurableExecution
+	WorkerCommandRunnerAdapter     = service.WorkerCommandRunnerAdapter
+	ProviderCommandRunner          = service.ProviderCommandRunner
+	ScriptCommandRunner            = service.ScriptCommandRunner
+	FactoryRuntimeRoot             = service.FactoryRuntimeRoot
+	RuntimeRoot                    = service.RuntimeRoot
+	ModelPullMetricsRecorder       = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem   = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter     = factorysessioncontracts.InvocationArtifactExporter
 
-	Root = factorysessionroot.Root
+	RuntimeModelInvocationOperation = modelinvocation.RuntimeModelInvocationOperation
+	RuntimeModelFactoryConfigReader = modelinvocation.FactoryConfigReader
+	RuntimeModelWorkerExecution     = modelinvocation.WorkerExecution
+	Root                            = factorysessionroot.Root
 )
 
 // NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
@@ -104,7 +105,7 @@ var (
 	NewRuntimeProjectStore     = runtimepersist.NewLazyProjectStore
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
-	NewDurableExecutionRuntime = service.NewDurableExecution
+	NewDurableOpening          = service.NewDurableOpening
 	ModelHostDiagnosticLogger  = service.ModelHostDiagnosticLogger
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 )
@@ -114,7 +115,6 @@ func NewRoot(
 	logger *zap.Logger,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -131,8 +131,7 @@ func NewRoot(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly RuntimeAssembly,
-	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
+	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory ProcessRuntimeFactory,
@@ -140,7 +139,6 @@ func NewRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-	invocationMetricsRecorder InvocationMetricsRecorder,
 	workService work.Service,
 	automationService automations.Service,
 	webhooksService webhooks.Service,
@@ -148,18 +146,18 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	modelInvocation RuntimeModelInvocationOperation,
+	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	return service.NewRoot(
 		providerSessions,
 		logger,
 		factoryWorkflows,
 		workflowPreview,
-		workersMockCommandRunnerFactory,
 		runtimeRoot,
 		resolveClock,
 		newSessionLogger,
@@ -176,8 +174,7 @@ func NewRoot(
 		decodeReplayConfig,
 		captureLoadedFactorySnapshot,
 		assembly,
-		durableExecutionFactory,
-		factorySessionExecutionFactory,
+		durableOpening,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		processRuntimeFactory,
@@ -185,7 +182,6 @@ func NewRoot(
 		generateRuntimeInstanceID,
 		resolveHome,
 		providerIdentities,
-		invocationMetricsRecorder,
 		workService,
 		automationService,
 		webhooksService,
@@ -193,11 +189,12 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		providerFromCommandRunnerFactory,
 		providerCommandRunner,
 		scriptCommandRunner,
 		ensureBackendScope,
 		initialActivation,
+		modelInvocation,
+		liveChangeCoordinator,
 	)
 }
 
@@ -229,4 +226,9 @@ func NewInvocationOperation(
 		logger,
 		presentations,
 	)
+}
+
+// NewRuntimeModelInvocation injects fixed peers into the session-scoped operation.
+func NewRuntimeModelInvocation(modelService models.Service, gateway RuntimeModelFactoryConfigReader, workerService RuntimeModelWorkerExecution) RuntimeModelInvocationOperation {
+	return modelinvocation.NewRuntimeModelInvocation(modelService, gateway, workerService)
 }

@@ -164,6 +164,7 @@ type ApplicationRuntime interface {
 }
 
 type RuntimeAssembly interface {
+	FactoryConfigForSession(context.Context, string) (*factorydefinitions.FactoryConfig, error)
 	CurrentRuntimeResolver
 	RuntimeResolver
 	RuntimeReader
@@ -173,16 +174,14 @@ type RuntimeAssembly interface {
 	Complete(
 		factoryRootDir string,
 		clock factoryruntime.Clock,
-		baseLogger *zap.Logger,
 		logger *zap.Logger,
 		runtimeBuild runtimeports.RuntimeReplacementBuilder,
 		startupRuntime runtimeports.RuntimeInstance,
 		modelsScope models.RuntimeScopeRef,
-		startupSpec factoryruntime.SessionBuildSpec,
+		completion factoryruntime.RuntimeInitialCompletion,
 		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
 		durableExecution durableexecution.Service,
-		factoryDefinitions factorydefinitions.Service,
 		factorySessionID string,
 		dir string,
 		executionBaseDir string,
@@ -190,13 +189,6 @@ type RuntimeAssembly interface {
 		backendScopeID string,
 		workFile string,
 		workflowID string,
-		workstationLoader factorydefinitions.WorkstationLoader,
-		loadFactory factorydefinitions.LoadedFactoryLoader,
-		factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-		editableFactoryValidator factorysessions.EditableFactoryValidator,
-		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
-		worldStateProjector factoryruntime.WorldStateProjector,
-		invocationMetricsRecorder InvocationMetricsRecorder,
 	) (ApplicationRuntime, SessionGateway, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }
 

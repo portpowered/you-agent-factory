@@ -260,6 +260,18 @@ func (owner *mutationOnlyClosableOpeningOwner) Close() error { return owner.clos
 
 func earlyScopeOpeningRoot(execution durableexecution.Service, modelService models.Service, openingErr error, durableFailure bool) *Root {
 	recordingRoot := &recordingsRootConstructionStub{}
+	opening := NewDurableOpening(
+		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
+		func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
+			map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
+			[]operatorconfig.ACPIntegration, *zap.Logger) (durableexecution.Service, error) {
+			if durableFailure {
+				return execution, openingErr
+			}
+			return execution, nil
+		},
+		func(identity string) (string, error) { return identity, nil },
+	)
 	return &Root{
 		resolveHome: func() (string, error) { return "/controlled-home", nil },
 		clock:       openingCoordinatorClock{},
@@ -277,24 +289,7 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		newSessionLogger:  func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger },
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
-		durableExecutionFactory: func(definition factorydefinitions.RuntimeSelection, persistence factorysessions.PersistencePolicy,
-			home, configPath string, defaults operatorconfig.ResolvedDefaults, root RuntimeRoot, clock factoryruntime.Clock,
-			provider providers.Service, mock *workers.MockWorkersConfig, _ FactorySessionExecutionFactory,
-			_ factorysessions.ProviderIdentityResolver) (DurableExecution, error) {
-			return NewDurableExecution(
-				func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
-				definition, persistence, home, configPath, defaults, root, clock, provider, mock,
-				func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
-					map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
-					[]operatorconfig.ACPIntegration) (durableexecution.Service, error) {
-					if durableFailure {
-						return execution, openingErr
-					}
-					return execution, nil
-				},
-				func(identity string) (string, error) { return identity, nil },
-			)
-		},
+		durableOpening: opening,
 	}
 }
 

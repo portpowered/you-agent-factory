@@ -286,13 +286,6 @@ func (projection providerIdentityProjection) CanonicalIdentity(identity string) 
 	return resolved.ID.String(), nil
 }
 
-func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
-	if edges.WorkersOperatingSystem != "" {
-		return edges.WorkersOperatingSystem
-	}
-	return workers.OperatingSystem(runtime.GOOS)
-}
-
 // provideWorkersProviderCommandRunner resolves the shared provider CLI runner
 // used by native executors and by migrated catalog Integrations on the
 // conductor path. Injected edges win; otherwise the platform process runner is
@@ -599,14 +592,6 @@ func provideSessionCheckpointStoreFactory() factoryruntime.JavaScriptCheckpointS
 	}
 }
 
-func provideFactorySessionsService(
-	assembly factorysessionwire.RuntimeAssembly,
-	root *factorysessionwire.Root,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-) (factorysessions.Service, error) {
-	return factorysessionwire.NewServiceFromAssembly(assembly, root, liveChangeCoordinator)
-}
-
 // provideFactorySessionsCapability publishes the already-composed Sessions root
 // through the neutral process capability. The initializer retains the opaque
 // value without importing the Sessions service; pkg/root reifies it at the
@@ -703,6 +688,7 @@ func provideOrchestrationCompilation(service factoryruntimewire.Orchestration) f
 }
 
 func provideFactorySessionExecutionFactory(
+	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	recordingWriter recordings.PortableRecordingWriter,
@@ -715,6 +701,7 @@ func provideFactorySessionExecutionFactory(
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride providerOverrideService,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+	workerService workers.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	// The allocator, runner adapter, and fixed provider override are read only
 	// to decide whether this process can reach a provider at all. No invocation executor is built
@@ -731,6 +718,7 @@ func provideFactorySessionExecutionFactory(
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 		mockWorkers *workers.MockWorkersConfig,
 		_ []operatorsettings.ACPIntegration,
+		logger *zap.Logger,
 	) (factorysessionwire.DurableExecutionService, error) {
 		// Whether this session runs children live is the same question the
 		// deleted live-child block answered, asked the same way: an explicit
@@ -750,7 +738,7 @@ func provideFactorySessionExecutionFactory(
 			childExecutorMode,
 			clock,
 			syncWaits,
-			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
+			checkpointSummaries,
 			workflows,
 			orchestration,
 			workerPresetIDs,
@@ -759,7 +747,7 @@ func provideFactorySessionExecutionFactory(
 			sessionIDs,
 			responseEventIDs,
 			responseStreams,
-			liveChangeCoordinator,
+			liveChangeCoordinator, workerService, logger,
 		)
 	}
 }
@@ -771,6 +759,7 @@ func provideProcessDurableExecution(
 	stores factorysessionwire.RuntimePersistenceStoreFactory,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionwire.SyncWaitScheduler,
+	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
 	writer recordings.PortableRecordingWriter,
@@ -791,7 +780,7 @@ func provideProcessDurableExecution(
 	}
 	return factorysessionwire.NewProcessDurableExecution(
 		resolveHome, mode, stores, clock, syncWaits,
-		factoryruntimewire.NewJavaScriptCheckpointSummaries(), workflows, orchestration,
+		checkpointSummaries, workflows, orchestration,
 		writer, sessionIDs, responseIDs, responses, liveChange, scope, workerService,
 		providerOverride, logger,
 	)
@@ -844,4 +833,13 @@ func provideRecordingFilesystemEffects(
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
 	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
+}
+
+// Narrow the already-composed peers without allocating another service.
+func provideRuntimeModelFactoryConfigReader(assembly factorysessionwire.RuntimeAssembly) factorysessionwire.RuntimeModelFactoryConfigReader {
+	return assembly
+}
+
+func provideRuntimeModelWorkerExecution(workerService workers.Service) factorysessionwire.RuntimeModelWorkerExecution {
+	return workerService
 }

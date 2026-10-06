@@ -828,7 +828,7 @@ func TestLiveDispatchListAndDetailConfirmAfterCompletedFlush(t *testing.T) {
 			},
 		},
 	}
-	service.SetDispatchDurability(reader, generationID)
+	service.BindDispatchDurability(sessionID, reader, generationID)
 
 	list, err := service.ListDispatches(context.Background(), sessionID)
 	if err != nil {
@@ -868,6 +868,72 @@ func TestLiveDispatchListAndDetailConfirmAfterCompletedFlush(t *testing.T) {
 	}
 	if reader.calls != 4 {
 		t.Fatalf("dispatch read watermark calls = %d, want one sample per response", reader.calls)
+	}
+}
+
+func TestDispatchDurabilityScopesKeepPeerConfirmationIsolated(t *testing.T) {
+	t.Parallel()
+	const dispatchID = "dispatch-shared"
+	service := &JavaScriptRuntimeService{sessions: map[string]*runtimeSessionState{}}
+	for _, sessionID := range []string{"dur-sess-flush-first", "dur-sess-flush-peer"} {
+		service.sessions[sessionID] = &runtimeSessionState{
+			session:    SessionReadResult{SessionID: sessionID, OrchestratorKind: "JAVASCRIPT"},
+			dispatches: []DispatchSummary{{ID: dispatchID, Status: DispatchStatusCompleted}},
+			events:     []json.RawMessage{json.RawMessage(`{"type":"DISPATCH_RECONCILED","context":{"dispatchId":"dispatch-shared","sequence":7}}`)},
+		}
+	}
+	first := &dispatchDurabilityReader{
+		available: true,
+		cursor:    recordings.CanonicalEventCursor{StreamGenerationID: "generation-first", Sequence: 7},
+	}
+	peer := &dispatchDurabilityReader{}
+	releaseFirst := service.BindDispatchDurability("dur-sess-flush-first", first, "generation-first")
+	releasePeer := service.BindDispatchDurability("dur-sess-flush-peer", peer, "generation-peer")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
+
+	// Replacing the peer's recording cannot retarget the first session's reads.
+	replacement := &dispatchDurabilityReader{
+		available: true,
+		cursor:    recordings.CanonicalEventCursor{StreamGenerationID: "generation-peer-replaced", Sequence: 7},
+	}
+	releaseReplacement := service.BindDispatchDurability("dur-sess-flush-peer", replacement, "generation-peer-replaced")
+	releasePeer()
+	releasePeer()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateConfirmed, "generation-peer-replaced")
+
+	// Reused generation IDs cannot authorize an older registration's cleanup.
+	releaseCurrent := service.BindDispatchDurability("dur-sess-flush-peer", replacement, "generation-peer-replaced")
+	releaseReplacement()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateConfirmed, "generation-peer-replaced")
+	releaseCurrent()
+	releaseCurrent()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateConfirmed, "generation-first")
+	releaseFirst()
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateUnconfirmed, "")
+
+	// Without a recording handle, a session remains explicitly unconfirmed.
+	service.BindDispatchDurability("dur-sess-flush-peer", nil, "generation-peer-replaced")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-peer", dispatchID, ConfirmationStateUnconfirmed, "")
+	assertSessionDispatchConfirmation(t, service, "dur-sess-flush-first", dispatchID, ConfirmationStateUnconfirmed, "")
+}
+
+func assertSessionDispatchConfirmation(t *testing.T, service *JavaScriptRuntimeService, sessionID, dispatchID string, confirmation ConfirmationState, generationID string) {
+	t.Helper()
+	list, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil || len(list.Dispatches) != 1 {
+		t.Fatalf("session %s dispatch list = %#v, error %v", sessionID, list, err)
+	}
+	detail, err := service.GetDispatch(context.Background(), sessionID, dispatchID)
+	if err != nil {
+		t.Fatalf("session %s dispatch detail: %v", sessionID, err)
+	}
+	for _, summary := range []DispatchSummary{list.Dispatches[0], detail.DispatchSummary} {
+		if summary.ConfirmationState != confirmation || summary.StreamGenerationID != generationID {
+			t.Fatalf("session %s dispatch = %#v, want %s in generation %s", sessionID, summary, confirmation, generationID)
+		}
 	}
 }
 

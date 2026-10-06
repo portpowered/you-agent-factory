@@ -147,7 +147,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err := validateHTTPRuntime(root, presentation); err != nil {
 		return nil, err
 	}
-	modelsHandler, err := newHTTPModelsHandler(root, presentation, modelsContent)
+	modelsHandler, err := newHTTPModelsHandler(root, presentation, modelsContent, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -197,12 +197,9 @@ func newHTTPModelsHandler(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
 	modelsContent work.ContentPreparation,
+	sessionID string,
 ) (*modelshttp.Handler, error) {
-	modelInvoker := presentation.ModelInvoker
-	if modelInvoker == nil {
-		modelInvoker = root.WorkersService()
-	}
-	modelsAdapter := modelshttp.NewAdapter(root.ModelsService(), modelInvoker, modelsContent, presentation.ModelsScope)
+	modelsAdapter := modelshttp.NewSessionAdapter(root.ModelsService(), root, modelsContent, presentation.ModelsScope, sessionID)
 	modelsHandler := modelshttp.NewHandler(modelsAdapter, presentation.Logger)
 	if modelsHandler == nil {
 		return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")

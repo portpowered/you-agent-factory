@@ -20,11 +20,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -869,71 +866,6 @@ func TestLoadRuntimeRejectsMissingOrNilSessionLoggerFactory(t *testing.T) {
 		func(*zap.Logger, string, string, string) *zap.Logger { return nil },
 	); err == nil {
 		t.Fatal("nil session logger error = nil")
-	}
-}
-
-func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T) {
-	var got factoryruntime.JavaScriptWorkerSettings
-	executionFactory := func(
-		_ string,
-		_ factorysessions.PersistencePolicy,
-		_ providers.Service,
-		_ factoryruntime.Clock,
-		_ map[string]struct{},
-		settings factoryruntime.JavaScriptWorkerSettings,
-		_ *workers.MockWorkersConfig,
-		_ []operatorconfig.ACPIntegration,
-	) (durableexecution.Service, error) {
-		got = settings
-		return nil, nil
-	}
-	opened, err := NewDurableExecution(
-		func(string) (operatorconfig.Config, error) {
-			return operatorconfig.Config{
-				Defaults: operatorconfig.Defaults{WorkerModelProvider: "customer"},
-				WorkerPresets: []operatorconfig.WorkerPreset{{
-					ID: "review", ModelProvider: "agent",
-				}},
-			}, nil
-		},
-		factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
-		factorysessions.PersistencePolicyDisabled,
-		t.TempDir(),
-		"",
-		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
-		RuntimeRoot{FactoryRootDir: t.TempDir()},
-		nil,
-		nil,
-		nil,
-		executionFactory,
-		factorysessions.ProviderIdentityResolver(func(identity string) (string, error) {
-			switch identity {
-			case "CODEX":
-				return "codex", nil
-			case "customer":
-				return "customer.provider", nil
-			case "agent":
-				return "cursor", nil
-			default:
-				return "", errors.New("unexpected provider")
-			}
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewDurableExecution: %v", err)
-	}
-	if got.DefaultModelProvider != "codex" || got.DefaultModel != "operator-model" {
-		t.Fatalf("resolved defaults = %#v, want codex/operator-model", got)
-	}
-	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
-		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)
-	}
-	if opened.WorkerSettings == nil || opened.WorkerSettings.Presets["review"].ModelProvider != "cursor" {
-		t.Fatalf("opened WorkerSettings = %#v, want canonical review preset for the process start", opened.WorkerSettings)
-	}
-	got.Presets["review"] = factoryruntime.JavaScriptWorkerPreset{Model: "changed"}
-	if opened.WorkerSettings.Presets["review"].Model != "" {
-		t.Fatal("opened WorkerSettings aliases the runtime execution settings")
 	}
 }
 

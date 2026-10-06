@@ -608,7 +608,7 @@ type serviceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          providers.Service
-	ProviderExecutor  workers.InvocationExecutor
+	ProviderExecutor  WorkerExecution
 	FakeScenarios     []FakeScenario
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
@@ -626,10 +626,9 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 		return NewFakeService(clock, config.FakeScenarios...)
 	case ExecutionProviderJavaScriptRuntime:
 		workflows := constructorWorkflowContracts{}
-		return NewJavaScriptExecutionService(
+		return NewProcessDurableExecutionService(
 			config.ProjectRoot,
 			config.ChildExecutorMode,
-			firstInvocationExecutor(config.ProviderExecutor, config.Provider),
 			config.Persistence,
 			config.Clock,
 			testSyncWaitScheduler{},
@@ -644,27 +643,35 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 			config.WorkerSettings,
 			mustTestRecordingWriter(),
 			testSessionIDGenerator,
-			nil, nil, nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			firstWorkerExecution(config.ProviderExecutor, config.Provider),
+			nil,
+			nil,
 		)
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
 	}
 }
 
-func firstInvocationExecutor(executor workers.InvocationExecutor, provider providers.Service) workers.InvocationExecutor {
+func firstWorkerExecution(executor WorkerExecution, provider providers.Service) WorkerExecution {
 	if executor != nil {
 		return executor
 	}
 	if provider == nil {
 		return nil
 	}
-	return constructorInvocationExecutor{}
+	return constructorWorkerExecution{}
 }
 
-// constructorInvocationExecutor is an inert root-contract value. Constructor
+// constructorWorkerExecution is an inert root-contract value. Constructor
 // tests validate dependency presence only; Workers owns invocation behavior.
-type constructorInvocationExecutor struct {
-	workers.InvocationExecutor
+type constructorWorkerExecution struct {
+	WorkerExecution
 }
 
 type testSyncWaitScheduler struct{}
@@ -678,10 +685,9 @@ func (testSyncWaitScheduler) After(duration time.Duration) <-chan time.Time {
 func TestNewJavaScriptExecutionServiceRequiresSyncWaitScheduler(t *testing.T) {
 	t.Parallel()
 	workflows := constructorWorkflowContracts{}
-	_, err := NewJavaScriptExecutionService(
+	_, err := NewProcessDurableExecutionService(
 		t.TempDir(),
 		ChildExecutorModeFake,
-		nil,
 		DisabledPersistence(),
 		durableFixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		nil,
@@ -693,7 +699,15 @@ func TestNewJavaScriptExecutionServiceRequiresSyncWaitScheduler(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		mustTestRecordingWriter(),
 		testSessionIDGenerator,
-		nil, nil, nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "sync wait scheduler is required") {
 		t.Fatalf("NewJavaScriptExecutionService error = %v, want missing sync wait scheduler", err)
@@ -867,7 +881,7 @@ func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payl
 	}
 	return raw
 }
-func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *testing.T) {
+func TestChildWorkerExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		outcome workers.ExecutionOutcome
@@ -885,7 +899,7 @@ func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *
 				},
 			}}
 			sink := newChildRecordSink()
-			executor := newDirectChildExecutor("direct-session", invoker, sink, childTestValues{}, "/project", 0)
+			executor := newChildWorkerExecutor("direct-session", invoker, sink, childTestValues{}, nil, "/project", 0)
 
 			result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
 			if err == nil {

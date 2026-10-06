@@ -13,6 +13,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -102,6 +103,7 @@ type portableReplayRuntimeCleanup struct {
 	mu           sync.Mutex
 	owner        interface{ Close() error }
 	closeRuntime func(context.Context) error
+	releaseScope func()
 	closed       bool
 	closeErr     error
 }
@@ -150,6 +152,10 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.owner.Close())
 		cleanup.owner = nil
 	}
+	if cleanup.releaseScope != nil {
+		cleanup.releaseScope()
+		cleanup.releaseScope = nil
+	}
 	if cleanup.closeRuntime != nil {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.closeRuntime(context.Background()))
 		cleanup.closeRuntime = nil
@@ -164,38 +170,31 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 func (r *Root) openPortableReplayDurableOwner(
 	configured preparedRuntime,
 	root RuntimeRoot,
-	clockEdge factoryruntime.Clock,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	workerService workers.Service,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
-	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
-	providerIdentities factorysessions.ProviderIdentityResolver,
-	resolveClock factoryruntime.ClockResolver,
 ) (durableexecution.Service, func() error, error) {
-	if durableExecutionFactory == nil {
+	if r.durableOpening == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
 	}
-	clock, err := clockForReplay(clockEdge, nil, nil, resolveClock)
+	clock, err := clockForReplay(r.clock, nil, nil, r.resolveClock)
 	if err != nil {
 		return nil, nil, err
 	}
-	durable, providerForDurable, err := constructPortableReplayDurableOwner(
-		configured,
+	durable, err := r.durableOpening.Open(
+		configured.Definition,
+		configured.Session.Persistence,
+		runtimeSelectionForStart(configured.Session).SystemConfigHome,
+		runtimeSelectionForStart(configured.Session).SystemConfigPath,
+		configured.OperatorDefaults,
 		root,
 		clock,
-		providerOverride,
-		providerCommandRunner,
-		workersMockCommandRunnerFactory,
-		providerFromCommandRunnerFactory,
-		durableExecutionFactory,
-		factorySessionExecutionFactory,
-		providerIdentities,
+		r.providerOverride,
+		configured.Workers.MockWorkers,
 	)
 	if err != nil {
-		return nil, nil, err
+		// Acquisition may have opened resources before failing. Return only
+		// their owned release; the failed candidate must never become usable.
+		cleanup := newPortableReplayRuntimeCleanup()
+		cleanup.SetOwner(&portableReplayDurableOwner{Service: durable.Service})
+		return nil, cleanup.Close, err
 	}
 	if durable.Service == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution owner is required")
@@ -208,9 +207,7 @@ func (r *Root) openPortableReplayDurableOwner(
 				probeContext,
 				configured,
 				durable.Service,
-				workerService,
-				providerForDurable,
-				providerCommandRunner,
+				cleanup,
 			)
 			// A failed opening can still own artifacts. Register them before
 			// forwarding the error; the durable owner must stop before release.
@@ -226,9 +223,7 @@ func (r *Root) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
 	durableOwner durableexecution.Service,
-	workerService workers.Service,
-	providerForDurable providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
+	cleanup *portableReplayRuntimeCleanup,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	opening, err := r.assemblePortableReplayRuntime(
 		ctx,
@@ -244,66 +239,31 @@ func (r *Root) preparePortableReplayRuntime(
 	if admission, ok := runtimeService.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	if err := bindDurableExecutionCapabilities(
+	releaseScope, err := bindDurableExecutionCapabilities(
 		configured.Session.SessionID,
 		durableOwner,
-		workerService,
 		runtimeService,
 		resourceLeaseAdmission,
 		configured.Runtime.RuntimeInstanceID,
 		runtime.StreamGeneration(),
 		runtime.RecordingLedger(),
-		providerForDurable,
+		r.providerOverride,
 		configured.Workers.MockWorkers,
-		providerCommandRunner,
+		r.providerCommandRunner,
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
-	); err != nil {
+	)
+	if err != nil {
 		return opening, err
 	}
+	cleanup.mu.Lock()
+	if cleanup.closed {
+		releaseScope()
+	} else {
+		cleanup.releaseScope = releaseScope
+	}
+	cleanup.mu.Unlock()
 	return opening, nil
-}
-
-func constructPortableReplayDurableOwner(
-	configured preparedRuntime,
-	root RuntimeRoot,
-	clock factoryruntime.Clock,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
-	durableExecutionFactory DurableExecutionFactory,
-	factorySessionExecutionFactory FactorySessionExecutionFactory,
-	providerIdentities factorysessions.ProviderIdentityResolver,
-) (DurableExecution, providers.Service, error) {
-	providerForDurable, err := resolveDurableExecutionProvider(
-		providerOverride,
-		configured.Workers.MockWorkers,
-		nil,
-		providerCommandRunner,
-		workersMockCommandRunnerFactory,
-		providerFromCommandRunnerFactory,
-	)
-	if err != nil {
-		return DurableExecution{}, nil, err
-	}
-	durable, err := durableExecutionFactory(
-		configured.Definition,
-		configured.Session.Persistence,
-		runtimeSelectionForStart(configured.Session).SystemConfigHome,
-		runtimeSelectionForStart(configured.Session).SystemConfigPath,
-		configured.OperatorDefaults,
-		root,
-		clock,
-		providerForDurable,
-		configured.Workers.MockWorkers,
-		factorySessionExecutionFactory,
-		providerIdentities,
-	)
-	if err != nil {
-		return DurableExecution{}, nil, err
-	}
-	return durable, providerForDurable, nil
 }
 
 func (r *Root) assemblePortableReplayRuntime(
@@ -369,7 +329,6 @@ func (observations replaySessionObservations) PublishWorkerProgress(fragment wor
 func bindDurableExecutionCapabilities(
 	sessionID string,
 	execution durableexecution.Service,
-	workerService workers.Service,
 	invoker factoryruntime.Service,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
@@ -380,40 +339,61 @@ func bindDurableExecutionCapabilities(
 	commandRunner platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
-) error {
-	setWorkerInvoker(execution, invoker)
-	setDispatchDurability(execution, recordingLedger, generationID)
-	if err := setWorkerExecution(
+) (func(), error) {
+	release, err := bindWorkerScope(
 		sessionID,
 		execution,
-		workerService,
 		admission,
 		runtimeID,
 		generationID,
 		providerOverride,
 		mockWorkers,
 		commandRunner,
-	); err != nil {
-		return err
+		progressPublisher,
+		attemptStarter,
+	)
+	if err != nil {
+		return nil, err
 	}
-	setWorkerProgressPublisher(execution, progressPublisher)
-	setWorkerAttemptStarter(execution, attemptStarter)
-	return nil
+	releaseLiveChange := bindLiveChangeScope(sessionID, execution, invoker)
+	releaseDurability := bindDispatchDurability(sessionID, execution, recordingLedger, generationID)
+	return func() {
+		release()
+		releaseDurability()
+		releaseLiveChange()
+	}, nil
 }
 
-func setDispatchDurability(
+func bindLiveChangeScope(sessionID string, execution durableexecution.Service, runtime factoryruntime.Service) func() {
+	binder, ok := execution.(interface {
+		BindLiveChangeScope(string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int)) func()
+	})
+	if !ok || runtime == nil {
+		return func() {}
+	}
+	_, required := runtime.(factoryruntime.AdmittedResourceCapacityService)
+	var setRevision func(int)
+	if revision, ok := runtime.(factoryruntime.ResourceCapacityRevisionService); ok {
+		setRevision = revision.SetFactoryRevision
+	}
+	return binder.BindLiveChangeScope(sessionID, runtimebinding.NewLiveChangeApplication(runtime),
+		runtimebinding.NewLiveChangeAdmission(runtime), required, setRevision)
+}
+
+func bindDispatchDurability(
+	sessionID string,
 	execution durableexecution.Service,
 	ledger recordings.Ledger,
 	generationID string,
-) {
+) func() {
 	reader, _ := ledger.(recordings.CompletedFlushWatermarkReader)
-	setter, ok := execution.(interface {
-		SetDispatchDurability(recordings.CompletedFlushWatermarkReader, string)
+	binder, ok := execution.(interface {
+		BindDispatchDurability(string, recordings.CompletedFlushWatermarkReader, string) func()
 	})
 	if !ok {
-		return
+		return func() {}
 	}
-	setter.SetDispatchDurability(reader, generationID)
+	return binder.BindDispatchDurability(sessionID, reader, generationID)
 }
 
 type durableSessionStateReader interface {

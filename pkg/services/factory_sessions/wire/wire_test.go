@@ -86,31 +86,19 @@ func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
+	service, err := newRootWithAssembly(assembly, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+		t.Fatalf("NewRoot() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewServiceFromAssembly() returned nil service")
+		t.Fatal("NewRoot() returned nil service")
 	}
 	var root factorysessions.Service = service
-	if root == nil {
-		t.Fatal("constructed root is nil")
-	}
 	var liveControl factorysessions.LiveControlService = service
-	if liveControl == nil {
-		t.Fatal("constructed root does not publish the live-control capability")
-	}
-	if liveControl == nil {
-		t.Fatal("constructed live-control capability is nil")
-	}
 	if any(liveControl) != any(root) {
 		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
 	}
 	var deletion factorysessions.LiveDeletionService = service
-	if deletion == nil {
-		t.Fatal("constructed root does not publish the live deletion capability")
-	}
 	if any(deletion) != any(root) {
 		t.Fatalf("LiveDeletionService = %T, want the same authoritative Service instance %T", deletion, root)
 	}
@@ -124,37 +112,13 @@ func TestNewServiceFromAssemblyRetainsOneRuntimeAssemblyOnThePublishedRoot(t *te
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
+	service, err := newRootWithAssembly(assembly, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+		t.Fatalf("NewRoot() error = %v", err)
 	}
 	var retained RuntimeAssembly = service
-	if retained == nil {
-		t.Fatalf("published service = %T, want the retained runtime assembly capability", service)
-	}
 	if any(retained) != any(service) {
 		t.Fatalf("runtime assembly = %T(%[1]v), want the same published process root %T", retained, service)
-	}
-}
-
-func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
-	t.Parallel()
-
-	inputs := validNewServiceInputs()
-	assembly, err := inputs.callNewRuntimeAssembly()
-	if err != nil {
-		t.Fatalf("NewRuntimeAssembly() error = %v", err)
-	}
-	opening := &Root{}
-	service, err := NewServiceFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
-	if err != nil {
-		t.Fatalf("NewServiceFromAssembly() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewServiceFromAssembly() returned nil service")
-	}
-	if service != opening {
-		t.Fatal("published service changed the process root identity")
 	}
 }
 
@@ -166,9 +130,9 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	root, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
+	root, err := newRootWithAssembly(assembly, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+		t.Fatalf("NewRoot() error = %v", err)
 	}
 	var service factorysessions.Service = root
 	if any(service) != any(root) {
@@ -221,16 +185,12 @@ func TestNewServiceFromAssemblyConstructsInertRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
+	service, err := newRootWithAssembly(assembly, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+		t.Fatalf("NewRoot() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewServiceFromAssembly() returned nil service")
-	}
-	var root factorysessions.Service = service
-	if root == nil {
-		t.Fatal("constructed root is nil")
+		t.Fatal("NewRoot() returned nil service")
 	}
 	if directories.calls != 0 {
 		t.Fatalf("construction inspected filesystem %d times, want no runtime activity", directories.calls)
@@ -340,11 +300,12 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		in.clock,
 		in.liveChangeCoordinator,
 		nil,
-		streams,
 		NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()),
-		nil,
 		NewNamedFactoryActivator(state),
 		NewKeyedDefinitionActivationGateway(state, in.clock),
+		nil, nil, nil,
+		nil,
+		nil, nil,
 	)
 }
 
@@ -740,4 +701,52 @@ func TestOwnerGatewayPreservesUnavailableRequiredCollaborators(t *testing.T) {
 	if gateway := NewGateway(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); gateway != nil {
 		t.Fatal("unavailable host and streams returned a non-nil gateway capability")
 	}
+}
+
+// newRootWithAssembly exercises the production constructor with only the roles
+// these root publication tests observe; no opening operation runs in this fixture.
+func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveChangeCoordinator) (*Root, error) {
+	return NewRoot(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		assembly,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		liveChangeCoordinator,
+	)
 }

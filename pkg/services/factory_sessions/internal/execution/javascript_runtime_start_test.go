@@ -497,7 +497,7 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 type javaScriptRuntimeServiceConfig struct {
 	ProjectRoot           string
 	ChildExecutorMode     string
-	InvocationExecutor    workers.InvocationExecutor
+	WorkerExecution       WorkerExecution
 	Persistence           runtimepersist.Store
 	Clock                 factory.Clock
 	CheckpointSummaries   factory.JavaScriptCheckpointSummaries
@@ -506,8 +506,8 @@ type javaScriptRuntimeServiceConfig struct {
 }
 
 func TestReservedSyncSessionsExposeTheirOwnProjectRootsBeforeExecution(t *testing.T) {
-	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
-	service.SetDirectWorkerExecution(&recordingWorkerExecution{})
+	execution := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir(), WorkerExecution: execution})
 	for _, root := range []string{t.TempDir(), t.TempDir()} {
 		requestID := filepath.Base(root)
 		reserved, err := service.reserveStartSession(context.Background(), StartRequest{
@@ -521,9 +521,12 @@ func TestReservedSyncSessionsExposeTheirOwnProjectRootsBeforeExecution(t *testin
 			t.Fatalf("reserved session project root = %q, want %q", got, root)
 		}
 		child := service.childExecutorHooks(ChildExecutorModeLive, reserved.state.session.SessionID).
-			NewChildExecutor("child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*directChildExecutor)
-		if child.workingDir != root {
-			t.Fatalf("child working directory = %q, want %q", child.workingDir, root)
+			NewChildExecutor(reserved.state.session.SessionID, newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+		if _, err := child.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"}); err != nil {
+			t.Fatalf("Execute child: %v", err)
+		}
+		if execution.request.Target.Environment.WorkingDirectory != root || execution.request.Correlation.FactorySessionID != reserved.state.session.SessionID {
+			t.Fatalf("detached request = %+v, want root %q for session %s", execution.request, root, reserved.state.session.SessionID)
 		}
 	}
 }
@@ -557,13 +560,14 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
 		}
 	}
-	return NewJavaScriptRuntimeService(
-		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
+	return NewProcessDurableRuntime(
+		config.ProjectRoot, config.ChildExecutorMode,
 		config.Persistence, clock, testSyncWaitScheduler{}, checkpointSummaries,
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
 		nil, nil, config.LiveChangeCoordinator,
+		nil, nil, nil, config.WorkerExecution, nil, nil,
 	)
 }
 

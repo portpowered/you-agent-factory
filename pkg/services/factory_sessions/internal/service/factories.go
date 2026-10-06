@@ -3,16 +3,14 @@ package service
 import (
 	"context"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // The factory roles below are consumed only while opening a Factory Session
@@ -20,8 +18,6 @@ import (
 // supplies implementations, while this package owns the operation signature it
 // needs. They are aliases to function signatures so the remaining legacy Wire
 // providers can be cut over without an intermediate adapter graph.
-type WorkFactory = func(work.RuntimeResolver) work.Service
-
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,
@@ -31,13 +27,8 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.JavaScriptWorkerSettings,
 	*workers.MockWorkersConfig,
 	[]operatorsettings.ACPIntegration,
+	*zap.Logger,
 ) (durableexecution.Service, error)
-
-type ConductorInvocationWithProgressFactory = func(
-	providers.Service,
-	platformprocess.CommandRunner,
-	workers.ProgressPublisher,
-) (workers.InvocationExecutor, error)
 
 // FactoryRuntimeRoot is the process-scoped Runtime capability. Factory
 // Sessions supplies its activation operation per call while the root owns
@@ -54,17 +45,3 @@ type DurableExecution struct {
 	ACPIntegrations []operatorsettings.ACPIntegration
 	OperatorModels  map[string]models.ModelOverlay
 }
-
-type DurableExecutionFactory func(
-	factorydefinitions.RuntimeSelection,
-	factorysessions.PersistencePolicy,
-	string,
-	string,
-	operatorsettings.ResolvedDefaults,
-	RuntimeRoot,
-	factoryruntime.Clock,
-	providers.Service,
-	*workers.MockWorkersConfig,
-	FactorySessionExecutionFactory,
-	factorysessions.ProviderIdentityResolver,
-) (DurableExecution, error)

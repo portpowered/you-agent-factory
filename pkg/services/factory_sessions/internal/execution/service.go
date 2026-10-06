@@ -334,42 +334,11 @@ func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
 	}
 }
 
-// NewJavaScriptExecutionService validates and constructs durable JavaScript
-// execution from explicit collaborators.
-func NewJavaScriptExecutionService(
-	projectRoot string,
-	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
-	persistenceChoice PersistenceChoice,
-	clock factory.Clock,
-	syncWaits SyncWaitScheduler,
-	checkpointSummaries factory.JavaScriptCheckpointSummaries,
-	workflowDefinitions factory.JavaScriptWorkflowDefinitions,
-	orchestration factory.OrchestrationJavaScriptExecution,
-	childValues factory.JavaScriptChildValues,
-	workerPresetIDs map[string]struct{},
-	workerSettings factory.JavaScriptWorkerSettings,
-	recordingWriter recording.PortableRecordingWriter,
-	generateSessionID internalcontracts.SessionIDGenerator,
-	generateResponseEventID factorysessions.ResponseEventIDGenerator,
-	responseStreams responsestreamservice.Service,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (Service, error) {
-	return NewProcessDurableExecutionService(
-		projectRoot, childExecutorMode, directChildInvocation, persistenceChoice, clock, syncWaits,
-		checkpointSummaries, workflowDefinitions, orchestration, childValues,
-		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
-		generateResponseEventID, responseStreams, liveChangeCoordinator,
-		nil, nil, nil, nil, nil, nil,
-	)
-}
-
 // NewProcessDurableExecutionService validates the complete durable leaf using
 // the same construction policy as runtime-backed execution.
 func NewProcessDurableExecutionService(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
 	persistenceChoice PersistenceChoice,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -428,7 +397,7 @@ func NewProcessDurableExecutionService(
 		return nil, err
 	}
 	return NewProcessDurableRuntime(
-		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, persistence, clock, syncWaits,
 		checkpointSummaries,
 		workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
@@ -445,7 +414,6 @@ func NewProcessDurableExecutionService(
 func NewProcessDurableRuntime(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -468,7 +436,7 @@ func NewProcessDurableRuntime(
 	logger *zap.Logger,
 ) *JavaScriptRuntimeService {
 	service := NewJavaScriptRuntimeService(
-		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, nil, persistence, clock, syncWaits,
 		checkpointSummaries, workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
 		generateResponseEventID, responseStreams, liveChangeCoordinator,
@@ -480,7 +448,7 @@ func NewProcessDurableRuntime(
 	service.persistenceProjectRoot = currentProjectRoot
 	service.resumeRuntimeScope = resumeScope
 	service.persistenceWarningLogger = logger
-	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", providerOverride, nil, nil)
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", providerOverride, nil, nil, nil, nil)
 	return service
 }
 

@@ -11,6 +11,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
 )
 
 // NewDurable constructs the configured runtime-backed capability.
@@ -32,12 +33,14 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	workerExecution factorysessionexecution.WorkerExecution,
+	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
 		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, childValues,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
-		liveChangeCoordinator,
+		liveChangeCoordinator, workerExecution, logger,
 	)
 }

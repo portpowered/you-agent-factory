@@ -433,35 +433,14 @@ func providePackagedFactoryInstallation(
 	}
 }
 
-func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
-	return func(
-		definition factorydefinitions.RuntimeSelection,
-		persistence factorysessions.PersistencePolicy,
-		systemConfigHome string,
-		systemConfigPath string,
-		defaults operatorsettings.ResolvedDefaults,
-		root factorysessionwire.RuntimeRoot,
-		clock factoryruntime.Clock,
-		provider providers.Service,
-		mockWorkersConfig *workers.MockWorkersConfig,
-		factory factorysessionwire.FactorySessionExecutionFactory,
-		providerIdentities factorysessions.ProviderIdentityResolver,
-	) (factorysessionwire.DurableExecution, error) {
-		return factorysessionwire.NewDurableExecutionRuntime(
-			loadOperatorConfig,
-			definition,
-			persistence,
-			systemConfigHome,
-			systemConfigPath,
-			defaults,
-			root,
-			clock,
-			provider,
-			mockWorkersConfig,
-			factory,
-			providerIdentities,
-		)
-	}
+// provideDurableOpening binds the execution opener and provider identity
+// policy once; live and replay requests cannot substitute these collaborators.
+func provideDurableOpening(
+	loadOperatorConfig operatorsettings.ConfigLoader,
+	factory factorysessionwire.FactorySessionExecutionFactory,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+) *factorysessionwire.DurableOpening {
+	return factorysessionwire.NewDurableOpening(loadOperatorConfig, factory, providerIdentities)
 }
 
 func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {

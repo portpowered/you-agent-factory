@@ -38,7 +38,7 @@ func newAPITestServer(roles any) *api.Server {
 			invoker = unavailableModelInvoker{}
 		}
 		modelsHandler = modelshttp.NewHandler(
-			modelshttp.NewAdapter(modelsService, invoker, apiModelContentPreparation{}, modelHTTPTestScope()),
+			modelshttp.NewSessionAdapter(modelsService, apiSessionModelInvoker{invoker}, apiModelContentPreparation{}, modelHTTPTestScope(), factorysessions.DefaultSessionID),
 			logger,
 		)
 	}
@@ -489,4 +489,13 @@ func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {
 			t.Fatalf("GET %s status = %d, want route removed", path, rec.Code)
 		}
 	}
+}
+
+// apiSessionModelInvoker adapts legacy test roles at the addressed HTTP boundary.
+type apiSessionModelInvoker struct {
+	workers.ModelInvoker
+}
+
+func (invoker apiSessionModelInvoker) InvokeModelForSession(ctx context.Context, _ string, name string, request modelcontract.Request) (modelcontract.Result, error) {
+	return invoker.InvokeModel(ctx, name, request)
 }

@@ -10,6 +10,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
 )
 
 // NewDurable constructs the runtime-backed durable execution capability while
@@ -32,6 +33,8 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	workerExecution factorysessionexecution.WorkerExecution,
+	logger *zap.Logger,
 ) (durableexecution.Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
@@ -41,14 +44,13 @@ func NewDurable(
 	if err != nil {
 		return nil, err
 	}
-	// A runtime-backed live session invokes its children as Workers through its
-	// own Factory Runtime, so it takes no direct provider edge of its own. The
+	// A runtime-backed live session invokes its children through the fixed
+	// Workers operation, so it takes no direct provider edge of its own. The
 	// mode still arrives from composition: a session with no provider behind it
 	// runs fake children, exactly as before.
-	execution, err := factorysessionexecution.NewJavaScriptExecutionService(
+	return factorysessionexecution.NewProcessDurableExecutionService(
 		projectRoot,
 		childExecutorMode,
-		nil,
 		persistence,
 		clock,
 		syncWaits,
@@ -63,14 +65,9 @@ func NewDurable(
 		generateResponseEventID,
 		responseStreams,
 		liveChangeCoordinator,
+		adaptRuntimePersistenceStoreFactory(stores),
+		nil, nil, workerExecution, nil, logger,
 	)
-	if err != nil {
-		return nil, err
-	}
-	if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
-		runtime.SetPersistenceRouting(adaptRuntimePersistenceStoreFactory(stores), nil)
-	}
-	return execution, nil
 }
 
 func adaptRuntimePersistenceStoreFactory(

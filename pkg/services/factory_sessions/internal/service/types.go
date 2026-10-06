@@ -42,7 +42,7 @@ type runtimeProducts struct {
 	execution              durableexecution.Service
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
 	inputResolver          roles.InvocationInputResolver
-	modelInvoker           workers.ModelInvoker
+	modelInvocation        modelinvocation.RuntimeModelInvocation
 	factoryRuntime         factoryruntime.Service
 	factoryDefinitions     factorydefinitions.Service
 	workflowPreview        factoryruntime.WorkflowPreviewOperation
@@ -137,17 +137,17 @@ func assembleRuntimeProducts(
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
-	modelInvoker := modelinvocation.NewRuntimeModelInvoker(modelinvocation.RuntimeModelInvokerConfig{
-		Models: modelsBind.Root, Scope: modelsBind.Scope,
-		Sessions: factorySessionGateway, Workers: workerService,
+	modelInvocation := modelinvocation.RuntimeModelInvocation{
+		FactorySessionID: effectiveFactorySessionID, Scope: modelsBind.Scope,
 		RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
 		FactoryDirectory: directory, WorkingDirectory: directory,
-	})
+	}
+
 	return runtimeProducts{
 		bindRuntime: bindRuntime,
 		process:     process, lifecycle: lifecycle,
 		sessions: factorySessionGateway, liveControl: liveControl, execution: factorySessionGateway,
-		inputResolver: inputResolver, modelInvoker: modelInvoker,
+		inputResolver: inputResolver, modelInvocation: modelInvocation,
 		factoryRuntime: factoryRuntime, factoryDefinitions: factoryDefinitions,
 		workflowPreview: workflowPreview, work: workService,
 		models: modelsBind.Root, modelsScope: modelsBind.Scope,
