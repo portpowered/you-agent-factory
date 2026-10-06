@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -104,6 +105,10 @@ func (storage workerCaptureStorage) ReadFile(path string) ([]byte, error) {
 }
 
 // provideWorkerSessionsService constructs the canonical process supervisor.
+func provideWorkerHistorySnapshotBudget() *workersessionswire.HistorySnapshotBudget {
+	return &workersessionswire.HistorySnapshotBudget{Entropy: rand.Reader}
+}
+
 func provideWorkerSessionsService(
 	execution workers.Service,
 	eventsService events.Service,
@@ -114,10 +119,11 @@ func provideWorkerSessionsService(
 	recorder recordings.WorkerSessionRecordingService,
 	writer recordings.WorkerRecordingWriter,
 	operations recordings.WorkerControlOperationStore,
+	snapshots *workersessionswire.HistorySnapshotBudget,
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, snapshots)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

@@ -214,6 +214,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		}
 	}
 	return listJSONObservation{
+		Provider: session.Provider, PredecessorWorkerSessionID: session.PredecessorWorkerSessionId, SuccessorWorkerSessionID: session.SuccessorWorkerSessionId,
 		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
 		EndedAt: session.EndedAt, FactorySessionID: session.FactorySessionId, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
@@ -251,13 +252,14 @@ func renderShow(output io.Writer, session factoryapi.WorkerSessionObservation) e
 }
 
 func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservation) error {
-	provider, kind, id := "-", "-", "-"
+	provider, kind, id := stringOrDash(session.Provider), "-", "-"
 	if session.ProviderSession != nil && session.ProviderSessionAvailable {
 		provider, kind, id = session.ProviderSession.Provider, session.ProviderSession.Kind, session.ProviderSession.Id
 	}
 	fields := []struct{ label, value string }{
 		{"Worker Session ID", session.WorkerSessionId}, {"Direct", fmt.Sprintf("%t", session.Direct)}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
 		{"Model", stringOrDash(session.Model)}, {"Reasoning Effort", stringOrDash(session.ReasoningEffort)},
+		{"Predecessor Worker Session ID", stringOrDash(session.PredecessorWorkerSessionId)}, {"Successor Worker Session ID", stringOrDash(session.SuccessorWorkerSessionId)},
 		{"Work IDs", joinOrDash(session.WorkIds)}, {"Turn ID", stringOrDash(session.TurnId)}, {"Attempt ID", session.AttemptId},
 		{"State", stringOrDashPtr(string(session.State))}, {"Confirmation state", string(workerSessionConfirmationState(session))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
 		{"Duration", formatDuration(session.DurationMillis)}, {"Duration basis", stringOrDashPtr(string(session.DurationBasis))},

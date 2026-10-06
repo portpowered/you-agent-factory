@@ -133,7 +133,7 @@ func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, frame workerSess
 
 func workerSessionStreamFailure(err error) (string, string) {
 	switch {
-	case errors.Is(err, workersessions.ErrObservationSourceGap):
+	case errors.Is(err, workersessions.ErrObservationSourceGap), errors.Is(err, workersessions.ErrObservationCursorStale):
 		return "WORKER_SESSION_STREAM_GAP", "retained Worker Session event history is unavailable"
 	case errors.Is(err, workersessions.ErrObservationSourceClosed):
 		return "WORKER_SESSION_STREAM_CLOSED", "Worker Session event source closed before terminal"
@@ -151,10 +151,13 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrInvalidObservationScope),
+		errors.Is(err, workersessions.ErrInvalidObservationHistory),
 		errors.Is(err, workersessions.ErrInvalidObservationPagination),
 		errors.Is(err, workersessions.ErrInvalidState),
 		strings.Contains(err.Error(), "worker session id is required"):
 		writeError(w, http.StatusBadRequest, "invalid Worker Session observation query", "BAD_REQUEST")
+	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
+		writeError(w, http.StatusInternalServerError, "Worker Session history projection is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrObservationRecordingCorrupt):
 		writeError(w, http.StatusInternalServerError, "Worker Session recording history is corrupt", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT))
 	case errors.Is(err, workersessions.ErrObservationRecordingUnavailable):

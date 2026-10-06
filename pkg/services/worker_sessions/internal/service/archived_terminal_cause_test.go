@@ -37,7 +37,7 @@ func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *test
 				ID: events.RecordID{Position: 3}, SourceType: lifecycleSourceType, SourceSequence: terminalSourceSequence, SourceEventID: terminalSourceEventID,
 				Payload: []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"physical-attempt","payload":{"status":"TERMINATED"}}`),
 			}}}}}
-			page := recordings.WorkerCapturedActivityPage{Catalog: recordings.WorkerSessionCatalogEntry{RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, RecordingGenerationID: target.RecordingGenerationID, OwnerEpoch: target.OwnerEpoch}, Terminal: &recordings.WorkerRecordingTerminal{Position: 3, Status: "TERMINATED"}, Health: recordings.WorkerRecordingStatusComplete,
+			page := recordings.WorkerCapturedActivityPage{Catalog: recordings.WorkerSessionCatalogEntry{FactorySessionID: target.FactorySessionID, CommittedPosition: 3, RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID, RecordingGenerationID: target.RecordingGenerationID, OwnerEpoch: target.OwnerEpoch}, Terminal: &recordings.WorkerRecordingTerminal{Position: 3, Status: "TERMINATED"}, Health: recordings.WorkerRecordingStatusComplete,
 				Opening: events.Record{Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker","attemptId":"provider-association-attempt","factorySessionId":"factory"}}`)},
 			}
 			switch variant {

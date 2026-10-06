@@ -1623,6 +1623,13 @@ const (
 	SortByStateType SortBy = "state.type"
 )
 
+// Defines values for ListWorkerSessionsParamsHistory.
+const (
+	ListWorkerSessionsParamsHistoryActive   ListWorkerSessionsParamsHistory = "active"
+	ListWorkerSessionsParamsHistoryAll      ListWorkerSessionsParamsHistory = "all"
+	ListWorkerSessionsParamsHistoryArchived ListWorkerSessionsParamsHistory = "archived"
+)
+
 // Defines values for ListWorkerSessionsParamsScope.
 const (
 	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
@@ -9154,8 +9161,14 @@ type WorkerSessionObservation struct {
 	Failure          *WorkerSessionFailure `json:"failure,omitempty"`
 
 	// Model Model identifier resolved for the provider invocation, when recorded.
-	Model           *string                          `json:"model,omitempty"`
-	Parse           WorkerSessionParseDiagnostics    `json:"parse"`
+	Model *string                       `json:"model,omitempty"`
+	Parse WorkerSessionParseDiagnostics `json:"parse"`
+
+	// PredecessorWorkerSessionId Source Worker Session when this session was admitted by continue or interrupt.
+	PredecessorWorkerSessionId *string `json:"predecessorWorkerSessionId,omitempty"`
+
+	// Provider Provider identity bound to this attempt, available before any Provider Session reference.
+	Provider        *string                          `json:"provider,omitempty"`
 	ProviderSession *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
 
 	// ProviderSessionAvailable Whether a provider-session identity is available for this attempt.
@@ -9171,6 +9184,9 @@ type WorkerSessionObservation struct {
 	RecordingHealthReason *string                       `json:"recordingHealthReason,omitempty"`
 	StartedAt             *time.Time                    `json:"startedAt"`
 	State                 WorkerSessionObservationState `json:"state"`
+
+	// SuccessorWorkerSessionId Successor admitted from this session by continue or interrupt, when known.
+	SuccessorWorkerSessionId *string `json:"successorWorkerSessionId,omitempty"`
 
 	// TerminalCause Why the attempt ended. Null while nonterminal. Operator causes require a committed control operation for this exact attempt.
 	TerminalCause *WorkerSessionObservationTerminalCause `json:"terminalCause"`
@@ -9973,6 +9989,9 @@ type GetMetricsCostsParams struct {
 
 // ListWorkerSessionsParams defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParams struct {
+	// History active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page.
+	History *ListWorkerSessionsParamsHistory `form:"history,omitempty" json:"history,omitempty"`
+
 	// Scope Origin scope to inspect. Omit for the fleet-wide view.
 	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
 
@@ -9989,6 +10008,9 @@ type ListWorkerSessionsParams struct {
 	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
 }
 
+// ListWorkerSessionsParamsHistory defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsHistory string
+
 // ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsScope string
 
@@ -9999,6 +10021,15 @@ type ListWorkerSessionsParamsState string
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+
+	// AfterPosition Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome.
+	AfterPosition *WorkerSessionAfterPosition `form:"after_position,omitempty" json:"after_position,omitempty"`
+
+	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
+	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
 // ReadWorkerSessionLogsParams defines parameters for ReadWorkerSessionLogs.
@@ -19339,6 +19370,22 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 	if params != nil {
 		queryValues := queryURL.Query()
 
+		if params.History != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "history", runtime.ParamLocationQuery, *params.History); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Scope != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
@@ -19530,6 +19577,54 @@ func NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest(server string,
 		if params.ReplayOnly != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "replayOnly", runtime.ParamLocationQuery, *params.ReplayOnly); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.AfterPosition != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_position", runtime.ParamLocationQuery, *params.AfterPosition); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.AfterSequence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_sequence", runtime.ParamLocationQuery, *params.AfterSequence); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.StreamGenerationId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "stream_generation_id", runtime.ParamLocationQuery, *params.StreamGenerationId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

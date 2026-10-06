@@ -9350,11 +9350,11 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.list.title",
-          "canonicalEnglish": "List fleet-wide or Work-scoped Worker Sessions"
+            "canonicalEnglish": "List fleet-wide or Work-scoped Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. Repeat --state values to combine lifecycle states with OR semantics. Use --limit as a positive fleet-wide result bound after filtering. The legacy --max-results and --next-token options are also fleet-wide only. Work-scoped listing does not accept those filters and returns a typed error when they are supplied. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind. Provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
+            "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. Repeat --state values to combine lifecycle states with OR semantics. Use --limit as a positive fleet-wide result bound after filtering. The legacy --max-results and --next-token options are also fleet-wide only. Work-scoped listing does not accept those filters and returns a typed error when they are supplied. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind. Provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts. Use --history active for owned nonterminal sessions, all for retained history, or archived for ended and owner-lost sessions. Omission preserves the compatibility view. History is fleet-wide only."
           }
         },
         "examples": [
@@ -9362,7 +9362,8 @@
           "you worker-sessions list --state RUNNING --state FAILED --limit 25",
           "you worker-sessions list --scope direct --state COMPLETED",
           "you worker-sessions list --work-id work-123",
-          "you worker-sessions list --work-id work-123 --output json"
+          "you worker-sessions list --work-id work-123 --output json",
+          "you worker-sessions list --history archived --output json"
         ],
         "visibility": "public",
         "sourceHash": "25716a79147ce58484566fba67e5c8b536154d1af8d23d8b0fc5a6edc266c752"
@@ -9584,6 +9585,35 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.worker-sessions.list.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.history": {
+          "id": "you.worker-sessions.list.flag.history",
+          "long": "history",
+          "usage": "Worker Session history: active, all, or archived; omit for the compatibility view",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "enum": [
+            "active",
+            "all",
+            "archived"
+          ],
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "static",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.history",
             "state": "active",
             "since": "1.0.0"
           }
@@ -10088,6 +10118,30 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.worker-sessions.read.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.read.flag.follow": {
+          "id": "you.worker-sessions.read.flag.follow",
+          "long": "follow",
+          "usage": "follow committed Worker Session logs until the captured terminal",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.follow",
             "state": "active",
             "since": "1.0.0"
           }

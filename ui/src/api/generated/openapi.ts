@@ -217,7 +217,7 @@ export interface paths {
     };
     /**
      * Stream top-level Worker Session events
-     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true. after_position is exclusive; after_sequence is its compatibility alias. stream_generation_id fences a recorded stream generation. Invalid, future, unavailable, and stale cursors use the same typed errors as scoped event streams.
      */
     get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
     put?: never;
@@ -1800,6 +1800,12 @@ export interface components {
        */
       terminalCause?: WorkerSessionObservationTerminalCause;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+      /** @description Source Worker Session when this session was admitted by continue or interrupt. */
+      predecessorWorkerSessionId?: string;
+      /** @description Successor admitted from this session by continue or interrupt, when known. */
+      successorWorkerSessionId?: string;
+      /** @description Provider identity bound to this attempt, available before any Provider Session reference. */
+      provider?: string;
     };
     /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
     WorkerSessionTurnUsage: {
@@ -8283,6 +8289,8 @@ export interface operations {
   listWorkerSessions: {
     parameters: {
       query?: {
+        /** @description active selects owned nonterminal Worker Sessions; all includes retained history; archived selects ended or owner-lost sessions. Omission retains the process-local compatibility view. Explicit history pages freeze membership and observations for five minutes of idle time. Expired or evicted cursors must be restarted from the first page. */
+        history?: PathsWorkerSessionsGetParametersQueryHistory;
         /** @description Origin scope to inspect. Omit for the fleet-wide view. */
         scope?: PathsWorkerSessionsGetParametersQueryScope;
         /** @description Optional repeated Worker Session lifecycle state filters. */
@@ -8546,6 +8554,12 @@ export interface operations {
       query?: {
         /** @description Drain retained history without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {
@@ -10408,6 +10422,13 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryHistory = {
+  active: "active",
+  all: "all",
+  archived: "archived",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryHistory =
+  (typeof PathsWorkerSessionsGetParametersQueryHistory)[keyof typeof PathsWorkerSessionsGetParametersQueryHistory];
 export const PathsWorkerSessionsGetParametersQueryScope = {
   direct: "direct",
   factory: "factory",

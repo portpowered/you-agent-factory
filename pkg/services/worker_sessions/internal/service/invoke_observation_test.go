@@ -67,6 +67,7 @@ func (f *observationEventReaderFake) Read(ctx context.Context, req events.ReadRe
 
 func newObservationRegistry(provider providersessions.Service, reader EventsReader) *registry {
 	registry := &registry{
+		historySnapshots: newObservationSnapshots(newTestHistoryBudget()),
 		sessions:         make(map[string]workersessions.Session),
 		observations:     make(map[string]*observation),
 		publications:     make(map[string]*publication),

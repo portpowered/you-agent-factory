@@ -42,6 +42,26 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostControls(t, process)
 	})
+	t.Run("real host history snapshots", func(t *testing.T) {
+		t.Parallel()
+		runRealHostHistory(t, process)
+	})
+	t.Run("real host history recovery", func(t *testing.T) {
+		t.Parallel()
+		runRealHostHistoryRecovery(t, process)
+	})
+	t.Run("real host captured metadata recovery", func(t *testing.T) {
+		t.Parallel()
+		runCapturedMetadataRecovery(t, process)
+	})
+	t.Run("real host captured logs polling", func(t *testing.T) {
+		t.Parallel()
+		runCapturedLogsPolling(t, process)
+	})
+	t.Run("real host captured logs cursor isolation", func(t *testing.T) {
+		t.Parallel()
+		runCapturedLogsCursorIsolation(t, process)
+	})
 	t.Run("real host interrupt and transcript", func(t *testing.T) {
 		t.Parallel()
 		runRealHostInterrupt(t, process)

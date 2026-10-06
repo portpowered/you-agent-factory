@@ -84,3 +84,35 @@ func TestCapturedArchivedSummaryDoesNotInferLiveState(t *testing.T) {
 		})
 	}
 }
+
+func TestCapturedArchivedSummaryMatchesIncompleteHistory(t *testing.T) {
+	t.Parallel()
+	item := historyCapture(t, "worker", "factory", "attempt", false)
+	reader := &LogReader{reader: &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+		Catalog: item.Catalog, Opening: item.Opening, Health: item.Health, OwnerLost: item.OwnerLost,
+	}}}
+	got, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+	want, wantErr := capturedHistoryIdentity(item, nil)
+	if err != nil || wantErr != nil || got.State != want.State || got.ConfirmationState != want.ConfirmationState || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone || got.RecordingHealth != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("selected incomplete capture differs from history: %+v %v", got, err)
+	}
+	assertArchivedUnknownFacts(t, got)
+	_, err = reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "other"})
+	if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("foreign Factory scope: %v", err)
+	}
+}
+
+func TestCapturedArchivedSummaryPersistsOwnerLossCause(t *testing.T) {
+	t.Parallel()
+	item := historyCapture(t, "worker", "factory", "attempt", false)
+	item.Terminal = &recordings.WorkerRecordingTerminal{Phase: workers.PhaseFailed, Status: "FAILED"}
+	item.HealthReason = "OWNER_LOST"
+	reader := &LogReader{reader: &capturedSummaryFake{snapshot: recordings.WorkerRecordingSnapshot{RecordingID: item.Catalog.RecordingID}, capturedActivityFake: capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+		Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health, HealthReason: item.HealthReason,
+	}}}}
+	got, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+	if err != nil || got.TerminalCause == nil || *got.TerminalCause != "OWNER_LOST" || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone {
+		t.Fatalf("owner loss observation=%+v error=%v", got, err)
+	}
+}

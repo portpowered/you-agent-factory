@@ -357,6 +357,9 @@ func (r *registry) archivedStopNoop(ctx context.Context, req workersessions.Cont
 	if observation.TerminalCause != nil && *observation.TerminalCause == "OWNER_LOST" {
 		return failed, workersessions.ErrObservationProjectionUnavailable
 	}
+	if observation.ConfirmationState != workersessions.ConfirmationStateConfirmed {
+		return failed, workersessions.ErrSessionNotFound
+	}
 	result := workersessions.ControlResult{
 		Session: workersessions.Session{ID: id, State: observation.State}, Action: action,
 		Outcome: workersessions.ControlOutcomeNoop, DispatchID: observation.AttemptID,

@@ -3,11 +3,43 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// The terminal stamp measures host capture completion, not provider completion.
+// Missing legacy stamps and terminals outside the committed prefix stay unknown.
+func applyCapturedTiming(observation *workersessions.Observation, terminal *recordings.WorkerRecordingTerminal, head uint64, stamps map[string]time.Time) {
+	if terminal == nil || terminal.Position < 1 || uint64(terminal.Position) > head || observation.StartedAt == nil {
+		return
+	}
+	ended, ok := stamps[strconv.FormatInt(int64(terminal.Position), 10)]
+	if !ok || ended.IsZero() || ended.Before(*observation.StartedAt) {
+		return
+	}
+	duration := ended.Sub(*observation.StartedAt)
+	observation.EndedAt = &ended
+	observation.Duration = &duration
+	observation.DurationBasis = workersessions.DurationBasisRecordedTimestamps
+}
+
+func applyCapturedUsageFacts(observation *workersessions.Observation, draft workers.Draft) {
+	if draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated ||
+		(draft.DispatchID != "" && draft.DispatchID != observation.AttemptID) {
+		return
+	}
+	if usage, _, ok := usageProjectionFromDraft(draft); ok {
+		observation.TokenUsage = usage
+	}
+	var payload workers.UsagePayload
+	if json.Unmarshal(draft.Payload, &payload) == nil && payload.Model != "" {
+		observation.Model = &payload.Model
+	}
+}
 
 // Capture may lag live publication. Only a durable snapshot grants usage facts;
 // a missing or unreadable snapshot leaves usage unknown without hiding identity.

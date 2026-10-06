@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,7 +50,10 @@ func (writer *FileWriter) indexSession(session *recordingSession) {
 	entry := writer.catalogEntry(session)
 	writer.catalogMu.Lock()
 	_, indexed := writer.catalog[entry.WorkerSessionID]
-	writer.catalog[entry.WorkerSessionID] = entry
+	writer.acceptCatalogEntry(entry)
+	if !indexed {
+		writer.indexSuccessorOpening(session, entry)
+	}
 	writer.catalogMu.Unlock()
 	if indexed || entry.CommittedPosition != 1 {
 		return
@@ -74,7 +78,11 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 	}
 	writer.catalogMu.Lock()
 	cached, indexed := writer.catalog[id]
+	_, ambiguous := writer.ambiguous[id]
 	writer.catalogMu.Unlock()
+	if ambiguous {
+		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+	}
 	if indexed {
 		return cached, nil
 	}
@@ -84,9 +92,10 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 	writer.catalogMu.Lock()
 	entry, ok := writer.catalog[id]
 	_, unavailable := writer.unavailable[id]
+	_, ambiguous = writer.ambiguous[id]
 	writer.catalogMu.Unlock()
 	if !ok {
-		if unavailable {
+		if unavailable || ambiguous {
 			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
 		}
 		return recordings.WorkerSessionCatalogEntry{}, os.ErrNotExist
@@ -163,9 +172,8 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 		}
 		indexed := writer.catalogEntry(session)
 		writer.catalogMu.Lock()
-		if current, ok := writer.catalog[indexed.WorkerSessionID]; !ok || current.CommittedPosition < indexed.CommittedPosition {
-			writer.catalog[indexed.WorkerSessionID] = indexed
-		}
+		writer.acceptCatalogEntry(indexed)
+		writer.indexSuccessorOpening(session, indexed)
 		writer.catalogMu.Unlock()
 	}
 	return nil
@@ -226,6 +234,11 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 	if limit < 1 || limit > 1000 {
 		return recordings.WorkerCapturedActivityPage{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
+	// A cached source identity alone cannot establish the absence of a
+	// successor in retained recordings. Complete the cancellable index once.
+	if err := writer.rebuildCatalog(ctx); err != nil {
+		return recordings.WorkerCapturedActivityPage{}, err
+	}
 	catalog, err := writer.LookupWorkerSessionCapture(ctx, request.WorkerSessionID)
 	if err != nil {
 		return recordings.WorkerCapturedActivityPage{}, err
@@ -246,7 +259,8 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		return recordings.WorkerCapturedActivityPage{}, err
 	}
 	page := recordings.WorkerCapturedActivityPage{
-		Catalog: catalog, Opening: session.records[0].Detached(),
+		OwnerLost: session.projection.ExecutionTerminal == nil && session.ownerEpoch != "" && session.ownerEpoch != "historical" && session.ownerEpoch != writer.ownerEpoch,
+		Catalog:   catalog, Opening: session.records[0].Detached(),
 		Health: session.projection.Status, HealthReason: session.projection.Degradation,
 		Terminal: cloneWorkerRecordingTerminal(session.projection.ExecutionTerminal),
 		Records:  make([]recordings.WorkerCapturedRecord, 0, limit),
@@ -269,6 +283,10 @@ func (writer *FileWriter) ReadWorkerCapturedActivity(ctx context.Context, reques
 		page.Records = append(page.Records, captured)
 	}
 	page.TokenUsage = capturedUsage(session, cursor.Head)
+	page.SuccessorWorkerSessionID, err = writer.capturedSuccessor(session, catalog)
+	if err != nil {
+		return recordings.WorkerCapturedActivityPage{}, err
+	}
 	page.NextToken, err = cursor.continuation(end, page.Terminal != nil)
 	return page, err
 }
@@ -313,18 +331,19 @@ func (writer *FileWriter) pageCursor(token string, catalog recordings.WorkerSess
 }
 
 func capturedUsage(session *recordingSession, head uint64) *workers.UsagePayload {
-	var result *workers.UsagePayload
-	for _, record := range session.records[:head] {
-		var draft workers.Draft
-		if json.Unmarshal(record.Payload, &draft) != nil || draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated {
-			continue
-		}
-		var usage workers.UsagePayload
-		if json.Unmarshal(draft.Payload, &usage) == nil {
-			result = &usage
-		}
+	index := sort.Search(len(session.usagePositions), func(index int) bool {
+		return session.usagePositions[index] > head
+	})
+	if index == 0 {
+		return nil
 	}
-	return result
+	position := session.usagePositions[index-1]
+	var draft workers.Draft
+	var usage workers.UsagePayload
+	if json.Unmarshal(session.records[position-1].Payload, &draft) != nil || json.Unmarshal(draft.Payload, &usage) != nil {
+		return nil
+	}
+	return &usage
 }
 
 func timePointer(value time.Time) *time.Time { stamp := value.UTC(); return &stamp }

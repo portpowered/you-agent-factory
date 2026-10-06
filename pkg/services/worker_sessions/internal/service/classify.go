@@ -889,6 +889,7 @@ func (r *registry) publishOpeningRecord(
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})
+	r.rememberObservationProvider(id, providers.ID(provider).CanonicalSessionProvider())
 	pub.mu.Unlock()
 	return nil
 }

@@ -735,6 +735,7 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 // its own exact resumability fact; resolved provider identity is carried by
 // the lifecycle record's provenance instead.
 type observation struct {
+	provider               string
 	clock                  platformclock.Source
 	workIDs                []string
 	turnID                 string

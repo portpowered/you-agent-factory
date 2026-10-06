@@ -57,6 +57,10 @@ type interruptPendingCaptureReader struct {
 	reads     []recordings.WorkerCapturedActivityRequest
 }
 
+func (*interruptPendingCaptureReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("interrupt recovery must use its frozen captured identity")
+}
+
 func (f *interruptPendingCaptureReader) LookupWorkerSessionCapture(_ context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
 	f.lookups = append(f.lookups, id)
 	return f.entry, f.lookupErr

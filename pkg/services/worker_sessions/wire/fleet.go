@@ -8,7 +8,11 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 )
 
 // ObservationServiceCatalog resolves the Worker Sessions services currently
@@ -22,16 +26,17 @@ type ObservationServiceCatalog func(context.Context) ([]workersessions.Service, 
 // remain bound to their owning runtime/service.
 type FleetObservationService struct {
 	catalog ObservationServiceCatalog
+	history *internalservice.FleetHistory
 }
 
 // NewFleetObservationService constructs a process-wide top-level observation
 // view from a dynamic service catalog. Construction stays in the owning
 // service's wire package so the service root remains a single contract.
-func NewFleetObservationService(catalog ObservationServiceCatalog) *FleetObservationService {
-	if catalog == nil {
+func NewFleetObservationService(catalog ObservationServiceCatalog, captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget) *FleetObservationService {
+	if catalog == nil || clock == nil || snapshots == nil {
 		return nil
 	}
-	return &FleetObservationService{catalog: catalog}
+	return &FleetObservationService{catalog: catalog, history: internalservice.NewFleetHistory(catalog, captured, clock, logger, snapshots)}
 }
 
 // GetObservationByWorkerSessionID resolves one top-level Worker Session
@@ -168,6 +173,12 @@ func (s *FleetObservationService) ListWorkerSessionObservations(
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if req.History != "" {
+		if s == nil {
+			return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
+		}
+		return s.history.ListWorkerSessionObservations(ctx, req)
 	}
 	query, err := s.prepareFleetQuery(ctx, req)
 	if err != nil {
@@ -623,7 +634,7 @@ func decodeFleetObservationCursor(value string) (string, error) {
 		return "", nil
 	}
 	decoded, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || strings.TrimSpace(string(decoded)) == "" {
+	if err != nil || strings.TrimSpace(string(decoded)) == "" || internalservice.IsHistoryCursor(value) {
 		return "", workersessions.ErrInvalidObservationPagination
 	}
 	return string(decoded), nil

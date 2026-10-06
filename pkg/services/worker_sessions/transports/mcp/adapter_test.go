@@ -57,8 +57,8 @@ func TestWorkerSessionValidationRejectsBeforeHTTP(t *testing.T) {
 		return nil, nil
 	})
 	cases := map[string][]string{
-		ToolList:                     {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
-		ToolRead:                     {`{}`, `{"workerSessionId":" "}`, `{"workerSessionId":"w","view":"logs"}`, `{"workerSessionId":"w","limit":1}`, `{"workerSessionId":"w","view":"transcript","limit":1}`, `{"workerSessionId":"w","view":"events","limit":0}`, `{"workerSessionId":"w","view":"events","limit":1001}`, `{"workerSessionId":"w","view":null}`},
+		ToolList:                     {`null`, `[]`, `"text"`, `{`, `{} {}`, `{"unknown":1}`, `{"history":null}`, `{"history":""}`, `{"history":"recent"}`, `{"history":1}`, `{"scope":null}`, `{"scope":"archive"}`, `{"state":["unknown"]}`, `{"state":"RUNNING"}`, `{"limit":0}`, `{"limit":1.5}`, `{"limit":"1"}`, `{"nextToken":" "}`},
+		ToolRead:                     {`{}`, `{"workerSessionId":" "}`, `{"workerSessionId":"w","view":"unknown"}`, `{"workerSessionId":"w","limit":1}`, `{"workerSessionId":"w","view":"transcript","limit":1}`, `{"workerSessionId":"w","view":"events","limit":0}`, `{"workerSessionId":"w","view":"events","limit":1001}`, `{"workerSessionId":"w","view":null}`, `{"workerSessionId":"w","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"events","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"transcript","nextToken":"opaque"}`, `{"workerSessionId":"w","view":"logs","nextToken":" "}`, `{"workerSessionId":"w","view":"logs","nextToken":null}`, `{"workerSessionId":"w","view":"logs","limit":1001}`, `{"workerSessionId":"w","view":"logs","extra":true}`},
 		ToolControl:                  {`{}`, `{"workerSessionId":"w","operation":"KILL"}`, `{"workerSessionId":"w","operation":"CANCEL","requestId":"r"}`, `{"workerSessionId":"w","operation":"TERMINATE","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"CANCEL","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","successorWorkerSessionId":"s","replacementMessage":"m"}`, `{"workerSessionId":"w","operation":"INTERRUPT","requestId":" ","successorWorkerSessionId":"s","replacementMessage":"m"}`},
 		"you.worker_session.unknown": {`{}`},
 	}
@@ -117,6 +117,67 @@ func TestWorkerSessionGeneratedRequestsAndResults(t *testing.T) {
 				t.Fatalf("result = %s, want %s; calls=%d closed=%v", actualJSON, wantJSON, calls, body.closed)
 			}
 		})
+	}
+}
+
+func TestWorkerSessionLogsPageForwardingAndCleanup(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, input, limit, token string
+		status                    int
+		code                      string
+	}{
+		{"default", `{"workerSessionId":"target","view":"logs"}`, "100", "", 200, ""},
+		{"cursor", `{"workerSessionId":"target","view":"logs","limit":2,"nextToken":"opaque+/="}`, "2", "opaque+/=", 200, ""},
+		{"invalid cursor", `{"workerSessionId":"target","view":"logs","nextToken":"wrong"}`, "100", "wrong", 400, "invalid_request"},
+		{"unavailable capture", `{"workerSessionId":"target","view":"logs"}`, "100", "", 503, "unavailable"},
+		{"host outage", `{"workerSessionId":"target","view":"logs"}`, "100", "", 0, "host_unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			const page = `{"workerSessionId":"target","events":[],"committedPosition":7,"health":"INCOMPLETE","nextToken":"stable"}`
+			summary := &trackedBody{Reader: strings.NewReader(`{"workerSessionId":"target","state":"FAILED"}`)}
+			logs := &trackedBody{Reader: strings.NewReader(page)}
+			calls := 0
+			adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+				calls++
+				if calls == 1 {
+					return &http.Response{StatusCode: 200, Body: summary}, nil
+				}
+				if request.Method != "GET" || request.URL.Path != "/worker-sessions/target/logs" || request.URL.Query().Get("limit") != test.limit || request.URL.Query().Get("nextToken") != test.token {
+					t.Fatalf("logs request: %s %s", request.Method, request.URL)
+				}
+				response := &http.Response{StatusCode: test.status, Body: logs}
+				if test.status == 0 {
+					return response, errors.New("private transport details")
+				}
+				return response, nil
+			})
+			value := workerCall(t, adapter, ToolRead, test.input)
+			if test.code == "" {
+				assertLogsViewResult(t, value, page)
+			} else if value["error"].(map[string]any)["code"] != "worker_session."+test.code || value["result"] != nil {
+				t.Fatalf("logs failure: %v", value)
+			}
+			if calls != 2 || !summary.closed || !logs.closed {
+				t.Fatalf("request/body ownership: calls=%d summary=%v logs=%v", calls, summary.closed, logs.closed)
+			}
+		})
+	}
+}
+
+func assertLogsViewResult(t *testing.T, value map[string]any, page string) {
+	t.Helper()
+	result := value["result"].(map[string]any)
+	if len(result) != 2 || result["session"].(map[string]any)["state"] != "FAILED" {
+		t.Fatalf("logs view members: %v", value)
+	}
+	got, _ := json.Marshal(result["logs"])
+	var want map[string]any
+	_ = json.Unmarshal([]byte(page), &want)
+	expected, _ := json.Marshal(want)
+	if string(got) != string(expected) {
+		t.Fatalf("page altered: %s", got)
 	}
 }
 
@@ -241,5 +302,32 @@ func assertReplayCleanup(t *testing.T, calls int, closed bool, ctx context.Conte
 	t.Helper()
 	if calls != 2 || !closed || ctx.Err() != context.Canceled {
 		t.Fatalf("replay cleanup: calls=%d closed=%v context=%v", calls, closed, ctx.Err())
+	}
+}
+
+func TestWorkerSessionHistorySelection(t *testing.T) {
+	t.Parallel()
+	for _, history := range []string{"", "active", "all", "archived"} {
+		t.Run(history, func(t *testing.T) {
+			t.Parallel()
+			want := history
+			if want == "" {
+				want = "all"
+			}
+			adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+				if request.URL.Query().Get("history") != want {
+					t.Fatalf("history query = %v, want %s", request.URL.Query(), want)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"sessions":[]}`)), Header: make(http.Header)}, nil
+			})
+			input := `{}`
+			if history != "" {
+				input = `{"history":"` + history + `"}`
+			}
+			result := workerCall(t, adapter, ToolList, input)
+			if result["error"] != nil {
+				t.Fatalf("history result = %v", result)
+			}
+		})
 	}
 }

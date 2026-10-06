@@ -115,6 +115,7 @@ func (a *Adapter) listWorkerSessionsForWork(
 func (a *Adapter) ListTopLevelWorkerSessions(
 	ctx context.Context,
 	scope string,
+	history string,
 	states []string,
 	maxResults *int,
 	nextToken *string,
@@ -129,8 +130,9 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 	request := workersessions.ListWorkerSessionObservationsRequest{
-		Scope:  workersessions.ObservationScope(strings.TrimSpace(scope)),
-		States: make([]workersessions.State, 0, len(states)),
+		Scope:   workersessions.ObservationScope(strings.TrimSpace(scope)),
+		History: workersessions.ObservationHistory(history),
+		States:  make([]workersessions.State, 0, len(states)),
 	}
 	for _, state := range states {
 		request.States = append(request.States, workersessions.State(strings.TrimSpace(state)))
@@ -140,6 +142,9 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 	}
 	if nextToken != nil {
 		request.NextToken = strings.TrimSpace(*nextToken)
+	}
+	if err := request.Validate(); err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 	topLevel := a.topLevel
 	if topLevel == nil {

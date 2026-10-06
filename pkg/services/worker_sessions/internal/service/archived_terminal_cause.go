@@ -8,6 +8,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func (s *LogReader) applyArchivedTerminalCause(ctx context.Context, page recordings.WorkerCapturedActivityPage, observation *workersessions.Observation) {
+	if page.Terminal == nil {
+		return
+	}
+	observation.TerminalCause = s.archivedTerminalCause(ctx, page, *observation)
+	if page.Health == recordings.WorkerRecordingStatusIncomplete && page.HealthReason == "OWNER_LOST" &&
+		page.Terminal.Phase == workers.PhaseFailed && page.Terminal.Position == 0 && observation.State == workersessions.StateFailed {
+		cause := "OWNER_LOST"
+		observation.TerminalCause = &cause
+		observation.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone, Detail: "the recorded worker supervisor is no longer alive"}
+	}
+}
+
 func (s *LogReader) archivedTerminalCause(ctx context.Context, page recordings.WorkerCapturedActivityPage, observation workersessions.Observation) *string {
 	if cause := naturalTerminalCause(observation.State); cause != nil {
 		return cause

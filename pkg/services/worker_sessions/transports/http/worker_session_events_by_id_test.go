@@ -73,6 +73,52 @@ func TestStreamWorkerSessionEventsByWorkerSessionIDMapsExclusiveCursor(t *testin
 	}
 }
 
+func TestStreamTopLevelWorkerSessionEventsMapsExclusiveCursor(t *testing.T) {
+	t.Parallel()
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	generation := factoryapi.WorkerSessionStreamGenerationID("generation-1")
+	service := &fakeObservationService{
+		getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateRunning},
+		streamByWorkerSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: false}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/worker-sessions/worker-1/events", nil), "worker-1",
+		factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{
+			AfterPosition: &position, StreamGenerationId: &generation,
+		},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	request := service.streamByWorkerRequest
+	if request.WorkerSessionID != "worker-1" || request.FactorySessionID != "" || request.Cursor == nil || request.Cursor.Position != 7 || request.Cursor.StreamGenerationID != "generation-1" {
+		t.Fatalf("top-level cursor forwarding: %+v", request)
+	}
+	if !service.streamByWorkerSubscription.closed {
+		t.Fatal("top-level subscription was not closed")
+	}
+}
+
+func TestStreamTopLevelWorkerSessionEventsRejectsConflictingCursorAliases(t *testing.T) {
+	t.Parallel()
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	sequence := factoryapi.AfterSequence(8)
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/events", nil), "worker-1",
+		factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{AfterPosition: &position, AfterSequence: &sequence},
+	)
+	if recorder.Code != http.StatusBadRequest || service.getByWorkerCalled {
+		t.Fatalf("conflicting cursor performed lookup or was accepted: status=%d lookup=%t body=%s", recorder.Code, service.getByWorkerCalled, recorder.Body.String())
+	}
+}
+
 func TestStreamWorkerSessionEventsByWorkerSessionIDRejectsConflictingCursorAliases(t *testing.T) {
 	position := factoryapi.WorkerSessionAfterPosition(7)
 	sequence := factoryapi.AfterSequence(8)
@@ -428,32 +474,41 @@ func TestStreamWorkerSessionEventsBySessionIDReplayOnlyWritesSummaryAndPreserves
 }
 
 func TestStreamWorkerSessionEventsBySessionIDWritesExplicitSourceFailure(t *testing.T) {
-	service := &fakeObservationService{
-		getResult: workersessions.Observation{
-			WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
-			ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
-		},
-		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
-			{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap},
-		}},
-	}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
+	t.Parallel()
+	for name, sourceErr := range map[string]error{
+		"retention gap":                    workersessions.ErrObservationSourceGap,
+		"cursor evicted during connection": workersessions.ErrObservationCursorStale,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{
+				getResult: workersessions.Observation{
+					WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+					ProviderSession: providers.SessionRef{Provider: providers.IDCursor, Kind: providers.SessionIDKind, ID: "cursor-session-1"},
+				},
+				streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+					{Kind: workersessions.ObservationDeliverySourceFailure, Err: sourceErr},
+				}},
+			}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events", nil)
 
-	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
-		Provider: factoryapi.LoadableProviderSessionProvider("cursor"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "cursor-session-1",
-	})
+			handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+				Provider: factoryapi.LoadableProviderSessionProvider("cursor"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "cursor-session-1",
+			})
 
-	frames := decodeSSEFrames(t, recorder.Body.String())
-	if len(frames) != 1 || frames[0].Delivery != "SOURCE_FAILURE" || frames[0].Event != nil {
-		t.Fatalf("frames = %#v, want one source failure without an event", frames)
-	}
-	if frames[0].ErrorCode == nil || *frames[0].ErrorCode != "WORKER_SESSION_STREAM_GAP" {
-		t.Fatalf("error code = %#v, want WORKER_SESSION_STREAM_GAP", frames[0].ErrorCode)
-	}
-	if frames[0].ErrorMessage == nil || !strings.Contains(*frames[0].ErrorMessage, "retained") {
-		t.Fatalf("error message = %#v, want safe retained-history message", frames[0].ErrorMessage)
+			frames := decodeSSEFrames(t, recorder.Body.String())
+			if len(frames) != 1 || frames[0].Delivery != "SOURCE_FAILURE" || frames[0].Event != nil {
+				t.Fatalf("frames = %#v, want one source failure without an event", frames)
+			}
+			if frames[0].ErrorCode == nil || *frames[0].ErrorCode != "WORKER_SESSION_STREAM_GAP" {
+				t.Fatalf("error code = %#v, want WORKER_SESSION_STREAM_GAP", frames[0].ErrorCode)
+			}
+			if frames[0].ErrorMessage == nil || !strings.Contains(*frames[0].ErrorMessage, "retained") {
+				t.Fatalf("error message = %#v, want safe retained-history message", frames[0].ErrorMessage)
+			}
+		})
 	}
 }
 

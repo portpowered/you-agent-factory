@@ -26,6 +26,10 @@ import (
 // events.Service value satisfies this interface structurally.
 type EventsAppender = internalservice.EventsAppender
 
+// HistorySnapshotBudget is the profile-owned retention budget for registry and
+// fleet history views. Its zero value is ready for construction-time injection.
+type HistorySnapshotBudget = internalservice.HistorySnapshotBudget
+
 // NewService constructs the Worker Sessions root from the one directly
 // injected Workers execution service that Start publishes attempts
 // through, the one directly injected EventsAppender Start's before-handoff
@@ -48,6 +52,7 @@ func NewService(
 	recording recordings.WorkerSessionRecordingService,
 	captured recordings.WorkerCapturedActivityReader,
 	operations recordings.WorkerControlOperationStore,
+	snapshots *HistorySnapshotBudget,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,
@@ -59,5 +64,6 @@ func NewService(
 		recording,
 		captured,
 		operations,
+		snapshots,
 	)
 }

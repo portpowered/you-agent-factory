@@ -17,6 +17,10 @@ type controlCaptureReader struct {
 	id    string
 }
 
+func (*controlCaptureReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("exact control identity must not list captured history")
+}
+
 func (f *controlCaptureReader) LookupWorkerSessionCapture(_ context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
 	f.id = id
 	return f.entry, f.err

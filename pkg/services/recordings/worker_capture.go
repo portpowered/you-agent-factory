@@ -26,6 +26,9 @@ type (
 	WorkerCapturedArtifactReader             = recordingcontracts.WorkerCapturedArtifactReader
 	WorkerRecordingStore                     = recordingcontracts.WorkerRecordingStore
 	WorkerSessionCatalogEntry                = workerrecording.WorkerSessionCatalogEntry
+	WorkerCapturedCatalogRequest             = workerrecording.WorkerCapturedCatalogRequest
+	WorkerCapturedCatalogPage                = workerrecording.WorkerCapturedCatalogPage
+	WorkerCapturedCatalogItem                = workerrecording.WorkerCapturedCatalogItem
 	WorkerCapturedRecord                     = workerrecording.WorkerCapturedRecord
 	WorkerCapturedActivityRequest            = workerrecording.WorkerCapturedActivityRequest
 	WorkerCapturedActivityPage               = workerrecording.WorkerCapturedActivityPage
