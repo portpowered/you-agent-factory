@@ -204,6 +204,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	result := liveStartResult(session)
+	result.StartupRecovery = products.startupRecovery
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
 	}

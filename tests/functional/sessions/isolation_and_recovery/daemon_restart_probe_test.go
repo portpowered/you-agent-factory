@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"io/fs"
 	"net/http"
@@ -459,11 +460,13 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 		oldReference := mustReadSeededReplayArtifact(t, reference)
 		writeRestartProbeFile(t, snapshot, damaged)
 		command, url, inputs := startEmptyPlainBoard(t, process, repo, home, apis[index+1])
+		cause := []string{"INVALID_JSON", "INVALID_SCHEMA"}[index]
 		assertUnreadableArchive(t, snapshot, damaged, index+1)
 		assertUnreadableArchive(t, reference, oldReference, index+1)
 		seedPlainBoardSiblingWork(t, url, repo+" fresh § —")
 		waitForPlainBoardWorkConfirmed(t, url)
 		restartProbeShutdown(t, url, command)
+		assertUnreadableStderr(t, snapshot, damaged, cause, inputs)
 		assertUnreadableArchive(t, snapshot, damaged, index+1)
 		if oldPath == plainBoardSelectedRecording(t, repo) || !bytes.Equal(oldHistory, mustReadSeededReplayArtifact(t, oldPath)) {
 			t.Fatal("fallback reused or changed retained history")
@@ -475,6 +478,28 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 	if runner.calls.Load() != 0 {
 		t.Fatal("unreadable snapshot dispatched stale Work")
 	}
+}
+
+func assertUnreadableStderr(t *testing.T, snapshot string, damaged []byte, cause string, inputs *support.CapturedInputs) {
+	t.Helper()
+	archives, err := filepath.Glob(snapshot + ".unreadable.*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, archive := range archives {
+		if !bytes.Equal(damaged, mustReadSeededReplayArtifact(t, archive)) {
+			continue
+		}
+		want := fmt.Sprintf("Durable state %q quarantined as %q: %s. Started an empty board.\n", snapshot, archive, cause)
+		if got := inputs.Stderr(); strings.Count(got, want) != 1 || strings.Count(got, "Started an empty board.") != 1 {
+			t.Fatalf("expected one safe recovery warning %q, got %q", want, got)
+		}
+		if strings.Contains(inputs.Stdout(), "Started an empty board.") {
+			t.Fatal("recovery warning was written to stdout")
+		}
+		return
+	}
+	t.Fatal("warning has no byte-preserving archive")
 }
 
 func assertUnreadableArchive(t *testing.T, path string, want []byte, count int) {

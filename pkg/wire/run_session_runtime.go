@@ -69,12 +69,13 @@ func provideRunRuntimeRunnerBuilder(
 // runSessionProcess is invocation-local lifecycle coordination. Its only
 // product identity is the canonical Factory Session ID returned by Root.Start.
 type runSessionProcess struct {
-	root      *factorysessionwire.Root
-	request   factorysessions.SessionStartRequest
-	mu        sync.RWMutex
-	sessionID string
-	ready     chan initializer.RuntimeHostBinding
-	onStarted func()
+	root            *factorysessionwire.Root
+	request         factorysessions.SessionStartRequest
+	mu              sync.RWMutex
+	sessionID       string
+	startupRecovery *factorysessions.StartupRecovery
+	ready           chan initializer.RuntimeHostBinding
+	onStarted       func()
 }
 
 func newRunSessionProcess(root *factorysessionwire.Root, request factorysessions.SessionStartRequest) *runSessionProcess {
@@ -98,6 +99,7 @@ func (process *runSessionProcess) Start(ctx, runCtx context.Context) error {
 	}
 	process.mu.Lock()
 	process.sessionID = result.SessionID
+	process.startupRecovery = result.StartupRecovery
 	process.mu.Unlock()
 	if process.onStarted != nil {
 		process.onStarted()
@@ -177,6 +179,16 @@ type runSessionRunner struct {
 	*runtimeapplication.ManagedRunner
 	root    *factorysessionwire.Root
 	process *runSessionProcess
+}
+
+func (runner runSessionRunner) StartupRecovery() *factorysessions.StartupRecovery {
+	runner.process.mu.RLock()
+	defer runner.process.mu.RUnlock()
+	if runner.process.startupRecovery == nil {
+		return nil
+	}
+	recovery := *runner.process.startupRecovery
+	return &recovery
 }
 
 func (runner runSessionRunner) SetStartupReadyCallback(callback func()) bool {

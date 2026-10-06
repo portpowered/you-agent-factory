@@ -30,6 +30,33 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+type startupRecoveryRunnerStub struct {
+	initializer.LocalRuntimeRunner
+	recovery *factorysessions.StartupRecovery
+}
+
+func (runner startupRecoveryRunnerStub) StartupRecovery() *factorysessions.StartupRecovery {
+	return runner.recovery
+}
+
+func TestStartupRecoveryWarningQuotesPathsOnOneLine(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	runner := startupRecoveryRunnerStub{recovery: &factorysessions.StartupRecovery{
+		File: "board\nstate.json", QuarantinedFile: "board\nstate.json.unreadable.archive", Cause: "INVALID_JSON",
+	}}
+	emitStartupRecovery(&output, runner)
+	if strings.Count(output.String(), "\n") != 1 || !strings.Contains(output.String(), `board\nstate.json`) ||
+		!strings.HasSuffix(output.String(), "INVALID_JSON. Started an empty board.\n") {
+		t.Fatalf("warning split or lost its safe cause: %q", output.String())
+	}
+	output.Reset()
+	emitStartupRecovery(&output, startupRecoveryRunnerStub{})
+	if output.Len() != 0 {
+		t.Fatal("healthy startup emitted a recovery warning")
+	}
+}
+
 func TestPrepareCanonicalSessionIDForExplicitJSONLRecording(t *testing.T) {
 	wantID := "00000000-0000-4000-8000-000000000006"
 	cfg, err := prepareCanonicalSessionIDForRun(RunConfig{

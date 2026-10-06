@@ -784,12 +784,22 @@ type SessionResponseSubscriptionRequest struct {
 // SessionStartResult is the canonical start/open outcome. The legacy result is
 // kept in one mode-specific field only as a compatibility projection.
 type SessionStartResult struct {
-	SessionID string
-	Mode      SessionOperationMode
-	Status    string
-	Live      *SessionOpenResult
-	Async     *AsyncStartResult
-	Sync      *SyncStartResult
+	StartupRecovery *StartupRecovery
+	SessionID       string
+	Mode            SessionOperationMode
+	Status          string
+	Live            *SessionOpenResult
+	Async           *AsyncStartResult
+	Sync            *SyncStartResult
+}
+
+// StartupRecovery reports preserved unreadable state using safe classified
+// causes. It never contains the original payload or parser error text.
+type StartupRecovery struct {
+	Code            string
+	File            string
+	Cause           string
+	QuarantinedFile string
 }
 
 // SessionOpenResult is the runtime-free live opening outcome. It intentionally

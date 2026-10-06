@@ -633,6 +633,12 @@ func (r *Root) bindSessionOpeningProducts(
 		opening.configured.Recordings.RecordPath,
 	)
 	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
+	if recovery := opening.startupRecovery; recovery != nil {
+		opened.startupRecovery = &factorysessions.StartupRecovery{
+			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
+			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
+		}
+	}
 	opened.operatorSettingsPath = opening.operatorSettingsPath
 	opened.workerSettings = opening.durableExecution.WorkerSettings
 	opened.replayMetadataWarnings = append(

@@ -112,6 +112,8 @@ type Config struct {
 	OpenDashboard        bool
 	StartupOutput        io.Writer
 	Diagnostics          io.Writer
+	// StartupRecoveryOutput carries the unconditional safe data-loss warning.
+	StartupRecoveryOutput io.Writer
 	// DeferHomeDisclosureUntilHostReady keeps an explicitly selected listener
 	// failure free of human startup output while preserving the home-before-
 	// initialization boundary for ordinary auto-port hosting.
