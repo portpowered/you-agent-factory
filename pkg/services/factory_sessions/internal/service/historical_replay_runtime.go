@@ -13,6 +13,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -373,7 +374,6 @@ func bindDurableExecutionCapabilities(
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) (func(), error) {
-	setWorkerInvoker(execution, invoker)
 	release, err := bindWorkerScope(
 		sessionID,
 		execution,
@@ -389,11 +389,29 @@ func bindDurableExecutionCapabilities(
 	if err != nil {
 		return nil, err
 	}
+	releaseLiveChange := bindLiveChangeScope(sessionID, execution, invoker)
 	releaseDurability := bindDispatchDurability(sessionID, execution, recordingLedger, generationID)
 	return func() {
 		release()
 		releaseDurability()
+		releaseLiveChange()
 	}, nil
+}
+
+func bindLiveChangeScope(sessionID string, execution durableexecution.Service, runtime factoryruntime.Service) func() {
+	binder, ok := execution.(interface {
+		BindLiveChangeScope(string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int)) func()
+	})
+	if !ok || runtime == nil {
+		return func() {}
+	}
+	_, required := runtime.(factoryruntime.AdmittedResourceCapacityService)
+	var setRevision func(int)
+	if revision, ok := runtime.(factoryruntime.ResourceCapacityRevisionService); ok {
+		setRevision = revision.SetFactoryRevision
+	}
+	return binder.BindLiveChangeScope(sessionID, runtimebinding.NewLiveChangeApplication(runtime),
+		runtimebinding.NewLiveChangeAdmission(runtime), required, setRevision)
 }
 
 func bindDispatchDurability(

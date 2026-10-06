@@ -717,23 +717,6 @@ func lastCanonicalCursor(
 	return nil
 }
 
-// workerInvokerBinder is the narrow capability a durable execution service
-// exposes when its orchestrator runs Workers of its own.
-type workerInvokerSetter interface {
-	SetWorkerInvoker(factoryruntime.Service)
-}
-
-// setWorkerInvoker hands one session's opaque Factory Runtime capability to its
-// execution service. An execution backend with no Workers of its own does not
-// implement the setter, and skipping it is correct rather than a missing wire.
-func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
-	setter, ok := execution.(workerInvokerSetter)
-	if !ok || runtime == nil {
-		return
-	}
-	setter.SetWorkerInvoker(runtime)
-}
-
 // workerScopeBinder accepts runtime-owned facts without replacing Workers.
 type workerScopeBinder interface {
 	BindWorkerScope(

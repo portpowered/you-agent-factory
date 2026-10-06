@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -136,8 +137,10 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 		sessions: map[string]*runtimeSessionState{
 			sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
 		},
-		workerInvokerService: runtime,
 	}
+	releaseScope := service.BindLiveChangeScope(sessionID, runtimebinding.NewLiveChangeApplication(runtime),
+		runtimebinding.NewLiveChangeAdmission(runtime), true, nil)
+	defer releaseScope()
 	request := factorysessions.LiveChangeRequest{
 		RequestID:        "request-live-capacity-admission",
 		ExpectedRevision: 0,
@@ -154,6 +157,10 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 
 	firstDone := startDurableLiveChange(service, sessionID, request)
 	<-runtime.changeAdmissionAttempt
+	peerRuntime := newDurableLiveChangeAdmissionTestRuntime(t)
+	releasePeer := service.BindLiveChangeScope("dur-sess-live-capacity-peer",
+		runtimebinding.NewLiveChangeApplication(peerRuntime), runtimebinding.NewLiveChangeAdmission(peerRuntime), true, nil)
+	defer releasePeer()
 	assertDurableLiveChangePending(t, firstDone, "durable live change completed while child lease was held")
 
 	secondDone := startDurableLiveChange(service, sessionID, request)
@@ -163,6 +170,9 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 	assertDurableLiveChangeOutcome(t, <-firstDone, factorysessions.LiveChangeOutcomeApplied, "first durable live change")
 	assertDurableLiveChangeOutcome(t, <-secondDone, factorysessions.LiveChangeOutcomeReplayed, "duplicate durable live change")
 	assertDurableLiveChangeApplicationCounts(t, runtime)
+	if peerRuntime.setCalls != 0 || peerRuntime.previewCalls != 0 {
+		t.Fatalf("held live change crossed peer route: set=%d preview=%d", peerRuntime.setCalls, peerRuntime.previewCalls)
+	}
 
 	events := (durableLiveChangeEventLog{service: service, sessionID: sessionID}).LiveChangeEvents()
 	assertDurableLiveChangeEvents(t, events)
@@ -963,5 +973,64 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 	providerSession := (resp.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "live-provider-session-1" {
 		t.Fatalf("provider session = %#v, want live-provider-session-1", providerSession)
+	}
+}
+
+func TestDurableLiveChangeScopesIsolatePeersAndOwnedRelease(t *testing.T) {
+	t.Parallel()
+	const first = "dur-sess-capacity-first"
+	const peer = "dur-sess-capacity-peer"
+	service := &JavaScriptRuntimeService{
+		clock:                 runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		liveChangeCoordinator: livechange.NewCoordinator(),
+		sessions: map[string]*runtimeSessionState{
+			first: {session: SessionReadResult{SessionID: first, Status: LifecycleStatusRunning}},
+			peer:  {session: SessionReadResult{SessionID: peer, Status: LifecycleStatusRunning}},
+		},
+	}
+	firstRuntime := newDurableLiveChangeAdmissionTestRuntime(t)
+	peerRuntime := newDurableLiveChangeAdmissionTestRuntime(t)
+	replacement := newDurableLiveChangeAdmissionTestRuntime(t)
+	revisions := map[string]int{}
+	register := func(id string, runtime *durableLiveChangeAdmissionTestRuntime, name string) func() {
+		return service.BindLiveChangeScope(id, runtimebinding.NewLiveChangeApplication(runtime),
+			runtimebinding.NewLiveChangeAdmission(runtime), true, func(revision int) { revisions[name] = revision })
+	}
+	releaseFirst := register(first, firstRuntime, "first")
+	releasePeer := register(peer, peerRuntime, "peer")
+	t.Cleanup(releaseFirst)
+	t.Cleanup(releasePeer)
+	apply := func(id, requestID string, revision int) {
+		t.Helper()
+		result, err := service.ApplyLiveChange(context.Background(), id, factorysessions.LiveChangeRequest{
+			RequestID: requestID, ExpectedRevision: revision, Operation: "resource.capacity.set",
+			TargetID: "reviewers", RequestedValue: json.RawMessage("1"), Source: "test",
+		})
+		if err != nil || result.Outcome != factorysessions.LiveChangeOutcomeApplied {
+			t.Fatalf("apply %s = %#v, %v", id, result, err)
+		}
+	}
+	apply(first, "first-change", 0)
+	if firstRuntime.setCalls != 1 || peerRuntime.setCalls != 0 || revisions["first"] != 1 {
+		t.Fatalf("first change crossed peer route: first=%d peer=%d revisions=%v", firstRuntime.setCalls, peerRuntime.setCalls, revisions)
+	}
+	releaseReplacement := register(first, replacement, "replacement")
+	t.Cleanup(releaseReplacement)
+	releaseFirst()
+	releaseFirst()
+	apply(first, "replacement-change", 1)
+	apply(peer, "peer-change", 0)
+	if firstRuntime.setCalls != 1 || replacement.setCalls != 1 || peerRuntime.setCalls != 1 || revisions["replacement"] != 2 || revisions["peer"] != 1 {
+		t.Fatalf("replacement routes: first=%d replacement=%d peer=%d revisions=%v", firstRuntime.setCalls, replacement.setCalls, peerRuntime.setCalls, revisions)
+	}
+	releaseReplacement()
+	_, err := service.ApplyLiveChange(context.Background(), first, factorysessions.LiveChangeRequest{})
+	var unavailable *factorysessions.LiveChangeError
+	if !errors.As(err, &unavailable) || unavailable.Code != factorysessions.LiveChangeErrorApplicationUnavailable {
+		t.Fatalf("released scope error = %v, want application unavailable", err)
+	}
+	apply(peer, "retained-peer-change", 1)
+	if peerRuntime.setCalls != 2 {
+		t.Fatalf("released first scope affected peer: %d", peerRuntime.setCalls)
 	}
 }

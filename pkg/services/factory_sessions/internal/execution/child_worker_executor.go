@@ -40,18 +40,6 @@ type childWorkerAttemptStarter func(
 	workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error)
 
-// SetWorkerInvoker attaches the Runtime capability used by durable live-change
-// control. Child execution deliberately does not use this broad capability;
-// it receives the narrow Workers Execute binding below.
-func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
-	if s == nil {
-		return
-	}
-	s.invokerMu.Lock()
-	s.workerInvokerService = runtime
-	s.invokerMu.Unlock()
-}
-
 // BindWorkerScope registers the owning runtime's request facts and resource
 // handles atomically. Captured children retain these immutable handles across
 // later registrations. The Workers operation is fixed by construction.
@@ -145,16 +133,6 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 		s.PublishWorkerProgress(fragment)
 	}
 	return binding
-}
-
-func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {
-	if s == nil {
-		return nil
-	}
-	s.invokerMu.RLock()
-	runtime := s.workerInvokerService
-	s.invokerMu.RUnlock()
-	return runtime
 }
 
 func (s *JavaScriptRuntimeService) workerExecutionBound() bool {

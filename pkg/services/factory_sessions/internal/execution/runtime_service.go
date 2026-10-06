@@ -251,11 +251,9 @@ type JavaScriptRuntimeService struct {
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
 	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
-	// workerInvokerService is guarded by its own lock, not the session lock. It
-	// is attached once after construction and read on paths that already hold the
-	// session lock; sharing one mutex between them deadlocks.
+	// Request bindings use a separate lock from durable session state.
 	invokerMu             sync.RWMutex
-	workerInvokerService  factory.Service
+	liveChangeScopes      map[string]*durableLiveChangeBinding
 	workerExecution       *childWorkerExecutionBinding
 	workerExecutionScopes map[string]*childWorkerExecutionBinding
 	// workerSessions maps one Workers dispatch identity to the durable session

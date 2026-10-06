@@ -623,6 +623,62 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(
 	return result, nil
 }
 
+// durableLiveChangeBinding retains only the owning runtime's scoped capacity
+// handles. It cannot select or replace a peer service.
+type durableLiveChangeBinding struct {
+	application       factorysessions.LiveChangeApplication
+	admission         factorysessions.LiveChangeAdmission
+	admissionRequired bool
+	setRevision       func(int)
+}
+
+// BindLiveChangeScope registers session-owned capacity handles. Cleanup compares
+// registration identity so a stale opening cannot release its replacement.
+func (s *JavaScriptRuntimeService) BindLiveChangeScope(
+	sessionID string,
+	application factorysessions.LiveChangeApplication,
+	admission factorysessions.LiveChangeAdmission,
+	admissionRequired bool,
+	setRevision func(int),
+) func() {
+	sessionID = strings.TrimSpace(sessionID)
+	binding := &durableLiveChangeBinding{application: application, admission: admission, admissionRequired: admissionRequired, setRevision: setRevision}
+	s.invokerMu.Lock()
+	if s.liveChangeScopes == nil {
+		s.liveChangeScopes = make(map[string]*durableLiveChangeBinding)
+	}
+	s.liveChangeScopes[sessionID] = binding
+	s.invokerMu.Unlock()
+	return func() {
+		s.invokerMu.Lock()
+		defer s.invokerMu.Unlock()
+		if s.liveChangeScopes[sessionID] == binding {
+			delete(s.liveChangeScopes, sessionID)
+		}
+	}
+}
+
+func (s *JavaScriptRuntimeService) liveChangeBinding(sessionID string) *durableLiveChangeBinding {
+	s.invokerMu.RLock()
+	defer s.invokerMu.RUnlock()
+	return s.liveChangeScopes[sessionID]
+}
+
+// The explicit legacy runtime boundary is translated into the same scoped
+// capacity handles used by live and replay registrations.
+func durableLiveChangeBindingForRuntime(runtime workflowsource.Service) *durableLiveChangeBinding {
+	_, required := runtime.(workflowsource.AdmittedResourceCapacityService)
+	binding := &durableLiveChangeBinding{
+		application:       runtimebinding.NewLiveChangeApplication(runtime),
+		admission:         runtimebinding.NewLiveChangeAdmission(runtime),
+		admissionRequired: required,
+	}
+	if revision, ok := runtime.(workflowsource.ResourceCapacityRevisionService); ok {
+		binding.setRevision = revision.SetFactoryRevision
+	}
+	return binding
+}
+
 // ApplyLiveChange lets a durable JavaScript Factory Session mutate the active
 // Factory Runtime that owns its Worker children. The transport-facing session
 // gateway remains the public owner; this optional capability keeps durable
@@ -674,11 +730,11 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 	if err != nil {
 		return factorysessions.LiveChangeResult{}, err
 	}
-	runtime := s.workerInvoker()
+	binding := s.liveChangeBinding(id)
 	if runtimeOverride != nil {
-		runtime = runtimeOverride
+		binding = durableLiveChangeBindingForRuntime(runtimeOverride)
 	}
-	if runtime == nil {
+	if binding == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
 			Message: "durable Factory Session runtime is unavailable",
@@ -689,15 +745,14 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 	defer s.liveChangeMu.Unlock()
 
 	events := durableLiveChangeEventLog{service: s, sessionID: id}
-	application := runtimebinding.NewLiveChangeApplication(runtime)
+	application := binding.application
 	if application == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
 			Message: "resource capacity application is unavailable",
 		}
 	}
-	admission := runtimebinding.NewLiveChangeAdmission(runtime)
-	release, admissionErr := acquireDurableLiveChangeAdmission(ctx, id, runtime, admission)
+	release, admissionErr := acquireDurableLiveChangeAdmission(ctx, id, binding.admissionRequired, binding.admission)
 	if admissionErr != nil {
 		return factorysessions.LiveChangeResult{}, admissionErr
 	}
@@ -723,8 +778,8 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		result, applyErr = s.liveChangeCoordinator.ApplyLiveChange(ctx, id, request, operation)
 	}
 	if applyErr == nil || result.Outcome == factorysessions.LiveChangeOutcomeReplayed {
-		if revision, ok := runtime.(workflowsource.ResourceCapacityRevisionService); ok && result.NewRevision >= 0 {
-			revision.SetFactoryRevision(result.NewRevision)
+		if binding.setRevision != nil && result.NewRevision >= 0 {
+			binding.setRevision(result.NewRevision)
 		}
 	}
 	return result, applyErr
@@ -733,11 +788,11 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 func acquireDurableLiveChangeAdmission(
 	ctx context.Context,
 	sessionID string,
-	runtime workflowsource.Service,
+	admissionRequired bool,
 	admission factorysessions.LiveChangeAdmission,
 ) (func(), error) {
 	if admission == nil {
-		if _, required := runtime.(workflowsource.AdmittedResourceCapacityService); required {
+		if admissionRequired {
 			return nil, &factorysessions.LiveChangeError{
 				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
 				Message: "live change coordination is unavailable",

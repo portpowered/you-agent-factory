@@ -213,8 +213,8 @@ func testPortableReplayResume(t *testing.T) {
 	if owner.workerRuntimeID != "portable-replay-runtime" || owner.workerGenerationID != "portable-replay-generation" {
 		t.Fatalf("child execution identity = runtime:%q generation:%q, want portable replay identities", owner.workerRuntimeID, owner.workerGenerationID)
 	}
-	if owner.workerInvoker == nil || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
-		t.Fatalf("resumed child bindings = invoker:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.workerInvoker != nil, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
+	if !owner.liveChangeBound || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
+		t.Fatalf("resumed child bindings = liveChange:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.liveChangeBound, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
 	}
 }
 
@@ -478,7 +478,7 @@ type portableReplayRuntimeOwner struct {
 	listResult              factorysessions.ListDispatchesResult
 	queryResult             factorysessions.ListDispatchesResult
 	queryRequest            factorysessions.DispatchQueryRequest
-	workerInvoker           factoryruntime.Service
+	liveChangeBound         bool
 	workerExecution         interface {
 		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 	}
@@ -600,8 +600,9 @@ func (*portableReplayRuntimeOwner) RecordPetriTokenMutations(
 	return nil
 }
 
-func (owner *portableReplayRuntimeOwner) SetWorkerInvoker(runtime factoryruntime.Service) {
-	owner.workerInvoker = runtime
+func (owner *portableReplayRuntimeOwner) BindLiveChangeScope(string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int)) func() {
+	owner.liveChangeBound = true
+	return func() { owner.liveChangeBound = false }
 }
 
 func (owner *portableReplayRuntimeOwner) BindWorkerScope(
@@ -837,7 +838,7 @@ func TestDurableCapabilityRegistrationOwnsCompletedFlushRelease(t *testing.T) {
 			if fail {
 				owner.workerErr = errors.New("worker registration failed")
 			}
-			release, err := bindDurableExecutionCapabilities("session-owned-flush", owner, nil, nil,
+			release, err := bindDurableExecutionCapabilities("session-owned-flush", owner, &portableReplayRuntimeService{}, nil,
 				"runtime-owned-flush", "generation-owned-flush", nil, nil, nil, nil, nil, nil)
 			if fail {
 				if !errors.Is(err, owner.workerErr) || release != nil || len(owner.events) != 0 {
@@ -849,7 +850,7 @@ func TestDurableCapabilityRegistrationOwnsCompletedFlushRelease(t *testing.T) {
 				t.Fatal(err)
 			}
 			release()
-			if !reflect.DeepEqual(owner.events, []string{"flush-register", "worker-release", "flush-release"}) {
+			if !reflect.DeepEqual(owner.events, []string{"live-change-register", "flush-register", "worker-release", "flush-release", "live-change-release"}) {
 				t.Fatalf("registration lifecycle = %v", owner.events)
 			}
 		})
@@ -878,4 +879,11 @@ func (owner *durabilityRegistrationOwner) BindDispatchDurability(
 ) func() {
 	owner.events = append(owner.events, "flush-register")
 	return func() { owner.events = append(owner.events, "flush-release") }
+}
+
+func (owner *durabilityRegistrationOwner) BindLiveChangeScope(
+	string, factorysessions.LiveChangeApplication, factorysessions.LiveChangeAdmission, bool, func(int),
+) func() {
+	owner.events = append(owner.events, "live-change-register")
+	return func() { owner.events = append(owner.events, "live-change-release") }
 }
