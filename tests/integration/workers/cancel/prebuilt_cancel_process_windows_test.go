@@ -57,6 +57,8 @@ func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
 		t.Fatalf("resolve live provider launcher ancestry: %v", err)
 	}
 	sourceTree.PIDs = append(sourceTree.PIDs, parents[sourceTree.RootPID])
+	assertNativeStaleForceRefused(t, ctx, binary, fixture, source)
+	assertNativeTreesLive(t, sourceTree, siblingTree)
 	result := forceNativeFixture(t, ctx, binary, fixture, source)
 	sample, err := captureProcessSample(sourceTree, siblingTree, time.Now())
 	if err != nil || len(sample.TargetPresent) != 0 || !reflect.DeepEqual(sample.UnrelatedPresent, siblingTree.PIDs) {
@@ -66,6 +68,8 @@ func TestPrebuiltWorkerSessionForceDirectTreeAndArchive(t *testing.T) {
 	if retry := forceNativeFixture(t, ctx, binary, fixture, source); !reflect.DeepEqual(result, retry) {
 		t.Fatalf("committed retry changed: original=%+v retry=%+v", result, retry)
 	}
+	assertNativeTerminalForceNoop(t, ctx, binary, fixture, source)
+	assertNativeTreesLive(t, siblingTree)
 	stopCancelDaemon(t, binary, fixture, daemon)
 	daemon = startCancelDaemon(t, ctx, binary, fixture)
 	waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
@@ -140,6 +144,39 @@ func forceNativeFixture(t *testing.T, ctx context.Context, binary string, fixtur
 		t.Fatalf("native force: result=%+v response=%+v", result, response)
 	}
 	return response
+}
+
+func assertNativeTreesLive(t *testing.T, trees ...workerProcessTree) {
+	t.Helper()
+	for _, tree := range trees {
+		for _, pid := range tree.PIDs {
+			present, err := processPIDPresent(pid)
+			if err != nil || !present {
+				t.Fatalf("refused control affected live %s process %d: present=%t error=%v", tree.WorkID, pid, present, err)
+			}
+		}
+	}
+}
+
+func assertNativeStaleForceRefused(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	result := runCancelCLI(ctx, binary, fixture, "--remote", "--server", fixture.serverURL, "--json", "worker-sessions", "terminate", observation.WorkerSessionId,
+		"--force", "--request-id", observation.WorkerSessionId+"-stale", "--expected-attempt-id", observation.AttemptId+"-stale")
+	var response factoryapi.ErrorResponse
+	if result.err == nil || json.Unmarshal([]byte(result.stderr), &response) != nil || string(response.Code) != "WORKER_SESSION_CONTROL_CONFLICT" {
+		t.Fatalf("stale force must return typed conflict: result=%+v response=%+v", result, response)
+	}
+}
+
+func assertNativeTerminalForceNoop(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	result := runCancelCLI(ctx, binary, fixture, "--remote", "--server", fixture.serverURL, "--json", "worker-sessions", "terminate", observation.WorkerSessionId,
+		"--force", "--request-id", observation.WorkerSessionId+"-expired", "--expected-attempt-id", observation.AttemptId)
+	var response factoryapi.WorkerSessionControlResponse
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || string(response.Outcome) != "NOOP" || string(response.State) != "TERMINATED" {
+		t.Fatalf("terminal force must be a no-op: result=%+v response=%+v", result, response)
+	}
+	assertForcedNativeArchive(t, ctx, fixture, observation)
 }
 
 func assertForcedNativeArchive(t *testing.T, ctx context.Context, fixture cancelFixture, original factoryapi.WorkerSessionObservation) {
