@@ -902,3 +902,7 @@ func runtimeSameWorkObserveConsumeNet() *state.Net {
 
 var _ workerexecution.Service = (*runtimeSupersededProcessWorkers)(nil)
 var _ platformprocess.ProcessLifecycleObserver = (*runtimeProcessObserver)(nil)
+
+func (*runtimeSupersededProcessWorkers) ValidateExecution(_ context.Context, request workerexecution.ExecuteRequest) error {
+	return request.Validate()
+}

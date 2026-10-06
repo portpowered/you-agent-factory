@@ -63,8 +63,20 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		request execution.ContinuationRequest,
 	) (providers.ExecuteResult, error) {
 		decoder := newDecoder(request.ExecuteRequest.ObserveSession)
-		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
+		observed := 0
+		publish := func() {
+			for observed < len(decoder.progress) {
+				request.ObserveProgress(decoder.progress[observed])
+				observed++
+			}
+		}
+		effectResult, effectErr := effect.Execute(ctx, request, func(chunk []byte) error {
+			err := decoder.observe(chunk)
+			publish()
+			return err
+		})
 		flushErr := decoder.flush()
+		publish()
 		content, session, finalErr := decoder.final()
 		failure, failed := collectFailure(decoder, effectErr, flushErr)
 		if finalErr != nil {
@@ -90,13 +102,15 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		if failure.Diagnostics == nil {
 			failure.Diagnostics = decoder.diagnostics()
 		}
+		failure.Diagnostics.ProgressAlreadyObserved = request.ProgressObserver != nil
 		result := providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
-				DurationMillis: effectResult.DurationMillis,
-				Progress:       decoder.progressFacts(),
-				Metadata:       completedMetadata(effectResult.Metadata, decoder.diagnostics().Metadata),
+				DurationMillis:          effectResult.DurationMillis,
+				Progress:                decoder.progressFacts(),
+				ProgressAlreadyObserved: request.ProgressObserver != nil,
+				Metadata:                completedMetadata(effectResult.Metadata, decoder.diagnostics().Metadata),
 			},
 		}
 		if failed {

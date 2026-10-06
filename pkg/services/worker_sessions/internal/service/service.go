@@ -292,6 +292,24 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return workersessions.StartResult{}, ErrMissingScheduler
 	}
 	req = normalizeStartRequest(req)
+	// Accepted requests replay before readiness checks. Only new requests must
+	// pass read-only Workers validation before reserving identity or capture.
+	if replay, err := r.lookupStart(req); replay != nil || err != nil {
+		if err != nil {
+			return workersessions.StartResult{}, err
+		}
+		return awaitStartReplay(callerCtx, replay)
+	}
+	if err := r.validateStartExecution(callerCtx, executor, req); err != nil {
+		// A concurrent validated caller may have won while preflight ran.
+		if replay, replayErr := r.lookupStart(req); replay != nil || replayErr != nil {
+			if replayErr != nil {
+				return workersessions.StartResult{}, replayErr
+			}
+			return awaitStartReplay(callerCtx, replay)
+		}
+		return workersessions.StartResult{}, err
+	}
 	replay, owner, err := r.reserveStart(req)
 	if err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))

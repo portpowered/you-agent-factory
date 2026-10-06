@@ -122,6 +122,50 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	for _, name := range []string{"t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
+		gated := &t7GatedProviderRunner{}
+		gated.reset()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	unreachable := newInvokeContinueResettableProviderCommandRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	for _, name := range []string{"t7-ready-local", "t7-ready-remote", "t7-ready-http", "t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
+		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)})
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	for _, mode := range []string{"local", "remote", "http"} {
+		for _, outcome := range []string{"valid", "invalid"} {
+			name := "t7-schema-" + mode + "-" + outcome
+			output := `{"answer":"schema validated answer","count":7}`
+			if outcome == "invalid" {
+				output = `{"answer":"invalid answer","count":"wrong type"}`
+			}
+			result := platformprocess.CommandResult{Stdout: directCodexSessionOutput(name+"-thread", output)}
+			runner := newInvokeContinueResettableProviderCommandRunner(result, result, result)
+			if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
+				return invokeContinueScenarioSetup{}, err
+			}
+		}
+	}
+	for _, name := range []string{"t7-failure-one", "t7-failure-two"} {
+		failure := platformprocess.CommandResult{
+			Stdout: []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-progress\",\"type\":\"command_execution\",\"command\":\"synthetic inspection\",\"aggregated_output\":\"T7 retained progress before timeout\",\"exit_code\":0}}\n" +
+				"{\"type\":\"turn.failed\",\"error\":{\"message\":\"provider timeout\"}}\n"),
+			Stderr: []byte("controlled provider timeout"), ExitCode: 124,
+		}
+		// Existing Workers policy permits two provider retries inside each
+		// supervised attempt. Supply every failure without a success fallback.
+		runner := newInvokeContinueResettableProviderCommandRunner(failure, failure, failure, failure, failure, failure)
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
 	localRunner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "initial direct output COMPLETE")},
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "continued direct output COMPLETE")},
@@ -287,6 +331,7 @@ func startInvokeContinuePackageProcess(
 	t *testing.T,
 	rootDir, hostDir, homeDir string,
 	route *invokeContinueStaticCommandRoute,
+	readiness *t7ReadinessBoundary,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
 	api := support.NewProcessAPIServer()
@@ -297,6 +342,8 @@ func startInvokeContinuePackageProcess(
 	processBuilds.Add(1)
 	ackStore := &interruptPhaseAckStore{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: readiness.registrations,
+		ProviderCatalogProbe:  readiness.probe,
 		WorkerRecordingWriter: ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
 			ackStore.WorkerRecordingStore = store

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,50 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestT7ValidatedStructuredOutputSurvivesStreamedText(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name     string
+		streamed bool
+		value    any
+	}{{"buffered-object", false, map[string]any{"answer": "validated"}}, {"streamed-object", true, map[string]any{"answer": "validated"}}, {"streamed-null", true, nil}} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			r := newTestRegistry(t)
+			sink := &perRuntimeAppendCapture{EventsAppender: newInternalTestEventsService()}
+			r.events = sink
+			r.publications["worker"] = &publication{open: true, provider: "codex", hasMessage: cell.streamed}
+			r.publishBufferedWorkerOutput(t.Context(), "worker", "attempt", workers.WorkResult{
+				Output: "raw output", StructuredResult: cell.value, StructuredResultPresent: true,
+			})
+			requests := sink.requestsFor("")
+			if len(requests) != 1 {
+				t.Fatalf("validated output records = %d, want one", len(requests))
+			}
+			var draft workers.Draft
+			if err := json.Unmarshal(requests[0].Payload, &draft); err != nil {
+				t.Fatal(err)
+			}
+			var message workers.MessagePayload
+			if err := json.Unmarshal(draft.Payload, &message); err != nil {
+				t.Fatal(err)
+			}
+			wantBlocks := 2
+			if cell.streamed {
+				wantBlocks = 1
+			}
+			if len(message.ContentBlocks) != wantBlocks {
+				t.Fatalf("structured delivery duplicated streamed text: %#v", message)
+			}
+			block := message.ContentBlocks[len(message.ContentBlocks)-1]
+			want, _ := json.Marshal(cell.value)
+			if block.Kind != workers.ContentBlockStructuredOutput || string(block.StructuredOutput) != string(want) {
+				t.Fatalf("validated native value = %#v, want %s", block, want)
+			}
+		})
+	}
+}
 
 type controlCaptureReader struct {
 	entry recordings.WorkerSessionCatalogEntry

@@ -259,6 +259,9 @@ type Edges struct {
 	ProviderOverride                 providers.Service
 	providercontract.ProviderRegistrations
 	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
+	// ProviderCatalogProbe projects externally supplied readiness facts. The
+	// default preserves published catalog facts without provider execution.
+	ProviderCatalogProbe               providercontract.CatalogProbeOperation
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -720,6 +723,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ProviderOverride != nil {
 		defaults.ProviderOverride = replacements.ProviderOverride
+	}
+	if replacements.ProviderCatalogProbe != nil {
+		defaults.ProviderCatalogProbe = replacements.ProviderCatalogProbe
 	}
 	if replacements.WorkersFactoryDocsFileSystem != nil {
 		defaults.WorkersFactoryDocsFileSystem = replacements.WorkersFactoryDocsFileSystem

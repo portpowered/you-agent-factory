@@ -7,6 +7,29 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
+func TestT7LiveProgressUsesBoundedDiagnosticRedaction(t *testing.T) {
+	t.Parallel()
+	var observed []providers.ExecuteProgress
+	request := providers.ExecuteRequest{
+		SystemPrompt: "system-secret", UserMessage: "prompt-secret", OutputSchema: "schema-secret",
+		EnvVars:          map[string]string{"API_KEY": "environment-secret"},
+		ProgressObserver: func(progress providers.ExecuteProgress) { observed = append(observed, progress) },
+	}
+	safe := safeProgressRequest(request, "continuation-secret")
+	progress := providers.ExecuteProgress{Phase: "delta", Detail: "visible system-secret prompt-secret schema-secret environment-secret continuation-secret",
+		Metadata: map[string]string{"safe": "environment-secret", "api_key": "hidden"}}
+	for count := 0; count < maxProgressFacts+1; count++ {
+		safe.ObserveProgress(progress)
+	}
+	if len(observed) != maxProgressFacts || observed[0].Detail != "visible <redacted> <redacted> <redacted> <redacted> <redacted>" ||
+		observed[0].Metadata["safe"] != "<redacted>" || observed[0].Metadata["api_key"] != "<redacted>" {
+		t.Fatalf("live bounded redaction = %+v", observed)
+	}
+	if progress.Metadata["safe"] != "environment-secret" {
+		t.Fatal("observer mutated provider metadata")
+	}
+}
+
 func TestNormalizeDiagnosticsRedactsDeclaredEnvironmentValues(t *testing.T) {
 	t.Parallel()
 	request := providers.ExecuteRequest{EnvVars: map[string]string{

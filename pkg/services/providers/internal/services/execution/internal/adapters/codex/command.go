@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -64,6 +65,12 @@ func buildCommand(request execution.ContinuationRequest) (providerservice.Comman
 	}
 	if effort != "" {
 		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
+	}
+	if strings.TrimSpace(request.SystemPrompt) != "" {
+		// JSON string escaping is valid for TOML basic strings and preserves
+		// multiline prompts without turning prompt text into config syntax.
+		prompt, _ := json.Marshal(request.SystemPrompt)
+		args = append(args, "--config", "developer_instructions="+string(prompt))
 	}
 	// Worker-authored args are extra `codex exec` options (for example
 	// `--config mcp_servers.<name>.enabled=false` or `--disable plugins`). They

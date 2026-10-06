@@ -39,13 +39,21 @@ func runIncompleteHistoryRestart(t *testing.T, direct bool) {
 	binary, project, home, factory, ready, env := incompleteHistoryFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
+	var directDocument string
 	if direct {
-		consumeHistorySeeds(t, factory)
+		// The public resolved-execution contract exposes provider inputs, but no
+		// script command/args. Use the existing no-reference native fixture for
+		// this direct origin; the Factory sibling still executes its script.
+		f := newInvokeArtifactFixture(t)
+		binary, project, home, env = f.binary, f.project, f.home, f.env
+		factory, ready, directDocument = filepath.Join(project, "factory"), filepath.Join(project, "ready"), f.document
+		env = append(env, "T7_SHIM_READY="+ready)
+		cleanupHistoryChild(t, ready)
 	}
 	first := startHistoryHost(t, ctx, binary, project, env, "--dir", factory, "--continuously")
 	if direct {
 		historyCLI(t, ctx, binary, project, env, "--remote", "--server", first.url, "--json", "worker-sessions", "invoke",
-			"--async", "--workstation", "process", "--worker-type", "SCRIPT_WORKER", "--user-message", "Capture partial progress")
+			"--async", "--execution", directDocument)
 	}
 	observation, prefix := awaitHistoryPrefix(t, ctx, binary, project, env, first.url, ready)
 	assertLiveHistoryObservation(t, direct, observation)

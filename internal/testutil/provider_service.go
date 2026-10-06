@@ -13,6 +13,7 @@ import (
 // Providers-root contract without reintroducing a production Workers provider
 // port. It is intentionally test-only and translates only detached values.
 type ProviderServiceAdapter struct {
+	NativeProvider
 	InferFunc func(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
 }
 

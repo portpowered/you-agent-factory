@@ -365,7 +365,8 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	// Capability facts are immutable at root construction. This one incapable
 	// route needs a separate process; ordinary peers retain native continuation.
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: scenario.providerRunner,
+		ProviderCommandRunner:           scenario.providerRunner,
+		FactorySessionsWorkingDirectory: invokeContinueRecordingDirectory(scenario.workingDirectory),
 		ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},

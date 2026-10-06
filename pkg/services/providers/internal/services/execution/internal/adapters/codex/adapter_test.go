@@ -17,6 +17,38 @@ import (
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
+func TestT7CodexPublishesProgressBeforeSessionReferenceAndReturn(t *testing.T) {
+	t.Parallel()
+	observed := make(chan providers.ExecuteProgress, 2)
+	effect := codex.EffectFunc(func(_ context.Context, _ execution.ContinuationRequest, observe func([]byte) error) (codex.EffectResult, error) {
+		if err := observe([]byte(`{"type":"item.completed","item":{"id":"early","type":"agent_message","text":"early progress"}}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		select {
+		case progress := <-observed:
+			if progress.Detail != "early progress" {
+				t.Fatalf("live progress = %+v", progress)
+			}
+		default:
+			t.Fatal("native progress was buffered until execution returned")
+		}
+		if err := observe([]byte(`{"type":"thread.started","thread_id":"late-thread"}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		return codex.EffectResult{}, nil
+	})
+	registration := codex.NewRegistration(effect)
+	result, err := registration.Attempt(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDCodex, AttemptID: "live-progress", ProgressObserver: func(progress providers.ExecuteProgress) { observed <- progress },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "late-thread" || result.Diagnostics == nil || !result.Diagnostics.ProgressAlreadyObserved {
+		t.Fatalf("observed result = %+v", result)
+	}
+}
+
 func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()
 

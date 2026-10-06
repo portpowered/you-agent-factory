@@ -802,3 +802,7 @@ func (service *invocationProviderServiceBase) canonicalIdentity() providers.ID {
 	}
 	return service.identity
 }
+
+func (*invocationProviderServiceBase) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}

@@ -166,13 +166,17 @@ func provideConfiguredProvidersService(
 		CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
 		Registrations:    edges.ProviderRegistrations,
 	}
+	catalogProbe := edges.ProviderCatalogProbe
+	if catalogProbe == nil {
+		catalogProbe = providerswire.IdentityCatalogProbe
+	}
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
 			workersRunner,
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	if edges.ProviderCommandRunner != nil {
@@ -181,7 +185,7 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
@@ -193,7 +197,7 @@ func provideConfiguredProvidersService(
 		provideWorkersAgentToolFileSystem(edges),
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-	return newConfiguredProvidersService(configuration, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
+	return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 }
 

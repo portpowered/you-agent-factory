@@ -4,10 +4,33 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+// Native adapters can publish before returning diagnostics. Apply the same
+// bounded redaction policy at that live boundary, before any consumer sees it.
+func safeProgressRequest(request providers.ExecuteRequest, extraSecrets ...string) providers.ExecuteRequest {
+	observer := request.ProgressObserver
+	if observer == nil {
+		return request
+	}
+	var mu sync.Mutex
+	count := 0
+	request.ProgressObserver = func(progress providers.ExecuteProgress) {
+		mu.Lock()
+		defer mu.Unlock()
+		if count >= maxProgressFacts {
+			return
+		}
+		count++
+		diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{progress}}, request, extraSecrets...)
+		observer(diagnostics.Progress[0])
+	}
+	return request
+}
 
 const (
 	maxProgressFacts      = 128

@@ -192,6 +192,9 @@ var ErrDuplicateRunnerRegistration = errors.New("duplicate Workers runner regist
 // Provider factories, command runners, and workstation builders remain
 // implementation details or explicit Worker subservices.
 type Service interface {
+	// ValidateExecution checks a detached request and its selected provider/runner
+	// without preparing a workspace, starting execution, or emitting observations.
+	ValidateExecution(context.Context, ExecuteRequest) error
 	// Execute runs one complete, detached Worker attempt. The operation is
 	// request-scoped; callers retain dispatch lifecycle, scheduling, and retry
 	// state outside Workers.

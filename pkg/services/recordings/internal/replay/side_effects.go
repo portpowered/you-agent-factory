@@ -770,3 +770,10 @@ func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
 
 var _ providers.Service = (*SideEffects)(nil)
 var _ platformprocess.CommandRunner = (*SideEffects)(nil)
+
+func (s *SideEffects) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return request.Validate()
+}

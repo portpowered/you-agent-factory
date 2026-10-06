@@ -988,3 +988,11 @@ func TestFactoryImpl_ObservePreservesLifecycleFacts(t *testing.T) {
 		})
 	}
 }
+
+func (*controlledWorkstationBoundary) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}
+
+func (*testWorkstationBoundary) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}

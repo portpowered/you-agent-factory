@@ -973,3 +973,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	}
 	return settings, providersRoot
 }
+
+func (localBoundaryWorkersService) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}

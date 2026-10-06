@@ -450,6 +450,40 @@ does not expose that fact. The Worker Session ID is the canonical identity for
 provider-issued correlation value. JSON output preserves these identities and
 includes `workId` and `workName` when Work attribution can be resolved.
 
+### Invoke and inspect a direct Worker Session
+
+An execution document supplies the base settings for `worker-sessions invoke`.
+Explicit flags override its provider, model, reasoning effort, prompts, and retry
+budget. Positional text overrides the document's user message unless
+`--user-message` was explicit. Non-terminal stdin supplies a missing message.
+With `--execution -`, stdin supplies only the document.
+
+Keep working directory, environment variables, and output schema in the
+execution document. Models remain provider inputs; the local catalog is not a
+model allowlist. Unsupported known settings fail before admission. Unknown
+document fields produce sorted field-path warnings on stderr; their values do
+not appear in those warnings. An admitted provider failure remains inspectable
+as a failed Worker Session.
+
+For observers in later commands, invoke against a running host:
+
+```bash
+you --remote --server http://localhost:7437 --json worker-sessions invoke \
+  --execution execution.json --model MODEL --reasoning-effort high --async
+you --server http://localhost:7437 --json worker-sessions show --worker-session-id WS_ID
+you --server http://localhost:7437 --json worker-sessions read --worker-session-id WS_ID --view logs
+you --remote --server http://localhost:7437 --json worker-sessions cancel WS_ID
+```
+
+Use the returned `workerSessionId` in place of `WS_ID`. It identifies the same
+execution before a Provider Session ID exists and after execution ends.
+
+A completed synchronous local invocation also leaves captured history. Start a
+host from the same project directory to inspect it with `list --history archived`,
+`show`, and `read --view logs`. The new host does not regain control of that
+completed execution. A short-lived local async caller does not guarantee that
+its Worker survives process exit; use remote async for host-owned execution.
+
 Direct Worker Session stdin is limited to 1,048,576 bytes, inclusive. This
 limit applies to `--execution -` and to non-terminal stdin used for direct
 Worker messages, continuation input, or replacement input.

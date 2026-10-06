@@ -617,6 +617,14 @@
         {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
         }
       ]
     },
@@ -660,7 +668,51 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7UnreachableHostNeverFallsBackToLocalProvider",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "cli"
         }
       ]
@@ -715,6 +767,14 @@
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
         }
       ]
     },
@@ -744,6 +804,10 @@
       "evidence": [
         {
           "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
           "boundary": "cli"
         }
       ]
@@ -778,6 +842,14 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
           "boundary": "cli"
         }
       ]
@@ -1315,6 +1387,14 @@
         {
           "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+          "boundary": "rest"
         }
       ]
     },
@@ -1569,6 +1649,38 @@
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "rest"
         }
       ]
     },
@@ -1733,6 +1845,22 @@
       "evidence": [
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "rest"
         }
       ]

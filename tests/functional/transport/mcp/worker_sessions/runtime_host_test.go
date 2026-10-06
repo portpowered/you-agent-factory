@@ -326,7 +326,7 @@ func admitControlWorker(t *testing.T, ctx context.Context, host, id string, runn
 	t.Helper()
 	payload := map[string]any{
 		"requestId": "request-" + id, "workerSessionId": id,
-		"execution": map[string]any{"workstationName": "process", "workerType": "processor", "dispatch": map[string]any{"dispatchId": "attempt-" + id, "workstationName": "process", "workerType": "processor"}},
+		"execution": map[string]any{"workstationName": "process", "workerType": "processor", "runnerId": "codex", "modelProvider": "codex", "model": "test-model", "userMessage": "controlled direct host prompt", "dispatch": map[string]any{"dispatchId": "attempt-" + id, "workstationName": "process", "workerType": "processor"}},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

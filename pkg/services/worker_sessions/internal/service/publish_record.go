@@ -829,7 +829,11 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly, req.Cursor)
+	subscription, err := r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly, req.Cursor)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	return r.joinTerminalObservation(ctx, workerSessionID, subscription), nil
 }
 
 func (r *registry) streamObservationTopic(

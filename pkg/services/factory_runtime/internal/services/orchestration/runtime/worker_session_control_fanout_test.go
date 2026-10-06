@@ -982,6 +982,10 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	}), nil
 }
 
+func (*synchronousFanOutExecution) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}
+
 func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 	t.Parallel()
 	nativeErr := errors.New("signal exit")

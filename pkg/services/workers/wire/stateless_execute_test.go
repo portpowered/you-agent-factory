@@ -943,3 +943,11 @@ func (double statelessDecisionEnvelopeDouble) WorkResultFromGoalRoutingDecisionE
 	}
 	return result
 }
+
+func (*statelessTestProviders) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}
+
+func (*statelessProviderOverride) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}
