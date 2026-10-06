@@ -86,7 +86,7 @@ func (s *JavaScriptRuntimeService) resumeInterruptedSession(
 		return AsyncStartResult{}, err
 	}
 
-	admission, err := s.beginRunAdmission()
+	admission, err := s.beginScopeRunAdmission(id)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
@@ -103,7 +103,7 @@ func (s *JavaScriptRuntimeService) resumeInterruptedSession(
 			Links:     LifecycleControlLinksForSession(id, true),
 		}
 	}
-	resumingAt := s.now()
+	resumingAt := s.nowForSession(id)
 	state.session.Status = LifecycleStatusResuming
 	state.result.SessionStatus = LifecycleStatusResuming
 	if state.session.Lifecycle == nil {
@@ -555,7 +555,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 	if err != nil {
 		return workflowresult.JavaScriptRuntimeOutcome{}, err
 	}
-	workerSettings := s.workerSettings
+	workerSettings := s.settingsForSession(sessionID)
 	if normalized.WorkerSettings != nil {
 		workerSettings = *normalized.WorkerSettings
 	}
@@ -570,7 +570,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		Policy:         policyResolution.Policy,
 		Resume:         resume,
 		WorkerSettings: workerSettings,
-	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
 }
 
 func mergeRuntimeRecords(existing, resumed []workflowresult.JavaScriptRuntimeRecord) []workflowresult.JavaScriptRuntimeRecord {
@@ -1170,11 +1170,15 @@ func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
 	encodedBytes int64,
 	thresholdBytes int64,
 ) {
-	if s == nil || s.persistenceWarningLogger == nil || encodedBytes < thresholdBytes {
+	if encodedBytes < thresholdBytes {
+		return
+	}
+	logger := s.loggerForSession(state.session.SessionID)
+	if logger == nil {
 		return
 	}
 	liveTokens, terminalTokens := retainedPetriTokenCounts(state)
-	s.persistenceWarningLogger.Warn(
+	logger.Warn(
 		"durable Factory Session snapshot reached the size warning threshold",
 		zap.String("code", durableSessionSnapshotSizeWarningCode),
 		zap.String("session_id", strings.TrimSpace(state.session.SessionID)),

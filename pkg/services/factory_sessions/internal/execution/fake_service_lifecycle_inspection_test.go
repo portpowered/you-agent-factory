@@ -817,16 +817,15 @@ func TestLiveDispatchListAndDetailConfirmAfterCompletedFlush(t *testing.T) {
 		dispatchID   = "dispatch-watermark"
 	)
 	reader := &dispatchDurabilityReader{}
-	service := &JavaScriptRuntimeService{
-		sessions: map[string]*runtimeSessionState{
-			sessionID: {
-				session:    SessionReadResult{SessionID: sessionID, OrchestratorKind: "JAVASCRIPT"},
-				dispatches: []DispatchSummary{{ID: dispatchID, Status: DispatchStatusCompleted, DispatchKind: "AGENT"}},
-				events: []json.RawMessage{
-					json.RawMessage(`{"type":"DISPATCH_RECONCILED","context":{"dispatchId":"dispatch-watermark","sequence":7}}`),
-				},
+	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
+		sessionID: {
+			session:    SessionReadResult{SessionID: sessionID, OrchestratorKind: "JAVASCRIPT"},
+			dispatches: []DispatchSummary{{ID: dispatchID, Status: DispatchStatusCompleted, DispatchKind: "AGENT"}},
+			events: []json.RawMessage{
+				json.RawMessage(`{"type":"DISPATCH_RECONCILED","context":{"dispatchId":"dispatch-watermark","sequence":7}}`),
 			},
 		},
+	}}, durableRuntimeBehavior: &durableRuntimeBehavior{},
 	}
 	service.BindDispatchDurability(sessionID, reader, generationID)
 
@@ -874,7 +873,7 @@ func TestLiveDispatchListAndDetailConfirmAfterCompletedFlush(t *testing.T) {
 func TestDispatchDurabilityScopesKeepPeerConfirmationIsolated(t *testing.T) {
 	t.Parallel()
 	const dispatchID = "dispatch-shared"
-	service := &JavaScriptRuntimeService{sessions: map[string]*runtimeSessionState{}}
+	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{}}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	for _, sessionID := range []string{"dur-sess-flush-first", "dur-sess-flush-peer"} {
 		service.sessions[sessionID] = &runtimeSessionState{
 			session:    SessionReadResult{SessionID: sessionID, OrchestratorKind: "JAVASCRIPT"},
@@ -967,7 +966,7 @@ func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*runtimeRecordi
 	if err := store.Save(sessionID, encoded); err != nil {
 		t.Fatalf("seed legacy snapshot: %v", err)
 	}
-	return store, &JavaScriptRuntimeService{persistence: store, sessions: make(map[string]*runtimeSessionState)}
+	return store, &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{sessions: make(map[string]*runtimeSessionState)}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 }
 
 func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *runtimeRecordingStore, service *JavaScriptRuntimeService, sessionID string) {
@@ -995,7 +994,7 @@ func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *runtimeRecording
 func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
 	root := t.TempDir()
 	store := &runtimeRecordingStore{}
-	service := &JavaScriptRuntimeService{persistence: store, projectRoot: root}
+	service := &JavaScriptRuntimeService{persistence: store, projectRoot: root, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded}}
 	exact, err := json.MarshalIndent(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity), "", "  ")
@@ -1029,9 +1028,9 @@ func (reader *dispatchDurabilityReader) CompletedFlushWatermark(
 func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t *testing.T) {
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	store := &runtimeRecordingStore{}
-	service := &JavaScriptRuntimeService{persistence: store, sessions: map[string]*runtimeSessionState{
+	service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 		sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
-	}}
+	}}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	if err := service.RecordPetriTokenMutations(sessionID, largeTerminalTokenMutations(3, "large-output")); err != nil {
 		t.Fatalf("RecordPetriTokenMutations: %v", err)
 	}
@@ -1050,9 +1049,9 @@ func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t 
 	wantErr := errors.New("checkpoint unavailable")
 	initial := largeTerminalTokenMutations(4, "large-output")
 	failedStore := &runtimeRecordingStore{saveErr: wantErr}
-	failedService := &JavaScriptRuntimeService{persistence: failedStore, sessions: map[string]*runtimeSessionState{
+	failedService := &JavaScriptRuntimeService{persistence: failedStore, durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 		failedID: {session: SessionReadResult{SessionID: failedID, Status: LifecycleStatusRunning}, petriMutations: clonePetriMutations(initial)},
-	}}
+	}}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	if err := failedService.RecordPetriTokenMutations(failedID, []interfaces.TokenMutationRecord{initial[2]}); !errors.Is(err, wantErr) {
 		t.Fatalf("failed RecordPetriTokenMutations error = %v, want %v", err, wantErr)
 	}

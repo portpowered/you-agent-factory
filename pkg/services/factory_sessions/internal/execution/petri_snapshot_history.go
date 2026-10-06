@@ -49,6 +49,7 @@ func (s *JavaScriptRuntimeService) applyPendingPetriHistory(candidate *runtimeSe
 
 func (s *JavaScriptRuntimeService) persistPetriCandidate(candidate runtimeSessionState) error {
 	id := candidate.session.SessionID
+	logger := s.loggerForSession(id)
 	err := s.persistSessionSnapshot(candidate)
 	var sizeErr *SnapshotSizeLimitError
 	if errors.As(err, &sizeErr) {
@@ -60,8 +61,8 @@ func (s *JavaScriptRuntimeService) persistPetriCandidate(candidate runtimeSessio
 			mutations: clonePetriMutations(candidate.petriMutations),
 			summaries: clonePetriTokenSummaries(candidate.petriSummaries),
 		}
-		if !degraded && s.persistenceWarningLogger != nil {
-			s.persistenceWarningLogger.Error("durable Factory Session persistence degraded",
+		if !degraded && logger != nil {
+			logger.Error("durable Factory Session persistence degraded",
 				zap.String("code", "durable_session_snapshot_size_limit"),
 				zap.String("session_id", id), zap.Int("observed_bytes", sizeErr.ActualBytes),
 				zap.Int("max_bytes", sizeErr.MaxBytes), zap.Bool("persistence_degraded", true))
@@ -73,8 +74,8 @@ func (s *JavaScriptRuntimeService) persistPetriCandidate(candidate runtimeSessio
 	}
 	if _, degraded := s.pendingPetriHistory[id]; degraded {
 		delete(s.pendingPetriHistory, id)
-		if s.persistenceWarningLogger != nil {
-			s.persistenceWarningLogger.Warn("durable Factory Session persistence recovered",
+		if logger != nil {
+			logger.Warn("durable Factory Session persistence recovered",
 				zap.String("code", "durable_session_snapshot_recovered"),
 				zap.String("session_id", id), zap.Bool("persistence_degraded", false))
 		}

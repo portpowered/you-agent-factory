@@ -18,9 +18,9 @@ import (
 
 func TestDurableLiveChangeRejectsAnotherProjectsRuntime(t *testing.T) {
 	const sessionID = "dur-sess-project-one"
-	service := &JavaScriptRuntimeService{sessions: map[string]*runtimeSessionState{
+	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{sessions: map[string]*runtimeSessionState{
 		sessionID: {session: SessionReadResult{SessionID: sessionID}, projectRoot: "/project-one"},
-	}}
+	}}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	_, err := service.ApplyLiveChangeWithRuntime(context.Background(), sessionID, factorysessions.LiveChangeRequest{}, nil, "/project-two")
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("cross-project live change error = %v, want session not found", err)
@@ -85,8 +85,8 @@ func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *t
 		Outcome: workers.ExecutionOutcomeAccepted,
 	}}
 	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
+		projectRoot:         "/project",
+		durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{childValues: childTestValues{}},
 	}
 	service.workerExecution = service.newChildWorkerExecutionBinding(invoker, nil, "", "", nil, nil, nil, nil, nil)
 
@@ -111,8 +111,8 @@ func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *t
 
 func TestLiveChildWithoutWorkersExecutionFailsWithChildSessionID(t *testing.T) {
 	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
+		projectRoot:         "/project",
+		durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{childValues: childTestValues{}},
 	}
 	hooks := service.childExecutorHooks(ChildExecutorModeLive, "parent-session")
 	if hooks.NewChildExecutor == nil {
@@ -347,7 +347,7 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 
 func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
 	t.Parallel()
-	service := &JavaScriptRuntimeService{}
+	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	if _, err := service.BindWorkerScope("parent", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "workers Execute capability is required") {
 		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
 	}

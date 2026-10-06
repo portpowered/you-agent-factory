@@ -43,7 +43,7 @@ func (s *JavaScriptRuntimeService) ensureSessionResponseEvents(sessionID string,
 	if s.responseStreams == nil {
 		return errors.New("durable response-event stream service is required")
 	}
-	store, err := s.responseStreams.NewEventStore(sessionID, s.clock)
+	store, err := s.responseStreams.NewEventStore(sessionID, s.clockForSession(sessionID))
 	if err != nil {
 		return fmt.Errorf("create durable response-event store: %w", err)
 	}

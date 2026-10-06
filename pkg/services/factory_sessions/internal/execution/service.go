@@ -182,7 +182,7 @@ func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
 	outcome factory.JavaScriptRuntimeOutcome,
 	startedAt time.Time,
 ) {
-	finishedAt := s.now()
+	finishedAt := s.nowForSession(state.session.SessionID)
 	applyTerminalRuntimeProjection(state, terminal, outcome)
 	if state.session.Lifecycle == nil {
 		state.session.Lifecycle = &LifecycleTimestamps{}

@@ -607,7 +607,7 @@ func seedRuntimeSessionWithRunningDispatch(
 		return NewValidationError("dispatchId", "dispatchId is required")
 	}
 
-	now := service.now()
+	now := service.nowForSession(id)
 	session := SessionReadResult{
 		SessionID:        id,
 		Status:           LifecycleStatusRunning,
@@ -666,7 +666,7 @@ func applyRuntimeTerminalOutcome(
 	if !ok {
 		return ErrSessionNotFound
 	}
-	finishedAt := service.now()
+	finishedAt := service.nowForSession(id)
 	terminal := runtimeSessionState{
 		session: cloneSessionRead(state.session),
 		result:  cloneResultRead(state.result),

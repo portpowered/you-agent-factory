@@ -17,7 +17,6 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -262,15 +261,14 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 	recordingRoot := &recordingsRootConstructionStub{}
 	opening := NewDurableOpening(
 		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
-		func(string, factorysessions.PersistencePolicy, providers.Service, factoryruntime.Clock,
-			map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, *workers.MockWorkersConfig,
-			[]operatorconfig.ACPIntegration, *zap.Logger) (durableexecution.Service, error) {
+		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+			release := func(context.Context) error { return execution.(interface{ Close() error }).Close() }
 			if durableFailure {
-				return execution, openingErr
+				return nil, release, openingErr
 			}
-			return execution, nil
+			return execution, release, nil
 		},
-		func(identity string) (string, error) { return identity, nil },
+		func(identity string) (string, error) { return identity, nil }, false,
 	)
 	return &Root{
 		resolveHome: func() (string, error) { return "/controlled-home", nil },
