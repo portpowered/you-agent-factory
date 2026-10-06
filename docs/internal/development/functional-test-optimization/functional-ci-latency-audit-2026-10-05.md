@@ -2227,3 +2227,24 @@ Their intervals overlap and cannot be added to supervisor time. Removing two
 Git-file diagnostic helpers privately allows 21 merged groups/320 tests, but
 that full sample takes 115.06s and raises peak RSS to 3.86 GiB; it is not adopted
 as a latency improvement.
+
+### First hosted archive fill
+
+Run `37393044364`, head `6efdbac547`, has no archive hit. The supervisor takes
+296.357s, including 265.724s of test invocation; all 69 package terminals and
+759 test results finish (757 pass, two skip, one recovered permission-request
+flake). The job fails afterward because the newly wired exact-hit diagnostic
+receives an empty GitHub output on a cache miss. The correction explicitly
+defaults that output to `false`; test and coverage gates remain unchanged.
+
+Capture retains 12,129 files / 964,300,415 bytes with zero budget omissions.
+Capture takes three seconds and cache save takes five seconds. Restored hosted
+execution is still required before claiming the three-minute checkpoint.
+
+A separate private archive-restore calibration takes 203.06s with 2,038
+compiler tool records and 40 link records. It uses an older private source tree,
+the unadopted 21-group experiment, and a capture-time recency window rather
+than the workflow's job-start window. It cannot establish current-head latency
+or cache effectiveness. Its 96.818s active compiler wall / 318.784s compiler
+CPU demonstrates substantial misses, which require investigation if repeated
+by the hosted restored run.

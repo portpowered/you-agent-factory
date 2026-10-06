@@ -570,7 +570,7 @@ jobs:
           FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
           FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY: ${{ steps.functional-compiler-cache.outputs.cache-primary-key }}
           FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-compiler-cache.outputs.cache-matched-key }}
-          FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-compiler-cache.outputs.cache-hit }}
+          FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-compiler-cache.outputs.cache-hit || 'false' }}
       - name: Capture bounded functional compiler archives
         if: always() && !cancelled() && matrix.suite == 'functional'
         id: functional-compiler-capture

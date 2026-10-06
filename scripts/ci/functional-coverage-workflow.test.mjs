@@ -106,7 +106,7 @@ test("functional compiler archives stay bounded and restore separately from the 
 	assert.match(capture, /--job-start "\$JOB_START"/);
 	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY:/);
 	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY:/);
-	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT:/);
+	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: \$\{\{ steps\.functional-compiler-cache\.outputs\.cache-hit \|\| 'false' \}\}/);
 });
 
 test("functional coverage joins quarantine after concurrent execution and publishes both status paths", () => {
