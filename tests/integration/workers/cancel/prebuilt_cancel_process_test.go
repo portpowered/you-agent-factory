@@ -833,7 +833,7 @@ func waitForFactoryForceResponse(t *testing.T, ctx context.Context, fixture canc
 	// Public force joins the Worker; Runtime publishes its dispatch response on
 	// the next tick. Observe that real asynchronous boundary rather than sleeping
 	// for an assumed completion time or substituting a controlled runner.
-	deadline := time.NewTimer(10 * time.Second)
+	deadline := time.NewTimer(10 * time.Second) //nolint:testsleep // Bound the real asynchronous dispatch publication observed through the prebuilt daemon's public events.
 	defer deadline.Stop()
 	for {
 		events, err := readFactoryEvents(ctx, fixture.serverURL, session)

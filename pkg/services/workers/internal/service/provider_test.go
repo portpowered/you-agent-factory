@@ -177,6 +177,7 @@ func TestAuthorizeProviderTargetAcceptsInjectedProviderOverrideWithoutCatalogIde
 
 	override := &providerAuthorizationFake{}
 	request := agentProviderRequest()
+	request.Target.ExecutorProvider = "codex"
 	request.Input.ProviderOverride = override
 	if err := (&Service{}).authorizeProviderTarget(context.Background(), &request, runners.AgentIdentity); err != nil {
 		t.Fatalf("authorizeProviderTarget() error = %v, want injected override to bypass catalog lookup", err)
@@ -184,6 +185,29 @@ func TestAuthorizeProviderTargetAcceptsInjectedProviderOverrideWithoutCatalogIde
 	if request.Target.Provider.ID != "" || request.Target.Provider.Alias != "" || request.Target.RunnerID != runners.AgentIdentity {
 		t.Fatalf("authorized target = %#v, want the caller-selected target unchanged", request.Target)
 	}
+}
+
+func TestRunRunnerUsesRequestScopedProviderForNativeExecutor(t *testing.T) {
+	t.Parallel()
+	provider := &canceledOverrideProvider{}
+	request := agentProviderRequest()
+	request.Target.ExecutorProvider = "codex"
+	request.Input.ProviderOverride = provider
+	service := &Service{}
+	_, err := service.runRunner(context.Background(), request, runners.AgentIdentity, nil)
+	if !errors.Is(err, providers.ErrExecuteCancelled) || provider.calls != 1 {
+		t.Fatalf("native override = %v, calls=%d; want recorded cancellation from one provider call", err, provider.calls)
+	}
+}
+
+type canceledOverrideProvider struct {
+	providerAuthorizationFake
+	calls int
+}
+
+func (provider *canceledOverrideProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	provider.calls++
+	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled, Message: "recorded cancellation"}
 }
 
 func runAuthorizeProviderTargetCases(t *testing.T, tests []authorizeProviderTargetTestCase) {

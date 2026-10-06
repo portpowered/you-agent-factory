@@ -153,6 +153,18 @@ func TestNormalizeProviderOverrideResultInfersStopAndContinuationOutcomes(t *tes
 	}
 }
 
+func TestNormalizeResultPreservesProviderCancellationWithoutCanceledContext(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{context.Canceled, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindCanceled, Message: "recorded cancellation"}} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			result := (&Service{}).normalizeResult(workers.ExecutionCorrelation{AttemptID: "attempt"}, workers.ExecuteRequest{}, workers.RunnerExecutionResult{Content: "discard"}, cause, 0, false)
+			if result.Outcome != workers.ExecutionOutcomeCanceled || len(result.Output.Primary) != 0 {
+				t.Fatalf("provider cancellation became a non-canceled result: %+v", result)
+			}
+		})
+	}
+}
+
 func TestHasProviderCompletionEvidenceAcceptsProviderMetadata(t *testing.T) {
 	t.Parallel()
 
