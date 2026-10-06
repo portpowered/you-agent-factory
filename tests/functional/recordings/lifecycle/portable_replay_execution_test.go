@@ -946,10 +946,22 @@ func assertSelectedReplayCommandJoined(t *testing.T, done <-chan error) {
 
 func assertSelectedReplayRead(t *testing.T, sessions factorysessions.Service, id string) {
 	t.Helper()
+	assertSelectedReplaySession(t, sessions, id)
+	assertSelectedReplayResults(t, sessions, id)
+	assertSelectedReplayArtifacts(t, sessions, id)
+	assertSelectedReplayReconnect(t, sessions, id)
+}
+
+func assertSelectedReplaySession(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
 	read, err := sessions.GetSession(t.Context(), id)
 	if err != nil || read.SessionID != id || read.ResolvedSource.SourceRef != "workflow/"+id+".js" || read.Status != factorysessions.LifecycleStatusSucceeded {
 		t.Fatalf("selected session %s: %#v, %v", id, read, err)
 	}
+}
+
+func assertSelectedReplayResults(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
 	for _, mode := range []factorysessions.ResultMode{factorysessions.ResultModeFinal, factorysessions.ResultModePartial} {
 		for _, include := range []bool{false, true} {
 			result, resultErr := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: mode, IncludeArtifacts: include})
@@ -959,6 +971,10 @@ func assertSelectedReplayRead(t *testing.T, sessions factorysessions.Service, id
 			result.PrimaryResult[0] = ' '
 		}
 	}
+}
+
+func assertSelectedReplayArtifacts(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
 	artifacts, err := sessions.ListArtifacts(t.Context(), id)
 	if err != nil || artifacts.SessionID != id || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].ID != "artifact-1" {
 		t.Fatalf("selected artifacts %s: %#v, %v", id, artifacts, err)
@@ -968,6 +984,10 @@ func assertSelectedReplayRead(t *testing.T, sessions factorysessions.Service, id
 	if err != nil || artifact.SessionID != id || artifact.ID != "artifact-1" || len(artifact.Content) != 0 {
 		t.Fatalf("selected redacted artifact %s: %#v, %v", id, artifact, err)
 	}
+}
+
+func assertSelectedReplayReconnect(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
 	sequence := 0
 	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{AfterSequence: &sequence})
 	if err != nil || events.SessionID != id || len(events.Events) != 2 {
