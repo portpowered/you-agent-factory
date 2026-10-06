@@ -198,23 +198,17 @@ func (s *Service) dispatchContinuation(
 }
 
 // executeNativeAttempt runs the bound native execution and records its real
-// outcome on control before returning - via defer, so an unexpected unwind
-// (including a panic) still closes control.done instead of leaving a
-// concurrent claimed signal() call blocked until its own ctx ends.
-// control.finish closes done itself, synchronously, right after Execute
-// returns and before this defer's caller's own deferred release/
-// cancelAttempt run. A concurrent ControlAttempt claim that lands in the
-// registry-release race window therefore still only ever observes the true
-// recorded outcome once it waits on done (see nativeAttemptControl.finish) -
-// a natural success can never be reported as ControlOutcomeCompleted merely
-// because a claim happened to land after Execute already returned.
+// outcome on control before returning. The deferred finish publishes the
+// adapter join even on unwind, then waits for any claimed kill decision before
+// exposing an outcome that Workers could retry. The exact capability, rather
+// than the adapter's exit code, determines whether force actually succeeded.
 func (s *Service) executeNativeAttempt(
 	attemptCtx context.Context,
 	control *nativeAttemptControl,
 	request providers.ExecuteRequest,
 ) (result providers.ExecuteResult, err error) {
 	defer func() {
-		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+		err = control.finishExecution(err)
 	}()
 	s.publishAttemptControl(request, control)
 	result, err = s.execution.Execute(attemptCtx, request)
@@ -228,7 +222,7 @@ func (s *Service) executeNativeContinuation(
 	reference providers.SessionRef,
 ) (result providers.ExecuteResult, err error) {
 	defer func() {
-		control.finish(errors.Is(err, providers.ErrExecuteCancelled))
+		err = control.finishExecution(err)
 	}()
 	s.publishAttemptControl(request, control)
 	return s.execution.Continue(attemptCtx, execution.ContinuationRequest{

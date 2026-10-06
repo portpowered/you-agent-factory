@@ -28,19 +28,20 @@ import (
 // the existing live/replay delivery mechanics; the planner owns acceptance,
 // publication, correlation, and duplicate retirement.
 type dispatchPlanningResultHook struct {
-	planner           dispatchplanning.Service
-	net               *state.Net
-	resultBuffer      *buffers.TypedBuffer[workerexecution.WorkResult]
-	completionPlanner factory.CompletionDeliveryPlanner
-	workService       work.Service
-	workRequestIDs    work.RequestIDGenerator
-	factorySessionID  string
-	waitCh            chan struct{}
-	scheduled         []scheduledDispatchResult
-	asyncErr          error
-	onResult          func()
-	acceptanceStates  sync.Map
-	mu                sync.Mutex
+	planner            dispatchplanning.Service
+	net                *state.Net
+	resultBuffer       *buffers.TypedBuffer[workerexecution.WorkResult]
+	completionPlanner  factory.CompletionDeliveryPlanner
+	recoverReplayForce func(context.Context, work.WorkDispatch) error
+	workService        work.Service
+	workRequestIDs     work.RequestIDGenerator
+	factorySessionID   string
+	waitCh             chan struct{}
+	scheduled          []scheduledDispatchResult
+	asyncErr           error
+	onResult           func()
+	acceptanceStates   sync.Map
+	mu                 sync.Mutex
 }
 
 func (h *dispatchPlanningResultHook) SetOnBufferedResult(fn func()) {
@@ -141,12 +142,14 @@ func newCanonicalDispatchPlanningResultHook(
 	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	factorySessionID string,
+	recoverReplayForce func(context.Context, work.WorkDispatch) error,
 ) *dispatchPlanningResultHook {
 	return &dispatchPlanningResultHook{
 		planner: planner, net: net, resultBuffer: resultBuffer,
 		completionPlanner: completionPlanner, workService: workService, workRequestIDs: workRequestIDs,
-		factorySessionID: factorySessionID,
-		waitCh:           make(chan struct{}, 1),
+		factorySessionID:   factorySessionID,
+		recoverReplayForce: recoverReplayForce,
+		waitCh:             make(chan struct{}, 1),
 	}
 }
 
@@ -252,6 +255,12 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 		return
 	}
 	if usedPlanned {
+		if planned.Outcome == workers.OutcomeCanceled && h.recoverReplayForce != nil {
+			if err := h.recoverReplayForce(ctx, request.Execution.Dispatch); err != nil {
+				h.recordCanonicalError(err)
+				return
+			}
+		}
 		h.acceptPlannedWorkersResult(ctx, request, dispatchID, result, planned)
 		return
 	}

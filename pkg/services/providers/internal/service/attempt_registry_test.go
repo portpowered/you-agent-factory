@@ -112,7 +112,7 @@ func assertObservedAttemptJoinedAndExpired(t *testing.T, ctx context.Context, ha
 	if !<-completed {
 		t.Fatal("exact joined execution was not completed")
 	}
-	if err := <-executed; err != nil {
+	if err := <-executed; !errors.Is(err, providers.ErrExecuteCancelled) {
 		t.Fatal(err)
 	}
 	accepted, err := handle.ForceKill(ctx)
@@ -585,11 +585,64 @@ func TestProvidersNativeKillCapabilityRequiresSupportedAdapterAndExactOwnedHandl
 				if err != nil || result.Outcome != want || result.Action != providers.ControlActionKill {
 					t.Errorf("control = %#v, %v; want %s", result, err, want)
 				}
-				if err := <-executed; err != nil {
+				if err := <-executed; (id == providers.IDAntigravity && err != nil) || (id != providers.IDAntigravity && !errors.Is(err, providers.ErrExecuteCancelled)) {
 					t.Fatalf("execution error = %v", err)
 				}
 			})
 		}
+	}
+}
+
+func TestNativeAttemptControl_KillFencesRetryableAdapterOutcome(t *testing.T) {
+	t.Parallel()
+	adapterErr := errors.New("retryable adapter exit")
+	for _, test := range []struct {
+		name       string
+		accepted   bool
+		killErr    error
+		adapterErr error
+	}{
+		{name: "confirmed", accepted: true, adapterErr: adapterErr},
+		{name: "confirmed with success output", accepted: true},
+		{name: "declined", adapterErr: adapterErr},
+		{name: "failed", killErr: errors.New("tree join failed"), adapterErr: adapterErr},
+		{name: "deadline", killErr: context.DeadlineExceeded, adapterErr: adapterErr},
+		{name: "natural winner"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			control := &nativeAttemptControl{allowKill: true, done: make(chan struct{})}
+			signaling, resolve := make(chan struct{}), make(chan struct{})
+			control.attachProcess(ownedProcessControlFunc(func(context.Context) (bool, error) {
+				close(signaling)
+				<-resolve
+				return test.accepted, test.killErr
+			}))
+			if !control.supports(providers.ControlActionKill) {
+				t.Fatal("missing kill capability")
+			}
+			killed := make(chan struct{})
+			go func() { _, _ = control.signal(t.Context()); close(killed) }()
+			<-signaling
+			executed := make(chan error, 1)
+			go func() { executed <- control.finishExecution(test.adapterErr) }()
+			<-control.done
+			select {
+			case <-executed:
+				t.Error("adapter outcome escaped before kill resolution")
+			default:
+			}
+			close(resolve)
+			<-killed
+			err := <-executed
+			if test.accepted {
+				if !errors.Is(err, providers.ErrExecuteCancelled) {
+					t.Fatalf("confirmed kill error = %v, want terminal cancellation", err)
+				}
+			} else if !errors.Is(err, test.adapterErr) {
+				t.Fatalf("unconfirmed kill changed natural outcome: %v", err)
+			}
+		})
 	}
 }
 
@@ -898,7 +951,7 @@ func TestProviderKillStopsOnlyTheSelectedLiveAttempt(t *testing.T) {
 	for id, gate := range gates {
 		t.Cleanup(func() {
 			gate.stop.Do(func() { close(gate.stopped) })
-			if err := <-gate.done; err != nil {
+			if err := <-gate.done; (id == "sibling" && err != nil) || (id == "target" && !errors.Is(err, providers.ErrExecuteCancelled)) {
 				t.Errorf("attempt %s execution = %v", id, err)
 			}
 		})

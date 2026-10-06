@@ -64,7 +64,7 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
-				BindAttemptControl:          bindRuntimeAttemptControl(executing),
+				BindAttemptControl:          bindRuntimeAttemptControl(executing, runtimeForceDispositionAvailable(cfg, request, executeRequest)),
 			},
 			execution,
 			clock,
@@ -94,6 +94,7 @@ func runtimeAttemptPreparation(
 			)
 			_, forced, completionErr := attempt.Resolve(callbackCtx, dispatchResult, dispatchErr)
 			if forced {
+				lifecycle.recordConfirmedForce(request.Execution.Dispatch.DispatchID)
 				result.Failure = nil
 				result.ProposedOutputPresent = false
 				result = canceledAttemptResult(executeRequest, result, workers.DispatchCancellationReasonCanceled)
@@ -104,12 +105,40 @@ func runtimeAttemptPreparation(
 	}
 }
 
-func bindRuntimeAttemptControl(executing *workers.ExecuteRequest) func(providers.AttemptControlObserver) {
+// Factory force must have an authored terminal destination for every input
+// Work. Withholding the capability makes the existing force path UNSUPPORTED
+// before any process effect; ordinary cancellation keeps its original owner.
+func runtimeForceDispositionAvailable(cfg *runtimeConfig, request workers.WorkstationDispatchRequest, execution workers.ExecuteRequest) bool {
+	if request.WorkstationName == workers.ProviderInvocationRoute {
+		return true
+	}
+	if cfg == nil || cfg.net == nil {
+		return false
+	}
+	workFound := false
+	for _, input := range execution.Input.Work {
+		if input.Kind == string(workers.DataTypeResource) {
+			continue
+		}
+		workFound = true
+		placeID := restoredFailedPlaceID(cfg.net, input.WorkTypeID)
+		if placeID == "" || cfg.net.Places[placeID] == nil {
+			return false
+		}
+	}
+	return workFound
+}
+
+func bindRuntimeAttemptControl(executing *workers.ExecuteRequest, forceAvailable bool) func(providers.AttemptControlObserver) {
 	return func(observe providers.AttemptControlObserver) {
 		if executing == nil || observe == nil {
 			return
 		}
-		executing.Input.AttemptControlObserver = observe
+		executing.Input.AttemptControlObserver = func(control providers.AttemptControl) {
+			if forceAvailable {
+				observe(control)
+			}
+		}
 	}
 }
 
@@ -282,6 +311,12 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 			continue
 		}
 		observation := recordedObservationFromFact(fact, s.clock)
+		if observation.State == workersessions.StateCanceled {
+			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+			if err != nil {
+				return nil, false, err
+			}
+		}
 		if fact.provider != nil {
 			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
 			if err != nil {

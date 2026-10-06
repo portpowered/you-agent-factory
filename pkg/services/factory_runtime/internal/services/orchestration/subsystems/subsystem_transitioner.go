@@ -37,6 +37,7 @@ type TransitionerSubsystem struct {
 	outputShaping     interfaces.InvocationOutputShapingService
 	workPropagation   interfaces.WorkPropagationPolicyService
 	decisionEnvelopes interfaces.DecisionEnvelopeService
+	confirmedForce    func(string) bool
 	// replayHistoricalWorks contains identities that are valid relation targets
 	// during deterministic replay even when their tokens are not currently on
 	// the board. It is populated only for restored replay runtimes; live
@@ -99,6 +100,7 @@ func NewTransitioner(
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
 	workPropagation interfaces.WorkPropagationPolicyService,
+	confirmedForce func(string) bool,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *TransitionerSubsystem {
 	if now == nil {
@@ -117,6 +119,7 @@ func NewTransitioner(
 		outputShaping:     outputShaping,
 		workPropagation:   workPropagation,
 		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
+		confirmedForce:    confirmedForce,
 	}
 	return tr
 }
@@ -286,7 +289,10 @@ func (t *TransitionerSubsystem) mapCanceledDispatch(
 	now time.Time,
 ) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
 	t.logArcSelection(result, resolved, consumedTokens)
-	mutations := t.restoreCanceledDispatchMutations(snapshot, result.DispatchID, resolved, now)
+	mutations, err := t.restoreCanceledDispatchMutations(snapshot, result.DispatchID, resolved, now)
+	if err != nil {
+		return nil, interfaces.CompletedDispatch{}, nil, err
+	}
 	return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
 }
 

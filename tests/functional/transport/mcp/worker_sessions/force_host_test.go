@@ -210,6 +210,7 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 	var completed []completedForceControl
 	admission := controlHostRunner{started: runner.started}
 	sibling := admitControlWorker(t, ctx, host.URL(), "force-sibling", admission)
+	assertForeignForceRefused(t, process, host, runner, sibling)
 	for index, transport := range []string{"http", "cli", "mcp"} {
 		id := "force-" + transport
 		done := admitControlWorker(t, ctx, host.URL(), id, admission)
@@ -375,18 +376,51 @@ func assertForceRestoredInput(t *testing.T, request, response factoryapi.Factory
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Factory cancellation returns the original Work to its input state. It
-	// must not replace that Work with a provider's partial output or new IDs.
+	// Confirmed force preserves the original Work at the authored FAILED
+	// placement, without provider partial output or replacement IDs.
 	if len(input.Inputs) != 1 || output.OutputWork == nil || len(*output.OutputWork) != 1 {
 		t.Fatalf("force did not restore its one consumed input: input=%#v output=%#v", input, output)
 	}
 	restored := (*output.OutputWork)[0]
+	if restored.State == nil || restored.State.Name != "failed" || restored.State.Type != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("forced Work placement = %#v, want authored FAILED", restored.State)
+	}
 	if restored.WorkId == nil || *restored.WorkId != input.Inputs[0].WorkId || restored.FailureDetail != nil || restored.Content == nil || len(*restored.Content) != 1 {
 		t.Fatalf("force changed restored Work identity/content: %#v", restored)
 	}
 	text, err := (*restored.Content)[0].AsWorkTextContentPart()
 	if err != nil || text.Text != "hold Factory force worker" {
 		t.Fatalf("force changed restored Work text: %#v, %v", text, err)
+	}
+}
+
+func assertForeignForceRefused(t *testing.T, process support.Process, source *support.FunctionalAPIServer, runner *forceHostRunner, done <-chan struct{}) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "mcp-force-foreign-profile")
+	foreign := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
+	})
+	session, ctx := startMCP(t, process, foreign.URL())
+	before := getHost(t, source.URL()+"/worker-sessions/force-sibling").(map[string]any)
+	attempt := before["attemptId"].(string)
+	for _, id := range []string{"force-sibling", "unknown-force-worker"} {
+		payload := map[string]any{"force": true, "requestId": "kill-" + id, "expectedAttemptId": attempt}
+		result := postHostJSON(t, ctx, foreign.URL()+"/worker-sessions/"+id+"/terminate", payload, http.StatusNotFound).(map[string]any)
+		if result["code"] != "NOT_FOUND" {
+			t.Fatalf("foreign/unknown force error = %v", result)
+		}
+		assertForceCLIErrorCode(t, foreign, id, "NOT_FOUND", "--force", "--request-id", "kill-"+id, "--expected-attempt-id", attempt)
+		args := map[string]any{"operation": "KILL", "workerSessionId": id, "requestId": "kill-" + id, "expectedAttemptId": attempt}
+		assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+	}
+	after := getHost(t, source.URL()+"/worker-sessions/force-sibling").(map[string]any)
+	for _, field := range []string{"workerSessionId", "attemptId", "state", "terminalCause", "endedAt"} {
+		assertJSONEqual(t, before[field], after[field])
+	}
+	assertForceStillActive(t, source, "force-sibling", done)
+	if runner.calls.Load() != 0 || runner.signals.Load() != 0 {
+		t.Fatal("foreign/unknown force reached the source execution")
 	}
 }
 

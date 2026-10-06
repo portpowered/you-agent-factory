@@ -14,6 +14,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -865,6 +867,47 @@ func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T)
 	}
 }
 
+func TestRuntimeAttemptPreparationForceRequiresAuthoredFailedPlacement(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"failed", "missing-state", "missing-place", "mixed-work", "unknown-work", "resource-only"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			var retained providers.AttemptControl
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{},
+				controlObserver: func(control providers.AttemptControl) { retained = control }}
+			net := &state.Net{WorkTypes: map[string]*state.WorkType{
+				"task": {States: []state.StateDefinition{{Value: "failed", Category: state.StateCategoryFailed}}},
+			}, Places: map[string]*petri.Place{"task:failed": {ID: "task:failed"}}}
+			inputs := []workers.WorkInput{{Kind: string(workers.DataTypeWork), WorkID: "source", WorkTypeID: "task"},
+				{Kind: string(workers.DataTypeResource), WorkTypeID: "capacity"}}
+			switch variant {
+			case "missing-state":
+				net.WorkTypes["task"].States = nil
+			case "missing-place":
+				delete(net.Places, "task:failed")
+			case "mixed-work":
+				inputs = append(inputs, workers.WorkInput{Kind: string(workers.DataTypeWork), WorkTypeID: "other"})
+			case "unknown-work":
+				inputs[0].WorkTypeID = "other"
+			case "resource-only":
+				inputs = inputs[1:]
+			}
+			cfg := &runtimeConfig{workerAttempts: sessions, net: net}
+			request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+			execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: inputs}}
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			if _, err := prepare(t.Context(), &execution); err != nil {
+				t.Fatal(err)
+			}
+			owned := &projectedAttemptControl{identity: "owned"}
+			execution.Input.AttemptControlObserver(owned)
+			if (retained == owned) != (variant == "failed") {
+				t.Fatalf("retained force capability = %v, variant %s", retained, variant)
+			}
+		})
+	}
+}
+
 func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("owned observation close failure")
@@ -996,8 +1039,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 		}}
 	execution := attemptTestRequest("dispatch", "physical")
 	request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+	request.Execution.Dispatch.DispatchID = "logical-dispatch"
 	cfg := &runtimeConfig{workerAttempts: sessions}
-	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
 	lifecycle := newAttemptLifecycle(attemptExecuteFunc(func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed,
 			Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
@@ -1005,6 +1048,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 			Continuation: &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
 			Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Message: "signal exit"}}, nativeErr
 	}), func() string { return "physical" }, 1)
+	cfg.attempts = lifecycle
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
 	var observed workers.ExecuteResult
 	var observedErr error
 	if err := lifecycle.startWithPreparation(t.Context(), execution, false,
@@ -1017,5 +1062,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 		len(observed.Output.Primary) != 0 || observed.ProposedOutputPresent || observed.StructuredResultPresent || observed.StructuredResult != nil || observed.Continuation != nil ||
 		observed.Failure == nil || observed.Failure.Family != workers.WorkFailureFamilyTerminal {
 		t.Fatalf("Runtime delivered force as retry/routing result: %#v, %v", observed, observedErr)
+	}
+	if !lifecycle.wasForced("logical-dispatch") || lifecycle.wasForced("physical") || lifecycle.wasForced("unrelated") {
+		t.Fatal("confirmed force did not retain only its logical dispatch disposition")
 	}
 }

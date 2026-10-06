@@ -133,6 +133,9 @@ func writeCancelWorkerScripts(factoryDir string) error {
 		if err := os.WriteFile(childPath, []byte(cancelChildPowerShell), 0o600); err != nil {
 			return fmt.Errorf("write child PowerShell fixture: %w", err)
 		}
+		if err := os.WriteFile(filepath.Join(scriptDir, "cancel-grandchild.ps1"), []byte(cancelGrandchildPowerShell), 0o600); err != nil {
+			return fmt.Errorf("write grandchild PowerShell fixture: %w", err)
+		}
 		return nil
 	}
 	path := filepath.Join(scriptDir, "cancel-worker.sh")
@@ -162,8 +165,25 @@ const cancelChildPowerShell = `param([string]$MarkerDir, [string]$ParentPID)
 $ErrorActionPreference = "Stop"
 Set-Content -LiteralPath (Join-Path $MarkerDir "child.pid") -Value ([string]$PID) -NoNewline
 Set-Content -LiteralPath (Join-Path $MarkerDir "child.parent.pid") -Value $ParentPID -NoNewline
+$grandchildArgs = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $PSScriptRoot "cancel-grandchild.ps1") + '" "' + $MarkerDir + '"'
+$grandchild = Start-Process -FilePath (Join-Path $PSHOME "powershell.exe") -ArgumentList $grandchildArgs -PassThru -WindowStyle Hidden
+Set-Content -LiteralPath (Join-Path $MarkerDir "grandchild.pid") -Value ([string]$grandchild.Id) -NoNewline
 Set-Content -LiteralPath (Join-Path $MarkerDir "child.started") -Value "started" -NoNewline
-Start-Sleep -Seconds 600
+$grandchild.WaitForExit()
+`
+
+// Real OS fixture processes answer challenges through files; the small sleep
+// belongs to the external protocol, not synchronization in a functional test.
+const cancelGrandchildPowerShell = `param([string]$MarkerDir)
+$ErrorActionPreference = "Stop"
+while ($true) {
+    $challenge = Join-Path $MarkerDir "challenge"
+    if (Test-Path -LiteralPath $challenge) {
+        $value = [System.IO.File]::ReadAllText($challenge)
+        [System.IO.File]::WriteAllText((Join-Path $MarkerDir "response"), $value)
+    }
+    Start-Sleep -Milliseconds 50
+}
 `
 
 const cancelWorkerShell = `#!/bin/sh
@@ -174,7 +194,9 @@ safe_work=$(printf '%s' "$work_id" | tr -c 'A-Za-z0-9._-' '_')
 marker_dir="$state_root/$safe_work/run-$$"
 mkdir -p "$marker_dir"
 printf '%s' "$$" > "$marker_dir/root.pid"
-sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; printf "%s" "started" > "$marker_dir/child.started"; exec sleep 600' sh "$marker_dir" "$$" &
+# Keep both FIFO ends open across challenges. Otherwise a read reopened before
+# the writer closes can receive EOF and overwrite the acknowledged response.
+sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; mkfifo "$marker_dir/challenge"; sh -c '\''exec 3<> "$1/challenge"; while IFS= read -r value <&3; do printf "%s" "$value" > "$1/response"; done'\'' sh "$marker_dir" & grandchild_pid=$!; printf "%s" "$grandchild_pid" > "$marker_dir/grandchild.pid"; printf "%s" "started" > "$marker_dir/child.started"; wait "$grandchild_pid"' sh "$marker_dir" "$$" &
 child_pid=$!
 printf '%s' "$child_pid" > "$marker_dir/child.pid"
 printf '%s' 'ready' > "$marker_dir/ready"

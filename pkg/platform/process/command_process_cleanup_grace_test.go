@@ -226,10 +226,10 @@ func TestProcessLifecycleMonitorWaitsForOutputDrain(t *testing.T) {
 }
 
 func TestNewExecCommandRunnerRejectsMissingEffects(t *testing.T) {
-	if _, err := NewExecCommandRunner(nil, platformclock.Real{}, nil, nil); err == nil {
+	if _, err := NewExecCommandRunner(nil, platformclock.Real{}, nil, nil, nil); err == nil {
 		t.Fatal("nil command factory was accepted")
 	}
-	if _, err := NewExecCommandRunner(exec.Command, nil, nil, nil); err == nil {
+	if _, err := NewExecCommandRunner(exec.Command, nil, nil, nil, nil); err == nil {
 		t.Fatal("nil process clock was accepted")
 	}
 }
@@ -578,6 +578,7 @@ func TestExecCommandRunnerPreservesZeroExitWhenObserverWatchesInheritedPipe(t *t
 		platformclock.Real{},
 		nil,
 		NewProcfsProcessStateReader(os.ReadFile),
+		os.DirFS("/proc"),
 	)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)

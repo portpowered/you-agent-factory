@@ -102,7 +102,7 @@ func TestEngine_SameTickCancellationResultRestoresResources(t *testing.T) {
 		nil, nil, nil,
 		factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
 			return factorydefinitions.WorkPropagationModeOutputAsPayload
-		}),
+		}), nil,
 	)
 	hook := newTestDispatchResultHook()
 	var forwarded []work.WorkDispatch

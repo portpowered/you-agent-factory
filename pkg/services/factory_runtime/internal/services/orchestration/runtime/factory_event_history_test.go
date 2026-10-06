@@ -680,7 +680,7 @@ func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *
 
 func newRuntimeSupersededServices(t *testing.T) (*runtimeSupersededProcessWorkers, *runtimeWorkerSessionsService) {
 	t.Helper()
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, logging.NoopLogger{}, nil)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, logging.NoopLogger{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner: %v", err)
 	}

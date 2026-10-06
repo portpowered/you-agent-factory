@@ -970,10 +970,11 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 		controlObserver: func(control providers.AttemptControl) { retained = control },
 	}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}, net: buildSimpleNet()},
 		eventHistory: &recordingfixtures.ScriptedRuntimeLedger{},
 	}
 	request := detachedTargetRequest()
+	request.Input.Work = []workers.WorkInput{{Kind: string(workers.DataTypeWork), WorkID: "source", WorkTypeID: "task"}}
 	request.Input.AttemptControlObserver = func(control providers.AttemptControl) { forwarded = control }
 	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
 	if err != nil {

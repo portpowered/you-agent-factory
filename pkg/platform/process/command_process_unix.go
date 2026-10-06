@@ -5,6 +5,7 @@ package process
 import (
 	"errors"
 	"os/exec"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -12,7 +13,16 @@ import (
 )
 
 type commandProcessTree struct {
-	pgid int
+	pgid   int
+	forced atomic.Bool
+}
+
+func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
+	configureCommandProcessTree(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return attachCommandProcessTree(cmd)
 }
 
 func configureCommandProcessTree(cmd *exec.Cmd) {
@@ -101,6 +111,11 @@ func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock 
 }
 
 func closeCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, clock platformclock.Source, logCtx commandProcessCleanupContext) {
+	if tree != nil && tree.forced.Load() {
+		// The exact force already joined the group while its leader identity
+		// was retained. Never signal its numeric group after reaping it.
+		return
+	}
 	if cmd == nil {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "missing command")
 		return

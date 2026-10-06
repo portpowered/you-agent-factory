@@ -59,7 +59,10 @@ from the Worker Session observation before submitting this request:
 The response retains `action: TERMINATE` and includes `forced: true`.
 `APPLIED` confirms that the exact owned process tree and authoritative attempt
 have finished. `UNSUPPORTED` means the host has no supported owned capability;
-it does not confirm termination. Windows force termination is unsupported.
+it does not confirm termination. Local Codex and Claude command attempts support
+force on Linux and Windows when the host retains process-tree ownership.
+Factory force also requires an authored FAILED state for every input Work type.
+Confirmed force preserves that Work at FAILED without automatic retry.
 Reuse the same request and attempt identities when recovering a disconnected request.
 
 A failed host connection returns retryable `worker_session.host_unavailable`.

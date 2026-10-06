@@ -3,9 +3,12 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -17,20 +20,144 @@ import (
 // jobobjectBasicAccountingInformation mirrors JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
 // (see golang.org/x/sys/windows JobObjectBasicAccountingInformation).
 type jobobjectBasicAccountingInformation struct {
-	TotalUserTime            int64
-	TotalKernelTime          int64
-	TotalPageFaultCount      uint32
-	TotalProcesses           uint32
-	ActiveProcesses          uint32
-	TotalTerminatedProcesses uint32
+	TotalUserTime             int64
+	TotalKernelTime           int64
+	ThisPeriodTotalUserTime   int64
+	ThisPeriodTotalKernelTime int64
+	TotalPageFaultCount       uint32
+	TotalProcesses            uint32
+	ActiveProcesses           uint32
+	TotalTerminatedProcesses  uint32
 }
 
 type commandProcessTree struct {
 	job     windows.Handle
 	rootPID uint32
+	root    windows.Handle
+}
+
+func (tree *commandProcessTree) ownedControl(done <-chan struct{}, clock Clock, _ fs.FS) *ownedCommandControl {
+	if tree == nil || tree.job == 0 || tree.root == 0 || tree.rootPID != 0 {
+		return nil
+	}
+	return &ownedCommandControl{stop: func(ctx context.Context) (bool, error) {
+		return tree.forceKillAndJoin(ctx, clock)
+	}, done: done}
+}
+
+func (tree *commandProcessTree) forceKillAndJoin(ctx context.Context, clock Clock) (bool, error) {
+	// The root handle was opened while suspended and remains retained even
+	// after os/exec reaps it. Never resolve its numeric PID again.
+	state, err := windows.WaitForSingleObject(tree.root, 0)
+	if err != nil {
+		return false, err
+	}
+	if state == windows.WAIT_OBJECT_0 {
+		return false, nil
+	}
+	if state != uint32(windows.WAIT_TIMEOUT) {
+		return false, fmt.Errorf("unexpected owned root wait state: %d", state)
+	}
+	if err := windows.TerminateJobObject(tree.job, 1); err != nil {
+		return false, err
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		active, err := tree.activeProcesses()
+		if err != nil {
+			return false, err
+		}
+		if active == 0 {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-clock.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func (tree *commandProcessTree) activeProcesses() (uint32, error) {
+	var info jobobjectBasicAccountingInformation
+	err := windows.QueryInformationJobObject(tree.job, windows.JobObjectBasicAccountingInformation,
+		uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil)
+	return info.ActiveProcesses, err
 }
 
 func configureCommandProcessTree(_ *exec.Cmd) {}
+
+// Start suspended so no provider code can create descendants before Job
+// assignment. os/exec closes the initial thread handle, so recover that thread
+// while the suspended root still pins its identity. Never resume on failure.
+func startCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
+	configureSuspendedCommand(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	tree, err := attachCommandProcessTree(cmd)
+	if err == nil {
+		err = resumeCommandProcess(cmd.Process.Pid)
+	}
+	if err != nil {
+		// Nothing has executed yet. Kill the root and close any assigned Job
+		// before joining, including os/exec's stream-copy goroutines.
+		killErr := cmd.Process.Kill()
+		if tree != nil {
+			_ = windows.CloseHandle(tree.job)
+			_ = windows.CloseHandle(tree.root)
+		}
+		waitErr := cmd.Wait()
+		return nil, errors.Join(err, killErr, waitErr)
+	}
+	// This Job contains every descendant from inception. No PID sweep is
+	// necessary or safe after the root has been reaped.
+	tree.rootPID = 0
+	return tree, nil
+}
+
+func configureSuspendedCommand(cmd *exec.Cmd) {
+	attributes := syscall.SysProcAttr{}
+	if cmd.SysProcAttr != nil {
+		attributes = *cmd.SysProcAttr
+	}
+	attributes.CreationFlags |= windows.CREATE_SUSPENDED
+	cmd.SysProcAttr = &attributes
+}
+
+func resumeCommandProcess(pid int) error {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = windows.CloseHandle(snapshot) }()
+	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
+	if err := windows.Thread32First(snapshot, &entry); err != nil {
+		return err
+	}
+	for {
+		if entry.OwnerProcessID == uint32(pid) {
+			thread, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = windows.CloseHandle(thread) }()
+			previous, err := windows.ResumeThread(thread)
+			if err != nil {
+				return err
+			}
+			if previous != 1 {
+				return fmt.Errorf("initial command thread suspension count = %d, want 1", previous)
+			}
+			return nil
+		}
+		if err := windows.Thread32Next(snapshot, &entry); err != nil {
+			return fmt.Errorf("find suspended command thread: %w", err)
+		}
+	}
+}
 
 func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	if cmd.Process == nil {
@@ -54,7 +181,7 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	}
 
 	process, err := windows.OpenProcess(
-		windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE,
+		windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.SYNCHRONIZE,
 		false,
 		uint32(cmd.Process.Pid),
 	)
@@ -62,13 +189,12 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 		windows.CloseHandle(job)
 		return nil, err
 	}
-	defer windows.CloseHandle(process)
-
 	if err := windows.AssignProcessToJobObject(job, process); err != nil {
 		windows.CloseHandle(job)
+		_ = windows.CloseHandle(process)
 		return nil, err
 	}
-	return &commandProcessTree{job: job, rootPID: uint32(cmd.Process.Pid)}, nil
+	return &commandProcessTree{job: job, rootPID: uint32(cmd.Process.Pid), root: process}, nil
 }
 
 // terminateCommandJobGroup waits up to grace for job members to exit, then
@@ -170,6 +296,8 @@ func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, clock platfo
 		)
 	}
 	windows.CloseHandle(tree.job)
+	_ = windows.CloseHandle(tree.root)
+	tree.root = 0
 	tree.job = 0
 }
 

@@ -80,7 +80,11 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 		request.Input.ProcessLifecycleObserver = observer
 		request.Input.AttemptControlObserver = attemptObserver
 	}
-	if service.providerOverride != nil {
+	// Live compatibility overrides only own legacy provider execution. Replay
+	// replaces native attempts too, without diverting live catalog providers.
+	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
+	if service.providerOverride != nil && (service.replayCommandRunner != nil ||
+		executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")) {
 		request.Input.ProviderOverride = service.providerOverride
 	}
 	if service.modelInvocationOverride != nil {

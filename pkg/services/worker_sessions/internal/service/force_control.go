@@ -228,6 +228,7 @@ func (r *registry) applyForceClaim(ctx context.Context, id string, target frozen
 	}
 	claim.resolve(effect.killed, effect.err)
 	if effect.err != nil {
+		r.logger.Warn("worker session force effect failed", "sessionID", publicWorkerID(id), "attemptID", target.attemptID, "error", effect.err)
 		// Keep the service deadline inspectable without exposing runner errors
 		// containing host process details through customer control responses.
 		return r.forceResult(id, target, workersessions.ControlOutcomeFailed), errors.Join(errRuntimeAttemptControlUnavailable, context.Cause(ctx))
@@ -236,6 +237,7 @@ func (r *registry) applyForceClaim(ctx context.Context, id string, target frozen
 		return r.forceResult(id, target, workersessions.ControlOutcomeUnsupported), nil
 	}
 	if err := awaitForceJoin(ctx, claim.joined); err != nil {
+		r.logger.Warn("worker session force join failed", "sessionID", publicWorkerID(id), "attemptID", target.attemptID, "error", err)
 		return r.forceResult(id, target, workersessions.ControlOutcomeFailed), err
 	}
 	result := r.forceResult(id, target, workersessions.ControlOutcomeApplied)

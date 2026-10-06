@@ -524,6 +524,7 @@ func (opening *EngineOpening) configureRuntimeDispatch(
 		cfg.workService,
 		cfg.workRequestIDs,
 		canonicalSessionIDFromFactoryConfig(cfg),
+		cfg.recoverReplayForce,
 	)
 	return resultHook, planner, nil
 }

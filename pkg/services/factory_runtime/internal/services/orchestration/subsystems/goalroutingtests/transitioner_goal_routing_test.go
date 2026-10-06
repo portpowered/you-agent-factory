@@ -123,7 +123,7 @@ func executeBuiltInGoalRepeaterResult(
 		},
 		nil,
 		nil,
-		repeaterWorkPropagationPolicy{},
+		repeaterWorkPropagationPolicy{}, nil,
 	)
 	result, err := transitioner.Execute(context.Background(), builtInGoalRepeaterSnapshot(now, transition.ID, inputPlace, outcome))
 	if err != nil {

@@ -8,12 +8,107 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
+
+func TestOwnedProcessControlLifecycle(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("owned tree signal failed")
+	for _, test := range []struct {
+		name         string
+		stopAccepted bool
+		stopError    error
+		cancelOnStop bool
+		expired      bool
+		cancelBefore bool
+		wantAccepted bool
+		wantError    error
+		wantCalls    int
+	}{
+		{name: "joined", stopAccepted: true, wantAccepted: true, wantCalls: 1},
+		{name: "declined", wantCalls: 1},
+		{name: "signal-failed", stopError: failure, wantError: failure, wantCalls: 1},
+		{name: "join-deadline", stopAccepted: true, cancelOnStop: true, wantError: context.Canceled, wantCalls: 1},
+		{name: "expired", expired: true},
+		{name: "caller-canceled", cancelBefore: true, wantError: context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan struct{})
+			calls := 0
+			control := &ownedCommandControl{done: done, waited: done, stop: func(context.Context) (bool, error) {
+				calls++
+				if test.cancelOnStop {
+					cancel()
+				} else {
+					close(done)
+				}
+				return test.stopAccepted, test.stopError
+			}}
+			if test.expired {
+				control.expire()
+			}
+			if test.cancelBefore {
+				cancel()
+			}
+			accepted, err := control.ForceKill(ctx)
+			if accepted != test.wantAccepted {
+				t.Fatalf("ForceKill accepted=%t for %s", accepted, test.name)
+			}
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("ForceKill error=%v, want %v", err, test.wantError)
+			}
+			if calls != test.wantCalls {
+				t.Fatalf("signal calls=%d, want %d", calls, test.wantCalls)
+			}
+			control.expire()
+			if accepted, err := control.ForceKill(context.Background()); accepted || err != nil || calls != test.wantCalls {
+				t.Fatalf("expired handle produced another effect: accepted=%t err=%v calls=%d", accepted, err, calls)
+			}
+		})
+	}
+}
+
+func TestOwnedProcessControlJoinsRunnerBeforeSuccess(t *testing.T) {
+	t.Parallel()
+	signaled, releaseTree, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var released atomic.Bool
+	control := &ownedCommandControl{done: done, stop: func(context.Context) (bool, error) {
+		close(signaled)
+		<-releaseTree
+		if released.Load() {
+			return false, errors.New("host identity released during signal/join")
+		}
+		return true, nil
+	}}
+	result := make(chan bool, 1)
+	go func() {
+		accepted, err := control.ForceKill(t.Context())
+		result <- accepted && err == nil
+	}()
+	<-signaled
+	go func() {
+		control.expire()
+		released.Store(true)
+		close(done)
+	}()
+	select {
+	case <-result:
+		t.Fatal("signal without tree and runner joins reported success")
+	default:
+	}
+	close(releaseTree)
+	if !<-result || !released.Load() {
+		t.Fatal("ForceKill must join the runner after fenced host cleanup")
+	}
+}
 
 // commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
 // start the helper, spawn the child, and write the pid file before the test
@@ -124,7 +219,7 @@ func (r fixedCommandRunnerWithError) Run(context.Context, CommandRequest) (Comma
 
 func testExecCommandRunner(t testing.TB, logger logging.Logger) ExecCommandRunner {
 	t.Helper()
-	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil)
+	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil, os.DirFS("/proc"))
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}

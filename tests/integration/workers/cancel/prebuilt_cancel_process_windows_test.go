@@ -5,13 +5,59 @@ package cancel_test
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"testing"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+func writeNativeForceFixture(t *testing.T, adapter string) cancelFixture {
+	t.Helper()
+	fixture, err := writeCancelFixture(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := filepath.Join(fixture.factoryDir, "scripts")
+	files := map[string]string{
+		"codex.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0codex.ps1\"\r\nexit /b %errorlevel%\r\n",
+		"codex.ps1": `$ErrorActionPreference = "Stop"
+$state = $env:FACTORY_RELIABILITY_CANCEL_STATE
+$name = "source"
+if (Test-Path -LiteralPath (Join-Path $state "source")) { $name = "sibling" }
+[System.IO.File]::AppendAllText((Join-Path $state "native-launches"), $name + [Environment]::NewLine)
+$null = [Console]::In.ReadToEnd()
+[Console]::WriteLine('{"type":"item.completed","item":{"id":"progress","type":"agent_message","text":"force fixture ready"}}')
+[Console]::Out.Flush()
+& (Join-Path $PSScriptRoot "cancel-worker.ps1") -WorkID $name -StateRoot $state
+`,
+	}
+	if adapter == "claude" {
+		files = map[string]string{
+			"claude.cmd": "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0claude.ps1\"\r\nexit /b %errorlevel%\r\n",
+			"claude.ps1": `$ErrorActionPreference = "Stop"
+$state = $env:FACTORY_RELIABILITY_CANCEL_STATE
+$name = "source"
+if (Test-Path -LiteralPath (Join-Path $state "source")) { $name = "sibling" }
+[System.IO.File]::AppendAllText((Join-Path $state "native-launches"), $name + [Environment]::NewLine)
+[Console]::WriteLine('{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"force fixture ready"}]}}')
+[Console]::Out.Flush()
+& (Join-Path $PSScriptRoot "cancel-worker.ps1") -WorkID $name -StateRoot $state
+`,
+		}
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(provider, name), []byte(content), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixture.environment = setCancelEnvironment(fixture.environment, "PATH", provider+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return fixture
+}
 
 func processSnapshotParents() (map[int]int, error) {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)

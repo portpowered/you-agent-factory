@@ -8,11 +8,35 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/windows"
 )
+
+func TestConfigureSuspendedCommandPreservesLaunchAttributes(t *testing.T) {
+	t.Parallel()
+	for _, configured := range []bool{false, true} {
+		t.Run(fmt.Sprint(configured), func(t *testing.T) {
+			cmd := &exec.Cmd{}
+			original := &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NEW_PROCESS_GROUP, CmdLine: "custom command"}
+			if configured {
+				cmd.SysProcAttr = original
+			}
+			configureSuspendedCommand(cmd)
+			if cmd.SysProcAttr.CreationFlags&windows.CREATE_SUSPENDED == 0 {
+				t.Fatal("command must start suspended before Job assignment")
+			}
+			if configured && (!cmd.SysProcAttr.HideWindow || cmd.SysProcAttr.CmdLine != original.CmdLine || cmd.SysProcAttr.CreationFlags&windows.CREATE_NEW_PROCESS_GROUP == 0) {
+				t.Fatal("suspended startup discarded caller launch attributes")
+			}
+			if original.CreationFlags&windows.CREATE_SUSPENDED != 0 {
+				t.Fatal("startup mutated caller-owned launch attributes")
+			}
+		})
+	}
+}
 
 func commandTestProcessRunning(pid int) bool {
 	process, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))

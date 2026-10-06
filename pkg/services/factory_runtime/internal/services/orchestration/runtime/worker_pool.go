@@ -82,6 +82,7 @@ type attemptLifecycle struct {
 	capacity int
 	active   map[string]*activeAttempt
 	terminal map[string]string
+	forced   map[string]bool
 }
 
 func newAttemptLifecycle(service executeCapability, newID factory.IDGenerator, capacity int) *attemptLifecycle {
@@ -94,6 +95,7 @@ func newAttemptLifecycle(service executeCapability, newID factory.IDGenerator, c
 		capacity: capacity,
 		active:   make(map[string]*activeAttempt),
 		terminal: make(map[string]string),
+		forced:   make(map[string]bool),
 	}
 }
 
@@ -539,6 +541,27 @@ func (l *attemptLifecycle) terminalAttemptID(dispatchID string) (string, bool) {
 	return attemptID, ok
 }
 
+// recordConfirmedForce retains the logical dispatch disposition until routing.
+// Only the exact Worker attempt's resolved force claim can publish this fact.
+// It stays local to Runtime; canonical marking mutations carry it through replay.
+func (l *attemptLifecycle) recordConfirmedForce(dispatchID string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.forced[dispatchID] = true
+}
+
+func (l *attemptLifecycle) wasForced(dispatchID string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.forced[dispatchID]
+}
+
 func (f *factoryImpl) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
 	f.workerSessionControlMu.Lock()
 	defer f.workerSessionControlMu.Unlock()
@@ -918,7 +941,10 @@ func choosePlannedWorkersResult(
 	request workers.WorkstationDispatchRequest,
 	live, planned workers.WorkResult,
 ) (workers.WorkResult, bool, error) {
-	if live.Outcome == workers.OutcomeFailed && planned.Outcome != workers.OutcomeFailed {
+	// A recorded cancellation is terminal truth, even when its replayed
+	// provider error is classified as a failed attempt without a live cancel.
+	// Keep execution failures from being replaced by recorded success.
+	if live.Outcome == workers.OutcomeFailed && planned.Outcome != workers.OutcomeFailed && planned.Outcome != workers.OutcomeCanceled {
 		return live, false, nil
 	}
 	planned.DispatchID = request.Execution.Dispatch.DispatchID
@@ -957,6 +983,7 @@ func buildRuntimeSubsystems(
 		cfg.quorumPolicy,
 		cfg.outputShaping,
 		cfg.workPropagation,
+		cfg.attempts.wasForced,
 		cfg.decisionEnvelopes,
 	)
 	if cfg.skipRestoredDispatchReconciliation {

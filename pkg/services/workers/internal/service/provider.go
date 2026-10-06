@@ -22,11 +22,9 @@ func (s *Service) authorizeProviderTarget(
 	if identity != runners.AgentIdentity {
 		return nil
 	}
-	// A composed provider override is the execution authority for legacy
-	// provider work whose execution mechanism is blank or SCRIPT_WRAP. Named
-	// executor providers remain catalog-selected, even when a process-scoped
-	// compatibility edge is present; otherwise an unknown named provider could
-	// silently fall through to that edge.
+	// A request-scoped provider owns this attempt, including recorded replay.
+	// The process-scoped compatibility edge applies only to legacy blank or
+	// SCRIPT_WRAP execution; named live providers retain catalog authority.
 	if providerOverrideApplies(request, configuredProviderOverride(s)) {
 		return nil
 	}
@@ -115,6 +113,11 @@ func providerOverrideApplies(
 	if request == nil ||
 		(request.Input.ProviderOverride == nil && serviceOverride == nil) {
 		return false
+	}
+	// Runtime-scoped effects (including replay) replace the selected provider
+	// attempt even when the authored workstation names a native executor.
+	if request.Input.ProviderOverride != nil {
+		return true
 	}
 	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
 	return executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")
