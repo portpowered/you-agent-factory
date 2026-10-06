@@ -163,23 +163,7 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			}
 			request := portableCheckpointOwnerFixture(t).startRequest()
 			failed, err := factory.openForRequest(t.Context(), request)
-			if !errors.Is(err, failure) || (failsClose && !errors.Is(err, closeErr)) {
-				t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
-			}
-			if failed.execution != nil || failed.process != nil {
-				t.Fatal("failed acquisition published usable session roles")
-			}
-			if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
-				t.Fatalf("failed owner cleanup = %v, want immediate release", events)
-			}
-			if failsClose {
-				if failed.closeArtifacts == nil {
-					t.Fatal("failed release lost its owned cleanup handle")
-				}
-				if err := failed.closeArtifacts(); !errors.Is(err, closeErr) {
-					t.Fatalf("retained cleanup error = %v, want release cause", err)
-				}
-			}
+			assertFailedReplayAcquisition(t, failed, err, failure, closeErr, events)
 			retried, err := factory.openForRequest(t.Context(), request)
 			if err != nil || retried.execution == nil || attempts != 2 {
 				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.execution != nil)
@@ -191,6 +175,27 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 				t.Fatalf("stale cleanup or retry closed failed owner again: %v", events)
 			}
 		})
+	}
+}
+
+func assertFailedReplayAcquisition(t *testing.T, failed runtimeProducts, err, failure, closeErr error, events []string) {
+	t.Helper()
+	if !errors.Is(err, failure) || (closeErr != nil && !errors.Is(err, closeErr)) {
+		t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
+	}
+	if failed.execution != nil || failed.process != nil {
+		t.Fatal("failed acquisition published usable session roles")
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
+		t.Fatalf("failed owner cleanup = %v, want immediate release", events)
+	}
+	if closeErr != nil {
+		if failed.closeArtifacts == nil {
+			t.Fatal("failed release lost its owned cleanup handle")
+		}
+		if err := failed.closeArtifacts(); !errors.Is(err, closeErr) {
+			t.Fatalf("retained cleanup error = %v, want release cause", err)
+		}
 	}
 }
 
@@ -872,18 +877,28 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 				}
 				return DurableExecution{Service: owner}, nil
 			}
-			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire)
+			factory := &Root{
+				clock: openingCoordinatorClock{}, providerOverride: tc.provider,
+				durableExecutionFactory: acquire,
+			}
+			durable, closeOwner, err := factory.openPortableReplayDurableOwner(configured, RuntimeRoot{})
 			if !errors.Is(err, tc.failure) {
 				t.Fatalf("error = %v, want %v", err, tc.failure)
 			}
 			if tc.failure != nil {
-				if durable.Service != nil || provider != nil {
-					t.Fatal("failed acquisition returned usable owner/provider")
+				if durable != nil {
+					t.Fatal("failed acquisition returned usable owner")
+				}
+				if err := closeOwner(); err != nil {
+					t.Fatal(err)
 				}
 				return
 			}
-			if durable.Service != owner || provider != tc.provider {
-				t.Fatalf("acquisition result = %v/%v, want admitted owner and selected provider", durable.Service, provider)
+			if replayOwner, ok := durable.(*portableReplayDurableOwner); !ok || replayOwner.Service != owner {
+				t.Fatalf("acquisition result = %v, want admitted owner", durable)
+			}
+			if err := closeOwner(); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

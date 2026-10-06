@@ -202,11 +202,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 		liveOwner, replayClose, err = r.openPortableReplayDurableOwner(
 			opening.configured,
 			opening.root,
-			r.clock,
-			r.providerOverride,
-			r.providerCommandRunner,
-			r.durableExecutionFactory,
-			r.resolveClock,
 		)
 		if err != nil {
 			if replayClose != nil {

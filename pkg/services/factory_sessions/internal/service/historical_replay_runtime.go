@@ -170,25 +170,24 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 func (r *Root) openPortableReplayDurableOwner(
 	configured preparedRuntime,
 	root RuntimeRoot,
-	clockEdge factoryruntime.Clock,
-	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	durableExecutionFactory DurableExecutionFactory,
-	resolveClock factoryruntime.ClockResolver,
 ) (durableexecution.Service, func() error, error) {
-	if durableExecutionFactory == nil {
+	if r.durableExecutionFactory == nil {
 		return nil, nil, fmt.Errorf("construct portable replay runtime: durable execution operation is required")
 	}
-	clock, err := clockForReplay(clockEdge, nil, nil, resolveClock)
+	clock, err := clockForReplay(r.clock, nil, nil, r.resolveClock)
 	if err != nil {
 		return nil, nil, err
 	}
-	durable, providerForDurable, err := constructPortableReplayDurableOwner(
-		configured,
+	durable, err := r.durableExecutionFactory(
+		configured.Definition,
+		configured.Session.Persistence,
+		runtimeSelectionForStart(configured.Session).SystemConfigHome,
+		runtimeSelectionForStart(configured.Session).SystemConfigPath,
+		configured.OperatorDefaults,
 		root,
 		clock,
-		providerOverride,
-		durableExecutionFactory,
+		r.providerOverride,
+		configured.Workers.MockWorkers,
 	)
 	if err != nil {
 		// Acquisition may have opened resources before failing. Return only
@@ -208,8 +207,6 @@ func (r *Root) openPortableReplayDurableOwner(
 				probeContext,
 				configured,
 				durable.Service,
-				providerForDurable,
-				providerCommandRunner,
 				cleanup,
 			)
 			// A failed opening can still own artifacts. Register them before
@@ -226,8 +223,6 @@ func (r *Root) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
 	durableOwner durableexecution.Service,
-	providerForDurable providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
 	cleanup *portableReplayRuntimeCleanup,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
 	opening, err := r.assemblePortableReplayRuntime(
@@ -252,9 +247,9 @@ func (r *Root) preparePortableReplayRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		runtime.StreamGeneration(),
 		runtime.RecordingLedger(),
-		providerForDurable,
+		r.providerOverride,
 		configured.Workers.MockWorkers,
-		providerCommandRunner,
+		r.providerCommandRunner,
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
 	)
@@ -269,31 +264,6 @@ func (r *Root) preparePortableReplayRuntime(
 	}
 	cleanup.mu.Unlock()
 	return opening, nil
-}
-
-func constructPortableReplayDurableOwner(
-	configured preparedRuntime,
-	root RuntimeRoot,
-	clock factoryruntime.Clock,
-	providerOverride providers.Service,
-	durableExecutionFactory DurableExecutionFactory,
-) (DurableExecution, providers.Service, error) {
-	providerForDurable := providerOverride
-	durable, err := durableExecutionFactory(
-		configured.Definition,
-		configured.Session.Persistence,
-		runtimeSelectionForStart(configured.Session).SystemConfigHome,
-		runtimeSelectionForStart(configured.Session).SystemConfigPath,
-		configured.OperatorDefaults,
-		root,
-		clock,
-		providerForDurable,
-		configured.Workers.MockWorkers,
-	)
-	if err != nil {
-		return durable, nil, err
-	}
-	return durable, providerForDurable, nil
 }
 
 func (r *Root) assemblePortableReplayRuntime(

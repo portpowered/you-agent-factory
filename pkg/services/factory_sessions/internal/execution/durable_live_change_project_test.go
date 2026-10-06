@@ -417,10 +417,7 @@ func TestBindWorkerScopeOverlappingChildrenKeepRoutesOnPeerFailureOrCancellation
 			// completes. Then complete the peer first and fail/cancel the first.
 			for range 2 {
 				request := <-worker.admitted
-				scope := strings.TrimSuffix(request.Correlation.FactorySessionID, "-child")
-				if request.Correlation.RuntimeID != "runtime-"+scope || request.Correlation.GenerationID != "generation-"+scope || request.Target.WorkerName != "worker-"+scope {
-					t.Fatalf("crossed child request: %#v", request)
-				}
+				assertAdmittedChildScope(t, request)
 			}
 			close(worker.release["second-child"])
 			if err := <-done["second"]; err != nil {
@@ -505,22 +502,26 @@ func TestBindWorkerScopeRetainsCapturedChildIdentityAndObservationHandles(t *tes
 			t.Fatalf("child correlation = %#v, want session %q runtime %q generation %q", got, scenario.session, scenario.runtime, scenario.generation)
 		}
 	}
-	for index, observed := range []struct {
-		session     string
-		progress    []workers.ProgressFragment
-		attempts    []workers.ExecutionCorrelation
-		completions int
-	}{
-		{"first-child", firstProgress, firstAttempts, firstCompletions},
-		{"second-child", secondProgress, secondAttempts, secondCompletions},
-	} {
-		if len(observed.progress) != 2 || len(observed.attempts) != 1 || observed.completions != 1 {
-			t.Fatalf("scope %d observations = %#v", index, observed)
-		}
-		fragment := observed.progress[0]
-		if fragment.Correlation.FactorySessionID != observed.session || fragment.Payload != "child output" || observed.attempts[0].FactorySessionID != observed.session || observed.progress[1].Kind != workers.CompletedFragmentKind || observed.progress[1].DispatchID != observed.attempts[0].DispatchID {
-			t.Fatalf("scope %d crossed observation routes: %#v", index, observed)
-		}
+	assertCapturedChildObservations(t, "first-child", firstProgress, firstAttempts, firstCompletions)
+	assertCapturedChildObservations(t, "second-child", secondProgress, secondAttempts, secondCompletions)
+}
+
+func assertAdmittedChildScope(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	scope := strings.TrimSuffix(request.Correlation.FactorySessionID, "-child")
+	if request.Correlation.RuntimeID != "runtime-"+scope || request.Correlation.GenerationID != "generation-"+scope || request.Target.WorkerName != "worker-"+scope {
+		t.Fatalf("crossed child request: %#v", request)
+	}
+}
+
+func assertCapturedChildObservations(t *testing.T, session string, progress []workers.ProgressFragment, attempts []workers.ExecutionCorrelation, completions int) {
+	t.Helper()
+	if len(progress) != 2 || len(attempts) != 1 || completions != 1 {
+		t.Fatalf("scope %s observations: progress=%#v attempts=%#v completions=%d", session, progress, attempts, completions)
+	}
+	fragment := progress[0]
+	if fragment.Correlation.FactorySessionID != session || fragment.Payload != "child output" || attempts[0].FactorySessionID != session || progress[1].Kind != workers.CompletedFragmentKind || progress[1].DispatchID != attempts[0].DispatchID {
+		t.Fatalf("scope %s crossed observation routes: progress=%#v attempts=%#v", session, progress, attempts)
 	}
 }
 
