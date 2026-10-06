@@ -343,22 +343,32 @@ func testProjectLoopbackProposalOutcomes(t *testing.T) {
 			assertReviewFailureWorkStates(t, works, map[string]string{childID: tc.state, wake.ownerID: "waiting", wake.peerID: "waiting"})
 			assertLoopbackReportOrigin(t, works, childID, tc.untagged)
 			assertLoopbackReadableEvidence(t, wake, childID, tc.commandError, tc.untagged)
-			dispatches := reviewFailureDispatches(t, wake.reviewFailureScenario)
-			if len(dispatchesWithTransition(dispatches, route)) != 1 {
-				t.Fatalf("report dispatched more than once: %#v", dispatches)
-			}
-			if tc.untagged && len(dispatchesWithTransition(dispatches, projectLeadWakeTransition)) != 0 {
-				t.Fatal("untagged loopback woke a tagged Project")
-			}
+			assertLoopbackReportDispatches(t, wake, route, tc.untagged)
 			if !tc.commandError && !tc.untagged {
-				for _, work := range works {
-					if work.WorkId != nil && *work.WorkId == childID {
-						assertPayloadHasSentinel(t, "original failure evidence", work.Payload, "original gap evidence")
-						assertPayloadHasSentinel(t, "last output", work.Tags, proposal)
-					}
-				}
+				assertLoopbackOriginalOutput(t, works, childID, proposal)
 			}
 		})
+	}
+}
+
+func assertLoopbackReportDispatches(t *testing.T, wake *projectWakeScenario, route string, untagged bool) {
+	t.Helper()
+	dispatches := reviewFailureDispatches(t, wake.reviewFailureScenario)
+	if len(dispatchesWithTransition(dispatches, route)) != 1 {
+		t.Fatalf("report dispatched more than once: %#v", dispatches)
+	}
+	if untagged && len(dispatchesWithTransition(dispatches, projectLeadWakeTransition)) != 0 {
+		t.Fatal("untagged loopback woke a tagged Project")
+	}
+}
+
+func assertLoopbackOriginalOutput(t *testing.T, works []factoryapi.Work, childID, proposal string) {
+	t.Helper()
+	for _, work := range works {
+		if work.WorkId != nil && *work.WorkId == childID {
+			assertPayloadHasSentinel(t, "original failure evidence", work.Payload, "original gap evidence")
+			assertPayloadHasSentinel(t, "last output", work.Tags, proposal)
+		}
 	}
 }
 
