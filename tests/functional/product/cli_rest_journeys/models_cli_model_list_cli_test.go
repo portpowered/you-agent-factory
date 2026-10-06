@@ -14,6 +14,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -113,7 +114,7 @@ func testModelscliProcessModelsCatalogDiscoversCustomOperatorModel(t *testing.T)
 		t.Helper()
 		inputs := support.FakeInputs(t.Context(), args)
 		inputs.Input.WorkingDirectory = workingDirectory
-		inputs.Input.Env = support.IsolatedHomeEnvironment(home)
+		inputs.Input.Env = isolatedHomeEnvironment(home)
 		if err := modelListProcess.Execute(inputs.Input); err != nil {
 			t.Fatalf("Process.Execute(%v) error = %v\nstderr=%s", args, err, inputs.Stderr())
 		}
@@ -268,4 +269,20 @@ func testModelscliProcessModelsInspect_ReturnsHumanReadableDetail(t *testing.T) 
 func resetmodelscli1State() {
 	var freshModelListProcess support.ApplicationProcess
 	modelListProcess = freshModelListProcess
+}
+
+// isolatedHomeEnvironment keeps configuration and model discovery in this
+// scenario's home without changing the environment used by parallel tests.
+func isolatedHomeEnvironment(home string) []string {
+	environment := make([]string, 0, len(os.Environ())+3)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") ||
+			strings.EqualFold(name, runcli.ModelCacheDirEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+home, "USERPROFILE="+home,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, ".agent-factory", "models"))
 }

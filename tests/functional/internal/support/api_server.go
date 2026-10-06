@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -115,7 +116,9 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 	if cfg.Env == nil {
 		home := t.TempDir()
-		inputs.Env = IsolatedHomeEnvironment(home)
+		inputs.Env = withFunctionalEnvironment(os.Environ(), "HOME", home)
+		inputs.Env = withFunctionalEnvironment(inputs.Env, "USERPROFILE", home)
+		inputs.Env = withFunctionalEnvironment(inputs.Env, runcli.ModelCacheDirEnvironment, filepath.Join(home, ".agent-factory", "models"))
 	} else {
 		inputs.Env = append([]string(nil), cfg.Env...)
 	}
