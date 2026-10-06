@@ -2440,3 +2440,43 @@ inside a synctest bubble. Accordingly, these public REST/MCP recovery scenarios
 use observable completion and controlled clocks/edges rather than shortening
 wall-clock sleeps or wrapping real sockets in virtual time. See the Go team's
 [Testing Time](https://go.dev/blog/testing-time) explanation of these limits.
+
+
+### Hosted parallel candidate and loop-duration race
+
+Head `bd5bf2728139c9d4e438d1df3de8a0c1ecb251c2`, run `37399514886`,
+functional job `112064602388`, passed in **223 seconds whole job**
+(01:37:28–01:41:11 UTC), **171.610 seconds supervisor**, and **158.206 seconds
+coverage invocation**. It accounted for all 68 packages and 751 results. The
+trace reported four compiler commands and 71 linker command observations.
+The customer-journeys package fell from 102.975 to 86.032 seconds, while the
+whole job still exceeded three minutes. The trace counts are observations,
+not measured linker CPU or a count of uniquely executed link actions.
+
+One loop boundary case recovered on retry: `maximum_168h` timed out observing
+its first scheduled Work after the invocation used a 20 ms return deadline.
+The next fixture issues the accepted-duration request asynchronously, observes
+the first scheduled Work, cancels its owned HTTP call, and joins that call
+before teardown. Duration rejection cases retain their HTTP 400 assertions;
+the separate overlap journey retains the bounded HTTP terminal-response check.
+Ten focused repetitions passed in 7.009 seconds, and scoped repository lint
+passed. This avoids an arbitrary short admission deadline without padding
+its timeout or removing the customer duration boundaries.
+
+The private removal of two direct internal metadata tests ran all 749 remaining
+results but failed existing floors: localized metadata validation fell to
+29.63% against 72.22%, and snapshot mapping fell to 68.75% against 75.00%. That
+deletion is not shipped. It needs public canonical-metadata proof and a
+documented classification of the purely programmatic defensive snapshot branch;
+no floor has been lowered to claim a performance checkpoint.
+
+A private explicit package-cleanup-hook experiment merged two more packages
+(21 groups, 175 original tests). Its full lane passed in **112.81 seconds**,
+with all 751 results and unchanged floors. It preserves native TestMain for
+packages with startup before m.Run or unsafe global/relative fixtures. The
+current prototype requires further lifecycle ordering and eligibility checks
+before adoption. Its tool trace includes tool-program links as well as tests:
+39 links, 44.354 seconds linker CPU, 44.088 seconds active linker wall intervals,
+and 137.839 seconds summed link wall. It also performed 30 compiler calls
+(3.097 seconds CPU) for changed tooling/bridge sources. This is local evidence
+for a prototype, not the next hosted checkpoint.
