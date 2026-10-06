@@ -675,3 +675,126 @@ func assertForcedNativeArchive(t *testing.T, ctx context.Context, fixture cancel
 		t.Fatalf("force terminal archive: observation=%+v error=%v", observation, err)
 	}
 }
+
+func TestPrebuiltWorkerSessionForceFactoryWorkRemainsFailed(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("owned force capability requires Windows Job or Linux retained leader")
+	}
+	t.Parallel()
+	binary := resolveCancelArtifact(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 110*time.Second)
+	defer cancel()
+	fixture := writeNativeForceFixture(t, "codex")
+	writeNativeForceFactory(t, fixture)
+	hash, err := fileSHA256(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("artifact=%s sha256=%s OS=%s/%s fixture=factory-force-disposition-v1", binary, hash, runtime.GOOS, runtime.GOARCH)
+	daemon := startCancelDaemon(t, ctx, binary, fixture)
+	session := waitForCancelFactorySession(t, ctx, fixture.serverURL, daemon)
+	workID := submitCancelWork(t, ctx, fixture.serverURL, session, "source")
+	source := waitForRunningWorkerSession(t, ctx, fixture.serverURL, session, workID, daemon)
+	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, "source")
+	registerFailedTreeCleanup(t, tree)
+	assertObservedTreeAncestry(t, tree)
+	forceNativeFixture(t, ctx, binary, fixture, source)
+	if present, err := processPIDsPresent(tree.PIDs); err != nil || len(present) != 0 {
+		t.Fatalf("Factory force returned before tree join: present=%v error=%v", present, err)
+	}
+	assertForcedNativeArchive(t, ctx, fixture, source)
+	assertFactoryForceDispatch(t, ctx, fixture, session, source)
+	boardWork := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	if boardWork.State == nil || boardWork.State.Name != "failed" || boardWork.State.Type != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("forced Work state = %+v, want inspectable FAILED disposition", boardWork.State)
+	}
+	assertNativeLaunchCount(t, fixture, 1)
+	stopCancelDaemon(t, binary, fixture, daemon)
+	assertNativeLaunchCount(t, fixture, 1)
+	t.Log("PASS: Factory force joined the tree, left input Work at FAILED despite onFailure:init, and launched no retry")
+}
+
+func writeNativeForceFactory(t *testing.T, fixture cancelFixture) {
+	t.Helper()
+	path := filepath.Join(fixture.factoryDir, "factory.json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var definition map[string]any
+	if err := json.Unmarshal(content, &definition); err != nil {
+		t.Fatal(err)
+	}
+	definition["workers"] = []any{map[string]any{"name": "process-worker"}}
+	station := definition["workstations"].([]any)[0].(map[string]any)
+	delete(station, "type")
+	station["onFailure"] = []any{map[string]any{"workType": "task", "state": "init"}}
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"workers/process-worker/AGENTS.md": "---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: CODEX\nexecutorProvider: CODEX\nstopToken: COMPLETE\n---\nObserve the source Work.\n",
+		"workstations/process/AGENTS.md":   "---\ntype: MODEL_WORKSTATION\n---\nProcess the source Work.\n",
+	}
+	for name, content := range files {
+		path := filepath.Join(fixture.factoryDir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertFactoryForceDispatch(t *testing.T, ctx context.Context, fixture cancelFixture, session string, source factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if source.WorkId == nil {
+		t.Fatalf("Factory source has no dispatch/Work association: %+v", source)
+	}
+	events := waitForFactoryForceResponse(t, ctx, fixture, session, *source.WorkId)
+	responses := 0
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse || event.Context.DispatchId == nil || !eventHasWorkID(event, *source.WorkId) {
+			continue
+		}
+		responses++
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil || payload.Outcome != factoryapi.WorkOutcomeCanceled || payload.Cancellation == nil || string(payload.Cancellation.Reason) != "CANCELED" {
+			t.Fatalf("force dispatch terminal truth: payload=%+v error=%v", payload, err)
+		}
+	}
+	if responses != 1 {
+		t.Fatalf("force dispatch responses=%d, want one", responses)
+	}
+}
+
+func waitForFactoryForceResponse(t *testing.T, ctx context.Context, fixture cancelFixture, session, workID string) []factoryapi.FactoryEvent {
+	t.Helper()
+	// Public force joins the Worker; Runtime publishes its dispatch response on
+	// the next tick. Observe that real asynchronous boundary rather than sleeping
+	// for an assumed completion time or substituting a controlled runner.
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	for {
+		events, err := readFactoryEvents(ctx, fixture.serverURL, session)
+		if err == nil {
+			for _, event := range events {
+				if event.Type == factoryapi.FactoryEventTypeDispatchResponse && eventHasWorkID(event, workID) {
+					return events
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-deadline.C:
+			t.Fatalf("Factory force dispatch response unavailable: %v; events=%v", err, cancelDaemonEventDiagnostic(fixture.serverURL, session))
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}

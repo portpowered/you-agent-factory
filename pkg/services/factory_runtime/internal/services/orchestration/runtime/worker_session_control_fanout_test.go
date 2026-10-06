@@ -992,8 +992,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 		}}
 	execution := attemptTestRequest("dispatch", "physical")
 	request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+	request.Execution.Dispatch.DispatchID = "logical-dispatch"
 	cfg := &runtimeConfig{workerAttempts: sessions}
-	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
 	lifecycle := newAttemptLifecycle(attemptExecuteFunc(func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed,
 			Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
@@ -1001,6 +1001,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 			Continuation: &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
 			Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Message: "signal exit"}}, nativeErr
 	}), func() string { return "physical" }, 1)
+	cfg.attempts = lifecycle
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
 	var observed workers.ExecuteResult
 	var observedErr error
 	if err := lifecycle.startWithPreparation(t.Context(), execution, false,
@@ -1013,5 +1015,8 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 		len(observed.Output.Primary) != 0 || observed.ProposedOutputPresent || observed.StructuredResultPresent || observed.StructuredResult != nil || observed.Continuation != nil ||
 		observed.Failure == nil || observed.Failure.Family != workers.WorkFailureFamilyTerminal {
 		t.Fatalf("Runtime delivered force as retry/routing result: %#v, %v", observed, observedErr)
+	}
+	if !lifecycle.wasForced("logical-dispatch") || lifecycle.wasForced("physical") || lifecycle.wasForced("unrelated") {
+		t.Fatal("confirmed force did not retain only its logical dispatch disposition")
 	}
 }

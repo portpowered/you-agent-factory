@@ -294,10 +294,10 @@ func (t *TransitionerSubsystem) restoreCanceledDispatchMutations(
 	dispatchID string,
 	result resolvedWorkResult,
 	now time.Time,
-) []interfaces.MarkingMutation {
+) ([]interfaces.MarkingMutation, error) {
 	entry := completedDispatchEntry(snapshot, dispatchID)
 	if entry == nil || len(entry.HeldMutations) == 0 {
-		return nil
+		return nil, nil
 	}
 	tokens := make(map[string]factorytoken.Token, len(entry.ConsumedTokens))
 	for _, workerToken := range entry.ConsumedTokens {
@@ -317,6 +317,13 @@ func (t *TransitionerSubsystem) restoreCanceledDispatchMutations(
 		if held.FromPlace != "" {
 			restored.PlaceID = held.FromPlace
 		}
+		if t.confirmedForce != nil && t.confirmedForce(dispatchID) && restored.Color.DataType != factorytoken.DataTypeResource {
+			failedPlace := t.forcedWorkFailedPlace(restored.Color.WorkTypeID)
+			if failedPlace == "" {
+				return nil, fmt.Errorf("confirmed force dispatch %s has no FAILED placement for Work type %s", dispatchID, restored.Color.WorkTypeID)
+			}
+			restored.PlaceID = failedPlace
+		}
 		restored.EnteredAt = now
 		mutations = append(mutations, interfaces.MarkingMutation{
 			Type:     interfaces.MutationCreate,
@@ -330,7 +337,22 @@ func (t *TransitionerSubsystem) restoreCanceledDispatchMutations(
 			),
 		})
 	}
-	return mutations
+	return mutations, nil
+}
+
+// Force bypasses authored failure routes, which can loop back to admission.
+// Reuse the FAILED placement used by guard/breaker kills.
+func (t *TransitionerSubsystem) forcedWorkFailedPlace(workTypeID string) string {
+	workType := t.netDefinition.WorkTypes[workTypeID]
+	if workType == nil {
+		return ""
+	}
+	for _, definition := range workType.States {
+		if definition.Category == state.StateCategoryFailed {
+			return state.PlaceID(workTypeID, definition.Value)
+		}
+	}
+	return ""
 }
 
 func completedDispatchCancellationReason(result resolvedWorkResult) string {

@@ -400,7 +400,7 @@ func TestTransitioner_CanceledDispatchRestoresConsumedWorkWithoutFailureRoute(t 
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(
 		net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net),
-		nil, nil, nil, testWorkPropagationPolicy(),
+		nil, nil, nil, testWorkPropagationPolicy(), nil,
 	)
 	snapshot := workerBatchSnapshot("")
 	snapshot.Dispatches["dispatch-1"].HeldMutations = []interfaces.MarkingMutation{{
@@ -417,6 +417,55 @@ func TestTransitioner_CanceledDispatchRestoresConsumedWorkWithoutFailureRoute(t 
 		t.Fatalf("Execute() error = %v, want nil", err)
 	}
 	assertCanceledDispatchRestoration(t, result, now)
+}
+
+func TestTransitioner_ForceCanceledWorkBypassesFailureLoopAndReleasesResource(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.October, 6, 6, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	// An authored failure loop must never restart an operator-killed Work.
+	net.Transitions["t1"].FailureArcs = []petri.Arc{{PlaceID: "task:init"}}
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now },
+		testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy(),
+		func(dispatchID string) bool { return dispatchID == "dispatch-1" })
+	snapshot := workerBatchSnapshot("")
+	entry := snapshot.Dispatches["dispatch-1"]
+	entry.HeldMutations = []interfaces.MarkingMutation{
+		{Type: interfaces.MutationConsume, TokenID: "tok-source", FromPlace: "task:init"},
+		{Type: interfaces.MutationConsume, TokenID: "resource", FromPlace: "resource:available"},
+	}
+	entry.ConsumedTokens = append(entry.ConsumedTokens, workerexecution.Token{
+		ID: "resource", State: "available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource},
+	})
+	snapshot.Results[0] = workerexecution.WorkResult{DispatchID: "dispatch-1", TransitionID: "t1",
+		Outcome:      workerexecution.OutcomeCanceled,
+		Cancellation: &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled},
+	}
+	result, err := transitioner.Execute(t.Context(), snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Mutations) != 2 || len(result.GeneratedBatches) != 0 || len(result.CompletedDispatches) != 1 {
+		t.Fatalf("force routing = %#v, want failed Work and released resource without generated Work", result)
+	}
+	work, resource := result.Mutations[0], result.Mutations[1]
+	assertForceFailedWorkMutation(t, work)
+	if resource.Type != interfaces.MutationCreate || resource.ToPlace != "resource:available" || resource.NewToken.State != "available" {
+		t.Fatalf("force resource release = %#v, want original held placement", resource)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.Outcome != workerexecution.OutcomeCanceled || completed.Cancellation.Reason != workerexecution.DispatchCancellationReasonCanceled ||
+		completed.FailureDetail != nil || completed.FailureMetadata != nil || len(completed.OutputMutations) != 2 {
+		t.Fatalf("force completion = %#v, want canonical canceled dispatch without retry failure", completed)
+	}
+}
+
+func assertForceFailedWorkMutation(t *testing.T, work interfaces.MarkingMutation) {
+	t.Helper()
+	if work.Type != interfaces.MutationCreate || work.TokenID != "tok-source" || work.ToPlace != "task:failed" ||
+		work.NewToken == nil || work.NewToken.State != "failed" || work.NewToken.Color.WorkID != "work-source" {
+		t.Fatalf("force Work disposition = %#v, want original inspectable Work at FAILED", work)
+	}
 }
 
 func assertCanceledDispatchRestoration(
@@ -538,7 +587,7 @@ func assertTransitionerLogCase(t *testing.T, tc transitionerLogCase) {
 	logger := &transitionerLogCapture{}
 	transitioner := NewTransitioner(
 		net, logger, testSubsystemNow, testTokenTransformer(net),
-		nil, nil, nil, testWorkPropagationPolicy(),
+		nil, nil, nil, testWorkPropagationPolicy(), nil,
 	)
 	snapshot := workerBatchSnapshot("")
 	snapshot.Results[0] = tc.result

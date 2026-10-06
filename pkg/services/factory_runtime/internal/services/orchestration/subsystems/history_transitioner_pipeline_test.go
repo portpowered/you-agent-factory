@@ -24,7 +24,7 @@ func newTestPipeline(n *state.Net, now func() time.Time) *testPipeline {
 		now = testSubsystemNow
 	}
 	return &testPipeline{
-		transitioner: NewTransitioner(n, logging.NoopLogger{}, now, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()),
+		transitioner: NewTransitioner(n, logging.NoopLogger{}, now, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy(), nil),
 		results:      buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}
 }
@@ -873,7 +873,7 @@ func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.Tic
 
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
 	n := buildPipelineNet()
-	transitioner := NewTransitioner(n, logging.NoopLogger{}, testSubsystemNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(n, logging.NoopLogger{}, testSubsystemNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy(), nil)
 	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
 	consumed := []factorytoken.Token{{

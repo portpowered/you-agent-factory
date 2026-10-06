@@ -94,6 +94,7 @@ func runtimeAttemptPreparation(
 			)
 			_, forced, completionErr := attempt.Resolve(callbackCtx, dispatchResult, dispatchErr)
 			if forced {
+				lifecycle.recordConfirmedForce(request.Execution.Dispatch.DispatchID)
 				result.Failure = nil
 				result.ProposedOutputPresent = false
 				result = canceledAttemptResult(executeRequest, result, workers.DispatchCancellationReasonCanceled)

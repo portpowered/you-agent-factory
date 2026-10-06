@@ -342,7 +342,7 @@ func executeLoggerParityTransition(scenario string, logger logging.Logger) (*int
 	if scenario == "unknown transition" {
 		snapshot.Results[0].TransitionID = "unknown"
 	}
-	return NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()).Execute(context.Background(), snapshot)
+	return NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy(), nil).Execute(context.Background(), snapshot)
 }
 
 func TestTransitionerSelectedLoggerResourceParity(t *testing.T) {
@@ -362,7 +362,7 @@ func TestTransitionerSelectedLoggerResourceParity(t *testing.T) {
 				if outcome == workers.OutcomeCanceled {
 					snapshot.Results[0].Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonSuperseded}
 				}
-				return NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()).Execute(context.Background(), snapshot)
+				return NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy(), nil).Execute(context.Background(), snapshot)
 			})
 			if result == nil || len(result.Mutations) != 2 || len(result.CompletedDispatches) != 1 {
 				t.Fatalf("resource result = %#v, want work routing/restoration and resource return", result)
@@ -405,7 +405,7 @@ func TestTransitionerSelectedLoggerPeerIsolation(t *testing.T) {
 				entry.ConsumedTokens[0].Color.WorkID = "peer-work"
 				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"peer-dispatch": entry}
 				snapshot.Results[0].DispatchID = "peer-dispatch"
-				result, err = NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy()).Execute(context.Background(), snapshot)
+				result, err = NewTransitioner(n, logger, loggerParityNow, testTokenTransformer(n), nil, nil, nil, testWorkPropagationPolicy(), nil).Execute(context.Background(), snapshot)
 			}
 			if err != nil {
 				results <- nil

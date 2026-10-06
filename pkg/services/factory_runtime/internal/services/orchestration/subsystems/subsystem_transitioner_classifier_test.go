@@ -210,7 +210,7 @@ func newClassifierTransitionerFromNet(now time.Time, net *state.Net) *Transition
 		},
 		nil,
 		nil,
-		testWorkPropagationPolicy())
+		testWorkPropagationPolicy(), nil)
 
 }
 

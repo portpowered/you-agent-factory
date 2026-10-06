@@ -24,7 +24,7 @@ func TestTransitionerPreservesNoArcDiagnosticWhileContextIsActive(t *testing.T) 
 	snapshot.Results[0].Error = "ordinary failure"
 	transitioner := NewTransitioner(
 		net, logging.NoopLogger{}, testSubsystemNow, testTokenTransformer(net), nil, nil, nil,
-		testWorkPropagationPolicy(),
+		testWorkPropagationPolicy(), nil,
 	)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -39,7 +39,7 @@ func TestTransitionerPreservesNoArcDiagnosticWhileContextIsActive(t *testing.T) 
 func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
-	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy(), nil)
 	snapshot := workerBatchSnapshot("worker output")
 	snapshot.Dispatches["dispatch-1"].ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"}
 	snapshot.Results[0] = workerexecution.WorkResult{
@@ -88,7 +88,7 @@ func TestTransitioner_TerminalFailureBypassesAuthoredRetryRoute(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	net.Transitions["t1"].FailureArcs = []petri.Arc{{ID: "retry", PlaceID: "task:init"}}
-	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy(), nil)
 	snapshot := workerBatchSnapshot("")
 	snapshot.Results[0] = workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
@@ -153,7 +153,7 @@ func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardless
 		},
 	}),
 
-		nil, nil, nil, testWorkPropagationPolicy())
+		nil, nil, nil, testWorkPropagationPolicy(), nil)
 
 	orderings := []struct {
 		name     string
