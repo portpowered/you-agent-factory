@@ -405,7 +405,7 @@ func NewProcessDurableExecution(
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
 	execution, err := factorysessionexecution.NewProcessDurableExecutionService(
-		home, childExecutorMode, nil, persistence, clock, syncWaits,
+		home, childExecutorMode, persistence, clock, syncWaits,
 		summaries, workflows, orchestration, workflows,
 		nil, factoryruntime.JavaScriptWorkerSettings{}, writer, sessionIDs, responseIDs,
 		responses, liveChange, storeForRoot, scope.CurrentProjectRoot, scope.ResumeRuntimeScope,

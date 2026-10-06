@@ -103,7 +103,7 @@ func assertChildCorrelation(t *testing.T, request workers.ExecuteRequest) {
 	}
 }
 
-func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
+func TestChildWorkerExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
 	const diagnostic = "structured output schema violation: instance /answer; expected string"
 	attempts := 0
 	var requests []workers.ExecuteRequest
@@ -174,7 +174,7 @@ func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T)
 	}
 }
 
-func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
+func TestChildWorkerExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
 	const diagnostic = "structured output schema violation: instance /answer; expected string"
 	attempts := 0
 	involver := &recordingWorkerExecution{result: workers.ExecuteResult{
@@ -191,11 +191,12 @@ func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *te
 	}}
 	involver.onExecute = func(_ workers.ExecuteRequest) { attempts++ }
 	sink := newChildRecordSink()
-	executor := newDirectChildExecutor(
+	executor := newChildWorkerExecutor(
 		"direct-structured-exhausted",
 		involver,
 		sink,
 		childTestValues{},
+		nil,
 		"/project",
 		2,
 	)

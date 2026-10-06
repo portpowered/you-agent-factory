@@ -34,11 +34,11 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID 
 	return s.childExecutorHooksForStart(mode, sessionID, mockWorkers, nil, nil, nil)
 }
 
-// TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
+// TestChildWorkerExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
 // is the standalone composition regression. Its child has no Factory Runtime
 // or Worker Session behind it, so the direct executor must translate the
 // canonical child permission into the detached Workers request itself.
-func TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(t *testing.T) {
+func TestChildWorkerExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		permission factory.JavaScriptChildPermission
@@ -58,11 +58,12 @@ func TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(
 					}},
 				},
 			}}
-			executor := newDirectChildExecutor(
+			executor := newChildWorkerExecutor(
 				"direct-sess-1",
 				invocation,
 				newChildRecordSink(),
 				childTestValues{},
+				nil,
 				"/project",
 				0,
 			)
@@ -260,7 +261,7 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 // newProcessChildRuntime exercises the complete production constructor rather
 // than attaching the execution capability after publication.
 func newProcessChildRuntime(worker childExecuteService) *JavaScriptRuntimeService {
-	return NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil, nil,
+	return NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil,
 		durableFixedClock{}, testSyncWaitScheduler{}, nil, nil, nil, childTestValues{},
 		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
 		nil, nil, nil, nil, nil, nil, worker, nil, nil)
@@ -304,7 +305,7 @@ func TestProcessDurableRuntimeForwardsSelectedProviderToWorker(t *testing.T) {
 			t.Fatalf("provider outcome=%#v error=%v", identity, err)
 		}
 	}
-	service := NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil, nil,
+	service := NewProcessDurableRuntime("/project", ChildExecutorModeLive, nil,
 		durableFixedClock{}, testSyncWaitScheduler{}, nil, nil, nil, childTestValues{},
 		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
 		nil, nil, nil, nil, nil, nil, worker, selectedProcessProvider{}, nil)
@@ -324,7 +325,7 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 	persistResumeCoverageSnapshot(t, store, sessionID, state)
 	workflows := factoryruntimefixtures.ScriptedJavaScriptWorkflows{}
 	summaries := checkpointfixtures.CheckpointSummariesFixture{LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult()}
-	service := NewProcessDurableRuntime("/project", ChildExecutorModeFake, nil, store,
+	service := NewProcessDurableRuntime("/project", ChildExecutorModeFake, store,
 		durableFixedClock{}, testSyncWaitScheduler{}, summaries, workflows, workflows, workflows,
 		nil, factory.JavaScriptWorkerSettings{}, nil, testSessionIDGenerator,
 		nil, nil, nil, nil, nil, func(project string) (ResumeRuntimeScope, error) {

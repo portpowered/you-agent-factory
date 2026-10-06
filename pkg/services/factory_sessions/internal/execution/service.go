@@ -339,7 +339,7 @@ func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
 func NewJavaScriptExecutionService(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
+	workerExecution WorkerExecution,
 	persistenceChoice PersistenceChoice,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -356,11 +356,11 @@ func NewJavaScriptExecutionService(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (Service, error) {
 	return NewProcessDurableExecutionService(
-		projectRoot, childExecutorMode, directChildInvocation, persistenceChoice, clock, syncWaits,
+		projectRoot, childExecutorMode, persistenceChoice, clock, syncWaits,
 		checkpointSummaries, workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
 		generateResponseEventID, responseStreams, liveChangeCoordinator,
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, workerExecution, nil, nil,
 	)
 }
 
@@ -369,7 +369,6 @@ func NewJavaScriptExecutionService(
 func NewProcessDurableExecutionService(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
 	persistenceChoice PersistenceChoice,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -428,7 +427,7 @@ func NewProcessDurableExecutionService(
 		return nil, err
 	}
 	return NewProcessDurableRuntime(
-		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, persistence, clock, syncWaits,
 		checkpointSummaries,
 		workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
@@ -445,7 +444,6 @@ func NewProcessDurableExecutionService(
 func NewProcessDurableRuntime(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -468,7 +466,7 @@ func NewProcessDurableRuntime(
 	logger *zap.Logger,
 ) *JavaScriptRuntimeService {
 	service := NewJavaScriptRuntimeService(
-		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, nil, persistence, clock, syncWaits,
 		checkpointSummaries, workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter, generateSessionID,
 		generateResponseEventID, responseStreams, liveChangeCoordinator,

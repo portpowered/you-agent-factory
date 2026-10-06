@@ -231,13 +231,8 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot       string
-	childExecutorMode string
-	// directChildInvocation remains only for legacy in-package construction
-	// helpers and tests. Production standalone opening supplies the narrow
-	// Workers Execute capability through workerExecution; P6-C can remove
-	// this compatibility input after those callers are retired.
-	directChildInvocation   workers.InvocationExecutor
+	projectRoot             string
+	childExecutorMode       string
 	persistence             runtimepersist.Store
 	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
 	persistenceProjectRoot  func() string
@@ -305,7 +300,7 @@ func (s *JavaScriptRuntimeService) SetPersistenceWarningLogger(logger *zap.Logge
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
-	directChildInvocation workers.InvocationExecutor,
+	workerExecution WorkerExecution,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -328,7 +323,6 @@ func NewJavaScriptRuntimeService(
 	service := &JavaScriptRuntimeService{
 		projectRoot:             projectRoot,
 		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		directChildInvocation:   directChildInvocation,
 		clock:                   clock,
 		syncWaits:               syncWaits,
 		checkpointSummaries:     checkpointSummaries,
@@ -348,6 +342,7 @@ func NewJavaScriptRuntimeService(
 		startInflight:           make(map[string]*startInflightFlight),
 		controlReplay:           make(map[string]controlReplayRecord),
 	}
+	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil)
 	return service
 }
 

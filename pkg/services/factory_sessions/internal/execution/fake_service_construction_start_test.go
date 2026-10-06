@@ -608,7 +608,7 @@ type serviceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          providers.Service
-	ProviderExecutor  workers.InvocationExecutor
+	ProviderExecutor  WorkerExecution
 	FakeScenarios     []FakeScenario
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
@@ -629,7 +629,7 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 		return NewJavaScriptExecutionService(
 			config.ProjectRoot,
 			config.ChildExecutorMode,
-			firstInvocationExecutor(config.ProviderExecutor, config.Provider),
+			firstWorkerExecution(config.ProviderExecutor, config.Provider),
 			config.Persistence,
 			config.Clock,
 			testSyncWaitScheduler{},
@@ -651,20 +651,20 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 	}
 }
 
-func firstInvocationExecutor(executor workers.InvocationExecutor, provider providers.Service) workers.InvocationExecutor {
+func firstWorkerExecution(executor WorkerExecution, provider providers.Service) WorkerExecution {
 	if executor != nil {
 		return executor
 	}
 	if provider == nil {
 		return nil
 	}
-	return constructorInvocationExecutor{}
+	return constructorWorkerExecution{}
 }
 
-// constructorInvocationExecutor is an inert root-contract value. Constructor
+// constructorWorkerExecution is an inert root-contract value. Constructor
 // tests validate dependency presence only; Workers owns invocation behavior.
-type constructorInvocationExecutor struct {
-	workers.InvocationExecutor
+type constructorWorkerExecution struct {
+	WorkerExecution
 }
 
 type testSyncWaitScheduler struct{}
@@ -867,7 +867,7 @@ func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payl
 	}
 	return raw
 }
-func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *testing.T) {
+func TestChildWorkerExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		outcome workers.ExecutionOutcome
@@ -885,7 +885,7 @@ func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *
 				},
 			}}
 			sink := newChildRecordSink()
-			executor := newDirectChildExecutor("direct-session", invoker, sink, childTestValues{}, "/project", 0)
+			executor := newChildWorkerExecutor("direct-session", invoker, sink, childTestValues{}, nil, "/project", 0)
 
 			result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
 			if err == nil {

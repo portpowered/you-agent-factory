@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const runtimeEventSource = "runtime-service"
@@ -214,7 +216,7 @@ func scriptedLiveChildrenWorkflows(
 type runtimeServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
-	ProviderExecutor  workers.InvocationExecutor
+	ProviderExecutor  fse.WorkerExecution
 	Persistence       runtimepersist.Store
 	Clock             factory.Clock
 	CheckpointSummary *factory.JavaScriptCheckpointSummary
@@ -226,7 +228,7 @@ type runtimeServiceConfig struct {
 type executionServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
-	ProviderExecutor  workers.InvocationExecutor
+	ProviderExecutor  fse.WorkerExecution
 	FakeScenarios     []fse.FakeScenario
 	Persistence       fse.PersistenceChoice
 	Clock             factory.Clock
@@ -266,7 +268,7 @@ func newExecutionService(provider fse.ExecutionProvider, config executionService
 			config.WorkerSettings,
 			fixtureRecordingWriter(),
 			fixtureSessionID,
-			nil, nil, nil,
+			fixtureSessionID, fixtureResponseStreams{}, nil,
 		)
 	default:
 		return nil, fse.NewValidationError("provider", "unsupported execution provider")
@@ -296,7 +298,7 @@ func newConfiguredJavaScriptRuntimeService(config runtimeServiceConfig) *fse.Jav
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		config.WorkerPresetIDs, config.WorkerSettings, fixtureRecordingWriter(),
 		fixtureSessionID,
-		nil, nil, nil,
+		fixtureSessionID, fixtureResponseStreams{}, nil,
 	)
 }
 
@@ -919,4 +921,15 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
+}
+
+// fixtureResponseStreams keeps durable child tests on an explicit in-memory
+// stream collaborator without constructing the response service graph.
+type fixtureResponseStreams struct{ responsestreamservice.Service }
+
+func (fixtureResponseStreams) NewEventStore(id string, clock factory.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	return responseeventstore.NewSessionResponseEventStoreWithClock(id, clock, fixtureSessionID), nil
+}
+func (fixtureResponseStreams) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	return store.Publish(event)
 }

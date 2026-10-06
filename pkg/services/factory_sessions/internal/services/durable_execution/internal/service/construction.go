@@ -48,7 +48,6 @@ func NewDurable(
 	return factorysessionexecution.NewProcessDurableExecutionService(
 		projectRoot,
 		childExecutorMode,
-		nil,
 		persistence,
 		clock,
 		syncWaits,

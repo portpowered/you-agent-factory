@@ -497,7 +497,6 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 type javaScriptRuntimeServiceConfig struct {
 	ProjectRoot           string
 	ChildExecutorMode     string
-	InvocationExecutor    workers.InvocationExecutor
 	WorkerExecution       WorkerExecution
 	Persistence           runtimepersist.Store
 	Clock                 factory.Clock
@@ -562,7 +561,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 		}
 	}
 	return NewProcessDurableRuntime(
-		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
+		config.ProjectRoot, config.ChildExecutorMode,
 		config.Persistence, clock, testSyncWaitScheduler{}, checkpointSummaries,
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
