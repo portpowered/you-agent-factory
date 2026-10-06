@@ -167,3 +167,23 @@ func TestRootContinueResumesWhenDaemonNegotiatesLoadSession(t *testing.T) {
 		t.Fatalf("executeCalls = %d, want 1", fake.executeCalls)
 	}
 }
+
+func TestContinuationSupportUsesNegotiatedCapabilityWithoutExecution(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name              string
+		known, load, want bool
+	}{
+		{"configured", false, false, true}, {"negotiated refusal", true, false, false}, {"negotiated support", true, true, true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &negotiatedCapabilityACPService{provider: "cursor-acp", known: cell.known, loadSession: cell.load}
+			root := mustNegotiatedCapabilityRootService(t, fake)
+			supported, err := root.SupportsContinuation(t.Context(), providers.SessionRef{Provider: "cursor-acp", Kind: providers.SessionIDKind, ID: "opaque-session"})
+			if err != nil || supported != cell.want || fake.executeCalls != 0 {
+				t.Fatalf("support=%v err=%v calls=%d", supported, err, fake.executeCalls)
+			}
+		})
+	}
+}

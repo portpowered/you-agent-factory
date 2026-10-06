@@ -314,6 +314,8 @@ func interruptResultForError(
 
 func interruptErrorResponse(err error) (int, string, string) {
 	switch {
+	case errors.Is(err, workersessions.ErrInterruptContinuationUnsupported):
+		return http.StatusConflict, "PROVIDER_UNSUPPORTED", "Provider does not support Worker Session continuation"
 	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
 		return http.StatusInternalServerError, "INTERNAL_ERROR", "Worker Session interrupt persistence unavailable"
 	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),

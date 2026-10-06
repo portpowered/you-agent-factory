@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+// ContinuationSupportReader reports configured and already negotiated resume
+// capability without starting a provider attempt or probing native state.
+type ContinuationSupportReader interface {
+	SupportsContinuation(context.Context, SessionRef) (bool, error)
+}
+
 // Service is the singular cross-service Providers root authority. Peer packages
 // depend on this one named interface for Providers-owned catalog enumeration,
 // identity/selection authority, availability/capability facts, and one normalized execution attempt rather

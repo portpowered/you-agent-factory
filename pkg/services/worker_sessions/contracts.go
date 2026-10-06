@@ -839,6 +839,8 @@ var (
 	// ErrInterruptSuccessorAdmissionFailed reports a successor reservation or
 	// Workers admission failure after source cancellation committed.
 	ErrInterruptSuccessorAdmissionFailed = errors.New("worker session: interrupt successor admission failed")
+	// ErrInterruptContinuationUnsupported refuses redirection before source cancellation.
+	ErrInterruptContinuationUnsupported = errors.New("worker session: provider continuation unsupported")
 	// ErrInterruptServerStopping reports rejection while the owning process
 	// lifecycle is stopping.
 	ErrInterruptServerStopping = errors.New("worker session: interrupt server is stopping")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -640,5 +641,43 @@ func assertContinuationInputSchema(t *testing.T, payload []byte) {
 	}
 	if err := schema.Validate(document); err != nil {
 		t.Fatalf("continuation tuple violates published schema: %v", err)
+	}
+}
+
+type interruptContinuationSupportFake struct {
+	supported bool
+	err       error
+	reference providers.SessionRef
+}
+
+func (fake *interruptContinuationSupportFake) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	fake.reference = reference
+	return fake.supported, fake.err
+}
+
+func TestInterruptContinuationPolicyRefusalPreservesSource(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{nil, providers.ErrUnknownProvider} {
+		t.Run(fmt.Sprint(cause), func(t *testing.T) {
+			t.Parallel()
+			service, supervision := newRunningPauseRegistry(t)
+			reference := service.sessions["worker-1"].ProviderSessionAssociation.Reference
+			fake := &interruptContinuationSupportFake{err: cause}
+			service.continuationSupport = fake
+			result, err := service.Interrupt(t.Context(), workersessions.InterruptRequest{RequestID: "policy-refusal", SourceWorkerSessionID: "worker-1", SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "follow-up"})
+			want := workersessions.ErrInterruptContinuationUnsupported
+			if cause != nil {
+				want = workersessions.ErrInterruptProviderSessionInvalid
+			}
+			if !errors.Is(err, want) || result.Accepted || result.Phase != workersessions.InterruptPhaseValidation || result.Source.State != workersessions.StateRunning || fake.reference != reference {
+				t.Fatalf("policy refusal: result=%#v err=%v reference=%#v", result, err, fake.reference)
+			}
+			if supervision.interrupting || service.activeStarts != 0 || len(service.continueReplays) != 0 || len(service.interruptReplays) != 0 {
+				t.Fatal("policy refusal reserved execution or continuation")
+			}
+			if _, err := service.Get(t.Context(), workersessions.GetRequest{ID: "successor-session"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+				t.Fatalf("successor reserved: %v", err)
+			}
+		})
 	}
 }

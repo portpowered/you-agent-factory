@@ -508,6 +508,11 @@ you --server http://localhost:7437 worker-sessions interrupt <source-worker-sess
   --async --output json "Stop and revise the plan"
 ```
 
+Before stopping the source, the server checks configured provider policy and
+already negotiated continuation capability. An unsupported provider returns
+`PROVIDER_UNSUPPORTED` in `VALIDATION`; the source keeps running and ordinary
+cancel and terminate remain available.
+
 Interrupt failures include a stable phase: `VALIDATION`,
 `SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
 default. `--remote` sends the complete request only to the configured

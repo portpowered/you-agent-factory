@@ -488,6 +488,15 @@ func (r *registry) prepareInterruptPlanLocked(
 	if err != nil {
 		return interruptPlan{}, err
 	}
+	if r.continuationSupport != nil {
+		supported, err := r.continuationSupport.SupportsContinuation(controlContext(r.lifecycleCtx), association.Reference)
+		if err != nil {
+			return interruptPlan{}, fmt.Errorf("%w: %w", workersessions.ErrInterruptProviderSessionInvalid, err)
+		}
+		if !supported {
+			return interruptPlan{}, workersessions.ErrInterruptContinuationUnsupported
+		}
+	}
 	return r.reserveInterruptSupervisionLocked(req, source, association)
 }
 

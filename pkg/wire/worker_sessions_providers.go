@@ -18,6 +18,7 @@ import (
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -122,10 +123,19 @@ func provideWorkerSessionsService(
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *workersessionswire.HistorySnapshotBudget,
+	providerService providers.Service,
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots)
+	var support providers.ContinuationSupportReader
+	if providerService != nil {
+		var ok bool
+		support, ok = providerService.(providers.ContinuationSupportReader)
+		if !ok {
+			return nil, fmt.Errorf("providers continuation capability is required")
+		}
+	}
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots, support)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

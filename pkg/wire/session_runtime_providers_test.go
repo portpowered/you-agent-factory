@@ -970,7 +970,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 		t.Fatalf("provider sessions service = %v", err)
 	}
 	execution := wireTestWorkersService{}
-	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget())
+	service, err := provideWorkerSessionsService(execution, eventsService, providerSessions, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil)
 	if err != nil {
 		t.Fatalf("worker sessions factory() error = %v", err)
 	}

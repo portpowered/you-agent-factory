@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -99,6 +100,7 @@ type registry struct {
 	events                   EventsAppender
 	eventReader              EventsReader
 	retainedReader           EventsRetainedReader
+	continuationSupport      providers.ContinuationSupportReader
 	providerSessions         providersessions.Service
 	recording                recordings.WorkerSessionRecordingService
 	operations               recordings.WorkerControlOperationStore

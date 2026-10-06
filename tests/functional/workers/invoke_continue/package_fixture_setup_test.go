@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -316,6 +317,13 @@ func startInvokeContinuePackageProcess(
 	route *invokeContinueStaticCommandRoute,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
+	return startInvokeContinuePackageProcessWithCapabilities(t, rootDir, hostDir, homeDir, route, nil)
+}
+
+// Capability policy is immutable, so its refusal witness uses a distinct edge
+// shape shared by its source, sibling, and local/remote control requests.
+func startInvokeContinuePackageProcessWithCapabilities(t *testing.T, rootDir, hostDir, homeDir string, route *invokeContinueStaticCommandRoute, overrides []providerswire.CatalogCapabilityOverride) (invokeContinueStartedProcess, error) {
+	t.Helper()
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
@@ -331,7 +339,8 @@ func startInvokeContinuePackageProcess(
 		FactorySessionsWorkingDirectory: invokeContinueRecordingDirectory(hostDir),
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
-		ProviderCommandRunner: route,
+		ProviderCommandRunner:              route,
+		ProviderCatalogCapabilityOverrides: overrides,
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return homeDir, nil
 		},

@@ -223,6 +223,10 @@ func TestRootContinueUnsupportedWhenProviderCannotContinue(t *testing.T) {
 	}
 
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
+	supported, err := root.SupportsContinuation(t.Context(), reference)
+	if err != nil || supported || adapterCalls != 0 {
+		t.Fatalf("unsupported policy query=%v err=%v calls=%d", supported, err, adapterCalls)
+	}
 	continued, err := root.Continue(context.Background(), providers.ContinueRequest{
 		Reference: reference,
 		Attempt:   providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"},

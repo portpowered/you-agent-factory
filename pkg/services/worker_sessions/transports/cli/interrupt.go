@@ -433,6 +433,8 @@ func mapInterruptServiceError(err error) error {
 		phase = string(typed.Phase)
 	}
 	switch {
+	case errors.Is(err, workersessions.ErrInterruptContinuationUnsupported):
+		return newInterruptCLIError("PROVIDER_UNSUPPORTED", "Provider does not support Worker Session continuation", phase, err)
 	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
 		return newInterruptCLIError("INTERNAL_ERROR", "Worker Session interrupt persistence unavailable", phase, err)
 	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),

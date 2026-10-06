@@ -10,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -511,4 +513,67 @@ func assertFailedContinuationReplayResult(t *testing.T, err error, stdout, stder
 	} else if err == nil || !strings.Contains(stdout+stderr, "WORKER_SESSION_FAILED") {
 		t.Fatalf("failed sync replay lost failure: err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
+}
+
+// F7-C7: a real Providers policy refusal must precede the joined stop boundary.
+// The incapable root is a different immutable edge shape; all control cells
+// share it, with an explicit Factory Session and test-owned command routes.
+func TestCapturedProviderUnsupportedInterruptPreservesControls(t *testing.T) {
+	t.Parallel()
+	root, dir := t.TempDir(), t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := newNativeContinuationRunner("codex")
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+	started, err := startInvokeContinuePackageProcessWithCapabilities(t, root, host, home, route, []providerswire.CatalogCapabilityOverride{{Provider: providers.IDCodex, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityUsage}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := started.command.stop(); err != nil {
+			t.Error(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := started.process.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	fixture := &invokeContinuePackageFixture{process: started.process, baseURL: started.baseURL, hostDir: host}
+	scenario := &invokeContinueScenario{fixture: fixture, name: "native-policy", runNumber: 1, workingDirectory: dir, homeDirectory: home, providerRunner: runner, session: fixture.openSession(t)}
+	assertUnsupportedProviderInterrupt(t, scenario, runner)
+}
+
+func assertUnsupportedProviderInterrupt(t *testing.T, scenario *invokeContinueScenario, runner *nativeContinuationRunner) {
+	t.Helper()
+	source, sibling, successor := scenarioScopedID(scenario, "source"), scenarioScopedID(scenario, "sibling"), scenarioScopedID(scenario, "successor")
+	invokeNativeContinuationWorker(t, scenario, "codex", source, "native source", runner.sourceReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, source, true) })
+	invokeNativeContinuationWorker(t, scenario, "codex", sibling, "native sibling", runner.siblingReady)
+	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, sibling, true) })
+	for _, remote := range []bool{false, true} {
+		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "interrupt", source,
+			"--request-id", scenarioScopedID(scenario, "interrupt"), "--successor-worker-session-id", successor,
+			"--replacement-message", "native follow-up", "--async"})
+		assertDirectWorkerSessionCLIError(t, request, "PROVIDER_UNSUPPORTED")
+		var failure struct {
+			Phase string `json:"phase"`
+		}
+		decodeDirectWorkerSessionResult(t, request.Stderr(), &failure)
+		if failure.Phase != "VALIDATION" {
+			t.Fatalf("unsupported phase = %q", failure.Phase)
+		}
+		assertNativeContinuationObservation(t, scenario, source, "RUNNING", "opaque-native-source", "", "")
+		assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
+	}
+	absent := missingReferenceRequest(t, scenario, true, []string{"worker-sessions", "show", "--worker-session-id", successor})
+	assertDirectWorkerSessionCLIError(t, absent, "WORKER_SESSION_NOT_FOUND")
+	if runner.CallCount() != 2 {
+		t.Fatalf("unsupported policy admitted provider: calls=%d", runner.CallCount())
+	}
+	stopNativeContinuationWorker(t, scenario, source, true)
+	assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", "")
+	assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
 }
