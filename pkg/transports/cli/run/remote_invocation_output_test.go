@@ -132,3 +132,24 @@ func TestNoReplayDriftWhenMetadataMatches(t *testing.T) {
 }
 
 var _ runtimehost.Service = stubFactoryService{}
+
+func TestBoardAdoptionWarningEscapesPathsOnOneLine(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	paths := []string{"old\n\".json", "path\\old.json"}
+	emitBoardAdoptionWarning(&output, paths)
+	line := output.String()
+	if strings.Count(line, "\n") != 1 || !strings.HasPrefix(line, "Skipped 2 unreadable recordings during legacy board adoption: ") {
+		t.Fatalf("warning must be one count/paths line: %q", line)
+	}
+	var decoded []string
+	if err := json.Unmarshal([]byte(line[strings.Index(line, "["):]), &decoded); err != nil || len(decoded) != 2 || decoded[0] != paths[0] || decoded[1] != paths[1] {
+		t.Fatalf("warning paths did not round trip: %q (%v)", line, err)
+	}
+	output.Reset()
+	emitBoardAdoptionWarning(&output, nil)
+	emitBoardAdoptionWarning(nil, paths)
+	if output.Len() != 0 {
+		t.Fatal("empty inventory emitted warning")
+	}
+}

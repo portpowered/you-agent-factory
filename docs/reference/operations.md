@@ -75,11 +75,20 @@ The first launch creates a dated recording in the operator profile and starts an
 The repository's `.you-agent-factory/current-board.json` reference selects that recording on later launches.
 Startup restores the board before readiness and publishes the reference atomically.
 
-For an older installation without a reference, startup adopts a uniquely matching retained history from the same profile.
+For an older installation without a reference, startup requires exactly one readable matching history from the same profile.
 Repository identity and recorded facts determine the selection; file dates do not determine it.
-Missing, corrupt, foreign, or ambiguous history stops startup without activating workers or replacing retained files.
+Unreadable inventory entries without an identified session are skipped; startup never infers identity from corrupt bytes.
+Successful adoption writes one stderr line with the skipped count and JSON-quoted paths, without recording contents or decoder causes.
+Two matching readable histories stop startup, including when one is a prefix of the other.
+Zero matches or an unreadable identified candidate also stop startup without activating workers or replacing retained files.
+A missing or damaged recording selected by an existing reference or explicit path remains fatal.
 
-Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace the automatic board reference.
+Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace an existing board reference.
+A continuous server run with explicit `--record` initializes an absent reference after restoring this repository's `~default` board.
+It publishes the absolute recording path after reconstruction and initial opening, before readiness.
+After graceful shutdown, a plain relaunch selects that reference and restores the same board.
+Every existing reference is preserved byte-for-byte, including invalid contents.
+Fresh explicit recordings, batch runs, peer sessions, `--resume`, `--replay`, and `--no-record` do not initialize a reference.
 Batch runs continue to create separate dated recordings.
 To use a selected recording during rollback, run the explicit command below with its actual path.
 Preserve the reference, recordings, and durable state files.

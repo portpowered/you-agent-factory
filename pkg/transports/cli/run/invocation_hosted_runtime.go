@@ -488,6 +488,14 @@ func runHostedRuntime(
 		startupDisclosure,
 		func() *recordings.ResumeRecoveryMetadata { return recoveryMetadata },
 	)
+	var skippedRecordings func() []string
+	boundObserver := onBound
+	onBound = func(binding factorysessions.RuntimeHostBinding) {
+		if skippedRecordings != nil {
+			emitBoardAdoptionWarning(cfg.BoardAdoptionOutput, skippedRecordings())
+		}
+		boundObserver(binding)
+	}
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
@@ -502,6 +510,9 @@ func runHostedRuntime(
 	}
 	if factorySvc == nil {
 		return fmt.Errorf("construct local runtime: builder returned nil runner")
+	}
+	if provider, ok := factorySvc.(interface{ SkippedBoardRecordings() []string }); ok {
+		skippedRecordings = provider.SkippedBoardRecordings
 	}
 	recoveryMetadata = resumeRecoveryMetadataForRunner(factorySvc)
 	if cfg.Port <= 0 {
@@ -853,4 +864,19 @@ func invocationFactoryEventRenderer(
 		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
 		InvocationOutputMode: cfg.InvocationOutputMode,
 	})
+}
+
+func skippedBoardRecordingsForRunner(runner initializer.LocalRuntimeRunner) []string {
+	if provider, ok := runner.(interface{ SkippedBoardRecordings() []string }); ok {
+		return provider.SkippedBoardRecordings()
+	}
+	return nil
+}
+
+func (runner hostedInvocationRunner) SkippedBoardRecordings() []string {
+	return skippedBoardRecordingsForRunner(runner.runner)
+}
+
+func (runner cleanInvocationSnapshotRunner) SkippedBoardRecordings() []string {
+	return skippedBoardRecordingsForRunner(runner.runner)
 }
