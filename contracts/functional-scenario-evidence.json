@@ -208,9 +208,20 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
       "stableIds": [
-        "cli/you.worker-sessions.invoke"
+        "cli/you.worker-sessions.invoke",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs",
+        "rest/startWorkerSession"
       ]
     },
     {

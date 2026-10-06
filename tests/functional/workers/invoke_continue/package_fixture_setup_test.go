@@ -122,8 +122,21 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
-	for _, name := range []string{"t7-local", "t7-remote", "t7-http", "t7-settings"} {
-		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, "T7 controlled output COMPLETE")})
+	for _, name := range []string{"t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
+		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)})
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	for _, name := range []string{"t7-failure-one", "t7-failure-two"} {
+		failure := platformprocess.CommandResult{
+			Stdout: []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-progress\",\"type\":\"command_execution\",\"command\":\"synthetic inspection\",\"aggregated_output\":\"T7 retained progress before timeout\",\"exit_code\":0}}\n" +
+				"{\"type\":\"turn.failed\",\"error\":{\"message\":\"provider timeout\"}}\n"),
+			Stderr: []byte("controlled provider timeout"), ExitCode: 124,
+		}
+		// Existing Workers policy permits two provider retries inside each
+		// supervised attempt. Supply every failure without a success fallback.
+		runner := newInvokeContinueResettableProviderCommandRunner(failure, failure, failure, failure, failure, failure)
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
 			return invokeContinueScenarioSetup{}, err
 		}
