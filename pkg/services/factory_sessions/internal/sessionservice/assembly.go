@@ -34,6 +34,7 @@ import (
 // services are constructed against its root resolver roles.
 type Assembly struct {
 	roles.SessionGateway
+	factoryDefinitions           factorydefinitions.Service
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
@@ -104,8 +105,10 @@ func NewAssembly(
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	factoryDefinitions factorydefinitions.Service,
 ) roles.RuntimeAssembly {
 	return &Assembly{
+		factoryDefinitions:           factoryDefinitions,
 		SessionGateway:               gateway,
 		loadFactory:                  loadFactory,
 		factoryScaffoldInitializer:   factoryScaffoldInitializer,
@@ -354,7 +357,6 @@ func (a *Assembly) Complete(
 	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
 	durableExecution durableexecution.Service,
-	factoryDefinitions factorydefinitions.Service,
 	factorySessionID string,
 	dir string,
 	executionBaseDir string,
@@ -439,7 +441,7 @@ func (a *Assembly) Complete(
 		runtimeLifecycle,
 		runtimeSidecars,
 		durableExecution,
-		factoryDefinitions,
+		a.factoryDefinitions,
 		dir,
 		executionBaseDir,
 		runtimeMode,

@@ -495,7 +495,6 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		opening.runtimeLifecycle,
 		opening.runtimeSidecars,
 		opening.durableExecution.Service,
-		r.factoryDefinitions,
 		opening.sessionID,
 		opening.configured.Definition.Directory,
 		opening.configured.Definition.ExecutionBaseDir,

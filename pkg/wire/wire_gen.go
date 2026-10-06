@@ -437,7 +437,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v111)
 	v112 := provideDefinitionValidationOperation(validationOperations)
 	editableFactoryValidator := provideEditableFactoryValidator(v112)
-	v113, err := wire5.NewRuntimeAssembly(sessionGateway, v38, v42, v47, v108, v43, v109, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v41, homeDirectoryResolver, v110, namedPathResolver, initialWorkReader, v44, v39, source, liveChangeCoordinator, v103, v47, host, v99, namedFactoryActivator, definitionActivationGateway, v35, factoryScaffoldInitializer, editableFactoryValidator, v105)
+	v113, err := wire5.NewRuntimeAssembly(sessionGateway, v38, v42, v47, v108, v43, v109, javaScriptCheckpointStoreFactory, sessionResultProjectionOperation, responseEventIDGenerator, v41, homeDirectoryResolver, v110, namedPathResolver, initialWorkReader, v44, v39, source, liveChangeCoordinator, v103, v47, host, v99, namedFactoryActivator, definitionActivationGateway, v35, factoryScaffoldInitializer, editableFactoryValidator, v105, factorydefinitionsService)
 	if err != nil {
 		return nil, err
 	}

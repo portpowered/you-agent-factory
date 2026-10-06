@@ -43,7 +43,7 @@ func (owner *closingDurableOwner) Close() error {
 func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
 	failure := errors.New("durable shutdown failed")
 	owner := &closingDurableOwner{err: failure}
-	assembly := NewAssembly(&Service{durable: owner}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner, nil, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(&Service{durable: owner}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, owner, nil, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("Close error = %v, want %v", err, failure)
 	}
@@ -337,7 +337,7 @@ func TestAssemblyUsesInjectedAuthorityAndStreamFactories(t *testing.T) {
 	state := newWorkResolverSessionState()
 	state.Register(sessionruntime.Registration{SessionID: "supplied", Handle: struct{}{}})
 	streams := &suppliedStreamFactories{}
-	assembly := NewAssembly(nil, state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, nil), nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(nil, state.Registry(), state, streams, nil, nil, nil, nil, nil, state.Clock(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, nil), nil, nil, nil, nil, nil).(*Assembly)
 	if assembly.Resolve("supplied") != state.Resolve("supplied") {
 		t.Fatal("assembly replaced supplied authority")
 	}
@@ -651,7 +651,7 @@ func TestNamedFactoryActivatorFollowsSelectedGenerationAndPreservesPeers(t *test
 	register("selected", true, "first", failure)
 	register("peer", false, "peer", nil)
 	activate := NewNamedFactoryActivator(state)
-	assembly := NewAssembly(nil, nil, state, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, activate, nil, nil, nil, nil, nil).(*Assembly)
+	assembly := NewAssembly(nil, nil, state, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, activate, nil, nil, nil, nil, nil, nil).(*Assembly)
 	if err := assembly.ActivateNamedFactory(ctx, "first"); !errors.Is(err, failure) {
 		t.Fatalf("selected activation error = %v, want %v", err, failure)
 	}

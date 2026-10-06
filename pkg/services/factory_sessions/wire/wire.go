@@ -283,6 +283,7 @@ func NewRuntimeAssembly(
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	factoryDefinitions factorydefinitions.Service,
 ) (RuntimeAssembly, error) {
 	if activation == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: scope activation is required")
@@ -324,6 +325,7 @@ func NewRuntimeAssembly(
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		invocationMetricsRecorder,
+		factoryDefinitions,
 	)
 	return assembly, nil
 }

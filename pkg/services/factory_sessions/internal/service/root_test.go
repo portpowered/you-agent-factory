@@ -274,6 +274,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		legacyservice.NewNamedFactoryActivator(state),
 		legacyservice.NewKeyedDefinitionActivationGateway(state, in.clock),
 		nil, nil, nil, nil,
+		nil,
 	), nil
 }
 

@@ -183,7 +183,6 @@ type RuntimeAssembly interface {
 		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
 		durableExecution durableexecution.Service,
-		factoryDefinitions factorydefinitions.Service,
 		factorySessionID string,
 		dir string,
 		executionBaseDir string,
