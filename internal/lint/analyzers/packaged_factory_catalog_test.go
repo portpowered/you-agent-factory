@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -22,9 +23,14 @@ const catalogJS = "/* @you-factory-meta\n{\"name\":\"@you/example\",\"id\":\"exa
 
 func cleanCatalogSnapshot(t *testing.T) catalogSnapshot {
 	t.Helper()
+	return catalogSnapshotForFactory(t, "example")
+}
+
+func catalogSnapshotForFactory(t *testing.T, name string) catalogSnapshot {
+	t.Helper()
 	snapshot := catalogSnapshot{
-		"factories/example/factory.js": {data: []byte(catalogJS), mode: 0o644},
-		"schemas/factory.schema.json":  {data: []byte(`{"$id":"urn:catalog-fixture","type":"object"}`), mode: 0o644},
+		"factories/" + name + "/factory.js": {data: []byte(strings.ReplaceAll(catalogJS, "example", name)), mode: 0o644},
+		"schemas/factory.schema.json":       {data: []byte(`{"$id":"urn:catalog-fixture","type":"object"}`), mode: 0o644},
 	}
 	catalog, err := packagedfactorycatalog.BuildCatalog(context.Background(), snapshot, "factories", "schemas/factory.schema.json")
 	if err != nil {
@@ -49,6 +55,10 @@ func TestPackagedFactoryCatalogAnalysistest(t *testing.T) {
 
 func TestPackagedFactoryCatalogDriftAndReadOnly(t *testing.T) {
 	t.Parallel()
+	example := cleanCatalogSnapshot(t)
+	second := catalogSnapshotForFactory(t, "second")
+	exampleConversion := factorydefinitions.SerializedFactoryConfigInput(example["generated/factories/example/factory.json"].data).Path()
+	secondConversion := factorydefinitions.SerializedFactoryConfigInput(second["generated/factories/second/factory.json"].data).Path()
 	for _, tc := range []struct {
 		name   string
 		mutate func(catalogSnapshot)
@@ -62,6 +72,11 @@ func TestPackagedFactoryCatalogDriftAndReadOnly(t *testing.T) {
 		{"YAML", func(s catalogSnapshot) {
 			s["generated/factories/example/factory.yaml"] = catalogFile{data: []byte("{}"), mode: 0o644}
 		}, []string{"stale: generated/factories/example/factory.yaml"}},
+		{"serialized conversion", func(s catalogSnapshot) {
+			s[exampleConversion] = catalogFile{data: []byte("{}"), mode: 0o644}
+		}, []string{"stale: " + exampleConversion}},
+		{"missing conversion", func(s catalogSnapshot) { delete(s, exampleConversion) }, []string{"missing: " + exampleConversion}},
+		{"conversion symlink", func(s catalogSnapshot) { s[exampleConversion] = catalogFile{mode: fs.ModeSymlink} }, []string{"non-regular: " + exampleConversion}},
 		{"missing", func(s catalogSnapshot) { delete(s, "generated/manifest.json") }, []string{"missing: generated/manifest.json"}},
 		{"all outputs missing", func(s catalogSnapshot) {
 			for name := range s {
@@ -69,14 +84,14 @@ func TestPackagedFactoryCatalogDriftAndReadOnly(t *testing.T) {
 					delete(s, name)
 				}
 			}
-		}, []string{"missing: generated/README.md", "missing: generated/factories/example/factory.json", "missing: generated/factories/example/factory.yaml", "missing: generated/manifest.json"}},
+		}, []string{"missing: generated/README.md", "missing: generated/factories/example/factory.json", "missing: generated/factories/example/factory.yaml", "missing: generated/manifest.json", "missing: " + exampleConversion}},
 		{"added Factory", func(s catalogSnapshot) {
 			s["factories/second/factory.js"] = catalogFile{data: []byte(strings.ReplaceAll(catalogJS, "example", "second")), mode: 0o644}
-		}, []string{"missing: generated/factories/second/factory.json", "missing: generated/factories/second/factory.yaml", "stale: generated/manifest.json"}},
+		}, []string{"missing: generated/factories/second/factory.json", "missing: generated/factories/second/factory.yaml", "missing: " + secondConversion, "stale: generated/manifest.json"}},
 		{"renamed Factory", func(s catalogSnapshot) {
 			delete(s, "factories/example/factory.js")
 			s["factories/second/factory.js"] = catalogFile{data: []byte(strings.ReplaceAll(catalogJS, "example", "second")), mode: 0o644}
-		}, []string{"missing: generated/factories/second/factory.json", "missing: generated/factories/second/factory.yaml", "stale: generated/manifest.json", "unexpected: generated/factories/example/factory.json", "unexpected: generated/factories/example/factory.yaml"}},
+		}, []string{"missing: generated/factories/second/factory.json", "missing: generated/factories/second/factory.yaml", "missing: " + secondConversion, "stale: generated/manifest.json", "unexpected: generated/factories/example/factory.json", "unexpected: generated/factories/example/factory.yaml", "unexpected: " + exampleConversion}},
 		{"extra", func(s catalogSnapshot) { s["generated/nested/a b"] = catalogFile{mode: 0o644} }, []string{"unexpected: generated/nested/a b"}},
 		{"notice prose", func(s catalogSnapshot) {
 			s["generated/README.md"] = catalogFile{data: []byte("Edited prose"), mode: 0o644}

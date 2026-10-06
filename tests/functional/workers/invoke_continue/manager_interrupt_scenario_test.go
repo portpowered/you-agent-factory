@@ -388,7 +388,8 @@ func (runner *s8InterruptProviderRunner) reset() {
 	runner.order = nil
 	runner.invocationCounts = make(map[string]int)
 	runner.cancellationCounts = make(map[string]int)
-	runner.active.Store(0)
+	// Active calls span resets until their deferred completion runs.
+	// Keep lifetime accounting balanced rather than clearing an in-flight count.
 }
 
 func (runner *s8InterruptProviderRunner) ActiveCallCount() int {

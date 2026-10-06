@@ -5,14 +5,19 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest measured published source, `643e6f3b7b`, passes every hosted
-workflow check. Functional Coverage takes **201s complete / 142.303s coverage**,
-68 packages / 738 results (736 pass, two skip), including one recovered
-TestInterruptRace admission failure recorded in the same-head flake ledger.
-Backend Integration passes. Parent `69eaa32820` takes 210s complete / 150.914s
-coverage and recovers interrupt-admission and Script cancellation failures;
-its remaining workflow is canceled by the newer push. Neither cancellation
-failure is claimed fixed by the Agent change. The preceding
+The latest measured published source, `c8b026366d`, passes hosted Functional
+Coverage in **209s complete / 143.728s coverage**, 67 packages / 762 results,
+760 pass and two skip, with no failures or retries. Its restored compiler
+archive is a prefix hit from 963695eff9; coverage runs zero compiler commands
+and 16 linker commands. Workflow fails Backend Lint's catalog drift race test
+and both Packaged Factories packaging jobs because expected finding sets omit
+the newly generated native conversion assets. These expectations are corrected
+locally without weakening drift/read-only checks; fresh hosted validation is
+required. Earlier source `643e6f3b7b` passes every hosted workflow check in
+201s complete / 142.303s functional coverage with one recovered interrupt
+admission failure. Parent `69eaa32820` takes 210s / 150.914s coverage with
+recovered interrupt and Script failures; its remaining workflow is canceled by
+the next push. The preceding
 `f7e138ae4e` functional job takes 222s complete / 154.403s coverage, with one
 recovered Agent cancellation failure, and its integration job fails the
 released probe-port race. The preceding `e243441e58` workflow passes
@@ -4315,3 +4320,59 @@ Retain this distinct lookup failure in its flake ledger; it is not the earlier
 TestInterruptRace admission diagnostic and is not resolved by the Script
 correction. This combined source is not the earlier clean 140.07s sample,
 and does not establish the complete hosted two-minute checkpoint.
+
+
+## Exact Worker Session reads, cache drift coverage and refreshed CPU profile
+
+The recovered TestInterruptExplicitModes/recorded lookup reads only the first
+page of a fleet-wide list to find known source/successor identities. The public
+list defaults to 50 results; a shared host retains unrelated sessions. Use
+existing CLI worker-sessions show calls for the exact two IDs and retain source
+CANCELED, successor RUNNING and both interrupt-lineage assertions. Other customer
+list tests remain. No page-size or accepted-state allowance is increased.
+
+Twenty repeated explicit-mode runs pass their customer assertions, then initially
+fail fixture cleanup with an active provider count of -1. Reset clears active
+accounting while an older call still owes its deferred decrement. Remove that
+counter reset from both controlled providers; keep balanced lifetime accounting
+and the existing zero-active cleanup assertion. The next 20 repetitions pass,
+including cleanup. Six fresh processes per side also pass. Baseline totals
+4.687995 CPU-seconds / 7.163311929s elapsed; candidate 4.831780 / 7.121415181s:
+3.1% more CPU and 0.6% less elapsed in this small sparse-host sample. This is an
+exact-read/retained-host reliability correction, not a measured package speedup.
+
+Hosted c8b026366d reports the native cache's extra asset correctly, but old
+analyzer unit expectations omit it in missing, added and renamed Factory cases.
+Update those expected findings using the content-address contract, retaining
+all existing read-only and unexpected-output assertions. Add explicit stale,
+missing and non-regular native conversion checks. All PackagedFactoryCatalog
+analyzer tests pass. The exact hosted race-check selection and both complete analyzer/plugin unit
+suites pass; both scoped lint suites pass. Backend Lint's later
+missing-Bun/deadcode evidence errors follow its failed race step, which skips
+the normal setup/build steps; do not treat those cascades as an independent
+runtime dependency fix. Packaging and lint failures are preserved in terminal
+job logs under the latency audit artifacts.
+
+The complete instrumented lane passes 67 packages / 762 results without failures
+or retries at 186.77s supervisor / 175.736s coverage / 571.79 CPU-seconds (441.22
+user, 130.57 kernel). It has two compiler commands (2.140022 CPU-seconds) and 19
+links (36.843303 CPU-seconds / 33.589s active wall). Profiling affects timing;
+this slower sample is retained and is not a full-lane speedup claim. The monolith
+profile spans 134.89s and samples 411.61 CPU-seconds. Initialization accounts for
+209.43 cumulative seconds (50.88%), packaged installation 208.78 (50.72%), layout
+preparation 110.04 (26.73%), definition validation 67.52 (16.40%), and generated
+config expansion 69.07 (16.78%). JSON unmarshal accounts for 143.29 cumulative
+seconds; syscall.Syscall6 has 69.19 flat seconds. These nested stacks overlap.
+This capture lacks package labels; do not infer per-package CPU by adding
+concurrent process deltas. Earlier labelled package priorities remain historical.
+
+The next major target is repeated canonical loading/validation during immutable
+packaged preparation and publication. Inspect exact byte forms and cache hits,
+then measure reuse of canonical conversions or generated renderings through the
+owning compiler/writer ports. Preserve customer edits, validator calls, portable
+files, file modes, independent values and atomic publication. Do not replace
+those ports with the rejected filesystem shortcut or share session state.
+
+Evidence: `interrupt-identity-paired/`, `interrupt-identity-profile/`,
+`pr2923-cache-live-hosted/`, `job-112262243278-terminal.log`,
+`job-112262243397-terminal.log` and `cache-live-backend-lint-failed.log`.
