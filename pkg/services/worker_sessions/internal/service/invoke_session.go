@@ -86,6 +86,10 @@ type runtimeAttempt struct {
 	providerControl        providers.AttemptControl
 	providerControlRetired bool
 	forceConfirmed         bool
+	forceJournalPending    int
+	forceJournalDone       chan struct{}
+	controlPersistenceLost bool
+	forceSafetyClaimed     bool
 }
 
 // PublishRuntimeProgress resolves only the explicit scoped owner before any

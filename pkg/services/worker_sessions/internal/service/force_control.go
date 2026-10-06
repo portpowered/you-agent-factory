@@ -64,7 +64,10 @@ func (r *registry) forceTerminate(ctx context.Context, req workersessions.Contro
 }
 
 func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessions.ControlRequest, target frozenControlTarget, intent recordings.WorkerControlOperationRecord) (workersessions.ControlResult, error) {
-	finishJournal := target.supervision.beginForceJournal()
+	finishJournal, err := r.beginFrozenForceJournal(req.ID, target)
+	if err != nil {
+		return r.forceResult(req.ID, target, workersessions.ControlOutcomeFailed), err
+	}
 	defer finishJournal()
 	var accepted recordings.WorkerControlOperationRecord
 	var storeErr error
@@ -81,7 +84,7 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 		storeErr = recordings.ErrWorkerRecordingPersistence
 	}
 	if storeErr != nil {
-		target.supervision.markControlPersistenceLost()
+		target.markControlPersistenceLost()
 	}
 	r.logger.Info("worker session force intent", "sessionID", publicWorkerID(req.ID), "attemptID", target.attemptID, "action", "kill", "durable", journal && storeErr == nil)
 	result, stopErr := r.executeFrozenForce(ctx, req.ID, target)
@@ -90,7 +93,7 @@ func (r *registry) forceWithCommittedIntent(ctx context.Context, req workersessi
 		storeErr = r.commitStopResult(context.WithoutCancel(ctx), accepted, result, stopErr)
 	}
 	if storeErr != nil {
-		target.supervision.markControlPersistenceLost()
+		target.markControlPersistenceLost()
 		r.recordStopPersistenceLoss(context.WithoutCancel(ctx), req.ID, target)
 		result.Outcome = workersessions.ControlOutcomeFailed
 		stopErr = errors.Join(stopErr, recordings.ErrWorkerRecordingPersistence)
@@ -273,7 +276,7 @@ func (r *registry) claimFrozenForce(id string, target frozenControlTarget) (forc
 		if err := r.frozenRuntimeOwnerLocked(id, target.runtime); err != nil {
 			return forceControlClaim{}, err
 		}
-		return target.runtime.claimForce(r.sessions[id].Terminal()), nil
+		return target.runtime.claimForce(r.sessions[id].Terminal())
 	}
 	if target.supervision == nil {
 		return forceControlClaim{}, nil
@@ -322,22 +325,26 @@ func (s *supervision) resolveForce(killed bool, err error) {
 	close(s.controlDone)
 }
 
-func (a *runtimeAttempt) claimForce(terminal bool) forceControlClaim {
+func (a *runtimeAttempt) claimForce(terminal bool) (forceControlClaim, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.completed == nil {
 		a.completed = make(chan struct{})
 	}
+	if a.controlPersistenceLost && a.forceSafetyClaimed {
+		return forceControlClaim{}, recordings.ErrWorkerRecordingPersistence
+	}
 	if terminal || a.completing || a.controlAction != "" {
-		return forceControlClaim{joined: a.completed}
+		return forceControlClaim{joined: a.completed}, nil
 	}
 	if a.controlPending {
-		return forceControlClaim{wait: a.controlDone}
+		return forceControlClaim{wait: a.controlDone}, nil
 	}
 	if a.providerControlRetired || a.providerControl == nil {
-		return forceControlClaim{}
+		return forceControlClaim{}, nil
 	}
 	a.controlPending = true
+	a.forceSafetyClaimed = true
 	a.controlDone = make(chan struct{})
 	return forceControlClaim{control: a.providerControl, joined: a.completed, resolve: func(killed bool, err error) {
 		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
@@ -348,5 +355,5 @@ func (a *runtimeAttempt) claimForce(terminal bool) forceControlClaim {
 		a.forceConfirmed = killed && err == nil
 		a.mu.Unlock()
 		a.resolveControl(workersessions.ControlActionTerminate, outcome, err)
-	}}
+	}}, nil
 }

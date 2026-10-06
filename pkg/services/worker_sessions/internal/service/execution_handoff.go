@@ -878,7 +878,7 @@ func (r *registry) BeginRuntimeAttempt(
 func (r *registry) reserveRuntimeAttemptKey(key workersessions.RuntimeAttemptKey, workerID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.runtimeAttemptOwners[key]; exists {
+	if _, exists := r.runtimeAttemptOwners[key]; exists || r.runtimeForceJournals[key] != nil {
 		return false
 	}
 	if r.runtimeAttemptOwners == nil {

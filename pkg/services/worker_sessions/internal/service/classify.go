@@ -101,7 +101,10 @@ func (a *runtimeAttempt) Complete(
 		r.mu.Unlock()
 		r.releaseRuntimeAttemptKey(a.key, a.workerID)
 	})
-	return nil
+	// The force join above must finish before saving its result. Runtime's
+	// completion callback, however, must not return and select a retry until
+	// that result has been acknowledged (or the logical dispatch is sealed).
+	return a.awaitForceJournal()
 }
 
 func runtimeAttemptCancelOutcomeSupported(outcome workers.WorkstationDispatchCancelOutcome) bool {
