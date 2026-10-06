@@ -4260,3 +4260,58 @@ These existing assertions are not weakened to pass this cache change. New
 focused decoder/generation/authoring checks and the complete functional lane
 pass; the entire catalog unit suite is not claimed green. Exact parent/candidate
 failure lists and JSON event logs are under `catalog-baseline-overlay/`.
+
+
+## Live-main rebase and Script customer cleanup
+
+After publication of cache head 110e1b3bd9, GitHub reports the PR conflicting
+with advanced main; no workflow run exists for that head. Rebase the optimization
+branch onto main 8cc84d34c6. The only conflict is generated Wire code; regenerate
+it from the combined handwritten graph instead of choosing either generated
+side. Cache generation leaves published assets unchanged, and focused decoder,
+generator and authoring checks pass on the combined source. Both rebuilt
+repository lint and builtin scoped lint pass.
+
+Script cancellation has the same causal gap observed previously in Agent:
+controlled command entry precedes publication of the exact processing Work.
+Before cancellation, observe that Work through its explicit Factory Session's
+public query, retaining the existing bounded timeout, state requirements,
+stopped-runtime, event, command, deletion and isolation assertions. Twenty
+focused cancellation repetitions pass. Remove the test-router constructor-only
+probe, fixture build/server-start counters and manual temporary-directory census.
+Keep per-scenario command requests and public session/Work/event identity,
+listener shutdown, failure and recovery checks. Testing owns directory removal.
+
+Six fresh native processes per side all pass, including the public shared Script
+journey. Baseline totals 3.253245 CPU-seconds / 3.429897654s elapsed; candidate
+3.464901 / 3.582569223s. The additional public processing observation increases
+this short sample by 6.5% CPU / 4.5% elapsed (about 0.035 CPU-seconds per process).
+This is a causal readiness/retry-risk correction and customer-test cleanup, not
+an execution speedup; preserve the cost rather than treating removed fixture
+assertions as measurable CPU savings. No retry or timeout allowance increases.
+The package retains its genuine host-environment privacy proof and corresponding
+native-binary safety exception.
+
+Live-main discovery selects 67 packages / 762 results from 75 discovered
+packages / 763 results; unchanged quarantine excludes eight packages and one
+selector. The unchanged shared-binary classifier joins 39 package groups / 595
+top-level registrations. These counts include new customer behavior merged on
+main; historical 68/738 captures are not current-source validation. Complete
+combined-source coverage is recorded separately under `cache-live-script-full/`.
+Evidence: `script-customer-paired/comparison.json`, preserved native logs and
+`cache-live-delta.tar` / deletion manifest. The latter records the exact source
+delta applied to the owned Linux mirror; it is not a benchmark result.
+
+
+Complete live-main validation passes all **67 packages / 762 results**, 760 pass
+and two skip, in **172.00s supervisor / 163.712s coverage / 555.61 CPU-seconds**
+(449.78 user, 105.83 kernel). Changed-source compilation runs 519 commands,
+consuming 127.433284 CPU-seconds over 46.843s active compiler wall. Twenty links
+consume 34.182308 CPU-seconds over 32.732s active link wall. All 160 reviewed
+scenario decisions remain current and coverage/quarantine gates are unchanged.
+One TestInterruptExplicitModes/recorded failure recovers on the unchanged
+same-head retry: the expected Worker Session is absent from the public list.
+Retain this distinct lookup failure in its flake ledger; it is not the earlier
+TestInterruptRace admission diagnostic and is not resolved by the Script
+correction. This combined source is not the earlier clean 140.07s sample,
+and does not establish the complete hosted two-minute checkpoint.
