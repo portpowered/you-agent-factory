@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +26,20 @@ import (
 // host processes using one isolated profile; no test process hydrates captures.
 func TestWorkerSessionHistoryRestart(t *testing.T) {
 	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		name := "originating-artifact"
+		if legacy {
+			name = "legacy-unavailable"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runWorkerSessionHistoryRestart(t, legacy)
+		})
+	}
+}
+
+func runWorkerSessionHistoryRestart(t *testing.T, legacy bool) {
+	t.Helper()
 	binary := os.Getenv("INFINITE_YOU_PREBUILT_ARTIFACT")
 	if binary == "" {
 		if os.Getenv("INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT") == "1" {
@@ -53,13 +69,7 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 	}
 	env := cleanupEnvironment(home, temp)
 	factory := writeCleanupFactory(t, project, node, filepath.Join(project, "ready"), filepath.Join(project, "release"))
-	seedsBefore, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
-	if err != nil || len(seedsBefore) != 1 {
-		t.Fatalf("known-name seed = %v, %v", seedsBefore, err)
-	}
-	if err := os.Rename(seedsBefore[0], filepath.Join(filepath.Dir(seedsBefore[0]), "seed-archived-name.json")); err != nil {
-		t.Fatal(err)
-	}
+	renameHistorySeed(t, factory)
 	if err := os.WriteFile(filepath.Join(project, "worker.cjs"), []byte("console.log('history-restart COMPLETE');"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +78,42 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 	historyCLI(t, ctx, binary, project, env, "run", "--dir", factory, "--quiet")
 	// Startup watches the Current Factory inputs. Consume this test-owned seed
 	// explicitly so restarting the host cannot submit another attempt.
+	removeHistorySeeds(t, factory)
+	// No native provider files exist: script output is captured by production
+	// wiring. Replace their conventional directories with unreadable file paths
+	// so a future provider-file fallback cannot supply this replay.
+	for _, name := range []string{".codex", ".cursor", ".claude"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte("not a provider directory"), 0o000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if legacy {
+		removeHistoryOriginatingArtifact(t, project)
+	}
+	first := startHistoryHost(t, ctx, binary, project, env)
+	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url, legacy)
+	first.stop(t, ctx, binary, project, env)
+	second := startHistoryHost(t, ctx, binary, project, env)
+	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url, legacy)
+	second.stop(t, ctx, binary, project, env)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
+	}
+}
+
+func renameHistorySeed(t *testing.T, factory string) {
+	t.Helper()
+	seeds, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
+	if err != nil || len(seeds) != 1 {
+		t.Fatalf("known-name seed = %v, %v", seeds, err)
+	}
+	if err := os.Rename(seeds[0], filepath.Join(filepath.Dir(seeds[0]), "seed-archived-name.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func removeHistorySeeds(t *testing.T, factory string) {
+	t.Helper()
 	seeds, err := filepath.Glob(filepath.Join(factory, "inputs", "task", "*", "seed-*.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -77,23 +123,6 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// No native provider files exist: script output is captured by production
-	// wiring. Replace their conventional directories with unreadable file paths
-	// so a future provider-file fallback cannot supply this replay.
-	for _, name := range []string{".codex", ".cursor", ".claude"} {
-		if err := os.WriteFile(filepath.Join(home, name), []byte("not a provider directory"), 0o000); err != nil {
-			t.Fatal(err)
-		}
-	}
-	first := startHistoryHost(t, ctx, binary, project, env)
-	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url)
-	first.stop(t, ctx, binary, project, env)
-	second := startHistoryHost(t, ctx, binary, project, env)
-	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url)
-	second.stop(t, ctx, binary, project, env)
-	if !reflect.DeepEqual(before, after) {
-		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
-	}
 }
 
 type historySnapshot struct {
@@ -101,18 +130,74 @@ type historySnapshot struct {
 	Logs        api.WorkerSessionLogPage
 }
 
-func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
+func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string, legacy bool) historySnapshot {
 	t.Helper()
 	snapshot := readHistorySnapshot(t, ctx, binary, project, env, server)
 	observation := snapshot.Observation
-	if observation.WorkName == nil || *observation.WorkName != "seed-archived-name" || observation.WorkId == nil || *observation.WorkId == "" {
+	if observation.WorkId == nil || *observation.WorkId == "" {
+		t.Fatalf("archived Work identity = %+v", observation)
+	}
+	if legacy && (observation.WorkName != nil || observation.Provider != nil) {
+		t.Fatalf("legacy capture without an available scoped artifact borrowed attribution: %+v", observation)
+	}
+	if !legacy && (observation.WorkName == nil || *observation.WorkName != "seed-archived-name") {
 		t.Fatalf("archived known name = %+v", observation)
 	}
 	table := historyCLI(t, ctx, binary, project, env, "--server", server, "worker-sessions", "list", "--history", "archived")
-	if !bytes.Contains(table, []byte("seed-archived-name")) {
+	if !legacy && !bytes.Contains(table, []byte("seed-archived-name")) {
 		t.Fatalf("archived table lost Work name: %s", table)
 	}
+	if legacy {
+		lines := strings.Split(strings.TrimSpace(string(table)), "\n")
+		if len(lines) != 2 || len(strings.Fields(lines[1])) < 4 || strings.Fields(lines[1])[0] != "-" {
+			t.Fatalf("legacy unavailable Work marker: %s", table)
+		}
+	}
 	return snapshot
+}
+
+// Downgrade only the test-owned persisted capture to its pre-provenance shape.
+// All real admissions, canonical history, identities and captured logs survive.
+// A standalone reader has no configured board candidate, so this case protects
+// the authorized unavailable result rather than guessing an artifact.
+func removeHistoryOriginatingArtifact(t *testing.T, home string) {
+	t.Helper()
+	removed := 0
+	err := filepath.WalkDir(home, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		if !strings.HasSuffix(path, ".worker.jsonl") && filepath.Base(filepath.Dir(path)) != "catalog" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		lines := bytes.Split(data, []byte("\n"))
+		for i, line := range lines {
+			if len(bytes.TrimSpace(line)) == 0 {
+				continue
+			}
+			var record map[string]json.RawMessage
+			if err := json.Unmarshal(line, &record); err != nil {
+				return err
+			}
+			if _, ok := record["originatingArtifact"]; !ok {
+				continue
+			}
+			delete(record, "originatingArtifact")
+			removed++
+			lines[i], err = json.Marshal(record)
+			if err != nil {
+				return err
+			}
+		}
+		return os.WriteFile(path, bytes.Join(lines, []byte("\n")), 0o600)
+	})
+	if err != nil || removed < 2 {
+		t.Fatalf("legacy capture downgrade: removed=%d error=%v", removed, err)
+	}
 }
 
 func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
