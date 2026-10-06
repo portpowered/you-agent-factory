@@ -438,7 +438,9 @@ func (counts *functionalQuarantineOutcomeCounts) merge(other functionalQuarantin
 }
 
 func runFunctionalQuarantineSelectorWithMeasurement(entry functionalQuarantineEntry, measurement string, timeout time.Duration, short bool, repoRoot string) (functionalQuarantineOutcomeResult, error) {
-	args := []string{"test", "-json", "-count=1"}
+	// The canonical Backend Lint lane owns vet; this invocation measures
+	// quarantine outcomes without repeating static analysis.
+	args := []string{"test", "-vet=off", "-json", "-count=1"}
 	if short {
 		args = append(args, "-short")
 	}

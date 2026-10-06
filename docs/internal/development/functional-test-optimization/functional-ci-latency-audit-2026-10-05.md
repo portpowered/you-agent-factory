@@ -2256,3 +2256,10 @@ retains that metadata too. Repeating fresh `go test -count=1 -coverpkg=./...`
 against an empty restored cache performs zero compiles and produces an identical
 coverage profile. All four cache proofs pass. Executable, result and counter
 payloads remain excluded, and the same total byte limit applies.
+
+Quarantine outcome and package-terminal invocations now use `-vet=off`, as
+inventory discovery already does. The required canonical Backend Lint lane
+retains vet ownership. This removes duplicate static analysis and regeneration
+of vet-only cached source side files without changing runtime selection,
+terminal-event evidence, retries, or quarantine expectations. Focused quarantine
+and overlap tests pass.
