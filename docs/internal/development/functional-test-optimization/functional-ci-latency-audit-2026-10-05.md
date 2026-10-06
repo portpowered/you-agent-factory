@@ -5,15 +5,16 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `b1d1087428`, passes the complete hosted workflow.
-Functional CI takes **222s complete / 170.789s coverage**, 68 packages / 742
-results, no retries, 111 compiler commands and 20 links after a prefix archive
-restore. Coverage execution is essentially unchanged from the preceding e02
-169.801s sample; differences in build state and CI overhead matter. The
-complete-job two-minute checkpoint remains **unmet**. The earlier warm
-three-minute checkpoint is merged. The next candidate removes legacy docs
-assertions, joins Docs smoke into the monolith, and consolidates compatible
-Factory CLI setups; measurements appear below.
+The latest published source, `21bde1452a`, passes hosted Functional Coverage in
+**146s complete / 102.318s coverage**, 68 packages / 740 results, no retries,
+six compiler commands and 19 links after a prefix b1 archive restore. The
+complete hosted two-minute checkpoint remains **unmet**, despite coverage
+execution now falling below two minutes. This head's contract job hit a
+concurrent regeneration/read failure; the corrective reader lock is pending.
+The earlier warm three-minute checkpoint is merged; this next checkpoint stays
+draft. Controlled CLI constructor pairs were neutral, so cache state and runner
+variance must accompany the faster full-job sample. Current CPU priorities are
+listed below and in the refreshed profile section.
 
 The published candidate shares one host across lifecycle, dispatch and eligibility
 journeys, retaining all 31 journey selectors with isolated Factory Sessions,
@@ -33,15 +34,27 @@ history subscription ownership cuts six repetitions from 20.713s to 2.631s.
 Focused component regressions and lint pass. The full four-CPU lane passes in
 171.33s supervisor / 165.362s coverage, 68 packages / 743 results, no retries.
 
-The current runtime CPU profile puts repeated system initialization on the
-critical optimization path: InitializeSystem accounts for 262.56s cumulative
-sampled CPU (59.10% of samples), including packaged installation and managed
-Factory preparation. These nested costs must not be added together. The largest
-labelled package totals are Product customer lifecycles (100.28s), Product
-customer journeys (85.31s), CLI/REST journeys (35.36s), Work admission (25.30s),
-and Factory execution (19.63s). Labels include fixture background goroutines.
-Prioritize shared session hosts and simpler customer setups in those packages;
-linking is already consolidated substantially.
+The refreshed published-source monolith profile samples **272.45 CPU-seconds**
+over 86.05s wall. System initialization consumes **161.64s cumulative (59.33%)**,
+mostly packaged Factory installation/layout preparation. These nested values
+must not be summed. Package labels include fixture background goroutines:
+
+| Functional package suffix | Sampled CPU | Initialization subset |
+| --- | ---: | ---: |
+| product/customer_lifecycles | 48.34s | 16.98s |
+| product/customer_journeys | 48.33s | 38.86s |
+| factory/execution | 20.97s | 11.75s |
+| product/cli_rest_journeys | 18.26s | 12.55s |
+| transport/mcp/worker_sessions | 14.46s | 12.69s |
+| models/inference | 11.76s | 7.45s |
+
+Prioritize already-initialized owned homes and isolated sessions in customer
+journeys and MCP worker-session setups. Customer lifecycles also has a distinct
+25.30s ReviewFailureRecovery story: its focused stack shows JSON-heavy public
+session opening (9.28s) and Work admission (7.78s), rather than initialization.
+Avoid merging more constructors on the assumption that alone removes bootstrap
+work. The native packages require separate profiling; this table only covers
+the 36-group monolith. Source and measurement caveats are retained below.
 
 ### Prior checkpoint measurements
 
@@ -3681,3 +3694,44 @@ graphs justify this cleanup, while the next performance work must address
 repeated initialization rather than treating constructor merging as sufficient.
 All 160 canonical decisions remain current. Artifact directory:
 `.artifacts/latency-audit/factory-cli-four-host-full`.
+
+### Refreshed published-source CPU attribution and CI blocker
+
+Profiling `21bde1452a` passes all 68 packages / 740 results with no retries,
+unchanged gates, at 125.94s supervisor / 119.874s coverage and 404.83s total CPU.
+This diagnostic adds CPU profiles and goroutine labels, so it is not a hosted
+checkpoint. Monolith duration is 86.05s with 272.45s sampled CPU; 246.89s (90.62%)
+is package-labelled. InitializeSystem accounts for 161.64s cumulative, including
+161.21s packaged installation, 99.19s managed-layout preparation and 74.59s
+FactoryConfigMapper expansion. JSON unmarshalling is 107.83s cumulative and
+Syscall6 is 43.40s flat. These costs overlap. Filtered initialization labels
+identify customer journeys (38.86s), customer lifecycles (16.98s), MCP worker
+sessions (12.69s), CLI/REST journeys (12.55s) and Factory execution (11.75s).
+The diagnostic generator is restored byte-for-byte afterward. Artifact:
+`.artifacts/latency-audit/owned-source-current-cpu`.
+
+Hosted source 21 passes Functional Coverage job 112188112819 in **146s complete /
+102.318s coverage**, 68 packages / 740 results, no retries, six compilers and 19
+links following a prefix b1 archive restore. Source b1's 111 compile commands
+versus six here materially affects the comparison. The two-minute complete job
+checkpoint is still unmet. Artifact:
+`.artifacts/latency-audit/pr2923-compatible-cli-hosted`.
+
+The same workflow's API Contract And Package job 112188113716 fails in
+`TestDefaultRegistryValidFixtures`: canonical runtime-api.json is momentarily
+invalid JSON. Contract staging generation rewrites that authored projection;
+its repository-mutating tests already acquire LockRepositoryStagingForTest.
+The validator's repository-root helper did not acquire the lock. The pending
+correction acquires the existing cross-process lock for canonical repository
+reads and releases it at test cleanup. No validation assertion is weakened or
+retry added. A contract-suite repetition is validating this merge unblocker.
+
+All contract tool packages pass three repetitions with the reader lock, including
+contractstaging and contractvalidator running as separate concurrent binaries.
+The API blocker correction changes test ownership only; no functional-runtime
+behavior, source contract or coverage floor changes.
+
+Both scoped linters pass for the contract reader correction. This corrective
+push is authorized to unblock CI; the previous head's Backend Lint job was
+still running when the completed API failure was corrected. No latency checkpoint
+is inferred from the correction and the PR remains draft.
