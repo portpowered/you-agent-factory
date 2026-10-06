@@ -194,7 +194,9 @@ safe_work=$(printf '%s' "$work_id" | tr -c 'A-Za-z0-9._-' '_')
 marker_dir="$state_root/$safe_work/run-$$"
 mkdir -p "$marker_dir"
 printf '%s' "$$" > "$marker_dir/root.pid"
-sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; mkfifo "$marker_dir/challenge"; sh -c '\''while :; do IFS= read -r value < "$1/challenge"; printf "%s" "$value" > "$1/response"; done'\'' sh "$marker_dir" & grandchild_pid=$!; printf "%s" "$grandchild_pid" > "$marker_dir/grandchild.pid"; printf "%s" "started" > "$marker_dir/child.started"; wait "$grandchild_pid"' sh "$marker_dir" "$$" &
+# Keep both FIFO ends open across challenges. Otherwise a read reopened before
+# the writer closes can receive EOF and overwrite the acknowledged response.
+sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; mkfifo "$marker_dir/challenge"; sh -c '\''exec 3<> "$1/challenge"; while IFS= read -r value <&3; do printf "%s" "$value" > "$1/response"; done'\'' sh "$marker_dir" & grandchild_pid=$!; printf "%s" "$grandchild_pid" > "$marker_dir/grandchild.pid"; printf "%s" "started" > "$marker_dir/child.started"; wait "$grandchild_pid"' sh "$marker_dir" "$$" &
 child_pid=$!
 printf '%s' "$child_pid" > "$marker_dir/child.pid"
 printf '%s' 'ready' > "$marker_dir/ready"
