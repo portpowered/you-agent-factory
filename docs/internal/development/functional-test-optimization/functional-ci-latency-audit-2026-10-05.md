@@ -5,16 +5,19 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `deec6a6f0f`, passes the entire hosted workflow.
-Functional Coverage takes **198s complete / 142.217s coverage**, 68 packages /
-740 results, no retries, zero compiler commands and 19 links. The preceding
-functional-runtime-identical source `21bde1452a` took **146s / 102.318s**, with
-six compiler commands. Retain this **146–198s** observed range; the faster sample
-is not a reliable ceiling. The contract reader correction now passes hosted API
-validation. The complete hosted two-minute checkpoint remains **unmet** and the
-PR stays draft. The earlier warm three-minute checkpoint is merged.
+The latest published source, `78153f7b20`, passes the entire hosted workflow.
+Functional Coverage takes
+**207s complete / 153.481s coverage**, 68 packages / 740 results. It recovers one
+`TestInterruptRace` failure on the enabled same-head retry; this is not a clean
+latency checkpoint. The trace includes eight compiler commands and 37 links.
+The earlier entire-workflow-passing contract-reader head `deec6a6f0f` takes
+**198s / 142.217s**, zero compiler commands and 19 links, no retries. Its
+functional-runtime-identical predecessor `21bde1452a` took **146s / 102.318s**.
+Retain the slower samples; 146 seconds is not a reliable ceiling. The complete
+hosted two-minute checkpoint remains **unmet** and the PR stays draft. The
+earlier warm three-minute checkpoint is merged.
 
-The current MCP candidate shares one initialized, owned client home and model
+The published MCP change shares one initialized, owned client home and model
 cache across independent stdio connections. Six native repetitions per version
 use **42.5% less CPU / 34.1% less elapsed time**. Full local validation preserves
 all 740 results and coverage gates without retries at **143.62s supervisor /
@@ -3782,3 +3785,66 @@ explains away the slower valid sample. The observed runtime-identical hosted
 range is 146–198s. Two-minute merge remains gated on the complete hosted job,
 not just coverage execution. Artifact:
 `.artifacts/latency-audit/pr2923-contract-reader-hosted`.
+
+
+### Hosted MCP source: recovered interrupt race retained
+
+Functional job 112198276041 (workflow 37442087379, source `78153f7b20`) succeeds
+in **207s complete**, 09:19:40–09:23:07 UTC, with **153.481s coverage**, all
+68 packages / 740 final results. Eight compiler commands and 37 links are
+reported after a prefix deec archive restore. One initial `TestInterruptRace`
+failure recovers on the enabled exact-test retry. The CLI caller returned
+`WORKER_SESSION_INTERRUPT_ADMISSION_FAILED` during the simultaneous CLI/HTTP
+interrupt journey, where both identical requests must return the same accepted
+successor. This is a customer guarantee, so retain the test and raw failure;
+do not remove it or loosen its assertion for speed. This run cannot establish
+a no-retry checkpoint or a complete-job gain from the focused MCP reduction.
+The complete workflow finishes successfully, including Backend Lint.
+Artifact: `.artifacts/latency-audit/pr2923-mcp-client-home-hosted`.
+
+### Factory Event session-host experiments
+
+Six compatible retained-history, cursor, trace and stream cases previously
+started independent hosts, several using the default session. The first
+candidate keeps mock-worker and controlled-provider cases on two shared hosts,
+with one explicit session per case. All six repetitions per version pass, but
+baseline execution uses **49.204s CPU / 26.773s wall** versus candidate
+**51.162s CPU / 42.181s wall**. Reject that two-host performance candidate.
+Artifact: `.artifacts/latency-audit/events-session-host-paired`.
+
+The next candidate uses one controlled-provider host for these public event
+assertions; they do not require a particular worker implementation. Each case
+owns its explicit Factory Session, authored directory, submitted Work and event
+cursor. Mock-dependent topology edits, initial CLI/recorded sessions and webhook
+fault cases retain their existing dedicated fixtures. All current ordering,
+no-gap/no-duplicate, typed cursor error/recovery, trace propagation and stream
+termination assertions remain. Parent host cleanup follows child session cleanup.
+
+Six native repetitions per version in B3/C3/C3/B3 order pass. Baseline execution
+uses **48.870s CPU / 25.896s wall**; candidate **38.389s CPU / 24.070s wall**,
+**21.4% less CPU / 7.1% less wall**. This excludes compilation/linking and does
+not predict hosted total. Both scoped linters pass and all 160 reviewed scenario
+decisions remain current. Full canonical coverage validation passes.
+Artifact: `.artifacts/latency-audit/events-single-host-paired`.
+
+
+The single-host event candidate's complete local lane passes all 68 packages /
+740 results (738 passes, two skips), no retries, unchanged coverage gates,
+quarantine selectors, 36 monolith groups and 549 registrations. Supervisor
+**150.57s**, coverage **143.117s**, aggregate CPU **493.18s** (397.63 user,
+95.55 system), maximum RSS 6,815,132 KiB. The shared support source change
+requires **115 compiler commands / 51.132s CPU / 28.410s union active wall**;
+22 supervisor links consume **36.041s CPU / 34.968s union active wall**.
+The preceding MCP-only local run had four compiler commands / 0.993s CPU.
+Record these complete samples without claiming a whole-lane speedup from the
+controlled event comparison. Artifact:
+`.artifacts/latency-audit/events-single-host-full`.
+
+Remaining native-binary exclusions are retained: executable/helper-process,
+process-wide environment/Cwd, relative fixtures and unsupported TestMain
+semantics still require native registration. The safe Docs join is already
+included. Do not weaken the classifier merely to reduce link count. Existing
+selected-time automation journeys already advance injected clocks only after
+registration/readiness acknowledgements; their wall deadlines bound failure
+rather than successful completion. Network/filesystem observation is not made
+virtual by blindly wrapping it in synctest.
