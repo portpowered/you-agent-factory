@@ -40,6 +40,21 @@ If ready or merge arming fails, report the bounded error and actual recovery
 owner. Never claim a failed command made the PR ready, armed, or merged.
 A changed head requires fresh evidence; never infer merge from arming success.
 
+## Corrected successor recovery
+
+When the task input has recovery-worktree, resolve its normalized repo-relative
+`.claude/worktrees/<original-lane>` path from the repository root, reject
+absolute/escaping tags, and verify the retained directory and
+context.recovery.workspace, select tasks/todo/{{ (index .Inputs 0).Name }}.json
+and paired Markdown as the current packet, and read retained progress.txt.
+Every reference to prd.json below means this selected successor packet.
+Review the same retained PR/branch through repeated review/process/CI visits;
+never create a second PR or overwrite root PRD/progress. Refuse mismatched
+adoption without reset/rebase/stash/clean or other retained mutation. Ordinary
+input without this tag keeps root prd.json and the name-derived directory.
+Work controls, equivalent APIs, canonical edits and operatorOverride remain
+forbidden; recovery does not reset the original lineage's two-successor budget.
+
 ### Step 1 — Gather context
 1. Read prd.json to understand what was implemented
 2. Use PR conversation comments as the single feedback channel for this workflow:

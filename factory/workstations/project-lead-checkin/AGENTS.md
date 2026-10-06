@@ -68,6 +68,20 @@ Name Factory Reliability and the portfolio supervisor as the requested repair ow
 Return `ACCEPTED` with the observed owner, mailbox request, and safe action.
 Keep all changes scoped to this Project and preserve history, review, CI, acceptance, privacy, and budgets.
 
+## Corrected successor recovery
+
+Apply the lead's Corrected successor recovery procedure on this check-in too.
+Diagnose failed/capped lanes from exact idea/plan/task IDs, Worker Sessions,
+Events, PR/head and progress.txt; a supported correction defaults to a new-name
+same-Project successor retaining useful unowned work. At most two accepted
+successors per original lineage includes all wakes/check-ins/generations.
+Reconcile uncertain submission with the same request ID. Missing history that
+prevents proving lineage or ownership is a nonfatal operator hold, never an
+assumed unused budget. Rebind only evidenced failed descendants/existing
+loopback by targetWorkId to verified current-Session successors. Never
+duplicate healthy/active/parked/unrelated Work or add per-cycle joins. Work
+controls, equivalent APIs, canonical edits and operatorOverride remain forbidden.
+
 Return only a decision envelope.
 Use `ACCEPTED` after verified inspection, submission, or nonfatal escalation.
 Use `FAILED` only when the Project itself cannot continue.

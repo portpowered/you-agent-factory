@@ -20,7 +20,8 @@ review.
 
 ## Your Task
 
-1. Read the PRD at `prd.json` (in the current working directory)
+1. Read the PRD at `prd.json` (in the current working directory), unless the
+   Corrected successor recovery section below selects a new-name packet.
 2. Read the progress log at `progress.txt`
 2.1. If `prd.json` contains an `operatorAmendment`, treat it as the newest
 operator-authorized scope and history decision. Finish only the retained lane,
@@ -161,6 +162,22 @@ a valid decision.
   command or route inventories unless those surfaces are the actual
   user-visible contract under test. Put repository-shape enforcement in a
   lint/static-check target instead.
+
+## Corrected successor recovery
+
+When the input carries recovery-worktree, require it to match the retained
+directory resolved from the repository root and context.recovery.workspace.
+The tag is normalized repo-relative `.claude/worktrees/<original-lane>`, never absolute or escaping. Select tasks/todo/{{ (index .Inputs 0).Name }}.json
+as the current PRD; read its paired Markdown and retained progress.txt. In all
+instructions above/below, prd.json means this selected successor packet.
+Preserve root PRD/progress and all useful branch, commits and dirty files.
+Verify the retained branch and same OPEN PR from context.recovery.workspace;
+use that PR for process/review and every repeated visit, never create a second
+PR. A branch/worktree mismatch is a bounded blocker; never reset, rebase, stash,
+clean or overwrite retained artifacts to repair adoption. Ordinary input
+without the tag continues to use root prd.json and its name-derived directory.
+Recovery does not permit Work controls, equivalent APIs, canonical edits or
+operatorOverride, and does not reset the original lineage's attempt budget.
 
 ## Bounded visit records
 
