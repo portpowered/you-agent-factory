@@ -2812,3 +2812,18 @@ The retired production-helper dead-code baseline entry is deleted. An obsolete
 selected-time directory-helper reference left by the last cleanup causes a
 monolith build failure before any valid complete-suite timing; it is removed.
 That 109.69s incomplete run is excluded from latency baselines.
+
+The corrected 31-package candidate passes all 68 packages / 758 results without
+retries in **147.18s supervisor / 140.269s coverage invocation**. Aggregate CPU
+is **447.95s** (362.02 user + 85.93 system), 54 compiler actions consume 24.185
+CPU seconds, and 28 links consume 40.751 CPU seconds with 37.053s active wall.
+Peak individual-process RSS is 5,532,956 KiB. This is successful private evidence,
+not a hosted checkpoint or a consistently faster identical-source comparison.
+
+Claude golden transcript reads now use the existing absolute repository-path
+helper instead of embedding package-relative fixtures. Transcript bytes, hashes
+and public replay assertions remain unchanged. Session restart's workflow input
+also resolves through that helper. Both packages pass three native repetitions
+(37.731s and 10.947s), and repository lint is clean. Their cwd/embed exclusions
+can therefore be removed by ordinary source discovery without loosening any
+consolidation classifier. The next combined lane verifies those cases together.

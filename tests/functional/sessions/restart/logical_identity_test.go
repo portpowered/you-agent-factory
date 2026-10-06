@@ -441,7 +441,7 @@ func setupResumableTwoStepWorkflowFixture(t *testing.T, workflowName string) str
 		t.Fatalf("mkdir workflows: %v", err)
 	}
 	raw, err := os.ReadFile(
-		filepath.Join("..", "..", "..", "fixtures", "javascript_runtime", workflowName+".workflow.js"),
+		support.AgentFactoryPath(t, filepath.Join("tests", "fixtures", "javascript_runtime", workflowName+".workflow.js")),
 	)
 	if err != nil {
 		t.Fatalf("read workflow fixture %s: %v", workflowName, err)
