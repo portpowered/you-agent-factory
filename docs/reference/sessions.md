@@ -53,6 +53,30 @@ Human output also names these recordings. History listing does not modify them.
 Warnings appear in history and all scopes. A recording directory enumeration
 failure or an unreachable selected host still fails the request.
 
+## Read captured Worker Session transcripts
+
+After a Worker Session ends, read its transcript from the selected host:
+
+```bash
+you --server http://localhost:7437 --json worker-sessions read \
+  --worker-session-id <worker-session-id>
+```
+
+The transcript contains ordered public messages, reasoning summaries, and tool
+activity captured by Portos. Message snapshots replace their preceding deltas.
+Portos does not read provider rollout files for this command. Private reasoning
+and encrypted content are absent.
+
+Recorded associated sessions remain readable after a host restart. The existing
+`--provider`, `--kind`, and `--id` tuple selects an associated session within a
+Factory Session. Use `--session <factory-session-id>` to select that scope.
+
+An active session returns `WORKER_SESSION_TRANSCRIPT_ACTIVE`. Missing
+associations and incomplete captures return `WORKER_SESSION_TRANSCRIPT_UNAVAILABLE`.
+An unknown identity or a foreign Factory Session scope returns `NOT_FOUND`.
+Use `worker-sessions read --view logs --worker-session-id <worker-session-id>`
+to inspect a captured prefix and its recording health.
+
 ## Finite Worker Session event captures
 
 Use `worker-sessions stream --replay-only` when you need a redirect-safe

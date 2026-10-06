@@ -1753,7 +1753,7 @@ export interface components {
       attemptId: string;
       /** @description Terminal Worker Session lifecycle state at transcript read time. */
       state: string;
-      /** @description Ordered normalized transcript entries projected by Provider Sessions. */
+      /** @description Ordered normalized transcript entries projected from Portos-captured Worker records. */
       entries: components["schemas"]["ProviderSessionTranscriptEntry"][];
     };
     WorkerSessionObservation: {

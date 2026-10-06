@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -202,7 +201,10 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	session, metadata, ok := r.loadObservationState(req.WorkerSessionID, req.FactorySessionID)
 	if !ok {
 		r.logger.Info("worker session identity transcript read", "workerSessionID", publicWorkerID(req.WorkerSessionID), "outcome", "not_found")
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+		if r.logs == nil {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+		}
+		return r.logs.capturedTranscript(ctx, strings.TrimSpace(req.WorkerSessionID), req.FactorySessionID)
 	}
 	providerSession := providers.SessionRef{}
 	if session.ProviderSessionAssociation != nil {
@@ -225,39 +227,18 @@ func (r *registry) projectTranscript(
 		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "unavailable")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
 	}
-	if r.providerSessions == nil {
-		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "projection_unavailable")
+	if r.logs == nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
 	}
-
-	projected, projectErr := r.providerSessions.Project(providersessions.ProjectRequest{
-		Session: providerSession.Clone(),
-		Context: ctx,
-	})
-	if projectErr != nil {
-		if errors.Is(projectErr, context.Canceled) || errors.Is(projectErr, providersessions.ErrOperationCanceled) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
+	result, err := r.logs.capturedTranscript(ctx, publicWorkerID(session.ID), metadata.factorySessionID)
+	if err != nil {
+		if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			err = workersessions.ErrObservationTranscriptUnavailable
 		}
-		if transcriptSourceUnavailable(projectErr) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
-		}
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, projectErr)
+		return workersessions.ReadTranscriptResult{}, err
 	}
-
-	result := workersessions.ReadTranscriptResult{
-		WorkerSessionID: session.ID,
-		ProviderSession: providerSession.Clone(),
-		WorkIDs:         append([]string(nil), metadata.workIDs...),
-		AttemptID:       metadata.attemptID,
-		State:           session.State,
-		Entries:         transcriptEntries(projected.Detail.Transcript),
-	}
-	if session.ProviderSessionAssociation != nil {
-		result.TurnID = session.ProviderSessionAssociation.TurnID
-		result.AttemptID = session.ProviderSessionAssociation.AttemptID
-	}
-	if err := result.Validate(); err != nil {
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate Worker Session transcript: %w", err)
+	if result.ProviderSession != providerSession || result.AttemptID != session.ProviderSessionAssociation.AttemptID || result.State != session.State {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
 	}
 	r.logger.Info("worker session transcript read", "workerSessionID", result.WorkerSessionID, "outcome", "success", "result_count", len(result.Entries))
 	return result, nil
@@ -266,8 +247,8 @@ func (r *registry) projectTranscript(
 // ReadTranscript returns the final normalized transcript for one Worker
 // Session. The canonical Worker Session identity is preferred; the exact
 // Provider Session reference remains a compatibility lookup. The lifecycle
-// check happens before the provider projection so an active session has a
-// stable active outcome even when its provider source is not yet readable.
+// check happens before capture reads so an active session has a stable active
+// outcome even when its committed history is not yet complete.
 func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session transcript read rejected", "outcome", "invalid")
@@ -281,7 +262,13 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 	session, metadata, err := r.transcriptSession(req)
 	if err != nil {
 		r.logger.Info("worker session transcript read", "outcome", "not_found")
-		return workersessions.ReadTranscriptResult{}, err
+		if r.logs == nil {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+		if req.WorkerSessionID != "" {
+			return r.logs.capturedTranscript(ctx, req.WorkerSessionID, req.FactorySessionID)
+		}
+		return r.logs.transcriptByProvider(ctx, req)
 	}
 	providerSession := req.ProviderSession
 	if req.WorkerSessionID != "" && session.ProviderSessionAssociation != nil {

@@ -9378,7 +9378,7 @@ type WorkerSessionTranscriptResponse struct {
 	// AttemptId Stable attempt or dispatch identity.
 	AttemptId string `json:"attemptId"`
 
-	// Entries Ordered normalized transcript entries projected by Provider Sessions.
+	// Entries Ordered normalized transcript entries projected from Portos-captured Worker records.
 	Entries []ProviderSessionTranscriptEntry `json:"entries"`
 
 	// FactorySessionId Explicit Factory Session scope used for this transcript read.

@@ -62,6 +62,7 @@ func (r *interruptHostRunner) RunStreaming(ctx context.Context, req platformproc
 	if observer != nil {
 		end := bytes.IndexByte(r.output, '\n') + 1
 		observer(platformprocess.OutputStreamStdout, r.output[:end])
+		observer(platformprocess.OutputStreamStdout, []byte(`{"type":"item.completed","item":{"id":"captured-message","type":"agent_message","text":"captured public answer"}}`+"\n"))
 	}
 	r.started <- req
 	<-ctx.Done()
@@ -117,11 +118,8 @@ func runRealHostInterrupt(t *testing.T, process support.Process, mode string) {
 	// transports rather than being classified as malformed requests.
 	assertToolError(t, callAction(t, ctx, session, "CONTROL", args), "worker_session.conflict", false)
 	postHostJSON(t, ctx, host.URL()+"/worker-sessions/source/interrupt", interruptModePayload("changed immutable tuple", mode), http.StatusConflict)
-	// Live transcript compatibility still uses native readers until T8.
-	// Explicit-mode cells deny those readers and prove captured replay instead.
-	if mode == "" {
-		assertTerminalTranscriptParity(t, ctx, session, host)
-	}
+	// All modes read the committed public message with no native roots.
+	assertTerminalTranscriptParity(t, ctx, session, host)
 	assertTerminalReplayParity(t, ctx, session, host, "source")
 	listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"].(map[string]any)
 	workers := listed["sessions"].([]any)
@@ -181,6 +179,8 @@ func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host
 		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 		assertFactoryCLIParity(t, reopened, id, selected)
 		assertArchivedHostTiming(t, reopened, id)
+		transcript := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "transcript"})["result"].(map[string]any)["transcript"]
+		assertTranscriptEqual(t, transcript, getHost(t, reopened.URL()+"/worker-sessions/"+id+"/transcript"))
 	}
 	assertProviderCallCount(t, runner, 2)
 	if native.calls.Load() != 0 {
@@ -251,7 +251,7 @@ func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.
 func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter, denyNative ...bool) (*support.FunctionalAPIServer, *interruptHostRunner, string) {
 	t.Helper()
 	home := t.TempDir()
-	output := installNativeTranscript(t, home)
+	output := capturedProviderFixtureOutput(t)
 	runner := &interruptHostRunner{output: output, started: make(chan platformprocess.CommandRequest, 3), sourceStopped: make(chan struct{})}
 	dir := support.ScaffoldSingleStepFactory(t, "mcp-interrupt-host")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
@@ -359,20 +359,9 @@ func (s *failingSuccessorStore) PersistWorkerRecord(ctx context.Context, record 
 	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-func installNativeTranscript(t *testing.T, home string) []byte {
+func capturedProviderFixtureOutput(t *testing.T) []byte {
 	t.Helper()
 	fixture := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-	rollout, err := os.ReadFile(filepath.Join(fixture, "rollout.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join(home, ".codex", "sessions", "2026", "07", "27")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "rollout-"+interruptProviderID+".jsonl"), rollout, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	output, err := os.ReadFile(filepath.Join(fixture, "stdout.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -457,7 +446,7 @@ func assertTerminalTranscriptParity(t *testing.T, ctx context.Context, session *
 	result := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": "source", "view": "transcript"})["result"].(map[string]any)
 	assertJSONEqual(t, result["session"], getHost(t, host.URL()+"/worker-sessions/source"))
 	transcript := result["transcript"].(map[string]any)
-	if transcript["workerSessionId"] != "source" || len(transcript["entries"].([]any)) == 0 {
+	if transcript["workerSessionId"] != "source" || len(transcript["entries"].([]any)) != 1 || transcript["entries"].([]any)[0].(map[string]any)["text"] != "captured public answer" {
 		t.Fatalf("terminal transcript omitted correlated entries: %v", transcript)
 	}
 	assertTranscriptEqual(t, transcript, getHost(t, host.URL()+"/worker-sessions/source/transcript"))
