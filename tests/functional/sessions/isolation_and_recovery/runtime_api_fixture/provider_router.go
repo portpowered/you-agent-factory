@@ -10,6 +10,7 @@ import (
 )
 
 type runtimeAPIProviderRouter struct {
+	testutil.NativeProvider
 	mu     sync.RWMutex
 	routes map[string]runtimeAPIProviderRoute
 	models map[string]string
@@ -138,11 +139,3 @@ func (router *runtimeAPIProviderRouter) ContinueReference(ctx context.Context, r
 }
 
 var _ providers.Service = (*runtimeAPIProviderRouter)(nil)
-
-func (router *runtimeAPIProviderRouter) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
-	provider := router.providerFor(request)
-	if provider == nil {
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: "no shared runtime API provider route for factory directory"}
-	}
-	return provider.ValidateExecution(ctx, request)
-}

@@ -12,6 +12,9 @@ import (
 // callback receives the public Providers request directly; it does not adapt
 // through the legacy Workers inference vocabulary.
 type NativeProvider struct {
+	// Preflight is not implemented by this execution-only double. Tests that
+	// exercise admission must supply a Providers service with validation policy.
+	providers.Service
 	ExecuteFunc  func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error)
 	ContinueFunc func(context.Context, providers.ContinueRequest) (providers.ContinueResult, error)
 }
@@ -238,10 +241,3 @@ func authoritativeNativeResult(result providers.ExecuteResult) providers.Execute
 
 var _ providers.Service = (*NativeProvider)(nil)
 var _ providers.Service = (*NativeMockProvider)(nil)
-
-func (provider NativeProvider) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return request.Validate()
-}

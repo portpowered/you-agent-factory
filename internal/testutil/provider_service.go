@@ -13,6 +13,7 @@ import (
 // Providers-root contract without reintroducing a production Workers provider
 // port. It is intentionally test-only and translates only detached values.
 type ProviderServiceAdapter struct {
+	NativeProvider
 	InferFunc func(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
 }
 
@@ -325,11 +326,4 @@ func runnerCapabilities(values []string) []workerexecution.RunnerOptionalCapabil
 		capabilities[index] = workerexecution.RunnerOptionalCapability(value)
 	}
 	return capabilities
-}
-
-func (adapter ProviderServiceAdapter) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return request.Validate()
 }

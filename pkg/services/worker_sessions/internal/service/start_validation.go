@@ -22,7 +22,7 @@ func (r *registry) lookupStart(req workersessions.StartRequest) (*startReplay, e
 	return replay, nil
 }
 
-func validateStartExecution(ctx context.Context, executor workers.Service, req workersessions.StartRequest) error {
+func (r *registry) validateStartExecution(ctx context.Context, executor workers.Service, req workersessions.StartRequest) error {
 	request, err := executeRequestFromSessionDispatch(req.Execution)
 	if err == nil {
 		err = executor.ValidateExecution(ctx, request)

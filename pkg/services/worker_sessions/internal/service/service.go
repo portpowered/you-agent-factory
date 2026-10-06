@@ -297,7 +297,7 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		}
 		return awaitStartReplay(callerCtx, replay)
 	}
-	if err := validateStartExecution(callerCtx, executor, req); err != nil {
+	if err := r.validateStartExecution(callerCtx, executor, req); err != nil {
 		// A concurrent validated caller may have won while preflight ran.
 		if replay, replayErr := r.lookupStart(req); replay != nil || replayErr != nil {
 			if replayErr != nil {
