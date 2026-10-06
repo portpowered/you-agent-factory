@@ -11,7 +11,7 @@ func TestFunctionalMonolithOriginalEvents(t *testing.T) {
 	groups := map[string]string{"TestPackage0001": "original/package"}
 	for _, action := range []string{"run", "pass", "fail", "skip", "output"} {
 		raw, _ := json.Marshal(map[string]any{"Package": functionalMonolithPackage, "Test": "TestFunctionalPackages/TestPackage0001/TestCustomer/nested", "Action": action, "Time": "2026-10-05T00:00:00Z", "Output": "TestFunctionalPackages/TestPackage0001/TestCustomer/nested\n"})
-		line, err := normalizeFunctionalMonolithEvent(raw, groups)
+		line, err := normalizeFunctionalMonolithEvent(raw, groups, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -27,21 +27,21 @@ func TestFunctionalMonolithOriginalEvents(t *testing.T) {
 
 func TestFunctionalMonolithBoundaryEvents(t *testing.T) {
 	groups := map[string]string{"TestPackage0001": "original/package"}
-	if _, err := normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Test":"TestFunctionalPackages/Unknown/TestCustomer","Action":"pass"}`), groups); err == nil {
+	if _, err := normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Test":"TestFunctionalPackages/Unknown/TestCustomer","Action":"pass"}`), groups, nil); err == nil {
 		t.Fatal("unknown group accepted")
 	}
 	native := []byte(`{"Package":"native/package","Test":"TestCustomer","Action":"fail"}`)
-	line, err := normalizeFunctionalMonolithEvent(native, groups)
+	line, err := normalizeFunctionalMonolithEvent(native, groups, nil)
 	if err != nil || !bytes.Equal(line, native) {
 		t.Fatalf("native failure changed: %s %v", line, err)
 	}
 	for _, action := range []string{"start", "pass", "output"} {
-		line, err := normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Action":"`+action+`"}`), groups)
+		line, err := normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Action":"`+action+`"}`), groups, nil)
 		if err != nil || len(line) != 0 {
 			t.Fatalf("coordinator bookkeeping became customer evidence: %s %v", line, err)
 		}
 	}
-	line, err = normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Action":"fail"}`), groups)
+	line, err = normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Action":"fail"}`), groups, nil)
 	if err != nil || len(line) == 0 {
 		t.Fatalf("coordinator failure hidden: %s %v", line, err)
 	}
@@ -122,5 +122,34 @@ func TestFunctionalMonolithRawCaptureRequiresEveryOriginalTerminal(t *testing.T)
 		if _, found := capture.packages[functionalMonolithPackage]; found {
 			t.Fatal("coordinator registered as a customer package")
 		}
+	}
+}
+
+func TestFunctionalMonolithPackageWallIncludesParallelChildren(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output, groups: map[string]string{"Group": "original/package"}}
+	for _, event := range []string{
+		`{"Time":"2026-10-06T00:00:00Z","Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/Group","Action":"run"}`,
+		`{"Time":"2026-10-06T00:00:01Z","Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/Group","Action":"pause"}`,
+		`{"Time":"2026-10-06T00:00:02Z","Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/Group","Action":"cont"}`,
+		`{"Time":"2026-10-06T00:00:10Z","Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/Group","Action":"pass","Elapsed":0}`,
+	} {
+		if _, err := writer.Write([]byte(event + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("normalized events = %s", output.String())
+	}
+	var terminal struct {
+		Package, Action string
+		Elapsed         float64
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if terminal.Package != "original/package" || terminal.Action != "pass" || terminal.Elapsed != 10 {
+		t.Fatalf("package wall = %+v, want complete ten-second window despite zero parent Elapsed", terminal)
 	}
 }

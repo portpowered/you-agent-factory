@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 // The native Go process still owns execution and its exit status. This writer
@@ -17,16 +18,20 @@ type functionalMonolithEventWriter struct {
 	groups  map[string]string
 	pending []byte
 	lines   int
+	started map[string]time.Time
 }
 
 func (writer *functionalMonolithEventWriter) Write(data []byte) (int, error) {
+	if writer.started == nil {
+		writer.started = make(map[string]time.Time)
+	}
 	writer.pending = append(writer.pending, data...)
 	for {
 		index := bytes.IndexByte(writer.pending, '\n')
 		if index < 0 {
 			return len(data), nil
 		}
-		line, err := normalizeFunctionalMonolithEvent(writer.pending[:index], writer.groups)
+		line, err := normalizeFunctionalMonolithEvent(writer.pending[:index], writer.groups, writer.started)
 		if err != nil {
 			return 0, err
 		}
@@ -44,7 +49,7 @@ func (writer *functionalMonolithEventWriter) flush() error {
 	if len(writer.pending) == 0 {
 		return nil
 	}
-	line, err := normalizeFunctionalMonolithEvent(writer.pending, writer.groups)
+	line, err := normalizeFunctionalMonolithEvent(writer.pending, writer.groups, writer.started)
 	if err != nil {
 		return err
 	}
@@ -79,7 +84,7 @@ func runFunctionalMonolithCommand(invocation commandInvocation) (string, string,
 	return normalized.String(), stderr, err
 }
 
-func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string) ([]byte, error) {
+func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string, started map[string]time.Time) ([]byte, error) {
 	var event map[string]json.RawMessage
 	if err := json.Unmarshal(line, &event); err != nil {
 		return line, nil
@@ -108,6 +113,7 @@ func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string) ([]
 	event["Package"], _ = json.Marshal(originalPackage)
 	if !nested {
 		delete(event, "Test")
+		annotateFunctionalPackageWallTime(event, action, group, started)
 		switch action {
 		case "run":
 			event["Action"] = json.RawMessage(`"start"`)
@@ -121,4 +127,23 @@ func normalizeFunctionalMonolithEvent(line []byte, groups map[string]string) ([]
 		event["Output"], _ = json.Marshal(strings.ReplaceAll(output, "TestFunctionalPackages/"+group+"/", ""))
 	}
 	return json.Marshal(event)
+}
+
+func annotateFunctionalPackageWallTime(event map[string]json.RawMessage, action, group string, started map[string]time.Time) {
+	// Go excludes parallel children from the parent's Elapsed. Package
+	// wall time must include those children and their scheduling waits.
+	var timestamp string
+	_ = json.Unmarshal(event["Time"], &timestamp)
+	at, timeErr := time.Parse(time.RFC3339Nano, timestamp)
+	if timeErr == nil && started != nil {
+		if action == "run" {
+			started[group] = at
+		}
+		if action == "pass" || action == "fail" || action == "skip" {
+			if began, found := started[group]; found && !at.Before(began) {
+				event["Elapsed"], _ = json.Marshal(at.Sub(began).Seconds())
+			}
+			delete(started, group)
+		}
+	}
 }
