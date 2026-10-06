@@ -5164,3 +5164,49 @@ whole-lane improvement over the preceding failed changed-base rebuild.
 Source is rebased d9120b42f1 plus the two MCP corrections; the private checkout's
 raw index Git head is stale and is not source identity for this run. Fresh
 hosted complete-job timing remains required before the two-minute checkpoint.
+
+
+### October 6: controlled bounded compiler-cache comparison
+
+A fixed snapshot of the completed candidate's Go cache is filtered through the
+existing compiler-only classifier and one-hour retention window. At 1 GiB,
+16418 files / 1073740699 bytes remain and 1051 eligible files are omitted.
+At 2 GiB, all 17469 files / 1690670095 bytes remain. Neither snapshot includes
+cached test executions or test binaries. This local snapshot differs from the
+hosted capture above; do not equate its omitted-file count with hosted CI.
+
+The original build-only probe cannot write two distinct acp.test binaries into
+one output directory. Its failed baseline is retained in cache-cap-paired/ and
+excluded. The corrected probe compiles one ACP package separately, identically
+for both candidates. It runs the coverage capture's recorded package/overlay/
+coverpkg/build flags with go test -c, separate binary output and no execution,
+four pinned CPUs, fresh snapshot copies, in 1g/2g/2g/1g order. All twelve build
+commands pass. No functional test is removed or executed by this comparison.
+
+Two 1 GiB runs use 176.631559 CPU-seconds / 52.590825s wall in total; two 2 GiB
+runs use 33.596564 / 12.614955: 81.0% less build CPU and 76.0% less build wall.
+Each 1 GiB run invokes 466 compiler commands, versus 13 with 2 GiB. Both sizes
+still link twelve binaries per run. The build comparison excludes snapshot
+capture/copy and network transfer. Local copy times vary with disk warming;
+no hosted transfer or complete-job improvement is claimed. Evidence:
+cache-cap-paired-v2/. The next hosted run must evaluate the extra cache transfer
+against saved compilation.
+
+The workflow's compiler archive bound increases to 2 GiB. The v2 key creates
+new larger captures, with v1 prefix fallback so existing useful archives still
+seed the first trial. Go content-based invalidation, compiler-only filtering,
+recent-use retention, dependency fallback and test execution remain unchanged.
+The existing workflow contract tests, four compiler-cache tests (including real
+coverage reuse), and actionlint pass. The corrected full functional lane above
+precedes this workflow-only change; hosted verification is required.
+
+Hosted run 37503527863 at 0a2bea7690 passes Functional Coverage in 288s complete
+/ 211.006s capture, with all 67 packages / 765 results (763 pass, two skip),
+a complete empty raw-failure index and no retry ledger. Prefix restore uses
+412189ffe9 and still executes 530 compiler commands and 12 links. Capture
+keeps 17331 files / 1073740288 bytes and omits 839 eligible artifacts. Evidence:
+mcp-live-hosted/ and mcp-live-hosted-job.log. Backend Lint and two packaged
+Factory jobs remain active at preparation time; do not call this workflow
+fully green. This changed-base run is not two-minute checkpoint evidence.
+The larger-cache candidate requires fresh hosted verification; local build-only
+savings exclude hosted transfer cost and do not establish the merge checkpoint.
