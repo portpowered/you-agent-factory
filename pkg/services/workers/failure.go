@@ -167,7 +167,11 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 }
 
 func normalizeProviderSessionError(err error) *ProviderError {
-	var sessionErr providerSessionFailure
+	// Structural matching keeps classification independent of inspection ownership.
+	var sessionErr interface {
+		error
+		ProviderSessionFailureKind() string
+	}
 	if !errors.As(err, &sessionErr) {
 		return nil
 	}
@@ -197,7 +201,9 @@ func normalizeProviderSessionError(err error) *ProviderError {
 	provider := ""
 	sessionID := ""
 	kind := "session_id"
-	var identity providerSessionFailureIdentity
+	var identity interface {
+		ProviderSessionFailureIdentity() (provider, kind, sessionID string)
+	}
 	if errors.As(err, &identity) {
 		provider, kind, sessionID = identity.ProviderSessionFailureIdentity()
 		provider = strings.TrimSpace(provider)
@@ -237,19 +243,12 @@ func normalizeProviderSessionError(err error) *ProviderError {
 	}
 }
 
-// These structural contracts avoid a dependency on the inspection service.
-type providerSessionFailure interface {
-	error
-	ProviderSessionFailureKind() string
-}
-
-type providerSessionFailureIdentity interface {
-	ProviderSessionFailureIdentity() (provider, kind, sessionID string)
-}
-
 // Search the entire cause tree so joined failures keep the classifier's priority.
 func hasProviderSessionFailureKind(err error, kind string) bool {
-	var failure providerSessionFailure
+	var failure interface {
+		error
+		ProviderSessionFailureKind() string
+	}
 	if errors.As(err, &failure) && failure.ProviderSessionFailureKind() == kind {
 		return true
 	}

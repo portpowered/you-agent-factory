@@ -5,16 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -86,15 +83,6 @@ func (writer *copiedLedgerWorkerRecordingWriter) recordingIdentity() string {
 	writer.mu.RLock()
 	defer writer.mu.RUnlock()
 	return writer.identity
-}
-
-func newCopiedLedgerWorkerRecordingWriter(directory string) (*copiedLedgerWorkerRecordingWriter, error) {
-	storage := platformreplay.NewLocal(runtime.GOOS)
-	store, err := recordingswire.NewWorkerRecordingFileWriter(storage, storage, storage, platformclock.Real{}, directory, uuid.NewString())
-	if err != nil {
-		return nil, err
-	}
-	return &copiedLedgerWorkerRecordingWriter{WorkerRecordingStore: store}, nil
 }
 
 type copiedLedgerReplayRunner struct {
@@ -186,7 +174,7 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 		filepath.Join(fixture.homeDir, ".codex", "sessions"),
 		filepath.Join(replayHome, ".codex", "sessions"),
 	)
-	copiedWorkerRecordingPath := filepath.Join(copyDirectory, "worker-recordings")
+	copiedWorkerRecordingPath := filepath.Join(copyDirectory, ".you-agent-factory", "worker-recordings")
 	copyCopiedLedgerDirectory(t, fixture.workerRecordingPath, copiedWorkerRecordingPath)
 	resumedServer := startCopiedLedgerResumeProcess(t, copiedFactoryDir, fixture.factoryID, copiedRecording, replayHome, copiedWorkerRecordingPath, fixture.runtimeInstanceID)
 	t.Cleanup(func() { resumedServer.Stop(t) })
@@ -257,11 +245,9 @@ func startCopiedLedgerReplayFixture(t *testing.T) copiedLedgerReplayFixture {
 	factoryID := uuid.NewString()
 	runtimeInstanceID := "copied-ledger-runtime-" + uuid.NewString()
 	recordPath := filepath.Join(t.TempDir(), "worker-session-copied-ledger.recording.json")
-	workerRecordingPath := filepath.Join(t.TempDir(), "worker-recordings")
-	workerRecordingWriter, err := newCopiedLedgerWorkerRecordingWriter(workerRecordingPath)
-	if err != nil {
-		t.Fatalf("create copied-ledger Worker recording edge: %v", err)
-	}
+	captureRoot := t.TempDir()
+	workerRecordingPath := filepath.Join(captureRoot, ".you-agent-factory", "worker-recordings")
+	workerRecordingWriter := &copiedLedgerWorkerRecordingWriter{}
 	env := remoteFunctionalEnvironment(homeDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
@@ -273,6 +259,10 @@ func startCopiedLedgerReplayFixture(t *testing.T) copiedLedgerReplayFixture {
 			ProviderSessionResolveHomeDirectory:      func() (string, error) { return homeDir, nil },
 			FactorySessionRuntimeInstanceIDGenerator: func() string { return runtimeInstanceID },
 			WorkerRecordingWriter:                    workerRecordingWriter,
+			FactorySessionsWorkingDirectory:          platformfilesystem.Local{WorkingDirectory: captureRoot},
+			WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+				workerRecordingWriter.WorkerRecordingStore = store
+			},
 		},
 	})
 	return copiedLedgerReplayFixture{
@@ -741,10 +731,7 @@ func startCopiedLedgerResumeProcess(
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	successorPath := filepath.Join(filepath.Dir(recordingPath), "worker-session-resume-successor.json")
-	workerRecordingWriter, err := newCopiedLedgerWorkerRecordingWriter(workerRecordingPath)
-	if err != nil {
-		t.Fatalf("create copied-ledger resume Worker recording edge: %v", err)
-	}
+	workerRecordingWriter := &copiedLedgerWorkerRecordingWriter{}
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
@@ -755,6 +742,12 @@ func startCopiedLedgerResumeProcess(
 			FactorySessionRuntimeInstanceIDGenerator: func() string { return runtimeInstanceID },
 			ProviderSessionResolveHomeDirectory:      func() (string, error) { return homeDir, nil },
 			WorkerRecordingWriter:                    workerRecordingWriter,
+			FactorySessionsWorkingDirectory: platformfilesystem.Local{
+				WorkingDirectory: filepath.Dir(filepath.Dir(workerRecordingPath)),
+			},
+			WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+				workerRecordingWriter.WorkerRecordingStore = store
+			},
 		},
 	})
 }

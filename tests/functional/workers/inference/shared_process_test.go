@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -107,13 +108,7 @@ func (group *inferenceProcessGroup) setup() {
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = newInferenceProviderOverride()
-	store, err := newInferenceRecordingStore(filepath.Join(group.rootDir, "worker-capture"))
-	if err != nil {
-		group.setupErr = err
-		return
-	}
 	group.workerRecordings = &inferenceWorkerRecordingRouter{
-		fallback:    store,
 		bySession:   make(map[string]recordings.WorkerRecordingWriter),
 		byWorker:    make(map[string]inferenceWorkerRecordingRoute),
 		byRecording: make(map[string]inferenceWorkerRecordingRoute),
@@ -150,7 +145,11 @@ func (group *inferenceProcessGroup) setup() {
 		ScriptCommandRunner:                 group.scripts,
 		ProviderOverride:                    group.override,
 		WorkerRecordingWriter:               group.workerRecordings,
-		ProviderRegistrations:               registrations,
+		FactorySessionsWorkingDirectory:     platformfilesystem.Local{WorkingDirectory: group.rootDir},
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+			group.workerRecordings.fallback = store
+		},
+		ProviderRegistrations: registrations,
 	})
 	if err != nil {
 		group.setupErr = err

@@ -255,7 +255,10 @@ func TestProviderSessionFailureContractMappings(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.kind, func(t *testing.T) {
 			t.Parallel()
-			var contract providerSessionFailure
+			var contract interface {
+				error
+				ProviderSessionFailureKind() string
+			}
 			if !errors.As(tc.err, &contract) || contract.ProviderSessionFailureKind() != tc.kind {
 				t.Fatalf("failure kind = %#v", contract)
 			}

@@ -464,14 +464,14 @@ or use a built-in preset.
 ## Recorded Codex session details
 
 The dashboard and `GET /provider-sessions/detail` read Codex history captured by
-Portos. Select `provider=codex`, `kind=session_id`, and the recorded provider
+`you`. Select `provider=codex`, `kind=session_id`, and the recorded provider
 session ID. Details remain available after execution and a host restart without
 access to Codex rollout files. Cursor details continue to use Cursor storage.
 
 Only recorded associations in the selected profile resolve. Unknown IDs,
 native-only sessions, and sessions recorded in another profile return
 `404 NOT_FOUND`. Multiple captured associations with the same provider tuple
-return `500 INTERNAL_ERROR`; Portos does not choose or merge their histories.
+return `500 INTERNAL_ERROR`; `you` does not choose or merge their histories.
 Unreadable or incomplete captured details return a safe error. Use Worker
 Session logs to inspect the captured prefix and capture health.
 

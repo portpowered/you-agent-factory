@@ -4,12 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -17,7 +13,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -617,15 +612,20 @@ func keyedSupervisionFactoryConfig() map[string]any {
 func identityServer(t *testing.T) (*identityFixture, *identityCharacterizationRunner, *identityRecordingWriter) {
 	t.Helper()
 	runner := &identityCharacterizationRunner{admitted: make(chan struct{}), release: make(chan struct{})}
-	capture := newIdentityRecordingWriter(t)
+	capture := &identityRecordingWriter{}
 	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
 	server := &identityFixture{env: env, dir: dir}
 	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Env:   env,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: capture},
+		Env: env,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner, WorkerRecordingWriter: capture,
+			WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+				capture.WorkerRecordingStore = store
+			},
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	t.Cleanup(runner.unblock)
@@ -750,16 +750,6 @@ type identityRecordingWriter struct {
 	recordings.WorkerRecordingStore
 	mu      sync.Mutex
 	records []recordings.WorkerRecordingRecord
-}
-
-func newIdentityRecordingWriter(t *testing.T) *identityRecordingWriter {
-	t.Helper()
-	storage := platformreplay.NewLocal(runtime.GOOS)
-	store, err := recordingswire.NewWorkerRecordingFileWriter(storage, storage, storage, platformclock.Real{}, t.TempDir(), uuid.NewString())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &identityRecordingWriter{WorkerRecordingStore: store}
 }
 
 func (w *identityRecordingWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {

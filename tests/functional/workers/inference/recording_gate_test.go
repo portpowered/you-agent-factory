@@ -5,12 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -391,16 +387,8 @@ func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004Recordin
 // wrap acceptance at the external recording edge; no parallel ledger is seeded.
 func newWSRFT004RecordingStore(t *testing.T) recordings.WorkerRecordingStore {
 	t.Helper()
-	store, err := newInferenceRecordingStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return store
-}
-
-func newInferenceRecordingStore(root string) (recordings.WorkerRecordingStore, error) {
-	storage := platformreplay.NewLocal(runtime.GOOS)
-	return recordingswire.NewWorkerRecordingFileWriter(storage, storage, storage, platformclock.Real{}, root, uuid.NewString())
+	sharedInferenceGroup.ensure(t)
+	return sharedInferenceGroup.workerRecordings.fallback.(recordings.WorkerRecordingStore)
 }
 
 func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(

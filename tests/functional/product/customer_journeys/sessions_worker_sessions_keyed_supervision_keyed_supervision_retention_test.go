@@ -145,14 +145,19 @@ func (r *keyedRetentionRunner) Run(ctx context.Context, req platformprocess.Comm
 
 func keyedRetentionServer(t *testing.T, runner *keyedRetentionRunner) (*identityFixture, *identityRecordingWriter) {
 	t.Helper()
-	capture := newIdentityRecordingWriter(t)
+	capture := &identityRecordingWriter{}
 	dir := support.ScaffoldFactory(t, keyedSupervisionFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
 	server := &identityFixture{env: env, dir: dir}
 	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Env: env,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, WorkerRecordingWriter: capture},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner, WorkerRecordingWriter: capture,
+			WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
+				capture.WorkerRecordingStore = store
+			},
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	for _, gate := range runner.gates {
