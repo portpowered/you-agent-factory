@@ -167,6 +167,8 @@ func runRealHostForceControls(t *testing.T, process support.Process) {
 func assertFactoryForceControl(t *testing.T, host *support.FunctionalAPIServer, dir string, runner *forceHostRunner) completedForceControl {
 	t.Helper()
 	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(host.URL(), opened.Session.Id))
+	defer stream.Close()
 	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "hold Factory force worker"})
 	var done <-chan struct{}
 	select {
@@ -194,10 +196,108 @@ func assertFactoryForceControl(t *testing.T, host *support.FunctionalAPIServer, 
 	waitControlSignal(t, done)
 	assertJSONEqual(t, result, executeForceCLI(t, host, id, attempt))
 	assertForceObservation(t, host, id)
+	assertFactoryForceEvents(t, host.URL(), opened.Session.Id, id, stream)
 	if runner.signals.Load() != 4 {
 		t.Fatalf("Factory force/replay signaled %d times, want 4 total", runner.signals.Load())
 	}
 	return completedForceControl{id: id, attempt: attempt, result: result}
+}
+
+// The live response is the synchronization boundary for canonical completion.
+// Read retained history only after that event, then reconnect from its request
+// to prove clients recover the same cancellation without another dispatch.
+func assertFactoryForceEvents(t *testing.T, baseURL, sessionID, dispatchID string, stream *support.FactoryEventStream) {
+	t.Helper()
+	var request, response factoryapi.FactoryEvent
+	for response.Id == "" {
+		event := stream.NextEventContext(t.Context())
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			if request.Id != "" {
+				t.Fatal("force admitted another request for the exact dispatch")
+			}
+			request = event
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			response = event
+		}
+	}
+	if request.Id == "" || support.ReconnectSequenceForFactoryEvent(request) >= support.ReconnectSequenceForFactoryEvent(response) {
+		t.Fatal("force response did not follow its canonical dispatch request")
+	}
+	assertCanceledForcePayload(t, response)
+	assertForceRestoredInput(t, request, response)
+	retained := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	sequence := support.ReconnectSequenceForFactoryEvent(request)
+	replayed := support.GetFactoryEventsAfterForSessionAt(t, baseURL, sessionID, support.FactoryEventReadCursor{
+		AfterEventID: request.Id, AfterSequence: &sequence,
+	})
+	assertForceEventHistory(t, retained, dispatchID, response, 1)
+	assertForceEventHistory(t, replayed, dispatchID, response, 0)
+}
+
+func assertCanceledForcePayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Outcome != factoryapi.WorkOutcomeCanceled || payload.Cancellation == nil || payload.Cancellation.Reason != factoryapi.DispatchCancellationReasonCANCELED {
+		t.Fatalf("force canonical response = %#v, want explicit cancellation", payload)
+	}
+	if payload.Output != nil && *payload.Output != "" || payload.StructuredResult != nil ||
+		payload.Feedback != nil && *payload.Feedback != "" ||
+		payload.SelectedClassificationLabel != nil && *payload.SelectedClassificationLabel != "" || payload.FailureDetail != nil || payload.ProviderFailure != nil {
+		t.Fatalf("force cancellation retained routing or failure authority: %#v", payload)
+	}
+}
+
+func assertForceRestoredInput(t *testing.T, request, response factoryapi.FactoryEvent) {
+	t.Helper()
+	input, err := request.Payload.AsDispatchRequestEventPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := response.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Factory cancellation returns the original Work to its input state. It
+	// must not replace that Work with a provider's partial output or new IDs.
+	if len(input.Inputs) != 1 || output.OutputWork == nil || len(*output.OutputWork) != 1 {
+		t.Fatalf("force did not restore its one consumed input: input=%#v output=%#v", input, output)
+	}
+	restored := (*output.OutputWork)[0]
+	if restored.WorkId == nil || *restored.WorkId != input.Inputs[0].WorkId || restored.FailureDetail != nil || restored.Content == nil || len(*restored.Content) != 1 {
+		t.Fatalf("force changed restored Work identity/content: %#v", restored)
+	}
+	text, err := (*restored.Content)[0].AsWorkTextContentPart()
+	if err != nil || text.Text != "hold Factory force worker" {
+		t.Fatalf("force changed restored Work text: %#v, %v", text, err)
+	}
+}
+
+func assertForceEventHistory(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, response factoryapi.FactoryEvent, wantRequests int) {
+	t.Helper()
+	requests, responses := 0, 0
+	for _, event := range events {
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			requests++
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			responses++
+			assertJSONEqual(t, response, event)
+			assertCanceledForcePayload(t, event)
+		}
+	}
+	if requests != wantRequests || responses != 1 {
+		t.Fatalf("force history requests=%d responses=%d, want %d/1", requests, responses, wantRequests)
+	}
 }
 
 type completedForceControl struct {

@@ -295,6 +295,11 @@ func assertJSONEqual(t *testing.T, actual, expected any) {
 	left, _ := json.Marshal(actual)
 	right, _ := json.Marshal(expected)
 	var normalized any
+	if err := json.Unmarshal(left, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	left, _ = json.Marshal(normalized)
+	normalized = nil
 	if err := json.Unmarshal(right, &normalized); err != nil {
 		t.Fatal(err)
 	}
