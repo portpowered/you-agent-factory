@@ -33,7 +33,8 @@ const interruptJSON = `{"accepted":true,"phase":"SUCCESSOR_ADMISSION","requestId
 
 func TestWorkerSessionMCPParity(t *testing.T) {
 	t.Run("parity", runSelectedHostScenarios)
-	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control")
+	functionalevidence.Covers(t, "mcp/mcp.tool.you.worker_session.list", "mcp/mcp.tool.you.worker_session.read", "mcp/mcp.tool.you.worker_session.control",
+		"cli/you.worker-sessions.terminate", "rest/terminateWorkerSession")
 }
 
 func runSelectedHostScenarios(t *testing.T) {
@@ -41,6 +42,10 @@ func runSelectedHostScenarios(t *testing.T) {
 	t.Run("real host exact target controls", func(t *testing.T) {
 		t.Parallel()
 		runRealHostControls(t, process)
+	})
+	t.Run("real host force target controls", func(t *testing.T) {
+		t.Parallel()
+		runRealHostForceControls(t, process)
 	})
 	t.Run("real host history snapshots", func(t *testing.T) {
 		t.Parallel()
