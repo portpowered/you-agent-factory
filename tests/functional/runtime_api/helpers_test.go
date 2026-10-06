@@ -356,7 +356,7 @@ func stringPointerValue[T ~string](value *T) string {
 // customer scenarios finish. Native go test retains the same TestMain cleanup.
 func FunctionalMonolithCleanup(t *testing.T) {
 	t.Helper()
-	if err := runtimeapifixture.CloseSharedFixture(); err != nil {
+	if err := CloseSharedFixture(); err != nil {
 		t.Errorf("close package fixture: %v", err)
 	}
 }
