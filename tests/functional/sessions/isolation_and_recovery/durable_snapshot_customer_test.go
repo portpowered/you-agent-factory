@@ -29,6 +29,7 @@ func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	t.Run("saved process feedback reaches the resumed review provider", testDurableCustomerFeedbackRecovery)
+	t.Run("consumed branch stays retired while its sibling resumes", testDurableCustomerBranchRecovery)
 	t.Run("ordinary writer failure preserves the last durable result", func(t *testing.T) {
 		t.Parallel()
 		dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
@@ -177,6 +178,88 @@ func startDurableFeedbackServer(t *testing.T, dir string, runner *durableFeedbac
 	})
 }
 
+// Public routing creates a task continuation and an audit Work with distinct
+// identities. Finishing the checking path consumes its token while review
+// remains blocked at the provider edge. Same-WorkID legacy branches have
+// separate private retention coverage; this scenario does not claim that edge.
+// Public Work locations and provider calls distinguish retirement from loss
+// of the still-reachable sibling after reconstruction.
+func testDurableCustomerBranchRecovery(t *testing.T) {
+	t.Parallel()
+	config := durableBranchFactoryConfig()
+	dir := support.ScaffoldFactory(t, config)
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	support.WriteWorkstationConfig(t, dir, "review", "---\ntype: MODEL_WORKSTATION\n---\nFEEDBACK_START{{ (index .Inputs 0).PreviousOutput }}FEEDBACK_END\n")
+	support.WriteWorkstationConfig(t, dir, "retire", "---\ntype: MODEL_WORKSTATION\n---\nRETIRE_BRANCH\n")
+	feedback := strings.Repeat("b", 50<<10)
+	workPath, recordPath := filepath.Join(dir, "work.json"), filepath.Join(dir, "source.jsonl")
+	payload := `{"requestId":"branch","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"branch-work","name":"branch","workTypeName":"task","state":"init","content":[{"type":"text","text":"fork this Work"}]}]}`
+	if err := os.WriteFile(workPath, []byte(payload), 0600); err != nil {
+		t.Fatal(err)
+	}
+	initial := &durableFeedbackRunner{firstOutput: feedback, requests: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
+	first := startDurableFeedbackServer(t, dir, initial, "--work", workPath, "--record", recordPath)
+	assertDurableReviewFeedback(t, initial, feedback)
+	// These reads observe asynchronous public projections; waiting for the
+	// terminal checking branch ensures its completion is recorded before stop.
+	support.WaitForStatus(t, first.URL(), 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 1 })
+	assertDurableBranchLocations(t, first.URL(), "task:processing")
+	first.Stop(t)
+	first.Close(t)
+	prefix := mustReadSeededReplayArtifact(t, recordPath)
+	resumed := &durableFeedbackRunner{requests: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
+	second := startDurableFeedbackServer(t, dir, resumed, "--resume", recordPath, "--record", filepath.Join(dir, "successor.jsonl"))
+	assertDurableReviewFeedback(t, resumed, feedback)
+	assertDurableBranchLocations(t, second.URL(), "task:processing")
+	close(resumed.release)
+	support.WaitForStatus(t, second.URL(), 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 2 })
+	assertDurableBranchLocations(t, second.URL(), "task:complete")
+	second.Stop(t)
+	resumed.mu.Lock()
+	calls, retired := resumed.calls, resumed.retired
+	resumed.mu.Unlock()
+	if calls != 1 || retired != 0 {
+		t.Fatalf("recovery dispatched review=%d retired=%d, want 1/0", calls, retired)
+	}
+	if after := mustReadSeededReplayArtifact(t, recordPath); !bytes.Equal(prefix, after) {
+		t.Fatal("branch recovery modified canonical source")
+	}
+}
+
+func durableBranchFactoryConfig() map[string]any {
+	config := seededReplayResumeFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "audit", "states": []map[string]string{
+			{"name": "checking", "type": "INITIAL"}, {"name": "checked", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"},
+		},
+	})
+	stations := config["workstations"].([]map[string]any)
+	stations[0]["outputs"] = []map[string]string{{"workType": "task", "state": "processing"}, {"workType": "audit", "state": "checking"}}
+	config["workstations"] = append(stations, map[string]any{
+		"name": "review", "worker": "worker-a",
+		"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+		"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+		"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+	}, map[string]any{
+		"name": "retire", "worker": "worker-a",
+		"inputs":    []map[string]string{{"workType": "audit", "state": "checking"}},
+		"outputs":   []map[string]string{{"workType": "audit", "state": "checked"}},
+		"onFailure": []map[string]string{{"workType": "audit", "state": "failed"}},
+	})
+	return config
+}
+
+func assertDurableBranchLocations(t *testing.T, baseURL, siblingLocation string) {
+	t.Helper()
+	works := support.ListDefaultSessionWork(t, baseURL)
+	if len(works.Results) != 2 || support.CountWorkAtCustomerState(works, "audit:checked") != 1 || support.CountWorkAtCustomerState(works, siblingLocation) != 1 {
+		t.Fatalf("branch locations lost or resurrected: %#v", works.Results)
+	}
+	if !support.HasWorkAtCustomerState(works, "branch-work", siblingLocation) {
+		t.Fatalf("recovery changed the original task identity: %#v", works.Results)
+	}
+}
+
 func assertDurableReviewFeedback(t *testing.T, runner *durableFeedbackRunner, feedback string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
@@ -198,10 +281,16 @@ type durableFeedbackRunner struct {
 	release     chan struct{}
 	mu          sync.Mutex
 	calls       int
+	retired     int
 }
 
 func (runner *durableFeedbackRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.mu.Lock()
+	if strings.Contains(string(request.Stdin), "RETIRE_BRANCH") {
+		runner.retired++
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("branch COMPLETE")}, nil
+	}
 	runner.calls++
 	first := runner.calls == 1 && runner.firstOutput != ""
 	runner.mu.Unlock()
