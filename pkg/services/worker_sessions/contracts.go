@@ -86,7 +86,7 @@ func (r RuntimeAttemptRequest) Validate() error {
 // doubles do not need to implement it. Complete is idempotent and records the
 // terminal observation; Runtime remains authoritative for admission,
 // cancellation, and the detached execution itself.
-type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) (workers.WorkstationDispatchResult, bool, error)
 
 // Complete commits the terminal observation through the RuntimeAttempt handle.
 func (a RuntimeAttempt) Complete(
@@ -96,6 +96,19 @@ func (a RuntimeAttempt) Complete(
 ) error {
 	if a == nil {
 		return errors.New("worker sessions: runtime attempt is unavailable")
+	}
+	_, _, err := a.Resolve(ctx, result, dispatchErr)
+	return err
+}
+
+// Resolve joins completion and returns the authoritative dispatch result. A
+// confirmed exact force termination replaces the provider's signal-exit failure
+// with cancellation so Runtime cannot retry or route its partial output. The
+// boolean reports confirmed force independently of ordinary cancellation; the
+// error reports completion acknowledgement, not the supplied execution error.
+func (a RuntimeAttempt) Resolve(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) (workers.WorkstationDispatchResult, bool, error) {
+	if a == nil {
+		return result, false, errors.New("worker sessions: runtime attempt is unavailable")
 	}
 	return a(ctx, result, dispatchErr)
 }

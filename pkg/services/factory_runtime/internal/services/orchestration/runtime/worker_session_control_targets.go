@@ -80,7 +80,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 				callbackCtx = context.Background()
 			}
 			if terminal != nil {
-				terminal(callbackCtx, admittedRequest, result, executeErr)
+				_, _ = terminal(callbackCtx, admittedRequest, result, executeErr)
 			}
 		})
 		return nil

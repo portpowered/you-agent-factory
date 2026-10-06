@@ -872,7 +872,7 @@ func (r *registry) BeginRuntimeAttempt(
 	}
 	opened = true
 	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
-	return workersessions.RuntimeAttempt(handle.Complete), nil
+	return workersessions.RuntimeAttempt(handle.Resolve), nil
 }
 
 func (r *registry) reserveRuntimeAttemptKey(key workersessions.RuntimeAttemptKey, workerID string) bool {

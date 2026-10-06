@@ -107,6 +107,28 @@ func (a *runtimeAttempt) Complete(
 	return a.awaitForceJournal()
 }
 
+// Resolve preserves natural and unconfirmed outcomes; only this physical
+// attempt's confirmed force claim can replace its result with cancellation.
+func (a *runtimeAttempt) Resolve(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) (workers.WorkstationDispatchResult, bool, error) {
+	err := a.Complete(ctx, result, dispatchErr)
+	if a == nil {
+		return result, false, err
+	}
+	a.mu.Lock()
+	confirmed := a.forceConfirmed
+	a.mu.Unlock()
+	if !confirmed {
+		return result, false, err
+	}
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	result.ReconciliationReason = ""
+	result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+	result.Result = workers.WorkResult{DispatchID: result.Result.DispatchID, TransitionID: result.Result.TransitionID,
+		Outcome: workers.OutcomeCanceled, Cancellation: result.Cancellation.Clone(), Metrics: result.Result.Metrics}
+	result.ProposedOutput = nil
+	return result, true, err
+}
+
 func runtimeAttemptCancelOutcomeSupported(outcome workers.WorkstationDispatchCancelOutcome) bool {
 	return outcome == workers.WorkstationDispatchCancelOutcomeCanceled ||
 		outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled ||

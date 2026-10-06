@@ -238,3 +238,80 @@ func TestForceRuntimeIntentPersistenceLossStopsAndKeepsDispatchSealedAfterComple
 	assertRuntimeForceRetryRefused(t.Context(), t, r, a)
 	assertRuntimeForceSiblingAdmitted(t.Context(), t, r)
 }
+
+func TestForceRuntimeResolveReturnsOnlyConfirmedCancellation(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"confirmed", "persistence-lost", "unconfirmed"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			r, a, store := newRuntimeForceJournalFixture(t)
+			nativeErr := errors.New("native signal exit")
+			original := failedForceDispatch()
+			original.Result.Output = "partial output"
+			original.Result.StructuredResult = map[string]any{"partial": true}
+			original.Result.StructuredResultPresent = true
+			original.Result.FailureMetadata = &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable}
+			original.Result.Continuation = &workers.ProviderContinuationRef{ProviderSessionID: "partial"}
+			original.ProposedOutput = &workers.ProposedOutput{}
+			completion := make(chan forceDispatchResolution, 1)
+			a.providerControl = &forceAttemptDouble{force: func(ctx context.Context) (bool, error) {
+				go func() {
+					result, forced, err := a.Resolve(context.WithoutCancel(ctx), original, nativeErr)
+					completion <- forceDispatchResolution{result, forced, err}
+				}()
+				if variant == "unconfirmed" {
+					return false, errors.New("tree not joined")
+				}
+				return true, nil
+			}}
+			if variant == "persistence-lost" {
+				store.advance = func(context.Context, recordings.WorkerControlOperationRecord) error {
+					return recordings.ErrWorkerRecordingPersistence
+				}
+			}
+			_, _ = r.Terminate(t.Context(), forceRequest())
+			select {
+			case resolved := <-completion:
+				assertForceDispatchResolution(t, variant, resolved, nativeErr)
+			case <-time.After(30 * time.Second):
+				t.Fatal("completion resolution did not join")
+			}
+		})
+	}
+}
+
+type forceDispatchResolution struct {
+	result workers.WorkstationDispatchResult
+	forced bool
+	err    error
+}
+
+func assertForceDispatchResolution(t *testing.T, variant string, resolved forceDispatchResolution, nativeErr error) {
+	t.Helper()
+	result := resolved.result
+	if resolved.forced != (variant != "unconfirmed") {
+		t.Fatalf("force confirmation = %t for %s", resolved.forced, variant)
+	}
+	if variant == "unconfirmed" {
+		if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed || result.Result.Output != "partial output" ||
+			result.Result.FailureMetadata == nil || resolved.err != nil {
+			t.Fatalf("unconfirmed force changed native completion: %#v, %v", result, resolved.err)
+		}
+		return
+	}
+	assertForceCanceledDispatch(t, result)
+
+	if errors.Is(resolved.err, nativeErr) || (variant == "confirmed" && resolved.err != nil) ||
+		(variant == "persistence-lost" && !errors.Is(resolved.err, recordings.ErrWorkerRecordingPersistence)) {
+		t.Fatalf("completion error = %v for %s", resolved.err, variant)
+	}
+}
+
+func assertForceCanceledDispatch(t *testing.T, result workers.WorkstationDispatchResult) {
+	t.Helper()
+	if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled || result.Result.Outcome != workers.OutcomeCanceled ||
+		result.Result.Output != "" || result.Result.StructuredResultPresent || result.Result.StructuredResult != nil ||
+		result.Result.FailureMetadata != nil || result.Result.Continuation != nil || result.ProposedOutput != nil || result.Cancellation == nil {
+		t.Fatalf("confirmed force retained retry or routing output: %#v", result)
+	}
+}

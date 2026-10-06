@@ -43,7 +43,7 @@ func runtimeAttemptPreparation(
 	execution := cfg.workerExecution
 	scheduler := cfg.workerAttemptScheduler
 	dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
-	return func(ctx context.Context, executing *workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	return func(ctx context.Context, executing *workers.ExecuteRequest) (attemptCompletionFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		admissionRequest := request
 		if strings.TrimSpace(request.WorkstationName) != workers.ProviderInvocationRoute {
@@ -79,7 +79,7 @@ func runtimeAttemptPreparation(
 		if err != nil {
 			return nil, err
 		}
-		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) (workers.ExecuteResult, error) {
 			result = normalizeAttemptResult(
 				executeRequest,
 				result,
@@ -92,7 +92,14 @@ func runtimeAttemptPreparation(
 				result,
 				executeErr,
 			)
-			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
+			_, forced, completionErr := attempt.Resolve(callbackCtx, dispatchResult, dispatchErr)
+			if forced {
+				result.Failure = nil
+				result.ProposedOutputPresent = false
+				result = canceledAttemptResult(executeRequest, result, workers.DispatchCancellationReasonCanceled)
+				return result, completionErr
+			}
+			return result, errors.Join(executeErr, completionErr)
 		}, nil
 	}
 }

@@ -526,8 +526,8 @@ func prepareDetachedModelRecording(cfg *runtimeConfig, previous attemptPreparati
 	if !runtimeModelRecordingEnabled(cfg) {
 		return previous
 	}
-	return func(ctx context.Context, request *workers.ExecuteRequest) (attemptTerminalFunc, error) {
-		var previousTerminal attemptTerminalFunc
+	return func(ctx context.Context, request *workers.ExecuteRequest) (attemptCompletionFunc, error) {
+		var previousTerminal attemptCompletionFunc
 		var err error
 		if previous != nil {
 			previousTerminal, err = previous(ctx, request)
@@ -538,11 +538,12 @@ func prepareDetachedModelRecording(cfg *runtimeConfig, previous attemptPreparati
 		request.Input.PreparedRequestObserver = func(prepared workers.ExecuteRequest) {
 			recordDetachedModelRequest(cfg, prepared)
 		}
-		return func(terminalContext context.Context, terminalRequest workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+		return func(terminalContext context.Context, terminalRequest workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) (workers.ExecuteResult, error) {
 			recordDetachedModelResponse(cfg, terminalRequest, result, executeErr)
 			if previousTerminal != nil {
-				previousTerminal(terminalContext, terminalRequest, result, executeErr)
+				return previousTerminal(terminalContext, terminalRequest, result, executeErr)
 			}
+			return result, executeErr
 		}, nil
 	}
 }

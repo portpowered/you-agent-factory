@@ -922,6 +922,7 @@ type beginRuntimeAttemptService struct {
 	clock           platformclock.Source
 	cancel          func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
 	controlObserver providers.AttemptControlObserver
+	resolveResult   func(workers.WorkstationDispatchResult, error) (workers.WorkstationDispatchResult, bool, error)
 }
 
 func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
@@ -968,12 +969,49 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 		_ context.Context,
 		result workers.WorkstationDispatchResult,
 		err error,
-	) error {
+	) (workers.WorkstationDispatchResult, bool, error) {
 		service.completeCalls++
 		if service.completed == nil {
 			service.completed = &result
 			service.completeErr = err
 		}
-		return nil
+		if service.resolveResult != nil {
+			return service.resolveResult(result, err)
+		}
+		return result, false, err
 	}), nil
+}
+
+func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
+	t.Parallel()
+	nativeErr := errors.New("signal exit")
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{},
+		resolveResult: func(result workers.WorkstationDispatchResult, _ error) (workers.WorkstationDispatchResult, bool, error) {
+			result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+			return result, true, nil
+		}}
+	execution := attemptTestRequest("dispatch", "physical")
+	request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+	cfg := &runtimeConfig{workerAttempts: sessions}
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	lifecycle := newAttemptLifecycle(attemptExecuteFunc(func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed,
+			Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
+			StructuredResult: map[string]any{"partial": true}, StructuredResultPresent: true,
+			Continuation: &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
+			Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Message: "signal exit"}}, nativeErr
+	}), func() string { return "physical" }, 1)
+	var observed workers.ExecuteResult
+	var observedErr error
+	if err := lifecycle.startWithPreparation(t.Context(), execution, false,
+		func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) {
+			observed, observedErr = result, err
+		}, false, prepare); err != nil {
+		t.Fatal(err)
+	}
+	if sessions.completeCalls != 1 || observed.Outcome != workers.ExecutionOutcomeCanceled || observed.Cancellation == nil || observedErr != nil ||
+		len(observed.Output.Primary) != 0 || observed.ProposedOutputPresent || observed.StructuredResultPresent || observed.StructuredResult != nil || observed.Continuation != nil ||
+		observed.Failure == nil || observed.Failure.Family != workers.WorkFailureFamilyTerminal {
+		t.Fatalf("Runtime delivered force as retry/routing result: %#v, %v", observed, observedErr)
+	}
 }
