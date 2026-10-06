@@ -4811,3 +4811,50 @@ Evidence: `work-cli-sessions-paired/`, `work-cli-sessions-confirmation/`,
 `compatible-cleanup-hooks-full/`, `provider-cleanup-hook-full/`,
 `pr2923-smoke-fixture-hosted/` and `smoke-fixture-hosted-functional.log`.
 Complete hosted timing remains above 120s, so PR #2923 stays draft.
+
+### October 6: remaining initialization cost and publication synchronization
+
+Hosted run 37487752183 at ae23bdff07 passes Functional Coverage in 229s
+complete / 154.149s coverage invocation: 67 packages, 763 results, 761 passes
+and two skips. The supervisor takes 165.768s, including 15.259s quarantine.
+The prefix-restored build executes 136 compiler commands and 16 links. This
+sample remains above the two-minute checkpoint and is not a controlled
+comparison with earlier runners. The workflow fails Backend Lint: its exact
+deadcode set adds one helper, validatePortableLayoutBoundaryJSON, to 2,528
+existing findings. The corrective change inlines that decoding into the
+existing public wrapper; it does not raise the baseline or change validation.
+All factoryconfig package tests and both scoped linters pass after correction.
+
+A fresh native customer_journeys profile exposes an intermittent transcript
+publication race: completed live state precedes durable capture. One of ten
+focused baseline repetitions fails with WORKER_SESSION_TRANSCRIPT_UNAVAILABLE.
+The customer test now observes its existing public terminal stream before its
+existing transcript read. That stream joins terminal publication. The change
+adds no requests, retries, sleeps or timeout allowance; all session correlation,
+continuation and lineage assertions remain. Fifty Linux and twenty Windows
+focused repetitions pass; the complete profiled customer package also passes.
+
+The passing profile measures 16.930s elapsed and 27.516843 CPU-seconds
+(19.587286 user, 7.929557 system), with profiling enabled. Initialization owns
+69.62% of sampled CPU; packaged installation owns 69.29%; fresh creation
+54.18%; layout preparation 32.22%; JSON unmarshalling 34.33%; filesystem syscall
+execution is 24.17% flat. These cumulative shares overlap and cannot be added.
+The sample is one native customer package, not whole-lane attribution or a
+controlled before/after speedup. Existing serialized native configurations and
+canonical-output caches remove conversions, but retain selected validation,
+layout preparation and operation-owned files. Sharing compatible initialized
+hosts with explicit independent Sessions remains the first priority; immutable
+rendered layout content is the next cache candidate, preserving selected ports
+and file validation. Mutable live Factory state must remain session-owned.
+
+A shared-host YAML portability experiment fails correctness before timing:
+public folder-based Session creation resolves factory.json, while this scenario
+invokes a materialized YAML root through the CLI's explicit factory-file route.
+The experiment is restored rather than dropping YAML invocation coverage or
+changing the public resolver to obtain a favorable benchmark.
+
+Evidence: boundary-decode-hosted/, canonical-boundary-customer-profile/,
+remote-transcript-reproduction/, remote-transcript-barrier/,
+canonical-boundary-barrier-profile/ and
+packaged-portability-shared-session-attempt.patch under the ignored local
+latency-audit artifact directory.
