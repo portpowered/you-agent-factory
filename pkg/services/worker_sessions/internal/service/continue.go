@@ -88,6 +88,7 @@ type continuePlan struct {
 	execution workers.WorkstationDispatchRequest
 	direct    bool
 	lineage   *workers.SessionLineage
+	archived  bool
 }
 
 type continuationSourceSnapshot struct {
@@ -99,6 +100,7 @@ type continuationSourceSnapshot struct {
 	dispatchID string
 	turnID     string
 	direct     bool
+	archived   bool
 }
 
 type continueReplay struct {
@@ -186,6 +188,10 @@ func (r *registry) reserveContinuation(
 	if err != nil {
 		return nil, false, err
 	}
+	archived, err := r.readArchivedContinuationSource(req)
+	if err != nil {
+		return nil, false, err
+	}
 	tuple := continueTuple{
 		sourceID:    req.SourceWorkerSessionID,
 		successorID: req.SuccessorWorkerSessionID,
@@ -207,7 +213,7 @@ func (r *registry) reserveContinuation(
 	if r.stopping {
 		return nil, false, workersessions.ErrContinuationServerStopping
 	}
-	snapshot, err := r.snapshotContinuationSourceLocked(req)
+	snapshot, err := r.continuationSnapshotLocked(req, archived)
 	if err != nil {
 		return nil, false, err
 	}
@@ -224,7 +230,11 @@ func (r *registry) reserveContinuation(
 	if err != nil {
 		return nil, false, err
 	}
-	return r.storeContinuationReservationLocked(req, tuple, snapshot, continuation), true, nil
+	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
+	if archived != nil {
+		r.publications[req.SourceWorkerSessionID] = &publication{capture: archived.target}
+	}
+	return replay, true, nil
 }
 
 func (r *registry) snapshotContinuationSourceLocked(
@@ -316,7 +326,9 @@ func (r *registry) storeContinuationReservationLocked(
 	continuation workers.WorkstationDispatchRequest,
 ) *continueReplay {
 	source := snapshot.session
-	r.sessions[source.ID] = source
+	if !snapshot.archived {
+		r.sessions[source.ID] = source
+	}
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
 		State:                      workersessions.StateReserved,
@@ -342,6 +354,7 @@ func (r *registry) storeContinuationReservationLocked(
 			request:   req,
 			execution: continuation,
 			direct:    snapshot.direct,
+			archived:  snapshot.archived,
 			lineage: &workers.SessionLineage{
 				PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 				PreviousDispatchID:         snapshot.dispatchID,
@@ -491,6 +504,12 @@ func (r *registry) releaseContinuationReservation(plan continuePlan) {
 // Recordings writer is therefore fed the exact accepted Events record
 // directly, preserving a durable prefix or an explicit loss classification.
 func (r *registry) commitContinuationLineage(plan continuePlan) {
+	if plan.archived {
+		// The admitted successor opening carries durable predecessor evidence.
+		// An archived source has no live Events topic to append or supervise.
+		r.commitContinuationSessionLinks(plan, plan.request.SourceWorkerSessionID)
+		return
+	}
 	source, err := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
 	if err != nil || source.ProviderSessionAssociation == nil {
 		r.releaseContinuationReservation(plan)
@@ -528,21 +547,25 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 		)
 	}
 
+	r.commitContinuationSessionLinks(plan, source.ID)
+}
+
+func (r *registry) commitContinuationSessionLinks(plan continuePlan, sourceID string) {
 	r.mu.Lock()
-	if current, exists := r.sessions[source.ID]; exists {
+	if current, exists := r.sessions[sourceID]; exists {
 		if current.SuccessorWorkerSessionID == "" || current.SuccessorWorkerSessionID == plan.request.SuccessorWorkerSessionID {
 			current.SuccessorWorkerSessionID = plan.request.SuccessorWorkerSessionID
-			r.sessions[source.ID] = current
+			r.sessions[sourceID] = current
 		}
 	}
 	if current, exists := r.sessions[plan.request.SuccessorWorkerSessionID]; exists {
-		if current.PredecessorWorkerSessionID == "" || current.PredecessorWorkerSessionID == source.ID {
-			current.PredecessorWorkerSessionID = source.ID
+		if current.PredecessorWorkerSessionID == "" || current.PredecessorWorkerSessionID == sourceID {
+			current.PredecessorWorkerSessionID = sourceID
 			r.sessions[plan.request.SuccessorWorkerSessionID] = current
 		}
 	}
-	if r.continuationSources[source.ID] == plan.request.RequestID {
-		delete(r.continuationSources, source.ID)
+	if r.continuationSources[sourceID] == plan.request.RequestID {
+		delete(r.continuationSources, sourceID)
 	}
 	r.mu.Unlock()
 }

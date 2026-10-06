@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,6 +17,68 @@ type retainedContinuationStore struct {
 	restartRecipeStore
 	payload json.RawMessage
 	readErr error
+}
+
+// The archive reader's collaborators supply detached capture facts; these
+// cells prove reservation and refusal without an executor or application graph.
+func TestContinuationArchivedSourceReservation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"captured", "incomplete", "wrong-scope", "wrong-attempt", "wrong-terminal", "missing-recipe", "unknown", "successor"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			ref := r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference
+			delete(r.sessions, req.SourceWorkerSessionID)
+			item := historyCapture(t, req.SourceWorkerSessionID, "", "dispatch-1", true)
+			item.Catalog.RecordingID, item.Catalog.RecordingGenerationID, item.Catalog.OwnerEpoch = "recording", "generation", "owner"
+			reader := &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+				Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health,
+			}}
+			r.logs = &LogReader{reader: reader}
+			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1"), reference: ref}
+			r.restart = store
+			want := configureArchivedContinuationCell(cell, reader, store)
+			replay, owner, err := r.reserveContinuation(req)
+			if want != nil {
+				if !errors.Is(err, want) || replay != nil || owner || len(r.sessions) != 0 || len(r.supervisions) != 0 {
+					t.Fatalf("archive refusal changed registry: replay=%v owner=%v err=%v", replay, owner, err)
+				}
+				return
+			}
+			if err != nil || !owner || !replay.plan.archived || !replay.plan.direct ||
+				replay.plan.execution.Execution.Continuation.ProviderSessionID != ref.ID || len(r.supervisions) != 0 {
+				t.Fatalf("archive reservation lost identity or restored supervision: replay=%+v err=%v", replay, err)
+			}
+			if _, exists := r.sessions[req.SourceWorkerSessionID]; exists {
+				t.Fatal("historical source became a live registry session")
+			}
+		})
+	}
+}
+
+func configureArchivedContinuationCell(cell string, reader *capturedActivityFake, store *restartRecipeStore) error {
+	switch cell {
+	case "captured":
+		return nil
+	case "incomplete":
+		reader.page.Health = recordings.WorkerRecordingStatusIncomplete
+	case "wrong-scope":
+		reader.page.Catalog.FactorySessionID = "foreign"
+	case "wrong-attempt":
+		store.execution.Execution.Dispatch.DispatchID = "foreign-attempt"
+	case "wrong-terminal":
+		reader.page.Terminal = &recordings.WorkerRecordingTerminal{Status: "CANCELED"}
+	case "missing-recipe":
+		store.err = os.ErrNotExist
+	case "unknown":
+		reader.err = os.ErrNotExist
+		return workersessions.ErrContinuationSourceNotFound
+	case "successor":
+		reader.page.SuccessorWorkerSessionID = "already-admitted"
+		return workersessions.ErrContinuationSourceConflict
+	}
+	return workersessions.ErrContinuationExecutionUnavailable
 }
 
 func (s *retainedContinuationStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
