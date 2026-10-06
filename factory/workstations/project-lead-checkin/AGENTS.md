@@ -16,7 +16,8 @@ and recent Factory Events. Use the same authority and delivery rules as
 `factory/workstations/project-lead/AGENTS.md`.
 
 The lead is normally woken by `project-lead-wake` each time one of its tagged
-children reaches `complete` or `failed`. This check-in is the safety net for
+children reaches `complete` or `failed`, or a tagged lane files a mailbox
+question. This check-in is the safety net for
 what a wake cannot see: a child stuck in a nonterminal state, an untagged
 child, a red or unreviewed PR with no Work, or a Project without a `project`
 tag. Pending `project-report` items for this Project are not stalls; they
@@ -57,7 +58,11 @@ the lead prompt, and never while one is already pending. A missing feedback
 route must be diagnosed, not treated as success.
 
 If the children are healthy and no independent ready work exists, record that finding and return.
-Treat a verified mailbox park as an external wait, using the request's release condition.
+Apply the lead's Mailbox-parked lanes answer-or-forward policy to this Project's
+parked lanes and outstanding forwarded requests on every check-in. Answer pending
+lead decisions within authority; reconcile binding operator replies and bridge
+them to the original response path/version without duplicate forwarding.
+A forwarded decision remains an external wait with its recorded release condition.
 Escalate a stalled child or missing wake route through the operator mailbox named in your Project rules.
 Name Factory Reliability and the portfolio supervisor as the requested repair owners.
 Return `ACCEPTED` with the observed owner, mailbox request, and safe action.

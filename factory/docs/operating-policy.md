@@ -200,6 +200,20 @@ dependent `project-cycle` and no `thoughts` join. Instead, the runtime wakes
 the owning lead (`project-lead-wake`) once for each tagged child that reaches
 `complete` or `failed`, and names that child. A slow child therefore never
 withholds the lead's reaction to a finished sibling or an unrelated red PR.
+A marked mailbox park on a tagged lane also admits one version-keyed
+`mailbox-question` project-report in its explicit Session. The existing wake
+matches only its Project; this variant uses payload laneWorkId and requestVersion
+rather than a terminal report's ParentID. Untagged lanes keep the operator route.
+The lead answers within the immutable plan, acceptance and rules.md authority,
+including narrowing changes, at the original shared responses/<lane>.md path,
+and records authority, evidence and version in its progress.md. It forwards only
+widening public exposure, adding an owner or a second path, growing a lint or
+boundary baseline, contradicting immutable plan or acceptance, or factory/tooling
+defects. A separate operator request references the original request/version;
+the lead bridges a binding operator answer on any wake/check-in after rechecking
+live membership and version. It never guesses an answer or duplicates forwarding.
+AM-T0, the compatibility marker, no-slot wait and 60-minute/second-park routes
+remain; admission outage keeps the bounded wait and check-in recovery.
 A failed item needs a cause-corrected successor, decided on its wake. The
 same-name `project-cycle` remains only as the relation-free terminal
 `complete` or `blocked` decision.

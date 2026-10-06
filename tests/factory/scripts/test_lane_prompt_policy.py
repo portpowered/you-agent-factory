@@ -34,8 +34,47 @@ Stop with final head pushed, non-draft PR, CI started and blockers addressed; re
 Never claim evidence was published when it was not.
 '''
 
+MAILBOX = '''
+For a lane carrying a project tag, address the request to its project lead first.
+A lane without a project tag keeps the current operator route.
+Include one explicit decision, source/acceptance/rules citations and evidence,
+A recommended with evidence and tradeoffs, Project tag (or none), Factory Session,
+Work ID and addressed decision owner, and no unauthorized widening or contract change.
+'''
+LEAD = '''
+Answer inside the immutable source plan, acceptance and rules.md pre-authorizations,
+including narrowing changes. Write responses/<lane>.md and this Project's progress.md.
+Forward only widening public exposure; adding an owner or a second path;
+growing a lint or boundary baseline; contradicting the immutable plan or acceptance;
+or factory/tooling defects. Write a separate operator request naming the
+original lane request and its version; do not place a speculative answer.
+When binding operator authority arrives, preserve its authority and deliver the lane's binding response.
+Use recorded request identities to avoid duplicate forwarding;
+reconcile outstanding forwarded requests and operator responses on every visit.
+Recheck the live Session, lane Work ID, project tag and request mtime_ns; rename atomically.
+'''
+
 
 class LanePromptPolicyTest(unittest.TestCase):
+    def test_mailbox_answer_forward_and_wrapped_policy(self):
+        self.assertEqual(policy.check_mailbox_policy(MAILBOX, MAILBOX, LEAD), [])
+        self.assertEqual(policy.check_mailbox_policy(MAILBOX.replace(' ', '\n'), MAILBOX, LEAD), [])
+
+    def test_each_forwarding_category_and_answer_obligation_is_diagnosed(self):
+        for diagnostic, clause in policy.LEAD_RULES:
+            with self.subTest(diagnostic=diagnostic):
+                results = policy.check_mailbox_policy(MAILBOX, MAILBOX, ' '.join(LEAD.split()).replace(clause, ''))
+                self.assertTrue(any(r.startswith(f'project-lead:{diagnostic}:') for r in results), results)
+
+    def test_request_decision_evidence_recommendation_and_identity_are_diagnosed(self):
+        for owner in ('plan', 'process'):
+            for diagnostic, clause in policy.MAILBOX_RULES:
+                with self.subTest(owner=owner, diagnostic=diagnostic):
+                    source = ' '.join(MAILBOX.split()).replace(clause, '')
+                    results = policy.check_mailbox_policy(source if owner == 'plan' else MAILBOX,
+                                                          source if owner == 'process' else MAILBOX, LEAD)
+                    self.assertTrue(any(r.startswith(f'{owner}:{diagnostic}:') for r in results), results)
+
     def test_compliant_text_and_wrapped_lines(self):
         self.assertEqual(policy.check_policy(PLAN, PROCESS), [])
         self.assertEqual(policy.check_policy(PLAN.replace(' ', '\n'), PROCESS.replace(' ', '\n')), [])
