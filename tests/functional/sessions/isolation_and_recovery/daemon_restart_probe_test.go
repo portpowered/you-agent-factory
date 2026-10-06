@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"io/fs"
 	"net/http"
 	"os"
@@ -451,6 +452,7 @@ func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {
 }
 
 type restartProbeFiles struct {
+	platformfilesystem.Local
 	corruptRoot   string
 	corruptReads  atomic.Int32
 	corruptWrites atomic.Int32
@@ -461,11 +463,15 @@ func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
 }
 
 func (files *restartProbeFiles) ReadFile(path string) ([]byte, error) {
+	return files.ReadFileBounded(path, 64<<20)
+}
+
+func (files *restartProbeFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
 	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptReads.Add(1)
 		return []byte(`{"Session":` + restartProbeSecret), nil
 	}
-	return os.ReadFile(path)
+	return files.Local.ReadFileBounded(path, limit)
 }
 
 func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {

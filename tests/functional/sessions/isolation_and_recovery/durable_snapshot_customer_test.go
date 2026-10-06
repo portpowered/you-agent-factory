@@ -222,6 +222,7 @@ func (runner *durableFeedbackRunner) Run(ctx context.Context, request platformpr
 }
 
 type durableCustomerFaultFiles struct {
+	platformfilesystem.Local
 	mu       sync.Mutex
 	failure  error
 	armed    bool

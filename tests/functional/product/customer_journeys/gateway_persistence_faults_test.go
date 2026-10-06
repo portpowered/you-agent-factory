@@ -172,6 +172,10 @@ func (f *gatewaySnapshotFaults) WriteFile(path string, data []byte, _ fs.FileMod
 }
 
 func (f *gatewaySnapshotFaults) ReadFile(path string) ([]byte, error) {
+	return f.ReadFileBounded(path, 64<<20)
+}
+
+func (f *gatewaySnapshotFaults) ReadFileBounded(path string, limit int64) ([]byte, error) {
 	f.mu.Lock()
 	fail := f.readSession != "" && filepath.Base(path) == f.readSession+".json"
 	if fail {
@@ -181,7 +185,7 @@ func (f *gatewaySnapshotFaults) ReadFile(path string) ([]byte, error) {
 	if fail {
 		return nil, errors.New("injected gateway snapshot read failure")
 	}
-	return f.Local.ReadFile(path)
+	return f.Local.ReadFileBounded(path, limit)
 }
 
 func (f *gatewaySnapshotFaults) failNextWrite() {

@@ -18,6 +18,9 @@ import (
 )
 
 type boardReferenceFiles struct {
+	platformfilesystem.Local
+	boundedLimit          int64
+	boundedErr            error
 	data                  []byte
 	readErr, writeErr     error
 	afterRead             func()
@@ -40,6 +43,14 @@ func (files *boardReferenceFiles) ReadFile(path string) ([]byte, error) {
 	return append([]byte(nil), files.data...), files.readErr
 }
 
+func (files *boardReferenceFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	files.boundedLimit = limit
+	if files.boundedErr != nil {
+		return nil, files.boundedErr
+	}
+	return files.ReadFile(path)
+}
+
 func (files *boardReferenceFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	files.writes++
 	if files.writeErr != nil {
@@ -48,6 +59,28 @@ func (files *boardReferenceFiles) WriteFile(path string, data []byte, mode fs.Fi
 	files.path, files.mode = path, mode
 	files.data = append([]byte(nil), data...)
 	return nil
+}
+
+func TestSnapshotLoadUsesInclusiveBoundAndRetainsTypedFailure(t *testing.T) {
+	t.Parallel()
+	files := &boardReferenceFiles{data: []byte("snapshot")}
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load("~default")
+	if err != nil || !bytes.Equal(got, files.data) || files.boundedLimit != 67108864 {
+		t.Fatalf("load = %q, %v; bound = %d", got, err, files.boundedLimit)
+	}
+	files.boundedErr = &platformfilesystem.ReadSizeLimitError{Limit: files.boundedLimit}
+	got, err = store.Load("~default")
+	var sizeErr *platformfilesystem.ReadSizeLimitError
+	if got != nil || !errors.As(err, &sizeErr) || sizeErr.ReadSizeLimit() != 67108864 {
+		t.Fatalf("size failure lost its typed cause: %q, %v", got, err)
+	}
+	if files.writes != 0 || files.mkdirs != 0 {
+		t.Fatal("bounded load changed persisted evidence")
+	}
 }
 
 func newBoardReferenceStore(t *testing.T, files *boardReferenceFiles) (runtimepersist.CurrentBoardStore, string) {
@@ -190,8 +223,10 @@ func TestPersistenceFailurePreservesCauseAndPublishesSafeOperation(t *testing.T)
 	}
 }
 
-func (f failingFileSystem) MkdirAll(string, fs.FileMode) error { return f.mkdirErr }
-func (f failingFileSystem) ReadFile(string) ([]byte, error)    { return nil, f.readErr }
+func (f failingFileSystem) MkdirAll(string, fs.FileMode) error            { return f.mkdirErr }
+func (f failingFileSystem) ReadFile(string) ([]byte, error)               { return nil, f.readErr }
+func (f failingFileSystem) ReadFileBounded(string, int64) ([]byte, error) { return nil, f.readErr }
+func (f failingFileSystem) RenameNoReplace(string, string) error          { return f.writeErr }
 func (f failingFileSystem) WriteFile(string, []byte, fs.FileMode) error {
 	return f.writeErr
 }
@@ -386,6 +421,14 @@ func (s *interruptingStorage) MkdirAll(path string, mode fs.FileMode) error {
 
 func (s *interruptingStorage) ReadFile(path string) ([]byte, error) {
 	return s.delegate.ReadFile(path)
+}
+
+func (s *interruptingStorage) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return s.directories.ReadFileBounded(path, limit)
+}
+
+func (s *interruptingStorage) RenameNoReplace(source, destination string) error {
+	return s.directories.RenameNoReplace(source, destination)
 }
 
 func (s *interruptingStorage) WriteFile(path string, data []byte, _ fs.FileMode) error {

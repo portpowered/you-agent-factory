@@ -37,6 +37,8 @@ type RuntimePersistenceFileSystem interface {
 	MkdirAll(string, fs.FileMode) error
 	ReadFile(string) ([]byte, error)
 	WriteFile(string, []byte, fs.FileMode) error
+	ReadFileBounded(string, int64) ([]byte, error)
+	RenameNoReplace(string, string) error
 }
 
 type InvocationMetricsRecorder interface {
