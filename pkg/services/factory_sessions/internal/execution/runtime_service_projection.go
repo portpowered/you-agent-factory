@@ -34,9 +34,10 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 		state = &initial
 	}
 	candidate := cloneRuntimeSessionState(state)
+	s.applyPendingPetriHistory(&candidate)
 	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
 	compactRuntimePetriHistory(&candidate)
-	if err := s.persistSessionSnapshot(candidate); err != nil {
+	if err := s.persistPetriCandidate(candidate); err != nil {
 		return err
 	}
 	if ok {

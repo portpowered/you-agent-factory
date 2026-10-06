@@ -1144,6 +1144,7 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	)
 	if len(encoded) > maxBytes {
 		return &SnapshotSizeLimitError{
+			SessionID:   sessionID,
 			Path:        persistedSnapshotPath(persistence, projectRoot, sessionID),
 			ActualBytes: len(encoded),
 			MaxBytes:    maxBytes,

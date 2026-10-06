@@ -266,6 +266,7 @@ type JavaScriptRuntimeService struct {
 
 	mu                       sync.RWMutex
 	sessions                 map[string]*runtimeSessionState
+	pendingPetriHistory      map[string]pendingPetriHistory
 	startReplay              map[string]startReplayRecord
 	startInflight            map[string]*startInflightFlight
 	controlReplay            map[string]controlReplayRecord

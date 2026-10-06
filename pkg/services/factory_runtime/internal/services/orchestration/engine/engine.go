@@ -646,8 +646,7 @@ func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.Com
 			if isNonFatalPetriMutationPersistenceError(err) {
 				e.logger.Error(
 					"engine: durable Petri mutation snapshot rejected; continuing runtime loop",
-					"dispatch_id", completed[i].DispatchID,
-					"error", err,
+					petriPersistenceErrorFields(completed[i].DispatchID, err)...,
 				)
 				continue
 			}
