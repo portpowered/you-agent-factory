@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,27 +36,46 @@ type parameterProcessFixture struct {
 	lifecycleEffects    *atomic.Int32
 }
 
-var parameterProcesses *parameterProcessFixture
+var parameterProcessState struct {
+	once    sync.Once
+	fixture *parameterProcessFixture
+	err     error
+}
 
-// TestMain constructs the two immutable process variants once for the package.
-// The ordinary public command process is shared; only the missing-asset witness
-// receives lifecycle-observation edges and a provider that must remain unused.
+// parameterProcessesForTest lazily owns the ordinary command process and the
+// missing-asset variant. Each command keeps its own home, inputs and directory.
+func parameterProcessesForTest(t testing.TB) *parameterProcessFixture {
+	t.Helper()
+	parameterProcessState.once.Do(func() {
+		parameterProcessState.fixture, parameterProcessState.err = buildParameterProcessFixture()
+	})
+	if parameterProcessState.err != nil {
+		t.Fatalf("build parameter functional process fixture: %v", parameterProcessState.err)
+	}
+	return parameterProcessState.fixture
+}
+
 func TestMain(m *testing.M) {
-	fixture, err := buildParameterProcessFixture()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "build parameter functional process fixture: %v\n", err)
-		os.Exit(1)
+	code := m.Run()
+	if err := closeParameterProcesses(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
 	}
-	parameterProcesses = fixture
+	os.Exit(code)
+}
 
-	exitCode := m.Run()
-	if closeErr := fixture.close(); closeErr != nil {
-		fmt.Fprintf(os.Stderr, "close parameter functional process fixture: %v\n", closeErr)
-		if exitCode == 0 {
-			exitCode = 1
-		}
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeParameterProcesses(); err != nil {
+		t.Error(err)
 	}
-	os.Exit(exitCode)
+}
+
+func closeParameterProcesses() error {
+	if parameterProcessState.fixture == nil {
+		return nil
+	}
+	return parameterProcessState.fixture.close()
 }
 
 func buildParameterProcessFixture() (*parameterProcessFixture, error) {
@@ -161,7 +181,7 @@ const (
 // and their customer invocations run in lexical order with fresh inputs.
 func TestCLIInvocationParameterValuesAndErrors(t *testing.T) {
 	t.Parallel()
-	if parameterProcesses == nil {
+	if parameterProcessesForTest(t) == nil {
 		t.Fatal("parameter process fixture is not initialized")
 	}
 
@@ -182,19 +202,19 @@ func TestCLIInvocationParameterValuesAndErrors(t *testing.T) {
 
 func testFullHandlerSubmitsCombinedSignature(t *testing.T) {
 	t.Helper()
-	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+	beforeProviderCalls := parameterProcessesForTest(t).providerRunner.CallCount()
 	factoryDir := scaffoldCombinedInvocationFactory(t)
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	inputs := spineInputs(t, combinedSignatureArgs(factoryPath))
-	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
+	if err := parameterProcessesForTest(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 
-	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 1 {
+	if got := parameterProcessesForTest(t).providerRunner.CallCount() - beforeProviderCalls; got != 1 {
 		t.Fatalf("controlled provider command call delta = %d, want 1", got)
 	}
-	prompt := string(parameterProcesses.providerRunner.LastRequest().Stdin)
+	prompt := string(parameterProcessesForTest(t).providerRunner.LastRequest().Stdin)
 	for _, want := range []string{
 		spinePositionalValue, spinePriorityValue, spineCallbackValue,
 		spineMetadataValue,
@@ -237,7 +257,7 @@ func testMalformedCombinedSignature(t *testing.T) {
 			t.Parallel()
 			args := append([]string{"you", "run", "--factory", factoryPath, "--no-record"}, test.args...)
 			inputs := parameterInputs(t, args)
-			executeErr := parameterProcesses.process.Execute(inputs.Input)
+			executeErr := parameterProcessesForTest(t).process.Execute(inputs.Input)
 			if executeErr == nil {
 				t.Fatalf("Process.Execute(malformed parameter) succeeded; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 			}
@@ -263,7 +283,7 @@ func testInvalidJSONCombinedSignature(t *testing.T) {
 		}
 	}
 	inputs := parameterInputs(t, args)
-	executeErr := parameterProcesses.process.Execute(inputs.Input)
+	executeErr := parameterProcessesForTest(t).process.Execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf("Process.Execute(invalid JSON parameter) succeeded; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 	}

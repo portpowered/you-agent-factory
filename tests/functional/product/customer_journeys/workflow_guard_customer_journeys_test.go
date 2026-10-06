@@ -1,12 +1,12 @@
 package customer_journeys_test
 
 import (
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -18,7 +18,17 @@ import (
 // completion workstation from dispatching until the watched workstation has
 // visited the shared Work enough times, then releases the expected public
 // terminal Work outcome through the guarded second-pass-review dispatch.
-func TestWorkflowEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
+func TestWorkflowGuardJourneys(t *testing.T) {
+	t.Parallel()
+	host := support.NewFactorySessionHost(t)
+	t.Run("EligibilityGuardReleasesAfterRequiredVisits", func(t *testing.T) { runWorkflowEligibilityGuard(t, host) })
+	t.Run("MatchingPeerNamesReleaseCorrelatedWork", func(t *testing.T) { runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t, host) })
+	t.Run("MismatchedPeerNamesRemainIdle", func(t *testing.T) { runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t, host) })
+	t.Run("VisitLimitRoutesWorkToFailed", func(t *testing.T) { runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t, host) })
+	t.Run("MismatchedFieldsRemainIdle", func(t *testing.T) { runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t, host) })
+}
+
+func runWorkflowEligibilityGuard(t *testing.T, host *support.FactorySessionHost) {
 	t.Parallel()
 	dir := support.ScaffoldFactory(t, visitGuardedCompletionFactoryConfig())
 	support.WriteWorkstationConfig(t, dir, "advance-to-gate", "---\ntype: LOGICAL_MOVE\n---\n")
@@ -40,13 +50,24 @@ func TestWorkflowEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
 		codexCommandResult("Done. COMPLETE"),
 	)
 
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	session, listed, events := host.Run(t, dir, runner, 15*time.Second)
 
+	assertEligibilityDispatchOrder(t, events)
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "complete")); got != 1 {
+		t.Fatalf("complete work count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "init")); got != 0 {
+		t.Fatalf("init work count after completion = %d, want 0", got)
+	}
+	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
+	assertGuardSessionQuiescent(t, session, 1, 0)
+	if runner.CallCount() != 4 {
+		t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, guarded second-pass-review)", runner.CallCount())
+	}
+}
+
+func assertEligibilityDispatchOrder(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
 	executeIndexes := dispatchResponseIndexesForTransition(t, events, "execute-story")
 	secondPassIndexes := dispatchResponseIndexesForTransition(t, events, "second-pass-review")
 	reviewIndexes := dispatchResponseIndexesForTransition(t, events, "review-story")
@@ -86,41 +107,6 @@ func TestWorkflowEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T) {
 			advanceIndexes[0],
 		)
 	}
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "complete")); got != 1 {
-		t.Fatalf("complete work count = %d, want 1; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "init")); got != 0 {
-		t.Fatalf("init work count after completion = %d, want 0", got)
-	}
-	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
-	FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t, session, 1, 0)
-	if runner.CallCount() != 4 {
-		t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, guarded second-pass-review)", runner.CallCount())
-	}
-}
-
-// TestWorkflowParentOrSameNameGuardReleasesExpectedWork proves a SAME_NAME input
-// guard dispatches only when peer Work names correlate, releasing the expected
-// matched Work to its public terminal state while mismatched peers remain idle
-// without the guarded workstation's success outcome.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestWorkflowParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
-	t.Parallel()
-	t.Run("matching peer names release correlated work", runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0)
-
-	t.Run("mismatched peer names keep guarded workstation idle", runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1)
-}
-
-// TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkState proves
-// VISIT_COUNT and MATCHES_FIELDS eligibility guard failures are observable
-// through public Work and Factory Session surfaces without inspecting internal
-// Petri markings.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkState(t *testing.T) {
-	t.Parallel()
-	t.Run("visit count loop breaker routes over-limit work to failed", runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0)
-
-	t.Run("matches fields guard blocks mismatched inputs", runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1)
 }
 
 func visitCountLoopBreakerFactoryConfig() map[string]any {
@@ -371,57 +357,34 @@ func assertTerminalWorkCorrelatesToTraceID(
 	t.Fatalf("listed work missing terminal story outcome for trace %q", traceID)
 }
 
-func waitForBlockedSameNameGuardObservation(t *testing.T, baseURL string, timeout time.Duration) {
+func waitForBlockedGuardObservation(t *testing.T, baseURL, sessionID string, timeout time.Duration) {
 	t.Helper()
-
-	support.WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
-		return status.Categories.Initial == 2 &&
-			status.Categories.Processing == 0 &&
-			status.Categories.Terminal == 0
+	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	_, err := support.WaitForObservation(timeout, func() (factoryapi.StatusResponse, error) {
+		return support.GetJSON[factoryapi.StatusResponse](t, endpoint), nil
+	}, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 2 && status.Categories.Processing == 0 &&
+			status.Categories.Terminal == 0 && status.Categories.Failed == 0
 	})
-}
-
-func waitForBlockedMatchesFieldsGuardObservation(t *testing.T, baseURL string, timeout time.Duration) {
-	t.Helper()
-
-	support.WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
-		return status.Categories.Initial == 2 &&
-			status.Categories.Processing == 0 &&
-			status.Categories.Terminal == 0 &&
-			status.Categories.Failed == 0
-	})
-}
-
-func waitForMinimumWorkAtCustomerState(
-	t *testing.T,
-	baseURL string,
-	location string,
-	want int,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		if support.CountWorkAtCustomerState(listed, location) >= want {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"%s work count = %d, want at least %d within %s; listed=%#v",
-		location,
-		support.CountWorkAtCustomerState(listed, location),
-		want,
-		timeout,
-		listed,
-	)
 }
 
-func FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
+func waitForMinimumWorkAtCustomerState(t *testing.T, baseURL, sessionID, location string, want int, timeout time.Duration) {
+	t.Helper()
+	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
+	_, err := support.WaitForObservation(timeout, func() (factoryapi.ListWorkResponse, error) {
+		return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint), nil
+	}, func(listed factoryapi.ListWorkResponse) bool {
+		return support.CountWorkAtCustomerState(listed, location) >= want
+	})
+	if err != nil {
+		t.Fatalf("waiting for %s Work: %v", location, err)
+	}
+}
+
+func assertGuardSessionQuiescent(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
 	t.Helper()
 	categories := session.Runtime.Progress.Categories
 	if categories.Initial != 0 || categories.Processing != 0 {
@@ -439,8 +402,9 @@ func FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t *testing.T, 
 	}
 }
 
-func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T, host *support.FactorySessionHost) {
 	t.Helper()
+	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
 	support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -469,12 +433,7 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(
 		codexCommandResult("Done. COMPLETE"),
 	)
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	session, listed, events := host.Run(t, dir, runner, 15*time.Second)
 
 	matchIndexes := dispatchResponseIndexesForTransition(t, events, "match-items")
 	if len(matchIndexes) != 1 {
@@ -489,15 +448,16 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T) {
 	if support.HasWorkAtCustomerState(listed, matchedTaskWorkID, support.WorkCustomerLocation("task", "ready")) {
 		t.Fatalf("task %q still at ready after SAME_NAME guard released correlated work", matchedTaskWorkID)
 	}
-	FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t, session, 1, 0)
+	assertGuardSessionQuiescent(t, session, 1, 0)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider command calls = %d, want 1 for the correlated match-items dispatch", runner.CallCount())
 	}
 
 }
 
-func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T, host *support.FactorySessionHost) {
 	t.Helper()
+	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
 	support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -525,18 +485,11 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(
 		codexCommandResult("Done. COMPLETE"),
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
+	baseURL, sessionID := host.Open(t, dir, runner)
 	waitForMinimumWorkAtCustomerState(
 		t,
 		baseURL,
+		sessionID,
 		support.WorkCustomerLocation("plan", "ready"),
 		1,
 		10*time.Second,
@@ -544,13 +497,14 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 	waitForMinimumWorkAtCustomerState(
 		t,
 		baseURL,
+		sessionID,
 		support.WorkCustomerLocation("task", "ready"),
 		1,
 		10*time.Second,
 	)
-	waitForBlockedSameNameGuardObservation(t, baseURL, 10*time.Second)
+	waitForBlockedGuardObservation(t, baseURL, sessionID, 10*time.Second)
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(sessionID)+"/work")
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "matched")); got != 0 {
 		t.Fatalf("matched task count = %d, want 0 for mismatched peer names; listed=%#v", got, listed)
 	}
@@ -558,7 +512,7 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 		t.Fatalf("task %q missing public ready state; listed=%#v", mismatchedTaskWorkID, listed)
 	}
 
-	events := server.GetFactoryEvents(t)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	if indexes := dispatchResponseIndexesForTransition(t, events, "match-items"); len(indexes) != 0 {
 		t.Fatalf("match-items dispatch count = %d, want 0 while peer names mismatch", len(indexes))
 	}
@@ -568,8 +522,9 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T) {
 
 }
 
-func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T, host *support.FactorySessionHost) {
 	t.Helper()
+	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, visitCountLoopBreakerFactoryConfig())
 	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -589,12 +544,7 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testi
 		codexCommandResult("Done. COMPLETE"),
 		codexCommandResult("needs more work"),
 	)
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	session, listed, events := host.Run(t, dir, runner, 15*time.Second)
 
 	for placeID, want := range map[string]int{
 		support.WorkCustomerLocation("story", "failed"):    1,
@@ -610,7 +560,7 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testi
 	if len(loopBreakerIndexes) != 1 {
 		t.Fatalf("review-loop-breaker dispatch count = %d, want 1 after visit-count guard failure", len(loopBreakerIndexes))
 	}
-	FactoryRuntimeOrchestratorsPetriGuardsAssertQuiescentSession(t, session, 0, 1)
+	assertGuardSessionQuiescent(t, session, 0, 1)
 	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
 	if runner.CallCount() != 4 {
 		t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, review reject)", runner.CallCount())
@@ -618,8 +568,9 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testi
 
 }
 
-func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T, host *support.FactorySessionHost) {
 	t.Helper()
+	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, matchesFieldsGuardFactoryConfig())
 	support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
@@ -647,18 +598,11 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testi
 	runner := support.NewShapedProviderCommandRunner(
 		codexCommandResult("Done. COMPLETE"),
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
+	baseURL, sessionID := host.Open(t, dir, runner)
 	waitForMinimumWorkAtCustomerState(
 		t,
 		baseURL,
+		sessionID,
 		support.WorkCustomerLocation("plan", "ready"),
 		1,
 		10*time.Second,
@@ -666,13 +610,14 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testi
 	waitForMinimumWorkAtCustomerState(
 		t,
 		baseURL,
+		sessionID,
 		support.WorkCustomerLocation("task", "ready"),
 		1,
 		10*time.Second,
 	)
-	waitForBlockedMatchesFieldsGuardObservation(t, baseURL, 10*time.Second)
+	waitForBlockedGuardObservation(t, baseURL, sessionID, 10*time.Second)
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(sessionID)+"/work")
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("plan", "matched")); got != 0 {
 		t.Fatalf("matched plan count = %d, want 0 for mismatched field values; listed=%#v", got, listed)
 	}
@@ -688,7 +633,7 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testi
 		}
 	}
 
-	events := server.GetFactoryEvents(t)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	if indexes := dispatchResponseIndexesForTransition(t, events, "pair-items"); len(indexes) != 0 {
 		t.Fatalf("pair-items dispatch count = %d, want 0 while MATCHES_FIELDS guard blocks mismatched names", len(indexes))
 	}

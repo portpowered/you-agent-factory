@@ -6,15 +6,21 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestConfigDrivenUnrecognizedProviderRefusalFailsOnce proves an unknown provider refusal does not enter the retry loop.
-func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
+func TestProviderRetryRecoveryJourneys(t *testing.T) {
+	t.Parallel()
+	host := support.NewFactorySessionHost(t)
+	t.Run("ConfigDrivenUnrecognizedProviderRefusalFailsOnce", func(t *testing.T) { runUnrecognizedProviderRefusal(t, host) })
+	t.Run("ConfigDrivenRetryLoopBreakerTerminatesAfterMaxRetries", func(t *testing.T) { runRetryExhaustion(t, host) })
+	t.Run("ConfigDrivenRetryLoopBreakerSucceedsBeforeLimit", func(t *testing.T) { runRetryRecovery(t, host) })
+}
+
+func runUnrecognizedProviderRefusal(t *testing.T, host *support.FactorySessionHost) {
+	t.Helper()
 	t.Parallel()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "process_failure_breaker",
@@ -48,14 +54,9 @@ func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{ExitCode: 77, Stderr: []byte("future provider refusal: credential=secret")},
 	)
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	_, listed, events := host.Run(t, dir, runner, 15*time.Second)
 
-	assertWorkflowSessionPlaces(t, listed, map[string]int{
+	assertWorkflowWorkStates(t, listed, map[string]int{
 		"task:failed":   1,
 		"task:init":     0,
 		"task:complete": 0,
@@ -79,30 +80,24 @@ func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
 	}
 }
 
-func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
+func runRetryExhaustion(t *testing.T, host *support.FactorySessionHost) {
+	t.Helper()
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will exhaust retries"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Needs work"},
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Still needs work"},
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Not good enough"},
+	provider := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("Processed. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Needs work")},
+		platformprocess.CommandResult{Stdout: []byte("Processed. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Still needs work")},
+		platformprocess.CommandResult{Stdout: []byte("Processed. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Not good enough")},
 	)
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
-		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	assertWorkflowSessionPlaces(t, listed, map[string]int{
+	_, listed, events := host.Run(t, dir, provider, 15*time.Second)
+	assertWorkflowWorkStates(t, listed, map[string]int{
 		"task:failed": 1, "task:init": 0, "task:in-review": 0, "task:complete": 0,
 	})
 
@@ -110,25 +105,25 @@ func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		t.Errorf("expected provider called 6 times, got %d", provider.CallCount())
 	}
 
-	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "task:failed")
-	server.Stop(t)
+	assertPublicDispatchRoute(t, events, "review-exhaustion", "task:failed")
 }
 
-func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
+func runRetryRecovery(t *testing.T, host *support.FactorySessionHost) {
+	t.Helper()
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will succeed on second try"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Needs work"},
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
+	provider := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("Processed. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Needs work")},
+		platformprocess.CommandResult{Stdout: []byte("Processed. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Looks good. ACCEPTED")},
 	)
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
-	assertWorkflowSessionPlaces(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
+	_, listed, _ := host.Run(t, dir, provider, 15*time.Second)
+	assertWorkflowWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
 func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, transitionID, toPlaceID string) {
@@ -149,11 +144,11 @@ func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, t
 	}
 }
 
-func assertWorkflowSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+func assertWorkflowWorkStates(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for placeID, want := range wants {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
-			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+			t.Errorf("%s Work count = %d, want %d", placeID, got, want)
 		}
 	}
 }

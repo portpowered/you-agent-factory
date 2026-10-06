@@ -24,7 +24,7 @@ func TestExistingMetricsCommandsMatchSelectedPublicAPIs(t *testing.T) {
 			writer.WriteHeader(http.StatusNotFound)
 		}
 	})
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 
 	metricsJSON := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "--session", fixture.sessionID)
 	if err := process.Execute(metricsJSON.Input); err != nil {
@@ -101,7 +101,7 @@ func TestExistingCostsCommandFailureRemainsCodedAndAtomic(t *testing.T) {
 		writer.WriteHeader(http.StatusNotFound)
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "costs", "--session", "compatibility-session")
-	err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+	err := runtimeMetricsProcess(t).Execute(inputs.Input)
 	assertBoundaryCodedFailure(t, err, inputs, "COST_FIXTURE_FAILED")
 	assertBoundaryRequestLog(t, server.log, "GET /metrics/costs?session_id=compatibility-session")
 }
@@ -122,7 +122,7 @@ func TestMetricsSessionCostHumanOutputUsesCostsRenderer(t *testing.T) {
 		}
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--server", server.URL(), "metrics", "session", fixture.sessionID, "--lens", "cost")
-	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
 		t.Fatalf("metrics session human cost error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	for _, marker := range []string{"COST", "Currency: USD", "Status: PRICED", "Cost (USD): $0.01", "Price source: BUILT_IN"} {

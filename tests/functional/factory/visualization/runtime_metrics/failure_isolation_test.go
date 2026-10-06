@@ -64,7 +64,7 @@ func TestMetricsSessionSelectedServerFailuresFailClosed(t *testing.T) {
 				writeBoundaryError(writer, test.status, test.code, test.family, test.message)
 			})
 			inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", test.sessionID)
-			err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+			err := runtimeMetricsProcess(t).Execute(inputs.Input)
 			assertBoundaryCodedFailure(t, err, inputs, string(test.code))
 			assertBoundaryRequestLog(t, server.log, "GET /metrics?session_id="+test.sessionID)
 		})
@@ -105,7 +105,7 @@ func TestMetricsSessionSelectedServerKeepsDisjointFacts(t *testing.T) {
 		selected := servers[index]
 		otherRequestsBefore := servers[1-index].server.log.snapshot()
 		inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", selected.server.URL(), "metrics", "session", selected.fixture.sessionID)
-		if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+		if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
 			t.Fatalf("%s selected-server command error = %v\nstdout:\n%s\nstderr:\n%s", selected.name, err, inputs.Stdout(), inputs.Stderr())
 		}
 		var document boundarySessionDocument
@@ -142,7 +142,7 @@ func TestMetricsSessionInvalidLensDoesNotContactServer(t *testing.T) {
 		writeBoundaryError(writer, http.StatusInternalServerError, factoryapi.ErrorResponseCode("UNEXPECTED_REQUEST"), factoryapi.ErrorFamilyInternalServerError, "unexpected request")
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", "session-invalid-lens", "--lens", "forecast")
-	err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+	err := runtimeMetricsProcess(t).Execute(inputs.Input)
 	assertBoundaryCodedFailure(t, err, inputs, "METRICS_UNSUPPORTED_SESSION_OPTION")
 	if len(server.log.snapshot()) != 0 {
 		t.Fatalf("invalid lens requests = %#v, want no server request", server.log.snapshot())
@@ -206,7 +206,7 @@ func TestMetricsSessionReplayFaultsFailClosed(t *testing.T) {
 				}
 			})
 			inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", test.sessionID)
-			err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+			err := runtimeMetricsProcess(t).Execute(inputs.Input)
 			assertBoundaryCodedFailure(t, err, inputs, "METRICS_SESSION_EVENTS_FAILED")
 			assertBoundaryRequestLog(t, server.log, "GET /metrics?session_id="+test.sessionID, "GET /factory-sessions/"+test.sessionID+"/events")
 		})
@@ -238,7 +238,7 @@ func TestMetricsSessionTimeoutReturnsNoPartialReport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	inputs := boundaryInputs(t, ctx, "you", "--json", "--server", server.URL(), "metrics", "session", fixture.sessionID)
-	command := support.StartProcessCommand(t, runtimeMetricsCLIProcess, inputs.Input)
+	command := support.StartProcessCommand(t, runtimeMetricsProcess(t), inputs.Input)
 	command.AcceptError()
 	waitBoundarySignal(t, eventsStarted, command.Done(), "timeout event request")
 	// Observe the behavior deadline before bounding cleanup. Starting both
@@ -282,7 +282,7 @@ func TestMetricsSessionCancellationReturnsNoPartialReport(t *testing.T) {
 		}
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", fixture.sessionID)
-	command := support.StartProcessCommand(t, runtimeMetricsCLIProcess, inputs.Input)
+	command := support.StartProcessCommand(t, runtimeMetricsProcess(t), inputs.Input)
 	command.AcceptError()
 	waitBoundarySignal(t, eventsStarted, command.Done(), "cancellation event request")
 	command.Stop(t)
@@ -313,7 +313,7 @@ func TestMetricsSessionCostReadFailureDoesNotWritePartialReport(t *testing.T) {
 		}
 	})
 	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", fixture.sessionID, "--lens", "cost")
-	err := runtimeMetricsCLIProcess.Execute(inputs.Input)
+	err := runtimeMetricsProcess(t).Execute(inputs.Input)
 	assertBoundaryCodedFailure(t, err, inputs, "COST_FIXTURE_FAILED")
 	if strings.Contains(inputs.Stderr(), "private-cost-payload") {
 		t.Fatalf("cost failure leaked response details: %q", inputs.Stderr())
@@ -336,8 +336,8 @@ func TestMetricsSessionCancellationDoesNotCorruptConcurrentReport(t *testing.T) 
 
 	survivorInputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", survivorServer.URL(), "metrics", "session", survivor.sessionID)
 	canceledInputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", canceledServer.URL(), "metrics", "session", canceled.sessionID)
-	survivorCommand := support.StartProcessCommand(t, runtimeMetricsCLIProcess, survivorInputs.Input)
-	canceledCommand := support.StartProcessCommand(t, runtimeMetricsCLIProcess, canceledInputs.Input)
+	survivorCommand := support.StartProcessCommand(t, runtimeMetricsProcess(t), survivorInputs.Input)
+	canceledCommand := support.StartProcessCommand(t, runtimeMetricsProcess(t), canceledInputs.Input)
 	canceledCommand.AcceptError()
 	waitBoundarySignal(t, survivorStarted, survivorCommand.Done(), "survivor event request")
 	waitBoundarySignal(t, canceledStarted, canceledCommand.Done(), "canceled event request")

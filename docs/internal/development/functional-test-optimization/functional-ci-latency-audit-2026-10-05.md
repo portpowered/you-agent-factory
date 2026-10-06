@@ -2566,3 +2566,84 @@ The first prototype exposed an independent synchronization race in `TestWorkerSe
 The private eight-build-job/four-parallel-test experiment takes **173.08s** and **386.29 CPU seconds** (312.90 user/73.39 system), with a selected-time event-stream observation failure. Its combined binary takes approximately 101s. Seven compiler calls consume 13.698 CPU seconds and 35 links consume 44.879 CPU seconds; peak individual process RSS is 3.54 GiB. This is a failed diagnostic sample, not checkpoint evidence. It does not improve elapsed time over the earlier eight/eight run and is not adopted. Build and execution budgets remain eight.
 
 Package wall reporting also needs correction: Go's parent test `Elapsed` excludes parallel children. Once customer journeys are combined and their children run in parallel, some successful original packages appear to take zero seconds or only the parent's serial work. The normalizer now records each original group's start timestamp and calculates terminal package elapsed from the full event window, including child execution and parallel scheduling waits. Child test timings and native package events retain their original values. A regression test proves a ten-second package window despite the parent terminal reporting zero. Earlier consolidated-package elapsed rankings must therefore be read with this limitation; CPU attribution above remains independently measured. This reporting correction changes no execution, inventory, coverage floor or verdict.
+
+
+## Isolated-session host consolidation, October 5 continuation
+
+The next implementation targets the measured initialization hotspot rather than
+only cutting linker count. Twenty-two existing customer scenarios now use four
+explicit, parent-owned process hosts: ten routing journeys, five guard journeys,
+three provider retry/recovery journeys, and four prompt/template journeys. Each
+leaf still owns its copied Factory, command-response queue, Factory Session,
+Work identities and output assertions. Closing one session does not stop peer
+sessions; cleanup terminates and deletes the session through REST before removing
+its external command route. Each host retains its own isolated operator home and
+model-cache configuration. No process-global default session or cache registry
+was added.
+
+Provider-internal mocks and token assertions were replaced with the command edge,
+public dispatch events, terminal Work, rendered command stdin and the actual
+working directory. The branch-tag prompt case now proves the customer-visible
+worker directory selected by that tag. Matching and mismatching guards still
+prove public dispatch, Work correlation and absence of unwanted provider calls.
+The blocked sessions legitimately report ACTIVE; an extra IDLE assumption was
+rejected after five focused repetitions exposed it. The final guard cases retain
+the original public Work-category guarantee. Their 50ms sleep loops now use the
+bounded public-observation helper, which evaluates immediately.
+
+Workflow source files now identify routing, guards and provider retries instead
+of internal Petri composition. Re-grouping preserves all 22 leaf scenarios while
+reducing reported top-level results from 751 to 742. Coverage manifests, minimums,
+quarantine and retry policy are unchanged.
+
+Packaged Review exposes its existing teardown as an explicit monolith cleanup
+hook. Runtime Metrics, Factory Transformation and CLI Invocation initialize their
+existing package fixtures lazily through sync.Once and expose the same cleanup
+hook. Native TestMain still owns native teardown; the combined package owns
+teardown after all of its parallel children finish. This makes **30 packages / 451
+top-level tests** eligible, versus 26 / 373 before this batch. All executable,
+relative-fixture and process-wide-state exclusions remain intact. Attempted
+teardown opt-ins for Packaged Fix, Chat Sessions ACP, Models and docs smoke were
+removed because other independent exclusions still require their native binaries;
+there is no benefit in shipping inactive hooks or relaxing those exclusions.
+
+An observed provider-log retry exposed a separate completion assumption: stopping
+one session does not stop peer log writers. A trailing incomplete JSON record is
+therefore transient, not proof of malformed persisted output. The file-output
+assertion now waits for the complete matching customer record, stops scanning once
+it finds that record, and preserves missing-record/malformed-record failure
+reporting. Ten focused repetitions pass. No additional fixed sleep was introduced.
+
+Validation so far: five routing/prompt repetitions, five guard/retry repetitions,
+three native lazy-fixture packages, twenty selected-time automation repetitions,
+and scoped repository/built-in lint pass. The complete four-CPU Linux experiments
+retain coverage floors, selected inventory, quarantine and fresh execution:
+
+| Private experiment | Elapsed | User + system CPU | Compiler actions | Links | Outcome |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Routing/prompt hosts, changed source | 184.07s | 580.25s | 119 | 34 | Pass |
+| Same routing/prompt source, warm archives | 140.58s | 403.37s | 0 | 32 | Pass |
+| Add guard/retry hosts and Review cleanup | 166.18s | 503.93s | 119 | 32 | Pass after one provider-log native retry |
+| Add three lazy fixture packages | 124.37s | 355.74s | 21 | 29 | Failed selected-time automation observation; native leaf retry passed |
+
+The first warm repeat partially overlapped a focused Windows check, so it is
+reported as diagnostic evidence rather than a controlled speedup. Reused report
+directories also retained an old flake ledger in that repeat; its fresh timing
+summary has 746 results, 744 passes, two skips and no failing test. Subsequent runs
+clear only the private generated report directory and use distinct tool-timer
+folders. The broad failed run's coordinator failure keeps the lane failed even
+though the individual automation retry passes; its short elapsed time is **not** a
+successful baseline. New diagnostics report the pending Work identities and public
+Work projection if that automation completion observation expires.
+
+These measurements use the previously described private Linux audit checkout with
+current changed source files copied in; they are not exact hosted-head results.
+The latest hosted complete-job result remains 192s. No three-minute checkpoint has
+been claimed from these local samples.
+
+The current expanded batch passes without retries: **129.01s supervisor elapsed**,
+**122.034s coverage invocation**, **378.63s aggregate CPU** (303.63 user + 75.00
+system), 68 packages, 742 results, 740 passes and two skips. Peak single-process
+RSS is 4,034,972 KiB (about 3.85 GiB). This is a successful changed-source local
+sample, not the hosted three-minute checkpoint; an identical-source warm repeat
+and a conflict-only rebase against current main follow.

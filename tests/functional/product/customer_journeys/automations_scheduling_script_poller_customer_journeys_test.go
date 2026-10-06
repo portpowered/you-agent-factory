@@ -353,6 +353,12 @@ func readAutomationCompletedWork(t *testing.T, baseURL, sessionID, state string,
 	for _, id := range workIDs {
 		pending[id] = true
 	}
+	defer func() {
+		if ctx.Err() != nil {
+			t.Logf("unobserved completion Work=%v; public session Work=%#v", pending,
+				support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work")))
+		}
+	}()
 	for len(pending) > 0 {
 		event := stream.NextEventContext(ctx)
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
