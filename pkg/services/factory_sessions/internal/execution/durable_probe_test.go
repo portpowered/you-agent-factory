@@ -84,7 +84,7 @@ func TestMatchCurrentBoardWorkRejectsChangedFacts(t *testing.T) {
 			if name == "canceled read" {
 				store.onLoad = cancel
 			}
-			service := &JavaScriptRuntimeService{persistence: store}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 			matched, err := service.MatchCurrentBoardWork(ctx, "~default", state)
 			if name == "canceled read" {
 				if !errors.Is(err, context.Canceled) {
@@ -103,7 +103,7 @@ func TestMatchCurrentBoardWorkRejectsChangedFacts(t *testing.T) {
 func TestCurrentBoardFactsExcludeOnlySynthesizedPetriLifecycle(t *testing.T) {
 	t.Parallel()
 	store := &durableProbeStore{snapshot: []byte(`{"Session":{"SessionID":"~default","OrchestratorKind":"PETRI"},"Events":[{"id":"session-started/~default","type":"SESSION_STARTED","payload":{}},{"id":"session-result-updated/~default","type":"SESSION_RESULT_UPDATED","payload":{}},{"id":"recorded-start","type":"SESSION_STARTED","payload":{}},{"id":"work","type":"WORK_REQUEST","payload":{}}]}`)}
-	service := &JavaScriptRuntimeService{persistence: store}
+	service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	facts, err := service.LoadCurrentBoardFacts(t.Context(), "~default")
 	if err != nil || len(facts) != 2 || facts[0].Id != "recorded-start" || facts[1].Id != "work" {
 		t.Fatalf("recorded witness=%v, %v", facts, err)
@@ -149,7 +149,7 @@ func TestHasDurableStateCanceledDuringRead(t *testing.T) {
 			store := &durableProbeStore{
 				snapshot: []byte(test.snapshot), failure: test.failure, onLoad: cancel,
 			}
-			service := &JavaScriptRuntimeService{persistence: store}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 			got, err := service.HasDurableState(ctx, "~default")
 			if got || !errors.Is(err, context.Canceled) {
 				t.Fatalf("probe canceled during read = %v, %v; want false, context.Canceled", got, err)
@@ -250,7 +250,7 @@ func TestLoadCurrentBoardFactsReadsCanonicalWitnessWithoutHydration(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			store := &durableProbeStore{snapshot: []byte(tc.snapshot)}
-			service := &JavaScriptRuntimeService{persistence: store}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 			got, err := service.LoadCurrentBoardFacts(t.Context(), "~default")
 			if (err == nil) != tc.valid {
 				t.Fatalf("witness=%v, %v", got, err)
@@ -268,7 +268,7 @@ func TestLoadCurrentBoardFactsReadsCanonicalWitnessWithoutHydration(t *testing.T
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	store := &durableProbeStore{onLoad: cancel}
-	service := &JavaScriptRuntimeService{persistence: store}
+	service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
 	if _, err := service.LoadCurrentBoardFacts(ctx, "~default"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("read cancellation=%v", err)
 	}

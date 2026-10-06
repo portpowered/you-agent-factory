@@ -198,7 +198,17 @@ func (s *JavaScriptRuntimeService) currentBoardStore() (runtimepersist.CurrentBo
 	if s == nil {
 		return nil, ErrSessionNotFound
 	}
-	store, ok := s.persistence.(runtimepersist.CurrentBoardStore)
+	persistence := s.persistence
+	if scoped, ok := persistence.(*ScopePersistence); ok {
+		// The implicit board belongs to the acquired default session. Resolve
+		// its registered store, never a peer or the process-global route.
+		scope := scoped.scope("~default")
+		if scope == nil || scope.retiring {
+			return nil, ErrSessionNotFound
+		}
+		persistence = scope.store
+	}
+	store, ok := persistence.(runtimepersist.CurrentBoardStore)
 	if !ok {
 		return nil, errors.New("current board reference persistence is unavailable")
 	}
