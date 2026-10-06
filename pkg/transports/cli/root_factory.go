@@ -313,6 +313,9 @@ func executeResolvedRunCommand(
 		if err := prepareNamedRunSystemInitialization(
 			cmd, &resolvedConfig, promptArgs, globals, namedPolicy, rootOptions,
 		); err != nil {
+			if !remotePlacementSelected(globals) {
+				err = clidiag.WithStartupCause(err)
+			}
 			return writeRunCommandInvocationError(cmd, globals, err)
 		}
 	}
@@ -320,6 +323,9 @@ func executeResolvedRunCommand(
 	if currentFactorySelected {
 		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
 			mapped := runcli.MapCurrentFactoryFailure(err)
+			if !remotePlacementSelected(globals) {
+				mapped = clidiag.WithStartupCause(mapped)
+			}
 			return writeRunCommandInvocationError(cmd, globals, mapped)
 		}
 	}
