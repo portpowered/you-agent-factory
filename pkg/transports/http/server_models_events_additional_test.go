@@ -312,7 +312,7 @@ type strictModelsServiceInvoker struct {
 	fake strictModelsServiceFake
 }
 
-func (invoker strictModelsServiceInvoker) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+func (invoker strictModelsServiceInvoker) InvokeModelForSession(ctx context.Context, _ string, name string, request modelinference.Request) (modelinference.Result, error) {
 	fake := invoker.fake
 	if fake.invoke == nil {
 		panic("unexpected models.Service.InvokeModel call")
@@ -331,7 +331,7 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
+		modelshttp.NewHandler(modelshttp.NewSessionAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, modelHTTPTestScope(), "~default"), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)
