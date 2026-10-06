@@ -29,37 +29,72 @@ const (
 	httpUnknownWorkID = "work-http-unknown-missing-id"
 )
 
-// TestAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
-// /work-requests accepts canonical works content and projects ordered content
-// parts. Its top-level name is retained because the functional-evidence
-// registry owns this public endpoint coverage identity.
-func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
+// TestWorkSubmissionJourneys shares one initialized host. Each customer group
+// owns its Factory Session; names, Work, staged content and event history remain
+// scoped even when the groups execute concurrently.
+func TestWorkSubmissionJourneys(t *testing.T) {
 	t.Parallel()
-	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
-	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
-	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
-	defer server.Stop(t)
-
-	assertAPIBatchUpsertAcceptsWorksContent(t, server)
+	idle := support.ScaffoldFactory(t, map[string]any{"workTypes": []map[string]any{{"name": "idle", "states": []map[string]string{{"name": "init", "type": "INITIAL"}}}}})
+	support.ClearSeedInputs(t, idle)
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(idle, submissionInputPreservingProviderRunner()))
+	if !t.Run("Cases", func(t *testing.T) {
+		t.Run("HTTPBatchAndFiles", func(t *testing.T) { t.Parallel(); runWorkBatchHTTPSubmission(t, server) })
+		t.Run("StructuredContent", func(t *testing.T) { t.Parallel(); runStructuredSubmissionSimplePipeline(t, server) })
+		t.Run("BatchContent", func(t *testing.T) {
+			t.Parallel()
+			_, sessionID := openSubmissionSession(t, server)
+			assertAPIBatchUpsertAcceptsWorksContent(t, server, sessionID)
+		})
+	}) {
+		return
+	}
 	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
 // assertAPIPOSTSubmitAndQueryWork proves REST POST /work submission and GET
 // /work query expose the submitted Work through the public HTTP surface after
 // completion.
-func assertAPIPOSTSubmitAndQueryWork(t *testing.T, server *support.FunctionalAPIServer) {
-	submitted := postWorkViaRESTAPI(t, server.URL())
-	assertListedWorkCompleteTask(t, server.URL(), submitted.TraceId)
+func assertAPIPOSTSubmitAndQueryWork(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
+	submitted := postWorkViaRESTAPI(t, server.URL(), sessionID)
+	assertListedWorkCompleteTask(t, server.URL(), submitted.TraceId, sessionID)
 }
 
 // assertAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
 // /work-requests accepts canonical works content and projects ordered content
 // parts.
-func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.FunctionalAPIServer) {
+func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
 	const (
 		workID    = "work-http-batch-content"
 		requestID = "request-http-batch-content"
 	)
+	upserted := submitContentBatch(t, server, sessionID, workID, requestID)
+	if upserted.RequestId != requestID || upserted.TraceId == "" {
+		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", upserted)
+	}
+	if len(upserted.Works) != 1 || upserted.Works[0].WorkId != workID {
+		t.Fatalf("PUT /work-requests works = %#v, want one accepted work with id %q", upserted.Works, workID)
+	}
+
+	items := submissionWaitForWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second, sessionID)
+	content := items[0].Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered batch content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first batch content part: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second batch content part: %v", err)
+	}
+	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
+		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
+	}
+}
+
+func submitContentBatch(t *testing.T, server *support.FunctionalAPIServer, sessionID, workID, requestID string) factoryapi.UpsertWorkRequestResponse {
+	t.Helper()
 	body, err := json.Marshal(map[string]any{
 		"requestId": requestID,
 		"type":      "FACTORY_REQUEST_BATCH",
@@ -76,9 +111,8 @@ func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.Funct
 	if err != nil {
 		t.Fatalf("marshal batch request: %v", err)
 	}
-	endpoint := support.DefaultSessionWorkURL(
-		server.URL(),
-		"/work-requests/"+url.PathEscape(requestID),
+	endpoint := support.SessionWorkURL(
+		server.URL(), sessionID, "/work-requests/"+url.PathEscape(requestID),
 	)
 	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -98,29 +132,7 @@ func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.Funct
 	if err := json.NewDecoder(resp.Body).Decode(&upserted); err != nil {
 		t.Fatalf("decode work request response: %v", err)
 	}
-	if upserted.RequestId != requestID || upserted.TraceId == "" {
-		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", upserted)
-	}
-	if len(upserted.Works) != 1 || upserted.Works[0].WorkId != workID {
-		t.Fatalf("PUT /work-requests works = %#v, want one accepted work with id %q", upserted.Works, workID)
-	}
-
-	items := submissionWaitForWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
-	content := items[0].Content
-	if content == nil || len(*content) != 2 {
-		t.Fatalf("GET /work content = %#v, want two ordered batch content parts", content)
-	}
-	firstPart, err := (*content)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("decode first batch content part: %v", err)
-	}
-	secondPart, err := (*content)[1].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("decode second batch content part: %v", err)
-	}
-	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
-		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
-	}
+	return upserted
 }
 
 // assertCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an
@@ -130,6 +142,7 @@ func assertCLIWorkTypeNameReachesLiveAPIHandler(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
 	factoryDir string,
+	sessionID string,
 ) {
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("ship name based CLI submit"), 0o644); err != nil {
@@ -139,7 +152,7 @@ func assertCLIWorkTypeNameReachesLiveAPIHandler(
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you",
 		"--server", functionalServerBaseURL(t, server.URL()),
-		"submit",
+		"submit", "--session", sessionID,
 		"--name", "  cli-live-api-name  ",
 		"--work-type-name", "task",
 		"--payload", payloadPath,
@@ -154,7 +167,7 @@ func assertCLIWorkTypeNameReachesLiveAPIHandler(
 		)
 	}
 
-	item := waitForWorkByNameComplete(t, server.URL(), "cli-live-api-name", "task", 10*time.Second)
+	item := waitForWorkByNameComplete(t, server.URL(), "cli-live-api-name", "task", 10*time.Second, sessionID)
 	if item.Name != "cli-live-api-name" {
 		t.Fatalf("CLI-submitted work name = %q, want cli-live-api-name", item.Name)
 	}
@@ -168,9 +181,9 @@ func assertCLIWorkTypeNameReachesLiveAPIHandler(
 // Work Request submission makes the submitted Work visible through list and
 // get endpoints so automation can submit once and inspect the resulting Work
 // identity and payload without a second transport.
-func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.FunctionalAPIServer) {
+func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
 	workTypeName := batchInputsWorkType
-	submitted := support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+	submitted := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, factoryapi.WorkRequest{
 		RequestId: httpSubmitListGetRequestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{{
@@ -202,7 +215,7 @@ func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.Functi
 		)
 	}
 
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := support.ListSessionWork(t, server.URL(), sessionID)
 	item, ok := findListedWorkByNameAndID(listed, httpSubmitListGetWorkName, httpSubmitListGetWorkID)
 	if !ok {
 		t.Fatalf(
@@ -222,7 +235,7 @@ func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.Functi
 		)
 	}
 
-	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpSubmitListGetWorkID)
+	endpoint := support.SessionWorkURL(server.URL(), sessionID, "/work/"+httpSubmitListGetWorkID)
 	got := support.GetJSON[factoryapi.Work](t, endpoint)
 	if support.StringPointerValue(got.WorkId) != httpSubmitListGetWorkID {
 		t.Fatalf(
@@ -249,7 +262,7 @@ func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.Functi
 // same logical Work Request through the public HTTP API keep canonical Work
 // Request and Work identities so retries and idempotent clients do not create
 // divergent identities for the same upsert key.
-func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *support.FunctionalAPIServer) {
+func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
 	workTypeName := batchInputsWorkType
 	batchRequest := factoryapi.WorkRequest{
 		RequestId: httpUpsertCanonicalRequestID,
@@ -262,7 +275,7 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 		}},
 	}
 
-	first := support.UpsertDefaultSessionWorkRequest(t, server.URL(), batchRequest)
+	first := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
 	if first.RequestId != httpUpsertCanonicalRequestID {
 		t.Fatalf("first PUT /work-requests requestId = %q, want %q", first.RequestId, httpUpsertCanonicalRequestID)
 	}
@@ -277,7 +290,7 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 		)
 	}
 
-	second := support.UpsertDefaultSessionWorkRequest(t, server.URL(), batchRequest)
+	second := support.UpsertSessionWorkRequest(t, server.URL(), sessionID, batchRequest)
 	if second.RequestId != first.RequestId {
 		t.Fatalf(
 			"repeat PUT /work-requests requestId = %q, want canonical %q",
@@ -300,7 +313,7 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 		)
 	}
 
-	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpUpsertCanonicalWorkID)
+	endpoint := support.SessionWorkURL(server.URL(), sessionID, "/work/"+httpUpsertCanonicalWorkID)
 	got := support.GetJSON[factoryapi.Work](t, endpoint)
 	if support.StringPointerValue(got.WorkId) != httpUpsertCanonicalWorkID {
 		t.Fatalf(
@@ -324,8 +337,8 @@ func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *suppo
 // does not exist in the running Factory Session returns a typed not-found public
 // error outcome (structured 404 with NOT_FOUND family/code) rather than an
 // opaque 500 or unstructured failure body.
-func assertAPIUnknownWorkReturnsTypedNotFound(t *testing.T, server *support.FunctionalAPIServer) {
-	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpUnknownWorkID)
+func assertAPIUnknownWorkReturnsTypedNotFound(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
+	endpoint := support.SessionWorkURL(server.URL(), sessionID, "/work/"+httpUnknownWorkID)
 	response, err := http.Get(endpoint)
 	if err != nil {
 		t.Fatalf("GET %s: %v", endpoint, err)
@@ -410,12 +423,12 @@ func assertAPIUnknownWorkTypedNotFoundHTTPResponse(
 	}
 }
 
-func postWorkViaRESTAPI(t *testing.T, baseURL string) factoryapi.SubmitWorkResponse {
+func postWorkViaRESTAPI(t *testing.T, baseURL string, sessionID string) factoryapi.SubmitWorkResponse {
 	t.Helper()
 
 	req, err := http.NewRequest(
 		http.MethodPost,
-		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
+		strings.TrimSuffix(baseURL, "/")+support.SessionWorkPath(sessionID, "/work"),
 		bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`),
 	)
 	if err != nil {
@@ -441,10 +454,10 @@ func postWorkViaRESTAPI(t *testing.T, baseURL string) factoryapi.SubmitWorkRespo
 	return submitResp
 }
 
-func assertListedWorkCompleteTask(t *testing.T, baseURL, traceID string) {
+func assertListedWorkCompleteTask(t *testing.T, baseURL, traceID string, sessionID string) {
 	t.Helper()
 
-	listResp := waitForWorkByTraceComplete(t, baseURL, traceID, 10*time.Second)
+	listResp := waitForWorkByTraceComplete(t, baseURL, traceID, 10*time.Second, sessionID)
 	work := requireWorkByTrace(t, listResp, traceID)
 	if support.StringPointerValue(work.WorkTypeName) != "task" {
 		t.Errorf("GET /work: expected work type 'task', got %q", support.StringPointerValue(work.WorkTypeName))

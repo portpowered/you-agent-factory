@@ -164,7 +164,7 @@
       ]
     },
     {
-      "test": "tests/functional/work/admission/submission_http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
+      "test": "tests/functional/work/admission/submission_http_test.go::TestWorkSubmissionJourneys",
       "stableIds": [
         "rest/upsertWorkRequestBySessionId"
       ]

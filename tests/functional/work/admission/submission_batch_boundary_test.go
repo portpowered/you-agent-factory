@@ -124,7 +124,7 @@ func runBoundaryBatchSmokeThroughWatchedFile(t *testing.T, batchJSON []byte, req
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
 		"work-boundary-child",
-	}, 10*time.Second)
+	}, 10*time.Second, submissionDefaultSessionID)
 
 	return loadBatchBoundarySummary(t, server, requestID)
 }
@@ -175,7 +175,7 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
 		"work-boundary-child",
-	}, 10*time.Second)
+	}, 10*time.Second, submissionDefaultSessionID)
 
 	return loadBatchBoundarySummary(t, server, requestID)
 }

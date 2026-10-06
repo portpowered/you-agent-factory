@@ -3102,3 +3102,85 @@ run: **198.36 s**, coverage command: 184.957 s, aggregate CPU: 612.96 s
 is established by these unpaired samples. Both scoped linters passed and the
 coordinator regression selection passed after the final panic-header change.
 The two-minute hosted checkpoint remains outstanding.
+
+
+## Exact-head build evidence and shared Work submission host
+
+Head `65efc94442` passed every required hosted check. Its changed-source
+functional job took 241 seconds (06:28:35–06:32:36 UTC), coverage command
+179.466 s, 370 compiler commands and 21 links. Prefix cache restoration used
+`968c90fe99`; capture retained 1,038,345,460 bytes with **zero omissions**.
+The completed-workflow exact-head rerun passed the functional job in **212
+seconds** (06:37:01–06:40:33), coverage 160.286 s, **zero compiler commands**
+and 21 links. Both ran all 68 original packages / 752 results without failures.
+The two-minute complete hosted-job checkpoint remains unmet.
+
+### Compiler archive budget comparison
+
+A build-only controlled comparison restored the same unchanged local compiler
+cache into separate 1 GiB and 2 GiB snapshots. Both compiled the exact selected
+functional inventory and overlay from the preceding full run with `-run=^$`:
+no customer test bodies ran, and the result is not a functional latency sample.
+Snapshots exclude test-result payloads and executables, as before. Both Go
+invocations succeeded in each trial; both required only **one tiny compiler
+invocation (~0.010 CPU seconds)** and 21 links. The 1 GiB build took 19.005 s
+and 50.623 aggregate CPU seconds; the 2 GiB build took 24.407 s and 73.971 CPU
+seconds. This is a sequential budget experiment, not a statistical linker-speed
+comparison. It demonstrates that increasing this local snapshot's budget does
+not recover meaningful missing compilation. The 1 GiB policy remains unchanged.
+The actual hosted exact-head zero-compiler result supports the same next action:
+prioritize execution/setup CPU, rather than a larger compiler cache.
+
+The already-committed workflow skips archive capture and save on exact primary
+cache hits. No additional snapshot-copy optimization is added.
+
+### Three submission hosts become one, with explicit sessions
+
+`TestWorkSubmissionJourneys` owns one initialized API host. Its parallel groups
+for HTTP batch/files, structured content and canonical batch content each open
+and close their own Factory Session and own their Factory directory. The host's
+default Factory is idle. Submission, staging, Work list/get, completion polling,
+upsert identity and the CLI `submit` call all carry the selected session ID.
+The original 13 customer cases and their assertion sets remain: ordered text,
+header-only and rejected empty content, staged file/media metadata, forged
+reference rejection, typed unknown-Work errors, canonical request/Work identity,
+and CLI/REST behavior. Two fewer reported top-level results reflect grouping
+three original tests under one parent; no customer case is removed.
+The reviewed REST endpoint evidence is updated to the new parent and published
+only after its parallel groups join successfully. The 160-scenario manifest
+check passes. Other fixtures explicitly retain their existing default selector
+while the shared helpers now also accept selected-session IDs.
+
+A full controlled Linux inventory/coverage run passes **68 packages / 750
+results**, 748 pass and 2 skip, without retry. Its 196.39-second elapsed and
+186.374-second coverage command overlap independent Windows validation work;
+these timings are **validation-only**, excluded from performance comparisons.
+Aggregate CPU was 639.83 s, with 118 compiler and 24 linker invocations. The
+final response helper was split after lint identified existing complexity at
+the newly modified assertion boundary; HTTP 201, identity and content guarantees
+are retained. Both scoped linters pass; native focused customer journeys pass
+three repetitions and the existing support upsert check passes.
+
+### Paired native execution measurement
+
+Baseline and candidate test binaries were built separately against the same
+runtime, with build time excluded from these execution numbers. Four CPUs were
+pinned, GOMAXPROCS=4, GOGC=100. Runs used five repetitions each in the order
+baseline, candidate, candidate, baseline; source/evidence files were restored
+for the matching binary and the candidate was restored afterward. Every run
+passed the same customer cases.
+
+| Version / run order | Five-repetition wall | User + system CPU |
+| --- | ---: | ---: |
+| Original three hosts, first | 3.525 s | 5.201 s |
+| Shared host, first | 4.507 s | 3.850 s |
+| Shared host, second | 3.255 s | 2.565 s |
+| Original three hosts, second | 3.134 s | 5.096 s |
+
+Across ten repetitions per version, aggregate CPU falls from **10.298 s to
+6.414 s**, approximately **37.7% less compute**. Aggregate wall rises from
+6.660 s to 7.762 s; elapsed samples are variable and no latency win is claimed.
+This is a native cell-level comparison, not a coverage-instrumented whole-CI
+checkpoint. Fresh candidate hosted CI is required. The remaining priority is
+consolidating compatible initialized-session fixtures in the largest measured
+customer packages, without collapsing distinct persistence or recovery proofs.
