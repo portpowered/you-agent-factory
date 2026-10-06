@@ -76,6 +76,34 @@ func TestCurrentBoardIntentSurvivesRuntimeActivation(t *testing.T) {
 	}
 }
 
+func TestCurrentBoardRecordingRequiresCanonicalRepositoryIdentity(t *testing.T) {
+	t.Parallel()
+	directory := filepath.Join(t.TempDir(), "factory")
+	for _, tc := range []struct {
+		name, directory string
+		kind            factorydefinitions.FactoryEventType
+		valid           bool
+	}{
+		{"same repository", directory, factorydefinitions.FactoryEventTypeRunRequest, true},
+		{"sibling repository", directory + "-sibling", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"missing directory", "", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"relative directory", "factory", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"no canonical request", directory, factorydefinitions.FactoryEventTypeWorkRequest, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload, err := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": tc.directory}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = validateCurrentBoardFactoryDirectory([]factorydefinitions.FactoryEvent{{Type: tc.kind, Payload: payload}}, directory)
+			if (err == nil) != tc.valid {
+				t.Fatalf("canonical repository validation = %v, want valid=%v", err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"selected", "fresh", "legacy requires history", "read failure", "explicit", "batch", "peer", "resume", "replay"} {

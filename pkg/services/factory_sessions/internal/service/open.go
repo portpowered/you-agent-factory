@@ -356,6 +356,12 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 			return err
 		}
 		if restoredBoard != nil {
+			if opening.hasCurrentBoardReference {
+				if err := validateCurrentBoardFactoryDirectory(restoredBoard.events, opening.load.LoadedFactoryCfg.FactoryDir()); err != nil {
+					return currentBoardHistoryFailure(opening.configured.Recordings.RecordPath, opening.sessionID,
+						"CORRUPT_HISTORY: selected recording does not match this repository; preserve the recording and reference", err)
+				}
+			}
 			opening.restoredWorldState = restoredBoard.state
 			opening.restoredEventHistory = restoredBoard.events
 		}

@@ -31,20 +31,46 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	sentinel := filepath.Join(dir, "worktrees", "sentinel.txt")
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
 	first := inputs(t, dir)
-	first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
+	if port != 0 {
+		first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
+	}
 	command := support.StartProcessCommand(t, process, first.Input)
 	url := restartProbeReadyURL(t, apis[0], command)
+	if port == 0 {
+		// The exact launch starts empty; Work enters through the public API
+		// only after readiness, without adding a selector or startup input.
+		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
+		if len(works.Results) != 0 {
+			t.Fatal("first plain launch was not empty")
+		}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url+"/factory-sessions/~default/work-requests/restart-dag", bytes.NewReader([]byte(batch)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			t.Fatalf("batch admission returned %d", response.StatusCode)
+		}
+	}
 	// Public status observes the asynchronous projection after all three
 	// admissions and A's completion, rather than padding with a sleep.
 	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.TotalTokens == 3 && status.Categories.Terminal == 1
 	})
+	waitForRestartProbeConfirmed(t, url)
 	before := restartProbeBoardReads(t, url)
 	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
 	second := inputs(t, dir)
-	second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
+	if port != 0 {
+		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
+	}
 	reopened := support.StartProcessCommand(t, process, second.Input)
 	url = restartProbeReadyURL(t, apis[1], reopened)
 	after := restartProbeBoardReads(t, url)
@@ -63,10 +89,48 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/restart-B/move"), request)
 	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 3 })
 	assertRestartProbeCompletions(t, url, runner)
+	waitForRestartProbeConfirmed(t, url)
+	completed := restartProbeBoardReads(t, url)
+	completedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	restartProbeShutdown(t, url, reopened)
+	if len(apis) > 2 {
+		// Reopen the same repository/reference/recording again after every
+		// Work is terminal. Reuse is the invariant, so this journey is ordered.
+		third := inputs(t, dir)
+		repeated := support.StartProcessCommand(t, process, third.Input)
+		url = restartProbeReadyURL(t, apis[2], repeated)
+		for i, work := range restartProbeBoardReads(t, url) {
+			if work.State == nil || work.State.Name != "complete" || !reflect.DeepEqual(work.Content, completed[i].Content) || !reflect.DeepEqual(work.WorkId, completed[i].WorkId) || !reflect.DeepEqual(work.Relations, completed[i].Relations) {
+				t.Fatalf("terminal restart changed Work: before=%#v after=%#v", completed[i], work)
+			}
+		}
+		assertRestartProbeEventFacts(t, completedEvents, support.GetFactoryEventsForSessionAt(t, url, "~default"))
+		if runner.calls.Load() != 3 {
+			t.Fatal("terminal restart dispatched completed Work")
+		}
+		restartProbeShutdown(t, url, repeated)
+	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
 	}
+}
+
+func waitForRestartProbeConfirmed(t *testing.T, url string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	// Public confirmation is the durability boundary. A terminal projection
+	// alone does not establish that the next process can recover these facts.
+	for ctx.Err() == nil {
+		confirmed := true
+		for _, work := range restartProbeBoardReads(t, url) {
+			confirmed = confirmed && work.ConfirmationState != nil && *work.ConfirmationState == factoryapi.CONFIRMED
+		}
+		if confirmed {
+			return
+		}
+	}
+	t.Fatal("DAG Work did not reach CONFIRMED before shutdown")
 }
 
 func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *support.ProcessCommand) string {

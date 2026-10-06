@@ -35,12 +35,12 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		t.Fatal(err)
 	}
 	implicitDir = implicitFactory
-	support.WriteAgentConfig(t, implicitDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	support.WriteAgentConfig(t, implicitDir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 	support.WriteWorkstationConfig(t, implicitDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	support.WriteAgentConfig(t, boardDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
-	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
@@ -48,9 +48,10 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		FactorySessionRuntimePersistenceFileSystem: files,
 		ProviderCommandRunner:                      runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			starts.Add(1)
-			if request.Port >= 23101 && request.Port <= 23104 {
-				return boardAPIs[request.Port-23101].Start(ctx, request)
+			// The two ordered local journeys own the first five starts. Route
+			// the exact-command journey without changing its default listener.
+			if index := starts.Add(1); index <= int32(len(boardAPIs)) {
+				return boardAPIs[index-1].Start(ctx, request)
 			}
 			return api.Start(ctx, request)
 		},
@@ -59,7 +60,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	// A board's stop/reopen is ordered; independent empty/corrupt projects
 	// below remain parallel on the same reusable process graph.
 	t.Run("F1 F2 graceful DAG restart", func(t *testing.T) {
-		testRestartProbeDAG(t, process, boardDir, boardAPIs, runner)
+		testRestartProbeDAG(t, process, boardDir, boardAPIs[:2], runner)
 	})
 	t.Run("PlainBoard graceful DAG restart without selector", func(t *testing.T) {
 		// Both journeys exercise local ~default ownership, so run this smallest
@@ -67,21 +68,24 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		runner.calls.Store(0)
 		home := t.TempDir()
 		invocations := 0
+		var retainedReference []byte
 		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations > 0 {
-				if _, err := os.Stat(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json")); err != nil {
+				reference, err := os.ReadFile(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json"))
+				if err != nil {
 					t.Fatalf("implicit opening did not publish its repository reference: %v", err)
 				}
+				if retainedReference != nil && !bytes.Equal(retainedReference, reference) {
+					t.Fatal("graceful restart replaced the selected recording reference")
+				}
+				retainedReference = reference
 			}
 			invocations++
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "run", "--continuously", "--with-server", "--quiet",
-				"--provider", "CODEX", "--model", "gpt-5-codex",
-			})
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = implicitRepo
 			return inputs
-		}, 23103)
+		}, 0)
 	})
 
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
@@ -93,8 +97,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 5 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want five and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 6 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want six and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }
