@@ -73,18 +73,26 @@ func consolidateFunctionalCoveragePlan(cfg config, plan *coverageInvocationPlan,
 	if err := json.Unmarshal(data, &groups); err != nil {
 		return err
 	}
-	if selection != nil {
-		for _, group := range groups {
-			expected := append([]string(nil), selection.SelectedTests[group.Package]...)
-			actual := append([]string(nil), group.Tests...)
-			slices.Sort(expected)
-			slices.Sort(actual)
-			if !slices.Equal(expected, actual) {
-				return fmt.Errorf("functional monolith inventory mismatch for %s: expected %v, registered %v", group.Package, expected, actual)
-			}
-		}
+	if err := validateFunctionalMonolithInventory(groups, selection); err != nil {
+		return err
 	}
 	return applyFunctionalMonolithGroups(plan, groups, filepath.Join(dir, "overlay.json"))
+}
+
+func validateFunctionalMonolithInventory(groups []functionalMonolithGroup, selection *functionalCoverageSelection) error {
+	if selection == nil {
+		return nil
+	}
+	for _, group := range groups {
+		expected := append([]string(nil), selection.SelectedTests[group.Package]...)
+		actual := append([]string(nil), group.Tests...)
+		slices.Sort(expected)
+		slices.Sort(actual)
+		if !slices.Equal(expected, actual) {
+			return fmt.Errorf("functional monolith inventory mismatch for %s: expected %v, registered %v", group.Package, expected, actual)
+		}
+	}
+	return nil
 }
 
 func applyFunctionalMonolithGroups(plan *coverageInvocationPlan, groups []functionalMonolithGroup, overlay string) error {

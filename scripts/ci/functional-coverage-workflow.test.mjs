@@ -104,6 +104,10 @@ test("functional compiler archives stay bounded and restore separately from the 
 	assert.match(restore, /functional-compiler-archives-v1/);
 	assert.match(capture, /--max-bytes 1073741824/);
 	assert.match(capture, /--job-start "\$JOB_START"/);
+	const apply = stepSection(job, "      - name: Apply bounded functional compiler archives", "      - uses: actions/setup-node@v4");
+	assert.match(apply, /if \[\[ -z "\$COMPILER_CACHE_MATCHED_KEY" \]\]/);
+	assert.match(apply, /restore "\$compiler_cache" "\$\(go env GOCACHE\)"/);
+	assert.match(apply, /echo "GOCACHE=\$compiler_cache" >> "\$GITHUB_ENV"/);
 	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY:/);
 	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY:/);
 	assert.match(job, /FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: \$\{\{ steps\.functional-compiler-cache\.outputs\.cache-hit \|\| 'false' \}\}/);

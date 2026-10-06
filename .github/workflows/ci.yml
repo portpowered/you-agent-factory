@@ -307,7 +307,8 @@ jobs:
         if: matrix.suite == 'functional'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
+          # Customer Git fixtures own their histories; diagnostics need HEAD.
+          fetch-depth: 1
       - uses: actions/setup-go@v5
         if: matrix.suite == 'unit'
         with:
@@ -387,7 +388,19 @@ jobs:
             functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Apply bounded functional compiler archives
         if: matrix.suite == 'functional'
-        run: python3 scripts/ci/functional-compile-cache.py restore "$(go env GOCACHE)" .artifacts/functional-compiler-cache/cache
+        shell: bash
+        env:
+          COMPILER_CACHE_MATCHED_KEY: ${{ steps.functional-compiler-cache.outputs.cache-matched-key }}
+        run: |
+          set -euo pipefail
+          compiler_cache="$GITHUB_WORKSPACE/.artifacts/functional-compiler-cache/cache"
+          if [[ -z "$COMPILER_CACHE_MATCHED_KEY" ]]; then
+            # Seed a cold snapshot from the smaller dependency-only tier.
+            python3 scripts/ci/functional-compile-cache.py restore "$compiler_cache" "$(go env GOCACHE)"
+          fi
+          # Use restored archives in place; capture later removes executables
+          # and result payloads before saving the bounded snapshot.
+          echo "GOCACHE=$compiler_cache" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:

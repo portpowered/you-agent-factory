@@ -2290,3 +2290,40 @@ case because its immediate public Work list is empty. It remains a failed
 sample, not checkpoint evidence. An earlier local harness attempt has no Git
 repository and fails before tests while reading the raw-failure artifact head;
 that harness setup is corrected before the two full exact-source samples.
+
+### Hosted restored result and complete-job budget
+
+Run `37394846636`, head `e671ed2e38`, passes the full functional supervisor in
+140.882s, including 132.624s invocation, zero compiler commands and 37 linker
+commands. There are no retries. Archive download takes four seconds and the
+second archive copy takes eight seconds. The entire functional job takes
+213s (00:45:08–00:48:41 UTC), so this is not yet a three-minute total-job
+checkpoint. Checkout takes 15s, Go setup 13s, other preparation and reporting
+account for the remainder. These costs are included rather than hiding them
+behind a passing supervisor-only measurement.
+
+The next workflow uses a shallow checkout and the restored archive directory
+directly as GOCACHE. A cold directory is seeded from the existing dependency
+tier. Capture still filters archives, static coverage metadata and action
+metadata into a fresh directory capped at 1 GiB before saving; executable and
+test-result payloads remain excluded. A real coverage-test proof also executes
+against the snapshot in place, with zero compiles and the same coverage profile.
+Its external marker confirms all three cold/restored/in-place tests actually
+run. Twelve workflow contract checks and actionlint pass.
+
+Backend Lint on the hosted head rejects two monolith complexity violations.
+Inventory validation is separated from construction and event identity/boundary
+tests are split; the focused tests and scoped built-in lint now pass with no
+allowance changes. Diagnostics also distinguish link-only work from compilation:
+the earlier JSON correctly reports zero compilers but labels those 37 links
+`compile-work-observed`; new diagnostics use `link-work-observed` for that case.
+
+A private cleanup candidate relocates eight internal Make/coverage-runner checks
+to their tool package, uses a scenario-owned project Factory for MCP ACP
+permissions, observes terminal Work through REST, and copies current captured
+journals for recovery fixtures instead of constructing legacy snapshots. Its
+first warm control passes in 111.92s with 68 packages/751 results. Raising test
+parallelism to 24 passes in 164.19s but needs four retries; a subsequent unchanged
+12-way control passes in 162.52s without retries. This sequence does not establish
+a parallelism improvement and the increase is not adopted. Linker CPU also
+drifts between samples, so none is used to predict a hosted checkpoint.

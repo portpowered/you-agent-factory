@@ -21,11 +21,11 @@ class CompilerCacheTests(unittest.TestCase):
             (project / "witness").mkdir(parents=True)
             (project / "go.mod").write_text("module example.com/coverageproof\n\ngo 1.25.0\n")
             (project / "witness/value.go").write_text('package witness\nfunc Value() string{return "one"}\n')
-            (project / "proof_test.go").write_text('package proof\nimport("testing";"example.com/coverageproof/witness")\nfunc TestValue(t *testing.T){if witness.Value()!="one"{t.Fatal("unexpected value")}}\n')
+            (project / "proof_test.go").write_text('package proof\nimport("os";"testing";"example.com/coverageproof/witness")\nfunc TestValue(t *testing.T){if witness.Value()!="one"{t.Fatal("unexpected value")};f,e:=os.OpenFile(os.Getenv("PROOF_EXECUTIONS"),os.O_APPEND|os.O_CREATE|os.O_WRONLY,0600);if e!=nil{t.Fatal(e)};defer f.Close();if _,e=f.WriteString("ran\\n");e!=nil{t.Fatal(e)}}\n')
 
             def run(name, go_cache):
                 profile = root / (name + ".out")
-                environment = dict(os.environ, GOCACHE=str(go_cache), GOMAXPROCS="4", GOFLAGS="")
+                environment = dict(os.environ, GOCACHE=str(go_cache), GOMAXPROCS="4", GOFLAGS="", PROOF_EXECUTIONS=str(root / "executions"))
                 result = subprocess.run(["go", "test", "-p=4", "-vet=off", "-count=1", "-coverpkg=./...", "-covermode=count", "-coverprofile=" + str(profile), "-x", "./..."], cwd=project, env=environment, capture_output=True, text=True, check=True)
                 return len(re.findall(r'[/\\]compile(?:\.exe)?(?=["\s]|$)', result.stderr)), profile.read_text()
 
@@ -36,6 +36,10 @@ class CompilerCacheTests(unittest.TestCase):
             self.assertGreater(cold, 0)
             self.assertEqual(reused, 0)
             self.assertEqual(before, after)
+            direct, in_place = run("direct", root / "snapshot")
+            self.assertEqual(direct, 0)
+            self.assertEqual(before, in_place)
+            self.assertEqual((root / "executions").read_text(), "ran\n" * 3)
 
     @unittest.skipUnless(shutil.which("go"), "requires the Go compiler")
     def test_real_go_reuse_and_source_invalidation(self):

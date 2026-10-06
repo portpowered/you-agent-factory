@@ -23,6 +23,10 @@ func TestFunctionalMonolithOriginalEvents(t *testing.T) {
 			t.Fatalf("identity or evidence changed: %s", line)
 		}
 	}
+}
+
+func TestFunctionalMonolithBoundaryEvents(t *testing.T) {
+	groups := map[string]string{"TestPackage0001": "original/package"}
 	if _, err := normalizeFunctionalMonolithEvent([]byte(`{"Package":"`+functionalMonolithPackage+`","Test":"TestFunctionalPackages/Unknown/TestCustomer","Action":"pass"}`), groups); err == nil {
 		t.Fatal("unknown group accepted")
 	}
