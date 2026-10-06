@@ -9,6 +9,7 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
@@ -34,6 +35,7 @@ import (
 // by the canonical application graph. They keep implementation package names
 // private to Factory Sessions while the root Wire package composes exact roles.
 type (
+	HistoricalReplayBehavior             = recordingreplay.Behavior
 	ApplicationRuntime                   = roles.ApplicationRuntime
 	DirectoryInspection                  = roles.DirectoryInspection
 	CursorPersistenceFileSystem          = roles.CursorPersistenceFileSystem
@@ -150,6 +152,7 @@ func NewRoot(
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation RuntimeModelInvocationOperation,
+	replayBehavior *HistoricalReplayBehavior,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	return service.NewRoot(
@@ -193,6 +196,7 @@ func NewRoot(
 		ensureBackendScope,
 		initialActivation,
 		modelInvocation,
+		replayBehavior,
 		liveChangeCoordinator,
 	)
 }
@@ -230,4 +234,9 @@ func NewInvocationOperation(
 // NewRuntimeModelInvocation injects fixed peers into the session-scoped operation.
 func NewRuntimeModelInvocation(modelService models.Service, gateway RuntimeModelFactoryConfigReader, workerService RuntimeModelWorkerExecution) RuntimeModelInvocationOperation {
 	return modelinvocation.NewRuntimeModelInvocation(modelService, gateway, workerService)
+}
+
+// NewHistoricalReplayBehavior constructs fixed behavior inside its service owner.
+func NewHistoricalReplayBehavior() *HistoricalReplayBehavior {
+	return recordingreplay.NewBehavior()
 }

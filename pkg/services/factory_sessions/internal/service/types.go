@@ -69,7 +69,7 @@ type workerSessionsObservationForSessionProvider interface {
 	WorkerSessionsObservationForSession(string) workersessions.ObservationService
 }
 
-func historicalReplayRuntimeProducts(
+func (r *Root) historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
 	liveOwner durableexecution.Service,
@@ -78,7 +78,7 @@ func historicalReplayRuntimeProducts(
 	if closeResources == nil {
 		closeResources = func() error { return nil }
 	}
-	replay := recordingreplay.NewService(projection, liveOwner)
+	replay := r.replayBehavior.Acquire(projection, liveOwner)
 	inspection := replay.Inspection()
 	return runtimeProducts{
 		process:          historicalReplayProcessRuntime{},

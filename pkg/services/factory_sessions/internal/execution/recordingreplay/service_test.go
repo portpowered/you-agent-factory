@@ -16,7 +16,7 @@ func TestServiceExposesRecordedSessionResultAndEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplayRecording: %v", err)
 	}
-	service := NewService(projection)
+	service := NewBehavior().Acquire(projection, nil)
 	ctx := context.Background()
 
 	session, err := service.GetSession(ctx, projection.Session.SessionID)
@@ -47,7 +47,7 @@ func TestServiceExposesRecordedArtifactsAndEmptyDispatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplayRecording: %v", err)
 	}
-	service := NewService(projection)
+	service := NewBehavior().Acquire(projection, nil)
 	ctx := context.Background()
 	sessionID := projection.Session.SessionID
 
@@ -82,7 +82,7 @@ func TestServiceHistoricalDispatchQueriesRemainEmptyForEveryFilter(t *testing.T)
 	if err != nil {
 		t.Fatalf("ReplayRecording: %v", err)
 	}
-	service := NewService(projection)
+	service := NewBehavior().Acquire(projection, nil)
 	sessionID := projection.Session.SessionID
 	for _, filters := range []fse.DispatchFilters{
 		{},
@@ -105,7 +105,7 @@ func TestServiceRejectsUnknownSessionsAndLiveOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplayRecording: %v", err)
 	}
-	service := NewService(projection)
+	service := NewBehavior().Acquire(projection, nil)
 	ctx := context.Background()
 
 	if _, err := service.GetSession(ctx, "missing"); !errors.Is(err, fse.ErrSessionNotFound) {
@@ -117,7 +117,7 @@ func TestServiceRejectsUnknownSessionsAndLiveOperations(t *testing.T) {
 	if _, err := service.QueryDispatches(ctx, fse.DispatchQueryRequest{SessionID: "missing"}); !errors.Is(err, fse.ErrSessionNotFound) {
 		t.Fatalf("QueryDispatches missing error = %v", err)
 	}
-	var nilService *Service
+	var nilService *Scope
 	if _, err := nilService.GetSession(ctx, projection.Session.SessionID); !errors.Is(err, fse.ErrSessionNotFound) {
 		t.Fatalf("nil GetSession error = %v", err)
 	}

@@ -215,7 +215,7 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 			return runtimeProducts{}, err
 		}
 	}
-	historicalProducts := historicalReplayRuntimeProducts(
+	historicalProducts := r.historicalReplayRuntimeProducts(
 		opening.logger,
 		*opening.load.HistoricalReplay,
 		liveOwner,

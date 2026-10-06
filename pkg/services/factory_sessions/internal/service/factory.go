@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
@@ -53,6 +54,7 @@ type ScriptCommandRunner interface {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
+	replayBehavior *recordingreplay.Behavior
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
@@ -140,6 +142,7 @@ func NewRoot(
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
+	replayBehavior *recordingreplay.Behavior,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
@@ -147,6 +150,7 @@ func NewRoot(
 		return nil, err
 	}
 	root := &Root{
+		replayBehavior:                 replayBehavior,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		initialActivation:              initialActivation,

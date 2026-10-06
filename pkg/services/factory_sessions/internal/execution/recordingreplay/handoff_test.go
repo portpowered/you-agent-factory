@@ -40,6 +40,98 @@ type handoffLiveOwner struct {
 	responseErr     error
 }
 
+// A held eligibility probe must block only its owning opening, even when the
+// peer recording has the same canonical identity.
+type heldReplayProbe struct {
+	*handoffLiveOwner
+	entered chan struct{}
+}
+
+func (owner *heldReplayProbe) HasRestorableState(ctx context.Context, _ string) (bool, error) {
+	close(owner.entered)
+	<-ctx.Done()
+	return false, ctx.Err()
+}
+
+func TestServiceAcquiredScopesKeepEqualIdentityHandoffsIndependent(t *testing.T) {
+	t.Parallel()
+	projection, err := ReplayRecording(buildLifecycleRecording(t, "INTERRUPTED", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	behavior := NewBehavior()
+	blocked := &heldReplayProbe{handoffLiveOwner: &handoffLiveOwner{}, entered: make(chan struct{})}
+	left := behavior.Acquire(projection, blocked)
+	rightOwner := &handoffLiveOwner{restorable: true}
+	right := behavior.Acquire(projection, rightOwner)
+	id := projection.Session.SessionID
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	leftResult := make(chan error, 1)
+	go func() {
+		_, err := left.ResumeInterruptedSession(ctx, id, fse.ResumeSessionRequest{})
+		leftResult <- err
+	}()
+	select {
+	case <-blocked.entered:
+	case <-t.Context().Done():
+		t.Fatal(t.Context().Err())
+	}
+	// This succeeds before canceling the peer's blocked probe. Shared handoff
+	// locks would deadlock here and fail the package's test timeout.
+	if _, err := right.Resume(t.Context(), id, fse.ControlRequest{}); err != nil {
+		t.Fatalf("peer resume: %v", err)
+	}
+	if _, err := right.Pause(t.Context(), id, fse.ControlRequest{}); err != nil {
+		t.Fatalf("peer live control: %v", err)
+	}
+	if read, err := left.GetSession(t.Context(), id); err != nil || read.Status != projection.Session.Status {
+		t.Fatalf("pending replay read = %#v, %v", read, err)
+	}
+	cancel()
+	if err := <-leftResult; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled probe = %v", err)
+	}
+	if _, err := left.Pause(t.Context(), id, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("canceled opening control = %v", err)
+	}
+	if rightOwner.probeCalls != 1 || rightOwner.resumeCalls != 1 || rightOwner.pauseCalls != 1 {
+		t.Fatalf("peer attribution = %#v", rightOwner)
+	}
+}
+
+func TestServiceAcquiredScopeRetriesFailedResumeWithoutChangingPeer(t *testing.T) {
+	t.Parallel()
+	projection, err := ReplayRecording(buildLifecycleRecording(t, "INTERRUPTED", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	behavior := NewBehavior()
+	owner := &handoffLiveOwner{restorable: true, resumeIntErr: context.Canceled}
+	selected := behavior.Acquire(projection, owner)
+	peer := behavior.Acquire(projection, nil)
+	id := projection.Session.SessionID
+	if _, err := selected.ResumeInterruptedSession(t.Context(), id, fse.ResumeSessionRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("failed resume = %v", err)
+	}
+	if _, err := selected.Pause(t.Context(), id, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("failed resume handed off: %v", err)
+	}
+	owner.resumeIntErr = nil
+	if _, err := selected.ResumeInterruptedSession(t.Context(), id, fse.ResumeSessionRequest{}); err != nil {
+		t.Fatalf("retry = %v", err)
+	}
+	if _, err := selected.Pause(t.Context(), id, fse.ControlRequest{}); err != nil {
+		t.Fatalf("selected live control = %v", err)
+	}
+	if _, err := peer.Pause(t.Context(), id, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
+		t.Fatalf("peer acquired handoff = %v", err)
+	}
+	if read, err := peer.GetSession(t.Context(), id); err != nil || read.Status != projection.Session.Status {
+		t.Fatalf("peer historical read = %#v, %v", read, err)
+	}
+}
+
 func (s *handoffLiveOwner) HasRestorableState(context.Context, string) (bool, error) {
 	s.probeCalls++
 	return s.restorable, s.probeErr
@@ -105,7 +197,7 @@ func TestServiceResumeInterruptedSessionDelegatesOnlyAfterLiveProbe(t *testing.T
 	const sessionID = "dur-sess-lifecycle-recording"
 	want := fse.AsyncStartResult{SessionID: sessionID, Status: "RESUMING", OrchestratorKind: "JAVASCRIPT"}
 	live := &handoffLiveOwner{restorable: true, resumeIntResult: want}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 
 	got, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{RequestID: "resume-1"})
 	if err != nil {
@@ -146,7 +238,7 @@ func TestServiceResumeUsesLiveResultAndMakesLiveOwnerAuthoritative(t *testing.T)
 			Dispatches: []fse.DispatchSummary{{ID: "live-dispatch", Status: fse.DispatchStatusRunning}},
 		},
 	}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 
 	got, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{RequestID: "resume-2"})
 	if err != nil {
@@ -191,7 +283,7 @@ func TestServiceSubscribeResponseEventsRoutesOnlyAfterHandoff(t *testing.T) {
 	}
 	cursor := &factorysessions.ResponseEventCursor{}
 	live := &handoffLiveOwner{restorable: true, responseCursor: cursor}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 
 	if _, err := service.SubscribeResponseEvents(context.Background(), sessionID, request); !errors.Is(err, ErrNonLiveReplay) {
 		t.Fatalf("historical SubscribeResponseEvents error = %v, want ErrNonLiveReplay", err)
@@ -214,7 +306,7 @@ func TestServiceSubscribeResponseEventsRoutesOnlyAfterHandoff(t *testing.T) {
 	}
 
 	withoutSubscriber := &handoffLiveOwnerWithoutResponseEvents{restorable: true}
-	service = NewService(projection, withoutSubscriber)
+	service = NewBehavior().Acquire(projection, withoutSubscriber)
 	if _, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{}); err != nil {
 		t.Fatalf("Resume without response subscriber error = %v", err)
 	}
@@ -236,7 +328,7 @@ func TestServiceResumeFailureDoesNotTakeOwnership(t *testing.T) {
 			Message:   "checkpoint state is invalid",
 		},
 	}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 
 	_, err = service.ResumeInterruptedSession(context.Background(), projection.Session.SessionID, fse.ResumeSessionRequest{RequestID: "resume-3"})
 	var resumeErr *fse.ResumeError
@@ -271,7 +363,7 @@ func TestServiceResumeProbeClassifiesOwnerFailuresAndRetainsHandoff(t *testing.T
 		testSuccessfulHandoffRetainsOwner(t, projection, sessionID)
 	})
 
-	var nilService *Service
+	var nilService *Scope
 	if owner, handedOff := nilService.handedOffOwner(); owner != nil || handedOff {
 		t.Fatalf("nil handedOffOwner() = (%v, %t), want (nil, false)", owner, handedOff)
 	}
@@ -284,7 +376,7 @@ func testTypedProbeFailure(t *testing.T, projection RecordingReplayProjection, s
 		SessionID: sessionID,
 		Message:   "checkpoint state is unavailable",
 	}
-	service := NewService(projection, &handoffLiveOwner{probeErr: want})
+	service := NewBehavior().Acquire(projection, &handoffLiveOwner{probeErr: want})
 	_, err := service.Resume(context.Background(), sessionID, fse.ControlRequest{})
 	var got *fse.ResumeError
 	if !errors.As(err, &got) || got != want {
@@ -296,7 +388,7 @@ func testTypedProbeFailure(t *testing.T, projection RecordingReplayProjection, s
 }
 
 func testMissingPersistedState(t *testing.T, projection RecordingReplayProjection, sessionID string) {
-	service := NewService(projection, &handoffLiveOwner{probeErr: fse.ErrSessionNotFound})
+	service := NewBehavior().Acquire(projection, &handoffLiveOwner{probeErr: fse.ErrSessionNotFound})
 	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
 	if !errors.Is(err, ErrNonLiveReplay) {
 		t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
@@ -304,7 +396,7 @@ func testMissingPersistedState(t *testing.T, projection RecordingReplayProjectio
 }
 
 func testOwnerWithoutProbe(t *testing.T, projection RecordingReplayProjection, sessionID string) {
-	service := NewService(projection, &handoffOwnerWithoutProbe{})
+	service := NewBehavior().Acquire(projection, &handoffOwnerWithoutProbe{})
 	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{})
 	if !errors.Is(err, ErrNonLiveReplay) {
 		t.Fatalf("ResumeInterruptedSession error = %v, want ErrNonLiveReplay", err)
@@ -317,7 +409,7 @@ func testSuccessfulHandoffRetainsOwner(t *testing.T, projection RecordingReplayP
 		resumeResult: fse.LifecycleControlResult{SessionID: sessionID},
 		pauseResult:  fse.LifecycleControlResult{SessionID: sessionID},
 	}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 	if _, err := service.Pause(context.Background(), sessionID, fse.ControlRequest{}); !errors.Is(err, ErrNonLiveReplay) {
 		t.Fatalf("Pause before handoff error = %v, want ErrNonLiveReplay", err)
 	}
@@ -380,7 +472,7 @@ func TestServiceWallsEightNonResumeOperationsBeforeHandoff(t *testing.T) {
 	}
 	sessionID := projection.Session.SessionID
 	live := &handoffLiveOwner{restorable: true}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 	ctx := context.Background()
 
 	operations := []struct {
@@ -418,7 +510,7 @@ func TestServiceWallsAllOperationsWhenPublicCheckpointIsNotRestorable(t *testing
 	}
 	sessionID := projection.Session.SessionID
 	live := &handoffLiveOwner{}
-	service := NewService(projection, live)
+	service := NewBehavior().Acquire(projection, live)
 	ctx := context.Background()
 	operations := []struct {
 		name string

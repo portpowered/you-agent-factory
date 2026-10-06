@@ -380,6 +380,7 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRoot,
+	factorysessionwire.NewHistoricalReplayBehavior,
 	wire.Bind(new(factorysessions.Service), new(*factorysessionwire.Root)),
 )
 
