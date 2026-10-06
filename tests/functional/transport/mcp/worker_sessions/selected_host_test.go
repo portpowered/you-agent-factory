@@ -300,11 +300,16 @@ func startCancellableMCP(t *testing.T, process support.Process, host string, wor
 		workDir = workspace[0]
 	}
 	go func() {
-		done <- process.Execute(root.Input{
+		err := process.Execute(root.Input{
 			Args: []string{"you", "--server", host, "server", "mcp"}, Context: ctx,
 			WorkingDirectory: workDir,
 			Stdin:            stdinRead, Stdout: stdoutWrite, Stderr: io.Discard,
 		})
+		// Command exit ends its protocol streams, including startup refusal.
+		// Otherwise a client can remain blocked writing initialize to the pipe.
+		_ = stdinRead.CloseWithError(err)
+		_ = stdoutWrite.CloseWithError(err)
+		done <- err
 	}()
 	t.Cleanup(func() {
 		cancel()

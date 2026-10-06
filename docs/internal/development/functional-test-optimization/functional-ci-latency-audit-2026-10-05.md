@@ -5110,3 +5110,57 @@ Main advances to 2d1d83f424 with archived Work attribution and additional public
 Worker Session scenarios. Rebase and full consolidated verification on that
 live base are required before pushing this batch; measurements above precede
 those upstream changes.
+
+
+### October 6: live-base MCP initialization and shared archive client
+
+The branch rebases onto main 2d1d83f424. The support-process conflict retains
+both upstream Factory Sessions access and the owned directory's cleanup.
+Hosted run 37498753463 subsequently finishes all required checks successfully;
+its 176s complete functional job still misses the two-minute checkpoint.
+
+The first rebased full run fails after 11:29.42 supervisor / 679.068s coverage
+capture, using 545.10 CPU-seconds (439.75 user, 105.35 system). Compilation
+consumes 213.619175 CPU-seconds across 1176 commands (69.917730s active wall);
+15 links consume 19.964437 CPU-seconds (13.180778s active wall). Capture is
+incomplete: the new upstream MCP archive scenarios do not finish. Retain both
+raw failure records and the incomplete inventory in loading-home-live-full/;
+this run is not a passing performance sample.
+
+A focused native named-close probe also times out at 90s, with both clients
+blocked writing MCP initialization into a pipe. The upstream tests used bare
+root processes with no owned initialized home/environment, bypassing the
+existing selected-host client fixture. Command termination also left protocol
+pipes open. Archive scenarios now use that fixture, and command exit closes
+both protocol pipe ends with the command's error. No timeout or retry allowance
+changes. Five archive test parents share one initialized client process/home/
+model cache, while retaining separate host stores/profiles, contexts and all
+customer paging, corruption, identity and recorded/unrecorded assertions.
+
+Build-excluded whole-MCP-package B/C/C/B runs on four pinned Linux CPUs all pass.
+The baseline already includes the corrected owned clients and pipe closure;
+the candidate adds sharing of those five client setups. Baseline totals are
+19.347023 CPU-seconds / 8.517919s wall; candidate totals are 18.166816 /
+8.257819: 6.1% less CPU and 3.1% less wall. These are package measurements,
+not whole-lane improvement claims. Evidence: archived-client-paired/.
+The complete native Windows candidate package passes in 19.168s and both
+scoped linters pass.
+
+The latest hosted cache capture reaches its 1 GiB ceiling: 19566 files,
+1073741684 bytes, and 546 omitted eligible compiler artifacts. This can cause
+avoidable compilation after restoration, but raising the ceiling also adds
+transfer cost. A controlled cache-size comparison is still needed; no larger
+cache has been enabled and no performance benefit is claimed.
+
+The corrected complete lane passes in 95.84s supervisor / 91.032s capture,
+using 263.75 CPU-seconds (201.42 user, 62.33 system). All 67 packages / 765
+results finish: 763 pass and two skip. The raw-failure index is complete and
+empty, and no retry ledger is produced. Four compiler commands consume
+0.984033 CPU-seconds / 1.263044s active wall; 15 links consume 18.542264
+CPU-seconds / 13.778736s active wall. Shared archive test registration reduces
+five parents to one without dropping their customer scenarios. Evidence:
+loading-home-mcp-owned-full/. This warmer verification run is not a controlled
+whole-lane improvement over the preceding failed changed-base rebuild.
+Source is rebased d9120b42f1 plus the two MCP corrections; the private checkout's
+raw index Git head is stale and is not source identity for this run. Fresh
+hosted complete-job timing remains required before the two-minute checkpoint.
