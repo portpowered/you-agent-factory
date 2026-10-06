@@ -67,10 +67,12 @@ test("functional coverage build cache is deps-only, exact-key, and saved only fr
 	const job = jobSection(workflow, "backend-coverage");
 	const restore = stepSection(job, "      - name: Restore functional dependency build cache", "      - name: Build functional dependency build cache");
 	const build = stepSection(job, "      - name: Build functional dependency build cache", "      - name: Save functional dependency build cache");
-	const save = stepSection(job, "      - name: Save functional dependency build cache", "      - name: Restore bounded functional compiler archives");
+	const save = stepSection(job, "      - name: Save functional dependency build cache", "      - name: Apply bounded functional compiler archives");
 
 	assert.match(restore, /uses: actions\/cache\/restore@v4/);
 	assert.match(restore, /id: functional-deps-cache/);
+	assert.match(restore, /steps\.functional-compiler-cache\.outputs\.cache-matched-key == ''/);
+	assert.ok(job.indexOf("      - name: Restore bounded functional compiler archives") < job.indexOf("      - name: Restore functional dependency build cache"));
 	assert.match(restore, /path: ~\/\.cache\/go-build/);
 	assert.match(restore, /key: functional-deps-build-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.mod', 'go\.sum'\) \}\}/);
 	assert.doesNotMatch(restore, /restore-keys/);
@@ -97,7 +99,7 @@ test("functional compiler archives stay bounded and restore separately from the 
 	const job = jobSection(workflow, "backend-coverage");
 	assert.doesNotMatch(job, /Restore functional coverage Go build cache/);
 	assert.doesNotMatch(job, /Save functional coverage Go build cache/);
-	const restore = stepSection(job, "      - name: Restore bounded functional compiler archives", "      - name: Apply bounded functional compiler archives");
+	const restore = stepSection(job, "      - name: Restore bounded functional compiler archives", "      - name: Restore functional dependency build cache");
 	const capture = stepSection(job, "      - name: Capture bounded functional compiler archives", "      - name: Save bounded functional compiler archives");
 	assert.match(restore, /path: \.artifacts\/functional-compiler-cache\/cache/);
 	assert.doesNotMatch(restore, /path: ~\/\.cache\/go-build/);

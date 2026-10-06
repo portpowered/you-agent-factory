@@ -355,8 +355,17 @@ jobs:
       # ~4 min restore of a ~7 GB whole build cache. The deps key is exact, with no
       # restore-keys, so a go.mod/go.sum or Go version change refills it.
       # Only pushes to main save it; every other run restores read-only.
-      - name: Restore functional dependency build cache
+      - name: Restore bounded functional compiler archives
         if: matrix.suite == 'functional'
+        id: functional-compiler-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .artifacts/functional-compiler-cache/cache
+          key: functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          restore-keys: |
+            functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
+      - name: Restore functional dependency build cache
+        if: matrix.suite == 'functional' && (steps.functional-compiler-cache.outputs.cache-matched-key == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
         id: functional-deps-cache
         uses: actions/cache/restore@v4
         with:
@@ -377,15 +386,6 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: ${{ steps.functional-deps-cache.outputs.cache-primary-key }}
-      - name: Restore bounded functional compiler archives
-        if: matrix.suite == 'functional'
-        id: functional-compiler-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .artifacts/functional-compiler-cache/cache
-          key: functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.event.pull_request.head.sha || github.sha }}
-          restore-keys: |
-            functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Apply bounded functional compiler archives
         if: matrix.suite == 'functional'
         shell: bash

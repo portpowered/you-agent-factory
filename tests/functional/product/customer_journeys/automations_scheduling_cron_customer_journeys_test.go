@@ -161,11 +161,7 @@ func assertCronSessionTick(t *testing.T, baseURL, sessionID, directory string, r
 ) work.FactorySubmissionRecord {
 	t.Helper()
 	record := waitForCronSubmission(t, route, workstation, nominal, 10*time.Second)
-	identity := sha256.Sum256([]byte(directory + "\x00" + workstation + "\x00" + nominal.UTC().Format(time.RFC3339Nano)))
-	if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID ||
-		record.Request.WorkID != "time-"+hex.EncodeToString(identity[:16]) || record.Request.RequestID != "request-"+record.Request.WorkID {
-		t.Fatalf("scheduled Work identity/state = %#v", record.Request)
-	}
+	assertCronScheduledIdentity(t, record, directory, workstation, nominal)
 	assertCronJitterPayload(t, record, workstation, nominal, 0)
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 	defer stream.Close()
@@ -198,27 +194,41 @@ func assertCronSessionTick(t *testing.T, baseURL, sessionID, directory string, r
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse || dispatchID == "" || support.StringPointerValue(event.Context.DispatchId) != dispatchID {
 			continue
 		}
-		response, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if response.Outcome != factoryapi.WorkOutcomeAccepted || response.OutputWork == nil || len(*response.OutputWork) != 1 {
-			t.Fatalf("cron output = %#v", response)
-		}
-		output := (*response.OutputWork)[0]
-		// Dispatch completion precedes publication of the public Work projection.
-		listed, err := support.WaitForObservation(10*time.Second,
-			func() (factoryapi.ListWorkResponse, error) {
-				return readWorkSnapshot(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"))
-			},
-			func(listed factoryapi.ListWorkResponse) bool {
-				return support.HasWorkAtCustomerState(listed, support.StringPointerValue(output.WorkId), support.WorkCustomerLocation("task", "init"))
-			},
-		)
-		if err != nil {
-			t.Fatalf("cron public output missing: %v; last Work: %#v", err, listed)
-		}
+		assertCronCompletedOutput(t, ctx, baseURL, sessionID, event)
 		return record
+	}
+}
+
+func assertCronScheduledIdentity(t *testing.T, record work.FactorySubmissionRecord, directory, workstation string, nominal time.Time) {
+	t.Helper()
+	identity := sha256.Sum256([]byte(directory + "\x00" + workstation + "\x00" + nominal.UTC().Format(time.RFC3339Nano)))
+	if record.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID ||
+		record.Request.WorkID != "time-"+hex.EncodeToString(identity[:16]) || record.Request.RequestID != "request-"+record.Request.WorkID {
+		t.Fatalf("scheduled Work identity/state = %#v", record.Request)
+	}
+}
+
+func assertCronCompletedOutput(t *testing.T, ctx context.Context, baseURL, sessionID string, event factoryapi.FactoryEvent) {
+	t.Helper()
+	response, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Outcome != factoryapi.WorkOutcomeAccepted || response.OutputWork == nil || len(*response.OutputWork) != 1 {
+		t.Fatalf("cron output = %#v", response)
+	}
+	output := (*response.OutputWork)[0]
+	// Dispatch completion precedes publication of the public Work projection.
+	listed, err := support.WaitForObservation(10*time.Second,
+		func() (factoryapi.ListWorkResponse, error) {
+			return readWorkSnapshot(ctx, support.SessionWorkURL(baseURL, sessionID, "/work"))
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			return support.HasWorkAtCustomerState(listed, support.StringPointerValue(output.WorkId), support.WorkCustomerLocation("task", "init"))
+		},
+	)
+	if err != nil {
+		t.Fatalf("cron public output missing: %v; last Work: %#v", err, listed)
 	}
 }
 

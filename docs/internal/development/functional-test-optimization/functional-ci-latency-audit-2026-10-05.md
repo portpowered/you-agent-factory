@@ -2327,3 +2327,61 @@ parallelism to 24 passes in 164.19s but needs four retries; a subsequent unchang
 12-way control passes in 162.52s without retries. This sequence does not establish
 a parallelism improvement and the increase is not adopted. Linker CPU also
 drifts between samples, so none is used to predict a hosted checkpoint.
+
+### In-place archive restore: hosted job still exceeds three minutes
+
+Head `4492b4921d451cf335eff925b5aaeff63deb516a`, Actions run
+`37397370508`, functional job `112056602110`, passed with all coverage gates
+unchanged. The complete job took **221 seconds** (01:06:30–01:10:11 UTC).
+The supervisor took **171.948 seconds** and the coverage invocation reported
+**157.896 seconds**. This is not the three-minute checkpoint.
+
+Shallow checkout took six seconds, Go setup nine seconds, archive restore four
+seconds, and applying the in-place archive cache took less than one second.
+The coverage trace reported zero compiler commands and 73 linker command
+observations, including the failed attempt and recovered retry. These trace
+counts are not linker CPU seconds. Capture and save each took four seconds.
+
+One recovered failure was `TestMCPSubagentCustomACPHandlesPermissionRequest`:
+its named `@you/subagent` Factory was absent from both the project and the
+runner's global catalog. The next fixture creates its own project Factory
+through the public application process before starting MCP. Three focused
+repetitions passed; the previous failure is retained in this measurement.
+
+### Customer-facing test cleanup entering the checkpoint candidate
+
+The next candidate moves eight Make/coverage-rendering checks from functional
+`observability/coverage` into `cmd/functionaltestviz`, retaining their assertions
+in tooling unit tests. Five Automations files change their misleading
+`root_composition` names to `customer_journeys`, without changing registered
+customer tests. Worker-session recovery fixtures now copy the current writer's
+journal output rather than constructing legacy snapshots. Public CLI/REST
+parity, restart, incomplete follow, unreadable recovery, damaged-recording
+isolation, and oversized-payload checks remain. The packaged full-flow failure
+journey observes terminal public Work records before asserting cardinality and
+lineage, replacing the race with an immediately read projection.
+
+Private Linux full-lane verification of these edits passed with 68 packages,
+751 test results (749 pass, two skip), and unchanged coverage policy. Twelve-way
+execution samples ranged from **111.92 to 162.52 seconds**, with no retries;
+a 24-way experiment took 164.19 seconds and recovered four failures, so it is
+not adopted. These are local supervisor samples, not hosted whole-job claims.
+Focused repetitions passed for MCP permission (three), current-journal recovery
+(three), full-flow terminal observation (five), and tooling checks (three).
+
+
+The archive restore now precedes the smaller dependency tier: a restored archive
+cache is used in place, so restoring another directory that the test job never
+reads is redundant. Cold misses retain dependency seeding; main pushes retain
+the independent dependency-cache maintenance step. This saves the three-second
+redundant restore observed in run 37397370508 without skipping fresh tests.
+
+A private cold-cache quarantine compilation experiment is rejected. Native
+verification passed in 162.14 seconds; adding the full coverage flags to its
+registration/outcome commands also passed but took 247.79 seconds. Compiler
+counts fell from 1530 to 1324, while compiler CPU rose from 194.254 to 241.088
+seconds, coverage-tool calls rose from 553 to 1157, and linker CPU rose from
+48.476 to 87.494 seconds. Aggregate job user/system time rose from 474.77/92.29
+to 705.96/175.34 seconds. Host variance and a brief overlapping scoped lint run
+limit wall-time attribution, but the experiment does not justify adopting
+coverage-instrumented quarantine checks. Both retained the same coverage gates.
