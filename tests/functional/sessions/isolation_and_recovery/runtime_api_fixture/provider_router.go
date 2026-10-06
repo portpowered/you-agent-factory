@@ -138,3 +138,7 @@ func (router *runtimeAPIProviderRouter) ContinueReference(ctx context.Context, r
 }
 
 var _ providers.Service = (*runtimeAPIProviderRouter)(nil)
+
+func (*runtimeAPIProviderRouter) SupportsContinuation(ctx context.Context, reference providers.SessionRef) (bool, error) {
+	return (testutil.NativeProvider{}).SupportsContinuation(ctx, reference)
+}

@@ -100,15 +100,17 @@ type registry struct {
 	events                   EventsAppender
 	eventReader              EventsReader
 	retainedReader           EventsRetainedReader
-	continuationSupport      providers.ContinuationSupportReader
-	providerSessions         providersessions.Service
-	recording                recordings.WorkerSessionRecordingService
-	operations               recordings.WorkerControlOperationStore
-	restart                  recordings.WorkerRestartInputStore
-	stopOperations           sync.Map // request key -> *sync.Mutex; no registry lock spans a join
-	clock                    platformclock.Source
-	scheduler                platformclock.TimerSource
-	logger                   logging.Logger
+	continuationSupport      interface {
+		SupportsContinuation(context.Context, providers.SessionRef) (bool, error)
+	}
+	providerSessions providersessions.Service
+	recording        recordings.WorkerSessionRecordingService
+	operations       recordings.WorkerControlOperationStore
+	restart          recordings.WorkerRestartInputStore
+	stopOperations   sync.Map // request key -> *sync.Mutex; no registry lock spans a join
+	clock            platformclock.Source
+	scheduler        platformclock.TimerSource
+	logger           logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
 	// contexts are never used as the lifetime of an admitted Start. Stop

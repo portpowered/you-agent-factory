@@ -16,6 +16,10 @@ type ProviderServiceAdapter struct {
 	InferFunc func(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
 }
 
+func (adapter ProviderServiceAdapter) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	return true, reference.Validate()
+}
+
 func (adapter ProviderServiceAdapter) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil
 }

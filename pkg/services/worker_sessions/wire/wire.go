@@ -55,7 +55,7 @@ func NewService(
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
-	continuationSupport providers.ContinuationSupportReader,
+	continuationSupport providers.Service,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,

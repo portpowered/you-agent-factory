@@ -127,15 +127,7 @@ func provideWorkerSessionsService(
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	var support providers.ContinuationSupportReader
-	if providerService != nil {
-		var ok bool
-		support, ok = providerService.(providers.ContinuationSupportReader)
-		if !ok {
-			return nil, fmt.Errorf("providers continuation capability is required")
-		}
-	}
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots, support)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots, providerService)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

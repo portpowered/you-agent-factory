@@ -124,6 +124,10 @@ func (router *inferenceProviderOverride) ContinueReference(
 	return router.catalog.ContinueReference(ctx, request)
 }
 
+func (router *inferenceProviderOverride) SupportsContinuation(ctx context.Context, reference providers.SessionRef) (bool, error) {
+	return router.catalog.SupportsContinuation(ctx, reference)
+}
+
 type inferenceIntegrationRouter struct {
 	identity string
 	mu       sync.RWMutex

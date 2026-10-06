@@ -16,6 +16,13 @@ type NativeProvider struct {
 	ContinueFunc func(context.Context, providers.ContinueRequest) (providers.ContinueResult, error)
 }
 
+func (provider NativeProvider) SupportsContinuation(_ context.Context, reference providers.SessionRef) (bool, error) {
+	if err := reference.Validate(); err != nil {
+		return false, err
+	}
+	return provider.ContinueFunc != nil, nil
+}
+
 func (provider NativeProvider) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,

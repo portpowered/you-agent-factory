@@ -180,7 +180,8 @@ func TestContinuationSupportUsesNegotiatedCapabilityWithoutExecution(t *testing.
 			t.Parallel()
 			fake := &negotiatedCapabilityACPService{provider: "cursor-acp", known: cell.known, loadSession: cell.load}
 			root := mustNegotiatedCapabilityRootService(t, fake)
-			supported, err := root.SupportsContinuation(t.Context(), providers.SessionRef{Provider: "cursor-acp", Kind: providers.SessionIDKind, ID: "opaque-session"})
+			var authority providers.Service = root
+			supported, err := authority.SupportsContinuation(t.Context(), providers.SessionRef{Provider: "cursor-acp", Kind: providers.SessionIDKind, ID: "opaque-session"})
 			if err != nil || supported != cell.want || fake.executeCalls != 0 {
 				t.Fatalf("support=%v err=%v calls=%d", supported, err, fake.executeCalls)
 			}

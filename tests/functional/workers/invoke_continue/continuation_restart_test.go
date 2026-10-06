@@ -588,7 +588,9 @@ func assertUnsupportedTerminalContinuation(t *testing.T, scenario *invokeContinu
 		assertDirectWorkerSessionCLIError(t, request, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
 		assertNativeContinuationObservation(t, scenario, source, "TERMINATED", "opaque-native-source", "", "")
 		assertNativeContinuationObservation(t, scenario, sibling, "RUNNING", "opaque-native-sibling", "", "")
-		absent := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "show", "--worker-session-id", successor})
+		// Show is remote-only; the source control's local placement must not
+		// route this absence check to the unrelated default host.
+		absent := missingReferenceRequest(t, scenario, true, []string{"worker-sessions", "show", "--worker-session-id", successor})
 		assertDirectWorkerSessionCLIError(t, absent, "WORKER_SESSION_NOT_FOUND")
 	}
 	if runner.CallCount() != 2 {

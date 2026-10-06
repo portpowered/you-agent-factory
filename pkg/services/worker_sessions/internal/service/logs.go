@@ -132,7 +132,7 @@ func NewWithCapturedActivity(
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
-	continuationSupport providers.ContinuationSupportReader,
+	continuationSupport providers.Service,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable

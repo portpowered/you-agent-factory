@@ -269,6 +269,13 @@ func (s *SideEffects) Continue(ctx context.Context, request providers.ContinueRe
 	}, nil
 }
 
+func (s *SideEffects) SupportsContinuation(ctx context.Context, reference providers.SessionRef) (bool, error) {
+	if err := reference.Validate(); err != nil {
+		return false, err
+	}
+	return true, ctx.Err()
+}
+
 func (s *SideEffects) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
 	reference, err := request.Reference.ToSessionRef()
 	if err != nil {

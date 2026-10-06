@@ -729,6 +729,10 @@ type invocationProviderServiceBase struct {
 	executeCalls int
 }
 
+func (*invocationProviderServiceBase) SupportsContinuation(context.Context, providers.SessionRef) (bool, error) {
+	return false, nil
+}
+
 func (service *invocationProviderServiceBase) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil
 }

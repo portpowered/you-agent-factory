@@ -178,8 +178,16 @@ func assertReplayExecutionBoundary(t *testing.T) {
 func assertReplayContinuationBoundary(t *testing.T) {
 	t.Helper()
 	providerRequest := replayBoundaryProviderRequest()
-	continued, err := newReplayBoundaryEffects(t).Continue(context.Background(), providers.ContinueRequest{
-		Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"},
+	var authority providers.Service = newReplayBoundaryEffects(t)
+	reference := providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"}
+	if supported, err := authority.SupportsContinuation(t.Context(), reference); err != nil || !supported {
+		t.Fatalf("replay continuation capability = %t, %v", supported, err)
+	}
+	if supported, err := authority.SupportsContinuation(t.Context(), providers.SessionRef{}); err == nil || supported {
+		t.Fatalf("invalid replay capability = %t, %v", supported, err)
+	}
+	continued, err := authority.Continue(context.Background(), providers.ContinueRequest{
+		Reference: reference,
 		Attempt:   providerRequest,
 	})
 	if err != nil || continued.Outcome != providers.ContinuationOutcomeResumed || continued.Reference.ID != "recorded-session" || continued.Result.Content != "recorded provider output" {

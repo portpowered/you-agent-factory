@@ -876,6 +876,10 @@ type providerContractCoverageRoot struct {
 	executeCalls int
 }
 
+func (*providerContractCoverageRoot) SupportsContinuation(context.Context, providers.SessionRef) (bool, error) {
+	return false, nil
+}
+
 func (root *providerContractCoverageRoot) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil
 }
