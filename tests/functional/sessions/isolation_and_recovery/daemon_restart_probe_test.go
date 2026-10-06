@@ -41,7 +41,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	support.WriteAgentConfig(t, boardDir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
-	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
@@ -70,7 +70,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		home := t.TempDir()
 		invocations := 0
 		var retainedReference []byte
-		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:5], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations > 0 {
 				reference, err := os.ReadFile(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json"))
 				if err != nil {
@@ -88,6 +88,34 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			return inputs
 		}, 0)
 	})
+	if !t.Run("PlainBoard legacy canonical adoption", func(t *testing.T) {
+		runner.calls.Store(0)
+		repo, home := t.TempDir(), t.TempDir()
+		dir := filepath.Join(repo, "factory")
+		if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+			t.Fatal(err)
+		}
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+		invocations := 0
+		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[5:], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+			if invocations == 1 {
+				// Simulate a pre-reference installation without altering its
+				// confirmed board or canonical recording. Future relaunches
+				// must use the automatically adopted reference.
+				if err := os.Remove(filepath.Join(repo, ".you-agent-factory", "current-board.json")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = repo
+			invocations++
+			return inputs
+		}, 0)
+	}) {
+		return
+	}
 	t.Run("PlainBoard invalid selection rejects without activation", func(t *testing.T) {
 		// These exact commands share Current Factory/~default ownership with
 		// the graceful journeys. Keep this cohort ordered on the same graph.
@@ -107,8 +135,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 6 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want six and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 9 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want nine and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }

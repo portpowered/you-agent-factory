@@ -7,6 +7,10 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestDurableProbeCanonicalValidation(t *testing.T) {
@@ -54,6 +58,69 @@ func TestDurableProbeCanonicalValidation(t *testing.T) {
 				t.Fatal("probe hydrated a session or mutated storage")
 			}
 		})
+	}
+}
+
+func TestMatchCurrentBoardWorkRejectsChangedFacts(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"matching", "state", "payload", "tags", "request", "relations", "missing work", "empty witness", "canceled read"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			item := work.FactoryWorkItem{ID: "work", WorkTypeID: "task", State: "waiting", DisplayName: "saved", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "§ —"}}, Tags: map[string]string{"keep": "yes"}}
+			token := workers.Token{ID: "token", State: item.State, Color: workers.Color{WorkID: item.ID, WorkTypeID: item.WorkTypeID, DataType: workers.DataTypeWork, Name: item.DisplayName, RequestID: "request", Content: item.Content, Payload: []byte("§ —"), Tags: item.Tags, Relations: []work.Relation{{Type: work.RelationType("DEPENDS_ON"), TargetWorkID: "prerequisite", RequiredState: "done"}}}}
+			snapshot := PersistedRuntimeSessionState{Session: SessionReadResult{SessionID: "~default"}, Records: []DurableSessionRecord{{Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &factorydefinitions.TokenMutationRecord{Type: factorydefinitions.MutationCreate, Token: &token}}}}
+			if name == "empty witness" {
+				snapshot.Records = nil
+			}
+			data, err := json.Marshal(snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store := &durableProbeStore{snapshot: data}
+			state := &factorydefinitions.FactoryWorldState{WorkItemsByID: map[string]work.FactoryWorkItem{}, WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{"request": {WorkItems: []work.FactoryWorkItem{item}}}, RelationsByWorkID: map[string][]work.FactoryRelation{"work": {{Type: "DEPENDS_ON", TargetWorkID: "prerequisite", RequiredState: "done"}}}}
+			switch name {
+			case "state":
+				item.State = "done"
+			case "payload":
+				item.Content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "altered"}}
+			case "tags":
+				item.Tags = map[string]string{"keep": "no"}
+			case "request":
+				delete(state.WorkRequestsByID, "request")
+			case "relations":
+				state.RelationsByWorkID = nil
+			}
+			if name != "missing work" {
+				state.WorkItemsByID[item.ID] = item
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if name == "canceled read" {
+				store.onLoad = cancel
+			}
+			service := &JavaScriptRuntimeService{persistence: store}
+			matched, err := service.MatchCurrentBoardWork(ctx, "~default", state)
+			if name == "canceled read" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation=%v", err)
+				}
+			} else if err != nil || matched != (name == "matching") {
+				t.Fatalf("matched=%v error=%v", matched, err)
+			}
+			if store.writes != 0 || len(service.sessions) != 0 {
+				t.Fatal("matching mutated or hydrated durable state")
+			}
+		})
+	}
+}
+
+func TestCurrentBoardFactsExcludeOnlySynthesizedPetriLifecycle(t *testing.T) {
+	t.Parallel()
+	store := &durableProbeStore{snapshot: []byte(`{"Session":{"SessionID":"~default","OrchestratorKind":"PETRI"},"Events":[{"id":"session-started/~default","type":"SESSION_STARTED","payload":{}},{"id":"session-result-updated/~default","type":"SESSION_RESULT_UPDATED","payload":{}},{"id":"recorded-start","type":"SESSION_STARTED","payload":{}},{"id":"work","type":"WORK_REQUEST","payload":{}}]}`)}
+	service := &JavaScriptRuntimeService{persistence: store}
+	facts, err := service.LoadCurrentBoardFacts(t.Context(), "~default")
+	if err != nil || len(facts) != 2 || facts[0].Id != "recorded-start" || facts[1].Id != "work" {
+		t.Fatalf("recorded witness=%v, %v", facts, err)
 	}
 }
 

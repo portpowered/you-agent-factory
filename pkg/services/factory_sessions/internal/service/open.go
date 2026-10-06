@@ -315,7 +315,7 @@ func (opening *sessionRuntimeOpening) bindSessionObservations() error {
 
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
-	if err := opening.selectCurrentBoardReference(ctx); err != nil {
+	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
 		return err
 	}
 	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {

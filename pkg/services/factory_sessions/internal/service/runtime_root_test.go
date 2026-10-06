@@ -174,7 +174,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 			case "replay":
 				opening.configured.Recordings.ReplayPath, bypass = "replay.json", true
 			}
-			err := opening.selectCurrentBoardReference(t.Context())
+			err := (&Root{}).selectCurrentBoardReference(t.Context(), opening)
 			if (err != nil) != wantError {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
 			}
@@ -913,5 +913,48 @@ func TestNewFactorySelectsLegacyHistoricalReplayBeforeLiveRuntimeAssembly(t *tes
 	}
 	if calls != 0 {
 		t.Fatalf("legacy historical opening invoked %d live collaborators, want zero", calls)
+	}
+}
+
+func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
+	t.Parallel()
+	event := func(id, payload string) factorydefinitions.FactoryEvent {
+		return factorydefinitions.FactoryEvent{Id: id, Type: factorydefinitions.FactoryEventTypeWorkRequest, Payload: json.RawMessage(payload)}
+	}
+	a, b, c := event("a", `{"text":"§ —","value":1}`), event("b", `{}`), event("c", `{}`)
+	reordered := event("a", `{"value":1,"text":"§ —"}`)
+	changed := event("a", `{"text":"secret","value":1}`)
+	for _, tc := range []struct {
+		name      string
+		witness   []factorydefinitions.FactoryEvent
+		histories map[string][]factorydefinitions.FactoryEvent
+		want      string
+	}{
+		{"unique", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
+		{"canonical JSON", []factorydefinitions.FactoryEvent{reordered}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
+		{"stale prefix", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"stale": {a}, "board": {a, b}}, "board"},
+		{"equal duplicate tie", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"copy": {a, b}, "board": {a, b}}, ""},
+		{"incomparable branch", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"branch": {a, c}, "board": {a, b}}, ""},
+		{"wrong payload", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {changed, b}}, ""},
+		{"missing", []factorydefinitions.FactoryEvent{a}, nil, ""},
+		{"empty witness", nil, map[string][]factorydefinitions.FactoryEvent{"board": {a}}, ""},
+		{"wrong order", []factorydefinitions.FactoryEvent{a, b}, map[string][]factorydefinitions.FactoryEvent{"board": {b, a}}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			matching := make(map[string][]factorydefinitions.FactoryEvent)
+			for path, events := range tc.histories {
+				if currentBoardContainsFacts(events, tc.witness) {
+					matching[path] = events
+				}
+			}
+			got, err := selectMaximalCurrentBoard(matching)
+			if got != tc.want || (err != nil) != (tc.want == "") {
+				t.Fatalf("selection=%q, %v; want %q", got, err, tc.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "secret") {
+				t.Fatal("diagnostic exposed payload")
+			}
+		})
 	}
 }

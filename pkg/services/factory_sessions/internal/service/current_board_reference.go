@@ -1,10 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -61,7 +63,7 @@ func (opening *sessionRuntimeOpening) currentBoardReferenceStore() (currentBoard
 	return store, nil
 }
 
-func (opening *sessionRuntimeOpening) selectCurrentBoardReference(ctx context.Context) error {
+func (r *Root) selectCurrentBoardReference(ctx context.Context, opening *sessionRuntimeOpening) error {
 	if !opening.usesImplicitCurrentBoard() {
 		return nil
 	}
@@ -78,11 +80,13 @@ func (opening *sessionRuntimeOpening) selectCurrentBoardReference(ctx context.Co
 		if err != nil {
 			return err
 		}
-		if probe.hasDurableState {
-			return currentBoardHistoryFailure("", opening.sessionID,
-				"MISSING_HISTORY: a durable board requires a matching retained recording before an implicit reference can be published", nil)
+		if !probe.hasDurableState {
+			return nil
 		}
-		return nil
+		path, err = r.discoverLegacyCurrentBoard(ctx, opening)
+		if err != nil {
+			return err
+		}
 	}
 	opening.configured.Recordings.RecordPath = path
 	opening.sessionSelection.Recording.RecordPath = path
@@ -90,6 +94,132 @@ func (opening *sessionRuntimeOpening) selectCurrentBoardReference(ctx context.Co
 	// The durable probe still validates the snapshot; an existing reference must
 	// never silently become an empty board when its selected artifact is gone.
 	return nil
+}
+
+type currentBoardFactsReader interface {
+	LoadCurrentBoardFacts(context.Context, string) ([]factorydefinitions.FactoryEvent, error)
+	MatchCurrentBoardWork(context.Context, string, *factorydefinitions.FactoryWorldState) (bool, error)
+}
+
+// selectMaximalCurrentBoard rejects ties and incomparable matching histories.
+// Canonical event prefixes determine continuation, never filenames.
+func selectMaximalCurrentBoard(histories map[string][]factorydefinitions.FactoryEvent) (string, error) {
+	selected := ""
+	for path, events := range histories {
+		maximal := true
+		for other, continuation := range histories {
+			if other != path && len(continuation) > len(events) && currentBoardEventPrefix(events, continuation) {
+				maximal = false
+				break
+			}
+		}
+		if !maximal {
+			continue
+		}
+		if selected != "" {
+			return "", fmt.Errorf("AMBIGUOUS_HISTORY: multiple retained board continuations match durable facts")
+		}
+		selected = path
+	}
+	if selected == "" {
+		return "", fmt.Errorf("MISSING_HISTORY: no retained recording matches durable board facts")
+	}
+	return selected, nil
+}
+
+func currentBoardContainsFacts(events, facts []factorydefinitions.FactoryEvent) bool {
+	if len(facts) == 0 {
+		return false
+	}
+	index := 0
+	for _, event := range events {
+		if index < len(facts) && equalCurrentBoardEvent(event, facts[index]) {
+			index++
+		}
+	}
+	return index == len(facts)
+}
+
+func currentBoardEventPrefix(prefix, events []factorydefinitions.FactoryEvent) bool {
+	if len(prefix) > len(events) {
+		return false
+	}
+	for index, event := range prefix {
+		if !equalCurrentBoardEvent(event, events[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalCurrentBoardEvent(left, right factorydefinitions.FactoryEvent) bool {
+	var a, b any
+	leftDecoder, rightDecoder := json.NewDecoder(bytes.NewReader(left.Payload)), json.NewDecoder(bytes.NewReader(right.Payload))
+	leftDecoder.UseNumber()
+	rightDecoder.UseNumber()
+	if leftDecoder.Decode(&a) != nil || rightDecoder.Decode(&b) != nil {
+		return false
+	}
+	left.Payload, right.Payload = nil, nil
+	return reflect.DeepEqual(left, right) && reflect.DeepEqual(a, b)
+}
+
+func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) (string, error) {
+	reader, ok := opening.durableExecution.Service.(currentBoardFactsReader)
+	if !ok {
+		return "", fmt.Errorf("current board durable witness reader is unavailable")
+	}
+	witness, err := reader.LoadCurrentBoardFacts(ctx, opening.sessionID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(opening.sessionSelection.SystemConfigHome) == "" {
+		return "", fmt.Errorf("current board recording profile is required")
+	}
+	root := filepath.Join(opening.sessionSelection.SystemConfigHome, ".you-agent-factory", "recordings")
+	listed, err := r.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+	if err != nil {
+		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy recording inventory could not be read", err)
+	}
+	if len(listed.Warnings) != 0 {
+		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy inventory contains unreadable histories; preserve them before retrying", nil)
+	}
+	histories := make(map[string][]factorydefinitions.FactoryEvent)
+	for _, candidate := range listed.Sessions {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if candidate.FactorySessionID != opening.sessionID {
+			continue
+		}
+		relative := filepath.FromSlash(candidate.ArtifactReference)
+		if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(filepath.Clean(relative), ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("legacy inventory returned a foreign artifact reference")
+		}
+		path := filepath.Join(root, relative)
+		history, err := restoreCurrentBoardHistory(r.recordingsService, path, opening.sessionID, false)
+		if err != nil {
+			return "", err
+		}
+		if validateCurrentBoardFactoryDirectory(history.events, opening.load.LoadedFactoryCfg.FactoryDir()) != nil {
+			continue
+		}
+		matched, err := reader.MatchCurrentBoardWork(ctx, opening.sessionID, history.state)
+		if err != nil {
+			return "", err
+		}
+		if len(witness) > 0 && !currentBoardContainsFacts(history.events, witness) {
+			continue
+		}
+		if matched || len(witness) > 0 {
+			histories[path] = history.events
+		}
+	}
+	path, err := selectMaximalCurrentBoard(histories)
+	if err != nil {
+		return "", currentBoardHistoryFailure("", opening.sessionID, err.Error(), nil)
+	}
+	return path, nil
 }
 
 func (opening *sessionRuntimeOpening) publishCurrentBoardReference(ctx context.Context) error {
