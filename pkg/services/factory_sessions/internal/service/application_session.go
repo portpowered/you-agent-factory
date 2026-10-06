@@ -222,3 +222,12 @@ func (r *Root) CurrentBoardRecordingArtifact(ctx context.Context, scope string) 
 	}
 	return recordings.RecordingArtifactReference(factoryruntime.RecordingPath(bound.CurrentBoardRecordPath).ForSession(scope)), nil
 }
+
+// ApplicationSkippedBoardRecordings returns paths only, never decoder causes.
+func (r *Root) ApplicationSkippedBoardRecordings(sessionID string) ([]string, error) {
+	bound, err := r.applicationSessionState(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), bound.SkippedBoardRecordings...), nil
+}

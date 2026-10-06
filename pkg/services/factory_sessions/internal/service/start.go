@@ -409,6 +409,7 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
 	bound.OperatorSettingsPath = products.operatorSettingsPath
 	bound.Recordings = products.recordings
+	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
 	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
 	bound.OrderlyStop = products.orderlyStop

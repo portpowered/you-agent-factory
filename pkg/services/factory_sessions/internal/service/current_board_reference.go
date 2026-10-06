@@ -101,30 +101,15 @@ type currentBoardFactsReader interface {
 	MatchCurrentBoardWork(context.Context, string, *factorydefinitions.FactoryWorldState) (bool, error)
 }
 
-// selectMaximalCurrentBoard rejects ties and incomparable matching histories.
-// Canonical event prefixes determine continuation, never filenames.
-func selectMaximalCurrentBoard(histories map[string][]factorydefinitions.FactoryEvent) (string, error) {
-	selected := ""
-	for path, events := range histories {
-		maximal := true
-		for other, continuation := range histories {
-			if other != path && len(continuation) > len(events) && currentBoardEventPrefix(events, continuation) {
-				maximal = false
-				break
-			}
-		}
-		if !maximal {
-			continue
-		}
-		if selected != "" {
-			return "", fmt.Errorf("AMBIGUOUS_HISTORY: multiple retained board continuations match durable facts")
-		}
-		selected = path
+// selectUniqueCurrentBoard rejects every ambiguous match, including prefixes.
+func selectUniqueCurrentBoard(histories map[string][]factorydefinitions.FactoryEvent) (string, error) {
+	if len(histories) > 1 {
+		return "", fmt.Errorf("AMBIGUOUS_HISTORY: multiple retained recordings match durable facts")
 	}
-	if selected == "" {
-		return "", fmt.Errorf("MISSING_HISTORY: no retained recording matches durable board facts")
+	for path := range histories {
+		return path, nil
 	}
-	return selected, nil
+	return "", fmt.Errorf("MISSING_HISTORY: no retained recording matches durable board facts")
 }
 
 func currentBoardContainsFacts(events, facts []factorydefinitions.FactoryEvent) bool {
@@ -138,18 +123,6 @@ func currentBoardContainsFacts(events, facts []factorydefinitions.FactoryEvent) 
 		}
 	}
 	return index == len(facts)
-}
-
-func currentBoardEventPrefix(prefix, events []factorydefinitions.FactoryEvent) bool {
-	if len(prefix) > len(events) {
-		return false
-	}
-	for index, event := range prefix {
-		if !equalCurrentBoardEvent(event, events[index]) {
-			return false
-		}
-	}
-	return true
 }
 
 func equalCurrentBoardEvent(left, right factorydefinitions.FactoryEvent) bool {
@@ -181,9 +154,6 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 	if err != nil {
 		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy recording inventory could not be read", err)
 	}
-	if len(listed.Warnings) != 0 {
-		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy inventory contains unreadable histories; preserve them before retrying", nil)
-	}
 	histories := make(map[string][]factorydefinitions.FactoryEvent)
 	for _, candidate := range listed.Sessions {
 		if err := ctx.Err(); err != nil {
@@ -200,22 +170,51 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 			histories[path] = events
 		}
 	}
-	path, err := selectMaximalCurrentBoard(histories)
+	path, err := selectUniqueCurrentBoard(histories)
 	if err != nil {
 		return "", currentBoardHistoryFailure("", opening.sessionID, err.Error(), nil)
+	}
+	for _, warning := range listed.Warnings {
+		opening.skippedBoardRecordings = append(opening.skippedBoardRecordings, warning.ArtifactReference)
 	}
 	return path, nil
 }
 
 func (opening *sessionRuntimeOpening) publishCurrentBoardReference(ctx context.Context) error {
 	if !opening.usesImplicitCurrentBoard() {
-		return nil
+		if !opening.restoresExplicitCurrentBoard() {
+			return nil
+		}
+		store, ok := opening.durableExecution.Service.(interface {
+			SaveCurrentBoardIfAbsent(context.Context, string, string) error
+		})
+		if !ok {
+			return fmt.Errorf("current board absent-reference persistence is unavailable")
+		}
+		path, err := filepath.Abs(opening.configured.Recordings.RecordPath)
+		if err != nil {
+			return err
+		}
+		return store.SaveCurrentBoardIfAbsent(ctx, opening.load.LoadedFactoryCfg.FactoryDir(), path)
 	}
 	store, err := opening.currentBoardReferenceStore()
 	if err != nil {
 		return err
 	}
 	return store.SaveCurrentBoard(ctx, opening.load.LoadedFactoryCfg.FactoryDir(), opening.configured.Recordings.RecordPath)
+}
+
+// Eligibility depends on confirmed reconstruction, never a fresh explicit target.
+func (opening *sessionRuntimeOpening) restoresExplicitCurrentBoard() bool {
+	selection := opening.sessionSelection
+	return selection != nil && !selection.Recording.ImplicitCurrentBoard &&
+		selection.Mode == factorysessions.SessionRuntimeModeService && selection.Host.Port > 0 &&
+		opening.sessionID == factorysessions.DefaultSessionID &&
+		strings.TrimSpace(selection.Recording.RecordPath) != "" &&
+		strings.TrimSpace(opening.configured.Recordings.ResumePath) == "" &&
+		strings.TrimSpace(opening.configured.Recordings.ReplayPath) == "" &&
+		opening.restoredWorldState != nil &&
+		currentBoardHistoryBelongsToFactory(opening.restoredEventHistory, opening.load.LoadedFactoryCfg.FactoryDir())
 }
 
 func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) error {

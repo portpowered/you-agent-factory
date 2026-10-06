@@ -108,10 +108,12 @@ type Config struct {
 	// ReplayMetadataOutput is the raw human stdout sink used for non-fatal
 	// replay drift disclosure even when quiet mode suppresses normal output.
 	ReplayMetadataOutput io.Writer
-	ProgressOutput       io.Writer
-	OpenDashboard        bool
-	StartupOutput        io.Writer
-	Diagnostics          io.Writer
+	// BoardAdoptionOutput carries paths-only legacy recovery warnings on stderr.
+	BoardAdoptionOutput io.Writer
+	ProgressOutput      io.Writer
+	OpenDashboard       bool
+	StartupOutput       io.Writer
+	Diagnostics         io.Writer
 	// DeferHomeDisclosureUntilHostReady keeps an explicitly selected listener
 	// failure free of human startup output while preserving the home-before-
 	// initialization boundary for ordinary auto-port hosting.
