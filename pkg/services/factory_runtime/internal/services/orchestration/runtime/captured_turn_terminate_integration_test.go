@@ -860,3 +860,7 @@ var _ workersessions.Service = (*capturedTurnWorkerSessions)(nil)
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
+
+func (*continuationFanOutExecution) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}

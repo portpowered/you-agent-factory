@@ -251,3 +251,7 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
+
+func (*liveSessionService) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}

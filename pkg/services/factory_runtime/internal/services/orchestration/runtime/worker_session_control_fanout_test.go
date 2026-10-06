@@ -926,3 +926,7 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 		return nil
 	}), nil
 }
+
+func (*synchronousFanOutExecution) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}
