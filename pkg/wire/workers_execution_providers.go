@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -271,57 +269,6 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 			runtimeConfig,
 			next,
 			platformfilesystem.Local{},
-		)
-	}
-}
-
-func provideConductorInvocationWithProgressFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-	allocator providerswire.PTYAllocator,
-) factorysessionwire.ConductorInvocationWithProgressFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(
-		selectedProviders providers.Service,
-		runner platformprocess.CommandRunner,
-		publisher workers.ProgressPublisher,
-	) (workers.InvocationExecutor, error) {
-		if selectedProviders == nil {
-			selectedProviders = providersService
-		}
-		return workerswire.NewConductorInvocationWithProgress(
-			selectedProviders,
-			runner,
-			commandClock,
-			allocator,
-			resolveSymlinks,
-			executableLocator,
-			executableInspector,
-			executableFiles,
-			operatingSystem,
-			publisher,
-			temporaryFiles,
 		)
 	}
 }

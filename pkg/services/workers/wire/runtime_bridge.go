@@ -1,11 +1,8 @@
 package wire
 
 import (
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
@@ -31,42 +28,6 @@ func NewMockCommandRunner(
 // LocalRuntimeHooks returns Workers-owned recording hooks for the Models runtime.
 func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
-}
-
-// NewConductorInvocationWithProgress routes external integrations through the
-// conductor. It is the only direct-invocation constructor with a remaining
-// production caller (pkg/wire/session_runtime_providers.go composes it for
-// standalone Factory Session execution); its zero-caller siblings
-// NewInvocation and NewInvocationWithProgress were retired in P6-C.
-//
-// TODO(P6-C): retire this bridge once that caller passes detached values to
-// workers.Service.Execute, which is the named successor boundary.
-func NewConductorInvocationWithProgress(
-	providersService providers.Service,
-	commandRunner platformprocess.CommandRunner,
-	commandClock platformclock.Source,
-	allocator any,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	progressPublisher workers.ProgressPublisher,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return workersinternal.NewConductorInvocationWithProgress(
-		providersService,
-		commandRunner,
-		commandClock,
-		adaptPTYAllocator(allocator),
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		progressPublisher,
-		temporaryFileSystems...,
-	)
 }
 
 // ResolveTemplateFields exposes the Workers-owned template resolver for composition.

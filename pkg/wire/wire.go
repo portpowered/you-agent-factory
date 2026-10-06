@@ -274,7 +274,6 @@ var servicesSet = wire.NewSet(
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
-	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingClock,
 	provideRecordingSnapshotWriter,

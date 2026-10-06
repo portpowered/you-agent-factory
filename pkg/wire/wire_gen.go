@@ -1065,7 +1065,6 @@ var servicesSet = wire11.NewSet(
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
-	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingClock,
 	provideRecordingSnapshotWriter,

@@ -34,7 +34,6 @@ import (
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -182,81 +181,6 @@ func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (
 }
 func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
 	return nil
-}
-
-func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersService(t *testing.T) {
-	t.Parallel()
-
-	edges := serviceedges.Edges{
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
-	}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	allocator, err := provideAgyPTYAllocator(edges)
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)
-	executor, err := factory(nil, adaptRunner(edges.ProviderCommandRunner), nil)
-	if err != nil {
-		t.Fatalf("factory() error = %v", err)
-	}
-	if executor == nil {
-		t.Fatal("factory() returned nil executor")
-	}
-}
-
-func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	allocator, err := provideAgyPTYAllocator(edges)
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	executor, err := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)(
-		nil, provideWorkerCommandRunnerAdapter()(runner), nil,
-	)
-	if err != nil {
-		t.Fatalf("construct invocation executor: %v", err)
-	}
-	result, err := executor.Execute(t.Context(), workers.InvocationInput{Request: workers.ProviderInferenceRequest{
-		Dispatch: work.WorkDispatch{DispatchID: "wire-codex-child"},
-		RunnerID: "codex", ModelProvider: "codex", Model: "gpt-5", UserMessage: "do work",
-	}})
-	if err != nil {
-		t.Fatalf("execute Codex child: %v; result=%#v", err, result)
-	}
-	if runner.CallCount() != 1 || result.Response.Content != "child result" {
-		t.Fatalf("runner calls=%d result=%#v", runner.CallCount(), result)
-	}
-}
-
-func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersService(t *testing.T) {
-	t.Parallel()
-
-	edges := serviceedges.Edges{
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
-	}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	allocator, err := provideAgyPTYAllocator(edges)
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)
-	if _, err = factory(providersService, adaptRunner(edges.ProviderCommandRunner), nil); err != nil {
-		t.Fatalf("factory() error = %v", err)
-	}
 }
 
 // TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge pins that a

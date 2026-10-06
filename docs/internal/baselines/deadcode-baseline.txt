@@ -1820,9 +1820,6 @@ pkg/services/workers/internal/interface/project_fields.go: unreachable func: top
 pkg/services/workers/internal/prompting/source.go: unreachable func: ResolveAuthoredPromptSource
 pkg/services/workers/internal/prompting/source.go: unreachable func: authoredPromptBody
 pkg/services/workers/internal/prompting/template_fields.go: unreachable func: ApplyResolvedFields
-pkg/services/workers/internal/pty.go: unreachable func: MockPTYAllocator.Allocate
-pkg/services/workers/internal/pty.go: unreachable func: MockPTYSession.Close
-pkg/services/workers/internal/pty.go: unreachable func: MockPTYSession.Run
 pkg/services/workers/internal/registry_runner.go: unreachable func: registryCapabilityRunner.Execute
 pkg/services/workers/internal/registry_runner.go: unreachable func: runnerMetadataFromProvider
 pkg/services/workers/internal/registry_runner.go: unreachable func: validateRequestedRunnerCapabilities

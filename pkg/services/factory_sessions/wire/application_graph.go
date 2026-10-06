@@ -75,20 +75,18 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProviderOverrideService                = service.ProviderOverrideService
-	WorkFactory                            = service.WorkFactory
-	FactorySessionExecutionFactory         = service.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory = service.ConductorInvocationWithProgressFactory
-	DurableExecutionFactory                = service.DurableExecutionFactory
-	DurableExecution                       = service.DurableExecution
-	WorkerCommandRunnerAdapter             = service.WorkerCommandRunnerAdapter
-	ProviderCommandRunner                  = service.ProviderCommandRunner
-	ScriptCommandRunner                    = service.ScriptCommandRunner
-	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
-	RuntimeRoot                            = service.RuntimeRoot
-	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
+	ProviderOverrideService        = service.ProviderOverrideService
+	FactorySessionExecutionFactory = service.FactorySessionExecutionFactory
+	DurableExecutionFactory        = service.DurableExecutionFactory
+	DurableExecution               = service.DurableExecution
+	WorkerCommandRunnerAdapter     = service.WorkerCommandRunnerAdapter
+	ProviderCommandRunner          = service.ProviderCommandRunner
+	ScriptCommandRunner            = service.ScriptCommandRunner
+	FactoryRuntimeRoot             = service.FactoryRuntimeRoot
+	RuntimeRoot                    = service.RuntimeRoot
+	ModelPullMetricsRecorder       = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem   = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter     = factorysessioncontracts.InvocationArtifactExporter
 
 	RuntimeModelInvocationOperation = modelinvocation.RuntimeModelInvocationOperation
 	RuntimeModelFactoryConfigReader = modelinvocation.FactoryConfigReader
