@@ -2263,3 +2263,30 @@ retains vet ownership. This removes duplicate static analysis and regeneration
 of vet-only cached source side files without changing runtime selection,
 terminal-event evidence, retries, or quarantine expectations. Focused quarantine
 and overlap tests pass.
+
+### Corrected metadata fill and local restored execution
+
+Hosted run `37393987887`, source `0e5bd429e7`, passes without retries:
+202.617s full supervisor, 193.405s invocation, 467 compiler and 37 linker
+trace commands. The earlier archive-only snapshot restores in four seconds
+and applies in fifteen seconds (220 MB compressed / 964,300,415 bytes retained).
+The corrected capture contains 13,707 files / 969,143,201 bytes, with no budget
+omissions; capture and save each take four seconds. This is still above three
+minutes and includes rebuilding missing static metadata.
+
+The exact-source four-CPU local restored supervisor passes in 108.938s,
+including 102.291s invocation, all 69 package terminals and 759 test results
+(757 pass, two skip), without retries. Restoring into an empty cache performs
+zero Go compiler invocations. There are 42 test/tool link records: 48.467s
+linker CPU, 53.744s active linker wall, and 159.370s summed overlapping link
+wall. Peak RSS is 2.22 GiB. The capture reaches the 1 GiB cap and omits 115
+older entries; all selected customer cases and unchanged coverage gates pass.
+This local result supports the corrected cache mechanism, but hosted reuse
+including transfer cost still needs measurement.
+
+The first exact-source local fill sample takes 150.247s and fails the existing
+`TestPackagedFullFlowDispatchTerminalFinalization/RoutesNoResultFailureToLead`
+case because its immediate public Work list is empty. It remains a failed
+sample, not checkpoint evidence. An earlier local harness attempt has no Git
+repository and fails before tests while reading the raw-failure artifact head;
+that harness setup is corrected before the two full exact-source samples.
