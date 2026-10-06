@@ -434,7 +434,7 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	waitTimeout time.Duration,
 	admission *durableRunAdmission,
 ) (SyncStartResult, error) {
-	startedAt := s.now()
+	startedAt := s.nowForSession(reserved.state.session.SessionID)
 	running := projectRuntimeRunningSessionState(
 		reserved.state.session.SessionID,
 		normalized,
@@ -768,7 +768,7 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		StateProvider: stateProvider,
 		Events:        events,
 		Application:   application,
-		Now:           s.now,
+		Now:           func() time.Time { return s.nowForSession(id) },
 	}
 	var result factorysessions.LiveChangeResult
 	var applyErr error

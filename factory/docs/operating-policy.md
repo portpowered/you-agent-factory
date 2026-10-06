@@ -218,6 +218,20 @@ A failed item needs a cause-corrected successor, decided on its wake. The
 same-name `project-cycle` remains only as the relation-free terminal
 `complete` or `blocked` decision.
 
+An existing project-tagged thoughts loopback that finds gaps saves and dry-runs
+a raw proposal at `docs/temp/projects/<project>/proposals/<loopback-name>.json`
+in the main checkout. It submits no Project children and completes ACCEPTED
+naming that path; admission ownership alone is not a failure. Actual write or
+dry-run failures retain truthful evidence and any saved reference. Completed
+and failed thoughts each emit one origin-preserving report through the existing
+project-report/wake path; busy leads leave reports pending. The owning lead
+reviews/edits against immutable authority and live ownership, admits ready fixes
+with a verified receipt or records a reason/release event in progress.md, and
+deduplicates by request/origin. Recovery retains the two-successor lineage,
+workspace adoption and current-Session dependency rules. Untagged loopbacks
+retain self-submission/receipt or accepted hold. This creates no new joins and
+does not authorize lead Work controls.
+
 Each lead pass or check-in inventories all current-Session Work pages, active
 sessions, prior-Session carryover, and retained PRs at exact heads. It records
 an owner or named release event for each relevant failed or open item. Old

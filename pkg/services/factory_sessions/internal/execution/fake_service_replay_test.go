@@ -238,7 +238,7 @@ func TestDurablePetriFailureHistorySnapshotRetentionBoundary(t *testing.T) {
 			}
 			service := &JavaScriptRuntimeService{
 				clock:       runtimeTestClock{now: time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)},
-				persistence: store,
+				persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{},
 			}
 			if err := service.persistSessionSnapshot(state); err != nil {
 				t.Fatalf("persist retry sequence: %v", err)

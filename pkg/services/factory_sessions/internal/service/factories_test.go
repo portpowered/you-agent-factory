@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -222,7 +223,7 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		DecodeReplayConfig:           inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
 		CaptureLoadedFactorySnapshot: inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		Assembly:                     factorySessionsRoot,
-		DurableOpening:               durableOpeningFixture(inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls)),
+		DurableOpening:               durableOpeningFixture(nil, inertRuntimeOpeningFunction[durableexecution.ScopeAcquisition](calls)),
 		FactoryScaffoldInitializer:   inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
 		EditableFactoryValidator:     inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
 		ProcessRuntimeFactory:        processRuntimeFactoryConstructionStub{},
@@ -343,10 +344,16 @@ func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context
 
 // durableOpeningFixture controls the configuration and acquisition effects of
 // the fixed opening owner used by live and replay component fixtures.
-func durableOpeningFixture(acquire FactorySessionExecutionFactory) *DurableOpening {
+func durableOpeningFixture(execution durableexecution.Service, acquire durableexecution.ScopeAcquisition) *DurableOpening {
 	return NewDurableOpening(
 		func(string) (operatorsettings.Config, error) { return operatorsettings.Config{}, nil },
-		acquire,
-		func(identity string) (string, error) { return identity, nil },
+		func(ctx context.Context, facts durableexecution.ScopeFacts, clock factoryruntime.Clock, logger *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
+			owned, release, err := acquire(ctx, facts, clock, logger)
+			if owned == nil && err == nil {
+				owned = execution
+			}
+			return owned, release, err
+		},
+		func(identity string) (string, error) { return identity, nil }, false,
 	)
 }

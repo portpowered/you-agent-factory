@@ -95,6 +95,30 @@ For a deterministic failure, submit a corrected successor or hold with its exact
 
 ## Corrected successor recovery
 
+### Loopback proposals
+
+Review tagged loopback proposals against immutable authority and live ownership before admission.
+Resolve the main checkout from the absolute git common directory. Read the
+exact originating thoughts Work, its retained payload, _last_output and
+Factory Events even when it failed; a failed validator can still leave a useful
+draft. Verify the current Session, origin Work ID and exact project tag.
+Read only this Project's stable proposals/<loopback-name>.json reference;
+never claim an untagged proposal or another Project's corrective work. A path
+alone is not authority. Validate the raw batch and every proposed child against
+source-plan.md, acceptance.md, rules.md, live Work and retained PR ownership.
+Deduplicate proposals by stable request ID and origin Work ID across wakes and check-ins.
+Edit the draft when needed without changing immutable acceptance, adding a
+second owner or inventing a new route. Keep the original findings readable.
+Admit ready fixes with explicit-session dry-run, submission and verified receipt; otherwise record reason and release event in progress.md.
+Record the proposal path, origin, request ID, edits and receipt Work IDs or
+hold reason. Reconcile an uncertain receipt with the same request ID before
+retrying; a duplicate notice does not authorize another admission.
+Apply Corrected successor recovery, including the two-successor lineage
+budget, retained workspace adoption and verified current-Session targetWorkId
+dependencies, to proposals recovering failed lanes. Never reset that budget.
+Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.
+Missing/invalid proposals take a nonfatal recorded hold and tooling escalation.
+
 On every escalated/failed child report, wake and check-in, recovery is the
 default when a concrete correction is supported; never blindly retry. Inspect
 exact idea/plan/task Work IDs, Worker Sessions, Factory Events, retained request

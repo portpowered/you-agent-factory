@@ -76,7 +76,7 @@ func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
 					store := &runtimeRecordingStore{}
 					service := &JavaScriptRuntimeService{
 						persistence:              store,
-						persistenceWarningLogger: zap.New(core),
+						persistenceWarningLogger: zap.New(core), durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{},
 					}
 					service.persistedSnapshotMaxBytes = limit.maxBytes
 					state := exactEncodedSizeWarningState(t, int(threshold)+boundary.delta)
@@ -122,7 +122,7 @@ func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
 	const maxBytes = 4096
 	service := &JavaScriptRuntimeService{
 		persistence:              &runtimeRecordingStore{saveErr: wantErr},
-		persistenceWarningLogger: zap.New(core),
+		persistenceWarningLogger: zap.New(core), durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{},
 	}
 	service.persistedSnapshotMaxBytes = maxBytes
 	if err := service.persistSessionSnapshot(exactEncodedSizeWarningState(t, int(durableSessionSnapshotWarningThresholdForMax(maxBytes)))); !errors.Is(err, wantErr) {

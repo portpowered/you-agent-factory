@@ -676,6 +676,34 @@
           "x": 2095,
           "y": 1135
         }
+      },
+      {
+        "id": "work-state:thoughts:reporting-complete",
+        "position": {
+          "x": 40,
+          "y": 755
+        }
+      },
+      {
+        "id": "work-state:thoughts:reporting-failed",
+        "position": {
+          "x": 325,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:report-thoughts-complete",
+        "position": {
+          "x": 610,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:report-thoughts-failure",
+        "position": {
+          "x": 895,
+          "y": 755
+        }
       }
     ],
     "edges": [],
@@ -698,7 +726,11 @@
           "workstation:ideafy",
           "workstation:though-retrigger",
           "resource:supervisor-slot",
-          "work-type:thoughts"
+          "work-type:thoughts",
+          "work-state:thoughts:reporting-complete",
+          "work-state:thoughts:reporting-failed",
+          "workstation:report-thoughts-complete",
+          "workstation:report-thoughts-failure"
         ]
       },
       {
@@ -1071,9 +1103,19 @@
           "type": "INITIAL"
         },
         {
+          "id": "reporting-complete",
+          "name": "reporting-complete",
+          "type": "PROCESSING"
+        },
+        {
           "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
+        },
+        {
+          "id": "reporting-failed",
+          "name": "reporting-failed",
+          "type": "FAILED"
         },
         {
           "id": "failed",
@@ -1752,13 +1794,13 @@
       "name": "ideafy",
       "onFailure": [
         {
-          "state": "failed",
+          "state": "reporting-failed",
           "workType": "thoughts"
         }
       ],
       "outputs": [
         {
-          "state": "complete",
+          "state": "reporting-complete",
           "workType": "thoughts"
         }
       ],
@@ -2442,6 +2484,31 @@
       ]
     },
     {
+      "id": "report-thoughts-complete",
+      "name": "report-thoughts-complete",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-complete"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "thoughts",
+          "state": "complete"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
       "id": "report-idea-complete",
       "name": "report-idea-complete",
       "type": "LOGICAL_MOVE",
@@ -2456,6 +2523,31 @@
         {
           "workType": "idea",
           "state": "complete"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "report-thoughts-failure",
+      "name": "report-thoughts-failure",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-failed"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "thoughts",
+          "state": "failed"
         },
         {
           "workType": "project-report",

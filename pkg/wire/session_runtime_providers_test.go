@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 
 	"go.uber.org/zap"
@@ -182,94 +181,6 @@ func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (
 }
 func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
 	return nil
-}
-
-// TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge pins that a
-// runtime-backed durable execution service is composed without any provider,
-// command runner, allocator, or registry of its own. Its children are Workers,
-// and every provider edge they need is the one Workers already composed for the
-// session; a second edge assembled here is the bypass the Worker Session
-// convergence removed. The mock-worker cases matter because the removed code
-// branched on them.
-func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T) {
-	t.Parallel()
-
-	edges := serviceedges.Edges{}
-	provider, err := provideProvidersService(selectedTestTimeEdges(edges))
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	workflowFiles := provideFactoryRuntimeWorkflowSources(edges)
-	workflowHome := provideFactoryRuntimeWorkflowHome(edges)
-	workflowSymlinks := provideFactoryRuntimeWorkflowSourceResolveSymlinks(edges)
-	workflows := provideJavaScriptWorkflows(workflowFiles, workflowHome, workflowSymlinks)
-	writer, err := providePortableRecordingWriter(edges)
-	if err != nil {
-		t.Fatalf("providePortableRecordingWriter() error = %v", err)
-	}
-	fs := provideFactorySessionRuntimePersistenceFileSystem(edges)
-	stores := provideFactorySessionRuntimePersistenceStoreFactory(fs)
-	syncWaits := provideFactorySessionSyncWaitScheduler()
-	sessionIDs := provideFactorySessionIDGenerator(edges)
-	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
-	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges)
-	allocator, err := provideAgyPTYAllocator(edges)
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	adaptRunner := provideWorkerCommandRunnerAdapter()
-	eventsService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("construct events service: %v", err)
-	}
-	responses, err := factorysessionwire.NewResponseStreams(responseEventIDs, responseEventRetentionLimits, eventsService, logging.NoopLogger{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	mapper, err := factoryruntimewire.NewDefinitionMapper(provideFactoryRuntimeIDGenerator(edges))
-	if err != nil {
-		t.Fatal(err)
-	}
-	factory := provideFactorySessionExecutionFactory(
-		factoryruntimewire.NewJavaScriptCheckpointSummaries(),
-		workflows,
-		provideOrchestrationJavaScriptExecution(provideRuntimeOrchestration(mapper, workflows)),
-		writer,
-		stores,
-		syncWaits,
-		sessionIDs,
-		responseEventIDs,
-		responses,
-		allocator,
-		adaptRunner,
-		provideFactoryRuntimeProviderOverride(edges),
-		factorysessionwire.NewLiveChangeCoordinator(),
-		nil,
-	)
-
-	clock := platformclock.Real{}
-	for _, mockWorkers := range []*workers.MockWorkersConfig{
-		nil,
-		workers.NewEmptyMockWorkersConfig(),
-	} {
-		execution, err := factory(
-			t.TempDir(),
-			factorysessions.PersistencePolicy(""),
-			provider,
-			clock,
-			nil,
-			factoryruntime.JavaScriptWorkerSettings{},
-			mockWorkers,
-			nil,
-			zap.NewNop(),
-		)
-		if err != nil {
-			t.Fatalf("factory(mockWorkers=%#v) error = %v", mockWorkers, err)
-		}
-		if execution == nil {
-			t.Fatalf("factory(mockWorkers=%#v) returned nil execution service", mockWorkers)
-		}
-	}
 }
 
 func TestOperatorSettingsCompletedOwnersUseProcessProviderCatalog(t *testing.T) {

@@ -30,7 +30,7 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	defer s.mu.Unlock()
 	state, ok := s.sessions[id]
 	if !ok {
-		initial := projectPetriRunningSessionState(id, s.now())
+		initial := projectPetriRunningSessionState(id, s.nowForSession(id))
 		state = &initial
 	}
 	candidate := cloneRuntimeSessionState(state)

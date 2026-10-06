@@ -362,7 +362,21 @@ History filters require fleet-wide listing without `--work-id`.
 
 Explicit history pages freeze membership and observations. Later sessions do not enter an existing page sequence.
 Cursors expire after five minutes of inactivity and can expire earlier under snapshot memory pressure.
-Restart from the first page when a cursor expires. The MCP `you.worker_session.list` tool defaults `history` to `all`.
+Restart from the first page when a cursor expires.
+
+Use the MCP `you.subagent` tool with `action: "LIST"` for fleet and history discovery.
+The LIST action defaults `history` to `all`.
+Start the MCP child against the selected host:
+
+```bash
+you --server http://localhost:7437 server mcp
+```
+
+Call `you.subagent` with this input to list retained ended or owner-lost Worker Sessions:
+
+```json
+{"action":"LIST","history":"archived","scope":"all"}
+```
 
 Use `read --view logs` to read a finite page of captured activity while the
 Worker runs or after execution ends. This view reads Portos recordings and

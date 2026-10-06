@@ -2,7 +2,10 @@ package customer_lifecycles_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -283,4 +286,238 @@ func deliveredProjectReport(
 	}
 	t.Fatalf("project lead wake outputWork = %#v, want one project-report", *response.OutputWork)
 	return "", ""
+}
+
+// Controlled provider outcomes prove reporting through public Work/Events;
+// actual draft writing and agent admission remain VAL-LOOPBACK obligations.
+func testProjectLoopbackProposalOutcomes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, decision, state  string
+		commandError, untagged bool
+	}{
+		{name: "F1 accepted proposal", decision: "ACCEPTED", state: "complete"},
+		{name: "F2 failed proposal", decision: "FAILED", state: "failed"},
+		{name: "F3 command failure with saved draft", state: "failed", commandError: true},
+		{name: "F6 untagged accepted hold", decision: "ACCEPTED", state: "complete", untagged: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			proposal := "docs/temp/projects/fixture/proposals/loopback.json"
+			wake := openProjectWakeScenarioWithProvider(t, func(_ context.Context, request platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+				if strings.Contains(providerCommandPrompt(request), "Project Lead wake") {
+					return reviewFailureAccepted("reconciled"), nil
+				}
+				if tc.commandError {
+					return platformprocess.CommandResult{}, errors.New("controlled loopback provider failure")
+				}
+				output := proposal
+				if tc.untagged {
+					output = "hold"
+				}
+				envelope, _ := json.Marshal(map[string]string{"decision": tc.decision, "feedback": "original gap evidence", "output": output})
+				return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(string(envelope))}, nil
+			})
+			wake.admitOwner(t)
+			stream := wake.eventStream(t)
+			childID, name := wake.marker+"-thoughts", wake.ownerName+"-loopback"
+			tags := map[string]string{"project": wake.ownerName}
+			if tc.untagged {
+				tags = nil
+			}
+			wake.submit(t, childID+"-request", reviewFailureSeed{Name: name, WorkID: childID, WorkType: "thoughts", State: "init", TraceID: childID + "-trace", Payload: "original gap evidence; saved proposal " + proposal, Tags: tags})
+			route := "report-thoughts-complete"
+			if tc.state == "failed" {
+				route = "report-thoughts-failure"
+			}
+			if tc.untagged {
+				awaitReviewFailureDispatchResponses(t, stream, route, 1)
+				awaitReviewFailureWorkStates(t, wake.reviewFailureScenario, map[string]string{childID: tc.state})
+			} else {
+				assertProjectLeadWakes(t, wake, stream, name)
+			}
+			works := wake.listWorks(t)
+			original := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(wake.fixture.baseURL, wake.sessionID, "/work/"+childID))
+			assertPayloadHasSentinel(t, "original saved reference", original.Payload, proposal)
+			assertReviewFailureWorkStates(t, works, map[string]string{childID: tc.state, wake.ownerID: "waiting", wake.peerID: "waiting"})
+			assertLoopbackReportOrigin(t, works, childID, tc.untagged)
+			assertLoopbackReadableEvidence(t, wake, childID, tc.commandError, tc.untagged)
+			assertLoopbackReportDispatches(t, wake, route, tc.untagged)
+			if !tc.commandError && !tc.untagged {
+				assertLoopbackOriginalOutput(t, works, childID, proposal)
+			}
+		})
+	}
+}
+
+func assertLoopbackReportDispatches(t *testing.T, wake *projectWakeScenario, route string, untagged bool) {
+	t.Helper()
+	dispatches := reviewFailureDispatches(t, wake.reviewFailureScenario)
+	if len(dispatchesWithTransition(dispatches, route)) != 1 {
+		t.Fatalf("report dispatched more than once: %#v", dispatches)
+	}
+	if untagged && len(dispatchesWithTransition(dispatches, projectLeadWakeTransition)) != 0 {
+		t.Fatal("untagged loopback woke a tagged Project")
+	}
+}
+
+func assertLoopbackOriginalOutput(t *testing.T, works []factoryapi.Work, childID, proposal string) {
+	t.Helper()
+	for _, work := range works {
+		if work.WorkId != nil && *work.WorkId == childID {
+			assertPayloadHasSentinel(t, "original failure evidence", work.Payload, "original gap evidence")
+			assertPayloadHasSentinel(t, "last output", work.Tags, proposal)
+		}
+	}
+}
+
+func testProjectLoopbackSequentialOrigins(t *testing.T) {
+	t.Parallel()
+	wake := openProjectWakeScenario(t)
+	wake.admitOwner(t)
+	stream := wake.eventStream(t)
+	name := wake.ownerName + "-loopback"
+	origins := map[string]bool{}
+	for _, suffix := range []string{"first", "second"} {
+		id := wake.marker + "-" + suffix + "-thoughts"
+		wake.submit(t, id+"-request", reviewFailureSeed{Name: name, WorkID: id, WorkType: "thoughts", State: "reporting-complete", TraceID: id + "-trace", Payload: "docs/temp/projects/fixture/proposals/loopback.json", Tags: map[string]string{"project": wake.ownerName}})
+		awaitReviewFailureDispatchResponses(t, stream, projectLeadWakeTransition, 1)
+		origins[id] = true
+	}
+	reports := 0
+	for _, work := range wake.listWorks(t) {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "project-report" {
+			continue
+		}
+		reports++
+		origin := reportOriginWorkID(work)
+		if !origins[origin] {
+			t.Fatalf("duplicate or incorrect origin %q", origin)
+		}
+		delete(origins, origin)
+		if work.State.Name != "delivered" {
+			t.Fatalf("report not delivered: %#v", work)
+		}
+	}
+	if reports != 2 || len(origins) != 0 {
+		t.Fatalf("reports=%d missing=%v", reports, origins)
+	}
+	dispatches := dispatchesWithTransition(reviewFailureDispatches(t, wake.reviewFailureScenario), projectLeadWakeTransition)
+	if len(dispatches) != 2 {
+		t.Fatalf("wakes=%d want 2", len(dispatches))
+	}
+	for _, dispatch := range dispatches {
+		ids := dispatchInputIDs(dispatch)
+		for _, id := range ids {
+			if id == wake.peerID {
+				t.Fatal("peer woke")
+			}
+		}
+	}
+}
+
+// F4 holds a real lead dispatch at the external provider boundary while a
+// second thoughts completes; normal dispatch completion releases the lead.
+func testProjectLoopbackBusyLead(t *testing.T) {
+	t.Parallel()
+	started, release := make(chan struct{}), make(chan struct{})
+	var first, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	wake := openProjectWakeScenarioWithProvider(t, func(ctx context.Context, request platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+		if strings.Contains(providerCommandPrompt(request), "Project Lead wake") {
+			first.Do(func() {
+				close(started)
+				select {
+				case <-release:
+				case <-ctx.Done():
+				}
+			})
+		}
+		return reviewFailureAccepted("lead reconciled"), nil
+	})
+	wake.admitOwner(t)
+	stream := wake.eventStream(t)
+	submit := func(slug string) {
+		id := wake.marker + "-" + slug + "-thoughts"
+		wake.submit(t, id+"-request", reviewFailureSeed{Name: wake.ownerName + "-" + slug, WorkID: id, WorkType: "thoughts", State: "reporting-complete", TraceID: id + "-trace", Payload: "saved proposal", Tags: map[string]string{"project": wake.ownerName}})
+	}
+	submit("first")
+	// Signal is emitted only when the first lead provider dispatch is active.
+	ctx, cancel := context.WithTimeout(context.Background(), reviewFailureEventTimeout)
+	defer cancel()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("lead dispatch did not start")
+	}
+	submit("second")
+	awaitReviewFailureDispatchResponses(t, stream, "report-thoughts-complete", 2)
+	pending := 0
+	for _, work := range wake.listWorks(t) {
+		if work.WorkTypeName != nil && *work.WorkTypeName == "project-report" && work.State.Name == "pending" {
+			pending++
+		}
+	}
+	if pending != 2 {
+		unblock()
+		t.Fatalf("pending reports while lead busy=%d want 2 (in-flight and queued)", pending)
+	}
+	unblock()
+	assertProjectLeadWakes(t, wake, stream, wake.ownerName+"-first", wake.ownerName+"-second")
+}
+
+func assertLoopbackReportOrigin(t *testing.T, works []factoryapi.Work, childID string, untagged bool) {
+	t.Helper()
+	reports := 0
+	for _, work := range works {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "project-report" {
+			continue
+		}
+		reports++
+		if reportOriginWorkID(work) != childID {
+			t.Fatalf("report origin = %q, want %q", reportOriginWorkID(work), childID)
+		}
+		// Reports retain the exact origin; the proposal stays readable on that Work.
+		if untagged && (work.State == nil || work.State.Name != "pending") {
+			t.Fatalf("untagged report delivered: %#v", work)
+		}
+	}
+	if reports != 1 {
+		t.Fatalf("reports = %d, want 1", reports)
+	}
+}
+
+func assertLoopbackReadableEvidence(t *testing.T, wake *projectWakeScenario, childID string, commandError, untagged bool) {
+	t.Helper()
+	if commandError {
+		events := support.GetFactoryEventsForSessionAt(t, wake.fixture.baseURL, wake.sessionID)
+		foundFailure := false
+		for _, event := range events {
+			if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+				continue
+			}
+			response := decodeReviewFailureDispatchResponse(t, event)
+			if response.TransitionId == "ideafy" && response.Outcome == factoryapi.WorkOutcomeFailed {
+				foundFailure = true
+			}
+		}
+		if !foundFailure {
+			t.Fatal("provider failure has no retained FAILED ideafy dispatch Event")
+		}
+	}
+	if untagged {
+		return
+	}
+	found := false
+	for _, request := range reviewFailureProviderRequests(wake.fixture.router.requestsFor(wake.factoryDir)) {
+		prompt := providerCommandPrompt(request)
+		if strings.Contains(prompt, "Project Lead wake") && strings.Contains(prompt, childID) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("lead prompt did not identify origin %q", childID)
+	}
 }

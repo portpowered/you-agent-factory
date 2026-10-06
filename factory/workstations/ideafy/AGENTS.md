@@ -203,6 +203,30 @@ or validation report to a feature branch.
 
 ## Submission and response contract
 
+### Loopback gap handoff
+
+For a loopback carrying a project tag, save a raw corrective batch at
+docs/temp/projects/<project>/proposals/<loopback-name>.json in the main checkout.
+Resolve the main checkout as the parent of the absolute git common directory;
+do not write the proposal only in a lane worktree. Inspect the exact bound
+Work ID, project tag and current Session before drafting. Keep the stable
+request ID and origin Work ID in the proposal's payload evidence. Preserve
+the original validation findings; drafting is not a repair or admission.
+Dry-run the saved proposal in the explicit Factory Session; submit no Project children.
+Return ACCEPTED with the proposal path in output; admission ownership alone never causes FAILED.
+Write or dry-run errors remain FAILED with truthful evidence and the saved proposal path when available.
+The runtime reports completed and failed thoughts through the existing
+project-report route. The owning lead reviews admission; a handoff does not
+claim the gaps fixed. Do not emit another report or a new loopback.
+For untagged loopbacks, retain dry-run, self-submission and verified receipt or accepted hold.
+Use the submission procedure below for that unowned corrective work.
+
+Example tagged handoff:
+
+```json
+{"decision":"ACCEPTED","feedback":"Drafted corrective proposal; project lead owns admission","output":"docs/temp/projects/worker-session-visibility/proposals/wsv-unfreeze-loopback-3.json"}
+```
+
 Submit new Work through the CLI, never through the final response. Write a raw
 `FACTORY_REQUEST_BATCH` with a stable request ID to an untracked file under
 `docs/temp/`, using `factory/docs/batch-inputs.md` as the shape. Run
@@ -213,6 +237,7 @@ inspect by request ID before retrying that same idempotent request ID. Record
 the receipt in supervisor state.
 
 Return only `{"decision":"ACCEPTED","feedback":"<verified submission or hold>","output":"<request ID or hold>"}`.
+For the tagged loopback exception above, output is the saved proposal path.
 On a failed CLI operation or unverified admission, return `FAILED` with the
 exact blocker. Do not return a Work batch or a `request` wrapper. When no safe
 action remains, record the hold and return an accepted hold decision without

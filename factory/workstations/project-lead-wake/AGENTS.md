@@ -37,6 +37,11 @@ child procedure for this variant.
 
 For ordinary terminal reports, start from the finished child:
 
+For a thoughts loopback proposal, inspect the exact origin Work ID, retained payload, _last_output and failure Events.
+Apply the lead's Loopback proposals admit-or-record policy in this same pass,
+including request/origin deduplication and Corrected successor recovery.
+Do not discard a saved draft because its originating thoughts failed.
+
 1. Run `you --server http://127.0.0.1:7437 work show <child-work-id> --session
    {{.Context.SessionID}}`. Read its terminal state, which is `complete` or
    `failed`. Read its failure evidence, Worker Sessions, and PR/CI state too.

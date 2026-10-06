@@ -445,9 +445,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v115 := provideFactorySessionExecutionFactory(javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v52, v50, v51, v42, responseEventIDGenerator, v40, v98, v99, v17, liveChangeCoordinator, workersService)
+	v115, err := wire5.NewRuntimeBackedExecution(v50, source, v51, javaScriptCheckpointSummaries, javaScriptWorkflows, orchestrationJavaScriptExecution, v52, v42, responseEventIDGenerator, v40, liveChangeCoordinator, workersService, logger)
+	if err != nil {
+		return nil, err
+	}
 	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(service)
-	v116 := provideDurableOpening(configLoader, v115, providerIdentityResolver)
+	v116 := provideDurableOpening(configLoader, v115, v98, v99, v17, providerIdentityResolver)
 	commandLineReader := providePprofCommandLineReader()
 	starter, err := provideAPIServerStarter(edges2, commandLineReader)
 	if err != nil {
@@ -1065,8 +1068,7 @@ var servicesSet = wire11.NewSet(
 	provideFactoryWebhookClock,
 	provideFactoryWebhookDeadLetterAppender, wire9.NewService, providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
-	provideOrchestrationCompilation, wire3.NewJavaScriptCheckpointSummaries, provideFactorySessionExecutionFactory,
-	provideFactorySessionReplayInputs,
+	provideOrchestrationCompilation, wire3.NewJavaScriptCheckpointSummaries, wire5.NewRuntimeBackedExecution, provideFactorySessionReplayInputs,
 	provideRecordingClock,
 	provideRecordingSnapshotWriter,
 	provideRecordingPublication,

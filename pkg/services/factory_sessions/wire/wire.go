@@ -326,37 +326,30 @@ func NewRuntimeAssembly(
 	return assembly, nil
 }
 
-func NewDurableExecution(
-	projectRoot string,
-	persistencePolicy factorysessions.PersistencePolicy,
+type RuntimeBackedExecution = factorysessionexecution.JavaScriptRuntimeService
+
+func NewRuntimeBackedExecution(
 	stores RuntimePersistenceStoreFactory,
-	childExecutorMode string,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
-	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
+	summaries factoryruntime.JavaScriptCheckpointSummaries,
 	workflows factoryruntime.JavaScriptWorkflows,
 	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	workerPresetIDs map[string]struct{},
-	workerSettings factoryruntime.JavaScriptWorkerSettings,
-	recordingWriter recordings.PortableRecordingWriter,
-	generateSessionID factorysessions.SessionIDGenerator,
-	generateResponseEventID factorysessions.ResponseEventIDGenerator,
-	responseStreams ResponseStreams,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	workerExecution factorysessionexecution.WorkerExecution,
+	writer recordings.PortableRecordingWriter,
+	sessionIDs factorysessions.SessionIDGenerator,
+	responseIDs factorysessions.ResponseEventIDGenerator,
+	responses ResponseStreams,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
+	workerService workers.Service,
 	logger *zap.Logger,
-) (durableexecution.Service, error) {
-	return durableexecutionwire.NewDurable(
-		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
-		checkpointSummaries, workflows, orchestration, workflows,
-		workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
-		liveChangeCoordinator, workerExecution, logger,
-	)
+) (*RuntimeBackedExecution, error) {
+	return durableexecutionwire.NewRuntimeBacked(stores, clock, syncWaits,
+		summaries, workflows, orchestration, workflows, writer, sessionIDs,
+		responseIDs, responses, liveChange, workerService, logger)
 }
 
 // NewProcessDurableExecution constructs the complete process durable owner.
-// Legacy runtime-backed opening remains a separate T17 compatibility path.
+// Its current-project authority is independent of explicit runtime scopes.
 func NewProcessDurableExecution(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	childExecutorMode string,

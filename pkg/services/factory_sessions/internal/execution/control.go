@@ -373,7 +373,7 @@ func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
 		interrupt,
 		priorDispatchStatus,
 		canonicalEventSourceRuntimeService,
-		s.now(),
+		s.nowForSession(state.session.SessionID),
 	)
 }
 
@@ -455,8 +455,9 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		return LifecycleControlResult{}, ErrSessionNotFound
 	}
 
+	controlReplay := s.controlReplayForSession(id)
 	replay := lookupRuntimeExtendedControlReplay(
-		s.controlReplay,
+		controlReplay,
 		operation,
 		id,
 		control,
@@ -490,7 +491,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
 			Links:     LifecycleControlLinksForSession(id, true),
 		}
-		storeControlReplay(s.controlReplay, replay.requestID, replay.tupleHash, LifecycleControlResult{}, controlErr)
+		storeControlReplay(controlReplay, replay.requestID, replay.tupleHash, LifecycleControlResult{}, controlErr)
 		return LifecycleControlResult{}, controlErr
 	}
 
@@ -518,7 +519,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 					outcome,
 					canonicalEventSourceRuntimeService,
 					control.Reason,
-					s.now(),
+					s.nowForSession(state.session.SessionID),
 				)
 			} else {
 				state.events = rebuildRuntimeSessionCanonicalEvents(state)
@@ -537,7 +538,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
-	storeControlReplay(s.controlReplay, replay.requestID, replay.tupleHash, result, nil)
+	storeControlReplay(controlReplay, replay.requestID, replay.tupleHash, result, nil)
 	return result, nil
 }
 
@@ -553,7 +554,7 @@ func applyRuntimeAcceptedLifecycleControl(
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
-			pausedAt := s.now()
+			pausedAt := s.nowForSession(state.session.SessionID)
 			state.session.Status = LifecycleStatusPaused
 			state.result.SessionStatus = LifecycleStatusPaused
 			if state.session.Lifecycle != nil {
@@ -562,7 +563,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		}
 	case LifecycleControlResume:
 		if state.session.Status == LifecycleStatusPaused {
-			resumedAt := s.now()
+			resumedAt := s.nowForSession(state.session.SessionID)
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 			if state.session.Lifecycle != nil {
@@ -574,7 +575,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		state.result.SessionStatus = LifecycleStatusCanceling
 		interruptRuntime = true
 	case LifecycleControlTerminate:
-		finishedAt := s.now()
+		finishedAt := s.nowForSession(state.session.SessionID)
 		state.session.Status = LifecycleStatusTerminated
 		state.result.SessionStatus = LifecycleStatusTerminated
 		state.result.ResultStatus = ResultStatusUnavailable
@@ -589,7 +590,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		interruptRuntime = true
 	case LifecycleControlApprove:
 		if state.session.Status == LifecycleStatusAwaitingApproval {
-			startedAt := s.now()
+			startedAt := s.nowForSession(state.session.SessionID)
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 			if state.session.Lifecycle != nil {

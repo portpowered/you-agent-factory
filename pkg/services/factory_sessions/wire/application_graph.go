@@ -75,18 +75,17 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProviderOverrideService        = service.ProviderOverrideService
-	FactorySessionExecutionFactory = service.FactorySessionExecutionFactory
-	DurableOpening                 = service.DurableOpening
-	DurableExecution               = service.DurableExecution
-	WorkerCommandRunnerAdapter     = service.WorkerCommandRunnerAdapter
-	ProviderCommandRunner          = service.ProviderCommandRunner
-	ScriptCommandRunner            = service.ScriptCommandRunner
-	FactoryRuntimeRoot             = service.FactoryRuntimeRoot
-	RuntimeRoot                    = service.RuntimeRoot
-	ModelPullMetricsRecorder       = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem   = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter     = factorysessioncontracts.InvocationArtifactExporter
+	ProviderOverrideService      = service.ProviderOverrideService
+	DurableOpening               = service.DurableOpening
+	DurableExecution             = service.DurableExecution
+	WorkerCommandRunnerAdapter   = service.WorkerCommandRunnerAdapter
+	ProviderCommandRunner        = service.ProviderCommandRunner
+	ScriptCommandRunner          = service.ScriptCommandRunner
+	FactoryRuntimeRoot           = service.FactoryRuntimeRoot
+	RuntimeRoot                  = service.RuntimeRoot
+	ModelPullMetricsRecorder     = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter   = factorysessioncontracts.InvocationArtifactExporter
 
 	RuntimeModelInvocationOperation = modelinvocation.RuntimeModelInvocationOperation
 	RuntimeModelFactoryConfigReader = modelinvocation.FactoryConfigReader
