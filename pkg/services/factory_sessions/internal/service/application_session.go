@@ -206,3 +206,19 @@ func (r *Root) WorkerPromptsService() workers.PromptTemplates {
 	prompts, _ := r.workerService.(workers.PromptTemplates)
 	return prompts
 }
+
+// CurrentBoardRecordingArtifact addresses the configured host board for exactly
+// one scope. It supplies only a legacy candidate; Recordings validates its facts.
+func (r *Root) CurrentBoardRecordingArtifact(ctx context.Context, scope string) (recordings.RecordingArtifactReference, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	bound, err := r.applicationSessionState(factorysessions.DefaultSessionID)
+	if err != nil {
+		return "", &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, Cause: err}
+	}
+	if strings.TrimSpace(scope) == "" {
+		return "", recordings.ErrInvalidProjectionScope
+	}
+	return recordings.RecordingArtifactReference(factoryruntime.RecordingPath(bound.CurrentBoardRecordPath).ForSession(scope)), nil
+}

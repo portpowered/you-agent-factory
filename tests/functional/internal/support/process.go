@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -38,6 +39,11 @@ type ProviderRegistry interface {
 	CanonicalIdentity(string) (string, error)
 }
 
+// FactorySessionStarter admits recorded sessions through the root-built process.
+type FactorySessionStarter interface {
+	Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
+}
+
 // ApplicationProcess is the lifecycle-capable process returned by the
 // context-aware functional construction boundary.
 type ApplicationProcess interface {
@@ -46,6 +52,7 @@ type ApplicationProcess interface {
 	ACPServer() ACPServer
 	ProviderRegistry() ProviderRegistry
 	WorkerRecordingReader() recordings.WorkerRecordingReader
+	FactorySessions() FactorySessionStarter
 }
 
 type applicationProcess struct {
@@ -54,7 +61,11 @@ type applicationProcess struct {
 	acpServer        ACPServer
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
+	factorySessions  FactorySessionStarter
 }
+
+// FactorySessions exposes the session admission capability of the root process.
+func (p applicationProcess) FactorySessions() FactorySessionStarter { return p.factorySessions }
 
 func (p applicationProcess) Close(ctx context.Context) error {
 	return p.close(ctx)
@@ -117,6 +128,7 @@ func buildProcessWithContext(
 		acpServer:        process.ACPServer(),
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
+		factorySessions:  process.FactorySessions().FactorySessions().(FactorySessionStarter),
 	}
 	return functionalProcess, recordingReader, nil
 }

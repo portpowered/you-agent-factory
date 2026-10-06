@@ -143,6 +143,8 @@ func dispatchResponseStatus(event factorydefinitions.FactoryEvent) (recordings.F
 		return recordings.FactoryDispatchStatusCompleted, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, usage, true, nil
 	case workers.OutcomeFailed:
 		return recordings.FactoryDispatchStatusFailed, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, usage, true, nil
+	case workers.OutcomeCanceled:
+		return recordings.FactoryDispatchStatusInterrupted, recordings.FactoryDispatchKindPetriTransition, payload.TransitionID, usage, true, nil
 	default:
 		return "", "", "", nil, true, errors.New("invalid dispatch response outcome")
 	}

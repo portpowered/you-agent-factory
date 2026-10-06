@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -291,4 +293,47 @@ func (resolver directSelectionResolver) ResolveExecutionRequest(request workers.
 		resolver.observe(request)
 	}
 	return workers.ExecuteRequest{Input: workers.ExecutionInput{WorkflowContext: resolver.context}}, nil
+}
+
+type artifactAttemptsFake struct {
+	factory.WorkerAttemptOpener
+	observed string
+}
+
+func (f *artifactAttemptsFake) AdmitRuntimeAttemptAsync(_ context.Context, request workersessions.StartRequest, _ workers.Service, _ platformclock.Source, _ platformclock.TimerSource) (workersessions.StartResult, error) {
+	f.observed = request.Execution.Execution.OriginatingArtifact
+	return workersessions.StartResult{}, nil
+}
+func (f *artifactAttemptsFake) BeginRuntimeAttempt(_ context.Context, request workersessions.RuntimeAttemptRequest, _ workers.Service, _ platformclock.Source, _ platformclock.TimerSource, _ func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error) {
+	f.observed = request.Execution.Execution.OriginatingArtifact
+	return nil, nil
+}
+func (f *artifactAttemptsFake) InvokeRuntimeSession(_ context.Context, request workersessions.RuntimeAttemptRequest, _ workersessions.RetryPolicy, _ workers.Service, _ platformclock.Source, _ platformclock.TimerSource) (workersessions.InvokeSessionResult, error) {
+	f.observed = request.Execution.Execution.OriginatingArtifact
+	return workersessions.InvokeSessionResult{}, nil
+}
+
+func TestWorkerWorkAttributionOriginatingArtifactAdmission(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"async", "begin", "invoke"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			fake := &artifactAttemptsFake{}
+			bound := artifactWorkerAttempts{WorkerAttemptOpener: fake, artifact: "selected-origin.jsonl"}
+			request := workersessions.RuntimeAttemptRequest{}
+			request.Execution.Execution.OriginatingArtifact = "caller-substitution"
+			var err error
+			switch mode {
+			case "async":
+				_, err = bound.AdmitRuntimeAttemptAsync(t.Context(), workersessions.StartRequest{Execution: request.Execution}, nil, nil, nil)
+			case "begin":
+				_, err = bound.BeginRuntimeAttempt(t.Context(), request, nil, nil, nil, nil)
+			case "invoke":
+				_, err = bound.InvokeRuntimeSession(t.Context(), request, workersessions.RetryPolicy{}, nil, nil, nil)
+			}
+			if err != nil || fake.observed != bound.artifact || request.Execution.Execution.OriginatingArtifact != "caller-substitution" {
+				t.Fatalf("capture provenance=%q, request=%q, error=%v", fake.observed, request.Execution.Execution.OriginatingArtifact, err)
+			}
+		})
+	}
 }

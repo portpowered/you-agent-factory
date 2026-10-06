@@ -381,8 +381,8 @@ func TestFleetWorkAttributionMissingAndCanceledReads(t *testing.T) {
 			}
 			adapter := NewAdapter(&fakeObservationService{}, reader)
 			observations := []workersessions.Observation{
-				{WorkerSessionID: "worker-a", WorkIDs: []string{"missing"}},
-				{WorkerSessionID: "worker-b", WorkIDs: []string{"missing"}},
+				{WorkerSessionID: "worker-a", FactorySessionID: "scope", WorkIDs: []string{"missing"}},
+				{WorkerSessionID: "worker-b", FactorySessionID: "scope", WorkIDs: []string{"missing"}},
 			}
 			got, err := adapter.resolveWorkAttribution(ctx, observations)
 			if cancelRead {
@@ -399,10 +399,56 @@ func TestFleetWorkAttributionMissingAndCanceledReads(t *testing.T) {
 					}
 				}
 			}
-			if reader.reads["~default"] != 1 {
+			if reader.reads["scope"] != 1 {
 				t.Fatalf("reads = %#v", reader.reads)
 			}
 		})
+	}
+}
+
+func TestSelectedWorkAttributionMatchesList(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{"session-a", "session-b"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			observation := workersessions.Observation{
+				WorkerSessionID: "worker", FactorySessionID: scope, WorkIDs: []string{"work-0"},
+				State: workersessions.StateCompleted,
+			}
+			service := &fakeObservationService{
+				getByWorkerResult: observation,
+				topLevelResult:    workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{observation}},
+			}
+			reader := &fleetWorkReader{reads: make(map[string]int)}
+			adapter := NewAdapter(service, reader)
+			selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker")
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed, err := adapter.ListTopLevelWorkerSessions(t.Context(), "", "", nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selected.WorkName == nil || *selected.WorkName != scope+"/name-0" || selected.WorkId == nil || *selected.WorkId != "work-0" ||
+				len(listed.Sessions) != 1 || listed.Sessions[0].WorkName == nil || *listed.Sessions[0].WorkName != *selected.WorkName {
+				t.Fatalf("selected/listed attribution = %+v / %+v", selected, listed)
+			}
+			if reader.reads[scope] != 2 || len(reader.reads) != 1 {
+				t.Fatalf("unexpected Work scope reads: %v", reader.reads)
+			}
+		})
+	}
+}
+
+func TestWorkAttributionWithoutFactoryScopeNeverReadsDefaultWork(t *testing.T) {
+	t.Parallel()
+	reader := &fleetWorkReader{reads: make(map[string]int)}
+	adapter := NewAdapter(&fakeObservationService{}, reader)
+	got, err := adapter.presentWorkerSessionObservation(t.Context(), workersessions.Observation{
+		WorkerSessionID: "legacy-worker", WorkIDs: []string{"work-0"},
+	})
+	if err != nil || got.WorkName != nil || got.WorkId == nil || *got.WorkId != "work-0" || len(reader.reads) != 0 {
+		t.Fatalf("unscoped attribution = %+v, %v; reads = %v", got, err, reader.reads)
 	}
 }
 
@@ -411,6 +457,55 @@ type fleetWorkReader struct {
 	reads  map[string]int
 	fail   bool
 	cancel context.CancelFunc
+}
+
+type recordedAttributionFake struct {
+	requests [][]recordings.WorkerWorkAttributionRequest
+	err      error
+}
+
+func (f *recordedAttributionFake) ResolveWorkerWorkAttribution(_ context.Context, requests []recordings.WorkerWorkAttributionRequest) ([]recordings.WorkerWorkAttribution, error) {
+	f.requests = append(f.requests, append([]recordings.WorkerWorkAttributionRequest(nil), requests...))
+	results := make([]recordings.WorkerWorkAttribution, len(requests))
+	for i, request := range requests {
+		results[i] = recordings.WorkerWorkAttribution{WorkerSessionID: request.WorkerSessionID, FactorySessionID: request.FactorySessionID, WorkID: request.WorkID, WorkName: request.FactorySessionID + "/recorded"}
+	}
+	return results, f.err
+}
+
+func TestArchivedWorkAttributionSharesSelectedAndBatchReads(t *testing.T) {
+	t.Parallel()
+	observations := []workersessions.Observation{
+		{WorkerSessionID: "worker-a", FactorySessionID: "scope-a", WorkIDs: []string{"reused"}},
+		{WorkerSessionID: "worker-b", FactorySessionID: "scope-b", WorkIDs: []string{"reused"}},
+		{WorkerSessionID: "direct"},
+	}
+	service := &fakeObservationService{getByWorkerResult: observations[0], topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: observations}}
+	reader := &fleetWorkReader{reads: make(map[string]int), fail: true}
+	recorded := &recordedAttributionFake{}
+	adapter := &Adapter{observations: service, topLevel: service, work: reader, attribution: recorded}
+	listed, err := adapter.ListTopLevelWorkerSessions(t.Context(), "", "", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Sessions) != 3 || len(recorded.requests) != 1 || len(recorded.requests[0]) != 2 {
+		t.Fatalf("batch = %+v, requests=%+v", listed, recorded.requests)
+	}
+	assertArchivedAttributionRows(t, listed.Sessions)
+	selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker-a")
+	if err != nil || selected.WorkName == nil || *selected.WorkName != "scope-a/recorded" {
+		t.Fatalf("selected = %+v, %v", selected, err)
+	}
+}
+
+func TestArchivedWorkAttributionPreservesTypedFailure(t *testing.T) {
+	t.Parallel()
+	want := &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorCorruptHistory, RecordingID: "corrupt"}
+	adapter := &Adapter{work: &fleetWorkReader{reads: make(map[string]int), fail: true}, attribution: &recordedAttributionFake{err: want}}
+	got, err := adapter.presentWorkerSessionObservation(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "scope", WorkIDs: []string{"work"}})
+	if !errors.Is(err, want) || got.WorkName != nil {
+		t.Fatalf("corrupt attribution = %+v, %v", got, err)
+	}
 }
 
 func (r *fleetWorkReader) GetWork(context.Context, string, string) (work.ReadModel, error) {
@@ -444,5 +539,20 @@ func TestListWorkerSessionsWorkHistoryRejectsBeforeEffects(t *testing.T) {
 	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/factory/worker-sessions?workId=work&history=all", nil), factoryapi.SessionID("factory"), factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work"})
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("Work history status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func assertArchivedAttributionRows(t *testing.T, rows []factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	for _, row := range rows {
+		if row.WorkerSessionId == "direct" {
+			if row.WorkName != nil || row.WorkId != nil {
+				t.Fatalf("direct attribution = %+v", row)
+			}
+			continue
+		}
+		if row.WorkName == nil || row.FactorySessionId == nil || *row.WorkName != *row.FactorySessionId+"/recorded" || row.WorkId == nil || *row.WorkId != "reused" {
+			t.Fatalf("scoped attribution = %+v", row)
+		}
 	}
 }

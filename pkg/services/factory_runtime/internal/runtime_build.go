@@ -353,3 +353,29 @@ func (boundary runtimeWorkerSessionBoundary) LoadWorkerRecording(ctx context.Con
 	}
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
+
+// artifactWorkerAttempts binds capture provenance at the Runtime admission
+// boundary, where the exact originating Factory artifact is known. This
+// persistence adapter carries Runtime-owned selection into Recordings capture
+// through the Worker Sessions admission request; it preserves that reference
+// across capture/reload without changing provider input or public source events.
+// Keep the binding here while the shared attempt opener serves multiple runtimes.
+type artifactWorkerAttempts struct {
+	factory.WorkerAttemptOpener
+	artifact string
+}
+
+func (a artifactWorkerAttempts) AdmitRuntimeAttemptAsync(ctx context.Context, request workersessions.StartRequest, execution workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource) (workersessions.StartResult, error) {
+	request.Execution.Execution.OriginatingArtifact = a.artifact
+	return a.WorkerAttemptOpener.AdmitRuntimeAttemptAsync(ctx, request, execution, clock, scheduler)
+}
+
+func (a artifactWorkerAttempts) BeginRuntimeAttempt(ctx context.Context, request workersessions.RuntimeAttemptRequest, execution workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource, cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error) {
+	request.Execution.Execution.OriginatingArtifact = a.artifact
+	return a.WorkerAttemptOpener.BeginRuntimeAttempt(ctx, request, execution, clock, scheduler, cancel)
+}
+
+func (a artifactWorkerAttempts) InvokeRuntimeSession(ctx context.Context, request workersessions.RuntimeAttemptRequest, retry workersessions.RetryPolicy, execution workers.Service, clock platformclock.Source, scheduler platformclock.TimerSource) (workersessions.InvokeSessionResult, error) {
+	request.Execution.Execution.OriginatingArtifact = a.artifact
+	return a.WorkerAttemptOpener.InvokeRuntimeSession(ctx, request, retry, execution, clock, scheduler)
+}
