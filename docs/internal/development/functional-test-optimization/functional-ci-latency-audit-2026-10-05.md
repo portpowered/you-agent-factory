@@ -5,13 +5,15 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
-The latest published source, `e02e408d02`, passes the complete hosted workflow.
-Functional CI takes **241s complete / 169.801s coverage**, 68 packages / 743
-results, no retries, seven compiler commands and 20 links after a prefix archive
-restore. The two-minute complete-job checkpoint remains **unmet**. The earlier
-warm three-minute checkpoint is merged; this next checkpoint remains draft.
-The pending source consolidates Factory/session CLI journeys and isolates
-construction-time process stores; measurements appear below.
+The latest published source, `b1d1087428`, passes the complete hosted workflow.
+Functional CI takes **222s complete / 170.789s coverage**, 68 packages / 742
+results, no retries, 111 compiler commands and 20 links after a prefix archive
+restore. Coverage execution is essentially unchanged from the preceding e02
+169.801s sample; differences in build state and CI overhead matter. The
+complete-job two-minute checkpoint remains **unmet**. The earlier warm
+three-minute checkpoint is merged. The next candidate removes legacy docs
+assertions, joins Docs smoke into the monolith, and consolidates compatible
+Factory CLI setups; measurements appear below.
 
 The published candidate shares one host across lifecycle, dispatch and eligibility
 journeys, retaining all 31 journey selectors with isolated Factory Sessions,
@@ -3618,3 +3620,64 @@ counter is compiled by full verification; an isolated test of that exact generat
 source verifies Getrusage advances (0.008560 CPU seconds). The canonical manifest
 check confirms all 160 reviewed scenarios remain current. The helper's owned
 store does not replace real customer recording behavior with a mock.
+
+### Published owned-store hosted result and further compatible consolidation
+
+Published `b1d1087428` passes hosted Functional Coverage job 112182439929 in
+**222s complete / 170.789s coverage**, 68 packages / 742 results, 740 pass and
+two skip, no test failures/retries, 111 compiler commands and 20 links after a prefix e02 archive restore. The preceding e02 coverage interval was
+169.801s: **execution latency is essentially unchanged in these hosted samples**.
+Do not attribute the 19s complete-job difference entirely to store isolation.
+Before-supervisor overhead is 27s and post-supervisor overhead 15s; the
+supervisor step takes 180s. The complete workflow, including Backend lint, subsequently passes.
+Artifacts: `.artifacts/latency-audit/pr2923-owned-recording-hosted`.
+
+A private cleanup-hook experiment on five native suites exposed additional
+native constraints: executable fixtures (Providers, ACP chat, Codex), test-level
+quarantine (AGY), and relative-path strings (Docs smoke). No classifier or
+quarantine policy was weakened. The first diagnostic source accidentally
+changed UTF-8 punctuation while editing on Windows; its full run failed a
+Providers docs marker and is invalid for performance conclusions. All five
+files were restored byte-for-byte from the published head before the corrected
+changes. The unsupported hooks were discarded, not shipped.
+
+Docs smoke now retains current CLI headings, content markers, topic index,
+alias behavior, embedding prerequisite guidance and unknown-topic diagnostics.
+It removes 19 legacy absence tables, retired topic rejection checks, obsolete
+executable-name regex checks, removed duplicate-tree path checks and old goal
+topology checks. These retirement assertions were a relative-path false
+positive in the existing classifier. The same owned cleanup finalizer runs in
+native TestMain and the existing monolith package cleanup hook, after children
+join. Native Docs smoke passes. Full verification passes **36 merged groups /
+551 top-level registrations**, 68 packages / 742 results, no retries, unchanged
+gates, at **127.01s supervisor / 121.423s coverage**, **409.71s CPU**. Four
+compiler actions use 0.287s CPU; 22 supervisor links use 38.608s CPU / 34.135s
+union active wall. Warmer compilation explains part of the difference from the
+prior 143.70s sample; one removed binary does not explain the entire gain.
+
+A further pending parent consolidates Named Factories, Session commands,
+authored JSON/YAML parity and validation/persistence onto one process, retaining
+all scenario leaves. Its provider router preserves the existing command-scoped
+validation observation and session-specific authored-source routes. Validation
+still rejects API startup; authored runtime calls retain their owned server.
+Duplicated initialization/reset/teardown helpers are removed. Three focused
+repetitions and six paired repetitions per source pass. CPU **17.662s baseline
+versus 18.944s candidate** and wall **7.987s versus 8.187s** are neutral to
+slightly worse, not a speedup claim. The change is setup simplification; the
+full lane is being validated before publication. Baseline has three processes
+for four journey families; the artifact folder's historical four-host name
+counts families, not process instances.
+
+The final compatible-CLI source passes full verification at **129.30s supervisor /
+123.035s coverage**, **398.02s CPU** (319.90 user / 78.12 kernel), peak process
+RSS 6,501,336 KiB. It retains **68 packages / 740 results**, 738 pass and two
+skip, no failures/retries, 36 monolith groups / 549 top-level registrations.
+The two fewer top-level results are removed journey wrappers, not customer
+scenario leaves. Five compiler commands use 2.883s CPU and 23 supervisor links
+use 33.304s CPU / 32.127s union active wall. The previous Docs-only full sample
+was 127.01s / 409.71s CPU; neither sample proves a wall-time gain from sharing
+two more process constructors. Source simplicity and reduced total fixture
+graphs justify this cleanup, while the next performance work must address
+repeated initialization rather than treating constructor merging as sufficient.
+All 160 canonical decisions remain current. Artifact directory:
+`.artifacts/latency-audit/factory-cli-four-host-full`.
