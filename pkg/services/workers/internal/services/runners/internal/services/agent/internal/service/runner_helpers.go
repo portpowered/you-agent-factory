@@ -70,8 +70,23 @@ func (s *service) observeProviderProgress(
 	provider string,
 ) providers.ProgressObserver {
 	return func(progress providers.ExecuteProgress) {
+		// The runner publishes authoritative terminal facts after execution
+		// returns. Buffer those facts so native messages are delivered once and
+		// retain the established run-before-message completion ordering.
+		if providerTerminalProgress(progress.Phase) {
+			return
+		}
 		continuation := live.snapshot()
 		s.publishProviderProgress(identity, progress, continuation, provider)
+	}
+}
+
+func providerTerminalProgress(phase string) bool {
+	switch strings.ToLower(strings.TrimSpace(phase)) {
+	case "message.completed", "turn.completed", "turn.failed":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -136,15 +136,7 @@ func testPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T, fixtur
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed", response)
 	}
-	want := []string{
-		"exec", "--json",
-		"--model", "gpt-5.6-luna",
-		"--config", `model_reasoning_effort="xhigh"`,
-		"-",
-	}
-	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
-		t.Fatalf("subagent command args = %#v, want %#v", got, want)
-	}
+	assertSubagentCodexSettings(t, runner.LastRequest().Args, "xhigh")
 }
 
 func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testing.T, fixture *subagentSharedFixture) {
@@ -160,13 +152,27 @@ func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testi
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed", response)
 	}
-	want := []string{
-		"exec", "--json",
-		"--model", "gpt-5.6-luna",
-		"-",
+	assertSubagentCodexSettings(t, runner.LastRequest().Args, "")
+}
+
+func assertSubagentCodexSettings(t *testing.T, args []string, effort string) {
+	t.Helper()
+	want := []string{"exec", "--json", "--model", "gpt-5.6-luna"}
+	if effort != "" {
+		want = append(want, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
-	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
-		t.Fatalf("subagent command args = %#v, want provider default without effort config %#v", got, want)
+	index := len(want)
+	if len(args) != index+3 || args[index] != "--config" || !strings.HasPrefix(args[index+1], "developer_instructions=") {
+		t.Fatalf("subagent system prompt command shape = %q", args)
+	}
+	var system string
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(args[index+1], "developer_instructions=")), &system); err != nil ||
+		!strings.HasPrefix(system, "You are the one-pass subagent worker for @you/subagent.") {
+		t.Fatalf("subagent system prompt was lost or escaped incorrectly: %q, %v", system, err)
+	}
+	want = append(want, "--config", args[index+1], "-")
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("subagent command args = %q, want %q", args, want)
 	}
 }
 

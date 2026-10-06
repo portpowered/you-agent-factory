@@ -31,6 +31,7 @@ import (
 // command effects ahead of legacy PTY before supplying the completed effect.
 func newConfiguredProvidersService(
 	configuration providerswire.Configuration,
+	catalogProbe providerswire.CatalogProbeOperation,
 	agyRunner platformprocess.CommandRunner,
 	legacyAgy providerswire.AgyEffect,
 	clock platformclock.Source,
@@ -49,7 +50,7 @@ func newConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	catalogService, err := providerswire.NewCatalogService(providerswire.IdentityCatalogProbe, config.CatalogDescriptors, config.CatalogOverrides)
+	catalogService, err := providerswire.NewCatalogService(catalogProbe, config.CatalogDescriptors, config.CatalogOverrides)
 	if err != nil {
 		return nil, err
 	}

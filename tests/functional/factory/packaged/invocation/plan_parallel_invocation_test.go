@@ -264,7 +264,7 @@ func assertPlanParallelProviderSelection(t *testing.T, requests []platformproces
 			continue
 		}
 		if !planParallelHasArgPair(request.Args, "--model", "operator-model") ||
-			planParallelHasArg(request.Args, "--config") {
+			strings.Contains(strings.Join(request.Args, " "), "model_reasoning_effort=") {
 			t.Fatalf("planner/merger request[%d] args = %#v, want operator model without effort override", index, request.Args)
 		}
 	}

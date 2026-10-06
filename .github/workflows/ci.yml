@@ -426,6 +426,9 @@ jobs:
           go test -race ./tests/functional/workers/inference -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency' -count=1 -p=2 -timeout=5m
           go test -race ./pkg/services/factory_runtime/internal/services/orchestration/runtime -run 'TestRecordedWorkerSessionObservation|TestMergeRecordedObservations' -count=1 -timeout=5m
           go test -race ./pkg/services/worker_sessions/internal/service -count=1 -timeout=5m
+      - name: Race-check invocation preflight and request replay
+        if: matrix.suite == 'unit'
+        run: go test -race -p=2 ./pkg/services/worker_sessions/internal/service ./tests/functional/workers/invoke_continue -run 'Test.*(Start|Replay)|TestT7' -count=2 -timeout 10m
       - name: Race-check bounded Codex detail and shared HTTP fixture
         if: matrix.suite == 'unit'
         run: |

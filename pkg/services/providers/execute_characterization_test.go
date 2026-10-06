@@ -1002,3 +1002,7 @@ func coverageContinuationFailure(kind providers.ContinuationFailureKind, message
 	}
 	return providers.ContinuationFailure{Kind: kind, Message: message, Reference: providers.SessionRef{Provider: providers.ID(normalized.Provider), Kind: normalized.Kind, ID: identity}}
 }
+
+func (*providerContractCoverageRoot) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}

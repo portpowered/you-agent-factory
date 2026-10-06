@@ -2,12 +2,40 @@ package internal_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
+
+func (*recordingExecuteCapability) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (*promptExecuteCapability) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+
+func TestT7RootPreflightPreservesValidationError(t *testing.T) {
+	t.Parallel()
+	root, err := workersinternal.NewRoot(&recordingExecuteCapability{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := root.ValidateExecution(ctx, workers.ExecuteRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("root preflight = %v, want cancellation", err)
+	}
+	if err := root.ValidateExecution(context.Background(), workers.ExecuteRequest{}); err != nil {
+		t.Fatalf("root preflight = %v", err)
+	}
+	var missing *workersinternal.Root
+	if err := missing.ValidateExecution(context.Background(), workers.ExecuteRequest{}); !errors.Is(err, workers.ErrExecuteUnavailable) {
+		t.Fatalf("missing root preflight = %v", err)
+	}
+}
 
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()

@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -57,8 +58,13 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	writer.rejectFailureMarker = true
 	runner := &wsrFT009BlockingProviderRunner{started: make(chan struct{}), trace: trace}
 	dir := wsrFT004Factory(t)
+	// Prepare an idle host before measuring the opening barrier. Cold process
+	// initialization is not Worker admission, and must not consume its ceiling.
+	support.ClearSeedInputs(t, dir)
+	api := support.NewProcessAPIServer()
 	trace.fixture = dir
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      api.Start,
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: writer,
 		FactoryRuntimeInputs:  &wsrFT009InputObserver{delegate: platformfilesystem.Local{}, trace: trace},
@@ -70,7 +76,7 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	invocationContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	inputs := support.FakeInputs(invocationContext, []string{
-		"you", "run", "--dir", dir, "--session", uuid.NewString(), "--quiet", "--record", filepath.Join(t.TempDir(), "wsr-ft-009.json"),
+		"you", "run", "--dir", dir, "--continuously", "--with-server", "--server", "http://127.0.0.1:1", "--quiet", "--record", filepath.Join(t.TempDir(), "wsr-ft-009.json"),
 	})
 	inputs.Input.Env = sharedInferenceProcessEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = dir
@@ -99,6 +105,15 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	// These waits synchronize only with the injected durable edge and blocked
 	// command runner; they do not poll or sleep while waiting for a product
 	// state transition.
+	baseURL := api.WaitForURL(t)
+	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.RuntimeStatus != ""
+	})
+	opened := support.OpenFactorySessionAt(t, baseURL, dir)
+	trace.add("idle host ready; submitting scenario Work")
+	support.SubmitSessionWorkAt(t, baseURL, opened.Session.Id, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Payload: "WSR-FT-009 interrupted durable opening",
+	})
 	trace.wait(t, writer.openingPersisted, done, &executeErr, "durable Worker opening", &stdout, &stderr)
 	trace.wait(t, runner.started, done, &executeErr, "blocked provider invocation", &stdout, &stderr)
 	trace.add("cancellation requested")

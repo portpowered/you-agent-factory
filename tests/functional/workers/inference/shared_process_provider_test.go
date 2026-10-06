@@ -103,6 +103,14 @@ func (router *inferenceProviderOverride) Execute(
 	return delegate.Execute(ctx, request)
 }
 
+func (router *inferenceProviderOverride) ValidateExecution(ctx context.Context, request providers.ExecuteRequest) error {
+	delegate, err := router.executionDelegate(request)
+	if err != nil {
+		return err
+	}
+	return delegate.ValidateExecution(ctx, request)
+}
+
 func (router *inferenceProviderOverride) ControlAttempt(
 	ctx context.Context,
 	request providers.ControlAttemptRequest,

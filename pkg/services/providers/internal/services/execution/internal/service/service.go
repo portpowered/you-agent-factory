@@ -122,6 +122,7 @@ func (s *service) Continue(
 	if detached.ResumeSession != nil {
 		detached.ResumeSession.Provider = resolved.Provider.ID
 	}
+	detached.ExecuteRequest = safeProgressRequest(detached.ExecuteRequest, secret...)
 	result, err = binding.continueAttempt(ctx, detached)
 	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached.ExecuteRequest, secret...)
 	if resultErr != nil {
@@ -167,6 +168,7 @@ func (s *service) Execute(
 		}
 	}
 	detached.Provider = resolved.Provider.ID
+	detached = safeProgressRequest(detached)
 	result, err = binding.attempt(ctx, detached)
 	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached)
 	if resultErr != nil {

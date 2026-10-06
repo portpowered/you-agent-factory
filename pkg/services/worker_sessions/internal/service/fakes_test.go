@@ -997,3 +997,23 @@ func failedContinuationDispatch(dispatchID string, reference providers.SessionRe
 	result.Result.ProviderContinuationFailureKind = providers.ContinuationFailureKindStale
 	return result
 }
+
+func (executionBoundary) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+
+func (usagePublishingExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (processGoneExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (contradictoryResultExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (cancellationResultExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}
+func (*cancellationObserverExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
+	return ctx.Err()
+}

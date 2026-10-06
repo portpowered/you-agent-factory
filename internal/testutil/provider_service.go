@@ -13,8 +13,7 @@ import (
 // Providers-root contract without reintroducing a production Workers provider
 // port. It is intentionally test-only and translates only detached values.
 type ProviderServiceAdapter struct {
-	// ContinuationSupport is scenario-owned; ordinary inference does not query it.
-	ContinuationSupport
+	NativeProvider
 	InferFunc func(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
 }
 

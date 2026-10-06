@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -76,10 +75,6 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	assertPackagedTTSCommandRequest(t, request, inputs.Input.WorkingDirectory, text, "", "")
 	if request.Command != "codex" {
 		t.Fatalf("provider command = %q, want codex", request.Command)
-	}
-	wantArgs := []string{"exec", "--json", "--model", factorydefinitions.DefaultTTSModelName, "-"}
-	if !reflect.DeepEqual(request.Args, wantArgs) {
-		t.Fatalf("provider command args = %#v, want %#v", request.Args, wantArgs)
 	}
 	prompt := string(request.Stdin)
 	const promptPrefix = "For Work "

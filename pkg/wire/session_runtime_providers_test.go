@@ -1047,3 +1047,7 @@ func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Contex
 func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
+
+func (wireTestWorkersService) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
+	return request.Validate()
+}

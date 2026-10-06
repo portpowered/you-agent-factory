@@ -15,8 +15,8 @@ func TestProviderDoublesUseScenarioContinuationCapability(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		support := &scenarioContinuationCapability{supported: supported}
 		doubles := []providers.Service{
-			testutil.NativeProvider{ContinuationSupport: support},
-			testutil.ProviderServiceAdapter{ContinuationSupport: support},
+			testutil.NativeProvider{Service: support},
+			testutil.ProviderServiceAdapter{NativeProvider: testutil.NativeProvider{Service: support}},
 		}
 		for _, double := range doubles {
 			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "captured-session"}
@@ -32,6 +32,7 @@ func TestProviderDoublesUseScenarioContinuationCapability(t *testing.T) {
 }
 
 type scenarioContinuationCapability struct {
+	providers.Service
 	supported bool
 	reference providers.SessionRef
 }

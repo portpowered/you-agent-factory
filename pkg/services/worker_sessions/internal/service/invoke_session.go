@@ -799,7 +799,9 @@ func (r *registry) ensureObservationWithClock(
 
 // publishBufferedWorkerOutput retains successful buffered provider output before
 // the Worker terminal record. Streaming Workers already own their message
-// records; their returned result must not introduce a second copy.
+// records; their returned result must not introduce a second text copy.
+// Schema validation completes after streaming, so retain the validated native
+// value even when a provider already emitted its raw text message.
 func (r *registry) publishBufferedWorkerOutput(ctx context.Context, id, attemptID string, result workers.WorkResult) {
 	output := result.Output
 	if output == "" && result.StructuredResult != nil {
@@ -809,7 +811,8 @@ func (r *registry) publishBufferedWorkerOutput(ctx context.Context, id, attemptI
 		}
 		output = string(raw)
 	}
-	if output == "" {
+	structured := result.StructuredResultPresent || result.StructuredResult != nil
+	if output == "" && !structured {
 		return
 	}
 	pub := r.publicationFor(id)
@@ -818,10 +821,21 @@ func (r *registry) publishBufferedWorkerOutput(ctx context.Context, id, attemptI
 	}
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
-	if pub.hasMessage || !pub.open {
+	if !pub.open || (pub.hasMessage && !structured) {
 		return
 	}
-	payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: output}}})
+	blocks := make([]workers.ContentBlock, 0, 2)
+	if !pub.hasMessage && output != "" {
+		blocks = append(blocks, workers.ContentBlock{Kind: workers.ContentBlockText, Text: output})
+	}
+	if structured {
+		raw, err := json.Marshal(result.StructuredResult)
+		if err != nil {
+			return
+		}
+		blocks = append(blocks, workers.ContentBlock{Kind: workers.ContentBlockStructuredOutput, StructuredOutput: raw})
+	}
+	payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant", ContentBlocks: blocks})
 	draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted, Payload: payload, DispatchID: attemptID, Provenance: lifecycleProvenance(pub.provider)}
 	identity := events.AppendIdentity{SourceType: workersessions.WorkerObservationSourceType, SourceID: events.SourceID(publicWorkerID(id) + "/result"), SourceSequence: 1, SourceEventID: "result"}
 	_, err := r.appendDraft(ctx, r.observationTopic(id), identity, workersessions.WorkerObservationSchemaID, draft)

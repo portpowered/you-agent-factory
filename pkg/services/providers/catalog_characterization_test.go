@@ -256,3 +256,7 @@ func assertGetErrorIs(
 		t.Fatalf("GetProvider(%#v) error = %v, want %v", request, err, want)
 	}
 }
+
+func (*catalogPeerFake) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}

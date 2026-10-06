@@ -104,3 +104,7 @@ func TestReplayBindingContractsAcceptPlatformProcessRootPorts(t *testing.T) {
 		t.Fatalf("factory ports = (%v,%v), want non-nil provider and runner", p, r)
 	}
 }
+
+func (providersRootPortProbe) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	return request.Validate()
+}

@@ -210,6 +210,93 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.terminate",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7UnreachableHostNeverFallsBackToLocalProvider",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.terminate",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

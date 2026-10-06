@@ -407,6 +407,10 @@ func directWorkerSessionPayload(requestID, sessionID, dispatchID string) factory
 		Execution: factoryapi.WorkerSessionResolvedExecution{
 			WorkstationName: "process",
 			WorkerType:      functionalStringPtr("processor"),
+			RunnerId:        functionalStringPtr("codex"),
+			ModelProvider:   functionalStringPtr("codex"),
+			Model:           functionalStringPtr("test-model"),
+			UserMessage:     functionalStringPtr("controlled direct lifecycle prompt"),
 			Dispatch: factoryapi.WorkerSessionResolvedDispatch{
 				DispatchId:      dispatchID,
 				WorkstationName: "process",

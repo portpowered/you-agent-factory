@@ -567,7 +567,7 @@ func (r *registry) completeSupervision(ctx context.Context, id string, supervisi
 	if r.completeRetryableSupervision(id, supervision, snapshot, result, dispatchErr, priorState) {
 		return
 	}
-	if supervision.runtimeKey.RuntimeID != "" && dispatchErr == nil && snapshot.action == "" && result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
+	if dispatchErr == nil && snapshot.action == "" && result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
 		r.publishBufferedWorkerOutput(context.WithoutCancel(ctx), id, snapshot.dispatchID, result.Result)
 	}
 	r.completeTerminalSupervision(id, supervision, snapshot, result, dispatchErr, priorState)

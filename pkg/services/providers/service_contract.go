@@ -41,6 +41,10 @@ type Service interface {
 	// ValidatePrerequisites verifies that one canonical provider is currently
 	// selectable.
 	ValidatePrerequisites(context.Context, ValidatePrerequisitesRequest) error
+	// ValidateExecution checks request policy and current catalog readiness without
+	// binding an attempt, starting a provider, or publishing observations. Models
+	// remain opaque provider inputs rather than a catalog allowlist.
+	ValidateExecution(context.Context, ExecuteRequest) error
 	// Execute performs exactly one normalized provider attempt. Invalid request
 	// identity fails with ErrInvalidID. Attempt failures return typed
 	// Providers-owned errors such as ErrExecuteCancelled, ErrExecuteTimeout, and

@@ -439,7 +439,8 @@ func assertCodexWorktreeCommand(
 			t.Fatalf("%s command WorkDir = %q, want materialized checkout %q", scenario.name, request.WorkDir, scenario.checkoutPath)
 		}
 		assertArgsDoNotContain(t, request.Args, "--worktree")
-		support.AssertArgsContainSequence(t, request.Args, []string{"exec", "--json", "--model", "test-model", "-"})
+		support.AssertArgsContainSequence(t, request.Args, []string{"exec", "--json", "--model", "test-model"})
+		support.AssertArgsContainSequence(t, request.Args, []string{"--config", `developer_instructions="Process the input task."`, "-"})
 	}
 }
 

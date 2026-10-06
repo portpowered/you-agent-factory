@@ -487,7 +487,7 @@ func awaitContinuationRestartLogs(t *testing.T, host invokeContinueStartedProces
 
 func startContinuationRestartHost(t *testing.T, root, host, home string, route *invokeContinueStaticCommandRoute) invokeContinueStartedProcess {
 	t.Helper()
-	started, err := startInvokeContinuePackageProcess(t, root, host, home, route)
+	started, err := startInvokeContinuePackageProcess(t, root, host, home, route, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

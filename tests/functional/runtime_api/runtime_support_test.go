@@ -253,31 +253,7 @@ func StartSharedFunctionalServer(t *testing.T, factoryDir string, scenario Scena
 	t.Helper()
 
 	fixture := sharedPackageFixture(t)
-	provider := providerForScenario(t, scenario)
-	if provider == nil && scenario.ProviderRunner == nil {
-		// A mock-worker scenario does not call Providers, but registering a
-		// fail-closed route keeps an accidental real invocation from escaping
-		// the controlled package fixture.
-		provider = testutil.NativeProvider{}
-	}
-
-	var unregisterProvider func()
-	if provider != nil {
-		unregisterProvider = fixture.providerRouter.register(factoryDir, scenario.Models, provider)
-	}
-	var unregisterCommand func()
-	if scenario.ProviderRunner != nil {
-		unregisterCommand = fixture.commandRouter.register(factoryDir, scenario.ProviderRunner)
-	}
-	var unregisterScript func()
-	if scenario.ScriptRunner != nil {
-		unregisterScript = fixture.scriptRouter.register(factoryDir, scenario.ScriptRunner)
-	}
-	// Register route cleanup before opening the session. If session creation
-	// fails, testing.T cleanup still resets every scenario-owned effect lane.
-	t.Cleanup(func() {
-		releaseRuntimeAPIEffectRoutes(unregisterScript, unregisterCommand, unregisterProvider)
-	})
+	fixture.registerScenario(t, factoryDir, scenario)
 
 	opened, err := openRuntimeAPIFactorySession(fixture.baseURL, factoryDir)
 	if err != nil {
@@ -308,6 +284,45 @@ func StartSharedFunctionalServer(t *testing.T, factoryDir string, scenario Scena
 		}
 	})
 	return &SessionHandle{fixture: fixture, sessionID: sessionID}
+}
+
+func (fixture *PackageFixture) registerScenario(t *testing.T, factoryDir string, scenario Scenario) {
+	t.Helper()
+
+	provider := providerForScenario(t, scenario)
+	if provider == nil && scenario.ProviderRunner == nil {
+		// A mock-worker scenario does not call Providers, but registering a
+		// fail-closed route keeps an accidental real invocation from escaping
+		// the controlled package fixture.
+		provider = testutil.NativeProvider{}
+	}
+
+	var unregisterProvider func()
+	if provider != nil {
+		unregisterProvider = fixture.providerRouter.register(factoryDir, scenario.Models, provider)
+	}
+	var unregisterCommand func()
+	if scenario.ProviderRunner != nil {
+		unregisterCommand = fixture.commandRouter.register(factoryDir, scenario.ProviderRunner)
+	}
+	var unregisterScript func()
+	if scenario.ScriptRunner != nil {
+		unregisterScript = fixture.scriptRouter.register(factoryDir, scenario.ScriptRunner)
+	}
+	// Register route cleanup before opening the session. If session creation
+	// fails, testing.T cleanup still resets every scenario-owned effect lane.
+	t.Cleanup(func() {
+		if unregisterScript != nil {
+			unregisterScript()
+		}
+		if unregisterCommand != nil {
+			unregisterCommand()
+		}
+		if unregisterProvider != nil {
+			unregisterProvider()
+		}
+	})
+
 }
 
 func (fixture *PackageFixture) TrackSession(id string) (func() error, error) {
@@ -954,11 +969,3 @@ func runtimeAPIDirContains(parent, child string) bool {
 }
 
 var _ platformprocess.CommandRunner = (*runtimeAPICommandRouter)(nil)
-
-func releaseRuntimeAPIEffectRoutes(routes ...func()) {
-	for _, release := range routes {
-		if release != nil {
-			release()
-		}
-	}
-}
