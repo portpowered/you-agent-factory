@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestTerminalCaptureKeepsExactAttemptReferenceWithoutCredentials(t *testing.T) {
@@ -66,6 +69,7 @@ type restartRecipeStore struct {
 	calls     int
 	err       error
 	reference providers.SessionRef
+	input     func() json.RawMessage
 }
 
 func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
@@ -408,5 +412,107 @@ func assertCapturedContinuationPlan(t *testing.T, replay *continueReplay, owner 
 	}
 	if environment := replay.plan.execution.Execution.ProcessEnvironment; len(environment) != 1 || environment[0] != "API_KEY=live-host-secret" {
 		t.Fatal("continuation lost the live host environment")
+	}
+}
+
+func (store *restartRecipeStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	if store.input != nil {
+		return store.input(), store.err
+	}
+	return nil, store.err
+}
+
+func TestContinuationInputBarrierPreservesTupleOrRefusesAdmission(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "sync-failure", "conflict", "secret-input", "unsafe-override", "stale-capture"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			base := continuationValidExecution("dispatch-1")
+			ref := r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference
+			plan := continuePlan{
+				request: req, direct: true,
+				execution: continuationExecution(base, "dispatch-1/continue/successor-1", req.FollowUpInput, ref),
+				lineage:   &workers.SessionLineage{PreviousAttemptID: "dispatch-1"},
+			}
+			store := &interruptInputStore{}
+			r.operations = store
+			r.restart = &restartRecipeStore{input: func() json.RawMessage { return store.input }}
+			r.publications[req.SourceWorkerSessionID] = &publication{capture: recordings.WorkerControlTarget{
+				WorkerSessionID: req.SourceWorkerSessionID, RecordingID: "recording", RecordingGenerationID: "generation", OwnerEpoch: "owner",
+			}}
+			r.logs = &LogReader{reader: &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+				WorkerSessionID: req.SourceWorkerSessionID, RecordingID: "recording", RecordingGenerationID: "generation", OwnerEpoch: "owner",
+			}}}
+			switch cell {
+			case "sync-failure":
+				store.writeErr = errors.New("private persistence detail")
+			case "conflict":
+				store.writeErr = recordings.ErrWorkerControlConflict
+			case "secret-input":
+				plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=follow up"}
+			case "unsafe-override":
+				plan.execution.Execution.EnvVars = map[string]string{"API_KEY": "private"}
+			case "stale-capture":
+				r.publications[req.SourceWorkerSessionID].capture.RecordingGenerationID = "foreign-generation"
+			}
+			err := r.persistContinuationInput(plan)
+			if cell == "exact" {
+				assertContinuationInputTuple(t, store.input, req, ref.ID, err)
+				return
+			}
+			if err == nil || len(store.input) != 0 {
+				t.Fatalf("unsafe/unacknowledged input persisted: %s, %v", store.input, err)
+			}
+			if cell == "conflict" && !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+				t.Fatalf("tuple conflict = %v", err)
+			}
+			// A failing persistence barrier returns before invocation preparation,
+			// even with no executor; no opening or provider call is possible.
+			if _, err := r.continueReserved(plan); err == nil {
+				t.Fatal("failed barrier admitted continuation")
+			}
+		})
+	}
+}
+
+func assertContinuationInputTuple(t *testing.T, payload []byte, req workersessions.ContinueRequest, referenceID string, err error) {
+	t.Helper()
+	var input durableContinuationInput
+	if err != nil || json.Unmarshal(payload, &input) != nil || input.RequestID != req.RequestID || input.FollowUpInput != req.FollowUpInput || input.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID || input.ProviderReference.ID != referenceID || input.Target.ExpectedAttemptID != "dispatch-1" || input.Execution.Execution.Dispatch.DispatchID != "dispatch-1/continue/successor-1" {
+		t.Fatalf("captured tuple lost identity: %+v, %v", input, err)
+	}
+	assertContinuationInputSchema(t, payload)
+}
+
+// Contract proof for the encoder's actual detached output, including the
+// source target and successor execution, rather than a hand-authored fixture.
+func assertContinuationInputSchema(t *testing.T, payload []byte) {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	for _, name := range []string{"continuation-input.v1.schema.json", "control-envelope.v2.schema.json", "control-operation.v1.schema.json"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "recordings", "internal", "services", "worker_capture", "schemas", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		if err := compiler.AddResource(name, document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := compiler.Compile("continuation-input.v1.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(document); err != nil {
+		t.Fatalf("continuation tuple violates published schema: %v", err)
 	}
 }

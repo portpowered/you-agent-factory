@@ -886,3 +886,7 @@ func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, re
 func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
 }
+
+func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	return nil, recordings.ErrWorkerRecordingPersistence
+}

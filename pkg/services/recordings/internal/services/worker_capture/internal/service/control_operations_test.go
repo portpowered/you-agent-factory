@@ -551,3 +551,45 @@ func TestControlInputRefusesCorruptBlobAndSymlink(t *testing.T) {
 		t.Fatalf("symlink accepted: %v", err)
 	}
 }
+
+func TestContinuationInputResolvesRetainedIdentityAcrossReopen(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	intent := controlIntent(t, writer, "recording", "worker", "request")
+	key := operationKey(intent)
+	key.RequestID = "continue/request"
+	input := json.RawMessage(`{"followUpInput":"exact input"}`)
+	if _, err := writer.PersistWorkerControlInput(t.Context(), key, input); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(platformreplay.NewLocal(runtime.GOOS), writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := reopened.(*FileWriter)
+	got, err := fresh.ReadWorkerContinuationInput(t.Context(), key)
+	if err != nil || !bytes.Equal(got, input) {
+		t.Fatalf("retained input = %s, %v", got, err)
+	}
+	got[0] = '!'
+	again, err := fresh.ReadWorkerContinuationInput(t.Context(), key)
+	if err != nil || !bytes.Equal(again, input) {
+		t.Fatal("read mutation changed stored input")
+	}
+	for _, cell := range []string{"scope", "worker", "request", "recording"} {
+		foreign := key
+		switch cell {
+		case "scope":
+			foreign.FactorySessionID = "foreign"
+		case "worker":
+			foreign.WorkerSessionID = "foreign"
+		case "request":
+			foreign.RequestID = "restart-recipe/request"
+		case "recording":
+			foreign.RecordingID = "foreign"
+		}
+		if leaked, err := fresh.ReadWorkerContinuationInput(t.Context(), foreign); err == nil || len(leaked) != 0 {
+			t.Fatalf("%s leaked retained input: %s, %v", cell, leaked, err)
+		}
+	}
+}

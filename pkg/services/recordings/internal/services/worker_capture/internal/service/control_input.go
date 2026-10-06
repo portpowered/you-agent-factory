@@ -101,6 +101,19 @@ func (writer *FileWriter) ReadWorkerControlInput(ctx context.Context, key record
 	return decodeControlInput(data, artifact)
 }
 
+// ReadWorkerContinuationInput resolves the retained generation inside the
+// selected store. Callers supply identity data, never a path or cached hash.
+func (writer *FileWriter) ReadWorkerContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	entry := writer.entry(key.RecordingID)
+	entry.mu.Lock()
+	identity, err := writer.controlInputIdentity(ctx, entry, key)
+	entry.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return writer.ReadWorkerControlInput(ctx, key, controlInputRef(identity))
+}
+
 func (writer *FileWriter) controlInputIdentity(ctx context.Context, entry *recordingEntry, key recordings.WorkerControlOperationKey) (controlInputArtifact, error) {
 	if key.RecordingID == "" || key.WorkerSessionID == "" || key.RequestID == "" {
 		return controlInputArtifact{}, recordings.ErrInvalidWorkerControlOperation

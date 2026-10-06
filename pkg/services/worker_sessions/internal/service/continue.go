@@ -412,6 +412,10 @@ func continuationDispatchID(sourceDispatchID, successorID string) string {
 }
 
 func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueResult, error) {
+	if err := r.persistContinuationInput(plan); err != nil {
+		r.releaseContinuationReservation(plan)
+		return r.continuationResult(plan), continuationNotAccepted(err)
+	}
 	runtimeID := strings.TrimSpace(plan.execution.Execution.RuntimeID)
 	if runtimeID != "" {
 		if !r.beginRuntimeOpening(runtimeID) {

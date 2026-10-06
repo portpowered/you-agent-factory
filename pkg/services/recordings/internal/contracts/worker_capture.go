@@ -39,6 +39,7 @@ type WorkerRestartInputStore interface {
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
 	ReadWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+	ReadWorkerContinuationInput(context.Context, workerrecording.WorkerControlOperationKey) (json.RawMessage, error)
 }
 
 // WorkerContinuationSource is detached proof from committed source history.
