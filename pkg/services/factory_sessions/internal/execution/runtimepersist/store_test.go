@@ -102,40 +102,7 @@ func TestCurrentBoardReferenceRejectsInvalidContractWithoutWriting(t *testing.T)
 				t.Fatal(err)
 			}
 			data := string(files.data)
-			switch name {
-			case "duplicate":
-				data = strings.TrimSuffix(data, "}") + `,"schemaVersion":"secret"}`
-			case "unknown":
-				data = strings.TrimSuffix(data, "}") + `,"secret":"private"}`
-			case "case":
-				data = strings.Replace(data, `"schemaVersion"`, `"SchemaVersion"`, 1)
-			case "null":
-				data = strings.Replace(data, `"factory-sessions.current-board.v1"`, `null`, 1)
-			case "missing":
-				data = `{}`
-			case "version":
-				data = strings.Replace(data, "current-board.v1", "current-board.secret", 1)
-			case "session":
-				data = strings.Replace(data, "~default", "foreign-secret", 1)
-			case "relative", "remote":
-				var fields map[string]any
-				if err := json.Unmarshal(files.data, &fields); err != nil {
-					t.Fatal(err)
-				}
-				fields["artifactReference"] = "secret.json"
-				if name == "remote" {
-					fields["artifactReference"] = "https://secret.example/board.json"
-				}
-				encoded, err := json.Marshal(fields)
-				if err != nil {
-					t.Fatal(err)
-				}
-				data = string(encoded)
-			case "trailing":
-				data += ` {"secret":true}`
-			case "malformed":
-				data = `{"secret":`
-			}
+			data = invalidBoardReferenceData(t, name, data)
 			files.data = []byte(data)
 			path, err := store.LoadCurrentBoard(t.Context(), factory)
 			if err == nil || path != "" || files.writes != 1 || string(files.data) != data {
@@ -467,4 +434,43 @@ func TestDirectoryStore_InterruptedSavePreservesPriorSnapshotAndSuccessfulSaveRe
 	if !json.Valid(loaded) || string(loaded) != string(next) {
 		t.Fatalf("snapshot after successful save = %s, want complete new payload %s", loaded, next)
 	}
+}
+
+func invalidBoardReferenceData(t *testing.T, name, data string) string {
+	t.Helper()
+	switch name {
+	case "duplicate":
+		data = strings.TrimSuffix(data, "}") + `,"schemaVersion":"secret"}`
+	case "unknown":
+		data = strings.TrimSuffix(data, "}") + `,"secret":"private"}`
+	case "case":
+		data = strings.Replace(data, `"schemaVersion"`, `"SchemaVersion"`, 1)
+	case "null":
+		data = strings.Replace(data, `"factory-sessions.current-board.v1"`, `null`, 1)
+	case "missing":
+		data = `{}`
+	case "version":
+		data = strings.Replace(data, "current-board.v1", "current-board.secret", 1)
+	case "session":
+		data = strings.Replace(data, "~default", "foreign-secret", 1)
+	case "relative", "remote":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(data), &fields); err != nil {
+			t.Fatal(err)
+		}
+		fields["artifactReference"] = "secret.json"
+		if name == "remote" {
+			fields["artifactReference"] = "https://secret.example/board.json"
+		}
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = string(encoded)
+	case "trailing":
+		data += ` {"secret":true}`
+	case "malformed":
+		data = `{"secret":`
+	}
+	return data
 }

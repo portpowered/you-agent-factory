@@ -44,6 +44,10 @@ func (s *JavaScriptRuntimeService) LoadCurrentBoardFacts(ctx context.Context, se
 	if readErr != nil || json.Unmarshal(data, &snapshot) != nil || strings.TrimSpace(snapshot.Session.SessionID) != id {
 		return nil, &ResumeError{Outcome: ResumeOutcomeCorruptedPersistence, SessionID: id, Message: "current board durable witness could not be read"}
 	}
+	return currentBoardFacts(ctx, id, snapshot)
+}
+
+func currentBoardFacts(ctx context.Context, id string, snapshot PersistedRuntimeSessionState) ([]factorydefinitions.FactoryEvent, error) {
 	raw, _, _, _ := runtimeHistoryFromPersistedSnapshot(snapshot)
 	events := make([]factorydefinitions.FactoryEvent, 0, len(raw))
 	for _, fact := range raw {
@@ -97,6 +101,10 @@ func (s *JavaScriptRuntimeService) MatchCurrentBoardWork(ctx context.Context, se
 	if err != nil || json.Unmarshal(data, &snapshot) != nil || snapshot.Session.SessionID != id {
 		return false, &ResumeError{Outcome: ResumeOutcomeCorruptedPersistence, SessionID: id, Message: "current board durable witness could not be read"}
 	}
+	return matchCurrentBoardSnapshot(ctx, snapshot, state)
+}
+
+func matchCurrentBoardSnapshot(ctx context.Context, snapshot PersistedRuntimeSessionState, state *factorydefinitions.FactoryWorldState) (bool, error) {
 	_, _, mutations, summaries := runtimeHistoryFromPersistedSnapshot(snapshot)
 	matched := 0
 	for _, mutation := range mutations {
@@ -107,22 +115,15 @@ func (s *JavaScriptRuntimeService) MatchCurrentBoardWork(ctx context.Context, se
 			continue
 		}
 		token := mutation.Token
-		item, ok := state.WorkItemsByID[token.Color.WorkID]
-		if !ok || !currentBoardTokenMatches(*token, item) || !currentBoardRequestMatches(token.Color.RequestID, item.ID, state) ||
-			!currentBoardRelationsMatch(token.Color.Relations, state.RelationsByWorkID[item.ID]) {
+		if !currentBoardWorkTokenMatches(*token, state) {
 			return false, nil
 		}
 		matched++
 	}
-	for _, summary := range summaries {
-		item, ok := state.WorkItemsByID[summary.WorkID]
-		if !ok || item.WorkTypeID != summary.WorkTypeID || item.State != summary.State ||
-			item.DisplayName != summary.Name || item.TraceID != summary.TraceID || item.ParentID != summary.ParentID ||
-			!currentBoardRequestMatches(summary.RequestID, item.ID, state) {
-			return false, nil
-		}
-		matched++
+	if !currentBoardSummariesMatch(summaries, state) {
+		return false, nil
 	}
+	matched += len(summaries)
 	return matched > 0, nil
 }
 
@@ -202,4 +203,22 @@ func (s *JavaScriptRuntimeService) currentBoardStore() (runtimepersist.CurrentBo
 		return nil, errors.New("current board reference persistence is unavailable")
 	}
 	return store, nil
+}
+
+func currentBoardWorkTokenMatches(token workers.Token, state *factorydefinitions.FactoryWorldState) bool {
+	item, ok := state.WorkItemsByID[token.Color.WorkID]
+	return ok && currentBoardTokenMatches(token, item) && currentBoardRequestMatches(token.Color.RequestID, item.ID, state) &&
+		currentBoardRelationsMatch(token.Color.Relations, state.RelationsByWorkID[item.ID])
+}
+
+func currentBoardSummariesMatch(summaries []PetriTokenSummary, state *factorydefinitions.FactoryWorldState) bool {
+	for _, summary := range summaries {
+		item, ok := state.WorkItemsByID[summary.WorkID]
+		if !ok || item.WorkTypeID != summary.WorkTypeID || item.State != summary.State ||
+			item.DisplayName != summary.Name || item.TraceID != summary.TraceID || item.ParentID != summary.ParentID ||
+			!currentBoardRequestMatches(summary.RequestID, item.ID, state) {
+			return false
+		}
+	}
+	return true
 }

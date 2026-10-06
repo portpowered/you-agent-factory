@@ -37,25 +37,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	command := support.StartProcessCommand(t, process, first.Input)
 	url := restartProbeReadyURL(t, apis[0], command)
 	if port == 0 {
-		// The exact launch starts empty; Work enters through the public API
-		// only after readiness, without adding a selector or startup input.
-		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
-		if len(works.Results) != 0 {
-			t.Fatal("first plain launch was not empty")
-		}
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url+"/factory-sessions/~default/work-requests/restart-dag", bytes.NewReader([]byte(batch)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		request.Header.Set("Content-Type", "application/json")
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		response.Body.Close()
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			t.Fatalf("batch admission returned %d", response.StatusCode)
-		}
+		admitRestartProbeDAG(t, url, batch)
 	}
 	// Public status observes the asynchronous projection after all three
 	// admissions and A's completion, rather than padding with a sleep.
@@ -75,11 +57,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	url = restartProbeReadyURL(t, apis[1], reopened)
 	after := restartProbeBoardReads(t, url)
 	assertRestartProbeStates(t, after)
-	for i := range before {
-		if !reflect.DeepEqual(before[i].Content, after[i].Content) || !reflect.DeepEqual(before[i].Tags, after[i].Tags) || !reflect.DeepEqual(before[i].Relations, after[i].Relations) || !reflect.DeepEqual(before[i].WorkId, after[i].WorkId) {
-			t.Fatalf("restart changed content, tags, relations or identity: before=%#v after=%#v", before[i], after[i])
-		}
-	}
+	assertRestartProbeRecoveredWork(t, before, after)
 	recoveredEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeEventFacts(t, events, recoveredEvents)
 	if runner.calls.Load() != 1 {
@@ -100,21 +78,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	completedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	restartProbeShutdown(t, url, reopened)
 	if len(apis) > 2 {
-		// Reopen the same repository/reference/recording again after every
-		// Work is terminal. Reuse is the invariant, so this journey is ordered.
-		third := inputs(t, dir)
-		repeated := support.StartProcessCommand(t, process, third.Input)
-		url = restartProbeReadyURL(t, apis[2], repeated)
-		for i, work := range restartProbeBoardReads(t, url) {
-			if work.State == nil || work.State.Name != "complete" || !reflect.DeepEqual(work.Content, completed[i].Content) || !reflect.DeepEqual(work.WorkId, completed[i].WorkId) || !reflect.DeepEqual(work.Relations, completed[i].Relations) {
-				t.Fatalf("terminal restart changed Work: before=%#v after=%#v", completed[i], work)
-			}
-		}
-		assertRestartProbeEventFacts(t, completedEvents, support.GetFactoryEventsForSessionAt(t, url, "~default"))
-		if runner.calls.Load() != 3 {
-			t.Fatal("terminal restart dispatched completed Work")
-		}
-		restartProbeShutdown(t, url, repeated)
+		assertRestartProbeTerminalRestart(t, process, dir, apis[2], runner, inputs, completed, completedEvents)
 	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
@@ -151,18 +115,7 @@ func assertRestartProbeFailedPrerequisite(t *testing.T, url string, runner *rest
 	if runner.calls.Load() != 2 {
 		t.Fatalf("failed prerequisite released descendant: provider calls=%d, want two", runner.calls.Load())
 	}
-	for _, event := range support.GetFactoryEventsForSessionAt(t, url, "~default") {
-		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
-			continue
-		}
-		encoded, err := json.Marshal(event)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if bytes.Contains(encoded, []byte("restart-C")) {
-			t.Fatalf("failed prerequisite released descendant: %s", encoded)
-		}
-	}
+	assertRestartProbeNoDescendantDispatch(t, url)
 }
 
 func waitForRestartProbeConfirmed(t *testing.T, url string) {
@@ -328,5 +281,72 @@ func writeRestartProbeFile(t *testing.T, path string, data []byte) {
 	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func admitRestartProbeDAG(t *testing.T, url, batch string) {
+	t.Helper()
+	// The exact launch starts empty; Work enters through the public API
+	// only after readiness, without adding a selector or startup input.
+	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
+	if len(works.Results) != 0 {
+		t.Fatal("first plain launch was not empty")
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, url+"/factory-sessions/~default/work-requests/restart-dag", bytes.NewReader([]byte(batch)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		t.Fatalf("batch admission returned %d", response.StatusCode)
+	}
+}
+
+func assertRestartProbeRecoveredWork(t *testing.T, before, after []factoryapi.Work) {
+	t.Helper()
+	for i := range before {
+		if !reflect.DeepEqual(before[i].Content, after[i].Content) || !reflect.DeepEqual(before[i].Tags, after[i].Tags) || !reflect.DeepEqual(before[i].Relations, after[i].Relations) || !reflect.DeepEqual(before[i].WorkId, after[i].WorkId) {
+			t.Fatalf("restart changed content, tags, relations or identity: before=%#v after=%#v", before[i], after[i])
+		}
+	}
+}
+
+func assertRestartProbeTerminalRestart(t *testing.T, process support.Process, dir string, api *support.ProcessAPIServer, runner *restartProbeUnexpectedRunner, inputs func(*testing.T, string) *support.CapturedInputs, completed []factoryapi.Work, completedEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+	// Reopen the same repository/reference/recording again after every
+	// Work is terminal. Reuse is the invariant, so this journey is ordered.
+	third := inputs(t, dir)
+	repeated := support.StartProcessCommand(t, process, third.Input)
+	url := restartProbeReadyURL(t, api, repeated)
+	for i, work := range restartProbeBoardReads(t, url) {
+		if work.State == nil || work.State.Name != "complete" || !reflect.DeepEqual(work.Content, completed[i].Content) || !reflect.DeepEqual(work.WorkId, completed[i].WorkId) || !reflect.DeepEqual(work.Relations, completed[i].Relations) {
+			t.Fatalf("terminal restart changed Work: before=%#v after=%#v", completed[i], work)
+		}
+	}
+	assertRestartProbeEventFacts(t, completedEvents, support.GetFactoryEventsForSessionAt(t, url, "~default"))
+	if runner.calls.Load() != 3 {
+		t.Fatal("terminal restart dispatched completed Work")
+	}
+	restartProbeShutdown(t, url, repeated)
+}
+
+func assertRestartProbeNoDescendantDispatch(t *testing.T, url string) {
+	t.Helper()
+	for _, event := range support.GetFactoryEventsForSessionAt(t, url, "~default") {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(encoded, []byte("restart-C")) {
+			t.Fatalf("failed prerequisite released descendant: %s", encoded)
+		}
 	}
 }

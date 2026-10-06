@@ -78,21 +78,7 @@ func TestMatchCurrentBoardWorkRejectsChangedFacts(t *testing.T) {
 			}
 			store := &durableProbeStore{snapshot: data}
 			state := &factorydefinitions.FactoryWorldState{WorkItemsByID: map[string]work.FactoryWorkItem{}, WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{"request": {WorkItems: []work.FactoryWorkItem{item}}}, RelationsByWorkID: map[string][]work.FactoryRelation{"work": {{Type: "DEPENDS_ON", TargetWorkID: "prerequisite", RequiredState: "done"}}}}
-			switch name {
-			case "state":
-				item.State = "done"
-			case "payload":
-				item.Content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "altered"}}
-			case "tags":
-				item.Tags = map[string]string{"keep": "no"}
-			case "request":
-				delete(state.WorkRequestsByID, "request")
-			case "relations":
-				state.RelationsByWorkID = nil
-			}
-			if name != "missing work" {
-				state.WorkItemsByID[item.ID] = item
-			}
+			applyBoardWitnessChange(name, item, state)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if name == "canceled read" {
@@ -285,5 +271,23 @@ func TestLoadCurrentBoardFactsReadsCanonicalWitnessWithoutHydration(t *testing.T
 	service := &JavaScriptRuntimeService{persistence: store}
 	if _, err := service.LoadCurrentBoardFacts(ctx, "~default"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("read cancellation=%v", err)
+	}
+}
+
+func applyBoardWitnessChange(name string, item work.FactoryWorkItem, state *factorydefinitions.FactoryWorldState) {
+	switch name {
+	case "state":
+		item.State = "done"
+	case "payload":
+		item.Content = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "altered"}}
+	case "tags":
+		item.Tags = map[string]string{"keep": "no"}
+	case "request":
+		delete(state.WorkRequestsByID, "request")
+	case "relations":
+		state.RelationsByWorkID = nil
+	}
+	if name != "missing work" {
+		state.WorkItemsByID[item.ID] = item
 	}
 }

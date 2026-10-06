@@ -155,25 +155,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				durableExecution: DurableExecution{Service: owner},
 				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "fresh.json"}},
 			}
-			bypass, wantError := false, false
-			switch name {
-			case "fresh":
-				owner.path = ""
-			case "legacy requires history":
-				owner.path, owner.durable, wantError = "", true, true
-			case "read failure":
-				owner.failure, wantError = errors.New("controlled reference failure"), true
-			case "explicit":
-				selection.Recording.ImplicitCurrentBoard, bypass = false, true
-			case "batch":
-				selection.Mode, bypass = factorysessions.SessionRuntimeModeBatch, true
-			case "peer":
-				opening.sessionID, bypass = "peer-session", true
-			case "resume":
-				opening.configured.Recordings.ResumePath, bypass = "resume.json", true
-			case "replay":
-				opening.configured.Recordings.ReplayPath, bypass = "replay.json", true
-			}
+			bypass, wantError := configureBoardReferenceCase(name, owner, opening)
 			err := (&Root{}).selectCurrentBoardReference(t.Context(), opening)
 			if (err != nil) != wantError {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
@@ -190,19 +172,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				}
 				return
 			}
-			wantPath := owner.path
-			if name == "fresh" {
-				wantPath = "fresh.json"
-			}
-			if opening.configured.Recordings.RecordPath != wantPath || opening.hasCurrentBoardReference != (name == "selected") {
-				t.Fatalf("selected path/presence = %s/%v", opening.configured.Recordings.RecordPath, opening.hasCurrentBoardReference)
-			}
-			if owner.saves != 0 {
-				t.Fatal("selection prematurely published reference")
-			}
-			if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.saves != 1 || owner.savedFactory != "factory-directory" || owner.savedArtifact != wantPath {
-				t.Fatalf("publication = %s/%s/%v", owner.savedFactory, owner.savedArtifact, err)
-			}
+			assertCurrentBoardPublication(t, name, owner, opening)
 		})
 	}
 }
@@ -956,5 +926,45 @@ func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
 				t.Fatal("diagnostic exposed payload")
 			}
 		})
+	}
+}
+
+func configureBoardReferenceCase(name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) (bool, bool) {
+	bypass, wantError := false, false
+	switch name {
+	case "fresh":
+		owner.path = ""
+	case "legacy requires history":
+		owner.path, owner.durable, wantError = "", true, true
+	case "read failure":
+		owner.failure, wantError = errors.New("controlled reference failure"), true
+	case "explicit":
+		opening.sessionSelection.Recording.ImplicitCurrentBoard, bypass = false, true
+	case "batch":
+		opening.sessionSelection.Mode, bypass = factorysessions.SessionRuntimeModeBatch, true
+	case "peer":
+		opening.sessionID, bypass = "peer-session", true
+	case "resume":
+		opening.configured.Recordings.ResumePath, bypass = "resume.json", true
+	case "replay":
+		opening.configured.Recordings.ReplayPath, bypass = "replay.json", true
+	}
+	return bypass, wantError
+}
+
+func assertCurrentBoardPublication(t *testing.T, name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) {
+	t.Helper()
+	wantPath := owner.path
+	if name == "fresh" {
+		wantPath = "fresh.json"
+	}
+	if opening.configured.Recordings.RecordPath != wantPath || opening.hasCurrentBoardReference != (name == "selected") {
+		t.Fatalf("selected path/presence = %s/%v", opening.configured.Recordings.RecordPath, opening.hasCurrentBoardReference)
+	}
+	if owner.saves != 0 {
+		t.Fatal("selection prematurely published reference")
+	}
+	if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.saves != 1 || owner.savedFactory != "factory-directory" || owner.savedArtifact != wantPath {
+		t.Fatalf("publication = %s/%s/%v", owner.savedFactory, owner.savedArtifact, err)
 	}
 }

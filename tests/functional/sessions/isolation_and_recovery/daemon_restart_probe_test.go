@@ -225,49 +225,7 @@ func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name
 	if err == nil || !errors.As(err, &diagnostic) {
 		t.Fatalf("invalid selection did not return a coded startup error: %v; stderr=%s", err, inputs.Stderr())
 	}
-	wantCode := "DURABLE_SESSION_PERSISTENCE_FAILED"
-	if name == "missing recording" {
-		wantCode = "CURRENT_BOARD_RECORDING_MISSING"
-	} else if name == "corrupt recording" {
-		wantCode = "CURRENT_BOARD_RECORDING_CORRUPT"
-	}
-	if diagnostic.CLIErrorCode() != wantCode {
-		t.Fatalf("startup error code = %s, want %s", diagnostic.CLIErrorCode(), wantCode)
-	}
-	output := inputs.Stdout() + inputs.Stderr()
-	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") ||
-		starts.Load() != beforeStarts || runner.calls.Load() != beforeCalls {
-		t.Fatalf("rejected selection exposed contents or activated runtime: %s", output)
-	}
-	for path, expected := range map[string][]byte{refPath: reference, sentinel: []byte("worktree § —"), request: []byte("request § —")} {
-		if actual := mustReadSeededReplayArtifact(t, path); !bytes.Equal(actual, expected) {
-			t.Fatalf("rejected opening changed retained file %s", path)
-		}
-	}
-	if name == "corrupt recording" {
-		if actual := mustReadSeededReplayArtifact(t, recording); !bytes.Equal(actual, []byte(`{"private":"`+restartProbeSecret+`"`)) {
-			t.Fatal("rejected opening changed corrupt recording")
-		}
-	} else if _, err := os.Stat(recording); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("rejected opening created selected recording: %v", err)
-	}
-	// This profile started with no dated recordings. Rejection must occur
-	// before the automatic target's exclusive reservation creates an artifact.
-	err = filepath.WalkDir(filepath.Join(home, ".you-agent-factory", "recordings"), func(path string, entry fs.DirEntry, walkErr error) error {
-		if errors.Is(walkErr, fs.ErrNotExist) {
-			return nil
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		if !entry.IsDir() {
-			t.Errorf("rejected opening reserved a fresh recording: %s", path)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertPlainBoardRejectedSelection(t, name, home, recording, refPath, sentinel, request, reference, inputs, diagnostic.CLIErrorCode(), starts.Load()-beforeStarts, runner.calls.Load()-beforeCalls)
 }
 
 func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir string, api *support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
@@ -371,27 +329,7 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	if err := os.Remove(filepath.Join(repos[0], ".you-agent-factory", "current-board.json")); err != nil {
 		t.Fatal(err)
 	}
-	for i, repo := range repos {
-		command, url := startPlainBoardInRepository(t, process, repo, home, apis[i+2])
-		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
-		if len(works.Results) != 2 {
-			t.Fatalf("repository %d recovered %d Work, want two", i, len(works.Results))
-		}
-		after := support.GetDefaultSessionWorkByID(t, url, "same-id")
-		if !reflect.DeepEqual(before[i].Content, after.Content) || !reflect.DeepEqual(before[i].Tags, after.Tags) || !reflect.DeepEqual(before[i].WorkId, after.WorkId) || after.State == nil || after.State.Name != "waiting" {
-			t.Fatalf("repository recovered the wrong board: before=%#v after=%#v", before[i], after)
-		}
-		restartProbeShutdown(t, url, command)
-		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")); !bytes.Equal(got, references[i]) {
-			t.Fatal("repository selected a different recording")
-		}
-		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, "worktrees", "sentinel.txt")); !bytes.Equal(got, []byte("untouched § —")) {
-			t.Fatal("restart mutated a worktree sentinel")
-		}
-		if i == 0 && !bytes.Equal(mustReadSeededReplayArtifact(t, artifacts[1]), siblingRecording) {
-			t.Fatal("legacy adoption mutated the sibling recording")
-		}
-	}
+	assertPlainBoardSiblingRecovery(t, process, home, apis, repos, before, references, artifacts, siblingRecording)
 	if runner.calls.Load() != 0 {
 		t.Fatal("waiting sibling Work dispatched a provider or process mutation")
 	}
@@ -450,15 +388,7 @@ func testPlainBoardRetainedVisitThreshold(t *testing.T, process support.Process,
 	assertRestartProbeEventFacts(t, events, support.GetFactoryEventsForSessionAt(t, url, "~default"))
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/same-id/move"), []byte(`{"stateName":"init"}`))
 	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 1 })
-	if runner.calls.Load() != 2 {
-		t.Fatalf("guard dispatched %d watched visits, want two total", runner.calls.Load())
-	}
-	for range 2 {
-		request := <-runner.requests
-		if !strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "guard § —") {
-			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
-		}
-	}
+	assertPlainBoardGuardDispatches(t, runner)
 	assertRestartProbeEventFacts(t, events, support.GetFactoryEventsForSessionAt(t, url, "~default"))
 	restartProbeShutdown(t, url, command)
 }
@@ -564,4 +494,94 @@ func (runner *restartProbeUnexpectedRunner) Run(_ context.Context, request platf
 		output = "restart COMPLETE"
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
+}
+
+func assertPlainBoardRejectedSelection(t *testing.T, name, home, recording, refPath, sentinel, request string, reference []byte, inputs *support.CapturedInputs, code string, newStarts, newCalls int32) {
+	t.Helper()
+	wantCode := "DURABLE_SESSION_PERSISTENCE_FAILED"
+	if name == "missing recording" {
+		wantCode = "CURRENT_BOARD_RECORDING_MISSING"
+	} else if name == "corrupt recording" {
+		wantCode = "CURRENT_BOARD_RECORDING_CORRUPT"
+	}
+	if code != wantCode {
+		t.Fatalf("startup error code = %s, want %s", code, wantCode)
+	}
+	output := inputs.Stdout() + inputs.Stderr()
+	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") ||
+		newStarts != 0 || newCalls != 0 {
+		t.Fatalf("rejected selection exposed contents or activated runtime: %s", output)
+	}
+	assertPlainBoardRejectedFiles(t, name, home, recording, refPath, sentinel, request, reference)
+}
+
+func assertPlainBoardRejectedFiles(t *testing.T, name, home, recording, refPath, sentinel, request string, reference []byte) {
+	t.Helper()
+	for path, expected := range map[string][]byte{refPath: reference, sentinel: []byte("worktree § —"), request: []byte("request § —")} {
+		if actual := mustReadSeededReplayArtifact(t, path); !bytes.Equal(actual, expected) {
+			t.Fatalf("rejected opening changed retained file %s", path)
+		}
+	}
+	if name == "corrupt recording" {
+		if actual := mustReadSeededReplayArtifact(t, recording); !bytes.Equal(actual, []byte(`{"private":"`+restartProbeSecret+`"`)) {
+			t.Fatal("rejected opening changed corrupt recording")
+		}
+	} else if _, err := os.Stat(recording); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("rejected opening created selected recording: %v", err)
+	}
+	// This profile started with no dated recordings. Rejection must occur
+	// before the automatic target's exclusive reservation creates an artifact.
+	err := filepath.WalkDir(filepath.Join(home, ".you-agent-factory", "recordings"), func(path string, entry fs.DirEntry, walkErr error) error {
+		if errors.Is(walkErr, fs.ErrNotExist) {
+			return nil
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() {
+			t.Errorf("rejected opening reserved a fresh recording: %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertPlainBoardSiblingRecovery(t *testing.T, process support.Process, home string, apis []*support.ProcessAPIServer, repos []string, before [2]factoryapi.Work, references [2][]byte, artifacts [2]string, siblingRecording []byte) {
+	t.Helper()
+	for i, repo := range repos {
+		command, url := startPlainBoardInRepository(t, process, repo, home, apis[i+2])
+		works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work"))
+		if len(works.Results) != 2 {
+			t.Fatalf("repository %d recovered %d Work, want two", i, len(works.Results))
+		}
+		after := support.GetDefaultSessionWorkByID(t, url, "same-id")
+		if !reflect.DeepEqual(before[i].Content, after.Content) || !reflect.DeepEqual(before[i].Tags, after.Tags) || !reflect.DeepEqual(before[i].WorkId, after.WorkId) || after.State == nil || after.State.Name != "waiting" {
+			t.Fatalf("repository recovered the wrong board: before=%#v after=%#v", before[i], after)
+		}
+		restartProbeShutdown(t, url, command)
+		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")); !bytes.Equal(got, references[i]) {
+			t.Fatal("repository selected a different recording")
+		}
+		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, "worktrees", "sentinel.txt")); !bytes.Equal(got, []byte("untouched § —")) {
+			t.Fatal("restart mutated a worktree sentinel")
+		}
+		if i == 0 && !bytes.Equal(mustReadSeededReplayArtifact(t, artifacts[1]), siblingRecording) {
+			t.Fatal("legacy adoption mutated the sibling recording")
+		}
+	}
+}
+
+func assertPlainBoardGuardDispatches(t *testing.T, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	if runner.calls.Load() != 2 {
+		t.Fatalf("guard dispatched %d watched visits, want two total", runner.calls.Load())
+	}
+	for range 2 {
+		request := <-runner.requests
+		if !strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "guard § —") {
+			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
+		}
+	}
 }

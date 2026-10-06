@@ -192,27 +192,12 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 		if candidate.FactorySessionID != opening.sessionID {
 			continue
 		}
-		relative := filepath.FromSlash(candidate.ArtifactReference)
-		if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(filepath.Clean(relative), ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("legacy inventory returned a foreign artifact reference")
-		}
-		path := filepath.Join(root, relative)
-		history, err := restoreCurrentBoardHistory(r.recordingsService, path, opening.sessionID, false)
+		path, events, err := r.matchLegacyCurrentBoard(ctx, opening, reader, root, candidate.ArtifactReference, witness)
 		if err != nil {
 			return "", err
 		}
-		if validateCurrentBoardFactoryDirectory(history.events, opening.load.LoadedFactoryCfg.FactoryDir()) != nil {
-			continue
-		}
-		matched, err := reader.MatchCurrentBoardWork(ctx, opening.sessionID, history.state)
-		if err != nil {
-			return "", err
-		}
-		if len(witness) > 0 && !currentBoardContainsFacts(history.events, witness) {
-			continue
-		}
-		if matched || len(witness) > 0 {
-			histories[path] = history.events
+		if events != nil {
+			histories[path] = events
 		}
 	}
 	path, err := selectMaximalCurrentBoard(histories)
@@ -257,4 +242,34 @@ func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRun
 	opening.configured.Recordings.RecordPath = target.ServicePath
 	selection.Recording.RecordPath = target.ServicePath
 	return nil
+}
+
+func (r *Root) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening, reader currentBoardFactsReader, root, artifact string, witness []factorydefinitions.FactoryEvent) (string, []factorydefinitions.FactoryEvent, error) {
+	relative := filepath.FromSlash(artifact)
+	if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(filepath.Clean(relative), ".."+string(filepath.Separator)) {
+		return "", nil, fmt.Errorf("legacy inventory returned a foreign artifact reference")
+	}
+	path := filepath.Join(root, relative)
+	history, err := restoreCurrentBoardHistory(r.recordingsService, path, opening.sessionID, false)
+	if err != nil {
+		return "", nil, err
+	}
+	if !currentBoardHistoryBelongsToFactory(history.events, opening.load.LoadedFactoryCfg.FactoryDir()) {
+		return "", nil, nil
+	}
+	matched, err := reader.MatchCurrentBoardWork(ctx, opening.sessionID, history.state)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(witness) > 0 && !currentBoardContainsFacts(history.events, witness) {
+		return "", nil, nil
+	}
+	if matched || len(witness) > 0 {
+		return path, history.events, nil
+	}
+	return "", nil, nil
+}
+
+func currentBoardHistoryBelongsToFactory(events []factorydefinitions.FactoryEvent, directory string) bool {
+	return validateCurrentBoardFactoryDirectory(events, directory) == nil
 }
