@@ -637,7 +637,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			ArtifactVerification:        result.ArtifactVerification.Clone(),
 			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
-			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
+			OutputWork:                  h.dispatchOutputWorkPtr(completed),
 			OutputResources:             h.dispatchOutputResourcesPtr(completed.OutputMutations),
 			ProviderFailure:             workers.CloneWorkFailureMetadata(result.FailureMetadata),
 			Usage:                       dispatchUsageEventPayload(result, completed),

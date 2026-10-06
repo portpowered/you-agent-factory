@@ -258,6 +258,9 @@ func TestCascadingFailureSelectedLoggerParity(t *testing.T) {
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("cascade = %#v, want two BFS moves", result)
 	}
+	if len(result.WorkStateChanges) != 2 {
+		t.Fatalf("cascade facts = %#v, want two BFS moves", result.WorkStateChanges)
+	}
 	entries := logs.FilterMessage("cascading-failure: propagating failure").All()
 	if len(entries) != 2 {
 		t.Fatalf("cascade diagnostics = %#v, want two records", entries)
@@ -268,6 +271,10 @@ func TestCascadingFailureSelectedLoggerParity(t *testing.T) {
 			t.Fatalf("cascade mutation %d = %#v", i, m)
 		}
 		dependency := []string{"parent", "child"}[i]
+		change := result.WorkStateChanges[i]
+		if change.WorkID != id || change.WorkTypeID != "task" || change.FromState != "init" || change.ToState != "failed" || change.TriggerWorkID != dependency || change.Source != work.WorkStateChangeSourceCascadingFailure || change.Reason != m.Reason {
+			t.Fatalf("cascade fact %d = %#v", i, change)
+		}
 		if entries[i].Level != zapcore.InfoLevel || !reflect.DeepEqual(entries[i].ContextMap(), map[string]any{"token": id, "dependency": dependency, "to_place": "task:failed"}) {
 			t.Fatalf("cascade diagnostic %d = %#v", i, entries[i])
 		}

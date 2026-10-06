@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -9,6 +10,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestFactoryEventHistory_RecordWorkStateChange_CascadeIDsSurviveRestartedTicks(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 6, 18, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return now })
+	change := work.WorkStateChangeRecord{SessionID: "session-1", WorkID: "child", WorkTypeID: "task", FromState: "init", ToState: "failed", Source: work.WorkStateChangeSourceCascadingFailure, TriggerWorkID: "parent", Reason: "cascading failure: dependency parent failed"}
+	history.RecordWorkStateChange(3, change, now)
+	stream, err := history.Subscribe(t.Context(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	successor := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return now })
+	if err := successor.SeedCanonicalEvents(stream.History); err != nil {
+		t.Fatal(err)
+	}
+	successor.RecordWorkStateChange(3, change, now.Add(time.Second))
+	resumed, err := successor.Subscribe(t.Context(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed.History) != 2 || !reflect.DeepEqual(resumed.History[0], stream.History[0]) || resumed.History[0].Id == resumed.History[1].Id {
+		t.Fatalf("successor changed retained identity or reused a move ID: %#v", resumed.History)
+	}
+	var payload interfaces.WorkStateChangeEventPayload
+	if err := resumed.History[1].DecodePayload(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.TriggerWorkID == nil || *payload.TriggerWorkID != "parent" || payload.Source != work.WorkStateChangeSourceCascadingFailure || payload.FromPlaceID != "task:init" || payload.ToPlaceID != "task:failed" {
+		t.Fatalf("successor cascade payload = %#v", payload)
+	}
+}
 
 func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.T) {
 	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)

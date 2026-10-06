@@ -27,7 +27,7 @@ func TestNewFactoryEngine_RequiresClock(t *testing.T) {
 	engine, err := NewFactoryEngine(
 		nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	if engine != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("NewFactoryEngine() = (%v, %v), want nil engine and clock dependency error", engine, err)
@@ -52,7 +52,7 @@ func newTestFactoryEngineWithClock(net *state.Net, marking *petri.Marking, runti
 		net, marking, runtimeSubsystems,
 		logger, clock, func() string { return fmt.Sprintf("test-id-%d", testWorkRequestIdentity.Add(1)) }, nil, nil,
 		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil,
 	)
 	if err != nil {
