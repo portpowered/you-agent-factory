@@ -47,6 +47,7 @@ type CommandRequest struct {
 	Inputs                   []workers.WorkInput
 	ExecutionLogger          logging.Logger
 	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
+	OwnedProcessObserver     platformprocess.OwnedProcessObserver
 }
 
 type CommandResult = platformprocess.CommandResult
@@ -391,6 +392,7 @@ func platformRequest(request CommandRequest) platformprocess.CommandRequest {
 		ExecutionScopeID:         request.FactorySessionID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+		OwnedProcessObserver:     request.OwnedProcessObserver,
 	}
 }
 
@@ -401,6 +403,7 @@ func workerRequest(request platformprocess.CommandRequest) CommandRequest {
 		FactorySessionID:         request.ExecutionScopeID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+		OwnedProcessObserver:     request.OwnedProcessObserver,
 	})
 }
 

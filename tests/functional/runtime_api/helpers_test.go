@@ -352,3 +352,12 @@ func stringPointerValue[T ~string](value *T) string {
 	}
 	return string(*value)
 }
+
+// FunctionalMonolithCleanup closes the package fixture after all parallel
+// customer scenarios finish. Native go test retains the same TestMain cleanup.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := runtimeapifixture.CloseSharedFixture(); err != nil {
+		t.Errorf("close package fixture: %v", err)
+	}
+}

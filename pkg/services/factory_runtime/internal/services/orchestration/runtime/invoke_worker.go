@@ -317,6 +317,7 @@ func executeRequestFromWorkstationRequest(
 			MockWorkers:              cfg.mockWorkersConfig.Clone(),
 			ProgressPublisher:        cfg.progressPublisher,
 			ProcessLifecycleObserver: execution.ProcessLifecycleObserver,
+			AttemptControlObserver:   execution.AttemptControlObserver,
 			ScriptEventRecorder:      runtimeScriptEventRecorder(cfg),
 			InferenceEventRecorder:   runtimeInferenceEventRecorder(cfg),
 			ExecutionLogger:          cfg.logger,

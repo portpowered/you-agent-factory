@@ -2351,6 +2351,96 @@ func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *tes
 	}
 }
 
+func TestBeginRuntimeAttempt_BindsAndRetiresProviderControl(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	var observed providers.AttemptControlObserver
+	var admitted *runtimeAttempt
+	bindCalls := 0
+	observerCalls := 0
+	fixture.request.Execution.Execution.AttemptControlObserver = func(control providers.AttemptControl) {
+		admitted.mu.Lock()
+		defer admitted.mu.Unlock()
+		if admitted.providerControl != control {
+			t.Fatal("external observer ran before retention or under the attempt lock")
+		}
+		observerCalls++
+	}
+	fixture.request.BindAttemptControl = func(observer providers.AttemptControlObserver) {
+		// The binder can inspect ownership without deadlocking, and only runs
+		// after admission has installed the exact handle.
+		r := fixture.service
+		r.mu.RLock()
+		admitted = r.runtimeAttemptControls[scopedWorkerAddress(fixture.request.ID, fixture.request.Execution.Execution.FactorySessionID)]
+		r.mu.RUnlock()
+		if admitted == nil {
+			t.Fatal("observer installed before runtime admission")
+		}
+		observed = observer
+		bindCalls++
+	}
+	attempt, err := fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+		coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil || attempt == nil || observed == nil || bindCalls != 1 {
+		t.Fatalf("admission = %v, %v, bindings %d", attempt, err, bindCalls)
+	}
+	t.Cleanup(func() {
+		_ = attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil)
+	})
+	owned := &projectedAttemptControl{identity: "runtime-owned"}
+	observed(nil)
+	observed(owned)
+	observed(&projectedAttemptControl{identity: "substitute"})
+	if admitted.providerControl != owned || observerCalls != 1 {
+		t.Fatal("bound observer lost the executing capability")
+	}
+	if err := attempt.Complete(t.Context(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+		t.Fatal(err)
+	}
+	observed(owned)
+	if admitted.providerControl != nil || !admitted.providerControlRetired || observerCalls != 1 {
+		t.Fatal("completed Runtime retained or reacquired control")
+	}
+}
+
+func TestBeginRuntimeAttempt_RejectedAdmissionDoesNotBindProviderControl(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	fixture.request.Key.DispatchID = "contradictory-dispatch"
+	bound := false
+	fixture.request.BindAttemptControl = func(providers.AttemptControlObserver) { bound = true }
+	attempt, err := fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+		coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) || attempt != nil || bound {
+		t.Fatalf("rejected admission = %v, %v, bound %t", attempt, err, bound)
+	}
+}
+
+func TestBeginRuntimeAttempt_ObserverBindingPanicClosesAdmission(t *testing.T) {
+	t.Parallel()
+	fixture := preparePerRuntimeAttemptFixture(t, "a", newEventsAppender())
+	var observed providers.AttemptControlObserver
+	fixture.request.BindAttemptControl = func(observer providers.AttemptControlObserver) {
+		observed = observer
+		panic("controlled binding failure")
+	}
+	func() {
+		defer func() {
+			if recover() != "controlled binding failure" {
+				t.Fatal("binding panic was not propagated")
+			}
+		}()
+		_, _ = fixture.service.BeginRuntimeAttempt(t.Context(), fixture.request, fixture.service.execution,
+			coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	}()
+	observed(&projectedAttemptControl{identity: "late"})
+	r := fixture.service
+	if len(r.runtimeAttemptControls) != 0 || len(r.runtimeAttemptOwners) != 0 {
+		t.Fatal("binding panic stranded admitted runtime ownership")
+	}
+	assertPerRuntimeAttemptState(t, t.Context(), fixture, workersessions.StateFailed)
+}
+
 func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
 	var r *registry
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}, newTestRegistry(t).execution, platformclock.Real{}, platformclock.Real{}, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
@@ -7651,6 +7741,9 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 	customObserver := &coverageProcessObserver{}
 	customRequest := request
 	customRequest.Execution.ProcessLifecycleObserver = customObserver
+	owned := &projectedAttemptControl{identity: "owned-attempt"}
+	var captured providers.AttemptControl
+	customRequest.Execution.AttemptControlObserver = func(control providers.AttemptControl) { captured = control }
 	supervision := newSupervision("handoff-dispatch", "")
 	setCoverageAccepted(supervision, true)
 	_, err := executeWithService(context.Background(), coverageExecution{
@@ -7658,11 +7751,131 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 			if request.Input.ProcessLifecycleObserver != customObserver {
 				t.Fatalf("Execute replaced a caller-provided process observer")
 			}
+			if request.Input.AttemptControlObserver == nil {
+				t.Fatal("execution handoff dropped the attempt observer")
+			}
+			request.Input.AttemptControlObserver(owned)
 			return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 		},
 	}, customRequest, supervision, func() {}, nil)
 	if err != nil || customObserver.started != 0 || customObserver.exited != 0 {
 		t.Fatalf("executeWithService(custom observer) = %v, observer=%#v, want success without replacement", err, customObserver)
+	}
+	if captured != owned {
+		t.Fatal("Worker Session observer did not receive the executing attempt's handle")
+	}
+}
+
+type projectedAttemptControl struct{ identity string }
+
+func (*projectedAttemptControl) ForceKill(context.Context) (bool, error) { return false, nil }
+
+func TestWorkerExecutionHandoff_RetainsAndRetiresExactProviderControl(t *testing.T) {
+	t.Parallel()
+	for _, ending := range []string{"success", "failure", "panic"} {
+		t.Run(ending, func(t *testing.T) {
+			t.Parallel()
+			request := dispatchHandoff("owned-dispatch")
+			s := newSupervision("owned-dispatch", "")
+			setCoverageAccepted(s, true)
+			owned := &projectedAttemptControl{identity: "owned"}
+			var late providers.AttemptControlObserver
+			observerCalls := 0
+			request.Execution.AttemptControlObserver = func(control providers.AttemptControl) {
+				// Reading under this lock also proves the external callback is
+				// invoked after retention and without holding the lock itself.
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				if control != owned || s.providerAttempt.control != owned {
+					t.Fatal("observer did not receive the retained owned capability")
+				}
+				observerCalls++
+			}
+			_, err := executeWithService(t.Context(), coverageExecution{
+				execute: func(_ context.Context, req workers.ExecuteRequest) (workers.ExecuteResult, error) {
+					late = req.Input.AttemptControlObserver
+					late(nil)
+					late(owned)
+					late(&projectedAttemptControl{identity: "substitute"})
+					if ending == "panic" {
+						panic("controlled executor failure")
+					}
+					if ending == "failure" {
+						return workers.ExecuteResult{}, errors.New("controlled executor failure")
+					}
+					return coverageExecutionResult(req, workers.ExecutionOutcomeAccepted), nil
+				},
+			}, request, s, func() {}, nil)
+			if (err != nil) != (ending != "success") || observerCalls != 1 {
+				t.Fatalf("execution ending %s: error %v, observer calls %d", ending, err, observerCalls)
+			}
+			if !s.providerAttempt.retired || s.providerAttempt.control != nil {
+				t.Fatal("execution return retained force authority")
+			}
+			late(owned)
+			if observerCalls != 1 || s.providerAttempt.control != nil {
+				t.Fatal("late callback revived the completed generation")
+			}
+		})
+	}
+}
+
+func TestWorkerSupervision_ProviderControlGenerationCannotRetargetReplacement(t *testing.T) {
+	t.Parallel()
+	s := newSupervision("reused-attempt", "")
+	oldRequest := workers.ExecuteRequest{}
+	retireOld := s.bindProviderAttemptControl(&oldRequest)
+	old := &projectedAttemptControl{identity: "old"}
+	oldRequest.Input.AttemptControlObserver(old)
+	oldSlot := s.providerAttempt
+
+	// A retry/continuation replaces the slot under the same mutex as its
+	// dispatch identity. Exercise reuse of that identity as well as pointer
+	// replacement, so an identity-only comparison would fail this assertion.
+	s.mu.Lock()
+	s.providerAttempt = &providerAttemptControl{}
+	s.mu.Unlock()
+	newRequest := workers.ExecuteRequest{}
+	retireNew := s.bindProviderAttemptControl(&newRequest)
+	defer retireNew()
+	current := &projectedAttemptControl{identity: "replacement"}
+	newRequest.Input.AttemptControlObserver(current)
+	oldRequest.Input.AttemptControlObserver(old)
+	retireOld()
+	if s.providerAttempt.control != current || s.providerAttempt.retired || !oldSlot.retired || oldSlot.control != nil {
+		t.Fatal("old observer or retirement changed replacement authority")
+	}
+}
+
+func TestWorkerSupervision_ReplacementAdmissionInstallsFreshProviderGeneration(t *testing.T) {
+	t.Parallel()
+	for _, replacement := range []string{"retry", "continuation"} {
+		t.Run(replacement, func(t *testing.T) {
+			t.Parallel()
+			r, s, reference := newPausedContinuationRegistry(t)
+			request := workers.ExecuteRequest{}
+			retire := s.bindProviderAttemptControl(&request)
+			defer retire()
+			old := &projectedAttemptControl{identity: "old"}
+			request.Input.AttemptControlObserver(old)
+			original := s.providerAttempt
+			if replacement == "retry" {
+				if _, ready := r.prepareRetryAttempt("worker-1", s); !ready {
+					t.Fatal("retry was not admitted")
+				}
+			} else {
+				if _, _, ready := r.prepareContinuation("worker-1", s, reference); !ready {
+					t.Fatal("continuation was not admitted")
+				}
+			}
+			if s.providerAttempt == original || s.providerAttempt.control != nil || s.providerAttempt.retired {
+				t.Fatal("replacement retained the previous execution's capability")
+			}
+			request.Input.AttemptControlObserver(old)
+			if s.providerAttempt.control != nil {
+				t.Fatal("old execution callback attached to the replacement")
+			}
+		})
 	}
 }
 

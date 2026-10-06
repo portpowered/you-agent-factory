@@ -14,6 +14,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -827,6 +828,43 @@ func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
 	}
 }
 
+func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T) {
+	t.Parallel()
+	for _, withObserver := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%t", withObserver), func(t *testing.T) {
+			t.Parallel()
+			owned := &projectedAttemptControl{identity: "owned"}
+			var retained, forwarded providers.AttemptControl
+			sessions := &beginRuntimeAttemptService{
+				Service:         &fakeWorkerSessionsService{},
+				controlObserver: func(control providers.AttemptControl) { retained = control },
+			}
+			cfg := &runtimeConfig{workerAttempts: sessions}
+			request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+			execution := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{RuntimeID: "runtime", DispatchID: "dispatch", AttemptID: "physical"}}
+			if withObserver {
+				execution.Input.AttemptControlObserver = func(control providers.AttemptControl) {
+					if retained != control {
+						t.Fatal("external callback ran before control retention")
+					}
+					forwarded = control
+				}
+			}
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			if terminal, err := prepare(t.Context(), &execution); err != nil || terminal == nil {
+				t.Fatalf("preparation = %v, %v", terminal, err)
+			}
+			if execution.Input.AttemptControlObserver == nil {
+				t.Fatal("preparation did not install the bound observer in the executing request")
+			}
+			execution.Input.AttemptControlObserver(owned)
+			if retained != owned || (withObserver && forwarded != owned) {
+				t.Fatal("executing handle lost during runtime preparation")
+			}
+		})
+	}
+}
+
 func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("owned observation close failure")
@@ -870,19 +908,21 @@ func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
 type beginRuntimeAttemptService struct {
 	factory.WorkerAttemptOpener
 	workersessions.Service
-	request       workersessions.RuntimeAttemptRequest
-	completed     *workers.WorkstationDispatchResult
-	completeErr   error
-	completeCalls int
-	beginErr      error
-	existing      workersessions.Session
-	getErr        error
-	closedRuntime string
-	closeErr      error
-	execution     workers.Service
-	scheduler     platformclock.TimerSource
-	clock         platformclock.Source
-	cancel        func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	request         workersessions.RuntimeAttemptRequest
+	completed       *workers.WorkstationDispatchResult
+	completeErr     error
+	completeCalls   int
+	beginErr        error
+	existing        workersessions.Session
+	getErr          error
+	closedRuntime   string
+	closeErr        error
+	execution       workers.Service
+	scheduler       platformclock.TimerSource
+	clock           platformclock.Source
+	cancel          func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	controlObserver providers.AttemptControlObserver
+	resolveResult   func(workers.WorkstationDispatchResult, error) (workers.WorkstationDispatchResult, bool, error)
 }
 
 func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Context, runtimeID string) error {
@@ -913,16 +953,65 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	if service.beginErr != nil {
 		return nil, service.beginErr
 	}
+	if request.BindAttemptControl != nil {
+		if service.controlObserver == nil {
+			request.BindAttemptControl(nil)
+		} else {
+			request.BindAttemptControl(func(control providers.AttemptControl) {
+				service.controlObserver(control)
+				if next := request.Execution.Execution.AttemptControlObserver; next != nil {
+					next(control)
+				}
+			})
+		}
+	}
 	return workersessions.RuntimeAttempt(func(
 		_ context.Context,
 		result workers.WorkstationDispatchResult,
 		err error,
-	) error {
+	) (workers.WorkstationDispatchResult, bool, error) {
 		service.completeCalls++
 		if service.completed == nil {
 			service.completed = &result
 			service.completeErr = err
 		}
-		return nil
+		if service.resolveResult != nil {
+			return service.resolveResult(result, err)
+		}
+		return result, false, err
 	}), nil
+}
+
+func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
+	t.Parallel()
+	nativeErr := errors.New("signal exit")
+	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{},
+		resolveResult: func(result workers.WorkstationDispatchResult, _ error) (workers.WorkstationDispatchResult, bool, error) {
+			result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+			return result, true, nil
+		}}
+	execution := attemptTestRequest("dispatch", "physical")
+	request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
+	cfg := &runtimeConfig{workerAttempts: sessions}
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	lifecycle := newAttemptLifecycle(attemptExecuteFunc(func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed,
+			Output:           workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}}},
+			StructuredResult: map[string]any{"partial": true}, StructuredResultPresent: true,
+			Continuation: &workers.ProviderContinuationRef{ProviderSessionID: "partial"},
+			Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Message: "signal exit"}}, nativeErr
+	}), func() string { return "physical" }, 1)
+	var observed workers.ExecuteResult
+	var observedErr error
+	if err := lifecycle.startWithPreparation(t.Context(), execution, false,
+		func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) {
+			observed, observedErr = result, err
+		}, false, prepare); err != nil {
+		t.Fatal(err)
+	}
+	if sessions.completeCalls != 1 || observed.Outcome != workers.ExecutionOutcomeCanceled || observed.Cancellation == nil || observedErr != nil ||
+		len(observed.Output.Primary) != 0 || observed.ProposedOutputPresent || observed.StructuredResultPresent || observed.StructuredResult != nil || observed.Continuation != nil ||
+		observed.Failure == nil || observed.Failure.Family != workers.WorkFailureFamilyTerminal {
+		t.Fatalf("Runtime delivered force as retry/routing result: %#v, %v", observed, observedErr)
+	}
 }

@@ -114,6 +114,7 @@ func workerCommandRequest(request providers.CommandRequest) workerprocess.Comman
 	private.FactorySessionID = request.FactorySessionID
 	private.ExecutionLogger = request.ExecutionLogger
 	private.ProcessLifecycleObserver = request.ProcessLifecycleObserver
+	private.OwnedProcessObserver = request.OwnedProcessObserver
 	return private
 }
 

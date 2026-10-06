@@ -14,6 +14,9 @@ import (
 // must not inspect process-wide operating-system state itself.
 type Local struct {
 	AllowRenameReplacement bool
+	// WorkingDirectory supplies Getwd without changing the host process directory.
+	// An empty value retains the operating system's current directory.
+	WorkingDirectory string
 }
 
 // WorkingDirectory is the exact process-directory effect supplied by this
@@ -80,7 +83,12 @@ func (Local) Create(path string) (io.WriteCloser, error) { return os.Create(path
 func (Local) OpenFile(path string, flag int, perm fs.FileMode) (io.WriteCloser, error) {
 	return os.OpenFile(path, flag, perm)
 }
-func (Local) Getwd() (string, error)                       { return os.Getwd() }
+func (local Local) Getwd() (string, error) {
+	if local.WorkingDirectory != "" {
+		return local.WorkingDirectory, nil
+	}
+	return os.Getwd()
+}
 func (Local) Stat(path string) (fs.FileInfo, error)        { return os.Stat(path) }
 func (Local) Lstat(path string) (fs.FileInfo, error)       { return os.Lstat(path) }
 func (Local) Readlink(path string) (string, error)         { return os.Readlink(path) }

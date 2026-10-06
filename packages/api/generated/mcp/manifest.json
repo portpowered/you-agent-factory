@@ -528,7 +528,8 @@
             "enum": [
               "CANCEL",
               "TERMINATE",
-              "INTERRUPT"
+              "INTERRUPT",
+              "KILL"
             ]
           },
           "requestId": {
@@ -540,6 +541,10 @@
             "minLength": 1
           },
           "replacementMessage": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedAttemptId": {
             "type": "string",
             "minLength": 1
           }

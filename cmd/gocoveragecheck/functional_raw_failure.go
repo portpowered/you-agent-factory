@@ -160,6 +160,16 @@ func (capture *functionalRawFailureCapture) beginInvocation(invocation commandIn
 	capture.activeCommand = append([]string{invocation.name}, invocation.args...)
 	capture.executedCommands = append(capture.executedCommands, slices.Clone(capture.activeCommand))
 	capture.activePackages = coverageInvocationPackages(invocation.args)
+	if len(invocation.monolithGroups) > 0 {
+		capture.activePackages = slices.DeleteFunc(capture.activePackages, func(pkg string) bool {
+			return pkg == functionalMonolithPackage
+		})
+		for _, original := range invocation.monolithGroups {
+			capture.activePackages = append(capture.activePackages, original)
+		}
+		slices.Sort(capture.activePackages)
+		capture.activePackages = slices.Compact(capture.activePackages)
+	}
 	capture.commandExitStatus = 0
 }
 
@@ -249,7 +259,7 @@ func writeRawFailureRendezvousMarker(path string) error {
 func parseFunctionalRawFailureEvent(line []byte) (goTestTimingEvent, bool, error) {
 	var event goTestTimingEvent
 	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil {
-		return goTestTimingEvent{}, false, errors.New("unattributable or malformed go test JSON output")
+		return goTestTimingEvent{}, false, fmt.Errorf("unattributable or malformed go test JSON output: %.200s", line)
 	}
 	if event.Package == "" {
 		// `go test -json -x` emits compiler and linker trace records as
@@ -258,7 +268,7 @@ func parseFunctionalRawFailureEvent(line []byte) (goTestTimingEvent, bool, error
 		if event.Action == "build-output" {
 			return event, true, nil
 		}
-		return goTestTimingEvent{}, false, errors.New("unattributable or malformed go test JSON output")
+		return goTestTimingEvent{}, false, fmt.Errorf("unattributable or malformed go test JSON output: %.200s", line)
 	}
 	return event, false, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	client "github.com/portpowered/infinite-you/pkg/transports/http/client"
@@ -24,7 +25,8 @@ type HostClient interface {
 	ReadWorkerSessionLogs(context.Context, client.WorkerSessionID, *client.ReadWorkerSessionLogsParams, ...client.RequestEditorFn) (*http.Response, error)
 	StreamWorkerSessionEventsByTopLevelWorkerSessionId(context.Context, client.WorkerSessionID, *client.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
 	CancelWorkerSession(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
-	TerminateWorkerSession(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
+	TerminateWorkerSessionWithBody(context.Context, client.WorkerSessionID, string, io.Reader, ...client.RequestEditorFn) (*http.Response, error)
+	TerminateWorkerSession(context.Context, client.WorkerSessionID, client.TerminateWorkerSessionJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
 	InterruptWorkerSession(context.Context, client.WorkerSessionID, client.InterruptWorkerSessionJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
 }
 
@@ -153,7 +155,12 @@ func (a *Adapter) control(ctx context.Context, input controlInput) (any, *toolEr
 	case "CANCEL":
 		response, err = a.host.CancelWorkerSession(ctx, input.WorkerSessionID)
 	case "TERMINATE":
-		response, err = a.host.TerminateWorkerSession(ctx, input.WorkerSessionID)
+		response, err = a.host.TerminateWorkerSessionWithBody(ctx, input.WorkerSessionID, "application/json", nil)
+	case "KILL":
+		force := true
+		response, err = a.host.TerminateWorkerSession(ctx, input.WorkerSessionID, client.TerminateWorkerSessionJSONRequestBody{
+			Force: &force, RequestId: input.RequestID, ExpectedAttemptId: input.ExpectedAttemptID,
+		})
 	case "INTERRUPT":
 		response, err = a.host.InterruptWorkerSession(ctx, input.WorkerSessionID, client.InterruptWorkerSessionJSONRequestBody{
 			RequestId: *input.RequestID, SuccessorWorkerSessionId: *input.SuccessorWorkerSessionID, ReplacementMessage: *input.ReplacementMessage,
@@ -163,6 +170,9 @@ func (a *Adapter) control(ctx context.Context, input controlInput) (any, *toolEr
 		defer func() { _ = response.Body.Close() }()
 	}
 	result, failure := decodeResponse(response, err, input.WorkerSessionID)
+	if failure == nil && input.Operation == "KILL" {
+		return validateKillResponse(result, input.WorkerSessionID)
+	}
 	if failure != nil && input.SuccessorWorkerSessionID != nil && failure.Details != nil {
 		if _, partial := failure.Details["phase"]; partial {
 			failure.Details["successorWorkerSessionId"] = *input.SuccessorWorkerSessionID

@@ -20,6 +20,9 @@ import (
 // execution remains truthfully unsupported rather than becoming a fabricated
 // resumable session.
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	if req.Force {
+		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl)
+	}
 	if err := r.validateControlTarget(req); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -152,7 +155,7 @@ func validateResumeAssociationForSupervision(session workersessions.Session, sup
 	dispatchID := strings.TrimSpace(supervision.dispatchID)
 	turnID := strings.TrimSpace(supervision.turnID)
 	accepted := supervision.accepted
-	activeControl := supervision.controlActive || supervision.requestedAction != "" || supervision.controlAction != ""
+	activeControl := supervision.controlActive || supervision.forceJournalPending != 0 || supervision.controlPersistenceLost || supervision.requestedAction != "" || supervision.controlAction != ""
 	continuing := supervision.continuing
 	publishing := supervision.publishing
 	supervision.mu.Unlock()
@@ -230,7 +233,7 @@ func (r *registry) prepareContinuation(
 	if !supervision.accepted || supervision.dispatchID == "" ||
 		association.DispatchID != supervision.dispatchID || association.AttemptID != supervision.dispatchID ||
 		strings.TrimSpace(association.TurnID) != strings.TrimSpace(supervision.turnID) ||
-		supervision.continuing || supervision.publishing || supervision.controlActive ||
+		supervision.continuing || supervision.publishing || supervision.controlActive || supervision.forceJournalPending != 0 || supervision.controlPersistenceLost ||
 		supervision.requestedAction != "" || supervision.controlAction != "" {
 		return workers.WorkstationDispatchRequest{}, "", false
 	}
@@ -242,6 +245,7 @@ func (r *registry) prepareContinuation(
 	continuationRef := reference.ContinuationRef()
 	continuation.Execution.Continuation = &continuationRef
 	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
+	supervision.providerAttempt = &providerAttemptControl{}
 	delete(r.dispatchOwners, previousDispatchID)
 	r.dispatchOwners[supervision.dispatchID] = id
 	supervision.publishing = true
@@ -305,6 +309,9 @@ func (r *registry) Cancel(ctx context.Context, req workersessions.ControlRequest
 }
 
 func (r *registry) Terminate(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	if req.Force {
+		return r.forceTerminate(ctx, req)
+	}
 	return r.cancelControl(ctx, req, workersessions.ControlActionTerminate, true)
 }
 
@@ -313,6 +320,9 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 }
 
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
+	if req.Force {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, errors.Join(workersessions.ErrInvalidControlRecord, workersessions.ErrInvalidForceControl)
+	}
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -635,27 +645,34 @@ type supervision struct {
 	startedAt  time.Time
 	deadlineAt time.Time
 
-	mu                 sync.Mutex
-	publishing         bool
-	accepted           bool
-	serverOwned        bool
-	continuing         bool
-	resumeCount        uint
-	preAdmissionAction workersessions.ControlAction
-	requestedAction    workersessions.ControlAction
-	controlAction      workersessions.ControlAction
-	controlActive      bool
-	controlDone        chan struct{}
-	controlHistory     *controlHistoryReservation
-	deadlineExceeded   bool
-	processGone        bool
-	interrupting       bool
-	interruptRequestID string
-	interruptDone      chan struct{}
-	result             workers.WorkstationDispatchResult
-	err                error
-	cancel             context.CancelFunc
-	cancelFailure      func() error
+	mu                     sync.Mutex
+	publishing             bool
+	accepted               bool
+	serverOwned            bool
+	continuing             bool
+	resumeCount            uint
+	preAdmissionAction     workersessions.ControlAction
+	requestedAction        workersessions.ControlAction
+	controlAction          workersessions.ControlAction
+	controlActive          bool
+	forcePending           bool
+	forceConfirmed         bool
+	forceJournalPending    int
+	forceJournalDone       chan struct{}
+	controlPersistenceLost bool
+	forceSafetyClaimed     bool
+	controlDone            chan struct{}
+	controlHistory         *controlHistoryReservation
+	deadlineExceeded       bool
+	processGone            bool
+	interrupting           bool
+	interruptRequestID     string
+	interruptDone          chan struct{}
+	result                 workers.WorkstationDispatchResult
+	err                    error
+	cancel                 context.CancelFunc
+	cancelFailure          func() error
+	providerAttempt        *providerAttemptControl
 
 	// retryBudget is the total attempt allowance for this supervision and
 	// attemptsMade counts the attempts actually published. retryPending records
@@ -703,15 +720,16 @@ func newSupervision(dispatchID, turnID string, executions ...workers.Workstation
 		execution = executions[0]
 	}
 	return &supervision{
-		dispatchID:  dispatchID,
-		turnID:      turnID,
-		execution:   cloneWorkstationDispatchRequest(execution),
-		retryBudget: 1,
-		published:   make(chan struct{}),
-		paused:      make(chan struct{}),
-		admitted:    make(chan struct{}),
-		done:        make(chan struct{}),
-		driverDone:  make(chan struct{}),
+		providerAttempt: &providerAttemptControl{},
+		dispatchID:      dispatchID,
+		turnID:          turnID,
+		execution:       cloneWorkstationDispatchRequest(execution),
+		retryBudget:     1,
+		published:       make(chan struct{}),
+		paused:          make(chan struct{}),
+		admitted:        make(chan struct{}),
+		done:            make(chan struct{}),
+		driverDone:      make(chan struct{}),
 	}
 }
 

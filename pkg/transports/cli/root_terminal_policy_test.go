@@ -700,6 +700,29 @@ func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionForceFlagsReachControlOperation(t *testing.T) {
+	var control workersessionscli.ControlConfig
+	root := withTestInjectedPlatformRoles(CommandFactory{
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+		TerminateWorkerSession: func(config workersessionscli.ControlConfig) error {
+			control = config
+			return nil
+		},
+	}).NewCommand(context.Background(), nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"worker-sessions", "terminate", "session-1", "--force",
+		"--request-id", "kill-1", "--expected-attempt-id", "attempt-1", "--remote", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !control.Force || control.RequestID != "kill-1" || control.ExpectedAttemptID != "attempt-1" ||
+		control.WorkerSessionID != "session-1" || !control.Remote || !control.JSON || control.Action != workersessions.ControlActionTerminate {
+		t.Fatalf("force config = %#v", control)
+	}
+}
+
 func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T) {
 	cases := []struct {
 		name string

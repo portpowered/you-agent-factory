@@ -2171,7 +2171,6 @@ testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_t
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionTimeoutReturnsNoPartialReport::deadline::1
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::TestMetricsSessionTimeoutReturnsNoPartialReport::deadline::2
 testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/failure_isolation_test.go::waitBoundarySignal::deadline::1
-testsleep-deadline-test|tests/functional/factory/visualization/runtime_metrics_test|tests/functional/factory/visualization/runtime_metrics/shared_cli_process_test.go::TestMain::deadline::1
 testsleep-deadline-test|tests/functional/internal/support_test|tests/functional/internal/support/root_run_host_test.go::TestRootRunFunctionalHostContextCancellationCompletesAndReleasesListener::deadline::1
 testsleep-deadline-test|tests/functional/internal/support_test|tests/functional/internal/support/root_run_host_test.go::TestRootRunFunctionalHostReportsOccupiedAddressAndAllowsReuse::deadline::1
 testsleep-deadline-test|tests/functional/internal/support_test|tests/functional/internal/support/root_run_host_test.go::TestRootRunFunctionalHostShutdownIsBoundedAndIdempotent::deadline::1
@@ -2358,7 +2357,6 @@ testsleep-sleep-test|pkg/transports/http/servertests/factorysessionsse|pkg/trans
 testsleep-sleep-test|pkg/wire|pkg/wire/cli_http_test.go::TestModelAssetHTTPClientAllowsBodyPastFormerWholeTransferBudget::sleep::1
 testsleep-sleep-test|pkg/wire|pkg/wire/models_gallery_backend_live_test.go::TestLocalAIGalleryCUDAInstalledBackendLive::sleep::1
 testsleep-sleep-test|tests/functional/bootstrap_portability|tests/functional/bootstrap_portability/helpers_functionallong_test.go::waitForGeneratedWorkAtPlace::sleep::1
-testsleep-sleep-test|tests/functional/product/customer_journeys_test|tests/functional/product/customer_journeys/factory_runtime_orchestrators_petri_guards_eligibility_test.go::waitForMinimumWorkAtCustomerState::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::assertNoAdditionalProviderCommandWork::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::waitForActivatedFactoryRuntime::sleep::1
 testsleep-sleep-test|tests/functional/factory/execution_test|tests/functional/factory/execution/current_helpers_long_test.go::waitForSubmittedWorkAtPlace::sleep::1
@@ -2372,7 +2370,6 @@ testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/provid
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_concurrency_test.go::waitForACPTestFile::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/daemon_process_test.go::removeACPDaemonHome::sleep::1
 testsleep-sleep-test|tests/functional/providers/acp_test|tests/functional/providers/acp/functional_rpc_peer_test.go::functionalRPCPeer.holdConcurrentPrompt::sleep::1
-testsleep-sleep-test|tests/functional/providers|tests/functional/providers/cli_script_executor_test.go::waitForBaseRunnerCalls::sleep::1
 testsleep-sleep-test|tests/functional/providers|tests/functional/providers/mock_workers_script_test.go::TestMockWorkers_ScriptHelper::sleep::1
 testsleep-sleep-test|tests/functional/providers|tests/functional/providers/runtime_logging_smoke_test.go::removeRuntimeLoggingSmokeDir::sleep::1
 testsleep-sleep-test|tests/functional/runtime_api|tests/functional/runtime_api/api_functional_server_override_regression_test.go::waitForFunctionalServerCompletion::sleep::1

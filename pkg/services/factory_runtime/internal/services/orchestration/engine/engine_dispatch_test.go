@@ -406,6 +406,72 @@ func TestWorkResultForCompletedDispatchPreservesResolvedClassificationLabel(t *t
 	}
 }
 
+func TestCanceledDispatchResponseDiscardsProposalAndRetry(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []workerexecution.DispatchCancellationReason{
+		workerexecution.DispatchCancellationReasonCanceled,
+		workerexecution.DispatchCancellationReasonSuperseded,
+	} {
+		t.Run(string(reason), func(t *testing.T) {
+			t.Parallel()
+			result := workerexecution.WorkResult{
+				DispatchID: "attempt", Outcome: workerexecution.OutcomeAccepted,
+				Output: "partial", Feedback: "retry", SelectedClassificationLabel: "done",
+				OutputContent:      []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "partial"}},
+				RecordedOutputWork: []work.FactoryWorkItem{{ID: "partial-work"}},
+				StructuredResult:   map[string]any{"partial": true}, StructuredResultPresent: true,
+				Continuation:    &workerexecution.ProviderContinuationRef{ProviderSessionID: "partial"},
+				FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown},
+				FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyRetryable},
+				Metrics:         workerexecution.WorkMetrics{RetryCount: 2},
+			}
+			completed := interfaces.CompletedDispatch{
+				DispatchID: "attempt", Outcome: workerexecution.OutcomeCanceled, Reason: string(reason),
+				Cancellation:                &workerexecution.DispatchCancellation{Reason: reason},
+				SelectedClassificationLabel: "done", FailureDetail: result.FailureDetail,
+			}
+			var responses []workerexecution.WorkResult
+			engine := &FactoryEngine{
+				runtimeState: &RuntimeState{Dispatches: map[string]*interfaces.DispatchEntry{
+					"attempt": {DispatchID: "attempt"},
+				}, InFlightCount: 1},
+				recordResponse: func(_ int, response workerexecution.WorkResult, _ interfaces.CompletedDispatch) {
+					responses = append(responses, response)
+				},
+			}
+			for range 2 {
+				engine.retireCompletedDispatches([]workerexecution.WorkResult{result}, map[string]interfaces.CompletedDispatch{"attempt": completed})
+			}
+			if len(responses) != 1 || engine.runtimeState.InFlightCount != 0 || len(engine.runtimeState.DispatchHistory) != 1 {
+				t.Fatalf("retirement responses/history/in-flight = %d/%d/%d", len(responses), len(engine.runtimeState.DispatchHistory), engine.runtimeState.InFlightCount)
+			}
+			assertCanceledDispatchResponse(t, responses[0], reason)
+			responses[0].Cancellation.Reason = "producer-mutation-check"
+			if completed.Cancellation.Reason != reason || result.OutputContent[0].Text != "partial" {
+				t.Fatal("response projection mutated producer-owned result or cancellation")
+			}
+		})
+	}
+}
+
+func assertCanceledDispatchResponse(t *testing.T, result workerexecution.WorkResult, reason workerexecution.DispatchCancellationReason) {
+	t.Helper()
+	if result.Outcome != workerexecution.OutcomeCanceled || result.Cancellation == nil || result.Cancellation.Reason != reason || result.Error != string(reason) || result.Metrics.RetryCount != 2 {
+		t.Fatalf("response lost cancellation or measured metrics: %#v", result)
+	}
+	if result.Output != "" || len(result.OutputContent) != 0 || len(result.RecordedOutputWork) != 0 || result.StructuredResult != nil || result.StructuredResultPresent {
+		t.Fatalf("canceled response retained output: %#v", result)
+	}
+	assertCanceledDispatchResponseHasNoRetry(t, result)
+}
+
+func assertCanceledDispatchResponseHasNoRetry(t *testing.T, result workerexecution.WorkResult) {
+	t.Helper()
+	if result.Feedback != "" || result.SelectedClassificationLabel != "" || result.Continuation != nil || result.FailureDetail != nil || result.FailureMetadata != nil {
+		t.Fatalf("canceled response retained routing or retry authority: %#v", result)
+	}
+}
+
 func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")

@@ -603,13 +603,36 @@ func executeGeneratedWorkerSessionsControlWithValues(
 	if err != nil {
 		return err
 	}
-	return operation(workersessionscli.ControlConfig{
+	config := workersessionscli.ControlConfig{
 		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		WorkerSessionID: workerSessionID, Action: action, OutputFormat: outputFormat,
 		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json"),
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug, Local: local,
-	})
+	}
+	if action == workersessions.ControlActionTerminate {
+		if err := resolveWorkerSessionForceValues(&config, values); err != nil {
+			return err
+		}
+		if !config.Force && (cmd.Flags().Changed("request-id") || cmd.Flags().Changed("expected-attempt-id")) {
+			return &workersessionscli.CLIError{Code: "WORKER_SESSION_CONTROL_INVALID", Message: "force control identities require --force"}
+		}
+	}
+	return operation(config)
+}
+
+func resolveWorkerSessionForceValues(config *workersessionscli.ControlConfig, values map[string]any) error {
+	var err error
+	config.Force, err = commandInputValue[bool](values, "you.worker-sessions.terminate.flag.force")
+	if err != nil {
+		return err
+	}
+	config.RequestID, err = commandInputValue[string](values, "you.worker-sessions.terminate.flag.request-id")
+	if err != nil {
+		return err
+	}
+	config.ExpectedAttemptID, err = commandInputValue[string](values, "you.worker-sessions.terminate.flag.expected-attempt-id")
+	return err
 }
 
 func installWorkerSessionsStreamModeConflictGuard(command *cobra.Command) error {

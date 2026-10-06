@@ -58,6 +58,11 @@ type RuntimeAttemptRequest struct {
 	ID                          string
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
+	// BindAttemptControl installs the exact admitted generation's observer into
+	// the externally executed request. It runs once after admission, before
+	// BeginRuntimeAttempt returns, and must return promptly. The observer is
+	// ephemeral; late publications cannot reacquire a completed/replaced owner.
+	BindAttemptControl func(providers.AttemptControlObserver) `json:"-"`
 }
 
 // Validate rejects contradictory routing before opening a topic or capture.
@@ -81,7 +86,7 @@ func (r RuntimeAttemptRequest) Validate() error {
 // doubles do not need to implement it. Complete is idempotent and records the
 // terminal observation; Runtime remains authoritative for admission,
 // cancellation, and the detached execution itself.
-type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) (workers.WorkstationDispatchResult, bool, error)
 
 // Complete commits the terminal observation through the RuntimeAttempt handle.
 func (a RuntimeAttempt) Complete(
@@ -91,6 +96,19 @@ func (a RuntimeAttempt) Complete(
 ) error {
 	if a == nil {
 		return errors.New("worker sessions: runtime attempt is unavailable")
+	}
+	_, _, err := a.Resolve(ctx, result, dispatchErr)
+	return err
+}
+
+// Resolve joins completion and returns the authoritative dispatch result. A
+// confirmed exact force termination replaces the provider's signal-exit failure
+// with cancellation so Runtime cannot retry or route its partial output. The
+// boolean reports confirmed force independently of ordinary cancellation; the
+// error reports completion acknowledgement, not the supplied execution error.
+func (a RuntimeAttempt) Resolve(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) (workers.WorkstationDispatchResult, bool, error) {
+	if a == nil {
+		return result, false, errors.New("worker sessions: runtime attempt is unavailable")
 	}
 	return a(ctx, result, dispatchErr)
 }
@@ -703,6 +721,12 @@ var (
 	// ErrInvalidControlRecord reports a malformed durable control request or
 	// outcome payload.
 	ErrInvalidControlRecord = errors.New("worker session: invalid control record")
+	// ErrInvalidForceControl reports a force request lacking its exact caller
+	// identities, or supplied to a control other than Terminate.
+	ErrInvalidForceControl = errors.New("worker session: invalid force control")
+	// ErrForceTerminationUnconfirmed reports a force effect whose owned tree
+	// or authoritative execution could not be confirmed stopped.
+	ErrForceTerminationUnconfirmed = errors.New("worker session: force termination unconfirmed")
 	// ErrSessionAlreadyExists reports Reserve called with an identity that is
 	// already registered.
 	ErrSessionAlreadyExists = errors.New("worker session: already exists")

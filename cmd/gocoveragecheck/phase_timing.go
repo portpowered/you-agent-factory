@@ -145,6 +145,6 @@ func (cfg config) finishCoveragePhase(name coveragePhaseName, status string) {
 	}
 }
 
-func unitCoveragePhaseTimingEnabled(cfg config) bool {
-	return cfg.suite == "" || cfg.suite == unitCoverageSuite
+func coveragePhaseTimingEnabled(cfg config) bool {
+	return cfg.suite == "" || cfg.suite == unitCoverageSuite || cfg.suite == functionalCoverageSuite
 }

@@ -27,7 +27,7 @@ import (
 func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 	t.Parallel()
 	serverURL, env, workingDirectory, scopeClock, home := startDocumentedMetricsServer(t)
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 
 	publicID := discoverDocumentedLiveSession(t, process, serverURL, env, workingDirectory)
 	writeDocumentedMetrics(t, home, publicID)

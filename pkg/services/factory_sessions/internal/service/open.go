@@ -726,7 +726,7 @@ type workerScopeBinder interface {
 		*workers.MockWorkersConfig,
 		platformprocess.CommandRunner,
 		workers.ProgressPublisher,
-		func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+		func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 	) (func(), error)
 }
 
@@ -740,7 +740,7 @@ func bindWorkerScope(
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
-	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) (func(), error) {
 	binder, ok := execution.(workerScopeBinder)
 	if !ok {
@@ -775,13 +775,13 @@ func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.Prog
 type runtimeWorkerAttemptStarterProvider interface {
 	BeginWorkerAttempt(
 		context.Context,
-		workers.ExecuteRequest,
-	) (func(context.Context, workers.ExecuteResult, error) error, error)
+		*workers.ExecuteRequest,
+	) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 }
 
 func runtimeWorkerAttemptStarter(
 	runtime runtimeports.RuntimeInstance,
-) func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if runtime == nil {
 		return nil
 	}

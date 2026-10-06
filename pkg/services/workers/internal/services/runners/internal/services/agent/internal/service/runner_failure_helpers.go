@@ -191,6 +191,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		EnvVars:                  cloneMetadata(request.EnvVars),
 		ProcessEnvironment:       append([]string(nil), request.ProcessEnvironment...),
 		ExecutionLogger:          request.ExecutionLogger,
+		AttemptControlObserver:   request.AttemptControlObserver,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
 }

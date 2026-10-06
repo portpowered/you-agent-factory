@@ -56,7 +56,7 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
 
-	process := runtimeMetricsCLIProcess
+	process := runtimeMetricsProcess(t)
 
 	humanOutput := executeReplayCostsCLI(t, process, environment, server.URL(), false)
 	wantCost := expectedPricedReplayCost()

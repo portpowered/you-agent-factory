@@ -89,7 +89,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 		// Consolidated suites contain independent, session-owned IO journeys.
 		// Use the lane budget for their concurrency as well as package builds;
 		// Go's CPU-count default otherwise serializes those waits after a merge.
-		coverageTestArgs = append(coverageTestArgs, "-vet=off", "-ldflags=-w", fmt.Sprintf("-parallel=%d", cfg.testJobs(targetOS, logicalCPUs)))
+		coverageTestArgs = append(coverageTestArgs, "-count=1", "-vet=off", "-ldflags=-w", fmt.Sprintf("-parallel=%d", cfg.testJobs(targetOS, logicalCPUs)))
 	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")
@@ -102,6 +102,11 @@ func prepareCoverageRunWithFunctionalMetadata(
 	plan, err := planCoverageInvocationWithUnitImports(cfg, coverageTestArgs, testPackages, profilePath, targetOS, testPackageArgs, functionalSelection, unitPackageFiles)
 	if err != nil {
 		return preparedCoverageRun{}, err
+	}
+	if cfg.functionalMonolith {
+		if err := consolidateFunctionalCoveragePlan(cfg, &plan, testPackages, repoRoot, listedPackages, functionalSelection); err != nil {
+			return preparedCoverageRun{}, errors.Join(err, plan.cleanup())
+		}
 	}
 	return preparedCoverageRun{
 		plan:                        plan,

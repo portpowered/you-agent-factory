@@ -46,7 +46,9 @@ type attemptTerminalFunc func(context.Context, workers.ExecuteRequest, workers.E
 // Runtime admits an attempt but before the detached Workers Execute call.
 // The returned terminal hook runs only for the one callback that wins the
 // Runtime terminal race.
-type attemptPreparation func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error)
+type attemptCompletionFunc func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) (workers.ExecuteResult, error)
+
+type attemptPreparation func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error)
 
 // executeCapability is deliberately private to Runtime. Workers' aggregate
 // Service already exposes Execute, but publishing another service-root
@@ -164,7 +166,7 @@ func (l *attemptLifecycle) startWithPreparation(
 		return err
 	}
 	request = attachAttemptProcessObserver(request, l, attempt)
-	var preparedTerminal attemptTerminalFunc
+	var preparedTerminal attemptCompletionFunc
 	if prepare != nil {
 		preparedTerminal, err = prepare(context.WithoutCancel(execCtx), &request)
 		if err != nil {
@@ -193,7 +195,7 @@ func (l *attemptLifecycle) startWithPreparation(
 			err = nil
 		}
 		if preparedTerminal != nil {
-			preparedTerminal(context.Background(), request, result, err)
+			result, err = preparedTerminal(context.WithoutCancel(execCtx), request, result, err)
 		}
 		terminal(context.Background(), request, result, err)
 	}

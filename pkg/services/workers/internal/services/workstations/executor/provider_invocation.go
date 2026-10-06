@@ -121,6 +121,7 @@ func providerInvocationRequest(
 		OutputSchema:                       request.OutputSchema,
 		EnvVars:                            cloneEnvVars(request.EnvVars),
 		ProcessEnvironment:                 append([]string(nil), request.ProcessEnvironment...),
+		AttemptControlObserver:             request.AttemptControlObserver,
 		ProcessLifecycleObserver:           request.ProcessLifecycleObserver,
 		Worktree:                           request.Worktree,
 		WorkingDirectory:                   request.WorkingDirectory,

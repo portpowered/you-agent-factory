@@ -207,6 +207,7 @@ func providersRequest(request workers.ProviderInferenceRequest) (providers.Execu
 		EnvVars:                     cloneStringMap(request.EnvVars),
 		ProcessEnvironment:          append([]string(nil), request.ProcessEnvironment...),
 		ExecutionLogger:             request.ExecutionLogger,
+		AttemptControlObserver:      request.AttemptControlObserver,
 		ProcessLifecycleObserver:    request.ProcessLifecycleObserver,
 	}, nil
 }

@@ -58,6 +58,12 @@ func TestMCPSubagentCustomACPHandlesPermissionRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build root application process: %v", err)
 	}
+	// Own the named Factory in the project instead of relying on any other
+	// test having initialized the process user's global Factory catalog.
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
+	source := support.InstallPackagedFactoryWithProcess(t, processRoot, env, projectRoot, "@you/subagent")
+	support.CreateNamedFactoryAtRootWithProcess(t, processRoot, env, projectRoot,
+		filepath.Join(projectRoot, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
 	server := startRuntimeBackedMCPServerWithProcess(t, processRoot, projectRoot, homeDir)
 	initializeMCPClient(t, server.client)
 

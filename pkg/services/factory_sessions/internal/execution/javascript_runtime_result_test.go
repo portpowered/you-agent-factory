@@ -772,12 +772,12 @@ func TestChildWorkerExecutor_PreparationErrorCompletesReturnedAttempt(t *testing
 	var completed workers.ExecuteResult
 	var completeErr error
 	completeCalls := 0
-	executor.attemptStarter = func(_ context.Context, _ workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
-		return func(_ context.Context, result workers.ExecuteResult, err error) error {
+	executor.attemptStarter = func(_ context.Context, _ *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return func(_ context.Context, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
 			completeCalls++
 			completed = result
 			completeErr = err
-			return nil
+			return result, nil
 		}, beginErr
 	}
 
@@ -1005,5 +1005,86 @@ func TestSnapshotWarningThresholdConfiguration(t *testing.T) {
 				t.Fatalf("threshold=%d, want %d", got, test.threshold)
 			}
 		})
+	}
+}
+
+func TestChildWorkerExecutor_AdmissionObserverReachesExecutingRequest(t *testing.T) {
+	t.Parallel()
+	owned := &struct{ providers.AttemptControl }{}
+	observed := false
+	completed := false
+	invoker := &recordingWorkerExecution{
+		result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted},
+		onExecute: func(request workers.ExecuteRequest) {
+			if request.Input.AttemptControlObserver == nil {
+				t.Error("Workers execution lost its admission-bound observer")
+				return
+			}
+			request.Input.AttemptControlObserver(owned)
+		},
+	}
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+	executor.attemptStarter = func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		if ctx.Err() != nil {
+			t.Error("admission context canceled")
+		}
+		request.Input.AttemptControlObserver = func(control providers.AttemptControl) { observed = control == owned }
+		return func(_ context.Context, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
+			completed = true
+			if !observed || err != nil {
+				t.Errorf("observed = %v, error = %v; want handle before completion", observed, err)
+			}
+			return result, err
+		}, nil
+	}
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "observe attempt"})
+	if err != nil || result.Status != factory.JavaScriptChildDispatchStatusCompleted || !completed || !observed {
+		t.Fatalf("result = %#v, err = %v, completed = %v, observed = %v", result, err, completed, observed)
+	}
+}
+
+func TestChildWorkerExecutor_RetryClosesAttemptBeforeBindingReplacement(t *testing.T) {
+	t.Parallel()
+	begun := 0
+	completed := 0
+	var attempts []string
+	var observed []int
+	invoker := &recordingWorkerExecution{}
+	invoker.onExecute = func(request workers.ExecuteRequest) {
+		if request.Input.AttemptControlObserver == nil {
+			t.Error("retry execution lost its admission observer")
+			return
+		}
+		request.Input.AttemptControlObserver(nil)
+		invoker.result = workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
+		if begun == 1 {
+			invoker.result.Outcome = workers.ExecutionOutcomeFailed
+			invoker.result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeInternalServerError, RetryHint: true}
+		}
+	}
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+	executor.maxAttempts = 2
+	executor.attemptStarter = func(_ context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		if begun != completed {
+			t.Errorf("retry admitted while prior attempt remained open: begun = %d, completed = %d", begun, completed)
+		}
+		begun++
+		generation := begun
+		attempts = append(attempts, request.Correlation.AttemptID)
+		request.Input.AttemptControlObserver = func(providers.AttemptControl) { observed = append(observed, generation) }
+		return func(_ context.Context, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
+			completed++
+			if result.Correlation.AttemptID != attempts[generation-1] || err != nil {
+				t.Errorf("completion = %#v, error = %v; want exact admitted attempt", result.Correlation, err)
+			}
+			return result, err
+		}, nil
+	}
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "retry attempt"})
+	if err != nil || result.Status != factory.JavaScriptChildDispatchStatusCompleted || begun != 2 || completed != 2 {
+		t.Fatalf("result = %#v, error = %v, begun = %d, completed = %d", result, err, begun, completed)
+	}
+	if len(attempts) != 2 || attempts[0] == attempts[1] || len(observed) != 2 || observed[0] != 1 || observed[1] != 2 {
+		t.Fatalf("attempts = %v, observer generations = %v; want distinct physical attempts", attempts, observed)
 	}
 }

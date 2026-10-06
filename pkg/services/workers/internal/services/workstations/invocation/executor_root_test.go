@@ -16,6 +16,28 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
+func TestProviderExecutorPreservesAttemptControlObserver(t *testing.T) {
+	t.Parallel()
+	provider := &invocationProviderServiceBase{identity: providers.IDCodex}
+	observed := false
+	_, err := workerinvocation.NewProviderExecutor(provider).Execute(t.Context(), workerexecution.InvocationInput{
+		Request: workerexecution.ProviderInferenceRequest{RunnerID: string(providers.IDCodex),
+			Dispatch:               work.WorkDispatch{DispatchID: "physical"},
+			AttemptControlObserver: func(providers.AttemptControl) { observed = true },
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.request.AttemptControlObserver == nil {
+		t.Fatal("invocation lost attempt control observation")
+	}
+	provider.request.AttemptControlObserver(nil)
+	if !observed {
+		t.Fatal("invocation replaced the attempt observer")
+	}
+}
+
 func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	provider := &executionTestProvider{response: workerexecution.InferenceResponse{
 		Content: "done",

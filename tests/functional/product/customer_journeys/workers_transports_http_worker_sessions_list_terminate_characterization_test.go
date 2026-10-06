@@ -40,11 +40,6 @@ func TestWorkerSessionHTTPListTerminateCharacterization(t *testing.T) {
 		FactoryDir: dir, WaitForServiceModeRuntime: true, Args: []string{"--session", sessionID},
 		Env:   server.env,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
-		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
-			// Fleet listing and termination do not cover first-run installation;
-			// complete profile bootstrap before the hosted readiness clock starts.
-			support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	t.Cleanup(runner.releaseAll)

@@ -2088,7 +2088,6 @@ pkg/transports/mapping/workerdiagnostics/generated.go: unreachable func: transcr
 pkg/transports/mapping/workflow.go: unreachable func: WorkflowSessionResultToAPI
 pkg/transports/mapping/workflow.go: unreachable func: WorkflowSessionResultUpdatedPayloadToAPI
 pkg/wire/session_runtime_providers.go: unreachable func: provideWorkersProviderCommandRunner
-tests/functional/factory/definitions/process.go: unreachable func: buildDefinitionsProcess
 tests/functional/internal/restclient/adapter.go: unreachable func: Adapter.GetFactoryResponseEventsBySessionID
 tests/functional/internal/restclient/adapter.go: unreachable func: Adapter.GetStatus
 tests/functional/internal/restclient/adapter.go: unreachable func: Adapter.OpenFactoryEventsBySessionID

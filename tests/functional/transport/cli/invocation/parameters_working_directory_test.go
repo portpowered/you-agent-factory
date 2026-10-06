@@ -37,7 +37,7 @@ func TestCLIRelativeFactoryPathResolvesFromInvocationDirectory(t *testing.T) {
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
 
-	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
+	if err := parameterProcessesForTest(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(Current Factory from invocation directory) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -69,7 +69,7 @@ func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
 
-	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
+	if err := parameterProcessesForTest(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config flatten) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -99,14 +99,14 @@ func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
 	invocationDirectory := t.TempDir()
 	missingFactoryJSON := filepath.Join(invocationDirectory, "factory", "factory.json")
 
-	beforeLifecycleEffects := parameterProcesses.lifecycleEffects.Load()
-	beforeProviderCalls := parameterProcesses.missingProvider.CallCount()
+	beforeLifecycleEffects := parameterProcessesForTest(t).lifecycleEffects.Load()
+	beforeProviderCalls := parameterProcessesForTest(t).missingProvider.CallCount()
 	inputs := parameterInputs(t, []string{
 		"you", "run", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
 
-	if err := parameterProcesses.missingAssetProcess.Execute(inputs.Input); err == nil {
+	if err := parameterProcessesForTest(t).missingAssetProcess.Execute(inputs.Input); err == nil {
 		t.Fatalf(
 			"missing Current Factory succeeded; stdout:\n%s\nstderr:\n%s",
 			inputs.Stdout(),
@@ -137,10 +137,10 @@ func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
 	if inputs.Stdout() != "" {
 		t.Fatalf("missing Current Factory stdout = %q, want empty", inputs.Stdout())
 	}
-	if got := parameterProcesses.missingProvider.CallCount() - beforeProviderCalls; got != 0 {
+	if got := parameterProcessesForTest(t).missingProvider.CallCount() - beforeProviderCalls; got != 0 {
 		t.Fatalf("provider dispatch call delta = %d, want 0", got)
 	}
-	if got := parameterProcesses.lifecycleEffects.Load() - beforeLifecycleEffects; got != 0 {
+	if got := parameterProcessesForTest(t).lifecycleEffects.Load() - beforeLifecycleEffects; got != 0 {
 		t.Fatalf("lifecycle activation effect delta = %d, want 0", got)
 	}
 }

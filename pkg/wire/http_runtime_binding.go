@@ -405,7 +405,11 @@ func (router workerSessionControlRouter) control(
 	action workersessions.ControlAction,
 ) (workersessions.ControlResult, error) {
 	owner, err := router.owner(ctx, request)
-	if errors.Is(err, workersessions.ErrSessionNotFound) && request.RequestID == "" &&
+	// Force outcomes may replay their exact committed request after the owner
+	// has exited. The archived service validates that tuple without restoring
+	// control authority; a fresh request still fails live-owner validation.
+	archivedRequest := request.RequestID == "" || (request.Force && action == workersessions.ControlActionTerminate)
+	if errors.Is(err, workersessions.ErrSessionNotFound) && archivedRequest &&
 		(action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate) && router.archived != nil {
 		owner, err = router.archived, nil
 	}

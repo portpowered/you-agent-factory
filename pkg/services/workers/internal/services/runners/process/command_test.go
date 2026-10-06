@@ -896,6 +896,32 @@ func TestCloneCommandRequestPreservesCallerState(t *testing.T) {
 
 type commandLifecycleRecorder struct{ started, exited []int }
 
+type commandOwnedControl struct{}
+
+func (*commandOwnedControl) ForceKill(context.Context) (bool, error) { return false, nil }
+
+func TestCommandProjectionPreservesOwnedCapabilityObserver(t *testing.T) {
+	t.Parallel()
+	request := commandTestRequest()
+	control := &commandOwnedControl{}
+	var calls int
+	request.OwnedProcessObserver = func(got platformprocess.OwnedProcessControl) {
+		if got != control {
+			t.Fatal("projection substituted the owned capability")
+		}
+		calls++
+	}
+	for _, projected := range []CommandRequest{CloneCommandRequest(request), workerRequest(platformRequest(request))} {
+		if projected.OwnedProcessObserver == nil {
+			t.Fatal("projection lost the owned capability observer")
+		}
+		projected.OwnedProcessObserver(control)
+	}
+	if calls != 2 || platformRequest(commandTestRequest()).OwnedProcessObserver != nil {
+		t.Fatal("observer was lost or leaked between requests")
+	}
+}
+
 func (observer *commandLifecycleRecorder) ProcessStarted(info platformprocess.ProcessInfo) {
 	observer.started = append(observer.started, info.PID)
 }
