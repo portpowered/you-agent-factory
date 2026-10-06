@@ -83,6 +83,9 @@ func TestT7StartPreflightRejectsBeforeIdentityOpeningAndExecution(t *testing.T) 
 			if result, err := r.Start(t.Context(), req); err != nil || result.Session.ID != req.ID {
 				t.Fatalf("retry = %#v, %v", result, err)
 			}
+			if err := r.waitForSupervisionDriver(t.Context(), req.ID); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }
@@ -106,6 +109,9 @@ func TestT7StartAcceptedReplaySkipsChangedReadinessAndConflicts(t *testing.T) {
 	}
 	if executor.validations.Load() != 1 {
 		t.Fatalf("preflight calls = %d, want 1", executor.validations.Load())
+	}
+	if err := r.waitForSupervisionDriver(t.Context(), req.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 

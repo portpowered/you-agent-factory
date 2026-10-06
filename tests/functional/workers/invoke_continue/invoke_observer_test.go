@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -47,6 +48,17 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 	r.requests = append(r.requests, cloneS8CommandRequest(request))
 	r.mu.Unlock()
 	progress := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-progress\",\"type\":\"command_execution\",\"command\":\"synthetic inspection\",\"aggregated_output\":\"T7 progress before detach\",\"exit_code\":0}}\n")
+	if filepath.Base(request.WorkDir) == "t7-secrets" {
+		item := map[string]any{"type": "item.completed", "item": map[string]any{
+			"id": "t7-private-progress", "type": "command_execution", "exit_code": 0,
+			"command": "synthetic inspection", "aggregated_output": "public progress " + t7SecretPrompt + " " + t7SecretSystem + " " + t7SecretToken,
+		}}
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		progress = append(encoded, '\n')
+	}
 	if observer != nil {
 		observer(platformprocess.OutputStreamStdout, progress)
 		if filepath.Base(request.WorkDir) == "t7-degraded" {
@@ -60,7 +72,11 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
-		terminal := directCodexOutputWithoutSession("T7 detached attempt completed")
+		output := "T7 detached attempt completed"
+		if filepath.Base(request.WorkDir) == "t7-factory" {
+			output = "T7 Factory sibling COMPLETE"
+		}
+		terminal := directCodexOutputWithoutSession(output)
 		if observer != nil {
 			observer(platformprocess.OutputStreamStdout, terminal)
 		}

@@ -216,6 +216,22 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.read",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
@@ -250,6 +266,14 @@
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs",
         "rest/startWorkerSession"
       ]
     },

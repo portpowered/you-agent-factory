@@ -49,6 +49,7 @@ type invokeContinuePackageFixture struct {
 	managerRunner      *s8RemoteProviderRunner
 	managerRepositoryA s8Repository
 	managerRepositoryB s8Repository
+	readiness          *t7ReadinessBoundary
 
 	sessionsMu        sync.Mutex
 	openedSessionIDs  []string
@@ -159,7 +160,8 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route)
+	readiness := newT7ReadinessBoundary()
+	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, readiness)
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +181,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		managerRunner:      setup.managerRunner,
 		managerRepositoryA: setup.managerRepositoryA,
 		managerRepositoryB: setup.managerRepositoryB,
+		readiness:          readiness,
 	}, nil
 }
 

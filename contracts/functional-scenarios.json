@@ -621,6 +621,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
         }
       ]
     },
@@ -698,6 +702,18 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "cli"
         }
       ]
     },
@@ -754,6 +770,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
           "boundary": "cli"
         }
       ]
@@ -1645,6 +1665,18 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "rest"
         }
       ]
     },
@@ -1821,6 +1853,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "rest"
         }
       ]

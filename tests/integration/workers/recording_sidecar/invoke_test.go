@@ -237,7 +237,9 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', data => input += data);
 process.stdin.on('end', () => {
  fs.writeFileSync(process.env.T7_SHIM_RECORD, JSON.stringify({args, stdin: input, cwd: process.cwd(), setting: process.env.T7_SYNTHETIC_SETTING}));
- console.log(JSON.stringify({type:'item.completed', item:{id:'progress', type:'command_execution', command:'synthetic inspection', aggregated_output:'t7-artifact-progress', exit_code:0}}));
+ const progress = process.env.T7_SHIM_READY ? 'history-restart partial' : 't7-artifact-progress';
+ if (process.env.T7_SHIM_READY) fs.writeFileSync(process.env.T7_SHIM_READY, String(process.pid));
+ console.log(JSON.stringify({type:'item.completed', item:{id:'progress', type:'command_execution', command:'synthetic inspection', aggregated_output:progress, exit_code:0}}));
  if (process.env.T7_SHIM_COMPLETE === '1') {
   console.log(JSON.stringify({type:'thread.started', thread_id:'t7-artifact-thread'}));
   console.log(JSON.stringify({type:'item.completed', item:{id:'final', type:'agent_message', text:'history-restart COMPLETE'}}));
