@@ -1,10 +1,8 @@
 package codex
 
 import (
-	"context"
 	"encoding/json"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,40 +26,6 @@ const (
 	codexFunctionalOutsideSessionID     = "session-outside-root"
 	codexFunctionalOversizedSessionID   = "session-oversized-root"
 )
-
-// TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess proves
-// injected discovery cancellation surfaces a safe root outcome without host-path
-// leakage when reached only through root.BuildProcess and public contracts.
-func TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess(t *testing.T) {
-	// The discovery override is process-wide during root construction. It
-	// cannot coexist with successful discovery in the shared process without a
-	// mutable route or a cancellation policy that would affect other scenarios.
-	homeDir := t.TempDir()
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalCanceledSessionID,
-		`{"type":"session_meta"}`+"\n",
-	)
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{
-		ProviderSessionCodexWalkDirectory: func(string, fs.WalkDirFunc) error {
-			return context.Canceled
-		},
-	})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexFunctionalCanceledSessionID,
-		http.StatusInternalServerError,
-	)
-	if !strings.Contains(body, "failed to load provider session details") {
-		t.Fatalf("error body = %q, want safe load failure", body)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "canceled-discovery", body, homeDir)
-}
 
 type codexSharedContainmentFixture struct {
 	outsideDir string

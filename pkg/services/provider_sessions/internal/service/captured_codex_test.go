@@ -314,3 +314,31 @@ func mustJSON(t *testing.T, value any) []byte {
 	}
 	return data
 }
+
+func TestCapturedCodexPeerMethodsShareProjectionAndCancellation(t *testing.T) {
+	t.Parallel()
+	fake, ref := codexCaptureFixture(t, "factory-session")
+	service := inspectionService{codex: capturedCodex{reader: fake}}
+	detail, err := service.Details("codex", ref.Kind, ref.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspected, err := service.Inspect(providersessions.InspectRequest{Session: ref})
+	if err != nil || inspected.Session != ref || inspected.Source != detail.Source {
+		t.Fatalf("Inspect = %+v, %v", inspected, err)
+	}
+	projected, err := service.Project(providersessions.ProjectRequest{Session: ref})
+	if err != nil || projected.Session != ref || !reflect.DeepEqual(projected.Detail, detail) {
+		t.Fatalf("Project = %+v, %v", projected, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = service.Project(providersessions.ProjectRequest{Context: ctx, Session: ref})
+	if !errors.Is(err, providersessions.ErrOperationCanceled) {
+		t.Fatalf("canceled Project = %v", err)
+	}
+	_, err = service.Inspect(providersessions.InspectRequest{Context: ctx, Session: ref})
+	if !errors.Is(err, providersessions.ErrOperationCanceled) {
+		t.Fatalf("canceled Inspect = %v", err)
+	}
+}

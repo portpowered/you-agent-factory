@@ -319,7 +319,7 @@ func provideFactorySessionProviderIdentityResolver(
 	}
 }
 
-func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service, error) {
+func provideProviderSessions(edges serviceedges.Edges, writer recordings.WorkerRecordingWriter) (providersessions.Service, error) {
 	files := edges.ProviderSessionFileSystem
 	if files == nil {
 		files = platformfilesystem.Local{}
@@ -328,13 +328,9 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 	if resolveHome == nil {
 		resolveHome = os.UserHomeDir
 	}
-	codexWalkDirectory := edges.ProviderSessionCodexWalkDirectory
-	if codexWalkDirectory == nil {
-		codexWalkDirectory = providersessionswire.CodexWalkDirectory(filepath.WalkDir)
-	}
-	codexResolveSymlinks := edges.ProviderSessionCodexResolveSymlinks
-	if codexResolveSymlinks == nil {
-		codexResolveSymlinks = providersessionswire.CodexResolveSymlinks(filepath.EvalSymlinks)
+	captured, ok := writer.(recordings.WorkerCapturedActivityReader)
+	if !ok || captured == nil {
+		return nil, fmt.Errorf("provider-session captured activity reader is required")
 	}
 	cursorWalkDirectory := edges.ProviderSessionCursorWalkDirectory
 	if cursorWalkDirectory == nil {
@@ -355,12 +351,11 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 	return providersessionswire.NewService(
 		files,
 		resolveHome,
-		codexWalkDirectory,
-		codexResolveSymlinks,
 		cursorWalkDirectory,
 		cursorResolveSymlinks,
 		cursorOpenDatabase,
 		providersessionswire.OperatingSystem(operatingSystem),
+		captured,
 	)
 }
 

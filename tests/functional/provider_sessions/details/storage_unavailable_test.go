@@ -108,30 +108,6 @@ func assertMixedCorruptDetail(t *testing.T, baseURL, id, home string) {
 	assertCodexProviderSessionErrorBodySafe(t, "mixed-corrupt", string(encoded), home)
 }
 
-// A failed walker needs a separate immutable edge shape: walking starts at the
-// whole Codex root, rather than a scenario-selected file path.
-func TestCodexProviderSessionWalkFailureReturnsSafeAPIError(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	if err := os.MkdirAll(codexSessionsRoot(home), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	var walks atomic.Int32
-	edges := serviceedges.Edges{
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
-		ProviderSessionCodexWalkDirectory: func(string, fs.WalkDirFunc) error {
-			walks.Add(1)
-			return privateStorageFault()
-		},
-	}
-	server := startStorageFailureHost(t, home, edges)
-	body := getAPIProviderSessionDetailErrorBody(t, server.URL(), "codex", "session_id", "session_fixture_codex_walk_fault", http.StatusInternalServerError)
-	assertStorageFailureResponse(t, body, home)
-	if walks.Load() != 1 {
-		t.Fatalf("faulted directory walks = %d, want 1", walks.Load())
-	}
-}
-
 func startStorageFailureHost(t *testing.T, home string, edges serviceedges.Edges) *support.FunctionalAPIServer {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "provider-session-storage-failures")
