@@ -35,6 +35,7 @@ type portableReplayDurableOwner struct {
 	prepareOnce sync.Once
 	prepare     func(context.Context) error
 	prepareErr  error
+	release     func(context.Context) error
 }
 
 func (owner *portableReplayDurableOwner) HasRestorableState(
@@ -84,19 +85,12 @@ func (owner *portableReplayDurableOwner) SubscribeResponseEvents(
 	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
 }
 
-// Close forwards the optional execution-owner shutdown boundary through the
-// replay handoff. The durable execution service contract remains focused on
-// customer operations; only implementations that own asynchronous work need
-// to expose this private lifecycle capability.
+// Close retires only this replay acquisition, never the shared execution owner.
 func (owner *portableReplayDurableOwner) Close() error {
-	if owner == nil || owner.Service == nil {
+	if owner == nil || owner.release == nil {
 		return nil
 	}
-	closer, ok := owner.Service.(interface{ Close() error })
-	if !ok {
-		return nil
-	}
-	return closer.Close()
+	return owner.release(context.Background())
 }
 
 type portableReplayRuntimeCleanup struct {
@@ -106,6 +100,7 @@ type portableReplayRuntimeCleanup struct {
 	releaseScope func()
 	closed       bool
 	closeErr     error
+	ownerErr     error
 }
 
 func newPortableReplayRuntimeCleanup() *portableReplayRuntimeCleanup {
@@ -119,7 +114,11 @@ func (cleanup *portableReplayRuntimeCleanup) SetOwner(owner interface{ Close() e
 	cleanup.mu.Lock()
 	defer cleanup.mu.Unlock()
 	if cleanup.closed {
-		cleanup.closeErr = errors.Join(cleanup.closeErr, owner.Close())
+		err := owner.Close()
+		cleanup.ownerErr = err
+		if err != nil {
+			cleanup.owner = owner
+		}
 		return
 	}
 	cleanup.owner = owner
@@ -144,13 +143,16 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 	}
 	cleanup.mu.Lock()
 	defer cleanup.mu.Unlock()
-	if cleanup.closed {
-		return cleanup.closeErr
+	if cleanup.closed && cleanup.owner == nil {
+		return errors.Join(cleanup.ownerErr, cleanup.closeErr)
 	}
 	cleanup.closed = true
 	if cleanup.owner != nil {
-		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.owner.Close())
-		cleanup.owner = nil
+		err := cleanup.owner.Close()
+		cleanup.ownerErr = err
+		if err == nil {
+			cleanup.owner = nil
+		}
 	}
 	if cleanup.releaseScope != nil {
 		cleanup.releaseScope()
@@ -160,14 +162,15 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.closeRuntime(context.Background()))
 		cleanup.closeRuntime = nil
 	}
-	return cleanup.closeErr
+	return errors.Join(cleanup.ownerErr, cleanup.closeErr)
 }
 
-// openPortableReplayDurableOwner constructs the existing durable execution
+// openPortableReplayDurableOwner acquires the fixed durable execution
 // owner for a checkpoint-bearing replay. Runtime assembly is deferred until
 // HasRestorableState confirms that the durable owner can actually resume; a
 // public checkpoint summary alone must remain inspection-only.
 func (r *Root) openPortableReplayDurableOwner(
+	ctx context.Context,
 	configured preparedRuntime,
 	root RuntimeRoot,
 ) (durableexecution.Service, func() error, error) {
@@ -179,6 +182,7 @@ func (r *Root) openPortableReplayDurableOwner(
 		return nil, nil, err
 	}
 	durable, err := r.durableOpening.Open(
+		ctx, configured.Session.SessionID,
 		configured.Definition,
 		configured.Session.Persistence,
 		runtimeSelectionForStart(configured.Session).SystemConfigHome,
@@ -193,7 +197,7 @@ func (r *Root) openPortableReplayDurableOwner(
 		// Acquisition may have opened resources before failing. Return only
 		// their owned release; the failed candidate must never become usable.
 		cleanup := newPortableReplayRuntimeCleanup()
-		cleanup.SetOwner(&portableReplayDurableOwner{Service: durable.Service})
+		cleanup.SetOwner(&portableReplayDurableOwner{release: durable.Release})
 		return nil, cleanup.Close, err
 	}
 	if durable.Service == nil {
@@ -202,6 +206,7 @@ func (r *Root) openPortableReplayDurableOwner(
 	cleanup := newPortableReplayRuntimeCleanup()
 	owner := &portableReplayDurableOwner{
 		Service: durable.Service,
+		release: durable.Release,
 		prepare: func(probeContext context.Context) error {
 			runtime, err := r.preparePortableReplayRuntime(
 				probeContext,

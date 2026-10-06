@@ -825,7 +825,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	}
 	preservedInterrupted := snapshotInterruptedDispatches(state)
 	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
-	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, s.now())
+	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, s.nowForSession(sessionID))
 	if record.Kind == factory.JavaScriptRecordKindCheckpoint && record.Checkpoint != nil {
 		state.checkpointSummary = s.checkpointSummaries.Build(factory.JavaScriptCheckpointSummaryInput{
 			SessionID:       sessionID,
@@ -834,7 +834,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 			Phase:           strings.TrimSpace(projection.Phase),
 			SourceHash:      strings.TrimSpace(state.session.SourceHash),
 			PolicyHash:      strings.TrimSpace(state.session.Policy.EffectiveHash),
-			CreatedAt:       s.now(),
+			CreatedAt:       s.nowForSession(sessionID),
 			CheckpointState: record.Checkpoint.State,
 			Records:         state.runtimeRecords,
 		})

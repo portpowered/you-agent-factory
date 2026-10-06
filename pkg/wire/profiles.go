@@ -46,6 +46,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -437,10 +438,14 @@ func providePackagedFactoryInstallation(
 // policy once; live and replay requests cannot substitute these collaborators.
 func provideDurableOpening(
 	loadOperatorConfig operatorsettings.ConfigLoader,
-	factory factorysessionwire.FactorySessionExecutionFactory,
+	execution *factorysessionwire.RuntimeBackedExecution,
+	allocator providerswire.PTYAllocator,
+	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
+	providerOverride providerOverrideService,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) *factorysessionwire.DurableOpening {
-	return factorysessionwire.NewDurableOpening(loadOperatorConfig, factory, providerIdentities)
+	return factorysessionwire.NewDurableOpening(loadOperatorConfig, execution, execution.Acquire, providerIdentities,
+		providerOverride == nil && adaptRunner != nil && allocator != nil)
 }
 
 func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {

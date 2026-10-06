@@ -11,9 +11,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1032,5 +1034,169 @@ func TestDurableLiveChangeScopesIsolatePeersAndOwnedRelease(t *testing.T) {
 	apply(peer, "retained-peer-change", 1)
 	if peerRuntime.setCalls != 2 {
 		t.Fatalf("released first scope affected peer: %d", peerRuntime.setCalls)
+	}
+}
+
+func TestDurableScopeRoutesSelectedPolicyClockAndPreActivationReads(t *testing.T) {
+	t.Parallel()
+	stores := map[string]*runtimeRecordingStore{"/first": {}, "/second": {}}
+	router := NewScopePersistence(func(root string) (runtimepersist.Store, error) {
+		store := stores[root]
+		if store == nil {
+			t.Fatalf("unexpected root %q", root)
+		}
+		return store, nil
+	})
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: router})
+	baseTime := time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)
+	for index, policy := range []PersistencePolicy{PersistencePolicyEnabled, PersistencePolicyDisabled, ""} {
+		id := []string{"first", "second", "default"}[index]
+		root := []string{"/first", "/second", "/second"}[index]
+		selectedTime := baseTime.Add(time.Duration(index) * time.Hour)
+		settings := factory.JavaScriptWorkerSettings{Presets: map[string]factory.JavaScriptWorkerPreset{"review": {Model: id}}}
+		release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{
+			FactorySessionID: id, RuntimeID: "runtime-" + id, ProjectRoot: root,
+			Persistence: policy, ChildExecutorMode: ChildExecutorModeFake,
+			WorkerPresetIDs: map[string]struct{}{"review": {}}, WorkerSettings: settings,
+		}, durableFixedClock{now: selectedTime}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := release(context.Background()); err != nil {
+				t.Error(err)
+			}
+		})
+		settings.Presets["review"] = factory.JavaScriptWorkerPreset{Model: "mutated"}
+		if service.settingsForSession(id).Presets["review"].Model != id {
+			t.Fatal("scope settings alias caller")
+		}
+		if err := service.RecordPetriSessionCompletion(id, PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+			t.Fatal(err)
+		}
+		read, err := service.GetSession(t.Context(), id)
+		if err != nil || !read.Lifecycle.FinishedAt.Equal(selectedTime) {
+			t.Fatalf("selected clock read = %#v, %v", read, err)
+		}
+	}
+	// Remove only the cache so the unmodified startup probe must cross Load.
+	service.mu.Lock()
+	service.sessions = make(map[string]*runtimeSessionState)
+	service.mu.Unlock()
+	for _, tc := range []struct {
+		id   string
+		want bool
+	}{{"first", true}, {"second", false}, {"default", false}} {
+		available, err := service.HasDurableState(t.Context(), tc.id)
+		if err != nil || available != tc.want {
+			t.Fatalf("probe %s = %t, %v", tc.id, available, err)
+		}
+	}
+	if stores["/first"].saveCalls != 1 || stores["/second"].saveCalls != 0 {
+		t.Fatal("selected or disabled persistence changed")
+	}
+}
+
+func TestDurableScopeFailedAndCancelledAcquisitionCanRetryWithoutRetiringPeer(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("store acquisition failed")
+	ctx, cancel := context.WithCancel(t.Context())
+	attempts := 0
+	router := NewScopePersistence(func(string) (runtimepersist.Store, error) {
+		attempts++
+		if attempts == 1 {
+			return nil, failure
+		}
+		if attempts == 2 {
+			cancel()
+		}
+		return &runtimeRecordingStore{}, nil
+	})
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: router})
+	facts := durableexecution.ScopeFacts{FactorySessionID: "candidate", ProjectRoot: "/candidate", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}
+	peerFacts := facts
+	peerFacts.FactorySessionID, peerFacts.Persistence = "peer", PersistencePolicyDisabled
+	peerRelease, err := service.Acquire(t.Context(), peerFacts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peerRelease(context.Background())
+	for _, attempt := range []struct {
+		ctx   context.Context
+		cause error
+	}{{t.Context(), nil}, {ctx, context.Canceled}} {
+		release, err := service.Acquire(attempt.ctx, facts, durableFixedClock{}, zap.NewNop())
+		if release == nil || err == nil || (attempt.cause != nil && !errors.Is(err, attempt.cause)) {
+			t.Fatalf("failed acquisition = %v", err)
+		}
+		if err := release(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.RecordPetriSessionCompletion("peer", PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+			t.Fatalf("peer retired: %v", err)
+		}
+	}
+	oldRelease, err := service.Acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := oldRelease(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	replacementRelease, err := service.Acquire(t.Context(), facts, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacementRelease(context.Background())
+	if err := oldRelease(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RecordPetriSessionCompletion("candidate", PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+		t.Fatalf("stale release retired replacement: %v", err)
+	}
+	if err := service.ensureOpen(); err != nil {
+		t.Fatalf("scoped release closed shared owner: %v", err)
+	}
+}
+
+func TestDurableScopeReleaseKeepsTerminalPersistenceUntilRunJoins(t *testing.T) {
+	t.Parallel()
+	store := &runtimeRecordingStore{}
+	router := NewScopePersistence(func(string) (runtimepersist.Store, error) { return store, nil })
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{Persistence: router})
+	release, err := service.Acquire(t.Context(), durableexecution.ScopeFacts{FactorySessionID: "owned", ProjectRoot: "/owned", Persistence: PersistencePolicyEnabled, ChildExecutorMode: ChildExecutorModeFake}, durableFixedClock{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runCtx, cancelRun := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	service.sessions["owned"] = &runtimeSessionState{session: SessionReadResult{SessionID: "owned"}, runCancel: cancelRun, runDone: done}
+	cancelled, cancelRelease := context.WithCancel(t.Context())
+	cancelRelease()
+	if err := release(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("release = %v", err)
+	}
+	if runCtx.Err() == nil {
+		t.Fatal("owned run was not cancelled")
+	}
+	if _, err := service.beginScopeRunAdmission("owned"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("retiring scope accepted run: %v", err)
+	}
+	snapshot := []byte(`{"session":{"sessionId":"owned"}}`)
+	if err := router.Save("owned", snapshot); err != nil {
+		t.Fatalf("terminal persistence lost: %v", err)
+	}
+	close(done)
+	if err := release(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := release(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetSession(t.Context(), "owned"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("retired state = %v", err)
+	}
+	if !bytes.Equal(store.payload, snapshot) || store.saveCalls != 1 {
+		t.Fatal("terminal snapshot lost or duplicated")
 	}
 }

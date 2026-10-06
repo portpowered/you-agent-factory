@@ -234,6 +234,7 @@ type JavaScriptRuntimeService struct {
 	projectRoot             string
 	childExecutorMode       string
 	persistence             runtimepersist.Store
+	scopePersistence        *ScopePersistence
 	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
 	persistenceProjectRoot  func() string
 	resumeRuntimeScope      func(string) (ResumeRuntimeScope, error)
@@ -331,6 +332,7 @@ func NewJavaScriptRuntimeService(
 		startInflight:           make(map[string]*startInflightFlight),
 		controlReplay:           make(map[string]controlReplayRecord),
 	}
+	service.scopePersistence, _ = persistence.(*ScopePersistence)
 	service.workerExecution = service.newChildWorkerExecutionBinding(workerExecution, nil, "", "", nil, nil, nil, nil, nil)
 	return service
 }
@@ -367,8 +369,6 @@ func (s *JavaScriptRuntimeService) persistenceForRead() (runtimepersist.Store, e
 	}
 	return s.persistenceForRoot(s.persistenceProjectRoot())
 }
-
-func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	return s.startAsync(ctx, req)
@@ -421,7 +421,7 @@ func (s *JavaScriptRuntimeService) startAsync(ctx context.Context, req StartRequ
 		}
 		return AsyncStartResult{}, err
 	}
-	startedAt := s.now()
+	startedAt := s.nowForSession(reserved.state.session.SessionID)
 	running := projectRuntimeRunningSessionState(
 		reserved.state.session.SessionID,
 		normalized,
@@ -753,7 +753,7 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 	runCtx, cancel := workflowRunContext(ctx, policyResolution.Policy)
 	defer cancel()
 
-	startedAt := s.now()
+	startedAt := s.nowForSession(sessionID)
 	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
 	if err != nil {
 		return runtimeSessionState{}, err
@@ -866,7 +866,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 	if err != nil {
 		return factory.JavaScriptRuntimeOutcome{}, err
 	}
-	workerSettings := s.workerSettings
+	workerSettings := s.settingsForSession(sessionID)
 	if normalized.WorkerSettings != nil {
 		workerSettings = *normalized.WorkerSettings
 	}
@@ -881,7 +881,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
 		WorkerSettings: workerSettings,
-	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {

@@ -3,8 +3,23 @@ package durableexecution
 import (
 	"context"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"go.uber.org/zap"
 )
+
+// ScopeFacts contains immutable selections for one runtime-backed opening.
+type ScopeFacts struct {
+	FactorySessionID  string
+	RuntimeID         string
+	ProjectRoot       string
+	Persistence       factorysessions.PersistencePolicy
+	ChildExecutorMode string
+	WorkerPresetIDs   map[string]struct{}
+	WorkerSettings    factoryruntime.JavaScriptWorkerSettings
+}
+
+type ScopeAcquisition = func(context.Context, ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error)
 
 // Service owns durable Factory Session start, lifecycle, inspection, replay,
 // and restart behavior behind the Factory Sessions private capability boundary.

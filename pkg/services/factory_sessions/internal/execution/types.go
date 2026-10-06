@@ -71,7 +71,7 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 	defer s.mu.Unlock()
 	state, ok := s.sessions[id]
 	if !ok {
-		initial := projectPetriRunningSessionState(id, s.now())
+		initial := projectPetriRunningSessionState(id, s.nowForSession(id))
 		state = &initial
 	}
 	if state.session.OrchestratorKind != interfaces.OrchestratorKindPetri {
@@ -98,7 +98,7 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 
 	base := cloneRuntimeSessionState(state)
 	s.applyPendingPetriHistory(&base)
-	candidate := projectPetriTerminalSessionState(base, completion, s.now())
+	candidate := projectPetriTerminalSessionState(base, completion, s.nowForSession(id))
 	compactRuntimePetriHistory(&candidate)
 	if err := s.persistPetriCandidate(candidate); err != nil {
 		return err

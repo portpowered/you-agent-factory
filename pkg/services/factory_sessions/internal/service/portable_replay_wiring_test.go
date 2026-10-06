@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -126,10 +125,11 @@ func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
 	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
 		t.Fatalf("cleanup ordering events = %v, want owner before artifacts", events)
 	}
-	if err := cleanup.Close(); !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
-		t.Fatalf("repeated cleanup error = %v, want the joined errors", err)
+	owner.closeErr = nil
+	if err := cleanup.Close(); !errors.Is(err, artifactErr) || errors.Is(err, ownerErr) {
+		t.Fatalf("retried owner cleanup = %v, want only retained artifact cause", err)
 	}
-	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close"}) {
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "worker-scope-release", "runtime-artifacts-close", "durable-owner-close"}) {
 		t.Fatalf("repeated cleanup ordering events = %v, want no duplicate closes", events)
 	}
 }
@@ -148,18 +148,16 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			failedOwner := &portableReplayRuntimeOwner{events: &events, closeErr: closeErr}
 			retryOwner := &portableReplayRuntimeOwner{}
 			factory := newPortableCheckpointRuntimeOpeningFactory(t, retryOwner)
-			acquire := factory.durableOpening.executionFactory
+			acquire := factory.durableOpening.acquire
 			attempts := 0
-			factory.durableOpening = durableOpeningFixture(func(projectRoot string,
-				policy factorysessions.PersistencePolicy, provider providers.Service, clock factoryruntime.Clock,
-				presets map[string]struct{}, settings factoryruntime.JavaScriptWorkerSettings,
-				mocks *workers.MockWorkersConfig, integrations []operatorconfig.ACPIntegration, logger *zap.Logger,
-			) (durableexecution.Service, error) {
+			factory.durableOpening = durableOpeningFixture(retryOwner, func(ctx context.Context,
+				facts durableexecution.ScopeFacts, clock factoryruntime.Clock, logger *zap.Logger,
+			) (func(context.Context) error, error) {
 				attempts++
 				if attempts == 1 {
-					return failedOwner, failure
+					return func(context.Context) error { return failedOwner.Close() }, failure
 				}
-				return acquire(projectRoot, policy, provider, clock, presets, settings, mocks, integrations, logger)
+				return acquire(ctx, facts, clock, logger)
 			})
 			request := portableCheckpointOwnerFixture(t).startRequest()
 			failed, err := factory.openForRequest(t.Context(), request)
@@ -171,8 +169,12 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			if err := retried.closeArtifacts(); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
-				t.Fatalf("stale cleanup or retry closed failed owner again: %v", events)
+			want := []string{"durable-owner-close"}
+			if failsClose {
+				want = append(want, "durable-owner-close")
+			}
+			if !reflect.DeepEqual(events, want) {
+				t.Fatalf("failed release retries = %v, want %v", events, want)
 			}
 		})
 	}
@@ -507,12 +509,8 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	}
 	dependencies.WorkerService = &portableReplayWorkerService{}
 	owner.workerExecution = dependencies.WorkerService
-	dependencies.DurableOpening = durableOpeningFixture(func(
-		_ string, _ factorysessions.PersistencePolicy, _ providers.Service, _ factoryruntime.Clock,
-		_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, _ *workers.MockWorkersConfig,
-		_ []operatorconfig.ACPIntegration, _ *zap.Logger,
-	) (durableexecution.Service, error) {
-		return owner, nil
+	dependencies.DurableOpening = durableOpeningFixture(owner, func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (func(context.Context) error, error) {
+		return func(context.Context) error { return owner.Close() }, nil
 	})
 	factory, err := dependencies.newFactory()
 	if err != nil {
@@ -857,26 +855,21 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 			configured := preparedRuntime{Session: factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigHome: "/controlled-home"}}}
 			configured.Workers.MockWorkers = &workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough}
 			owner := &portableReplayRuntimeOwner{}
-			acquire := func(_ string, _ factorysessions.PersistencePolicy, provider providers.Service, _ factoryruntime.Clock,
-				_ map[string]struct{}, _ factoryruntime.JavaScriptWorkerSettings, mocks *workers.MockWorkersConfig,
-				_ []operatorconfig.ACPIntegration, _ *zap.Logger,
-			) (durableexecution.Service, error) {
-				if provider != tc.provider {
-					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
+			acquire := func(_ context.Context, facts durableexecution.ScopeFacts, _ factoryruntime.Clock, _ *zap.Logger) (func(context.Context) error, error) {
+				wantMode := factorysessions.ChildExecutorModeFake
+				if tc.provider != nil {
+					wantMode = factorysessions.ChildExecutorModeLive
 				}
-				if mocks == nil || !mocks.UnmatchedDispatchPolicy.PassthroughUnmatched() {
-					t.Fatal("request mock policy was lost")
+				if facts.ChildExecutorMode != wantMode {
+					t.Fatalf("mode = %s, want %s", facts.ChildExecutorMode, wantMode)
 				}
-				if tc.failure != nil {
-					return nil, tc.failure
-				}
-				return owner, nil
+				return func(context.Context) error { return owner.Close() }, tc.failure
 			}
 			factory := &Root{
 				clock: openingCoordinatorClock{}, providerOverride: tc.provider,
-				durableOpening: durableOpeningFixture(acquire),
+				durableOpening: durableOpeningFixture(owner, acquire),
 			}
-			durable, closeOwner, err := factory.openPortableReplayDurableOwner(configured, RuntimeRoot{})
+			durable, closeOwner, err := factory.openPortableReplayDurableOwner(t.Context(), configured, RuntimeRoot{})
 			if !errors.Is(err, tc.failure) {
 				t.Fatalf("error = %v, want %v", err, tc.failure)
 			}
