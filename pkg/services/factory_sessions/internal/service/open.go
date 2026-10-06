@@ -92,6 +92,7 @@ type sessionRuntimeOpening struct {
 	restoredEventHistory        []factorydefinitions.FactoryEvent
 	boardHistoryOpening         currentBoardHistoryOpening
 	hasCurrentBoardReference    bool
+	emptyCurrentBoard           bool
 	initial                     *factoryruntime.RuntimeInitialOpening
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
@@ -323,6 +324,9 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 	var err error
 	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
 		return err
+	}
+	if opening.emptyCurrentBoard {
+		return nil
 	}
 	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
 		input := opening.configured.Recordings.ResumeInput

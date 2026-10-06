@@ -75,14 +75,20 @@ func (r *Root) selectCurrentBoardReference(ctx context.Context, opening *session
 	if err != nil {
 		return err
 	}
+	probe, err := inspectCurrentBoardHistory(ctx, opening.durableExecution.Service, opening.sessionID)
+	if err != nil {
+		return err
+	}
+	opening.boardHistoryOpening = probe
+	if !probe.hasDurableState {
+		// A reference alone is not a durable board. Reserve a new recording
+		// rather than replaying or overwriting the stale selected history.
+		opening.emptyCurrentBoard = true
+		opening.configured.Recordings.RecordPath = ""
+		opening.sessionSelection.Recording.RecordPath = ""
+		return nil
+	}
 	if path == "" {
-		probe, err := inspectCurrentBoardHistory(ctx, opening.durableExecution.Service, opening.sessionID)
-		if err != nil {
-			return err
-		}
-		if !probe.hasDurableState {
-			return nil
-		}
 		path, err = r.discoverLegacyCurrentBoard(ctx, opening)
 		if err != nil {
 			return err

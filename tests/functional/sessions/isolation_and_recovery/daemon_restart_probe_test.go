@@ -215,6 +215,9 @@ func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name
 	sentinel := filepath.Join(repo, "worktrees", "sentinel.txt")
 	request := filepath.Join(repo, "request.json")
 	writeRestartProbeFile(t, refPath, reference)
+	// Selection failures concern a retained durable board. Without its
+	// snapshot, a valid old reference intentionally starts a fresh board.
+	writeRestartProbeFile(t, filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json"), []byte(`{"Session":{"SessionID":"~default"}}`))
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
 	writeRestartProbeFile(t, request, []byte("request § —"))
 	beforeStarts, beforeCalls := starts.Load(), runner.calls.Load()
@@ -339,6 +342,112 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	t.Run("F9 retained visit threshold", func(t *testing.T) {
 		testPlainBoardRetainedVisitThreshold(t, process, home, apis[4:], runner)
 	})
+}
+
+func TestUnreadableMissingSnapshotStartsQuietEmpty(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	repo, home := t.TempDir(), t.TempDir()
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	station := config["workstations"].([]map[string]any)[0]
+	station["type"] = "LOGICAL_MOVE"
+	delete(station, "worker")
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: LOGICAL_MOVE\n---\n")
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	// Relaunches of the same repository/default board intentionally run in
+	// order. This journey owns its profile, files, streams and reusable graph.
+	command, url := startPlainBoardInRepository(t, process, repo, home, apis[0])
+	seedPlainBoardSiblingWork(t, url, repo)
+	waitForPlainBoardWorkConfirmed(t, url)
+	restartProbeShutdown(t, url, command)
+	oldPath := plainBoardSelectedRecording(t, repo)
+	oldHistory := mustReadSeededReplayArtifact(t, oldPath)
+	snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+	if err := os.Remove(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	command, url, inputs := startQuietEmptyPlainBoard(t, process, repo, home, apis[1])
+	seedPlainBoardSiblingWork(t, url, repo+" fresh § —")
+	want := waitForPlainBoardWorkConfirmed(t, url)
+	restartProbeShutdown(t, url, command)
+	assertQuietMissingSnapshot(t, repo, inputs)
+	if freshPath := plainBoardSelectedRecording(t, repo); freshPath == oldPath {
+		t.Fatal("missing snapshot reused its stale recording")
+	}
+	command, url = startPlainBoardInRepository(t, process, repo, home, apis[2])
+	got := waitForPlainBoardWorkConfirmed(t, url)
+	assertRestartProbeRecoveredWork(t, []factoryapi.Work{want}, []factoryapi.Work{got})
+	restartProbeShutdown(t, url, command)
+	if !bytes.Equal(oldHistory, mustReadSeededReplayArtifact(t, oldPath)) {
+		t.Fatal("fresh startup or clean restart changed old history")
+	}
+	// F11: a valid stale reference whose recording is also absent is quiet.
+	if err := os.Remove(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(plainBoardSelectedRecording(t, repo)); err != nil {
+		t.Fatal(err)
+	}
+	command, url, inputs = startQuietEmptyPlainBoard(t, process, repo, home, apis[3])
+	restartProbeShutdown(t, url, command)
+	assertQuietMissingSnapshot(t, repo, inputs)
+	if runner.calls.Load() != 0 {
+		t.Fatal("missing snapshot dispatched stale Work")
+	}
+}
+
+func plainBoardSelectedRecording(t *testing.T, repo string) string {
+	t.Helper()
+	var reference struct{ ArtifactReference string }
+	if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &reference); err != nil {
+		t.Fatal(err)
+	}
+	return reference.ArtifactReference
+}
+
+func startQuietEmptyPlainBoard(t *testing.T, process support.Process, repo, home string, api *support.ProcessAPIServer) (*support.ProcessCommand, string, *support.CapturedInputs) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = repo
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	url := restartProbeReadyURL(t, api, command)
+	status := support.GetJSON[factoryapi.StatusResponse](t, url+"/status")
+	works := support.GetJSON[factoryapi.ListWorkResponse](t, url+"/factory-sessions/~default/work")
+	if status.TotalTokens != 0 || len(works.Results) != 0 {
+		t.Fatal("missing snapshot replayed stale Work")
+	}
+	raw := support.GetJSON[map[string]any](t, url+"/status")
+	if _, present := raw["startupRecovery"]; present {
+		t.Fatal("missing snapshot reported a recovery diagnostic")
+	}
+	return command, url, inputs
+}
+
+func assertQuietMissingSnapshot(t *testing.T, repo string, inputs *support.CapturedInputs) {
+	t.Helper()
+	if output := inputs.Stderr(); strings.Contains(output, "quarantined") || strings.Contains(output, "recovery") {
+		t.Fatalf("missing snapshot emitted recovery warning: %s", output)
+	}
+	archives, err := filepath.Glob(filepath.Join(repo, ".you-agent-factory", "durable-sessions", "*.unreadable.*"))
+	if err != nil || len(archives) != 0 {
+		t.Fatalf("missing snapshot created quarantine archives: %v, %v", archives, err)
+	}
 }
 
 func testPlainBoardRetainedVisitThreshold(t *testing.T, process support.Process, home string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {

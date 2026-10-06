@@ -143,7 +143,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 	for _, name := range []string{"selected", "fresh", "legacy requires history", "read failure", "explicit", "batch", "peer", "resume", "replay"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			owner := &boardReferenceOwner{path: "retained.json"}
+			owner := &boardReferenceOwner{path: "retained.json", durable: true}
 			selection := &factorysessions.SessionRuntimeSelection{
 				Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
 				Mode:      factorysessions.SessionRuntimeModeService,
@@ -933,7 +933,7 @@ func configureBoardReferenceCase(name string, owner *boardReferenceOwner, openin
 	bypass, wantError := false, false
 	switch name {
 	case "fresh":
-		owner.path = ""
+		owner.path, owner.durable = "", false
 	case "legacy requires history":
 		owner.path, owner.durable, wantError = "", true, true
 	case "read failure":
@@ -956,7 +956,7 @@ func assertCurrentBoardPublication(t *testing.T, name string, owner *boardRefere
 	t.Helper()
 	wantPath := owner.path
 	if name == "fresh" {
-		wantPath = "fresh.json"
+		wantPath = ""
 	}
 	if opening.configured.Recordings.RecordPath != wantPath || opening.hasCurrentBoardReference != (name == "selected") {
 		t.Fatalf("selected path/presence = %s/%v", opening.configured.Recordings.RecordPath, opening.hasCurrentBoardReference)
@@ -964,7 +964,48 @@ func assertCurrentBoardPublication(t *testing.T, name string, owner *boardRefere
 	if owner.saves != 0 {
 		t.Fatal("selection prematurely published reference")
 	}
+	if name == "fresh" {
+		planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "fresh.json"}}
+		if !opening.emptyCurrentBoard {
+			t.Fatal("missing snapshot did not select empty startup")
+		}
+		if err := (&Root{recordingsRuntime: planner}).reserveFreshCurrentBoard(t.Context(), opening); err != nil {
+			t.Fatal(err)
+		}
+		wantPath = "fresh.json"
+	}
 	if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.saves != 1 || owner.savedFactory != "factory-directory" || owner.savedArtifact != wantPath {
 		t.Fatalf("publication = %s/%s/%v", owner.savedFactory, owner.savedArtifact, err)
+	}
+}
+
+func TestCurrentBoardMissingSnapshotSkipsStaleHistory(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"retained.json", "missing.json", ""} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			owner := &boardReferenceOwner{path: path}
+			opening := &sessionRuntimeOpening{
+				sessionID: "~default",
+				sessionSelection: &factorysessions.SessionRuntimeSelection{
+					Mode:      factorysessions.SessionRuntimeModeService,
+					Host:      factorysessions.RuntimeHostRequest{Port: 1234},
+					Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true, RecordPath: "planned.json"},
+				},
+				load:             RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: "factory-directory"}},
+				durableExecution: DurableExecution{Service: owner},
+				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "planned.json"}},
+			}
+			// No history reader is injected: missing state must never replay the
+			// stale reference, even if its target is unreadable or absent.
+			if err := (&Root{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
+				t.Fatal(err)
+			}
+			if !opening.emptyCurrentBoard || opening.hasCurrentBoardReference ||
+				opening.configured.Recordings.RecordPath != "" || opening.sessionSelection.Recording.RecordPath != "" ||
+				opening.restoredWorldState != nil || len(opening.restoredEventHistory) != 0 || owner.saves != 0 {
+				t.Fatal("missing snapshot selected or published stale history")
+			}
+		})
 	}
 }
