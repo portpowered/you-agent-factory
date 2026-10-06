@@ -77,15 +77,81 @@ func TestHasDurableStateStorageAndCancellation(t *testing.T) {
 	}
 }
 
+func TestHasDurableStateCanceledDuringRead(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		snapshot string
+		failure  error
+	}{
+		{name: "valid", snapshot: `{"Session":{"SessionID":"~default"}}`},
+		{name: "corrupt", snapshot: `{"secret":"do not print"`},
+		{name: "missing", failure: fs.ErrNotExist},
+		{name: "unreadable", failure: errors.New("secret storage failure")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			store := &durableProbeStore{
+				snapshot: []byte(test.snapshot), failure: test.failure, onLoad: cancel,
+			}
+			service := &JavaScriptRuntimeService{persistence: store}
+			got, err := service.HasDurableState(ctx, "~default")
+			if got || !errors.Is(err, context.Canceled) {
+				t.Fatalf("probe canceled during read = %v, %v; want false, context.Canceled", got, err)
+			}
+			if len(service.sessions) != 0 || store.writes != 0 || store.reads != 1 {
+				t.Fatal("canceled probe hydrated a session or mutated storage")
+			}
+		})
+	}
+}
+
+func TestDurableProbeCanceledWhileValidatingHistory(t *testing.T) {
+	t.Parallel()
+	// The context controls cancellation at a validation boundary, without a
+	// goroutine or a timing-dependent large fixture. No storage effect is needed.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	controlled := &durableProbeContext{Context: ctx, cancel: cancel, remaining: 5}
+	snapshot := []byte(`{"Session":{"SessionID":"~default"},"Records":[
+		{"kind":"canonical_factory_event","canonicalEvent":{"type":"WORK_CREATED"}},
+		{"kind":"future_kind"}
+	]}`)
+	id, err := inspectDurableSnapshot(controlled, snapshot)
+	if id != "" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled history validation = %q, %v; want empty identity, context.Canceled", id, err)
+	}
+}
+
+type durableProbeContext struct {
+	context.Context
+	cancel    context.CancelFunc
+	remaining int
+}
+
+func (ctx *durableProbeContext) Err() error {
+	ctx.remaining--
+	if ctx.remaining == 0 {
+		ctx.cancel()
+	}
+	return ctx.Context.Err()
+}
+
 type durableProbeStore struct {
 	snapshot []byte
 	failure  error
 	reads    int
 	writes   int
+	onLoad   func()
 }
 
 func (store *durableProbeStore) Load(string) ([]byte, error) {
 	store.reads++
+	if store.onLoad != nil {
+		store.onLoad()
+	}
 	return store.snapshot, store.failure
 }
 
@@ -109,7 +175,7 @@ func BenchmarkDurableProbe(b *testing.B) {
 	b.Run("discard-history-probe", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			if _, err := inspectDurableSnapshot(snapshot); err != nil {
+			if _, err := inspectDurableSnapshot(b.Context(), snapshot); err != nil {
 				b.Fatal(err)
 			}
 		}
