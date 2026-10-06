@@ -885,3 +885,12 @@ func assertAgyResponseEventTopology(t testing.TB, selector string, events []fact
 		}
 	}
 }
+
+// FunctionalMonolithCleanup closes the package fixture after all parallel
+// customer scenarios finish. Native go test retains the same TestMain cleanup.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := agySharedProcess.finalize(); err != nil {
+		t.Errorf("close package fixture: %v", err)
+	}
+}

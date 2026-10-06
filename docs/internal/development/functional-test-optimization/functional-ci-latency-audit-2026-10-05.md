@@ -2339,7 +2339,7 @@ The supervisor took **171.948 seconds** and the coverage invocation reported
 Shallow checkout took six seconds, Go setup nine seconds, archive restore four
 seconds, and applying the in-place archive cache took less than one second.
 The coverage trace reported zero compiler commands and 73 linker command
-observations, including the failed attempt and recovered retry. These trace
+observations from the coverage invocation, including its failed attempt. Retry stderr is not included in these diagnostics; they do not measure retry link work. These trace
 counts are not linker CPU seconds. Capture and save each took four seconds.
 
 One recovered failure was `TestMCPSubagentCustomACPHandlesPermissionRequest`:
@@ -2480,3 +2480,23 @@ before adoption. Its tool trace includes tool-program links as well as tests:
 and 137.839 seconds summed link wall. It also performed 30 compiler calls
 (3.097 seconds CPU) for changed tooling/bridge sources. This is local evidence
 for a prototype, not the next hosted checkpoint.
+
+
+### Latest hosted customer-observation fix: 62e5d98d79
+
+[Hosted run 37401008431](https://github.com/portpowered/you-agent-factory/actions/runs/37401008431) passes the complete functional lane without retries: 68 packages, 751 results, 749 pass and two skips. The functional job takes **237 seconds**, including setup and reporting. Its supervisor takes **188.583 seconds** and coverage invocation **177.583 seconds**. This does **not** satisfy the three-minute complete-job checkpoint.
+
+The restored compiler archive cache observes only two compiler commands for changed test sources and 36 linker commands. A cache miss does not explain this slower run. The largest package is customer_journeys (116.003s), followed by cli_rest_journeys (77.730s), packaged/invocation (73.274s), provider_sessions/details (47.802s), MCP worker_sessions (45.970s), recordings/lifecycle (45.310s), and models/inference (43.309s). Package elapsed times overlap and include parallel scheduling; they must not be added as the lane critical path or treated as CPU measurements.
+
+The separate Verification Policy gate fails on an outdated dry-run assertion that assumed `-stream` immediately followed `-suite functional`. The command now includes `-functional-monolith=true`; the job-count handoff remains four in that policy test. Backend Lint passes. The policy assertion is corrected in the next candidate.
+
+### Teardown-aware consolidation experiments
+
+The first private cleanup-hook prototype joins two additional teardown-only packages (rollout and MCP protocol), preserving all 751 results and blocking floors. It passes in **112.81s**, with 39 observed tool links including supervisor tools: measured link CPU **44.354s**, link active wall **44.088s**, and sum of overlapping link wall **137.839s**. It is a private source experiment, not hosted evidence or a three-minute checkpoint.
+
+A subsequent same-feature experiment limiting each process to GOMAXPROCS=2 passes in **134.20s** (coverage invocation 128.005s), without retries. Its 39 links consume **44.501s CPU**, occupy **42.401s active wall**, and sum to **114.963s overlapping wall**. Four compiler commands are observed after source changes. This does not demonstrate a total-lane improvement over the four-thread prototype; the reduced thread limit is not adopted. Earlier valid four-thread private samples range from 111.92s to 162.52s and remain relevant to variance.
+
+
+The expanded teardown-aware candidate consolidates **24 packages and 223 top-level tests**, compared with the shipped 19 packages/171 tests. Only five reviewed teardown-only packages opt in: rollout, MCP protocol, runtime_api, workers/inference, and workers/inference/agy. Other fixture, global-state, executable, relative-path, startup-TestMain and quarantine boundaries remain native. Native retries continue to use original packages. The hook runs through Go's parent `t.Cleanup` after every parallel child; cleanup errors still fail the package. Functional execution is fresh `-count=1`; this lifecycle opt-in does not claim repeat-count support for once-only shared fixtures.
+
+The expanded private run passes in **155.79 seconds**, with coverage invocation **145.599s**, all 68 packages/751 results, 749 pass/two skips, and unchanged blocking coverage gates. It observes 13 compiler actions after source changes and **34 links**, versus 39 in the smaller prototype. Those links consume **62.228s CPU**, occupy **68.692s active wall**, and sum to **175.355s overlapping wall**. The total run is slower than the smaller prototype despite fewer binaries; the evidence establishes reduced link count, not a controlled wall-time improvement. Focused Go eligibility tests, scoped built-in and repository lint, and six lane-budget policy tests pass. Hosted timing remains necessary before the three-minute merge checkpoint.

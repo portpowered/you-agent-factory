@@ -190,6 +190,8 @@ func writeFunctionalMonolithMetadata(listed []functionalGoListPackage, packages 
 func functionalMonolithRegistration(pkg functionalGoListPackage) (string, string, string, error) {
 	var tests strings.Builder
 	name, reason, mainAlias := "", "", ""
+	cleanup := ""
+	var mainFunction *ast.FuncDecl
 	for _, group := range []struct {
 		alias string
 		files []string
@@ -215,7 +217,10 @@ func functionalMonolithRegistration(pkg functionalGoListPackage) (string, string
 				}
 				if fn.Name.Name == "TestMain" {
 					mainAlias = group.alias
-					reason = "custom TestMain: preserve native binary"
+					mainFunction = fn
+				}
+				if functionalMonolithCleanupHook(fn, file) {
+					cleanup = group.alias + "." + fn.Name.Name
 				}
 				if functionalTestNamePattern.MatchString(fn.Name.Name) && functionalTestSignature(fn, testingImportNames(file)) {
 					fmt.Fprintf(&tests, "{%s, %s.%s},\n", strconv.Quote(fn.Name.Name), group.alias, fn.Name.Name)
@@ -227,6 +232,7 @@ func functionalMonolithRegistration(pkg functionalGoListPackage) (string, string
 	if mainAlias != "" {
 		registration += "func main() { " + mainAlias + ".TestMain(m) }\n"
 	}
+	registration, reason = functionalMonolithCleanupRegistration(registration, reason, cleanup, mainFunction)
 	return registration, name, reason, nil
 }
 
@@ -242,4 +248,61 @@ func functionalMonolithNativeReason(source string) string {
 		}
 	}
 	return ""
+}
+
+// Explicit cleanup hooks preserve the native lifecycle only when TestMain has
+// no setup before m.Run. Packages with setup, relative fixtures or global effects
+// continue to use their native executable.
+func functionalMonolithCleanupHook(fn *ast.FuncDecl, file *ast.File) bool {
+	return fn.Name.Name == "FunctionalMonolithCleanup" && functionalTestSignature(fn, testingImportNames(file))
+}
+
+func functionalMonolithCleanupRegistration(registration, reason, cleanup string, mainFunction *ast.FuncDecl) (string, string) {
+	if mainFunction == nil {
+		return registration, reason
+	}
+	if cleanup == "" || !functionalMonolithMainRunsFirst(mainFunction) {
+		return registration, "custom TestMain: preserve native binary"
+	}
+	return registration + "var monolithCleanup = " + cleanup + "\n", reason
+}
+
+func functionalMonolithMainRunsFirst(fn *ast.FuncDecl) bool {
+	if fn.Body == nil || len(fn.Body.List) == 0 || fn.Type.Params == nil || len(fn.Type.Params.List) != 1 || len(fn.Type.Params.List[0].Names) != 1 {
+		return false
+	}
+	statement, ok := fn.Body.List[0].(*ast.AssignStmt)
+	if !ok || len(statement.Rhs) != 1 {
+		return false
+	}
+	call, ok := statement.Rhs[0].(*ast.CallExpr)
+	if !ok || len(call.Args) != 0 {
+		return false
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "Run" {
+		return false
+	}
+	receiver, ok := selector.X.(*ast.Ident)
+	return ok && receiver.Name == fn.Type.Params.List[0].Names[0].Name && functionalMonolithRunCallCount(fn.Body, receiver.Name) == 1
+}
+
+func functionalMonolithRunCallCount(body *ast.BlockStmt, receiver string) int {
+	count := 0
+	ast.Inspect(body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "Run" {
+			return true
+		}
+		owner, ok := selector.X.(*ast.Ident)
+		if ok && owner.Name == receiver {
+			count++
+		}
+		return true
+	})
+	return count
 }

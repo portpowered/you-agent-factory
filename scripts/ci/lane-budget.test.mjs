@@ -95,7 +95,7 @@ test("explicit functional CI jobs override is shared by discovery and coverage o
 	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 	assert.match(result.stdout, /unitlane -jobs 2/);
 	assert.match(result.stdout, /functionallane -jobs 4/);
-	assert.match(result.stdout, /gocoveragecheck -suite functional -stream -jobs 4/);
+	assert.match(result.stdout, /gocoveragecheck -suite functional -functional-monolith=true -stream -jobs 4/);
 });
 
 test("corrupted production result warns, falls back, and reaches numeric job flags", (t) => {
