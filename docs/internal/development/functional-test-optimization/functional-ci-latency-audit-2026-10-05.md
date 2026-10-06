@@ -5610,3 +5610,82 @@ f79408d2bf (#2959), changing captured Codex detail projection, provider/session
 fixtures, generated clients, recordings and workflow coverage selection. Rebase
 the local cleanup and interrupt fix to that source and verify the affected
 fixtures before the next push; measurements above precede that rebase.
+
+
+## October 6: reuse installed homes for input rejection and named parity
+
+The latest completed hosted run, 37514240019 at f5e79654cf, passes Functional
+Tests in 198 seconds for the complete job. Its main capture is 139.637s,
+67 packages / 766 results (764 pass, two skip), with 94 compiler commands
+and twelve links. The overall workflow fails: the unit replay/start race
+selection observes one execution before the asynchronous successor starts,
+and the browser discard/leave scenario times out waiting for Edit mode.
+Coverage holds are not the cause of that unit failure. The browser failure
+is still unresolved and has no established relationship to these Go changes.
+
+The branch is rebased onto live main f79408d2bf83a965a8744b665a4097b70683132f.
+Wire conflicts were resolved by regeneration. Captured Codex detail expectations
+follow the new public contract; the duplicate native-only-history child that
+called the same successful-history assertion is removed. Final Go sources have
+no conflict markers, generated Wire has no drift, and diff whitespace passes.
+The rebased Worker Sessions component, providers, Codex and CLI/REST packages
+pass focused execution and both scoped linters. This does not replace hosted
+required checks.
+
+The unit late-output characterization now observes the accepted successor's
+controlled execution before checking publication effects. Acceptance reserves
+the successor before asynchronous execution starts; an immediate count read
+was not a synchronization boundary. One hundred focused race repetitions pass,
+as does the preceding CI command's two-repetition replay/start selection for
+Worker Sessions and invoke_continue. No sleeps, enlarged deadlines or weakened
+effect assertions are introduced. Hosted CI remains authoritative for gates.
+
+Two compatible functional setups now reuse installed homes:
+
+- Required-input rejection invokes the same test-owned installed home through
+  an explicit UUID Factory Session. Remove the obsolete seed-copy machinery,
+  backend-scope JSON rewriting, duplicate filesystem census and pass-through
+  invocation wrapper. Keep the CLI refusal, missing-input diagnostic and
+  no-provider-execution assertions.
+- Named CLI/REST outcome parity uses its parent fixture's installed Factory,
+  home and isolated model cache. Each CLI/API invocation already opens its
+  own explicit session. The child no longer deletes the parent's home;
+  parent-owned teardown remains responsible for its installation.
+
+Uncontended B/C/C/B comparison uses separate compiled native Linux binaries,
+four pinned CPUs, GOMAXPROCS4, GOGC100, and two fresh executions per sample.
+Compilation/linking are excluded. Both entire customer groups run, rather
+than only the changed assertion. All eight group executions per side pass.
+
+| Side | CPU seconds, summed samples | Wall seconds, summed samples | Wall range per sample |
+| --- | ---: | ---: | ---: |
+| Baseline | 7.023789 | 7.610737358 | 3.776065023–3.834672335 |
+| Candidate | 6.076905 | 7.156714274 | 3.571954919–3.584759355 |
+
+Observed savings are 13.5% CPU and 6.0% elapsed for these two groups. This is
+not a claim of an equivalent whole-suite gain. Source is Windows HEAD
+9d04b4e914 plus the causal unit-test change and these two candidate files;
+the private Linux checkout is synchronized from its Git archive, with exact
+upstream deleted files removed first. Private checkout Git identity is stale
+and is not source provenance. Baselines, builds, logs and profiles remain
+under private installation-reuse-paired artifacts. Both scoped linters pass
+for Worker Sessions and customer_lifecycles.
+
+The complete functional supervisor and quarantine pass in 115.90s, with
+110.918s main capture and 341.04 CPU-seconds (268.73 user / 72.31 system).
+All 67 packages finish: 763 results, 761 pass and two skip. Complete raw
+failure capture contains no failures and no retry ledger is created.
+470 compiler commands consume 88.282990 CPU-seconds / 29.311676s active
+wall; fifteen links consume 18.183157 CPU-seconds / 13.416034s active wall.
+These active intervals overlap execution and one another and are not additive
+wall phases. Changed-source compile misses after the live-main rebase make
+this a fresh candidate measurement, not a controlled comparison with the
+older 92.15s warm run or a hosted checkpoint. Private artifacts are retained
+under installation-reuse-full.
+
+The complete hosted two-minute checkpoint remains unmet. Publish this reviewed
+batch for fresh hosted evidence, retain the PR draft until the checkpoint and
+required checks pass, and continue reducing repeated initialization through
+owned homes and explicit Factory Sessions. Immutable pre-rendered file caching
+remains a measured follow-up hypothesis; no additional production cache or
+shared live session state is introduced in this batch.

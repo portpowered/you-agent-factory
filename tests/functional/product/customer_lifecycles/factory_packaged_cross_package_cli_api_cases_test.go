@@ -175,14 +175,8 @@ func testFactorypackagedcrossPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t
 	}
 
 	fixture := factorypackagedcrossSharedCrossProcess(t)
-	namedHomeDir := t.TempDir()
-	namedFactoryDir := support.InstallPackagedFactoryWithProcess(
-		t,
-		fixture.process,
-		isolatedHomeEnvironment(namedHomeDir),
-		t.TempDir(),
-		factorydefinitions.PackagedGoalFactoryName,
-	)
+	// The named invocation uses the parent-owned installation and its own session.
+	namedHomeDir, namedFactoryDir := fixture.homeDir, fixture.factoryDir
 	apiServer := startPackagedGoalParityAPIServer(t, fixture.factoryDir)
 	t.Cleanup(func() { assertPackagedGoalParityAPIServerHealthy(t, apiServer) })
 
@@ -289,7 +283,6 @@ func runPackagedOutcomeParityCase3(t *testing.T, apiServer *packagedGoalParityAP
 		wantPackagedGoalPrimaryResult,
 	)
 	assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "complete")
-	removeCrossOwnedPath(t, "named factory home", homeDir)
 
 }
 func runPackagedOutcomeParityCase4(t *testing.T, apiServer *packagedGoalParityAPIServer) {
