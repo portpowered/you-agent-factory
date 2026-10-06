@@ -19,6 +19,9 @@ type interruptInputStore struct {
 	stopOperationStore
 	input         json.RawMessage
 	writeErr      error
+	writeAckErr   error
+	persistentAck bool
+	loseInputRef  bool
 	readErr       error
 	corrupt       bool
 	readKeys      []recordings.WorkerControlOperationKey
@@ -41,7 +44,58 @@ func (s *interruptInputStore) PersistWorkerControlInput(_ context.Context, _ rec
 		return "", s.writeErr
 	}
 	s.input = append(json.RawMessage(nil), input...)
-	return "scoped-input", nil
+	if s.loseInputRef {
+		return "", s.writeAckErr
+	}
+	err := s.writeAckErr
+	if !s.persistentAck {
+		s.writeAckErr = nil
+	}
+	return "scoped-input", err
+}
+
+func TestInterruptInputLostAcknowledgementRequiresExactReadback(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"committed", "missing-reference", "corrupt", "read-failure", "conflict", "sync-unconfirmed"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			r, plan, store := newDurableInterruptFixture(t)
+			configureInterruptInputAck(store, cell)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if cell == "committed" {
+				if err != nil || operation == nil || operation.InputArtifactRef != "scoped-input" || len(store.records) != 1 {
+					t.Fatalf("exact committed input refused: operation=%#v err=%v", operation, err)
+				}
+				return
+			}
+			want := recordings.ErrWorkerRecordingPersistence
+			if cell == "conflict" {
+				want = workersessions.ErrInterruptRequestIDConflict
+			}
+			if !errors.Is(err, want) || operation != nil || len(store.records) != 0 || strings.Contains(err.Error(), "private-input") {
+				t.Fatalf("unsafe acknowledgement committed intent: operation=%#v err=%v", operation, err)
+			}
+			if (cell == "conflict" || cell == "missing-reference") && len(store.readKeys) != 0 {
+				t.Fatal("definitive refusal attempted recovery read")
+			}
+		})
+	}
+}
+
+func configureInterruptInputAck(store *interruptInputStore, cell string) {
+	store.writeAckErr = errors.New("private-input-acknowledgement")
+	switch cell {
+	case "missing-reference":
+		store.loseInputRef = true
+	case "corrupt":
+		store.corrupt = true
+	case "read-failure":
+		store.readErr = errors.New("private-input-read")
+	case "conflict":
+		store.writeAckErr = recordings.ErrWorkerControlConflict
+	case "sync-unconfirmed":
+		store.persistentAck = true
+	}
 }
 
 func (s *interruptInputStore) ReadWorkerControlInput(_ context.Context, key recordings.WorkerControlOperationKey, ref string) (json.RawMessage, error) {

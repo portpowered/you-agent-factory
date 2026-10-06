@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 // external store boundary loses only the selected phase acknowledgement.
 type interruptPhaseAckStore struct {
 	recordings.WorkerRecordingStore
+	inputAcknowledgements sync.Map
 }
 
 func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
@@ -40,6 +42,17 @@ func (store *interruptPhaseAckStore) PersistWorkerControlInput(ctx context.Conte
 		return "", errors.New("private-input-write-detail")
 	}
 	ref, err := store.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input-unsynced") {
+		return ref, errors.New("private-input-sync-unconfirmed")
+	}
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input-missing-ref") {
+		return "", errors.New("private-input-reference-unavailable")
+	}
+	if err == nil && strings.Contains(key.RequestID, "interrupt-ack-input") {
+		if _, lost := store.inputAcknowledgements.LoadOrStore(key, true); !lost {
+			return ref, errors.New("private-interrupt-input-acknowledgement-detail")
+		}
+	}
 	if err == nil && strings.HasPrefix(key.RequestID, "continue/continuation-input-ack-lost") {
 		return "", errors.New("private-continuation-acknowledgement-detail")
 	}
@@ -166,7 +179,7 @@ func (store *interruptPhaseAckStore) AdvanceWorkerControlOperation(ctx context.C
 
 func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"interrupt-ack-intent", "interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
+	for _, name := range []string{"interrupt-ack-input", "interrupt-ack-intent", "interrupt-ack-source", "interrupt-ack-admission", "interrupt-ack-completion"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

@@ -16,7 +16,7 @@ import (
 // still uses the same production store and exact owned provider execution.
 func TestInterruptPersistenceFailureLeavesSourceControllable(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"interrupt-input-write-failure", "interrupt-input-read-failure", "interrupt-input-corrupt", "interrupt-intent-failure", "interrupt-ack-intent-disputed"} {
+	for _, name := range []string{"interrupt-input-write-failure", "interrupt-input-read-failure", "interrupt-input-corrupt", "interrupt-intent-failure", "interrupt-ack-intent-disputed", "interrupt-ack-input-unsynced", "interrupt-ack-input-missing-ref"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
