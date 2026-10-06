@@ -149,6 +149,17 @@ func (err testResponseCodedError) Error() string { return err.response.Message }
 
 func (err testResponseCodedError) CLIErrorResponse() factoryapi.ErrorResponse { return err.response }
 
+func TestNestedDiagnosticWriterPropagatesRenderedMarker(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	outer := NewDiagnosticWriter(&output)
+	inner := NewDiagnosticWriter(outer)
+	WriteTerminalFailure(inner, errors.New("application failure"))
+	if !outer.DiagnosticRendered() || strings.Count(output.String(), "Error:") != 1 {
+		t.Fatalf("nested rendered marker/output = %t / %q", outer.DiagnosticRendered(), output.String())
+	}
+}
+
 func TestWriteFailurePreservesDecodedServerResponse(t *testing.T) {
 	t.Parallel()
 

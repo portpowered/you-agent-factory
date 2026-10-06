@@ -80,12 +80,14 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		if state.session.Status == completion.Status {
 			candidate := cloneRuntimeSessionState(state)
+			_, pending := s.pendingPetriHistory[id]
+			s.applyPendingPetriHistory(&candidate)
 			beforeMutations, beforeSummaries := len(candidate.petriMutations), len(candidate.petriSummaries)
 			compactRuntimePetriHistory(&candidate)
-			if beforeMutations == len(candidate.petriMutations) && beforeSummaries == len(candidate.petriSummaries) {
+			if !pending && beforeMutations == len(candidate.petriMutations) && beforeSummaries == len(candidate.petriSummaries) {
 				return nil
 			}
-			if err := s.persistSessionSnapshot(candidate); err != nil {
+			if err := s.persistPetriCandidate(candidate); err != nil {
 				return err
 			}
 			*state = candidate
@@ -94,9 +96,11 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 		return fmt.Errorf("record Petri session completion: session %q is already %s", id, state.session.Status)
 	}
 
-	candidate := projectPetriTerminalSessionState(*state, completion, s.now())
+	base := cloneRuntimeSessionState(state)
+	s.applyPendingPetriHistory(&base)
+	candidate := projectPetriTerminalSessionState(base, completion, s.now())
 	compactRuntimePetriHistory(&candidate)
-	if err := s.persistSessionSnapshot(candidate); err != nil {
+	if err := s.persistPetriCandidate(candidate); err != nil {
 		return err
 	}
 	if ok {
@@ -311,6 +315,17 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 			continue
 		}
 		token := *mutations[i].Token
+		token.Color.Content = work.CloneWorkContentParts(token.Color.Content)
+		token.Color.Payload = append([]byte(nil), token.Color.Payload...)
+		token.Color.PreviousChainingTraceIDs = append([]string(nil), token.Color.PreviousChainingTraceIDs...)
+		token.Color.Relations = append([]work.Relation(nil), token.Color.Relations...)
+		if token.Color.Tags != nil {
+			tags := make(map[string]string, len(token.Color.Tags))
+			for key, value := range token.Color.Tags {
+				tags[key] = value
+			}
+			token.Color.Tags = tags
+		}
 		token.History = cloneWorkerHistory(token.History)
 		token.Color.StructuredResult = jsonvalue.Clone(token.Color.StructuredResult)
 		token.Color.StructuredResultPresent = jsonvalue.Present(
@@ -371,6 +386,7 @@ const (
 // persistence writer is called. It intentionally identifies only the target,
 // measured size, and configured bound; snapshot content is never included.
 type SnapshotSizeLimitError struct {
+	SessionID   string
 	Path        string
 	ActualBytes int
 	MaxBytes    int
@@ -394,6 +410,12 @@ func (e *SnapshotSizeLimitError) Error() string {
 // actionable error. Ordinary writer failures do not implement this marker
 // and retain their existing fatal propagation behavior.
 func (*SnapshotSizeLimitError) NonFatalPetriMutationPersistenceError() {}
+
+// SnapshotSizeLimitDiagnostics exposes safe facts through a structural error
+// contract so the runtime need not import the persistence implementation.
+func (e *SnapshotSizeLimitError) SnapshotSizeLimitDiagnostics() (string, int, int) {
+	return e.SessionID, e.ActualBytes, e.MaxBytes
+}
 
 // compactPersistedTokenFailureLogs applies the durable snapshot retention
 // policy without changing the live runtime state from which the snapshot was
@@ -858,6 +880,7 @@ func compactRuntimePetriHistory(state *runtimeSessionState) {
 		state.petriMutations,
 		state.petriSummaries,
 	)
+	state.petriMutations = coalescePetriMutationHistory(state.petriMutations)
 	if !allowsLegacyTerminalPetriCompaction(state) {
 		return
 	}
@@ -959,20 +982,5 @@ func clonePetriTokenSummaries(summaries []PetriTokenSummary) []PetriTokenSummary
 }
 
 func clonePetriMutationRecord(mutation interfaces.TokenMutationRecord) interfaces.TokenMutationRecord {
-	cloned := mutation
-	if mutation.Token != nil {
-		token := *clonePetriMutations([]interfaces.TokenMutationRecord{mutation})[0].Token
-		token.Color.Content = work.CloneWorkContentParts(mutation.Token.Color.Content)
-		token.Color.Payload = append([]byte(nil), mutation.Token.Color.Payload...)
-		token.Color.PreviousChainingTraceIDs = append([]string(nil), mutation.Token.Color.PreviousChainingTraceIDs...)
-		token.Color.Relations = append([]work.Relation(nil), mutation.Token.Color.Relations...)
-		if mutation.Token.Color.Tags != nil {
-			token.Color.Tags = make(map[string]string, len(mutation.Token.Color.Tags))
-			for key, value := range mutation.Token.Color.Tags {
-				token.Color.Tags[key] = value
-			}
-		}
-		cloned.Token = &token
-	}
-	return cloned
+	return clonePetriMutations([]interfaces.TokenMutationRecord{mutation})[0]
 }

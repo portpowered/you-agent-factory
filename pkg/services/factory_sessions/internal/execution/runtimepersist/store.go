@@ -42,6 +42,18 @@ type DirectoryStore struct {
 	files FileSystem
 }
 
+// persistenceError keeps the filesystem cause for internal diagnostics while
+// publishing only application-authored operation text at the CLI boundary.
+type persistenceError struct {
+	operation string
+	cause     error
+}
+
+func (e *persistenceError) Error() string           { return fmt.Sprintf("%s: %v", e.operation, e.cause) }
+func (e *persistenceError) Unwrap() error           { return e.cause }
+func (e *persistenceError) CLIErrorCode() string    { return "DURABLE_SESSION_PERSISTENCE_FAILED" }
+func (e *persistenceError) CLIErrorMessage() string { return e.operation + " failed" }
+
 // NewLazyProjectStore selects the process-owned snapshot location without
 // creating directories during process construction. Save creates them when
 // the first persistent session publishes a snapshot.
@@ -109,11 +121,11 @@ func SaveBytes(
 		return errors.New("durable session persistence filesystem is required")
 	}
 	if err := files.MkdirAll(trimmedDir, 0o700); err != nil {
-		return fmt.Errorf("create durable session persistence directory: %w", err)
+		return &persistenceError{operation: "create durable session persistence directory", cause: err}
 	}
 	path := SnapshotPath(trimmedDir, sessionID)
 	if err := files.WriteFile(path, encoded, 0o600); err != nil {
-		return fmt.Errorf("write durable session snapshot: %w", err)
+		return &persistenceError{operation: "write durable session snapshot", cause: err}
 	}
 	return nil
 }
@@ -139,7 +151,7 @@ func LoadBytes(
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("read durable session snapshot: %w", err)
+		return nil, &persistenceError{operation: "read durable session snapshot", cause: err}
 	}
 	return encoded, nil
 }

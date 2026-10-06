@@ -291,6 +291,7 @@ func (writer *DiagnosticWriter) Write(payload []byte) (int, error) {
 func (writer *DiagnosticWriter) MarkDiagnosticRendered() {
 	if writer != nil {
 		writer.rendered = true
+		MarkDiagnosticRendered(writer.output)
 	}
 }
 
@@ -507,6 +508,17 @@ func sanitizeDebugMessage(message string) string {
 		return message[:512] + "..."
 	}
 	return message
+}
+
+// WriteTerminalFailure reports an application-owned startup or cleanup cause.
+// Execute diagnostics are already owned by the command renderer; callers use a
+// separate invocation for cleanup so a rendered command cannot hide its cause.
+func WriteTerminalFailure(output io.Writer, err error) {
+	if output == nil || err == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(output, "Error: %s\n", sanitizeDebugMessage(err.Error()))
+	MarkDiagnosticRendered(output)
 }
 
 func sanitizeDebugURLMatch(raw string) string {
