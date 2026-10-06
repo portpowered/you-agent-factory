@@ -2896,3 +2896,42 @@ compatible packages; their top-level registration count becomes 488. Host-load
 variance remains substantial, so this one run is validation rather than a
 claimed throughput improvement. Focused native repetitions and repository lint
 also pass.
+
+### Native-package CPU costs from the successful diagnostic run
+
+These are measured process CPU seconds, not monolith label samples. Wall times
+include concurrency with other packages and profiling overhead. Do not combine
+these wall values into a total or compare them directly with sampled CPU.
+
+| Native package | User + system CPU seconds | Wall seconds |
+| --- | ---: | ---: |
+| Packaged Factory invocation | 26.45 | 35.23 |
+| Models inference | 15.76 | 22.65 |
+| Providers ACP | 14.09 | 19.21 |
+| Chat Sessions ACP | 11.51 | 18.49 |
+| MCP stdio | 10.57 | 16.27 |
+| Worker invoke/continue | 6.94 | 13.22 |
+| Providers | 6.74 | 13.85 |
+| Mock Workers | 5.98 | 6.37 |
+
+These executable/protocol fixtures remain native. Prioritize repeated setup
+within their compatible cases rather than merging away executable isolation.
+
+### Subsequent cold-cache hosted evidence
+
+PR #2905's merge-queue candidate passes functional coverage in **316s complete /
+243.519s coverage**. It has no matched archive cache, 672 compiler actions and
+22 links. This does not contradict its 155s same-head warm-cache rerun, but it
+shows that cache availability is material to the three-minute goal. PR-scoped
+cache entries are not sufficient evidence of default-branch/queue reuse; the
+main-push cache-seeding path must be verified after merging.
+
+The admission candidate `6ce70798aa` passes its initial hosted functional job
+in **310s complete / 235.462s coverage**, all 68 packages / 755 results, with
+no retries, no matched archive cache, 671 compiler actions and 22 links. The
+120s complete-job checkpoint remains unmet. The local full-run CPU is 570.51s
+(449.41 user / 121.10 system); three compiler processes use 1.940 CPU seconds
+and 25 timed linker processes use 48.838 CPU seconds, with 48.516s active linker
+intervals. Peak process RSS is 5,757,144 KiB. CI diagnostic command counts and
+local timed-process counts use different instrumentation and are reported
+separately.
