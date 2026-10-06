@@ -488,7 +488,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 1)}
 	var store recordings.WorkerRecordingStore
-	cfg := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{
+	cfg := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Args: []string{"--record", filepath.Join(dir, "board.json")}, Edges: serviceedges.Edges{
 		ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
 		WorkerRecordingStoreObserver: func(value recordings.WorkerRecordingStore) { store = value },
 	}}
@@ -497,8 +497,10 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	done := admitControlWorker(t, ctx, host.URL(), "ended-sibling", runner)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "ended-sibling", "operation": "TERMINATE"})
 	waitControlSignal(t, done)
-	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
-	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "Factory archive recovery"})
+	// The recorded host owns this scope's canonical board. HTTP Open does not
+	// select a recording, so its closed attribution would be unavailable.
+	scopeID := support.GetDefaultSession(t, host.URL()).Id
+	support.SubmitSessionWorkAt(t, host.URL(), scopeID, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "Factory archive recovery"})
 	select {
 	case done = <-runner.started:
 	case <-ctx.Done():
@@ -510,7 +512,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 		t.Fatalf("Factory recovery admission: %v", factoryPage)
 	}
 	factoryID := factoryWorkers[0].(map[string]any)["workerSessionId"].(string)
-	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+opened.Session.Id+"/pause", map[string]any{}, http.StatusOK)
+	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+scopeID+"/pause", map[string]any{}, http.StatusOK)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": factoryID, "operation": "TERMINATE"})
 	waitControlSignal(t, done)
 	seedHistoryCrashCapture(t, ctx, store)
@@ -520,6 +522,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	// the original writer is joined. Observe recovery through public reads.
 	injectHistoryCaptureTails(t, dir)
 	// Different owner epoch, identical durable root, no native provider files.
+	cfg.Args = nil
 	reopened := support.StartFunctionalAPIServer(t, cfg)
 	recoveredSession, recoveredCtx := startMCP(t, process, reopened.URL())
 	active := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "active", "all", "")
@@ -532,7 +535,7 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	}
 	factoryArchive := historyParityPage(t, recoveredCtx, recoveredSession, reopened, "archived", "factory", "")
 	assertArchivedProviderRecovery(t, reopened, recoveredCtx, recoveredSession, factoryArchive)
-	if workers := factoryArchive["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != factoryID || workers[0].(map[string]any)["factorySessionId"] != opened.Session.Id {
+	if workers := factoryArchive["sessions"].([]any); len(workers) != 1 || workers[0].(map[string]any)["workerSessionId"] != factoryID || workers[0].(map[string]any)["factorySessionId"] != scopeID {
 		t.Fatalf("restart lost Factory capture attribution: %v", factoryArchive)
 	}
 	selected := getHost(t, reopened.URL()+"/worker-sessions/lost-worker").(map[string]any)

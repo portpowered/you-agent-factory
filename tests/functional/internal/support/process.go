@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -46,6 +47,7 @@ type ApplicationProcess interface {
 	ACPServer() ACPServer
 	ProviderRegistry() ProviderRegistry
 	WorkerRecordingReader() recordings.WorkerRecordingReader
+	FactorySessions() factorysessions.Service
 }
 
 type applicationProcess struct {
@@ -54,7 +56,11 @@ type applicationProcess struct {
 	acpServer        ACPServer
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
+	factorySessions  factorysessions.Service
 }
+
+// FactorySessions exposes the same public session contract as the root process.
+func (p applicationProcess) FactorySessions() factorysessions.Service { return p.factorySessions }
 
 func (p applicationProcess) Close(ctx context.Context) error {
 	return p.close(ctx)
@@ -117,6 +123,7 @@ func buildProcessWithContext(
 		acpServer:        process.ACPServer(),
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
+		factorySessions:  process.FactorySessions().FactorySessions().(factorysessions.Service),
 	}
 	return functionalProcess, recordingReader, nil
 }

@@ -76,6 +76,11 @@ func assertMetadataCaptureFacts(t *testing.T, id string, observation map[string]
 	if observation["state"] != "COMPLETED" || observation["providerSessionAvailable"] != false || observation["recordingHealth"] != "COMPLETE" {
 		t.Fatalf("captured metadata invented ownership/association or lost health: %v", observation)
 	}
+	for _, key := range []string{"workName", "workId", "factorySessionId"} {
+		if observation[key] != nil {
+			t.Fatalf("direct/legacy capture invented Work attribution: %v", observation)
+		}
+	}
 	if id == "legacy" {
 		for _, key := range []string{"provider", "model", "reasoningEffort", "tokenUsage", "startedAt", "endedAt", "durationMillis"} {
 			if value := observation[key]; value != nil && value != "" {
