@@ -83,6 +83,7 @@ func controlSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []any{"workerSessionId", "operation"},
 		"properties": map[string]any{
+			"resumeMode": map[string]any{"type": "string", "enum": []any{"provider", "recorded"}, "default": "provider"},
 			"workerSessionId": map[string]any{
 				"type":      "string",
 				"minLength": 1,

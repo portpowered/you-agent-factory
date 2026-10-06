@@ -54,12 +54,16 @@ func runRealHostFactory(t *testing.T, process support.Process) {
 	args := map[string]any{"workerSessionId": id, "operation": "INTERRUPT", "requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}
 	// Runtime owns Factory replacement. Preserve the explicit unsupported
 	// refusal and prove it has no provider effect through both transports.
-	refusal := callTool(t, ctx, session, "you.worker_session.control", args)
-	assertToolError(t, refusal, "worker_session.conflict", false)
-	details := refusal.StructuredContent.(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
-	if details["upstreamCode"] != "UNSUPPORTED" || details["phase"] != "VALIDATION" {
-		t.Fatalf("Factory replacement refusal lost typed policy: %v", details)
+	for _, mode := range []string{"provider", "recorded"} {
+		args["resumeMode"] = mode
+		refusal := callTool(t, ctx, session, "you.worker_session.control", args)
+		assertToolError(t, refusal, "worker_session.conflict", false)
+		details := refusal.StructuredContent.(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
+		if details["upstreamCode"] != "UNSUPPORTED" || details["phase"] != "VALIDATION" {
+			t.Fatalf("Factory replacement refusal lost typed policy: %v", details)
+		}
 	}
+	delete(args, "resumeMode")
 	postHostJSON(t, ctx, endpoint+"/interrupt", map[string]any{"requestId": "factory-interrupt", "successorWorkerSessionId": "unsupported-successor", "replacementMessage": "replacement"}, http.StatusConflict)
 	assertProviderCallCount(t, runner, 1)
 	if source := getHost(t, endpoint).(map[string]any); source["state"] != "RUNNING" {

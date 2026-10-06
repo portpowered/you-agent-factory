@@ -45,7 +45,12 @@ before treating the capture as complete. `nextToken` is accepted only with
 Call `you.worker_session.control` with `workerSessionId` and `operation`:
 `CANCEL`, `TERMINATE`, `KILL`, or `INTERRUPT`. `INTERRUPT` also requires `requestId`,
 `successorWorkerSessionId`, and `replacementMessage`. Use the same values when
-retrying an interrupted request. `CANCEL` and `TERMINATE` reject these fields.
+retrying an interrupted request. Optional `resumeMode` accepts `provider` (default)
+or `recorded`, only with `INTERRUPT`. Provider mode continues the captured Provider
+Session ID; recorded mode starts a fresh execution using captured context and
+settings with the replacement message. Neither mode falls back to the other.
+`CANCEL`, `TERMINATE`, and `KILL` reject `resumeMode`. Changing the mode or
+replacement message for an accepted request conflicts with that request.
 
 `KILL` requires `requestId` and `expectedAttemptId` and rejects replacement fields.
 Other operations reject `expectedAttemptId`. Read the physical attempt identity

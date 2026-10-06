@@ -489,3 +489,50 @@ func assertWorkerSessionUnsupportedPreflight(t *testing.T, code string) {
 		t.Fatalf("unsafe upstream text: %s", raw)
 	}
 }
+
+func TestWorkerSessionValidationResumeModeBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("invalid mode reached HTTP")
+		return nil, nil
+	})
+	prefix := `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s","replacementMessage":"m",`
+	for _, field := range []string{`"resumeMode":""`, `"resumeMode":" "`, `"resumeMode":"invalid"`, `"resumeMode":"Provider"`, `"resumeMode":null`, `"resumeMode":1`, `"resumeMode":true`, `"resumeMode":[]`, `"resumeMode":"provider","resumeMode":"recorded"`, `"ResumeMode":"recorded"`} {
+		failure := workerCall(t, adapter, ToolControl, prefix+field+"}")["error"].(map[string]any)
+		if failure["code"] != "worker_session.invalid_request" || failure["retryable"] != false {
+			t.Fatalf("invalid mode: %v", failure)
+		}
+	}
+	for _, op := range []string{"CANCEL", "TERMINATE", "KILL"} {
+		failure := workerCall(t, adapter, ToolControl, `{"workerSessionId":"w","operation":"`+op+`","resumeMode":"recorded"}`)["error"].(map[string]any)
+		if failure["code"] != "worker_session.invalid_request" || failure["retryable"] != false {
+			t.Fatalf("inapplicable mode: %v", failure)
+		}
+	}
+}
+
+func TestWorkerSessionInterruptForwardsResumeMode(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"", "provider", "recorded"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+				var body map[string]any
+				if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				if (mode == "" && body["resumeMode"] != nil) || (mode != "" && body["resumeMode"] != mode) || body["replacementMessage"] != "m" {
+					t.Fatalf("forwarded body: %v", body)
+				}
+				return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"accepted":true}`))}, nil
+			})
+			input := `{"workerSessionId":"w","operation":"INTERRUPT","requestId":"r","successorWorkerSessionId":"s","replacementMessage":"m"`
+			if mode != "" {
+				input += `,"resumeMode":"` + mode + `"`
+			}
+			if value := workerCall(t, adapter, ToolControl, input+"}"); value["error"] != nil {
+				t.Fatalf("forwarding: %v", value)
+			}
+		})
+	}
+}

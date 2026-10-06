@@ -85,14 +85,18 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runCapturedLogsCursorIsolation(t, process)
 	})
-	t.Run("real host interrupt and transcript", func(t *testing.T) {
-		t.Parallel()
-		runRealHostInterrupt(t, process)
-	})
-	t.Run("real host partial interrupt", func(t *testing.T) {
-		t.Parallel()
-		runRealHostPartialInterrupt(t, process)
-	})
+	for _, mode := range []string{"", "provider", "recorded"} {
+		t.Run("real host interrupt "+mode, func(t *testing.T) {
+			t.Parallel()
+			runRealHostInterrupt(t, process, mode)
+		})
+	}
+	for _, mode := range []string{"provider", "recorded"} {
+		t.Run("real host partial interrupt "+mode, func(t *testing.T) {
+			t.Parallel()
+			runRealHostPartialInterrupt(t, process, mode)
+		})
+	}
 	t.Run("real host Factory discovery and reads", func(t *testing.T) {
 		t.Parallel()
 		runRealHostFactory(t, process)
@@ -144,6 +148,23 @@ func runSelectedHostScenarios(t *testing.T) {
 			assertJSONEqual(t, result, requestHost(t, http.MethodPost, host.URL+"/worker-sessions/host-worker/"+strings.ToLower(operation)))
 		}
 	})
+	t.Run("invalid mode makes no HTTP request", func(t *testing.T) {
+		t.Parallel()
+		host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("invalid mode reached HTTP")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		t.Cleanup(host.Close)
+		session, ctx := startMCP(t, process, host.URL)
+		for _, mode := range []any{"", "unknown", "Provider", nil, 1, true} {
+			args := interruptPayload("replacement")
+			args["workerSessionId"], args["operation"], args["resumeMode"] = "source", "INTERRUPT", mode
+			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.invalid_request", false)
+		}
+		for _, op := range []string{"CANCEL", "TERMINATE", "KILL"} {
+			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", map[string]any{"workerSessionId": "source", "operation": op, "resumeMode": "recorded"}), "worker_session.invalid_request", false)
+		}
+	})
 	t.Run("typed errors and unavailable host", func(t *testing.T) {
 		t.Parallel()
 		host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +184,17 @@ func runSelectedHostScenarios(t *testing.T) {
 			assertToolError(t, result, code, false)
 		}
 		assertToolError(t, callTool(t, ctx, session, "you.worker_session.read", map[string]any{"workerSessionId": "unavailable"}), "worker_session.unavailable", true)
+		for _, mode := range []string{"", "provider", "recorded"} {
+			args := interruptModePayload("replacement", mode)
+			args["workerSessionId"], args["operation"] = "missing", "INTERRUPT"
+			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.not_found", false)
+		}
 		host.Close()
+		for _, mode := range []string{"", "provider", "recorded"} {
+			args := interruptModePayload("replacement", mode)
+			args["workerSessionId"], args["operation"] = "host-worker", "INTERRUPT"
+			assertToolError(t, callTool(t, ctx, session, "you.worker_session.control", args), "worker_session.host_unavailable", true)
+		}
 		for _, tool := range []string{"list", "read", "control"} {
 			args := map[string]any{}
 			if tool != "list" {

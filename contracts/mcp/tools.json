@@ -4242,6 +4242,17 @@
             "id": "mcp.arg.you.worker_session.control.expected_attempt_id",
             "name": "expectedAttemptId",
             "required": false
+          },
+          "mcp.arg.you.worker_session.control.resume_mode": {
+            "id": "mcp.arg.you.worker_session.control.resume_mode",
+            "name": "resumeMode",
+            "required": false,
+            "constraints": {
+              "enum": [
+                "provider",
+                "recorded"
+              ]
+            }
           }
         },
         "schema": {
@@ -4276,6 +4287,14 @@
             "expectedAttemptId": {
               "type": "string",
               "minLength": 1
+            },
+            "resumeMode": {
+              "type": "string",
+              "enum": [
+                "provider",
+                "recorded"
+              ],
+              "default": "provider"
             }
           },
           "required": [

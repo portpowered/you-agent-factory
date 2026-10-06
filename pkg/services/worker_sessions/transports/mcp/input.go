@@ -23,6 +23,7 @@ type readInput struct {
 	NextToken       *string `json:"nextToken"`
 }
 type controlInput struct {
+	ResumeMode               *string `json:"resumeMode"`
 	WorkerSessionID          string  `json:"workerSessionId"`
 	Operation                string  `json:"operation"`
 	RequestID                *string `json:"requestId"`
@@ -123,6 +124,11 @@ func decodeControl(raw json.RawMessage) (controlInput, error) {
 	if !slices.Contains([]string{"CANCEL", "TERMINATE", "INTERRUPT", "KILL"}, input.Operation) {
 		return input, fmt.Errorf("operation must be CANCEL, TERMINATE, INTERRUPT or KILL")
 	}
+	if input.ResumeMode != nil {
+		if input.Operation != "INTERRUPT" || !slices.Contains([]string{"provider", "recorded"}, *input.ResumeMode) {
+			return input, fmt.Errorf("resumeMode must be provider or recorded and is accepted only with INTERRUPT")
+		}
+	}
 	if input.Operation == "KILL" {
 		return input, validateKillInput(input)
 	}
@@ -157,7 +163,7 @@ func validateControlFields(raw json.RawMessage) error {
 			return fmt.Errorf("invalid control arguments")
 		}
 		key, ok := token.(string)
-		if !ok || seen[key] || !slices.Contains([]string{"workerSessionId", "operation", "requestId", "expectedAttemptId", "successorWorkerSessionId", "replacementMessage"}, key) {
+		if !ok || seen[key] || !slices.Contains([]string{"workerSessionId", "operation", "requestId", "expectedAttemptId", "successorWorkerSessionId", "replacementMessage", "resumeMode"}, key) {
 			return fmt.Errorf("control arguments contain duplicate or unknown properties")
 		}
 		seen[key] = true

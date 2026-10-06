@@ -547,6 +547,14 @@
           "expectedAttemptId": {
             "type": "string",
             "minLength": 1
+          },
+          "resumeMode": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "recorded"
+            ],
+            "default": "provider"
           }
         }
       }
