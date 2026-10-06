@@ -18,9 +18,8 @@ import (
 // completion workstation from dispatching until the watched workstation has
 // visited the shared Work enough times, then releases the expected public
 // terminal Work outcome through the guarded second-pass-review dispatch.
-func TestWorkflowGuardJourneys(t *testing.T) {
+func runWorkflowGuardJourneys(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
-	host := support.NewFactorySessionHost(t)
 	t.Run("EligibilityGuardReleasesAfterRequiredVisits", func(t *testing.T) { runWorkflowEligibilityGuard(t, host) })
 	t.Run("MatchingPeerNamesReleaseCorrelatedWork", func(t *testing.T) { runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t, host) })
 	t.Run("MismatchedPeerNamesRemainIdle", func(t *testing.T) { runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t, host) })
@@ -28,7 +27,7 @@ func TestWorkflowGuardJourneys(t *testing.T) {
 	t.Run("MismatchedFieldsRemainIdle", func(t *testing.T) { runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t, host) })
 }
 
-func runWorkflowEligibilityGuard(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowEligibilityGuard(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := support.ScaffoldFactory(t, visitGuardedCompletionFactoryConfig())
 	support.WriteWorkstationConfig(t, dir, "advance-to-gate", "---\ntype: LOGICAL_MOVE\n---\n")
@@ -402,7 +401,7 @@ func assertGuardSessionQuiescent(t *testing.T, session factoryapi.FactorySession
 	}
 }
 
-func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 
@@ -455,7 +454,7 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase0(t *testing.T, hos
 
 }
 
-func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 
@@ -522,7 +521,7 @@ func runWorkflowParentOrSameNameGuardReleasesExpectedWorkCase1(t *testing.T, hos
 
 }
 
-func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 
@@ -568,7 +567,7 @@ func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase0(t *testi
 
 }
 
-func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowVisitOrMatchGuardFailureIsVisibleInPublicWorkStateCase1(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 

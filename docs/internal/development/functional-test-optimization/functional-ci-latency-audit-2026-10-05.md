@@ -12,6 +12,14 @@ passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
 below. The three- and two-minute hosted merge checkpoints remain outstanding.
 
+Latest head `ec85aae468` passes all 68 packages / 760 results with no retries.
+The changed-source hosted job takes **246s complete / 194.783s supervisor /
+184.590s coverage invocation**, with 110 compiler actions and 25 links. Its
+identical-head rerun hits the archive cache exactly: **223s complete / 185.458s
+supervisor / 167.054s coverage invocation**, zero compiler actions and 25 links.
+The three-minute complete-job checkpoint remains outstanding. These current
+runtime results supersede pre-rebase latency for the merge decision.
+
 The last pre-rebase hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
 
 The first hosted next-phase run, at `0878fd26d0`, passes in **316.816s** full
@@ -2728,3 +2736,69 @@ The isolated Windows `TestHostedContinuousRunsStayLiveWhileIdle/server` also fai
 in 35.222s waiting for listener startup/shutdown. It does not call the changed
 API helper, so this is separately recorded as a native hosted-runtime limitation,
 not attributed to the storage binding. No timeout ceiling is increased.
+
+
+### Test-only hosts and further setup reduction
+
+A fresh-state four-CPU Linux sample of `ec85aae468` passes in **128.04s
+supervisor / 122.132s coverage invocation**, 68 packages / 760 results, no retries
+and **373.87s aggregate CPU** (307.20 user + 66.67 system). Compilation consumes
+40.688 CPU seconds across 117 actions; 31 links consume 37.840 CPU seconds.
+Compiler active wall is 22.167s; linker active wall is 34.464s. These overlap
+other work. Maximum individual-process RSS is 5,208,324 KiB (about 4.97 GiB),
+not aggregate peak memory. Unrelated Windows workloads limit comparability.
+
+The fresh-state warm attempt fails the selected-time watcher despite a passing
+native leaf retry: 137.98s elapsed, 389.80 CPU seconds, two compiler actions and
+29 links. This is failed diagnostic evidence. No peer Work had been admitted.
+The next fixture drives watcher debounce registrations until the owned file
+read is acknowledged, then retains public dispatch and Work assertions. A real
+filesystem notification may replace the timer observed first; its first timer
+registration alone is insufficient. Exact pre-due, retry, cancellation and
+late-result checks remain. The initial observer implementation rejected unrelated
+5ms metrics waits; it now ignores those as the existing scheduler waiter does.
+Three native repetitions pass. A prior 20-repeat native attempt stalls in hosted
+activation before the final explicit storage edge and is interrupted; it is not
+successful evidence.
+
+Backend Lint finds five new support helpers in its production dead-code scan,
+which excludes tests as roots. Move the hosts into their two owning test
+packages' `_test.go` files, and withdraw the broad automatic API-helper storage
+binding. Each new host and the selected-time host instead supplies its owned
+storage directory explicitly. Production support dead-code findings then match
+the existing baseline exactly. Routing, guards and provider retries now share
+one parent-owned host; prompts retain a second host. All 22 customer scenarios
+remain session-isolated. Grouping changes selected results from 760 to 758.
+Five shared-session repetitions and three prompt repetitions pass.
+
+Remove the functional provider-Go-panic compatibility case; public provider
+failure routing remains, and the passing worker unit
+`TestExecuteRunnerPanicBecomesSafeFailedResult` retains safe panic recovery proof.
+Providers, Codex inference and invoke/continue expose existing lazy teardown
+through consolidation hooks, without changing native TestMain behavior.
+Complete Linux validation and hosted timing follow before accepting the batch.
+
+The first test-local host batch passes the full Linux lane with 758 selected
+results and no retries, but takes **203.09s supervisor / 195.446s coverage
+invocation**, **637.09 aggregate CPU seconds** (504.62 user + 132.47 system),
+119 compiler actions and 28 links. Peak individual-process RSS is 7,265,056 KiB.
+It does not show an improvement over the earlier 128.04s sample. That batch
+withdrew the general API-helper directory binding; unrelated hosts then share
+storage again, including within one execution. This is an isolation concern,
+not an established explanation for the whole measured variance.
+
+The final batch retains the general binding using the existing policy-free
+filesystem `Local` adapter's optional working-directory value. Its default
+remains `os.Getwd`; an explicit value changes only that effect, never the host
+process directory. A focused unit verifies both the owned value and unchanged
+host directory. No new production function/dead-code allowance is introduced.
+Explicit scenario storage overrides remain authoritative.
+
+Redundant missing-Factory bootstrap invocations are also removed from eight
+customer fixture files. Normal public host startup still initializes the
+customer home; construction-inertness assertions remain, and no model catalog
+or initialization implementation is mocked or bypassed. Three selected-time /
+shared-session repetitions pass after this change, and the affected repository
+lint reports zero issues. The three additional opt-ins compile natively with
+empty selectors and retain nil-safe teardown. Complete final-source Linux and
+hosted checks remain required.

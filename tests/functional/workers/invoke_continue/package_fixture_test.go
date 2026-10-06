@@ -620,3 +620,12 @@ func (runner invokeContinueProviderRunner) RunStreaming(ctx context.Context, req
 func (runner invokeContinueProviderRunner) commandEffect() providers.CommandRunner {
 	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }
+
+// FunctionalMonolithCleanup retains the native package lifecycle after all
+// parallel customer scenarios have released their sessions and streams.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeInvokeContinuePackageFixture(); err != nil {
+		t.Errorf("close invoke/continue package fixture: %v", err)
+	}
+}

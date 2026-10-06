@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// F-T01–F-T09 share one immutable default-role host. Sequencing is deliberate:
+// F-T01Ã¢â‚¬â€œF-T09 share one immutable default-role host. Sequencing is deliberate:
 // each A/B stop/peer journey advances the same selected scheduler, so separate
 // parallel leaves would change one another's eligibility. The whole journey
 // runs in parallel with independent legacy/ingress hosts.
@@ -23,7 +23,7 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 	base := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	facts := platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond)
 	scheduler := &selectedTimeScheduler{Deterministic: platformclock.NewDeterministic(base, time.Millisecond), registered: make(chan selectedTimeWait, 256), readiness: make(chan *selectedReadinessTimer, 256)}
-	files := &selectedTimeFiles{empty: make(map[string]int), reads: make(chan string, 16), walked: make(chan string, 64), admissions: make(map[string]int)}
+	files := &selectedTimeFiles{empty: make(map[string]int), reads: make(chan string, 16), observedReads: make(chan string, 256), walked: make(chan string, 64), admissions: make(map[string]int)}
 	dirA, routeA := newScriptCycleFactory(t)
 	dirB, routeB := newScriptCycleFactory(t)
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{filepath.Clean(dirA): routeA, filepath.Clean(dirB): routeB}}
@@ -40,6 +40,7 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 			FactoryDir: hostDir,
 			Edges: serviceedges.Edges{
 				Clock: selectedTimeFacts{facts}, ProcessScheduler: scheduler, ScriptCommandRunner: router,
+				FactorySessionsWorkingDirectory:    functionalWorkingDirectory(hostDir),
 				FactoryRuntimeInputs:               files,
 				FactoryRuntimeInputDirectoryWalker: files.walk,
 				SubmissionRecorder: func(record work.FactorySubmissionRecord) {
@@ -54,7 +55,6 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 				if admissions.Load() != 0 || len(scheduler.registered) != 0 || len(routeA.entered) != 0 || len(routeB.entered) != 0 {
 					tb.Fatal("construction activated a source or timer")
 				}
-				support.InitializeCustomerHomeWithProcess(tb, process, input.Env, hostDir)
 			},
 		})
 	})

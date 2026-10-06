@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -220,9 +219,6 @@ func startExactNaturalStopServer(t *testing.T, runner *fleetCharacterizationRunn
 			ProviderCommandRunner: runner, WorkerRecordingWriter: store,
 			FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir),
 			WorkerRecordingStoreObserver:    func(backing recordings.WorkerRecordingStore) { store.WorkerRecordingStore = backing },
-		},
-		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })

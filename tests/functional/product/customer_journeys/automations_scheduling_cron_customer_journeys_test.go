@@ -115,7 +115,6 @@ func startCronSessionHost(t *testing.T, clock *clockwork.FakeClock) (*support.Fu
 					tb.Fatal("cron admitted before activation")
 				}
 			}
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, hostDir)
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })

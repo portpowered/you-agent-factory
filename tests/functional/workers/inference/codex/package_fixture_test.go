@@ -415,3 +415,12 @@ func overwriteCodexFixtureDir(t *testing.T, srcDir, dstDir string) {
 		t.Fatalf("reset Codex fixture %q: %v", dstDir, err)
 	}
 }
+
+// FunctionalMonolithCleanup retains the native package lifecycle after all
+// parallel customer scenarios have released their sessions and streams.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := closeCodexPackageFixture(); err != nil {
+		t.Errorf("close Codex package fixture: %v", err)
+	}
+}

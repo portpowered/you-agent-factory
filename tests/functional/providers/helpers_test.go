@@ -991,3 +991,12 @@ func (fixture *ProcessFixture) validateSessionTopology() error {
 func (fixture *ProcessFixture) RuntimeLogDir() string {
 	return fixture.runtimeLogs
 }
+
+// FunctionalMonolithCleanup retains the native package lifecycle after all
+// parallel customer scenarios have released their sessions and streams.
+func FunctionalMonolithCleanup(t *testing.T) {
+	t.Helper()
+	if err := CloseGlobalFixture(); err != nil {
+		t.Errorf("close provider fixture: %v", err)
+	}
+}

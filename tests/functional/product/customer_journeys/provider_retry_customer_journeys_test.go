@@ -11,15 +11,14 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestProviderRetryRecoveryJourneys(t *testing.T) {
+func runProviderRetryRecoveryJourneys(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
-	host := support.NewFactorySessionHost(t)
 	t.Run("ConfigDrivenUnrecognizedProviderRefusalFailsOnce", func(t *testing.T) { runUnrecognizedProviderRefusal(t, host) })
 	t.Run("ConfigDrivenRetryLoopBreakerTerminatesAfterMaxRetries", func(t *testing.T) { runRetryExhaustion(t, host) })
 	t.Run("ConfigDrivenRetryLoopBreakerSucceedsBeforeLimit", func(t *testing.T) { runRetryRecovery(t, host) })
 }
 
-func runUnrecognizedProviderRefusal(t *testing.T, host *support.FactorySessionHost) {
+func runUnrecognizedProviderRefusal(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 	dir := support.ScaffoldFactory(t, map[string]any{
@@ -80,7 +79,7 @@ func runUnrecognizedProviderRefusal(t *testing.T, host *support.FactorySessionHo
 	}
 }
 
-func runRetryExhaustion(t *testing.T, host *support.FactorySessionHost) {
+func runRetryExhaustion(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))
@@ -108,7 +107,7 @@ func runRetryExhaustion(t *testing.T, host *support.FactorySessionHost) {
 	assertPublicDispatchRoute(t, events, "review-exhaustion", "task:failed")
 }
 
-func runRetryRecovery(t *testing.T, host *support.FactorySessionHost) {
+func runRetryRecovery(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))

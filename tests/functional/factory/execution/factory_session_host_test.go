@@ -1,4 +1,4 @@
-package support
+package execution_test
 
 import (
 	"context"
@@ -13,57 +13,54 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// FactorySessionHost owns one initialized process for a customer journey group.
+// factorySessionHost owns one initialized process for a customer journey group.
 // Each invocation opens its own Factory Session and uses a factory-scoped
 // command edge. The parent test owns host cleanup after all parallel children.
-type FactorySessionHost struct {
-	server   *FunctionalAPIServer
+type factorySessionHost struct {
+	server   *support.FunctionalAPIServer
 	commands *factorySessionCommands
 }
-
-type functionalWorkingDirectory string
-
-func (directory functionalWorkingDirectory) Getwd() (string, error) { return string(directory), nil }
 
 type factorySessionCommands struct {
 	mu     sync.RWMutex
 	routes map[string]platformprocess.CommandRunner
 }
 
-func NewFactorySessionHost(t *testing.T) *FactorySessionHost {
+func newFactorySessionHost(t *testing.T) *factorySessionHost {
 	t.Helper()
 	commands := &factorySessionCommands{routes: make(map[string]platformprocess.CommandRunner)}
-	idle := ScaffoldFactory(t, map[string]any{"workTypes": []map[string]any{{"name": "idle", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"}}}}})
-	ClearSeedInputs(t, idle)
-	server := StartFunctionalAPIServer(t, FunctionalAPIServerConfig{
+	idle := support.ScaffoldFactory(t, map[string]any{"workTypes": []map[string]any{{"name": "idle", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"}}}}})
+	support.ClearSeedInputs(t, idle)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: idle, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: commands},
 	})
-	return &FactorySessionHost{server: server, commands: commands}
+	return &factorySessionHost{server: server, commands: commands}
 }
 
 // Run observes terminal Work and retained Factory Events in an explicit live
 // session. It leaves peer sessions and the shared host running.
-func (host *FactorySessionHost) Run(t *testing.T, dir string, runner platformprocess.CommandRunner, timeout time.Duration) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+func (host *factorySessionHost) Run(t *testing.T, dir string, runner platformprocess.CommandRunner, timeout time.Duration) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	t.Helper()
 	baseURL, id := host.Open(t, dir, runner)
-	WaitForSessionTerminalStatus(t, baseURL, id, timeout)
+	support.WaitForSessionTerminalStatus(t, baseURL, id, timeout)
 	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(id)
-	detail := GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
+	detail := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
 	session, err := detail.AsFactorySession()
 	if err != nil {
 		t.Fatal(err)
 	}
-	work := GetJSON[factoryapi.ListWorkResponse](t, endpoint+"/work")
-	events := GetFactoryEventsForSessionAt(t, baseURL, id)
+	work := support.GetJSON[factoryapi.ListWorkResponse](t, endpoint+"/work")
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, id)
 	return session, work, events
 }
 
 // Open starts an isolated Factory Session, including journeys that intentionally
 // remain blocked. Session cleanup runs before its command route is removed.
-func (host *FactorySessionHost) Open(t *testing.T, dir string, runner platformprocess.CommandRunner) (baseURL, sessionID string) {
+func (host *factorySessionHost) Open(t *testing.T, dir string, runner platformprocess.CommandRunner) (baseURL, sessionID string) {
 	t.Helper()
 	if runner == nil {
 		t.Fatal("Factory Session command runner is required")
@@ -82,9 +79,9 @@ func (host *FactorySessionHost) Open(t *testing.T, dir string, runner platformpr
 		t.Fatalf("Factory Session command route already registered for %s", dir)
 	}
 	t.Cleanup(func() { host.commands.mu.Lock(); delete(host.commands.routes, key); host.commands.mu.Unlock() })
-	opened := OpenFactorySessionAt(t, host.server.URL(), dir)
+	opened := support.OpenFactorySessionAt(t, host.server.URL(), dir)
 	id := opened.Session.Id
-	t.Cleanup(func() { CloseFactorySessionAt(t, host.server.URL(), id) })
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, host.server.URL(), id) })
 	return host.server.URL(), id
 }
 

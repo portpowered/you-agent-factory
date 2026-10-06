@@ -30,7 +30,7 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	t.Parallel()
 	recoveryDir, recovery := newScriptCycleFactory(t)
 	emptyDir, empty := newScriptCycleFactory(t)
-	cursor, checkpoint := "cursor-雪-\\opaque", "checkpoint-λ-\"quoted\""
+	cursor, checkpoint := "cursor-é›ª-\\opaque", "checkpoint-Î»-\"quoted\""
 	output := scriptCycleOutput(t, cursor, checkpoint)
 	restartDir, restart := newScriptCycleFactory(t)
 	peerDir, peer := newScriptCycleFactory(t)
@@ -190,7 +190,6 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedC
 				default:
 				}
 			}
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, hostDir)
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })

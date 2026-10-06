@@ -12,9 +12,8 @@ import (
 
 // TestWorkflowRoutingJourneys isolates every routing scenario in its own
 // Factory Session while reusing one initialized customer process.
-func TestWorkflowRoutingJourneys(t *testing.T) {
+func runWorkflowRoutingJourneys(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
-	host := support.NewFactorySessionHost(t)
 	t.Run("WorkflowMultiStagePipelineCompletesAtPublicTerminals", func(t *testing.T) { testWorkflowMultiStagePipelineCompletesAtPublicTerminals(t, host) })
 	t.Run("WorkflowFailureRoutesToDocumentedFailedState", func(t *testing.T) { testWorkflowFailureRoutesToDocumentedFailedState(t, host) })
 	t.Run("WorkflowMultipleStagesPreserveWorkCorrelation", func(t *testing.T) { testWorkflowMultipleStagesPreserveWorkCorrelation(t, host) })
@@ -25,7 +24,7 @@ func TestWorkflowRoutingJourneys(t *testing.T) {
 // public success terminal location(s) at quiescence. Scenarios cover two-stage
 // same-work-type pipelines, cross-work-type dispatcher flows, and three-stage
 // ideation pipelines through public Work and event observations.
-func testWorkflowMultiStagePipelineCompletesAtPublicTerminals(t *testing.T, host *support.FactorySessionHost) {
+func testWorkflowMultiStagePipelineCompletesAtPublicTerminals(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	t.Run("two_stage_service_simple_completes_at_terminal", func(t *testing.T) {
 		t.Parallel()
@@ -54,7 +53,7 @@ func testWorkflowMultiStagePipelineCompletesAtPublicTerminals(t *testing.T, host
 // dispatch outcomes are asserted on Factory Events when that is the natural
 // observation surface, without routing the same Work to success terminals or
 // inspecting internal Petri markings.
-func testWorkflowFailureRoutesToDocumentedFailedState(t *testing.T, host *support.FactorySessionHost) {
+func testWorkflowFailureRoutesToDocumentedFailedState(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", func(t *testing.T) { t.Parallel(); runWorkflowFailureRoutesToDocumentedFailedStateCase0(t, host) })
 
@@ -68,7 +67,7 @@ func testWorkflowFailureRoutesToDocumentedFailedState(t *testing.T, host *suppor
 // attributable on public Work listings and Factory Event projections after
 // routing completes or lands at the documented failed place, without
 // inspecting internal Petri markings.
-func testWorkflowMultipleStagesPreserveWorkCorrelation(t *testing.T, host *support.FactorySessionHost) {
+func testWorkflowMultipleStagesPreserveWorkCorrelation(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	t.Run("cross_work_type_dispatcher_preserves_origin_trace_through_stages", func(t *testing.T) {
 		t.Parallel()
@@ -151,7 +150,7 @@ func testWorkflowMultipleStagesPreserveWorkCorrelation(t *testing.T, host *suppo
 	})
 }
 
-func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
@@ -180,7 +179,7 @@ func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase0(t *testing.T, 
 
 }
 
-func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
@@ -207,7 +206,7 @@ func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase1(t *testing.T, 
 
 }
 
-func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
@@ -238,7 +237,7 @@ func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase2(t *testing.T, 
 
 }
 
-func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
@@ -266,7 +265,7 @@ func runWorkflowMultiStagePipelineCompletesAtPublicTerminalsCase3(t *testing.T, 
 
 }
 
-func runWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
@@ -309,7 +308,7 @@ func runWorkflowFailureRoutesToDocumentedFailedStateCase0(t *testing.T, host *su
 
 }
 
-func runWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
@@ -353,7 +352,7 @@ func runWorkflowFailureRoutesToDocumentedFailedStateCase1(t *testing.T, host *su
 
 }
 
-func runWorkflowFailureRoutesToDocumentedFailedStateCase2(t *testing.T, host *support.FactorySessionHost) {
+func runWorkflowFailureRoutesToDocumentedFailedStateCase2(t *testing.T, host *factorySessionHost) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))

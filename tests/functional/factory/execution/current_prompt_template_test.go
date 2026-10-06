@@ -160,7 +160,7 @@ func testSharedTemplateValidationDoesNotMutate(t *testing.T, fixture *sharedCurr
 // failures through terminal Work and the external provider command boundary.
 func TestPromptRenderingJourneys(t *testing.T) {
 	t.Parallel()
-	host := support.NewFactorySessionHost(t)
+	host := newFactorySessionHost(t)
 	t.Run("ProcessSubmissionTagsParameterizeWorkerDirectory", func(t *testing.T) { testProcessSubmissionTagsParameterizeWorkerDirectory(t, host) })
 	t.Run("ProcessWorkNameMapsIntoPromptTemplate", func(t *testing.T) { testProcessWorkNameMapsIntoPromptTemplate(t, host) })
 	t.Run("ProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate", func(t *testing.T) { testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t, host) })
@@ -169,7 +169,7 @@ func TestPromptRenderingJourneys(t *testing.T) {
 
 // TestProcessWorkNameMapsIntoPromptTemplate proves that a submitted Work name is
 // rendered into the workstation prompt template before provider invocation.
-func testProcessWorkNameMapsIntoPromptTemplate(t *testing.T, host *support.FactorySessionHost) {
+func testProcessWorkNameMapsIntoPromptTemplate(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -196,7 +196,7 @@ func testProcessWorkNameMapsIntoPromptTemplate(t *testing.T, host *support.Facto
 
 // TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate proves that seeded
 // markdown Work name and payload content render into the workstation prompt.
-func testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T, host *support.FactorySessionHost) {
+func testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
@@ -225,7 +225,7 @@ func testProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T, ho
 
 // TestProcessSubmissionTagsParameterizeWorkerDirectory proves that submitted
 // tags select the customer-authored directory passed to the provider command.
-func testProcessSubmissionTagsParameterizeWorkerDirectory(t *testing.T, host *support.FactorySessionHost) {
+func testProcessSubmissionTagsParameterizeWorkerDirectory(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -252,7 +252,7 @@ func testProcessSubmissionTagsParameterizeWorkerDirectory(t *testing.T, host *su
 // TestProcessParameterizedTemplateFailureRoutesWorkToFailed proves that an
 // unresolved workstation prompt template routes Work to failed without invoking
 // the provider.
-func testProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T, host *support.FactorySessionHost) {
+func testProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "parameterized_failure"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "unresolved template test"}`))
