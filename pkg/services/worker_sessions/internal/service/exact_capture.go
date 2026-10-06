@@ -57,6 +57,42 @@ func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool 
 		interruptRecipeSafe(payload, execution.Execution.ProcessEnvironment)
 }
 
+// Validate the immutable direct input before source cancellation, rather than
+// discovering an unusable recipe in Continue after the source has stopped.
+// Capture identity remains pinned by the existing interrupt fence.
+func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan, target recordings.WorkerControlTarget) (interruptPlan, error) {
+	_, metadata, exists := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	if r.logs == nil || !exists || !metadata.direct {
+		// Component fixtures and legacy non-direct interruption have no direct
+		// recipe. Preserve those paths; they do not authorize captured restart.
+		return plan, nil
+	}
+	target.ExpectedAttemptID = plan.dispatchID
+	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, plan.request.SourceWorkerSessionID)
+	selected := recordings.WorkerControlTarget{
+		RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: plan.dispatchID,
+	}
+	if err != nil || selected != target {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	captured, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
+	start := workersessions.StartRequest{RequestID: plan.request.RequestID, ID: plan.request.SourceWorkerSessionID, Execution: captured}
+	if err != nil || start.Validate() != nil || !directRestartRecipeSafe(captured) ||
+		captured.Execution.Dispatch.DispatchID != plan.dispatchID || captured.Execution.FactorySessionID != target.FactorySessionID {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	// The environment is owned by the current host and never restored from
+	// storage. Check the detached recipe against that environment for secrets.
+	captured.Execution.ProcessEnvironment = append([]string(nil), plan.execution.Execution.ProcessEnvironment...)
+	if !directRestartRecipeSafe(captured) {
+		return plan, workersessions.ErrInterruptExecutionUnavailable
+	}
+	plan.execution = captured
+	return plan, nil
+}
+
 // Read outside the registry lock; reservation later rechecks the immutable
 // source attempt. A replay already reserved in this host needs no storage read.
 func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {

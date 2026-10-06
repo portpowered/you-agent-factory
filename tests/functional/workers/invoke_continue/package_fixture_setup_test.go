@@ -260,6 +260,8 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"manager-interrupt-disconnect",
 		"manager-interrupt-failure",
 		"unsafe-recipe",
+		"interrupt-recipe-read-failure",
+		"interrupt-recipe-unsafe-read",
 		"interrupt-ack-source",
 		"interrupt-ack-intent",
 		"interrupt-ack-intent-disputed",

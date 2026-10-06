@@ -205,3 +205,14 @@ func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context
 	}
 	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request)
 }
+
+func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	if strings.HasPrefix(target.WorkerSessionID, "interrupt-recipe-read-failure-") {
+		return workers.WorkstationDispatchRequest{}, errors.New("private-recipe-read-detail")
+	}
+	execution, err := store.WorkerRecordingStore.ReadWorkerRestartRecipe(ctx, target)
+	if strings.HasPrefix(target.WorkerSessionID, "interrupt-recipe-unsafe-read-") {
+		execution.Execution.EnvVars = map[string]string{"API_KEY": "private-recipe-read-detail"}
+	}
+	return execution, err
+}

@@ -50,6 +50,10 @@ func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan)
 		}
 		return nil, nil
 	}
+	plan, err = r.capturedInterruptPlan(ctx, plan, target.capture)
+	if err != nil {
+		return nil, err
+	}
 	if !interruptInputSafe(plan) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}

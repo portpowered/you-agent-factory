@@ -348,6 +348,87 @@ func TestControlFrozenRuntimeCaptureRefusesReplacementAfterWait(t *testing.T) {
 	}
 }
 
+// The interrupt preflight component reads detached settings through explicit
+// store/catalog collaborators; no execution or transport is assembled here.
+func TestInterruptPreflightUsesCapturedRecipeBeforeIntent(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"captured", "scoped", "missing", "unsafe", "wrong-attempt", "recipe-scope", "catalog-worker", "catalog-recording", "catalog-scope", "catalog-generation", "catalog-owner", "inherited-secret"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			r, plan, journal := newDurableInterruptFixture(t)
+			r.observations["worker"] = &observation{direct: true}
+			capture := r.publications["worker"].capture
+			reader := &controlCaptureReader{entry: recordings.WorkerSessionCatalogEntry{
+				WorkerSessionID: capture.WorkerSessionID, RecordingID: capture.RecordingID,
+				RecordingGenerationID: capture.RecordingGenerationID, OwnerEpoch: capture.OwnerEpoch,
+			}}
+			r.logs = &LogReader{reader: reader}
+			store := &restartRecipeStore{execution: cloneWorkstationDispatchRequest(plan.execution)}
+			store.execution.Execution.Model = "captured-model"
+			store.execution.Execution.Args = []string{"--captured-option"}
+			r.restart = store
+			plan.execution.Execution.Model = "changed-live-model"
+			plan.execution.Execution.ProcessEnvironment = []string{"API_KEY=private-live-credential"}
+			configureInterruptPreflightCell(cell, r, &plan, store, reader)
+			operation, err := r.beginInterruptIntent(t.Context(), plan)
+			if cell != "captured" && cell != "scoped" {
+				if !errors.Is(err, workersessions.ErrInterruptExecutionUnavailable) || operation != nil || len(journal.input) != 0 || len(journal.records) != 0 {
+					t.Fatalf("invalid captured recipe committed intent: operation=%+v err=%v", operation, err)
+				}
+				if strings.Contains(err.Error(), "private-") || r.sessions["worker"].State != workersessions.StateRunning {
+					t.Fatal("preflight leaked storage details or changed source state")
+				}
+				return
+			}
+			assertCapturedInterruptIntent(t, plan, operation, journal.input, err)
+		})
+	}
+}
+
+func assertCapturedInterruptIntent(t *testing.T, plan interruptPlan, operation *recordings.WorkerControlOperationRecord, payload json.RawMessage, err error) {
+	t.Helper()
+	var input durableInterruptInput
+	if err != nil || operation == nil || json.Unmarshal(payload, &input) != nil || input.Execution.Execution.Model != "captured-model" ||
+		len(input.Execution.Execution.Args) != 1 || input.Execution.Execution.Args[0] != "--captured-option" || input.ReplacementMessage != plan.request.ReplacementMessage {
+		t.Fatalf("intent lost captured settings: input=%+v err=%v", input, err)
+	}
+	if strings.Contains(string(payload), "private-live-credential") || strings.Contains(string(payload), "changed-live-model") {
+		t.Fatal("intent used live settings or persisted inherited credentials")
+	}
+}
+
+func configureInterruptPreflightCell(cell string, r *registry, plan *interruptPlan, store *restartRecipeStore, reader *controlCaptureReader) {
+	switch cell {
+	case "scoped":
+		capture := r.publications["worker"].capture
+		capture.FactorySessionID = "factory"
+		r.publications["worker"].capture = capture
+		plan.execution.Execution.FactorySessionID = "factory"
+		store.execution.Execution.FactorySessionID = "factory"
+		reader.entry.FactorySessionID = "factory"
+	case "missing":
+		store.err = errors.New("private-storage-detail")
+	case "unsafe":
+		store.execution.Execution.EnvVars = map[string]string{"CUSTOM": "private-override"}
+	case "wrong-attempt":
+		store.execution.Execution.Dispatch.DispatchID = "other"
+	case "recipe-scope":
+		store.execution.Execution.FactorySessionID = "foreign"
+	case "catalog-worker":
+		reader.entry.WorkerSessionID = "foreign"
+	case "catalog-recording":
+		reader.entry.RecordingID = "foreign"
+	case "catalog-scope":
+		reader.entry.FactorySessionID = "foreign"
+	case "catalog-generation":
+		reader.entry.RecordingGenerationID = "foreign"
+	case "catalog-owner":
+		reader.entry.OwnerEpoch = "foreign"
+	case "inherited-secret":
+		store.execution.Execution.Model = "private-live-credential"
+	}
+}
+
 func (store *restartRecipeStore) ReadWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
 	return store.execution, store.err
 }

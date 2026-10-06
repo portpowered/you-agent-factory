@@ -393,6 +393,61 @@ func TestInterruptUnsafeRecipeLeavesSourceControllable(t *testing.T) {
 	}
 }
 
+// Direct captured restart input must be usable before cancellation. These
+// CLI/HTTP parity cells fault only the recording-store read edge; normal
+// stopping remains available through the same public host.
+func TestInterruptCapturedRecipeReadRefusalLeavesSourceControllable(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"interrupt-recipe-read-failure", "interrupt-recipe-unsafe-read"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			scenario := newS8InterruptScenario(t, ctx, cell)
+			t.Cleanup(scenario.runner.releaseAll)
+			ids := scenario.ids
+			ids.workerA = cell + "-" + ids.workerA
+			invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+				requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+				factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+			})
+			scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
+			status, body, response := postS8InterruptError(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+			if status != http.StatusServiceUnavailable || string(response.Code) != "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED" || string(response.Phase) != "VALIDATION" || strings.Contains(body, "private-recipe-read-detail") {
+				t.Fatalf("recipe preflight HTTP status=%d response=%#v body=%s", status, response, body)
+			}
+			code, phase, err := executeS8InterruptCLIError(ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+			if err != nil || code != string(response.Code) || phase != "VALIDATION" {
+				t.Fatalf("recipe preflight CLI code=%s phase=%s err=%v", code, phase, err)
+			}
+			assertRecipeRefusalStillAllowsTermination(t, scenario, ids)
+		})
+	}
+}
+
+func assertRecipeRefusalStillAllowsTermination(t *testing.T, scenario s8InterruptScenario, ids s8ScenarioIdentities) {
+	t.Helper()
+	ctx := scenario.ctx
+	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
+	if findS8Observation(t, listed, ids.workerA).State != "RUNNING" || scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
+		t.Fatal("failed recipe read stopped source or admitted successor")
+	}
+	for _, item := range listed {
+		if item.WorkerSessionID == ids.successor {
+			t.Fatal("recipe preflight reserved a successor")
+		}
+	}
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "terminate", ids.workerA})
+	inputs.Input.Env, inputs.Input.WorkingDirectory = scenario.env, scenario.repositoryA.path
+	if err := scenario.manager.Execute(inputs.Input); err != nil {
+		t.Fatalf("terminate after recipe preflight: %v %s", err, inputs.Stderr())
+	}
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	listed = listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
+	if findS8Observation(t, listed, ids.workerA).State != "TERMINATED" || scenario.runner.CallCount() != 1 {
+		t.Fatal("recipe refusal disabled exact termination")
+	}
+}
+
 func postS8Interrupt(
 	t *testing.T,
 	ctx context.Context,
