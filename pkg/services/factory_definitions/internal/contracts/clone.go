@@ -3,6 +3,7 @@ package factorycontracts
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 )
 
 // CloneFactoryConfig returns a detached copy of a canonical Factory
@@ -11,11 +12,17 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	// Worker cloning is already typed, and portable file bodies are immutable
-	// strings. Keep those bytes out of the remaining JSON representation copy.
+	// Worker cloning is already typed; immutable portable file and workstation
+	// prompt text stays out of the remaining JSON representation copy.
 	serialized := *cfg
 	serialized.Workers = nil
 	serialized.ResourceManifest = nil
+	if cfg.Workstations != nil {
+		serialized.Workstations = make([]FactoryWorkstationConfig, len(cfg.Workstations))
+		for index, workstation := range cfg.Workstations {
+			serialized.Workstations[index] = workstationWithoutText(workstation)
+		}
+	}
 	data, err := json.Marshal(&serialized)
 	if err != nil {
 		return nil, fmt.Errorf("encode Factory definition clone: %w", err)
@@ -39,6 +46,7 @@ func CloneFactoryConfig(cfg *FactoryConfig) (*FactoryConfig, error) {
 	cloned.ResourceManifest = cloneFactoryResourceManifest(cfg.ResourceManifest)
 	for index := range cloned.Workstations {
 		if index < len(cfg.Workstations) {
+			restoreWorkstationText(&cloned.Workstations[index], cfg.Workstations[index], serialized.Workstations[index])
 			cloned.Workstations[index].PromptSourcePath = cfg.Workstations[index].PromptSourcePath
 			cloned.Workstations[index].PromptSourceIsTemplate = cfg.Workstations[index].PromptSourceIsTemplate
 		}
@@ -81,7 +89,9 @@ func cloneValue[T any](value T) T {
 }
 
 func CloneWorkstationConfig(def FactoryWorkstationConfig) FactoryWorkstationConfig {
-	cloned := cloneValue(def)
+	serialized := workstationWithoutText(def)
+	cloned := cloneValue(serialized)
+	restoreWorkstationText(&cloned, def, serialized)
 	cloned.PromptSourcePath = def.PromptSourcePath
 	cloned.PromptSourceIsTemplate = def.PromptSourceIsTemplate
 	return cloned
@@ -99,4 +109,25 @@ func CloneModelOperationBindings(
 	bindings []ModelOperationBinding,
 ) []ModelOperationBinding {
 	return cloneValue(bindings)
+}
+
+// Valid UTF-8 prompt strings are immutable. Invalid text stays in the JSON
+// copy so the existing replacement-character normalization is preserved.
+func workstationWithoutText(def FactoryWorkstationConfig) FactoryWorkstationConfig {
+	if utf8.ValidString(def.Body) {
+		def.Body = ""
+	}
+	if utf8.ValidString(def.PromptTemplate) {
+		def.PromptTemplate = ""
+	}
+	return def
+}
+
+func restoreWorkstationText(cloned *FactoryWorkstationConfig, source, serialized FactoryWorkstationConfig) {
+	if serialized.Body == "" {
+		cloned.Body = source.Body
+	}
+	if serialized.PromptTemplate == "" {
+		cloned.PromptTemplate = source.PromptTemplate
+	}
 }

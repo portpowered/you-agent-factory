@@ -5357,3 +5357,59 @@ workflow is not claimed fully green. The previous 16c7729f90 workflow is now
 terminal/cancelled, with a failed Verification Policy job; no fully green
 status is claimed for it either. Fresh hosted checks and complete-job timing
 are still required for this resolver batch and the two-minute checkpoint.
+
+
+### October 6: avoid JSON copying immutable workstation prompt text
+
+After the native Work-type resolver, a candidate lifecycle profile still shows
+3.34s / 12.01% cumulative CPU in CloneWorkstationConfig. That operation and
+CloneFactoryConfig serialize workstation Body and PromptTemplate strings while
+copying mutable configuration. Both now retain valid UTF-8 prompt strings
+outside the JSON copy, restore them afterward, and retain the ordinary JSON
+path for the remaining mutable fields. Invalid UTF-8 text stays in the JSON
+path so existing replacement-character normalization remains. Prompt source
+identity/template metadata, nil/empty serialization, remaining encoding errors
+and JSON-copy fallback behavior remain unchanged. No cache or effect-port
+bypass is introduced.
+
+All contract component tests and both scoped linters pass. The focused clone
+proof covers standalone and enclosing Factory copies, exact multilingual/
+control-character text, invalid UTF-8 normalization, prompt source metadata,
+and detachment of description maps, environment maps, stop words and nested
+input guards. It uses tiny synthetic data, not the packaged catalog.
+
+Four build-excluded whole lifecycle-package B/C/C/B executions on four pinned
+Linux CPUs all pass. Baseline totals are 59.716043 CPU-seconds / 39.972377s wall;
+candidate totals are 48.539256 / 37.265284: 18.7% less CPU and 6.8% less wall.
+Each paired candidate uses less CPU and wall than its baseline. CPU profiles
+are collected identically in every run; the baseline's workstation clone
+accounts for 3.85s / 12.36% cumulatively, while it falls below the candidate's
+top-80 cumulative threshold. Evidence: workstation-text-paired/.
+These are package comparisons, not additive or complete-lane savings.
+
+Complete consolidated verification on d173d3b17f passes in 122.60s supervisor /
+117.805s capture, using 329.71 CPU-seconds (260.22 user, 69.49 system). All 67
+packages / 766 results finish (764 pass, two skip), with a complete empty
+failure index and no retry ledger. Changed-source compilation executes 439
+commands, consuming 76.405853 CPU-seconds / 33.554119s active wall; 15 links
+consume 18.190696 CPU-seconds / 13.031436s active wall. Preserve that rebuild
+cost rather than claiming a controlled whole-lane improvement over the earlier
+112.62s resolver verification with only 116 compiler commands. Evidence:
+workstation-text-full/. Source is 967582dc9c plus the two contract clone files;
+the private raw-index Git identity remains stale.
+
+Hosted run 37508964007 on preceding head 967582dc9c passes Functional Coverage
+in 205s complete / 132.890s capture, all 67 packages / 766 results, 112 compiler
+commands and 12 links, with no failures or retries. It restores the v2 cache
+from c034a3f136 (approximately 320 MiB compressed) and captures 16618 files /
+1562548061 bytes with zero omissions. Other required jobs remain active; the
+workflow is not fully green and the two-minute complete-job checkpoint is
+still unmet. Evidence: native-work-type-hosted/ and
+native-work-type-hosted-job.log. The preceding c034a3f136 workflow is now
+terminal/cancelled; its completed functional result remains timing evidence.
+
+Main advances to 7b80612014 with architecture visualization documentation only.
+The branch rebases that update before pushing this batch. No Go source or
+functional Go tests change in that main update; the complete verification above
+covers the same Go sources. Fresh hosted complete-job timing and required checks
+remain the merge gate for the workstation clone optimization.
