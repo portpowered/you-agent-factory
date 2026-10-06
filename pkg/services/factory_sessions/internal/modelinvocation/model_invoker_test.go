@@ -910,6 +910,7 @@ func (fixture testModelInvocation) InvokeModel(ctx context.Context, name string,
 
 func TestRuntimeModelInvocationKeepsConcurrentSessionSelectionsAndCancellationIsolated(t *testing.T) {
 	t.Parallel()
+	//nolint:testsleep // Bounds deadlock failure at held Workers edges; channels synchronize admission and completion.
 	ctx, stop := context.WithTimeout(t.Context(), 5*time.Second)
 	defer stop()
 	canceledCtx, cancel := context.WithCancel(ctx)
@@ -939,32 +940,7 @@ func TestRuntimeModelInvocationKeepsConcurrentSessionSelectionsAndCancellationIs
 	}
 	go invoke(canceledCtx, "selected", selected)
 	go invoke(ctx, "peer", peer)
-	// Both requests must reach the controlled edge before either completes.
-	for range 2 {
-		select {
-		case request := <-execution.observed:
-			id := request.Correlation.FactorySessionID
-			scoped, ok := facts[id]
-			if !ok || request.Target.WorkerName != id+"-worker" || request.Correlation.RuntimeID != scoped.RuntimeID ||
-				request.Correlation.GenerationID != scoped.GenerationID || request.Input.WorkflowContext.SessionID != id ||
-				request.Target.Workspace.FactoryDirectory != scoped.FactoryDirectory || request.Target.Environment.WorkingDirectory != scoped.WorkingDirectory ||
-				(request.Input.ModelRuntime == nil || request.Input.ModelRuntime.Scope != scoped.Scope) {
-				t.Fatalf("misattributed Workers request: %#v", request)
-			}
-		case <-ctx.Done():
-			t.Fatal("concurrent model requests did not both reach Workers")
-		}
-	}
-	for range 2 {
-		select {
-		case request := <-readiness:
-			if request.Scope != facts["selected"].Scope && request.Scope != facts["peer"].Scope {
-				t.Fatalf("unexpected readiness scope: %#v", request)
-			}
-		case <-ctx.Done():
-			t.Fatal("missing readiness request")
-		}
-	}
+	assertConcurrentModelAdmissions(t, ctx, execution.observed, readiness, facts)
 	cancel()
 	select {
 	case result := <-selected:
@@ -982,6 +958,41 @@ func TestRuntimeModelInvocationKeepsConcurrentSessionSelectionsAndCancellationIs
 		}
 	case <-ctx.Done():
 		t.Fatal("peer did not complete after selected cancellation")
+	}
+}
+
+func assertConcurrentModelAdmissions(t *testing.T, ctx context.Context, observed <-chan workers.ExecuteRequest, readiness <-chan models.GetModelReadinessRequest, facts map[string]RuntimeModelInvocation) {
+	t.Helper()
+	// Both requests must reach the controlled edge before either completes.
+	for range 2 {
+		select {
+		case request := <-observed:
+			assertModelRequestAttribution(t, request, facts)
+		case <-ctx.Done():
+			t.Fatal("concurrent model requests did not both reach Workers")
+		}
+	}
+	for range 2 {
+		select {
+		case request := <-readiness:
+			if request.Scope != facts["selected"].Scope && request.Scope != facts["peer"].Scope {
+				t.Fatalf("unexpected readiness scope: %#v", request)
+			}
+		case <-ctx.Done():
+			t.Fatal("missing readiness request")
+		}
+	}
+}
+
+func assertModelRequestAttribution(t *testing.T, request workers.ExecuteRequest, facts map[string]RuntimeModelInvocation) {
+	t.Helper()
+	id := request.Correlation.FactorySessionID
+	scoped, ok := facts[id]
+	if !ok || request.Target.WorkerName != id+"-worker" || request.Correlation.RuntimeID != scoped.RuntimeID ||
+		request.Correlation.GenerationID != scoped.GenerationID || request.Input.WorkflowContext.SessionID != id ||
+		request.Target.Workspace.FactoryDirectory != scoped.FactoryDirectory || request.Target.Environment.WorkingDirectory != scoped.WorkingDirectory ||
+		(request.Input.ModelRuntime == nil || request.Input.ModelRuntime.Scope != scoped.Scope) {
+		t.Fatalf("misattributed Workers request: %#v", request)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -271,4 +272,92 @@ func TestHandlerFromRootOverlappingSelectedLoggers(t *testing.T) {
 			assertSelectedDiagnostic(t, logsB, quietPeer, "B", "encode response failed", writeFailure)
 		})
 	}
+}
+
+// ModelsRoot is the accepted Models root contract used by the HTTP adapter.
+// Adapter-owned operations invoke this surface rather than Models internal
+// packages.
+type ModelsRoot = models.Service
+
+// ModelInvoker is the one capability this transport needs from whichever
+// service executes a model operation: run one named model operation and return
+// its result. It is declared here rather than imported so the Models HTTP
+// transport depends only on Models' own request/result vocabulary; the
+// composition root supplies the Worker-backed implementation, which satisfies
+// this port structurally.
+type ModelInvoker interface {
+	InvokeModel(context.Context, string, models.Request) (models.Result, error)
+}
+
+// RootBinding binds the HTTP adapter to one injected Models root.
+type RootBinding struct {
+	Models  ModelsRoot
+	Invoker ModelInvoker
+	Content work.ContentPreparation
+	Scope   models.RuntimeScopeRef
+}
+
+// NewHandlerFromRoot constructs an HTTP adapter that calls through the supplied
+// Models root and explicitly selected logger. Tests inject a focused fake implementing ModelsRoot without
+// constructing real catalog assemblers, asset caches, host supervisors, lease
+// managers, inference runtimes, or service-local Wire graphs.
+func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Handler {
+	if binding.Invoker == nil {
+		binding.Invoker = noopModelInvoker{}
+	}
+	if binding.Content == nil {
+		binding.Content = noopContentPreparation{}
+	}
+	var scopes []models.RuntimeScopeRef
+	if !binding.Scope.IsZero() {
+		scopes = append(scopes, binding.Scope)
+	}
+	return NewHandler(
+		NewAdapter(binding.Models, binding.Invoker, binding.Content, scopes...),
+		logger,
+	)
+}
+
+type noopModelInvoker struct{}
+
+func (noopModelInvoker) InvokeModel(
+	_ context.Context,
+	_ string,
+	_ models.Request,
+) (models.Result, error) {
+	return models.Result{}, models.ErrUnsupportedOperation
+}
+
+type noopContentPreparation struct{}
+
+func (noopContentPreparation) PrepareWorkContent(
+	_ context.Context,
+	content []work.WorkContentPart,
+) ([]work.WorkContentPart, error) {
+	return content, nil
+}
+
+// NewAdapter constructs the Models HTTP representation adapter.
+func NewAdapter(
+	service models.Service,
+	invoker ModelInvoker,
+	content work.ContentPreparation,
+	scopes ...models.RuntimeScopeRef,
+) *Adapter {
+	if service == nil || invoker == nil || content == nil {
+		return nil
+	}
+	var scope models.RuntimeScopeRef
+	if len(scopes) > 0 {
+		scope = scopes[0]
+	}
+	return &Adapter{models: service, scope: scope, sessionInvoker: testSessionModelInvoker{invoker}, content: content}
+}
+
+type testSessionModelInvoker struct {
+	ModelInvoker
+}
+
+func (invoker testSessionModelInvoker) InvokeModelForSession(ctx context.Context, _ string, name string, request models.Request) (models.Result, error) {
+	return invoker.InvokeModel(ctx, name, request)
 }

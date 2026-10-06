@@ -19,27 +19,9 @@ var (
 type Adapter struct {
 	models         models.Service
 	scope          models.RuntimeScopeRef
-	invoker        ModelInvoker
 	content        work.ContentPreparation
 	sessionInvoker SessionModelInvoker
 	sessionID      string
-}
-
-// NewAdapter constructs the Models HTTP representation adapter.
-func NewAdapter(
-	service models.Service,
-	invoker ModelInvoker,
-	content work.ContentPreparation,
-	scopes ...models.RuntimeScopeRef,
-) *Adapter {
-	if service == nil || invoker == nil || content == nil {
-		return nil
-	}
-	var scope models.RuntimeScopeRef
-	if len(scopes) > 0 {
-		scope = scopes[0]
-	}
-	return &Adapter{models: service, scope: scope, invoker: invoker, content: content}
 }
 
 // SessionModelInvoker is the addressed invocation capability consumed by a live host.
@@ -69,7 +51,7 @@ func (a *Adapter) InvokeModel(
 	modelName string,
 	request factoryapi.ModelInvocationRequest,
 ) (models.Result, error) {
-	if a == nil || (a.invoker == nil && a.sessionInvoker == nil) || a.content == nil {
+	if a == nil || a.sessionInvoker == nil || a.content == nil {
 		return models.Result{}, errModelInvocationServicesRequired
 	}
 	mapped := modelInvocationRequestFromHTTP(request)
@@ -78,10 +60,7 @@ func (a *Adapter) InvokeModel(
 		return models.Result{}, err
 	}
 	mapped.Content = prepared
-	if a.sessionInvoker != nil {
-		return a.sessionInvoker.InvokeModelForSession(ctx, a.sessionID, modelName, mapped)
-	}
-	return a.invoker.InvokeModel(ctx, modelName, mapped)
+	return a.sessionInvoker.InvokeModelForSession(ctx, a.sessionID, modelName, mapped)
 }
 
 // InvokeGenericModel maps and validates the provider-neutral request before it

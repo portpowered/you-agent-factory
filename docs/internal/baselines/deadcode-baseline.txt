@@ -1245,9 +1245,6 @@ pkg/services/models/transports/cli/models.go: unreachable func: NewWithOutputFil
 pkg/services/models/transports/cli/models.go: unreachable func: queryModelWithProtocol
 pkg/services/models/transports/cli/root_invoke.go: unreachable func: joinedCLIInvocationRequest
 pkg/services/models/transports/http/invoke_operations.go: unreachable func: GenericInvocationFailureToGenerated
-pkg/services/models/transports/http/root_binding.go: unreachable func: NewHandlerFromRoot
-pkg/services/models/transports/http/root_binding.go: unreachable func: noopContentPreparation.PrepareWorkContent
-pkg/services/models/transports/http/root_binding.go: unreachable func: noopModelInvoker.InvokeModel
 pkg/services/models/transports/http/root_error_mapping.go: unreachable func: CatalogRootErrorResponse
 pkg/services/models/transports/mcp/acquire_lease.go: unreachable func: AcquireLease
 pkg/services/models/transports/mcp/client.go: unreachable func: Bind

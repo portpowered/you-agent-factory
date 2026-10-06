@@ -128,22 +128,9 @@ func (invoker *runtimeModelInvoker) InvokeRuntimeModel(
 		ModelName: strings.TrimSpace(modelName),
 		Operation: strings.TrimSpace(request.Operation),
 	}
-	if invoker == nil || invoker.models == nil {
-		return models.Result{}, classifyRuntimeModelError(
-			fmt.Errorf("Models service is not available"), failureContext,
-		)
-	}
-	if invoker.sessions == nil {
-		return models.Result{}, classifyRuntimeModelError(
-			fmt.Errorf("Factory Session service is not available"), failureContext,
-		)
-	}
 	invocation.FactorySessionID = strings.TrimSpace(invocation.FactorySessionID)
-	if invocation.FactorySessionID == "" || strings.TrimSpace(invocation.RuntimeID) == "" || strings.TrimSpace(invocation.GenerationID) == "" {
-		return models.Result{}, models.ErrRuntimeScopeInvalid
-	}
-	if invocation.Scope.IsZero() {
-		return models.Result{}, models.ErrRuntimeScopeInvalid
+	if err := invoker.validateInvocation(invocation, failureContext); err != nil {
+		return models.Result{}, err
 	}
 	factoryConfig, err := invoker.sessions.FactoryConfigForSession(
 		ctx, invocation.FactorySessionID,
@@ -198,6 +185,20 @@ func (invoker *runtimeModelInvoker) InvokeRuntimeModel(
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func (invoker *runtimeModelInvoker) validateInvocation(invocation RuntimeModelInvocation, failureContext workers.InferenceFailureContext) error {
+	if invoker == nil || invoker.models == nil {
+		return classifyRuntimeModelError(fmt.Errorf("Models service is not available"), failureContext)
+	}
+	if invoker.sessions == nil {
+		return classifyRuntimeModelError(fmt.Errorf("Factory Session service is not available"), failureContext)
+	}
+	if invocation.FactorySessionID == "" || strings.TrimSpace(invocation.RuntimeID) == "" ||
+		strings.TrimSpace(invocation.GenerationID) == "" || invocation.Scope.IsZero() {
+		return models.ErrRuntimeScopeInvalid
+	}
+	return nil
 }
 
 func (invoker *runtimeModelInvoker) resolveRuntimeModelWorker(
