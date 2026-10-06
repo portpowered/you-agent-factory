@@ -576,15 +576,9 @@ func (r *Root) bindSessionOpeningProducts(
 	cleanup.Add(func() error { releaseScope(); return nil })
 	opened := assembleRuntimeProducts(
 		ctx,
-		r.factoryDefinitions,
 		r.SessionGateway,
 		rootRuntime,
-		r.factoryWorkflows,
-		r.workflowPreview,
-		r.workService,
-		r.workerService,
-		opening.modelsBind,
-		r.providerSessions,
+		opening.modelsBind.Scope,
 		opening.startupRuntime,
 		sessionRuntime,
 		processRuntime,
