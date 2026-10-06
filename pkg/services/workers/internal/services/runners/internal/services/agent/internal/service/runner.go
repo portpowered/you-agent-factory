@@ -796,23 +796,18 @@ func (s *service) publishProgress(
 	provider string,
 ) {
 	var terminalMessages []providers.ExecuteProgress
-	// A provider that streamed its facts live has already delivered every
-	// entry in Progress, in this order, through the attempt's ProgressObserver.
-	// Replaying the slice here would publish each fact a second time.
-	//
-	// The terminal-message reordering below is unaffected: it only ever
-	// matches the dotted "message.completed" phase the native adapters
-	// produce, and a streaming provider reports its message facts as
-	// started/delta/completed instead, so a streamed turn contributes no
-	// terminal messages here in the first place.
+	// Live progress has already crossed the observer, while terminal facts
+	// were buffered there until the runner can publish its final outcome.
 	alreadyObserved := result.Diagnostics != nil && result.Diagnostics.ProgressAlreadyObserved
-	if result.Diagnostics != nil && !alreadyObserved {
+	if result.Diagnostics != nil {
 		for _, progress := range result.Diagnostics.Progress {
 			if strings.EqualFold(strings.TrimSpace(progress.Phase), "message.completed") {
 				terminalMessages = append(terminalMessages, progress)
 				continue
 			}
-			s.publishProviderProgress(identity, progress, continuation, provider)
+			if !alreadyObserved || providerTerminalProgress(progress.Phase) {
+				s.publishProviderProgress(identity, progress, continuation, provider)
+			}
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
