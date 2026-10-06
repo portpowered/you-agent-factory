@@ -208,6 +208,20 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7UnreachableHostNeverFallsBackToLocalProvider",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
@@ -228,6 +242,14 @@
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "rest/readWorkerSessionLogs",
         "rest/startWorkerSession"
       ]
     },

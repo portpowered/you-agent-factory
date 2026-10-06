@@ -122,10 +122,33 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
-	for _, name := range []string{"t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
+	gated := &t7GatedProviderRunner{}
+	gated.reset()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-detach", gated, gated, nil, nil, nil, gated.reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	unreachable := newInvokeContinueResettableProviderCommandRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	for _, name := range []string{"t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
 		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)})
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
 			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	for _, mode := range []string{"local", "remote", "http"} {
+		for _, outcome := range []string{"valid", "invalid"} {
+			name := "t7-schema-" + mode + "-" + outcome
+			output := `{"answer":"schema validated answer","count":7}`
+			if outcome == "invalid" {
+				output = `{"answer":"invalid answer","count":"wrong type"}`
+			}
+			result := platformprocess.CommandResult{Stdout: directCodexSessionOutput(name+"-thread", output)}
+			runner := newInvokeContinueResettableProviderCommandRunner(result, result, result)
+			if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
+				return invokeContinueScenarioSetup{}, err
+			}
 		}
 	}
 	for _, name := range []string{"t7-failure-one", "t7-failure-two"} {

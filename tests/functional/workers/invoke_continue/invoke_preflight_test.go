@@ -89,7 +89,7 @@ func TestT7InvokeOverridesReachProviderCommandAndCapturedSession(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "rest/startWorkerSession", "rest/getWorkerSessionObservationByWorkerSessionId", "rest/readWorkerSessionLogs")
 	fixture := ensureInvokeContinuePackageFixture(t)
 	for _, cell := range []struct{ mode, source string }{
-		{"local", "document"}, {"local", "overrides"}, {"local", "positional"}, {"local", "stdin"},
+		{"local", "document"}, {"local", "overrides"}, {"local", "positional"}, {"local", "stdin"}, {"local", "document-stdin"},
 		{"remote", "document"}, {"remote", "overrides"}, {"http", "document"},
 	} {
 		t.Run(cell.mode+"-"+cell.source, func(t *testing.T) {
@@ -133,6 +133,10 @@ func t7AssertSettings(t *testing.T, fixture *invokeContinuePackageFixture, mode,
 	case "stdin":
 		delete(execution, "userMessage")
 		user = "stdin prompt"
+	case "document-stdin":
+		delete(execution, "reasoningEffort")
+		effort = ""
+		args[len(args)-1] = "-"
 	}
 	writeInvokeContinueJSON(t, path, document)
 	if mode == "http" {
@@ -149,6 +153,9 @@ func t7AssertSettings(t *testing.T, fixture *invokeContinuePackageFixture, mode,
 	if source == "stdin" {
 		inputs.Input.Stdin = strings.NewReader(user)
 	}
+	if source == "document-stdin" {
+		inputs.Input.Stdin = t7DocumentStdin(t, document)
+	}
 	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("invoke: %v\n%s", err, inputs.Stderr())
 	}
@@ -163,6 +170,15 @@ func t7AssertSettings(t *testing.T, fixture *invokeContinuePackageFixture, mode,
 	}
 	t7AssertProviderCommand(t, requests[0], scenario.workingDirectory, model, effort, system, user)
 	t7AssertCapturedSettings(t, ctx, fixture.baseURL, id, model, effort)
+}
+
+func t7DocumentStdin(t *testing.T, document map[string]any) io.Reader {
+	t.Helper()
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.NewReader(encoded)
 }
 
 func t7AssertCapturedSettings(t *testing.T, ctx context.Context, baseURL, id, model, effort string) {
@@ -221,10 +237,16 @@ func t7AssertProviderCommand(t *testing.T, command platformprocess.CommandReques
 		t.Fatal(err)
 	}
 	if command.Command != "codex" || !strings.Contains(commandArgs, "--model "+model) ||
-		!strings.Contains(commandArgs, `model_reasoning_effort="`+effort+`"`) ||
 		!strings.Contains(commandArgs, "developer_instructions="+string(encodedSystem)) ||
 		string(command.Stdin) != user || command.WorkDir != workingDirectory {
 		t.Fatalf("effective provider command = %#v", command)
+	}
+	if effort == "" {
+		if strings.Contains(commandArgs, "model_reasoning_effort=") {
+			t.Fatalf("omitted effort overrides provider default: %#v", command.Args)
+		}
+	} else if !strings.Contains(commandArgs, `model_reasoning_effort="`+effort+`"`) {
+		t.Fatalf("effective reasoning effort = %#v", command.Args)
 	}
 	if !strings.Contains(strings.Join(command.Env, "\n"), "T7_SYNTHETIC_SETTING=controlled-value") {
 		t.Fatalf("provider env = %#v", command.Env)

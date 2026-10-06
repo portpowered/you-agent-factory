@@ -660,6 +660,14 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7UnreachableHostNeverFallsBackToLocalProvider",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
           "boundary": "cli"
         },
@@ -669,6 +677,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
           "boundary": "cli"
         },
         {
@@ -727,6 +739,10 @@
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_read_surface_test.go::TestWorkerSessionHTTPReadDuringFactoryWork",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
         }
       ]
     },
@@ -756,6 +772,10 @@
       "evidence": [
         {
           "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
           "boundary": "cli"
         }
       ]
@@ -1593,6 +1613,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "rest"
         }
       ]
     },
@@ -1765,6 +1789,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7UnsupportedEffortRejectsBeforeAdmission",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
           "boundary": "rest"
         }
       ]
