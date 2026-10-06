@@ -35,6 +35,8 @@ import (
 type Assembly struct {
 	roles.SessionGateway
 	factoryDefinitions           factorydefinitions.Service
+	reconnectCursorValidator     factorysessions.ReconnectCursorValidator
+	worldStateProjector          factoryruntime.WorldStateProjector
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      StreamManager
@@ -106,9 +108,13 @@ func NewAssembly(
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 	factoryDefinitions factorydefinitions.Service,
+	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
+	worldStateProjector factoryruntime.WorldStateProjector,
 ) roles.RuntimeAssembly {
 	return &Assembly{
 		factoryDefinitions:           factoryDefinitions,
+		reconnectCursorValidator:     reconnectCursorValidator,
+		worldStateProjector:          worldStateProjector,
 		SessionGateway:               gateway,
 		loadFactory:                  loadFactory,
 		factoryScaffoldInitializer:   factoryScaffoldInitializer,
@@ -364,9 +370,6 @@ func (a *Assembly) Complete(
 	backendScopeID string,
 	workFile string,
 	workflowID string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	reconnectCursorValidator factorysessions.ReconnectCursorValidator,
-	worldStateProjector factoryruntime.WorldStateProjector,
 ) (
 	roles.ApplicationRuntime,
 	roles.SessionGateway,
@@ -448,12 +451,12 @@ func (a *Assembly) Complete(
 		backendScopeID,
 		workFile,
 		workflowID,
-		workstationLoader,
+		nil,
 		a.loadFactory,
 		a.factoryScaffoldInitializer,
 		a.editableFactoryValidator,
-		reconnectCursorValidator,
-		worldStateProjector,
+		a.reconnectCursorValidator,
+		a.worldStateProjector,
 		a.invocationMetricsRecorder,
 		a.newJavaScriptCheckpointStore,
 		a.sessionResultProjection,

@@ -275,6 +275,7 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		legacyservice.NewKeyedDefinitionActivationGateway(state, in.clock),
 		nil, nil, nil, nil,
 		nil,
+		nil, nil,
 	), nil
 }
 

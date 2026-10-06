@@ -307,6 +307,7 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		NewKeyedDefinitionActivationGateway(state, in.clock),
 		nil, nil, nil, nil,
 		nil,
+		nil, nil,
 	)
 }
 

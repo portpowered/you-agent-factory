@@ -190,9 +190,6 @@ type RuntimeAssembly interface {
 		backendScopeID string,
 		workFile string,
 		workflowID string,
-		workstationLoader factorydefinitions.WorkstationLoader,
-		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
-		worldStateProjector factoryruntime.WorldStateProjector,
 	) (ApplicationRuntime, SessionGateway, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }
 
