@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	runtimeapifixture "github.com/portpowered/infinite-you/tests/functional/sessions/isolation_and_recovery/runtime_api_fixture"
 )
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
@@ -33,7 +32,7 @@ type runtimeAPIScenario struct {
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if err := runtimeapifixture.CloseSharedFixture(); err != nil {
+	if err := CloseSharedFixture(); err != nil {
 		fmt.Fprintf(os.Stderr, "runtime API package fixture cleanup: %v\n", err)
 		if code == 0 {
 			code = 1
@@ -74,7 +73,7 @@ func withEnvironment(environment []string) runtimeOption {
 
 type functionalAPIServer struct {
 	*support.FunctionalAPIServer
-	shared    *runtimeapifixture.PackageFixture
+	shared    *PackageFixture
 	sessionID string
 }
 
@@ -162,7 +161,7 @@ func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool,
 func startSharedFunctionalServer(t *testing.T, factoryDir string, scenario runtimeAPIScenario) *functionalAPIServer {
 	t.Helper()
 
-	handle := runtimeapifixture.StartSharedFunctionalServer(t, factoryDir, runtimeapifixture.Scenario{
+	handle := StartSharedFunctionalServer(t, factoryDir, Scenario{
 		Provider:       scenario.provider,
 		ProviderRunner: scenario.providerRunner,
 		ScriptRunner:   scenario.scriptRunner,
