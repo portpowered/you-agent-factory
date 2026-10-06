@@ -423,6 +423,12 @@ func runJavaScriptPartialMockWorkers(t *testing.T, fixture *javascriptSharedProc
 		t.Fatalf("provider command runner call count = %d, want 1 passthrough child dispatch", runner.CallCount())
 	}
 
+	request := runner.LastRequest()
+	if !strings.Contains(string(request.Stdin), passthroughChildPrompt) ||
+		strings.Contains(string(request.Stdin), mockedChildPrompt) {
+		t.Fatalf("passthrough command input = %q, want only the unmatched child's prompt", request.Stdin)
+	}
+
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
 		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",

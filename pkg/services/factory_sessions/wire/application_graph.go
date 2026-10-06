@@ -84,7 +84,6 @@ type (
 	WorkerCommandRunnerAdapter             = service.WorkerCommandRunnerAdapter
 	ProviderCommandRunner                  = service.ProviderCommandRunner
 	ScriptCommandRunner                    = service.ScriptCommandRunner
-	ProviderFromCommandRunnerFactory       = service.ProviderFromCommandRunnerFactory
 	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
 	RuntimeRoot                            = service.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
@@ -118,7 +117,6 @@ func NewRoot(
 	logger *zap.Logger,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -152,7 +150,6 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
@@ -164,7 +161,6 @@ func NewRoot(
 		logger,
 		factoryWorkflows,
 		workflowPreview,
-		workersMockCommandRunnerFactory,
 		runtimeRoot,
 		resolveClock,
 		newSessionLogger,
@@ -198,7 +194,6 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		providerFromCommandRunnerFactory,
 		providerCommandRunner,
 		scriptCommandRunner,
 		ensureBackendScope,

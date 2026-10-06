@@ -168,8 +168,6 @@ func (r *Root) openPortableReplayDurableOwner(
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,
 	workerService workers.Service,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	durableExecutionFactory DurableExecutionFactory,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
@@ -187,9 +185,6 @@ func (r *Root) openPortableReplayDurableOwner(
 		root,
 		clock,
 		providerOverride,
-		providerCommandRunner,
-		workersMockCommandRunnerFactory,
-		providerFromCommandRunnerFactory,
 		durableExecutionFactory,
 		factorySessionExecutionFactory,
 		providerIdentities,
@@ -269,24 +264,11 @@ func constructPortableReplayDurableOwner(
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
 	providerOverride providers.Service,
-	providerCommandRunner platformprocess.CommandRunner,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	durableExecutionFactory DurableExecutionFactory,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, providers.Service, error) {
-	providerForDurable, err := resolveDurableExecutionProvider(
-		providerOverride,
-		configured.Workers.MockWorkers,
-		nil,
-		providerCommandRunner,
-		workersMockCommandRunnerFactory,
-		providerFromCommandRunnerFactory,
-	)
-	if err != nil {
-		return DurableExecution{}, nil, err
-	}
+	providerForDurable := providerOverride
 	durable, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session.Persistence,

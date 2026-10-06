@@ -50,49 +50,47 @@ type workerExecutionBindingWorkerService struct {
 
 // runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
-	ProviderSessions                 providersessions.Service
-	Logger                           *zap.Logger
-	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
-	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
-	WorkersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	RuntimeRoot                      FactoryRuntimeRoot
-	ResolveClock                     factoryruntime.ClockResolver
-	NewSessionLogger                 factoryruntime.SessionLoggerFactory
-	Clock                            factoryruntime.Clock
-	ProviderOverride                 ProviderOverrideService
-	SubmissionRecorder               recordings.SubmissionRecorder
-	DispatchRecorder                 recordings.DispatchRecorder
-	Validator                        factorydefinitions.Validator
-	NamedPaths                       factorydefinitions.NamedPathResolver
-	Definitions                      factorydefinitions.Service
-	RuntimeRouter                    *factorysessions.DefinitionRuntimeRouter
-	LoadFactory                      factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
-	Assembly                         roles.RuntimeAssembly
-	DurableExecutionFactory          DurableExecutionFactory
-	FactorySessionExecutionFactory   FactorySessionExecutionFactory
-	FactoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator         factorysessions.EditableFactoryValidator
-	ProcessRuntimeFactory            roles.ProcessRuntimeFactory
-	GenerateSessionID                factorysessions.SessionIDGenerator
-	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
-	ResolveHome                      factorysessions.HomeDirectoryResolver
-	ProviderIdentities               factorysessions.ProviderIdentityResolver
-	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
-	WorkService                      work.Service
-	AutomationService                automations.Service
-	WebhooksService                  webhooks.Service
-	ModelService                     models.Service
-	RecordingsService                recordings.Service
-	RecordingsRuntime                recordings.RuntimeScopeService
-	WorkerService                    workers.Service
-	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	ProviderCommandRunner            ProviderCommandRunner
-	ScriptCommandRunner              ScriptCommandRunner
-	EnsureBackendScope               operatorsettings.BackendScopeEnsurer
-	InitialActivation                factoryruntime.InitialRuntimeActivationOperation
+	ProviderSessions               providersessions.Service
+	Logger                         *zap.Logger
+	FactoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
+	WorkflowPreview                factoryruntime.WorkflowPreviewOperation
+	RuntimeRoot                    FactoryRuntimeRoot
+	ResolveClock                   factoryruntime.ClockResolver
+	NewSessionLogger               factoryruntime.SessionLoggerFactory
+	Clock                          factoryruntime.Clock
+	ProviderOverride               ProviderOverrideService
+	SubmissionRecorder             recordings.SubmissionRecorder
+	DispatchRecorder               recordings.DispatchRecorder
+	Validator                      factorydefinitions.Validator
+	NamedPaths                     factorydefinitions.NamedPathResolver
+	Definitions                    factorydefinitions.Service
+	RuntimeRouter                  *factorysessions.DefinitionRuntimeRouter
+	LoadFactory                    factorydefinitions.LoadedFactoryLoader
+	NewLoadedFactory               factorydefinitions.LoadedFactorySourceFactory
+	DecodeReplayConfig             factorydefinitions.ReplayRuntimeConfigDecoder
+	CaptureLoadedFactorySnapshot   factorydefinitions.LoadedFactorySnapshotCapturer
+	Assembly                       roles.RuntimeAssembly
+	DurableExecutionFactory        DurableExecutionFactory
+	FactorySessionExecutionFactory FactorySessionExecutionFactory
+	FactoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
+	EditableFactoryValidator       factorysessions.EditableFactoryValidator
+	ProcessRuntimeFactory          roles.ProcessRuntimeFactory
+	GenerateSessionID              factorysessions.SessionIDGenerator
+	GenerateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
+	ResolveHome                    factorysessions.HomeDirectoryResolver
+	ProviderIdentities             factorysessions.ProviderIdentityResolver
+	InvocationMetricsRecorder      roles.InvocationMetricsRecorder
+	WorkService                    work.Service
+	AutomationService              automations.Service
+	WebhooksService                webhooks.Service
+	ModelService                   models.Service
+	RecordingsService              recordings.Service
+	RecordingsRuntime              recordings.RuntimeScopeService
+	WorkerService                  workers.Service
+	ProviderCommandRunner          ProviderCommandRunner
+	ScriptCommandRunner            ScriptCommandRunner
+	EnsureBackendScope             operatorsettings.BackendScopeEnsurer
+	InitialActivation              factoryruntime.InitialRuntimeActivationOperation
 }
 
 func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
@@ -101,7 +99,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Logger,
 		fixture.FactoryWorkflows,
 		fixture.WorkflowPreview,
-		fixture.WorkersMockCommandRunnerFactory,
 		fixture.RuntimeRoot,
 		fixture.ResolveClock,
 		fixture.NewSessionLogger,
@@ -135,7 +132,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.RecordingsService,
 		fixture.RecordingsRuntime,
 		fixture.WorkerService,
-		fixture.ProviderFromCommandRunnerFactory,
 		fixture.ProviderCommandRunner,
 		fixture.ScriptCommandRunner,
 		fixture.EnsureBackendScope,
@@ -220,44 +216,42 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 	factorySessionsRoot := &factorySessionsConstructionStub{}
 	return runtimeOpeningFixture{
-		InitialActivation:                inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
-		ProviderSessions:                 providerSessionsConstructionStub{},
-		Logger:                           zap.NewNop(),
-		FactoryWorkflows:                 workflowDefinitionsConstructionStub{},
-		WorkflowPreview:                  workflowPreviewConstructionStub{},
-		WorkersMockCommandRunnerFactory:  inertRuntimeOpeningFunction[factoryruntime.WorkersMockCommandRunnerFactory](calls),
-		ResolveClock:                     inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
-		NewSessionLogger:                 inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
-		Clock:                            openingCoordinatorClock{},
-		Validator:                        validatorConstructionStub{},
-		NamedPaths:                       namedPathsConstructionStub{},
-		Definitions:                      factoryDefinitionsConstructionStub{},
-		RuntimeRouter:                    &factorysessions.DefinitionRuntimeRouter{},
-		LoadFactory:                      inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
-		NewLoadedFactory:                 inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
-		DecodeReplayConfig:               inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
-		CaptureLoadedFactorySnapshot:     inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
-		Assembly:                         factorySessionsRoot,
-		DurableExecutionFactory:          inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
-		FactorySessionExecutionFactory:   inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
-		FactoryScaffoldInitializer:       inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
-		EditableFactoryValidator:         inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
-		ProcessRuntimeFactory:            processRuntimeFactoryConstructionStub{},
-		GenerateSessionID:                inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
-		GenerateRuntimeInstanceID:        inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
-		ResolveHome:                      inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
-		ProviderIdentities:               inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
-		WorkService:                      work.MaterializationService(constructionMaterializer{calls: calls}),
-		AutomationService:                automations.Root{},
-		ModelService:                     &modelsConstructionStub{},
-		RecordingsService:                &recordingsRootConstructionStub{},
-		RecordingsRuntime:                &recordingsRootConstructionStub{},
-		WebhooksService:                  webhooksConstructionStub{},
-		WorkerService:                    &workersConstructionStub{},
-		ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
-		ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
-		ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
-		EnsureBackendScope:               inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
+		InitialActivation:              inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
+		ProviderSessions:               providerSessionsConstructionStub{},
+		Logger:                         zap.NewNop(),
+		FactoryWorkflows:               workflowDefinitionsConstructionStub{},
+		WorkflowPreview:                workflowPreviewConstructionStub{},
+		ResolveClock:                   inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
+		NewSessionLogger:               inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
+		Clock:                          openingCoordinatorClock{},
+		Validator:                      validatorConstructionStub{},
+		NamedPaths:                     namedPathsConstructionStub{},
+		Definitions:                    factoryDefinitionsConstructionStub{},
+		RuntimeRouter:                  &factorysessions.DefinitionRuntimeRouter{},
+		LoadFactory:                    inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
+		NewLoadedFactory:               inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
+		DecodeReplayConfig:             inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
+		CaptureLoadedFactorySnapshot:   inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
+		Assembly:                       factorySessionsRoot,
+		DurableExecutionFactory:        inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
+		FactorySessionExecutionFactory: inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
+		FactoryScaffoldInitializer:     inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
+		EditableFactoryValidator:       inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
+		ProcessRuntimeFactory:          processRuntimeFactoryConstructionStub{},
+		GenerateSessionID:              inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
+		GenerateRuntimeInstanceID:      inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
+		ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
+		ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
+		WorkService:                    work.MaterializationService(constructionMaterializer{calls: calls}),
+		AutomationService:              automations.Root{},
+		ModelService:                   &modelsConstructionStub{},
+		RecordingsService:              &recordingsRootConstructionStub{},
+		RecordingsRuntime:              &recordingsRootConstructionStub{},
+		WebhooksService:                webhooksConstructionStub{},
+		WorkerService:                  &workersConstructionStub{},
+		ProviderCommandRunner:          workersRootBindingProbeRunner{tag: "provider"},
+		ScriptCommandRunner:            workersRootBindingProbeRunner{tag: "script"},
+		EnsureBackendScope:             inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
 	}
 }
 

@@ -137,32 +137,6 @@ func TestNewProviderCommandRunnerForwardsStreamingOutputAndRejectsMissingRunner(
 	}
 }
 
-func TestNewProviderFromCommandRunnerReturnsSelectedProvidersService(t *testing.T) {
-	t.Parallel()
-
-	selected := &statelessTestProviders{}
-	got, err := NewProviderFromCommandRunner(
-		selected,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		"",
-	)
-	if err != nil {
-		t.Fatalf("NewProviderFromCommandRunner() error = %v", err)
-	}
-	if got != selected {
-		t.Fatalf("NewProviderFromCommandRunner() = %T, want selected Providers service", got)
-	}
-
-	if _, err := NewProviderFromCommandRunner(nil, nil, nil, nil, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "service is required") {
-		t.Fatalf("NewProviderFromCommandRunner(nil) error = %v, want required-service error", err)
-	}
-}
-
 func assertProjectedWorkerRequest(t *testing.T, got workerprocess.CommandRequest, want providers.CommandRequest) {
 	t.Helper()
 	if got.Command != want.Command || !reflect.DeepEqual(got.Args, want.Args) ||

@@ -206,8 +206,6 @@ func (r *Root) openHistoricalSessionRuntime(opening *sessionRuntimeOpening) (run
 			r.providerOverride,
 			r.providerCommandRunner,
 			r.workerService,
-			r.workersMockCommandRunnerFactory,
-			r.providerFromCommandRunnerFactory,
 			r.durableExecutionFactory,
 			r.factorySessionExecutionFactory,
 			r.providerIdentities,
@@ -246,17 +244,7 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	if r.durableExecutionFactory == nil {
 		return fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
-	opening.providerForDurable, err = resolveDurableExecutionProvider(
-		r.providerOverride,
-		opening.configured.Workers.MockWorkers,
-		opening.load.LoadedFactoryCfg,
-		r.providerCommandRunner,
-		r.workersMockCommandRunnerFactory,
-		r.providerFromCommandRunnerFactory,
-	)
-	if err != nil {
-		return err
-	}
+	opening.providerForDurable = r.providerOverride
 	opening.durableExecution, err = r.durableExecutionFactory(
 		opening.configured.Definition,
 		opening.configured.Session.Persistence,

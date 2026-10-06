@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -781,5 +782,55 @@ func assertResumeRecoveryMetadata(
 func portableReplayCleanupOpening(record runtimeports.RuntimeInstance) *factoryruntime.RuntimeInitialOpening {
 	return &factoryruntime.RuntimeInitialOpening{Record: record,
 		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error { return record.CloseArtifacts() }},
+	}
+}
+
+// Replay keeps explicit provider selection and request mock policy while nil
+// selection inherits the already composed Workers provider. Acquisition errors
+// still leave no usable durable owner.
+func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testing.T) {
+	t.Parallel()
+	selected := testutil.NewMockProvider(workers.InferenceResponse{Content: "selected"})
+	failure := errors.New("durable persistence unavailable")
+	for _, tc := range []struct {
+		name     string
+		provider providers.Service
+		failure  error
+	}{{name: "inherit"}, {name: "explicit", provider: selected}, {name: "acquisition failure", provider: selected, failure: failure}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			configured := preparedRuntime{}
+			configured.Workers.MockWorkers = &workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough}
+			owner := &portableReplayRuntimeOwner{}
+			acquire := func(_ factorydefinitions.RuntimeSelection, _ factorysessions.PersistencePolicy,
+				_, _ string, _ operatorconfig.ResolvedDefaults, _ RuntimeRoot, _ factoryruntime.Clock,
+				provider providers.Service, mocks *workers.MockWorkersConfig,
+				_ FactorySessionExecutionFactory, _ factorysessions.ProviderIdentityResolver,
+			) (DurableExecution, error) {
+				if provider != tc.provider {
+					t.Fatalf("provider = %v, want selected %v", provider, tc.provider)
+				}
+				if mocks == nil || !mocks.UnmatchedDispatchPolicy.PassthroughUnmatched() {
+					t.Fatal("request mock policy was lost")
+				}
+				if tc.failure != nil {
+					return DurableExecution{}, tc.failure
+				}
+				return DurableExecution{Service: owner}, nil
+			}
+			durable, provider, err := constructPortableReplayDurableOwner(configured, RuntimeRoot{}, openingCoordinatorClock{}, tc.provider, acquire, nil, nil)
+			if !errors.Is(err, tc.failure) {
+				t.Fatalf("error = %v, want %v", err, tc.failure)
+			}
+			if tc.failure != nil {
+				if durable.Service != nil || provider != nil {
+					t.Fatal("failed acquisition returned usable owner/provider")
+				}
+				return
+			}
+			if durable.Service != owner || provider != tc.provider {
+				t.Fatalf("acquisition result = %v/%v, want admitted owner and selected provider", durable.Service, provider)
+			}
+		})
 	}
 }

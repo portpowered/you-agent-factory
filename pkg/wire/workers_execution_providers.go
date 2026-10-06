@@ -326,40 +326,6 @@ func provideConductorInvocationWithProgressFactory(
 	}
 }
 
-func provideProviderFromCommandRunnerFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-) factorysessionwire.ProviderFromCommandRunnerFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner platformprocess.CommandRunner) (providers.Service, error) {
-		return workerswire.NewProviderFromCommandRunner(
-			providersService, runner, commandClock, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
-		)
-	}
-}
-
 // provideInvocationWorkPolicy constructs only pure Work return policy, avoiding
 // the Work runtime resolver's dependency on the Sessions assembly.
 func provideInvocationWorkPolicy() factorysessionwire.InvocationWorkPolicy {

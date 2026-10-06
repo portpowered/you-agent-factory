@@ -54,53 +54,51 @@ type ScriptCommandRunner interface {
 // Its Assembly is bound after the other process services have been composed.
 type Root struct {
 	*legacyservice.Assembly
-	startFlights                     singleflight.Group
-	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
-	durableExecutionFactory          DurableExecutionFactory
-	modelInvocation                  modelinvocation.RuntimeModelInvocationOperation
-	workerService                    workers.Service
-	modelService                     models.Service
-	automationService                automations.Service
-	factorySessionExecutionFactory   FactorySessionExecutionFactory
-	recordingsService                recordings.Service
-	recordingsRuntime                recordings.RuntimeScopeService
-	replayInputs                     recordings.ReplayInputLoader
-	webhooksService                  webhooks.Service
-	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	factoryDefinitions               factorydefinitions.Service
-	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
-	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
-	editableFactoryValidator         factorysessions.EditableFactoryValidator
-	initialActivation                factoryruntime.InitialRuntimeActivationOperation
-	workService                      work.Service
-	providerSessions                 providersessions.Service
-	factoryDefinitionValidator       factorydefinitions.Validator
-	namedPaths                       factorydefinitions.NamedPathResolver
-	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
-	workflowPreview                  factoryruntime.WorkflowPreviewOperation
-	loadFactory                      factorydefinitions.LoadedFactoryLoader
-	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
-	resolveClock                     factoryruntime.ClockResolver
-	newSessionLogger                 factoryruntime.SessionLoggerFactory
-	baseLogger                       *zap.Logger
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	processRuntimeFactory            roles.ProcessRuntimeFactory
-	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
-	generateSessionID                factorysessions.SessionIDGenerator
-	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
-	resolveHome                      factorysessions.HomeDirectoryResolver
-	providerIdentities               factorysessions.ProviderIdentityResolver
-	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
-	runtimeRoot                      FactoryRuntimeRoot
-	clock                            factoryruntime.Clock
-	providerOverride                 providers.Service
-	invocationMetricsRecorder        roles.InvocationMetricsRecorder
-	providerCommandRunner            platformprocess.CommandRunner
-	scriptCommandRunner              platformprocess.CommandRunner
-	submissionRecorder               recordings.SubmissionRecorder
-	dispatchRecorder                 recordings.DispatchRecorder
+	startFlights                   singleflight.Group
+	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
+	durableExecutionFactory        DurableExecutionFactory
+	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
+	workerService                  workers.Service
+	modelService                   models.Service
+	automationService              automations.Service
+	factorySessionExecutionFactory FactorySessionExecutionFactory
+	recordingsService              recordings.Service
+	recordingsRuntime              recordings.RuntimeScopeService
+	replayInputs                   recordings.ReplayInputLoader
+	webhooksService                webhooks.Service
+	factoryDefinitions             factorydefinitions.Service
+	definitionRuntimeRouter        *factorysessions.DefinitionRuntimeRouter
+	factoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator       factorysessions.EditableFactoryValidator
+	initialActivation              factoryruntime.InitialRuntimeActivationOperation
+	workService                    work.Service
+	providerSessions               providersessions.Service
+	factoryDefinitionValidator     factorydefinitions.Validator
+	namedPaths                     factorydefinitions.NamedPathResolver
+	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
+	workflowPreview                factoryruntime.WorkflowPreviewOperation
+	loadFactory                    factorydefinitions.LoadedFactoryLoader
+	newLoadedFactory               factorydefinitions.LoadedFactorySourceFactory
+	decodeReplayConfig             factorydefinitions.ReplayRuntimeConfigDecoder
+	captureLoadedFactorySnapshot   factorydefinitions.LoadedFactorySnapshotCapturer
+	resolveClock                   factoryruntime.ClockResolver
+	newSessionLogger               factoryruntime.SessionLoggerFactory
+	baseLogger                     *zap.Logger
+	processRuntimeFactory          roles.ProcessRuntimeFactory
+	ensureOperatorBackendScope     operatorsettings.BackendScopeEnsurer
+	generateSessionID              factorysessions.SessionIDGenerator
+	generateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
+	resolveHome                    factorysessions.HomeDirectoryResolver
+	providerIdentities             factorysessions.ProviderIdentityResolver
+	factorySessionsRuntimeAssembly roles.RuntimeAssembly
+	runtimeRoot                    FactoryRuntimeRoot
+	clock                          factoryruntime.Clock
+	providerOverride               providers.Service
+	invocationMetricsRecorder      roles.InvocationMetricsRecorder
+	providerCommandRunner          platformprocess.CommandRunner
+	scriptCommandRunner            platformprocess.CommandRunner
+	submissionRecorder             recordings.SubmissionRecorder
+	dispatchRecorder               recordings.DispatchRecorder
 }
 
 func NewRoot(
@@ -108,7 +106,6 @@ func NewRoot(
 	logger *zap.Logger,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -142,7 +139,6 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
 	ensureBackendScope operatorsettings.BackendScopeEnsurer,
@@ -150,50 +146,48 @@ func NewRoot(
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 ) (*Root, error) {
 	root := &Root{
-		initialActivation:                initialActivation,
-		modelInvocation:                  modelInvocation,
-		durableExecutionFactory:          durableExecutionFactory,
-		workerService:                    workerService,
-		modelService:                     modelService,
-		automationService:                automationService,
-		factorySessionsRuntimeAssembly:   assembly,
-		factorySessionExecutionFactory:   factorySessionExecutionFactory,
-		recordingsService:                recordingsService,
-		recordingsRuntime:                recordingsRuntime,
-		replayInputs:                     recordingsRuntime,
-		webhooksService:                  webhooksService,
-		workersMockCommandRunnerFactory:  workersMockCommandRunnerFactory,
-		factoryDefinitions:               definitions,
-		definitionRuntimeRouter:          runtimeRouter,
-		factoryScaffoldInitializer:       factoryScaffoldInitializer,
-		editableFactoryValidator:         editableFactoryValidator,
-		workService:                      workService,
-		providerSessions:                 providerSessions,
-		factoryDefinitionValidator:       validator,
-		namedPaths:                       namedPaths,
-		factoryWorkflows:                 factoryWorkflows,
-		workflowPreview:                  workflowPreview,
-		loadFactory:                      loadFactory,
-		newLoadedFactory:                 newLoadedFactory,
-		decodeReplayConfig:               decodeReplayConfig,
-		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
-		resolveClock:                     resolveClock,
-		newSessionLogger:                 newSessionLogger,
-		baseLogger:                       logger,
-		providerFromCommandRunnerFactory: providerFromCommandRunnerFactory,
-		processRuntimeFactory:            processRuntimeFactory,
-		generateSessionID:                generateSessionID,
-		ensureOperatorBackendScope:       ensureBackendScope,
-		generateRuntimeInstanceID:        generateRuntimeInstanceID,
-		resolveHome:                      resolveHome,
-		providerIdentities:               providerIdentities,
-		clock:                            clock,
-		providerOverride:                 providerOverride,
-		invocationMetricsRecorder:        invocationMetricsRecorder,
-		providerCommandRunner:            providerCommandRunner,
-		scriptCommandRunner:              scriptCommandRunner,
-		submissionRecorder:               submissionRecorder,
-		dispatchRecorder:                 dispatchRecorder,
+		initialActivation:              initialActivation,
+		modelInvocation:                modelInvocation,
+		durableExecutionFactory:        durableExecutionFactory,
+		workerService:                  workerService,
+		modelService:                   modelService,
+		automationService:              automationService,
+		factorySessionsRuntimeAssembly: assembly,
+		factorySessionExecutionFactory: factorySessionExecutionFactory,
+		recordingsService:              recordingsService,
+		recordingsRuntime:              recordingsRuntime,
+		replayInputs:                   recordingsRuntime,
+		webhooksService:                webhooksService,
+		factoryDefinitions:             definitions,
+		definitionRuntimeRouter:        runtimeRouter,
+		factoryScaffoldInitializer:     factoryScaffoldInitializer,
+		editableFactoryValidator:       editableFactoryValidator,
+		workService:                    workService,
+		providerSessions:               providerSessions,
+		factoryDefinitionValidator:     validator,
+		namedPaths:                     namedPaths,
+		factoryWorkflows:               factoryWorkflows,
+		workflowPreview:                workflowPreview,
+		loadFactory:                    loadFactory,
+		newLoadedFactory:               newLoadedFactory,
+		decodeReplayConfig:             decodeReplayConfig,
+		captureLoadedFactorySnapshot:   captureLoadedFactorySnapshot,
+		resolveClock:                   resolveClock,
+		newSessionLogger:               newSessionLogger,
+		baseLogger:                     logger,
+		processRuntimeFactory:          processRuntimeFactory,
+		generateSessionID:              generateSessionID,
+		ensureOperatorBackendScope:     ensureBackendScope,
+		generateRuntimeInstanceID:      generateRuntimeInstanceID,
+		resolveHome:                    resolveHome,
+		providerIdentities:             providerIdentities,
+		clock:                          clock,
+		providerOverride:               providerOverride,
+		invocationMetricsRecorder:      invocationMetricsRecorder,
+		providerCommandRunner:          providerCommandRunner,
+		scriptCommandRunner:            scriptCommandRunner,
+		submissionRecorder:             submissionRecorder,
+		dispatchRecorder:               dispatchRecorder,
 	}
 	root.runtimeRoot = runtimeRoot
 	return root, nil

@@ -69,21 +69,6 @@ func NewConductorInvocationWithProgress(
 	)
 }
 
-// NewProviderFromCommandRunner constructs one provider-backed worker from a command runner.
-func NewProviderFromCommandRunner(
-	providersService providers.Service,
-	commandRunner platformprocess.CommandRunner,
-	commandClock platformclock.Source,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (providers.Service, error) {
-	return workersinternal.NewProviderFromService(providersService)
-}
-
 // ResolveTemplateFields exposes the Workers-owned template resolver for composition.
 func ResolveTemplateFields(
 	workingDirectory string,

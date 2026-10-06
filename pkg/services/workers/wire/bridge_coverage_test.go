@@ -131,19 +131,6 @@ func providerCoverageCommandRequest() providers.CommandRequest {
 	}
 }
 
-func TestWorkersWireProviderConstructionReturnsSelectedService(t *testing.T) {
-	t.Parallel()
-
-	providersService := &statelessTestProviders{}
-	got, err := NewProviderFromCommandRunner(providersService, nil, nil, nil, nil, nil, nil, "")
-	if err != nil || got != providersService {
-		t.Fatalf("NewProviderFromCommandRunner() = %v, %v; want selected service", got, err)
-	}
-	if _, err := NewProviderFromCommandRunner(nil, nil, nil, nil, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "service is required") {
-		t.Fatalf("NewProviderFromCommandRunner(nil) error = %v", err)
-	}
-}
-
 func TestWorkersWirePTYAllocatorHandlesTypedAndMalformedForeignShapes(t *testing.T) {
 	t.Parallel()
 
