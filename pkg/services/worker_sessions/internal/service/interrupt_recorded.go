@@ -41,7 +41,22 @@ func (r *registry) freezeInterruptInput(ctx context.Context, plan interruptPlan)
 	if _, err := encodeInterruptInput(plan); err != nil {
 		return plan, err
 	}
+	_, metadata, direct := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	if direct && metadata.direct && r.logs != nil {
+		if err := r.restart.ValidateWorkerRestartRecipe(ctx, plan.request.SuccessorWorkerSessionID, interruptSuccessorExecution(plan)); err != nil {
+			return plan, err
+		}
+	}
 	return plan, nil
+}
+
+func interruptSuccessorExecution(plan interruptPlan) workers.WorkstationDispatchRequest {
+	execution := continuationExecution(plan.execution, continuationDispatchID(plan.dispatchID, plan.request.SuccessorWorkerSessionID), plan.request.ReplacementMessage, plan.reference)
+	if plan.request.ResumeMode == "recorded" {
+		execution.Execution.Continuation = nil
+		execution.Execution.UserMessage = "Captured context (truncated=" + strconv.FormatBool(plan.truncated) + "):\n" + plan.context + "\nReplacement message:\n" + plan.request.ReplacementMessage
+	}
+	return execution
 }
 
 func (r *registry) readInterruptContext(ctx context.Context, plan interruptPlan, target recordings.WorkerControlTarget) (string, bool, error) {
@@ -124,11 +139,7 @@ func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.C
 		r.mu.Unlock()
 		return workersessions.ContinueResult{}, workersessions.ErrInterruptSourceConflict
 	}
-	execution := continuationExecution(plan.execution, continuationDispatchID(plan.dispatchID, req.SuccessorWorkerSessionID), req.FollowUpInput, plan.reference)
-	if plan.request.ResumeMode == "recorded" {
-		execution.Execution.Continuation = nil
-		execution.Execution.UserMessage = "Captured context (truncated=" + strconv.FormatBool(plan.truncated) + "):\n" + plan.context + "\nReplacement message:\n" + req.FollowUpInput
-	}
+	execution := interruptSuccessorExecution(plan)
 	if _, exists := r.sessions[req.SuccessorWorkerSessionID]; exists {
 		r.mu.Unlock()
 		return workersessions.ContinueResult{}, workersessions.ErrInterruptSourceConflict

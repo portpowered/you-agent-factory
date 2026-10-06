@@ -74,6 +74,10 @@ type restartRecipeStore struct {
 	input     func() json.RawMessage
 }
 
+func (store *restartRecipeStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+	return store.err
+}
+
 func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
 	store.calls++
 	store.target = target

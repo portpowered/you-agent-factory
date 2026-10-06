@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -17,7 +19,7 @@ import (
 // and fresh recorded admission, including a source without output or identity.
 func TestInterruptExplicitModes(t *testing.T) {
 	for _, cell := range []struct{ name, mode string }{
-		{"provider", "provider"}, {"recorded", "recorded"}, {"empty", "recorded"},
+		{"provider", "provider"}, {"recorded", "recorded"}, {"empty", "recorded"}, {"bounded", "recorded"},
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
@@ -28,6 +30,9 @@ func TestInterruptExplicitModes(t *testing.T) {
 			initial := scenario.runner.callFor(scenario.repositoryA.path, s8InterruptCallAInitial)
 			if cell.name == "empty" {
 				initial.omitInitialObservation = true
+			}
+			if cell.name == "bounded" {
+				initial.initialContext = strings.Repeat("世", 100000)
 			}
 			if cell.name == "recorded" {
 				initial.initialContext = "captured source context"
@@ -42,7 +47,11 @@ func TestInterruptExplicitModes(t *testing.T) {
 			})
 			scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial)
 			if initial.initialContext != "" {
-				awaitInterruptCapturedContext(t, ctx, scenario, 1)
+				minimumBytes := 1
+				if cell.name == "bounded" {
+					minimumBytes = 150000
+				}
+				awaitInterruptCapturedContext(t, ctx, scenario, minimumBytes)
 			}
 			// Invalid HTTP mode must not stop the source or admit a successor.
 			status, body, _, err := sendS8InterruptHTTP(ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage, "invalid")
@@ -79,6 +88,13 @@ func TestInterruptExplicitModes(t *testing.T) {
 				}
 				if cell.name == "recorded" && !strings.Contains(input, initial.initialContext) {
 					t.Fatalf("lost captured context: %s", input)
+				}
+				if cell.name == "bounded" {
+					_, contextText, found := strings.Cut(input, "Captured context (truncated=true):\n")
+					contextText, _, ended := strings.Cut(contextText, "\nReplacement message:\n")
+					if !found || !ended || len(contextText) > 65536 || !utf8.ValidString(contextText) || !strings.Contains(contextText, "世") {
+						t.Fatalf("bounded context bytes=%d found=%v ended=%v valid=%v input=%q", len(contextText), found, ended, utf8.ValidString(contextText), input[:min(len(input), 500)])
+					}
 				}
 				if cell.name == "empty" && !strings.Contains(input, "Captured context (truncated=false):\n\nReplacement message:") {
 					t.Fatalf("empty context = %s", input)
@@ -118,18 +134,29 @@ func TestInterruptExplicitModes(t *testing.T) {
 
 // Provider callbacks enqueue capture asynchronously. Observe the public prefix
 // before asking interrupt to freeze it, rather than guessing a scheduling delay.
-func awaitInterruptCapturedContext(t *testing.T, ctx context.Context, scenario s8InterruptScenario, count int) {
+func awaitInterruptCapturedContext(t *testing.T, ctx context.Context, scenario s8InterruptScenario, minimumBytes int) {
 	t.Helper()
 	for ctx.Err() == nil {
-		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, scenario.serverURL+"/worker-sessions/"+scenario.ids.workerA+"/logs?limit=1000")
 		found := 0
-		for _, event := range page.Events {
-			if event.Event.Payload["kind"] == "MESSAGE" {
-				found++
+		next := ""
+		for ctx.Err() == nil {
+			page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, scenario.serverURL+"/worker-sessions/"+scenario.ids.workerA+"/logs?limit=1000&nextToken="+url.QueryEscape(next))
+			for _, event := range page.Events {
+				if event.Event.Payload["kind"] == "MESSAGE" {
+					payload, err := json.Marshal(event.Event.Payload)
+					if err != nil {
+						t.Fatal(err)
+					}
+					found += len(payload)
+				}
 			}
-		}
-		if found >= count {
-			return
+			if found >= minimumBytes {
+				return
+			}
+			if len(page.Events) == 0 || page.NextToken == nil || *page.NextToken == "" {
+				break
+			}
+			next = *page.NextToken
 		}
 	}
 	t.Fatal("captured source context never reached the public log prefix")

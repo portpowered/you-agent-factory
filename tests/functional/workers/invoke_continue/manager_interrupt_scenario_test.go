@@ -437,8 +437,15 @@ func (runner *s8InterruptProviderRunner) run(
 		observer(platformprocess.OutputStreamStdout, append([]byte(nil), output[:lineEnd]...))
 	}
 	if observer != nil && call.initialContext != "" {
-		payload := fmt.Sprintf("{\"type\":\"item.updated\",\"item\":{\"id\":\"captured-context\",\"type\":\"agent_message\",\"text\":%q}}\n", call.initialContext)
-		observer(platformprocess.OutputStreamStdout, []byte(payload))
+		// Separate native items keep each observation below capture's record
+		// bound while letting the scenario prove the aggregate context bound.
+		text := []rune(call.initialContext)
+		for index := 0; len(text) > 0; index++ {
+			length := min(len(text), 512)
+			payload := fmt.Sprintf("{\"type\":\"item.updated\",\"item\":{\"id\":\"captured-context-%d\",\"type\":\"agent_message\",\"text\":%q}}\n", index, string(text[:length]))
+			observer(platformprocess.OutputStreamStdout, []byte(payload))
+			text = text[length:]
+		}
 	}
 	runner.recordStarted(call)
 

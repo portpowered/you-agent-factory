@@ -453,7 +453,7 @@ func assertRecipeRefusalStillAllowsTermination(t *testing.T, scenario s8Interrup
 // gates. Refusal must retain live control, independently of artifact storage.
 func TestInterruptInputByteRefusalLeavesSourceControllable(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"serialized-overflow", "invalid-utf8"} {
+	for _, cell := range []string{"serialized-overflow", "successor-artifact-overflow", "invalid-utf8"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			scenario := newS8InterruptScenario(t, t.Context(), cell)
@@ -465,10 +465,18 @@ func TestInterruptInputByteRefusalLeavesSourceControllable(t *testing.T) {
 			})
 			scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
 			replacement, want := "replacement\xff", "WORKER_SESSION_INTERRUPT_INVALID"
-			if cell == "serialized-overflow" {
+			if cell == "successor-artifact-overflow" {
+				// The frozen source input fits, but the successor identity occurs
+				// in both its recipe target and its new dispatch identity.
+				ids.successor = strings.Repeat("s", recordings.WorkerControlInputMaxBytes/2)
+				replacement, want = "complete replacement", "BAD_REQUEST"
+			}
+			if cell == "serialized-overflow" || cell == "successor-artifact-overflow" {
 				// The message fits as raw text; its JSON escaping exceeds the
 				// entire input budget even before execution settings are added.
-				replacement = strings.Repeat("<", recordings.WorkerControlInputMaxBytes/6)
+				if cell == "serialized-overflow" {
+					replacement = strings.Repeat("<", recordings.WorkerControlInputMaxBytes/6)
+				}
 				want = "BAD_REQUEST"
 				status, _, response := postS8InterruptError(t, scenario.ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, replacement)
 				if status != http.StatusBadRequest || string(response.Code) != want || string(response.Phase) != "VALIDATION" {
