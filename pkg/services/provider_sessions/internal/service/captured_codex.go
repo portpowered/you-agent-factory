@@ -72,16 +72,10 @@ func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.Session
 			if !captureHasRef(item, ref) {
 				continue
 			}
-			if item.Catalog.WorkerSessionID == "" {
-				return selected, providersessions.ErrSessionStorageUnavailable
+			selected, err = selectCodexAssociation(selected, item.Catalog)
+			if err != nil {
+				return selected, err
 			}
-			if selected.WorkerSessionID != "" && selected != item.Catalog {
-				if selected.WorkerSessionID != item.Catalog.WorkerSessionID || selected.RecordingID != item.Catalog.RecordingID || selected.RecordingGenerationID != item.Catalog.RecordingGenerationID {
-					return selected, providersessions.ErrAmbiguousSessionFile
-				}
-				return selected, providersessions.ErrSessionStorageUnavailable
-			}
-			selected = item.Catalog
 		}
 		if page.NextToken == "" {
 			break
@@ -96,6 +90,19 @@ func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.Session
 		return selected, providersessions.ErrSessionNotFound
 	}
 	return selected, nil
+}
+
+func selectCodexAssociation(current, candidate recordings.WorkerSessionCatalogEntry) (recordings.WorkerSessionCatalogEntry, error) {
+	if candidate.WorkerSessionID == "" {
+		return current, providersessions.ErrSessionStorageUnavailable
+	}
+	if current.WorkerSessionID == "" || current == candidate {
+		return candidate, nil
+	}
+	if current.WorkerSessionID != candidate.WorkerSessionID || current.RecordingID != candidate.RecordingID || current.RecordingGenerationID != candidate.RecordingGenerationID {
+		return current, providersessions.ErrAmbiguousSessionFile
+	}
+	return current, providersessions.ErrSessionStorageUnavailable
 }
 
 func captureHasRef(item recordings.WorkerCapturedCatalogItem, ref providers.SessionRef) bool {
@@ -140,23 +147,19 @@ func (s *capturedCodex) readCapture(ctx context.Context, selected recordings.Wor
 		if err != nil {
 			return first, captureReadError(err)
 		}
-		if page.Catalog != selected || page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil ||
-			page.Terminal.Position < 1 || uint64(page.Terminal.Position) > selected.CommittedPosition {
+		if !validCapturedCodexPage(page, selected) {
 			return first, providersessions.ErrSessionStorageUnavailable
 		}
 		if request.NextToken == "" {
 			first = page
-		} else if !reflect.DeepEqual(page.Opening, first.Opening) || *page.Terminal != *first.Terminal || !reflect.DeepEqual(page.TokenUsage, first.TokenUsage) {
+		} else if !sameCapturedCodexHead(page, first) {
 			return first, providersessions.ErrSessionStorageUnavailable
 		}
-		for _, record := range page.Records {
-			position := uint64(record.Record.ID.Position)
-			if position != previous+1 || position > selected.CommittedPosition || record.Truncated || record.Record.ID.Topic != first.Opening.ID.Topic {
-				return first, providersessions.ErrSessionStorageUnavailable
-			}
-			previous = position
-			records = append(records, record)
+		previous, err = validateCapturedCodexRecords(page, previous)
+		if err != nil {
+			return first, err
 		}
+		records = append(records, page.Records...)
 		if page.NextToken == "" {
 			break
 		}
@@ -174,6 +177,26 @@ func (s *capturedCodex) readCapture(ctx context.Context, selected recordings.Wor
 		return first, providersessions.ErrSessionStorageUnavailable
 	}
 	return first, nil
+}
+
+func validCapturedCodexPage(page recordings.WorkerCapturedActivityPage, selected recordings.WorkerSessionCatalogEntry) bool {
+	return page.Catalog == selected && page.Health == recordings.WorkerRecordingStatusComplete && page.Terminal != nil &&
+		page.Terminal.Position >= 1 && uint64(page.Terminal.Position) <= selected.CommittedPosition
+}
+
+func sameCapturedCodexHead(page, first recordings.WorkerCapturedActivityPage) bool {
+	return reflect.DeepEqual(page.Opening, first.Opening) && *page.Terminal == *first.Terminal && reflect.DeepEqual(page.TokenUsage, first.TokenUsage)
+}
+
+func validateCapturedCodexRecords(page recordings.WorkerCapturedActivityPage, previous uint64) (uint64, error) {
+	for _, record := range page.Records {
+		position := uint64(record.Record.ID.Position)
+		if position != previous+1 || position > page.Catalog.CommittedPosition || record.Truncated || record.Record.ID.Topic != page.Opening.ID.Topic {
+			return previous, providersessions.ErrSessionStorageUnavailable
+		}
+		previous = position
+	}
+	return previous, nil
 }
 
 func captureTerminalMatches(page recordings.WorkerCapturedActivityPage) bool {

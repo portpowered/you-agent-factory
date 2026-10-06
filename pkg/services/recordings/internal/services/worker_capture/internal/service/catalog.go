@@ -62,6 +62,14 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if err := writer.rebuildCatalog(ctx); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
+	// Association queries need the complete membership set to prove absence or
+	// uniqueness. ID-scoped reads still retain healthy histories and prefixes.
+	writer.catalogMu.Lock()
+	unproven := writer.catalogDamaged || len(writer.ambiguous) != 0
+	writer.catalogMu.Unlock()
+	if unproven {
+		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingReplay
+	}
 	entries := writer.catalogEntries()
 	generation := writer.catalogGeneration(entries)
 	after, err := decodeCatalogCursor(request.NextToken, generation)

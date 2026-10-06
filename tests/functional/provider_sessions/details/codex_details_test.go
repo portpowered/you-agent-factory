@@ -237,6 +237,11 @@ func assertCapturedCodexDetail(t *testing.T, detail factoryapi.ProviderSessionDe
 			t.Fatalf("captured entry facts fabricated/lost: %#v", entry)
 		}
 	}
+	assertCapturedCodexSourceAndUsage(t, detail)
+}
+
+func assertCapturedCodexSourceAndUsage(t *testing.T, detail factoryapi.ProviderSessionDetailResponse) {
+	t.Helper()
 	if detail.Source.RelativePath != "" || detail.Source.SizeBytes != 0 || detail.Source.ModifiedAt != nil || detail.Parse.LineCount != 0 {
 		t.Fatalf("uncaptured native facts fabricated: %#v", detail)
 	}

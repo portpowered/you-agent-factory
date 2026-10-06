@@ -114,25 +114,8 @@ func TestCodexCapturedProjectsSnapshotsToolsUsageAndCaptureTimes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.ProviderSession.ID != ref.ID || len(got.Transcript) != 3 || *got.Transcript[0].Text != "final answer" ||
-				got.Transcript[1].Type != providersessions.TranscriptToolCall || *got.Transcript[1].Name != "read" ||
-				got.Transcript[2].Type != providersessions.TranscriptToolOutput || *got.Transcript[2].Output != "result" {
-				t.Fatalf("detail = %+v", got)
-			}
-			for i, entry := range got.Transcript {
-				if entry.Order != i+1 || entry.LineNumber != nil || entry.EncryptedContent != nil {
-					t.Fatalf("entry facts = %+v", entry)
-				}
-			}
-			if !got.Transcript[0].Timestamp.Equal(*fake.pages[""].Records[1].CapturedAt) {
-				t.Fatal("lost first capture time")
-			}
-			if got.Source != (providersessions.SourceMetadata{}) || got.Parse.LineCount != 0 || got.Parse.MalformedLineCount != 0 || len(got.Parse.Turns) != 0 || len(got.Parse.CumulativeInputTokens) != 0 {
-				t.Fatal("invented native source facts")
-			}
-			if got.Parse.TokenUsage == nil || *got.Parse.TokenUsage.InputTokens != 10 || *got.Parse.TokenUsage.CachedInputTokens != 3 || *got.Parse.TokenUsage.TotalTokens != 14 || len(got.Parse.FunctionCalls) != 2 {
-				t.Fatalf("parse = %+v", got.Parse)
-			}
+			assertCodexCapturedTranscript(t, got, ref, fake.pages[""].Records[1].CapturedAt)
+			assertCodexCapturedParse(t, got)
 			*got.Transcript[0].Text = "caller mutation"
 			*got.Parse.TokenUsage.InputTokens = 100
 			again, err := s.Details(t.Context(), ref)
@@ -140,6 +123,33 @@ func TestCodexCapturedProjectsSnapshotsToolsUsageAndCaptureTimes(t *testing.T) {
 				t.Fatal("result aliases stored input")
 			}
 		})
+	}
+}
+
+func assertCodexCapturedTranscript(t *testing.T, got providersessions.Detail, ref providers.SessionRef, stamp *time.Time) {
+	t.Helper()
+	if got.ProviderSession.ID != ref.ID || len(got.Transcript) != 3 || *got.Transcript[0].Text != "final answer" ||
+		got.Transcript[1].Type != providersessions.TranscriptToolCall || *got.Transcript[1].Name != "read" ||
+		got.Transcript[2].Type != providersessions.TranscriptToolOutput || *got.Transcript[2].Output != "result" {
+		t.Fatalf("detail = %+v", got)
+	}
+	for i, entry := range got.Transcript {
+		if entry.Order != i+1 || entry.LineNumber != nil || entry.EncryptedContent != nil {
+			t.Fatalf("entry facts = %+v", entry)
+		}
+	}
+	if !got.Transcript[0].Timestamp.Equal(*stamp) {
+		t.Fatal("lost first capture time")
+	}
+}
+
+func assertCodexCapturedParse(t *testing.T, got providersessions.Detail) {
+	t.Helper()
+	if got.Source != (providersessions.SourceMetadata{}) || got.Parse.LineCount != 0 || got.Parse.MalformedLineCount != 0 || len(got.Parse.Turns) != 0 || len(got.Parse.CumulativeInputTokens) != 0 {
+		t.Fatal("invented native source facts")
+	}
+	if got.Parse.TokenUsage == nil || *got.Parse.TokenUsage.InputTokens != 10 || *got.Parse.TokenUsage.CachedInputTokens != 3 || *got.Parse.TokenUsage.TotalTokens != 14 || len(got.Parse.FunctionCalls) != 2 {
+		t.Fatalf("parse = %+v", got.Parse)
 	}
 }
 
@@ -213,26 +223,8 @@ func TestCodexCapturedRejectsDamagedOrChangingActivity(t *testing.T) {
 				second.Records = second.Records[:2]
 			case "topic":
 				second.Records[0].Record.ID.Topic = "foreign"
-			case "generation":
-				second.Catalog.RecordingGenerationID = "changed"
-			case "head":
-				second.Catalog.CommittedPosition++
-			case "opening":
-				second.Opening.SourceID = "changed"
-			case "terminal":
-				terminal := *second.Terminal
-				terminal.Status = "FAILED"
-				second.Terminal = &terminal
-			case "usage":
-				second.TokenUsage = &workers.UsagePayload{InputTokens: 50}
-			case "malformed":
-				second.Records[0].Record.Payload = []byte(`{broken`)
-			case "cursor cycle":
-				second.NextToken = "next"
-			case "empty page":
-				first.Records = nil
-			case "negative usage":
-				first.TokenUsage.InputTokens = -1
+			default:
+				mutateCapturedCodexHead(name, &first, &second)
 			}
 			fake.pages[""], fake.pages["next"] = first, second
 			_, err := (&capturedCodex{reader: fake}).Details(t.Context(), ref)
@@ -240,6 +232,31 @@ func TestCodexCapturedRejectsDamagedOrChangingActivity(t *testing.T) {
 				t.Fatalf("error = %v, want %v", err, want)
 			}
 		})
+	}
+}
+
+func mutateCapturedCodexHead(name string, first, second *recordings.WorkerCapturedActivityPage) {
+	switch name {
+	case "generation":
+		second.Catalog.RecordingGenerationID = "changed"
+	case "head":
+		second.Catalog.CommittedPosition++
+	case "opening":
+		second.Opening.SourceID = "changed"
+	case "terminal":
+		terminal := *second.Terminal
+		terminal.Status = "FAILED"
+		second.Terminal = &terminal
+	case "usage":
+		second.TokenUsage = &workers.UsagePayload{InputTokens: 50}
+	case "malformed":
+		second.Records[0].Record.Payload = []byte(`{broken`)
+	case "cursor cycle":
+		second.NextToken = "next"
+	case "empty page":
+		first.Records = nil
+	case "negative usage":
+		first.TokenUsage.InputTokens = -1
 	}
 }
 
