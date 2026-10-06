@@ -28,36 +28,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // newDefaultWorkTypeResolver binds Work admission's omitted-type policy to the
-// current Factory selected for a Factory Session. Composition owns the binding
-// because it is the only place that holds both the Factory Definitions save API
-// and the invocation work-type policy; Work's HTTP transport keeps consuming it
-// as the plain func(context.Context, string) (string, error) port it already
-// accepts.
+// native configuration in the selected Factory Session. The session projection
+// avoids serializing an editable Factory to resolve its default Work Type.
 func newDefaultWorkTypeResolver(
-	definitions apisurface.FactorySaveAPI,
+	sessions factorysessions.LiveControlService,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 ) func(context.Context, string) (string, error) {
 	return func(ctx context.Context, sessionID string) (string, error) {
-		if definitions == nil || invocationWorkType == nil {
+		if sessions == nil || invocationWorkType == nil {
 			return "", nil
 		}
-		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
+		projection, err := sessions.GetFactorySession(ctx, sessionID)
 		if err != nil {
-			if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
+			if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorydefinitions.ErrCurrentFactoryNotFound) {
 				return "", nil
 			}
 			return "", err
 		}
-		factoryConfig, err := factorymapping.FactoryConfigFromOpenAPI(namedFactory)
-		if err != nil {
-			return "", err
-		}
-		defaultID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
+		defaultID, err := invocationWorkType.DefaultWorkType(projection.Context.FactoryCfg)
 		if err != nil {
 			return "", nil
 		}

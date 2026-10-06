@@ -5295,3 +5295,65 @@ Main next advances to d173d3b17f with factory workspace setup-script handling
 and its Python tests only. No Go source or functional Go test changes; the
 branch rebases that update before the next push. Fresh hosted checks remain
 the merge gate, and the complete-job two-minute checkpoint is still unmet.
+
+
+### October 6: resolve default Work Type from the native session projection
+
+Work's omitted-type resolver previously read the full editable Factory through
+Factory Definitions' API adapter, serialized its snapshot to generated API
+representations, and converted that representation back to native configuration.
+It now reads the existing public Factory Sessions live-control projection and
+passes that projection's native configuration to the unchanged invocation
+work-type policy. The composition binding uses the already injected root.
+No new effect port, cache, public endpoint or session registry is introduced.
+Content-endpoint session-existence validation remains on its existing binding.
+
+The focused resolver component test retains missing-collaborator, missing
+session/current-Factory, policy-error and opaque-error outcomes; its successful
+case now checks that the policy receives the selected native Factory. The Work
+HTTP default-type admission boundary test and both scoped linters pass. The
+first native compile exposes an unused generated-API import in the updated test
+fake; it is removed before the passing checks.
+
+Build-excluded B/C/C/B whole customer_lifecycles runs use four pinned Linux CPUs,
+count one, CPU profiles for every run, and separately built native binaries.
+All eight initial/confirmation executions pass. Initial totals are baseline
+89.116140 CPU-seconds / 48.512779s wall versus candidate 58.104046 / 40.062619:
+34.8% less CPU and 17.4% less wall. Baseline CPU varies markedly (53.904875
+versus 35.211265 per run), so confirmation reuses those same built binaries.
+Confirmation totals are baseline 72.934559 / 54.529236 versus candidate
+56.474695 / 50.149307: 22.6% less CPU and 8.0% less wall. Retain both ranges;
+do not headline only the stronger initial sample. Evidence:
+native-default-work-type-paired/ and native-default-work-type-confirmation/.
+
+The initial baseline profile samples 10.92s / 20.64% cumulatively in the
+omitted-type resolver; the candidate's resolver is below its top-80 cumulative
+threshold. Candidate JSON decoding and Factory Session opening still consume
+substantial CPU. These profiles overlap in cumulative attribution; no complete
+lane speedup is inferred. Source is c034a3f136 plus the three resolver files,
+with the same Go source as the private checkout's a1f5c7a63c base before this
+change. Full consolidated verification is required before pushing.
+
+The complete consolidated candidate passes on live base d173d3b17f in 112.62s
+supervisor / 108.398s capture, using 325.03 CPU-seconds (249.78 user, 75.25
+system). All 67 packages / 766 results finish (764 pass, two skip), with a
+complete empty failure index and no retry ledger. Compilation executes 116
+commands, consuming 40.262287 CPU-seconds / 15.549924s active wall. Fifteen
+links consume 18.791994 CPU-seconds / 12.622867s active wall. Evidence:
+native-default-work-type-full/. This changed-production verification is not
+a controlled complete-lane comparison to the preceding runtime-base rebuild.
+Source is c034a3f136 plus the three resolver files; the private raw-index Git
+identity is stale. Main remains d173d3b17f when the batch is prepared.
+
+Hosted run 37506845531 on preceding head c034a3f136 passes Functional Coverage
+in 233s complete / 167.382s capture, with all 67 packages / 766 results, no
+failures or retries, 280 compiler commands and 12 links. The v2 snapshot from
+16c7729f90 restores approximately 231 MiB compressed; the new compiler capture
+keeps 15126 files / 1390011382 bytes with zero omissions. This captures more
+than 1 GiB after the runtime rebase, but does not isolate cache-size benefit
+from source/base changes. Evidence: parity-larger-cache-hosted/ and
+parity-larger-cache-hosted-job.log. Other required jobs remain active; the
+workflow is not claimed fully green. The previous 16c7729f90 workflow is now
+terminal/cancelled, with a failed Verification Policy job; no fully green
+status is claimed for it either. Fresh hosted checks and complete-job timing
+are still required for this resolver batch and the two-minute checkpoint.
