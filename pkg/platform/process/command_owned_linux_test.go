@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"testing"
 	"testing/fstest"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestOwnedLinuxGroupObservation(t *testing.T) {
@@ -30,6 +32,21 @@ func TestOwnedLinuxGroupObservation(t *testing.T) {
 		{name: "disappeared process", procFS: fstest.MapFS{
 			"46": {Mode: fs.ModeDir},
 		}},
+		{name: "process reaped after stat open", procFS: failingProcFS{
+			FS:   fstest.MapFS{"46/stat": {Data: []byte("46 (child) R 1 42 42")}},
+			path: "46/stat", err: &fs.PathError{Op: "read", Path: "46/stat", Err: unix.ESRCH},
+		}},
+		{name: "reaped process does not hide live descendant", procFS: failingProcFS{
+			FS: fstest.MapFS{
+				"46/stat": {Data: []byte("46 (unrelated) R 1 46 46")},
+				"47/stat": {Data: []byte("47 (grandchild) R 1 42 42")},
+			},
+			path: "46/stat", err: &fs.PathError{Op: "read", Path: "46/stat", Err: unix.ESRCH},
+		}, live: true},
+		{name: "permission denied remains unconfirmed", procFS: failingProcFS{
+			FS:   fstest.MapFS{"46/stat": {Data: []byte("46 (child) R 1 42 42")}},
+			path: "46/stat", err: &fs.PathError{Op: "read", Path: "46/stat", Err: unix.EACCES},
+		}, wantErr: true},
 		{name: "malformed process fact", procFS: fstest.MapFS{
 			"46/stat": {Data: []byte("not a process stat")},
 		}, wantErr: true},

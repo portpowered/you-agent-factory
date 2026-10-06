@@ -85,8 +85,10 @@ func ownedLinuxGroupRunning(procFS fs.FS, pgid int) (bool, error) {
 			continue
 		}
 		stat, err := fs.ReadFile(procFS, entry.Name()+"/stat")
-		if errors.Is(err, fs.ErrNotExist) {
-			continue // An unrelated process may disappear during enumeration.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH) {
+			// A process may be reaped between enumeration, open and read.
+			// procfs reports ESRCH when an already-open stat loses its task.
+			continue
 		}
 		if err != nil {
 			return false, err
