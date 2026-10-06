@@ -50,6 +50,7 @@ type FactoryEngine struct {
 	recordDispatch        func(interfaces.FactoryDispatchRecord)
 	recordCompletion      func(interfaces.FactoryCompletionRecord)
 	recordResponse        func(int, workerexecution.WorkResult, interfaces.CompletedDispatch)
+	recordWorkStateChange func(int, work.WorkStateChangeRecord)
 	recordPetriMutations  func([]interfaces.TokenMutationRecord) error
 	dispatchHandler       func(work.WorkDispatch)
 	dispatchHook          factory.DispatchResultHook
@@ -97,6 +98,7 @@ func NewFactoryEngine(
 	recordDispatch func(interfaces.FactoryDispatchRecord),
 	recordCompletion func(interfaces.FactoryCompletionRecord),
 	recordResponse func(int, workerexecution.WorkResult, interfaces.CompletedDispatch),
+	recordWorkStateChange func(int, work.WorkStateChangeRecord),
 	recordPetriMutations func([]interfaces.TokenMutationRecord) error,
 	automaticTicksPaused func() bool,
 	onResultBufferDrained func(int),
@@ -124,7 +126,8 @@ func NewFactoryEngine(
 		resultBuffer = buffers.NewTypedBuffer[workerexecution.WorkResult](64)
 	}
 	e := &FactoryEngine{
-		state: n,
+		recordWorkStateChange: recordWorkStateChange,
+		state:                 n,
 		runtimeState: &RuntimeState{
 			Marking:      marking,
 			Dispatches:   make(map[string]*interfaces.DispatchEntry),
@@ -697,6 +700,11 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 			return snapshot, mutated, fmt.Errorf("applying mutations from tick-group %d: %w", tickGroup, err)
 		}
 		e.reserveHistoricalMutations(result.Mutations)
+		if e.recordWorkStateChange != nil {
+			for _, change := range result.WorkStateChanges {
+				e.recordWorkStateChange(e.runtimeState.TickCount, change)
+			}
+		}
 		snapshot = e.runtimeState.Snapshot()
 		mutated = true
 	}
