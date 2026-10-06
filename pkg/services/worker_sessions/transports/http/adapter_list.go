@@ -229,7 +229,7 @@ func (a *Adapter) resolveWorkAttribution(
 			return nil, err
 		}
 		for _, result := range results {
-			attribution[result.WorkerSessionID] = workerSessionWorkAttribution{WorkID: result.WorkID, WorkName: result.WorkName}
+			attribution[result.WorkerSessionID] = workerSessionWorkAttribution{WorkID: result.WorkID, WorkName: result.WorkName, HistoryUnavailable: result.HistoryUnavailable}
 		}
 	}
 	return attribution, nil

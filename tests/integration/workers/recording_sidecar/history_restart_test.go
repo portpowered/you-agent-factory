@@ -86,10 +86,10 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 		}
 	}
 	first := startHistoryHost(t, ctx, binary, project, env)
-	before := readHistorySnapshot(t, ctx, binary, project, env, first.url)
+	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url)
 	first.stop(t, ctx, binary, project, env)
 	second := startHistoryHost(t, ctx, binary, project, env)
-	after := readHistorySnapshot(t, ctx, binary, project, env, second.url)
+	after := readNamedHistorySnapshot(t, ctx, binary, project, env, second.url)
 	second.stop(t, ctx, binary, project, env)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("restart changed captured identity/ordered replay: before=%+v after=%+v", before, after)
@@ -99,6 +99,20 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 type historySnapshot struct {
 	Observation api.WorkerSessionObservation
 	Logs        api.WorkerSessionLogPage
+}
+
+func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
+	t.Helper()
+	snapshot := readHistorySnapshot(t, ctx, binary, project, env, server)
+	observation := snapshot.Observation
+	if observation.WorkName == nil || *observation.WorkName != "seed-archived-name" || observation.WorkId == nil || *observation.WorkId == "" {
+		t.Fatalf("archived known name = %+v", observation)
+	}
+	table := historyCLI(t, ctx, binary, project, env, "--server", server, "worker-sessions", "list", "--history", "archived")
+	if !bytes.Contains(table, []byte("seed-archived-name")) {
+		t.Fatalf("archived table lost Work name: %s", table)
+	}
+	return snapshot
 }
 
 func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
@@ -112,20 +126,13 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 		t.Fatalf("archived sessions = %+v", rows.Sessions)
 	}
 	observation := rows.Sessions[0]
-	if observation.WorkName == nil || *observation.WorkName != "seed-archived-name" || observation.WorkId == nil || *observation.WorkId == "" {
-		t.Fatalf("archived known name = %+v", observation)
-	}
 	selected := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId)
 	var selectedObservation api.WorkerSessionObservation
-	if err := json.Unmarshal(selected, &selectedObservation); err != nil || selectedObservation.WorkName == nil || *selectedObservation.WorkName != "seed-archived-name" {
-		t.Fatalf("selected archived name = %s, %v", selected, err)
+	if err := json.Unmarshal(selected, &selectedObservation); err != nil {
+		t.Fatalf("selected archived observation = %s, %v", selected, err)
 	}
 	if !reflect.DeepEqual(observation, selectedObservation) {
 		t.Fatalf("list/show disagree: list=%+v show=%+v", observation, selectedObservation)
-	}
-	table := historyCLI(t, ctx, binary, project, env, "--server", server, "worker-sessions", "list", "--history", "archived")
-	if !bytes.Contains(table, []byte("seed-archived-name")) {
-		t.Fatalf("archived table lost Work name: %s", table)
 	}
 	assertHistoryHTTP(t, ctx, server, observation)
 

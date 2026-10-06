@@ -106,12 +106,17 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	}
 	projection, err := q.projection(ctx, page, request.FactorySessionID)
 	if err != nil {
+		if isUnavailableHistory(err) {
+			result.HistoryUnavailable = true
+			return result, nil // Optional attribution is unavailable; capture identity and health remain authoritative.
+		}
 		return result, err
 	}
 	association, exists := projection.associations[request.WorkerSessionID]
 	if !exists {
 		if page.Catalog.OriginatingArtifact == "" || projection.reportedDefault {
-			return result, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: recordings.RecordingID(page.Catalog.RecordingID)}
+			result.HistoryUnavailable = true
+			return result, nil // The legacy candidate has no validated association; never borrow its name.
 		}
 		return result, nil // Histories may lack a canonical association.
 	}
@@ -120,6 +125,11 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	}
 	result.WorkName = projection.names[request.WorkID]
 	return result, nil
+}
+
+func isUnavailableHistory(err error) bool {
+	var historyError *recordings.HistoricalRecordingQueryError
+	return errors.As(err, &historyError) && (historyError.Kind == recordings.HistoricalRecordingQueryErrorMissingHistory || historyError.Kind == recordings.HistoricalRecordingQueryErrorUnavailable)
 }
 
 func validateOpening(page recordings.WorkerCapturedActivityPage, request recordings.WorkerWorkAttributionRequest) (workers.SessionPayload, error) {

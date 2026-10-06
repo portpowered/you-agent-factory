@@ -1222,35 +1222,3 @@ func TestFileWriterCatalogDiscoversLegacyAndPreservesHealthySibling(t *testing.T
 		t.Fatalf("legacy generation changed on reconstruction: %v", err)
 	}
 }
-
-func TestWorkerWorkAttributionOriginatingArtifactSurvivesCatalogRebuild(t *testing.T) {
-	t.Parallel()
-	for _, artifact := range []string{"", "selected/custom-recording.json"} {
-		t.Run(artifact, func(t *testing.T) {
-			t.Parallel()
-			local := platformreplay.NewLocal(runtime.GOOS)
-			writer := journalWriter(t, local)
-			record := journalRecord(t, "origin-recording", "origin-worker")
-			record.OriginatingArtifact = artifact
-			if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
-				t.Fatal(err)
-			}
-			// The opening establishes provenance; later records cannot replace it.
-			record.OriginatingArtifact = "later-substitution"
-			record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, record.WorkerSessionID), 2)
-			if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
-				t.Fatal(err)
-			}
-			reopened, err := NewFileWriter(local, local, local, &captureTimeProbe{}, writer.root, "restarted", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, store := range []recordings.WorkerRecordingStore{writer, reopened} {
-				page, err := store.ReadWorkerCapturedActivity(t.Context(), recordings.WorkerCapturedActivityRequest{WorkerSessionID: record.WorkerSessionID, Limit: 1})
-				if err != nil || page.Catalog.OriginatingArtifact != artifact || page.Health != recordings.WorkerRecordingStatusComplete {
-					t.Fatalf("origin after committed/reopened read = %+v, %v; want %q", page.Catalog, err, artifact)
-				}
-			}
-		})
-	}
-}

@@ -11,10 +11,11 @@ type WorkerWorkAttributionRequest struct {
 
 // WorkerWorkAttribution retains only an explicit recorded name.
 type WorkerWorkAttribution struct {
-	WorkerSessionID  string
-	FactorySessionID string
-	WorkID           string
-	WorkName         string
+	WorkerSessionID    string
+	FactorySessionID   string
+	WorkID             string
+	WorkName           string
+	HistoryUnavailable bool
 }
 
 // WorkerWorkAttributionReader is the read-only, query-local batch capability.

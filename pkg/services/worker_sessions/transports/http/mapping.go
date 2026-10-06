@@ -546,8 +546,9 @@ func cloneStringSliceMap(value map[string][]string) map[string][]string {
 }
 
 type workerSessionWorkAttribution struct {
-	WorkID   string
-	WorkName string
+	WorkID             string
+	WorkName           string
+	HistoryUnavailable bool
 }
 
 func listWorkerSessionObservationsResponseToAPI(
@@ -575,6 +576,9 @@ func workerSessionObservationWithWorkToAPI(observation workersessions.Observatio
 	}
 	if work.WorkName != "" {
 		mapped.WorkName = stringPtr(work.WorkName)
+	}
+	if work.HistoryUnavailable {
+		mapped.Provider = nil
 	}
 	return mapped
 }

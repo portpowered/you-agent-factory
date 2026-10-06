@@ -183,7 +183,7 @@ func TestWorkerWorkAttributionRejectsForeignAndAmbiguousFacts(t *testing.T) {
 
 func TestWorkerWorkAttributionErrorsAndCancellation(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"capture-corrupt", "history-unavailable", "history-missing", "canceled", "cancel-during-history", "invalid-request", "nil-context"} {
+	for _, scenario := range []string{"capture-corrupt", "history-corrupt", "canceled", "cancel-during-history", "invalid-request", "nil-context"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
@@ -197,12 +197,8 @@ func TestWorkerWorkAttributionErrorsAndCancellation(t *testing.T) {
 			case "capture-corrupt":
 				want = recordings.ErrWorkerRecordingReplay
 				captures.err = want
-			case "history-unavailable", "history-missing":
-				kind := recordings.HistoricalRecordingQueryErrorUnavailable
-				if scenario == "history-missing" {
-					kind = recordings.HistoricalRecordingQueryErrorMissingHistory
-				}
-				want = &recordings.HistoricalRecordingQueryError{Kind: kind, RecordingID: "recording"}
+			case "history-corrupt":
+				want = &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorCorruptHistory, RecordingID: "recording"}
 				history.err = want
 			case "canceled":
 				cancel()
@@ -220,6 +216,22 @@ func TestWorkerWorkAttributionErrorsAndCancellation(t *testing.T) {
 			got, err := New(captures, history).ResolveWorkerWorkAttribution(ctx, requests)
 			if !errors.Is(err, want) || got != nil {
 				t.Fatalf("error attribution = %+v, %v; want %v", got, err, want)
+			}
+		})
+	}
+}
+
+func TestWorkerWorkAttributionUnavailableHistory(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []recordings.HistoricalRecordingQueryErrorKind{recordings.HistoricalRecordingQueryErrorUnavailable, recordings.HistoricalRecordingQueryErrorMissingHistory} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			captures := &captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": capturePage(t, "worker", "scope", "recording", "dispatch", "work")}}
+			history := &historyFake{err: &recordings.HistoricalRecordingQueryError{Kind: kind, RecordingID: "recording"}}
+			got, err := New(captures, history).ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work"}})
+			want := []recordings.WorkerWorkAttribution{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work", HistoryUnavailable: true}}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("unavailable optional attribution = %+v, %v; want %+v", got, err, want)
 			}
 		})
 	}
@@ -288,8 +300,7 @@ func TestWorkerWorkAttributionReportedDefaultRequiresExactAssociation(t *testing
 			reader := New(&captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": page}}, &historyFake{histories: map[string]recordings.HistoricalRecordingQueryResult{"recording": history}})
 			got, err := reader.ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: canonical, WorkID: "work"}})
 			if scenario == "missing-association" {
-				var typed *recordings.HistoricalRecordingQueryError
-				if !errors.As(err, &typed) || typed.Kind != recordings.HistoricalRecordingQueryErrorMissingHistory || got != nil {
+				if err != nil || len(got) != 1 || got[0].WorkName != "" || !got[0].HistoryUnavailable {
 					t.Fatalf("unvalidated alias = %+v, %v", got, err)
 				}
 				return
