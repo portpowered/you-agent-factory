@@ -32,7 +32,7 @@ func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 	peerRunner := peer.providerRunner.(*t7GatedProviderRunner)
 	defer t7ReleaseAndJoin(t, ctx, targetRunner)()
 	defer t7ReleaseAndJoin(t, ctx, peerRunner)()
-	t7WriteFactorySibling(t, fixture.hostDir, peer.workingDirectory)
+	t7WriteFactorySibling(t, peer.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, peer.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	work := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{
@@ -94,11 +94,15 @@ func t7AssertFactorySibling(t *testing.T, ctx context.Context, baseURL, id, sess
 	}
 }
 
-func t7WriteFactorySibling(t *testing.T, source, directoryPath string) {
+func t7WriteFactorySibling(t *testing.T, directoryPath string) {
 	t.Helper()
-	if err := copyInvokeContinueDirectory(source, directoryPath); err != nil {
+	// Copy authored inputs only: the running host contains recordings that
+	// parallel attempts can atomically rename while a directory walk is active.
+	if err := copyInvokeContinueDirectory(support.LegacyFixtureDir(t, "executor_success"), directoryPath); err != nil {
 		t.Fatal(err)
 	}
+	// Only the explicitly submitted sibling Work should start this Factory.
+	support.ClearSeedInputs(t, directoryPath)
 	directory, _ := json.Marshal(directoryPath)
 	worker := "---\ntype: MODEL_WORKER\nexecutorProvider: CODEX\nmodel: opaque-factory-model\nmodelProvider: codex\nreasoningEffort: high\nstopToken: COMPLETE\n---\nFactory sibling instruction.\n"
 	if err := os.WriteFile(filepath.Join(directoryPath, "workers", "worker", "AGENTS.md"), []byte(worker), 0o600); err != nil {
