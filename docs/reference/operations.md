@@ -87,7 +87,11 @@ This includes truncated JSON, invalid snapshot schemas, read failures, and snaps
 The size limit is inclusive.
 Startup moves the snapshot and existing board reference to separate archives without replacing earlier archives.
 Each archive uses `<path>.unreadable.<UTC YYYYMMDDTHHMMSSfffffffffZ>.<unique-id>`; collisions receive a numbered suffix.
-Previous recordings remain available.
+Unreadable local board references also start an empty board after preservation.
+A corrupt recording permits fallback only when a valid repository reference selects it inside the current profile's recording directory.
+Startup archives that recording and related snapshot/reference files before publishing a fresh board.
+Foreign selections and ambiguous histories still stop startup without fallback.
+Previous healthy recordings remain available.
 If preservation fails, startup stops before readiness or worker activation.
 
 Without `--debug`, stderr prints one line:

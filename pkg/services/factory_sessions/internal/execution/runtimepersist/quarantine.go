@@ -70,3 +70,34 @@ func (s DirectoryStore) quarantineFile(ctx context.Context, source, suffix strin
 	}
 	return "", &persistenceError{operation: "reserve unreadable current board archive", cause: fs.ErrExist}
 }
+
+// QuarantineCurrentBoardArtifact preserves an independently selected local
+// reference or recording, then related snapshot/reference bytes. The caller
+// validates recording selection; this store never follows reference contents.
+func (s DirectoryStore) QuarantineCurrentBoardArtifact(ctx context.Context, at time.Time, identity, artifact string) (string, string, error) {
+	if !quarantineIdentityPattern.MatchString(identity) || s.files == nil {
+		return "", "", errors.New("current board quarantine identity or persistence is unavailable")
+	}
+	source := artifact
+	if source == "" {
+		source = s.currentBoardPath()
+	}
+	utc := at.UTC()
+	suffix := fmt.Sprintf(".unreadable.%s%09dZ.%s", utc.Format("20060102T150405"), utc.Nanosecond(), identity)
+	archive, err := s.quarantineFile(ctx, source, suffix)
+	if err != nil {
+		return "", "", err
+	}
+	for _, related := range []string{s.SnapshotPath("~default"), s.currentBoardPath()} {
+		if related == source {
+			continue
+		}
+		if _, err := s.quarantineFile(ctx, related, suffix); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", "", err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return "", "", err
+	}
+	return source, archive, nil
+}

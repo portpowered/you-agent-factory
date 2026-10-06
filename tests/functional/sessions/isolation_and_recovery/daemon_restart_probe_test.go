@@ -167,7 +167,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("PlainBoard invalid selection rejects without activation", func(t *testing.T) {
 		// These exact commands share Current Factory/~default ownership with
 		// the graceful journeys. Keep this cohort ordered on the same graph.
-		for _, name := range []string{"malformed reference", "foreign session reference", "foreign repository reference", "missing recording", "corrupt recording"} {
+		for _, name := range []string{"foreign session reference", "foreign repository reference", "missing recording", "corrupt recording"} {
 			t.Run(name, func(t *testing.T) {
 				testPlainBoardRejectedSelection(t, process, name, &starts, runner)
 			})
@@ -430,7 +430,7 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	scaffoldUnreadableBoard(t, repo)
-	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
 	files := &unreadableOpeningFiles{storage: platformreplay.NewLocal(runtime.GOOS)}
@@ -499,6 +499,7 @@ func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 		t.Fatal("clean restart repeated the recovery warning")
 	}
 	testUnreadableOversizedBoard(t, process, repo, home, snapshot, apis[4])
+	testUnreadableLocalArtifacts(t, process, repo, home, apis[5:], runner)
 	testUnreadableOpeningFailures(t, process, repo, home, files, &starts, runner)
 }
 
@@ -545,8 +546,8 @@ func testUnreadableOpeningFailures(t *testing.T, process support.Process, repo, 
 				}
 			}
 			if publication {
-				assertUnreadableArchive(t, snapshot, damaged, 4)
-				assertUnreadableArchive(t, reference, oldReference, 4)
+				assertUnreadableArchive(t, snapshot, damaged, 6)
+				assertUnreadableArchive(t, reference, oldReference, 6)
 			} else if !bytes.Equal(damaged, mustReadSeededReplayArtifact(t, snapshot)) || !bytes.Equal(oldReference, mustReadSeededReplayArtifact(t, reference)) {
 				t.Fatal("failed preservation changed original evidence")
 			}
@@ -646,6 +647,8 @@ func testUnreadableOversizedBoard(t *testing.T, process support.Process, repo, h
 	if got := unreadableFileChecksum(t, archive); got != wantHash {
 		t.Fatal("oversized archive changed bytes")
 	}
+	seedPlainBoardSiblingWork(t, url, repo+" oversized fresh")
+	waitForPlainBoardWorkConfirmed(t, url)
 	restartProbeShutdown(t, url, command)
 	wantLine := fmt.Sprintf("Durable state %q quarantined as %q: SIZE_LIMIT. Started an empty board.\n", snapshot, archive)
 	if strings.Count(inputs.Stderr(), wantLine) != 1 || strings.Contains(inputs.Stdout()+inputs.Stderr(), "fixture-private-prompt") {
@@ -1021,5 +1024,62 @@ func assertPlainBoardGuardDispatches(t *testing.T, runner *restartProbeUnexpecte
 		if !strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "guard § —") {
 			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
 		}
+	}
+}
+
+func testUnreadableLocalArtifacts(t *testing.T, process support.Process, repo, home string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	// F9 cells reopen the same default board in order after joined shutdown.
+	for index, cell := range []string{"local reference", "scoped recording"} {
+		t.Run("F9 "+cell, func(t *testing.T) {
+			snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+			reference := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+			history := plainBoardSelectedRecording(t, repo)
+			prior := map[string][]byte{snapshot: mustReadSeededReplayArtifact(t, snapshot), reference: mustReadSeededReplayArtifact(t, reference), history: mustReadSeededReplayArtifact(t, history)}
+			source, cause := reference, "INVALID_JSON"
+			if cell == "scoped recording" {
+				source, cause = history, "INVALID_SCHEMA"
+			}
+			damaged := []byte(`{"private":"fixture-private-prompt",`)
+			writeRestartProbeFile(t, source, damaged)
+			prior[source] = damaged
+			beforeCalls := runner.calls.Load()
+			command, url, inputs := startEmptyPlainBoard(t, process, repo, home, apis[index])
+			assertUnreadableStatus(t, url, source, cause)
+			if runner.calls.Load() != beforeCalls {
+				t.Fatal("artifact fallback dispatched prior Work")
+			}
+			seedPlainBoardSiblingWork(t, url, repo+" F9 § —")
+			waitForPlainBoardWorkConfirmed(t, url)
+			restartProbeShutdown(t, url, command)
+			assertUnreadableStderr(t, source, damaged, cause, inputs)
+			for path, data := range prior {
+				if path == history && source != history {
+					if !bytes.Equal(data, mustReadSeededReplayArtifact(t, path)) {
+						t.Fatal("reference fallback changed prior recording")
+					}
+					continue
+				}
+				archives, err := filepath.Glob(path + ".unreadable.*")
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, archive := range archives {
+					if bytes.Equal(data, mustReadSeededReplayArtifact(t, archive)) {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("fallback lost retained evidence for %s", path)
+				}
+			}
+			if history == plainBoardSelectedRecording(t, repo) {
+				t.Fatal("fallback reused selected history")
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "fixture-private-prompt") {
+				t.Fatal("artifact fallback disclosed content")
+			}
+		})
 	}
 }

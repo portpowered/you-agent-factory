@@ -75,6 +75,13 @@ func (r *Root) selectCurrentBoardReference(ctx context.Context, opening *session
 	}
 	path, err := store.LoadCurrentBoard(ctx, opening.load.LoadedFactoryCfg.FactoryDir())
 	if err != nil {
+		var local interface {
+			CurrentBoardReferenceFailure()
+			SnapshotFailureCause() string
+		}
+		if errors.As(err, &local) {
+			return r.quarantineCurrentBoardArtifact(ctx, opening, "", local.SnapshotFailureCause())
+		}
 		return err
 	}
 	probe, err := inspectCurrentBoardHistory(ctx, opening.durableExecution.Service, opening.sessionID)
@@ -322,4 +329,46 @@ func (r *Root) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRunt
 
 func currentBoardHistoryBelongsToFactory(events []factorydefinitions.FactoryEvent, directory string) bool {
 	return validateCurrentBoardFactoryDirectory(events, directory) == nil
+}
+
+func (r *Root) quarantineCurrentBoardArtifact(ctx context.Context, opening *sessionRuntimeOpening, artifact, cause string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store, ok := opening.durableExecution.Service.(interface {
+		QuarantineCurrentBoardArtifact(context.Context, time.Time, string, string) (string, string, error)
+	})
+	if !ok || opening.clock == nil || r.generateSessionID == nil {
+		return fmt.Errorf("current board artifact quarantine persistence, clock and identity are required")
+	}
+	file, archive, err := store.QuarantineCurrentBoardArtifact(ctx, opening.clock.Now(), r.generateSessionID(), artifact)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	opening.startupRecovery = &currentBoardStartupRecovery{file: file, quarantinedFile: archive, cause: cause}
+	opening.startEmptyCurrentBoard()
+	return nil
+}
+
+// A corrupt recording can be selected without parsing its damaged body only
+// through a validated repository reference to this profile's recording tree.
+// Explicit and foreign paths retain their rejecting behavior.
+func (r *Root) quarantineSelectedCurrentBoardRecording(ctx context.Context, opening *sessionRuntimeOpening, failure error) error {
+	if !opening.usesImplicitCurrentBoard() || !opening.hasCurrentBoardReference {
+		return failure
+	}
+	var typed *currentBoardHistoryRestoreError
+	if !errors.As(failure, &typed) || typed.code != currentBoardRecordingCorruptCode {
+		return failure
+	}
+	root := filepath.Join(opening.sessionSelection.SystemConfigHome, ".you-agent-factory", "recordings")
+	path := filepath.Clean(opening.configured.Recordings.RecordPath)
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return failure
+	}
+	return r.quarantineCurrentBoardArtifact(ctx, opening, path, "INVALID_SCHEMA")
 }

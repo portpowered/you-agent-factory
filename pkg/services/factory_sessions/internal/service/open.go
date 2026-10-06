@@ -361,6 +361,9 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 			opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
 		)
 		if err != nil {
+			if opening.usesImplicitCurrentBoard() {
+				return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
+			}
 			logCurrentBoardHistoryFailure(
 				opening.logger,
 				opening.sessionID,

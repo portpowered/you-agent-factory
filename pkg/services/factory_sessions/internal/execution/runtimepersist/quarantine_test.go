@@ -235,3 +235,50 @@ func TestCurrentBoardQuarantineLocalFilesSurviveFreshSnapshotAndReference(t *tes
 		}
 	}
 }
+
+func TestCurrentBoardArtifactQuarantinePreservesSelectedAndRelatedBytes(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"reference", "recording", "denied", "cancel"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			store, files, snapshot, reference := newQuarantineStore(t)
+			recording := filepath.Join(filepath.Dir(reference), "history.jsonl")
+			files.contents[snapshot], files.contents[reference], files.contents[recording] = []byte("snapshot"), []byte("reference"), []byte("recording")
+			source, selected := recording, recording
+			if cell == "reference" {
+				source, selected = reference, ""
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if cell == "denied" {
+				files.failSource, files.failure = source, fs.ErrPermission
+			}
+			if cell == "cancel" {
+				files.afterMove = cancel
+			}
+			quarantine := store.(interface {
+				QuarantineCurrentBoardArtifact(context.Context, time.Time, string, string) (string, string, error)
+			})
+			file, archive, err := quarantine.QuarantineCurrentBoardArtifact(ctx, time.Time{}, "artifact-id", selected)
+			failed := cell == "denied" || cell == "cancel"
+			if failed {
+				if err == nil || file != "" || archive != "" {
+					t.Fatal("failed preservation claimed success")
+				}
+			} else if err != nil || file != source || !bytes.Equal(files.contents[archive], []byte(cell)) {
+				t.Fatalf("archive %s, %s, %v", file, archive, err)
+			}
+			for _, data := range []string{"snapshot", "reference", "recording"} {
+				retained := false
+				for _, got := range files.contents {
+					if string(got) == data {
+						retained = true
+					}
+				}
+				if !retained {
+					t.Fatalf("lost %s evidence", data)
+				}
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 )
 
 // ReadSizeLimitError reports a bounded read without retaining file content.
@@ -51,6 +52,20 @@ func (Local) ReadFileBounded(path string, limit int64) ([]byte, error) {
 // a crash between these operations also retains the bytes. Filesystems without
 // hard-link support fail safely. Permissions are inherited from the same inode.
 func (Local) RenameNoReplace(source, destination string) error {
+	// Reject symbolic links in the selected path, including parent directories,
+	// before creating an archive or removing any name outside that selection.
+	for parent := filepath.Clean(source); ; parent = filepath.Dir(parent) {
+		info, err := os.Lstat(parent)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("no-replace move rejects symbolic links")
+		}
+		if filepath.Dir(parent) == parent {
+			break
+		}
+	}
 	info, err := os.Lstat(source)
 	if err != nil {
 		return err

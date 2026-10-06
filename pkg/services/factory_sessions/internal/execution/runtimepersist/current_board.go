@@ -38,7 +38,7 @@ func (s DirectoryStore) LoadCurrentBoard(ctx context.Context, factoryDirectory s
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	data, err := s.files.ReadFile(s.currentBoardPath())
+	data, err := s.files.ReadFileBounded(s.currentBoardPath(), SnapshotMaxBytes)
 	if cancelErr := ctx.Err(); cancelErr != nil {
 		return "", cancelErr
 	}
@@ -46,12 +46,22 @@ func (s DirectoryStore) LoadCurrentBoard(ctx context.Context, factoryDirectory s
 		return "", nil
 	}
 	if err != nil {
-		return "", &persistenceError{operation: "read current board reference", cause: err}
+		cause := "READ_FAILED"
+		var limit interface{ ReadSizeLimit() int64 }
+		if errors.As(err, &limit) {
+			cause = "SIZE_LIMIT"
+		}
+		return "", &currentBoardReferenceFailure{cause: cause}
 	}
 	reference, err := decodeCurrentBoardReference(data)
-	if err == nil {
-		err = reference.validate(factoryDirectory)
+	if err != nil {
+		cause := "INVALID_SCHEMA"
+		if !json.Valid(data) {
+			cause = "INVALID_JSON"
+		}
+		return "", &currentBoardReferenceFailure{cause: cause}
 	}
+	err = reference.validate(factoryDirectory)
 	if err != nil {
 		return "", &persistenceError{operation: "validate current board reference", cause: err}
 	}
@@ -144,3 +154,17 @@ func decodeCurrentBoardReference(data []byte) (currentBoardReference, error) {
 	}
 	return reference, nil
 }
+
+// Only unreadable local bytes permit fallback. Decoded foreign identities and
+// unsafe selectors remain ordinary rejecting validation errors.
+type currentBoardReferenceFailure struct{ cause string }
+
+func (e *currentBoardReferenceFailure) Error() string {
+	return "unreadable local current board reference: " + e.cause
+}
+func (e *currentBoardReferenceFailure) SnapshotFailureCause() string  { return e.cause }
+func (e *currentBoardReferenceFailure) CurrentBoardReferenceFailure() {}
+func (e *currentBoardReferenceFailure) CLIErrorCode() string {
+	return "DURABLE_SESSION_PERSISTENCE_FAILED"
+}
+func (e *currentBoardReferenceFailure) CLIErrorMessage() string { return e.Error() }

@@ -517,3 +517,35 @@ func invalidBoardReferenceData(t *testing.T, name, data string) string {
 	}
 	return data
 }
+
+func TestCurrentBoardReferenceClassifiesLocalDamageButRejectsForeignSelection(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"malformed", "unknown", "session", "relative", "limit", "read"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := &boardReferenceFiles{}
+			store, root := newBoardReferenceStore(t, files)
+			factory := filepath.Join(root, "factory")
+			if err := store.SaveCurrentBoard(t.Context(), factory, filepath.Join(root, "history.json")); err != nil {
+				t.Fatal(err)
+			}
+			if name == "limit" {
+				files.boundedErr = &platformfilesystem.ReadSizeLimitError{Limit: 64 << 20}
+			} else if name == "read" {
+				files.readErr = fs.ErrPermission
+			} else {
+				files.data = []byte(invalidBoardReferenceData(t, name, string(files.data)))
+			}
+			_, err := store.LoadCurrentBoard(t.Context(), factory)
+			var classified interface {
+				SnapshotFailureCause() string
+				CurrentBoardReferenceFailure()
+			}
+			local := errors.As(err, &classified)
+			expected := map[string]string{"malformed": "INVALID_JSON", "unknown": "INVALID_SCHEMA", "limit": "SIZE_LIMIT", "read": "READ_FAILED"}[name]
+			if err == nil || local != (expected != "") || (local && classified.SnapshotFailureCause() != expected) || files.boundedLimit != 64<<20 || files.writes != 1 {
+				t.Fatalf("reference classification %v, local=%v, bound=%d, writes=%d", err, local, files.boundedLimit, files.writes)
+			}
+		})
+	}
+}

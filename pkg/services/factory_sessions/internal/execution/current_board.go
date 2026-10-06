@@ -255,3 +255,19 @@ func currentBoardSummariesMatch(summaries []PetriTokenSummary, state *factorydef
 	}
 	return true
 }
+
+// QuarantineCurrentBoardArtifact uses only the acquired default persistence
+// scope, as for snapshot quarantine; no process-global routing is consulted.
+func (s *JavaScriptRuntimeService) QuarantineCurrentBoardArtifact(ctx context.Context, at time.Time, identity, artifact string) (string, string, error) {
+	store, err := s.currentBoardStore()
+	if err != nil {
+		return "", "", err
+	}
+	quarantine, ok := store.(interface {
+		QuarantineCurrentBoardArtifact(context.Context, time.Time, string, string) (string, string, error)
+	})
+	if !ok {
+		return "", "", errors.New("current board artifact quarantine persistence is unavailable")
+	}
+	return quarantine.QuarantineCurrentBoardArtifact(ctx, at, identity, artifact)
+}
