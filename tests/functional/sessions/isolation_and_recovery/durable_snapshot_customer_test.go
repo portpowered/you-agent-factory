@@ -30,6 +30,7 @@ func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 	t.Run("saved process feedback reaches the resumed review provider", testDurableCustomerFeedbackRecovery)
 	t.Run("consumed branch stays retired while its sibling resumes", testDurableCustomerBranchRecovery)
+	t.Run("last good Work stays readable after a live writer failure", testDurableCustomerLiveWriterFailure)
 	t.Run("ordinary writer failure preserves the last durable result", func(t *testing.T) {
 		t.Parallel()
 		dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
@@ -92,6 +93,58 @@ func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 			t.Fatalf("recovery changed canonical source: %v", err)
 		}
 	})
+}
+
+// The API owns this cell: admission and reads share the still-running host.
+// The filesystem edge signals the actual failed write; a public read then
+// proves that the saved Work remains available without reconstructing the host.
+func testDurableCustomerLiveWriterFailure(t *testing.T) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+	files := &durableCustomerFaultFiles{failure: errors.New("injected live writer failure"), rejected: make(chan struct{}, 1)}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WorkingDirectory: dir, WaitForServiceModeRuntime: true,
+		Args: []string{"--provider", "CODEX", "--model", "gpt-5-codex", "--no-record"},
+		Edges: serviceedges.Edges{
+			FactorySessionRuntimePersistenceFileSystem: files,
+			ProviderCommandRunner:                      &durableCustomerFaultRunner{files: files},
+		},
+	})
+	typeName := "task"
+	for _, id := range []string{"last-good-live-work", "writer-fault-live-work"} {
+		support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+			RequestId: id, Type: factoryapi.WorkRequestTypeFactoryRequestBatch,
+			Works: &[]factoryapi.Work{{WorkId: &id, Name: id, WorkTypeName: &typeName, Payload: map[string]string{"instruction": "complete this Work"}}},
+		})
+		if id == "last-good-live-work" {
+			support.WaitForStatus(t, server.URL(), 20*time.Second, func(status factoryapi.StatusResponse) bool { return status.Categories.Terminal == 1 })
+		}
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	select {
+	case <-files.rejected:
+	case <-ctx.Done():
+		t.Fatal("live writer failure was not reached")
+	}
+	works := support.ListDefaultSessionWork(t, server.URL())
+	if !support.HasWorkAtCustomerState(works, "last-good-live-work", "task:complete") {
+		t.Fatalf("live writer failure lost last-good Work: %#v", works.Results)
+	}
+	for _, item := range works.Results {
+		if item.WorkId != nil && *item.WorkId == "last-good-live-work" {
+			assertDurableLastGoodOutput(t, factoryapi.ListWorkResponse{Results: []factoryapi.Work{item}})
+		}
+	}
+	files.mu.Lock()
+	path, lastGood := files.path, append([]byte(nil), files.lastGood...)
+	files.mu.Unlock()
+	persisted, err := os.ReadFile(path)
+	if err != nil || len(lastGood) == 0 || !bytes.Equal(lastGood, persisted) {
+		t.Fatalf("live writer failure replaced last-good snapshot: %v", err)
+	}
+	server.Stop(t)
 }
 
 func assertDurableLastGoodOutput(t *testing.T, works factoryapi.ListWorkResponse) {
@@ -316,6 +369,7 @@ type durableCustomerFaultFiles struct {
 	armed    bool
 	path     string
 	lastGood []byte
+	rejected chan struct{}
 }
 
 func (*durableCustomerFaultFiles) MkdirAll(path string, mode fs.FileMode) error {
@@ -326,6 +380,10 @@ func (files *durableCustomerFaultFiles) WriteFile(path string, payload []byte, m
 	files.mu.Lock()
 	defer files.mu.Unlock()
 	if files.armed {
+		select {
+		case files.rejected <- struct{}{}:
+		default:
+		}
 		return files.failure
 	}
 	if err := os.WriteFile(path, payload, mode); err != nil {
