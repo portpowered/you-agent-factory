@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 )
@@ -139,4 +141,123 @@ func runHistoryListingCLI(t *testing.T, binary, factory, home, endpoint string) 
 	}
 	t.Logf("CLI argv=%q OS exit=%d stdout=%s stderr=%s", args, exitCode, stdout.String(), stderr.String())
 	return stdout.Bytes(), err
+}
+
+// Reuse of the repository/profile is the invariant, so the two generations
+// are ordered inside one otherwise independent prebuilt-artifact scenario.
+func TestPlainBoardGracefulRestart(t *testing.T) {
+	t.Parallel()
+	binary := requireRestartCLIArtifact(t)
+	home, repo := t.TempDir(), t.TempDir()
+	config := boardPersistenceFactoryConfig()
+	config["workstations"].([]map[string]any)[0]["inputs"] = []map[string]string{{"workType": "task", "state": "init"}}
+	workType := config["workTypes"].([]map[string]any)[0]
+	workType["states"] = append(workType["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	factory := filepath.Join(repo, "factory")
+	if err := os.Rename(scaffoldBoardPersistenceFactory(t, config), factory); err != nil {
+		t.Fatal(err)
+	}
+	writeBoardPersistenceAgentConfig(t, factory, "restart-blocker", boardPersistenceWorkerConfig(currentRestartWorkerExecutable(t)))
+	release := filepath.Join(repo, "release")
+	if err := os.WriteFile(release, []byte("released"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
+	if works := waitForBoardStates(t, first.baseURL, map[string]string{}, time.Minute); len(works.Results) != 0 {
+		t.Fatal("first plain launch was not empty")
+	}
+	batch := `{"requestId":"plain-dag","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"plain-A","name":"A","workTypeName":"task","state":"init","payload":"A"},{"workId":"plain-B","name":"B","workTypeName":"task","state":"waiting","tags":{"witness":"§ —"},"payload":"B § —"},{"workId":"plain-C","name":"C","workTypeName":"task","state":"init","payload":"C § —"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"B","targetWorkName":"A","requiredState":"complete"},{"type":"DEPENDS_ON","sourceWorkName":"C","targetWorkName":"B","requiredState":"complete"}]}`
+	submitBoardPersistenceBatchThroughCLI(t, first, binary, factory, home, batch, "plain-dag", 3)
+	states := map[string]string{"plain-A": "complete", "plain-B": "waiting", "plain-C": "init"}
+	before := waitForBoardStates(t, first.baseURL, states, time.Minute)
+	before = waitPlainBoardConfirmed(t, first.baseURL, states)
+	ids := map[string]struct{}{"plain-A": {}, "plain-B": {}, "plain-C": {}}
+	history := restartWorkHistoryFingerprint(t, first.baseURL, ids)
+	shutdownPlainBoard(t, first)
+	second := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
+	after := waitForBoardStates(t, second.baseURL, states, time.Minute)
+	assertPlainBoardPreserved(t, before, after)
+	if got := restartWorkHistoryFingerprint(t, second.baseURL, ids); !reflect.DeepEqual(history, got) {
+		t.Fatalf("cold restart changed canonical Work history: before=%v after=%v", history, got)
+	}
+	response, err := http.Post(second.baseURL+"/factory-sessions/~default/work/plain-B/move", "application/json", strings.NewReader(`{"stateName":"init"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		t.Fatalf("release recovered prerequisite status=%d", response.StatusCode)
+	}
+	waitForBoardStates(t, second.baseURL, map[string]string{"plain-A": "complete", "plain-B": "complete", "plain-C": "complete"}, time.Minute)
+	events, err := readBoardEvents(t.Context(), second.baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id := range ids {
+		assertSingleTerminalCompletion(t, events, id, "complete")
+	}
+	shutdownPlainBoard(t, second)
+	t.Logf("INT-BOARD artifact SHA256=%s source=%s: two plain launches, confirmed UTF-8 board/history preserved, dependency released/completed once", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead)
+}
+
+func assertPlainBoardPreserved(t *testing.T, before, after factoryapi.ListWorkResponse) {
+	t.Helper()
+	byID := make(map[string]factoryapi.Work)
+	for _, work := range before.Results {
+		byID[boardPersistenceStringPointerValue(work.WorkId)] = work
+	}
+	for _, work := range after.Results {
+		old := byID[boardPersistenceStringPointerValue(work.WorkId)]
+		if !reflect.DeepEqual(old.Content, work.Content) || !reflect.DeepEqual(old.Tags, work.Tags) || !reflect.DeepEqual(old.Relations, work.Relations) || !reflect.DeepEqual(old.State, work.State) {
+			t.Fatalf("cold restart changed Work: before=%#v after=%#v", old, work)
+		}
+	}
+}
+
+func waitPlainBoardConfirmed(t *testing.T, baseURL string, states map[string]string) factoryapi.ListWorkResponse {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		listed, err := readBoardWorkList(ctx, baseURL)
+		confirmed := err == nil && boardStatesMatch(listed, states)
+		for _, work := range listed.Results {
+			confirmed = confirmed && work.ConfirmationState != nil && *work.ConfirmationState == factoryapi.CONFIRMED
+		}
+		if confirmed {
+			return listed
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			encoded, _ := json.Marshal(listed)
+			t.Fatalf("board did not become confirmed: %v: %s", err, encoded)
+		}
+	}
+}
+
+func shutdownPlainBoard(t *testing.T, daemon *boardPersistenceDaemon) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, daemon.baseURL+"/shutdown", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted && response.StatusCode != http.StatusNoContent {
+		t.Fatalf("shutdown status=%d", response.StatusCode)
+	}
+	select {
+	case <-daemon.done:
+		if err := daemon.waitError(); err != nil {
+			t.Fatalf("joined shutdown: %v: %s", err, daemon.stderr.String())
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("shutdown did not join process")
+	}
 }
