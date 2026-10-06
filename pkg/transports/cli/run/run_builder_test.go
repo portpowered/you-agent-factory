@@ -117,7 +117,8 @@ func testSessionStartRequestFactory(
 				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 			},
 			Recording: factorysessions.SessionRecordingSelection{
-				RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
+				ImplicitCurrentBoard: cfg.ImplicitCurrentBoard,
+				RecordPath:           cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
 			},
 			ModelCacheDirectory: cfg.ModelCacheDir,
 			OperatorDefaults:    cfg.OperatorDefaults,

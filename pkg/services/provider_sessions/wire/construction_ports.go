@@ -10,8 +10,6 @@ import (
 type (
 	FileSystem            = providersessionsinternal.FileSystem
 	ResolveHomeDirectory  = providersessionsinternal.ResolveHomeDirectory
-	CodexWalkDirectory    = providersessionsinternal.CodexWalkDirectory
-	CodexResolveSymlinks  = providersessionsinternal.CodexResolveSymlinks
 	CursorWalkDirectory   = providersessionsinternal.CursorWalkDirectory
 	CursorResolveSymlinks = providersessionsinternal.CursorResolveSymlinks
 	CursorOpenSQLDatabase = providersessionsinternal.CursorOpenSQLDatabase

@@ -1,4 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: existing provider-session detail coverage stayed intact during sibling-feature extraction.
+
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -8,7 +10,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { ComponentProps, ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
@@ -95,6 +96,72 @@ describe("ProviderSessionDetailPanel", () => {
       "/provider-sessions/detail?id=cursor_sess_01&kind=session_id&provider=cursor",
       { method: "GET" },
     );
+  });
+
+  it("renders captured Codex content and usage without native source facts", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          source: { relativePath: "", sizeBytes: 0 },
+          parse: {
+            eventCount: 8,
+            lineCount: 0,
+            tokenUsage: {
+              inputTokens: 10,
+              cachedInputTokens: 3,
+              outputTokens: 4,
+              totalTokens: 14,
+            },
+          },
+          transcript: [
+            {
+              order: 1,
+              type: "tool_call",
+              callId: "captured-tool",
+              name: "inspect public fixture",
+              timestamp: "2026-10-06T14:00:00Z",
+            },
+            {
+              order: 2,
+              type: "tool_output",
+              callId: "captured-tool",
+              output: "public result",
+              timestamp: "2026-10-06T14:00:01Z",
+            },
+            {
+              order: 3,
+              type: "assistant_message",
+              text: "captured answer COMPLETE",
+              timestamp: "2026-10-06T14:00:02Z",
+            },
+          ],
+        }),
+      ),
+    );
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("captured answer COMPLETE")).toBeTruthy(),
+    );
+    expect(
+      screen.getAllByText("inspect public fixture").length,
+    ).toBeGreaterThan(0);
+    expandDisclosure("Expand Tool output");
+    expect(screen.getByText("public result")).toBeTruthy();
+    expect(
+      screen.queryByText("2026/05/18/rollout-sess_active.jsonl"),
+    ).toBeNull();
+    const transcript = screen.getByRole("button", {
+      name: "Collapse Transcript",
+    });
+    expect(transcript.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(transcript);
+    expect(
+      screen
+        .getByRole("button", { name: "Expand Transcript" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("shows an explicit loading state while session details are being fetched", () => {

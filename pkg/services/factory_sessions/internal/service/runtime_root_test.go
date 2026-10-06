@@ -15,12 +15,229 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+type boardReferenceSource struct {
+	factorydefinitions.MutableLoadedFactorySource
+	directory string
+}
+
+func (source boardReferenceSource) FactoryDir() string { return source.directory }
+
+type boardReferenceOwner struct {
+	durableexecution.Service
+	path                        string
+	failure                     error
+	durable                     bool
+	loads, saves                int
+	savedFactory, savedArtifact string
+}
+
+func (owner *boardReferenceOwner) LoadCurrentBoard(context.Context, string) (string, error) {
+	owner.loads++
+	return owner.path, owner.failure
+}
+
+func (owner *boardReferenceOwner) SaveCurrentBoard(_ context.Context, factory, artifact string) error {
+	owner.saves++
+	owner.savedFactory, owner.savedArtifact = factory, artifact
+	return owner.failure
+}
+
+func (owner *boardReferenceOwner) HasDurableState(context.Context, string) (bool, error) {
+	return owner.durable, owner.failure
+}
+
+func TestCurrentBoardIntentSurvivesRuntimeActivation(t *testing.T) {
+	t.Parallel()
+	selected := factorysessions.SessionStartRequest{
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode:      factorysessions.SessionRuntimeModeService,
+			Host:      factorysessions.RuntimeHostRequest{Port: 1234},
+			Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+		},
+	}
+	inputs := runtimeActivationInputs(factorydefinitions.RuntimeSelection{}, selected, false,
+		workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorconfig.ResolvedDefaults{}, nil)
+	restored := sessionRequestFromActivation(factoryruntime.RuntimeActivationRequest{
+		Inputs: inputs, Runtime: factoryruntime.RuntimeSelection{Mode: factorydefinitions.RuntimeModeService},
+	})
+	if !restored.RuntimeSelection.Recording.ImplicitCurrentBoard ||
+		restored.RuntimeSelection.Mode != selected.RuntimeSelection.Mode ||
+		restored.RuntimeSelection.Host.Port != selected.RuntimeSelection.Host.Port {
+		t.Fatalf("activation lost startup selection: %#v", restored.RuntimeSelection)
+	}
+}
+
+func TestCurrentBoardRecordingRequiresCanonicalRepositoryIdentity(t *testing.T) {
+	t.Parallel()
+	directory := filepath.Join(t.TempDir(), "factory")
+	for _, tc := range []struct {
+		name, directory string
+		kind            factorydefinitions.FactoryEventType
+		valid           bool
+	}{
+		{"same repository", directory, factorydefinitions.FactoryEventTypeRunRequest, true},
+		{"sibling repository", directory + "-sibling", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"missing directory", "", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"relative directory", "factory", factorydefinitions.FactoryEventTypeRunRequest, false},
+		{"no canonical request", directory, factorydefinitions.FactoryEventTypeWorkRequest, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload, err := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": tc.directory}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = validateCurrentBoardFactoryDirectory([]factorydefinitions.FactoryEvent{{Type: tc.kind, Payload: payload}}, directory)
+			if (err == nil) != tc.valid {
+				t.Fatalf("canonical repository validation = %v, want valid=%v", err, tc.valid)
+			}
+		})
+	}
+}
+
+func TestCurrentBoardRecordingRejectsForeignContinuation(t *testing.T) {
+	t.Parallel()
+	directory := filepath.Join(t.TempDir(), "factory")
+	request := func(directory string) factorydefinitions.FactoryEvent {
+		payload, err := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": directory}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return factorydefinitions.FactoryEvent{Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: payload}
+	}
+	for _, tc := range []struct {
+		name   string
+		events []factorydefinitions.FactoryEvent
+		valid  bool
+	}{
+		{"same repository continuation", []factorydefinitions.FactoryEvent{request(directory), request(directory)}, true},
+		{"foreign continuation", []factorydefinitions.FactoryEvent{request(directory), request(directory + "-sibling")}, false},
+		{"foreign origin", []factorydefinitions.FactoryEvent{request(directory + "-sibling"), request(directory)}, false},
+		{"missing continuation identity", []factorydefinitions.FactoryEvent{request(directory), request("")}, false},
+		{"malformed continuation", []factorydefinitions.FactoryEvent{request(directory), {Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: json.RawMessage(`{"private":`)}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateCurrentBoardFactoryDirectory(tc.events, directory)
+			if (err == nil) != tc.valid {
+				t.Fatalf("continuation validation = %v, want valid=%v", err, tc.valid)
+			}
+			if err != nil && strings.Contains(err.Error(), "private") {
+				t.Fatal("repository diagnostic exposed event content")
+			}
+		})
+	}
+}
+
+func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"selected", "fresh", "legacy requires history", "read failure", "explicit", "batch", "peer", "resume", "replay"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			owner := &boardReferenceOwner{path: "retained.json"}
+			selection := &factorysessions.SessionRuntimeSelection{
+				Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+				Mode:      factorysessions.SessionRuntimeModeService,
+				Host:      factorysessions.RuntimeHostRequest{Port: 1234},
+			}
+			opening := &sessionRuntimeOpening{
+				sessionID: "~default", sessionSelection: selection,
+				load:             RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: "factory-directory"}},
+				durableExecution: DurableExecution{Service: owner},
+				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "fresh.json"}},
+			}
+			bypass, wantError := configureBoardReferenceCase(name, owner, opening)
+			err := (&Root{}).selectCurrentBoardReference(t.Context(), opening)
+			if (err != nil) != wantError {
+				t.Fatalf("selection error = %v, want error %v", err, wantError)
+			}
+			if bypass {
+				if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.loads != 0 || owner.saves != 0 {
+					t.Fatal("explicit/peer/batch opening touched reference")
+				}
+				return
+			}
+			if wantError {
+				if opening.configured.Recordings.RecordPath != "fresh.json" || owner.saves != 0 {
+					t.Fatal("failed selection changed opening or reference")
+				}
+				return
+			}
+			assertCurrentBoardPublication(t, name, owner, opening)
+		})
+	}
+}
+
+type currentBoardTargetPlanner struct {
+	recordings.RuntimeScopeService
+	target  recordings.LiveRecordingTarget
+	err     error
+	calls   int
+	request recordings.LiveRecordingTargetRequest
+}
+
+func (planner *currentBoardTargetPlanner) PlanLiveRecordingTarget(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+	planner.calls++
+	planner.request = request
+	return planner.target, planner.err
+}
+
+func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"fresh", "retained", "explicit", "cancelled", "reservation failure", "empty target"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "fresh.json"}}
+			selection := &factorysessions.SessionRuntimeSelection{
+				Recording: factorysessions.SessionRecordingSelection{ImplicitCurrentBoard: true},
+				Mode:      factorysessions.SessionRuntimeModeService, Host: factorysessions.RuntimeHostRequest{Port: 1234},
+				SystemConfigHome: "profile", CanonicalSessionID: "canonical-id",
+			}
+			opening := &sessionRuntimeOpening{sessionID: "~default", sessionSelection: selection}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			wantCalls, wantError, wantPath := 1, false, "fresh.json"
+			switch name {
+			case "retained":
+				opening.configured.Recordings.RecordPath = "retained.json"
+				selection.Recording.RecordPath = "retained.json"
+				wantCalls, wantPath = 0, "retained.json"
+			case "explicit":
+				selection.Recording.ImplicitCurrentBoard = false
+				wantCalls, wantPath = 0, ""
+			case "cancelled":
+				cancel()
+				wantCalls, wantError, wantPath = 0, true, ""
+			case "reservation failure":
+				planner.err = errors.New("controlled reservation failure")
+				wantError, wantPath = true, ""
+			case "empty target":
+				planner.target = recordings.LiveRecordingTarget{}
+				wantError, wantPath = true, ""
+			}
+			root := &Root{recordingsRuntime: planner}
+			err := root.reserveFreshCurrentBoard(ctx, opening)
+			if (err != nil) != wantError || planner.calls != wantCalls {
+				t.Fatalf("reservation error/calls = %v/%d, want error=%v calls=%d", err, planner.calls, wantError, wantCalls)
+			}
+			if opening.configured.Recordings.RecordPath != wantPath || selection.Recording.RecordPath != wantPath {
+				t.Fatal("reservation did not preserve or publish the selected target")
+			}
+			if planner.calls > 0 && (planner.request.HomeDir != "profile" || planner.request.CanonicalSessionID != "canonical-id" || planner.request.ReportedSessionID != "~default") {
+				t.Fatalf("reservation lost invocation identity: %#v", planner.request)
+			}
+		})
+	}
+}
 
 func TestReplayRequestsHistoricalInspectionUsesEffectiveListenerPort(t *testing.T) {
 	t.Parallel()
@@ -667,4 +884,153 @@ func TestNewFactorySelectsLegacyHistoricalReplayBeforeLiveRuntimeAssembly(t *tes
 	if calls != 0 {
 		t.Fatalf("legacy historical opening invoked %d live collaborators, want zero", calls)
 	}
+}
+
+func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
+	t.Parallel()
+	event := func(id, payload string) factorydefinitions.FactoryEvent {
+		return factorydefinitions.FactoryEvent{Id: id, Type: factorydefinitions.FactoryEventTypeWorkRequest, Payload: json.RawMessage(payload)}
+	}
+	a, b, c := event("a", `{"text":"§ —","value":1}`), event("b", `{}`), event("c", `{}`)
+	reordered := event("a", `{"value":1,"text":"§ —"}`)
+	changed := event("a", `{"text":"secret","value":1}`)
+	for _, tc := range []struct {
+		name      string
+		witness   []factorydefinitions.FactoryEvent
+		histories map[string][]factorydefinitions.FactoryEvent
+		want      string
+	}{
+		{"unique", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
+		{"canonical JSON", []factorydefinitions.FactoryEvent{reordered}, map[string][]factorydefinitions.FactoryEvent{"board": {a, b}}, "board"},
+		{"stale prefix", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"stale": {a}, "board": {a, b}}, ""},
+		{"equal duplicate tie", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"copy": {a, b}, "board": {a, b}}, ""},
+		{"incomparable branch", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"branch": {a, c}, "board": {a, b}}, ""},
+		{"wrong payload", []factorydefinitions.FactoryEvent{a}, map[string][]factorydefinitions.FactoryEvent{"board": {changed, b}}, ""},
+		{"missing", []factorydefinitions.FactoryEvent{a}, nil, ""},
+		{"empty witness", nil, map[string][]factorydefinitions.FactoryEvent{"board": {a}}, ""},
+		{"wrong order", []factorydefinitions.FactoryEvent{a, b}, map[string][]factorydefinitions.FactoryEvent{"board": {b, a}}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			matching := make(map[string][]factorydefinitions.FactoryEvent)
+			for path, events := range tc.histories {
+				if currentBoardContainsFacts(events, tc.witness) {
+					matching[path] = events
+				}
+			}
+			got, err := selectUniqueCurrentBoard(matching)
+			if got != tc.want || (err != nil) != (tc.want == "") {
+				t.Fatalf("selection=%q, %v; want %q", got, err, tc.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "secret") {
+				t.Fatal("diagnostic exposed payload")
+			}
+		})
+	}
+}
+
+func configureBoardReferenceCase(name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) (bool, bool) {
+	bypass, wantError := false, false
+	switch name {
+	case "fresh":
+		owner.path = ""
+	case "legacy requires history":
+		owner.path, owner.durable, wantError = "", true, true
+	case "read failure":
+		owner.failure, wantError = errors.New("controlled reference failure"), true
+	case "explicit":
+		opening.sessionSelection.Recording.ImplicitCurrentBoard, bypass = false, true
+	case "batch":
+		opening.sessionSelection.Mode, bypass = factorysessions.SessionRuntimeModeBatch, true
+	case "peer":
+		opening.sessionID, bypass = "peer-session", true
+	case "resume":
+		opening.configured.Recordings.ResumePath, bypass = "resume.json", true
+	case "replay":
+		opening.configured.Recordings.ReplayPath, bypass = "replay.json", true
+	}
+	return bypass, wantError
+}
+
+func assertCurrentBoardPublication(t *testing.T, name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) {
+	t.Helper()
+	wantPath := owner.path
+	if name == "fresh" {
+		wantPath = "fresh.json"
+	}
+	if opening.configured.Recordings.RecordPath != wantPath || opening.hasCurrentBoardReference != (name == "selected") {
+		t.Fatalf("selected path/presence = %s/%v", opening.configured.Recordings.RecordPath, opening.hasCurrentBoardReference)
+	}
+	if owner.saves != 0 {
+		t.Fatal("selection prematurely published reference")
+	}
+	if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.saves != 1 || owner.savedFactory != "factory-directory" || owner.savedArtifact != wantPath {
+		t.Fatalf("publication = %s/%s/%v", owner.savedFactory, owner.savedArtifact, err)
+	}
+}
+
+func (owner *boardReferenceOwner) SaveCurrentBoardIfAbsent(ctx context.Context, factory, artifact string) error {
+	if owner.path != "" {
+		return nil
+	}
+	return owner.SaveCurrentBoard(ctx, factory, artifact)
+}
+
+func TestCurrentBoardReferenceExplicitRestoreEligibility(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"restored", "existing", "fresh", "foreign", "batch", "peer", "resume", "replay", "no record", "no server", "publication failure"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			directory, artifact := filepath.Join(t.TempDir(), "factory"), filepath.Join(t.TempDir(), "board.json")
+			identity, _ := json.Marshal(map[string]any{"factory": map[string]string{"factoryDirectory": directory}})
+			owner := &boardReferenceOwner{}
+			opening := &sessionRuntimeOpening{
+				sessionID:            "~default",
+				sessionSelection:     &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService, Host: factorysessions.RuntimeHostRequest{Port: 1234}, Recording: factorysessions.SessionRecordingSelection{RecordPath: artifact}},
+				configured:           preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: artifact}},
+				load:                 RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: directory}},
+				durableExecution:     DurableExecution{Service: owner},
+				restoredWorldState:   &factorydefinitions.FactoryWorldState{},
+				restoredEventHistory: []factorydefinitions.FactoryEvent{{Type: factorydefinitions.FactoryEventTypeRunRequest, Payload: identity}},
+			}
+			wantSave := configureExplicitBoardPublication(name, owner, opening)
+			err := opening.publishCurrentBoardReference(t.Context())
+			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != 0 {
+				t.Fatalf("publication error=%v saves=%d loads=%d", err, owner.saves, owner.loads)
+			}
+			if wantSave && owner.savedArtifact != artifact {
+				t.Fatal("publication changed selected path")
+			}
+		})
+	}
+}
+
+func configureExplicitBoardPublication(name string, owner *boardReferenceOwner, opening *sessionRuntimeOpening) bool {
+	wantSave := false
+	switch name {
+	case "restored":
+		wantSave = true
+	case "existing":
+		owner.path = "existing invalid bytes"
+	case "fresh":
+		opening.restoredWorldState = nil
+	case "foreign":
+		opening.restoredEventHistory = nil
+	case "batch":
+		opening.sessionSelection.Mode = factorysessions.SessionRuntimeModeBatch
+	case "peer":
+		opening.sessionID = "peer"
+	case "resume":
+		opening.configured.Recordings.ResumePath = "resume.json"
+	case "replay":
+		opening.configured.Recordings.ReplayPath = "replay.json"
+	case "no record":
+		opening.sessionSelection.Recording.RecordPath = ""
+	case "no server":
+		opening.sessionSelection.Host.Port = 0
+	case "publication failure":
+		owner.failure = errors.New("controlled publication failure")
+		wantSave = true
+	}
+	return wantSave
 }

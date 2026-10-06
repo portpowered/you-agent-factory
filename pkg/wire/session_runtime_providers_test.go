@@ -803,7 +803,10 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("events service = %v", err)
 	}
-	providerSessions, err := provideProviderSessions(serviceedges.Edges{})
+	providerSessions, err := provideProviderSessions(serviceedges.Edges{}, struct {
+		recordings.WorkerRecordingWriter
+		recordings.WorkerCapturedActivityReader
+	}{})
 	if err != nil {
 		t.Fatalf("provider sessions service = %v", err)
 	}

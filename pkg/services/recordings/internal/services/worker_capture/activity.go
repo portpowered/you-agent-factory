@@ -25,6 +25,9 @@ type WorkerSessionCatalogEntry struct {
 type WorkerCapturedCatalogRequest struct {
 	Limit     int
 	NextToken string
+	// RequireCompleteMembership fails closed when damage or ambiguity prevents
+	// proving association absence or uniqueness. Default reads retain healthy histories.
+	RequireCompleteMembership bool
 }
 
 type WorkerCapturedCatalogPage struct {

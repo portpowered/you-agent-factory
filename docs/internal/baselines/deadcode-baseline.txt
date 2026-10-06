@@ -1447,11 +1447,6 @@ pkg/services/operator_settings/transports/mcp/schemas.go: unreachable func: tool
 pkg/services/operator_settings/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
 pkg/services/operator_settings/wire/document_owner.go: unreachable func: NewConfigDocumentService
 pkg/services/provider_sessions/internal/service/service.go: unreachable func: NewForRoots
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detach.go: unreachable func: detachParsedDetails
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detail.go: unreachable func: LoadDetails
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detail.go: unreachable func: Resolve
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/parser.go: unreachable func: ParseDetails
-pkg/services/provider_sessions/internal/services/codex_reader/internal/service/parser.go: unreachable func: parseCodexSessionDetails
 pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/discovery.go: unreachable func: NormalizeAgentStorageRoot
 pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/token_usage.go: unreachable func: computeTotalTokens
 pkg/services/provider_sessions/wire/wire.go: unreachable func: NewForRoots

@@ -174,18 +174,20 @@ func startBoardPersistenceDaemonProcessWithResumeOutput(
 	if debugOutput {
 		args = append(args, "--debug")
 	}
-	args = append(args,
-		"run", "--dir", factoryDir,
-		"--continuously", "--with-server",
-		"--listen", address,
-	)
+	args = append(args, "run", "--continuously", "--with-server", "--listen", address)
+	workingDirectory := factoryDir
+	if recordPath != "" {
+		args = append(args, "--dir", factoryDir, "--record", recordPath)
+	} else {
+		// Plain restart resolves ./factory from the invocation repository.
+		workingDirectory = filepath.Dir(factoryDir)
+	}
 	if resumePath != "" {
 		args = append(args, "--resume", resumePath)
 	}
-	args = append(args, "--record", recordPath)
 	command := exec.CommandContext(t.Context(), binaryPath, args...)
 	startedAt := time.Now()
-	command.Dir = factoryDir
+	command.Dir = workingDirectory
 	commandEnv := append(
 		builtcliacceptance.ProcessEnvForIsolatedHome(homeDir),
 		boardPersistenceHelperEnv+"="+boardPersistenceHelperEnvValue,

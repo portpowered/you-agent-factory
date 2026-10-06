@@ -33,6 +33,7 @@ func OOTBRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
 // definition as a side effect.
 func ServerRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
 	cfg := ExplicitRunConfig(defaults)
+	cfg.FreshCurrentBoard = true
 	cfg.Continuously = true
 	cfg.OpenDashboard = true
 	return cfg

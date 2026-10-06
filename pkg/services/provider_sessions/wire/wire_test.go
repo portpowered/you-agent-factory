@@ -1,19 +1,20 @@
 package wire
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 const (
@@ -30,21 +31,17 @@ const (
 func TestNewForRootsConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
-	codexWalk := &recordingCodexWalkDirectory{}
-	codexSymlinks := &recordingCodexResolveSymlinks{}
 	cursorWalk := &recordingCursorWalkDirectory{}
 	cursorSymlinks := &recordingCursorResolveSymlinks{}
 	cursorDatabase := &recordingCursorOpenDatabase{}
 
 	service, err := NewForRoots(
 		platformfilesystem.Local{},
-		codexWalk.walk,
-		codexSymlinks.resolve,
 		cursorWalk.walk,
 		cursorSymlinks.resolve,
 		cursorDatabase.open,
 		t.TempDir(),
-		t.TempDir(),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewForRoots() error = %v", err)
@@ -53,12 +50,6 @@ func TestNewForRootsConstructsInertRoot(t *testing.T) {
 		t.Fatal("NewForRoots() returned nil service")
 	}
 	var root providersessions.Service = service
-	if codexWalk.calls != 0 {
-		t.Fatalf("construction invoked Codex walk %d times, want no session discovery", codexWalk.calls)
-	}
-	if codexSymlinks.calls != 0 {
-		t.Fatalf("construction invoked Codex symlink resolution %d times, want no filesystem activity", codexSymlinks.calls)
-	}
 	if cursorWalk.calls != 0 {
 		t.Fatalf("construction invoked Cursor walk %d times, want no session discovery", cursorWalk.calls)
 	}
@@ -75,9 +66,6 @@ func TestNewForRootsConstructsInertRoot(t *testing.T) {
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("Inspect() = %v, want ErrSessionNotFound after inert construction", err)
 	}
-	if codexWalk.calls == 0 {
-		t.Fatal("Inspect() did not invoke Codex walk, want runtime session lookup")
-	}
 }
 
 func TestNewServiceConstructsInertRoot(t *testing.T) {
@@ -87,8 +75,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, ".cursor", "chats"), 0o755); err != nil {
 		t.Fatalf("mkdir cursor chats: %v", err)
 	}
-	codexWalk := &recordingCodexWalkDirectory{}
-	codexSymlinks := &recordingCodexResolveSymlinks{}
 	cursorWalk := &recordingCursorWalkDirectory{}
 	cursorSymlinks := &recordingCursorResolveSymlinks{}
 	cursorDatabase := &recordingCursorOpenDatabase{}
@@ -96,12 +82,11 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	service, err := NewService(
 		platformfilesystem.Local{},
 		func() (string, error) { return home, nil },
-		codexWalk.walk,
-		codexSymlinks.resolve,
 		cursorWalk.walk,
 		cursorSymlinks.resolve,
 		cursorDatabase.open,
 		providersessionsinternal.OperatingSystem(runtime.GOOS),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -110,12 +95,8 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		t.Fatal("NewService() returned nil service")
 	}
 	var root providersessions.Service = service
-	if codexWalk.calls != 0 || codexSymlinks.calls != 0 ||
-		cursorWalk.calls != 0 || cursorSymlinks.calls != 0 || cursorDatabase.calls != 0 {
-		t.Fatalf(
-			"construction invoked walk/symlink/sql stubs (codex walk=%d symlinks=%d cursor walk=%d symlinks=%d sql=%d), want inert construction",
-			codexWalk.calls, codexSymlinks.calls, cursorWalk.calls, cursorSymlinks.calls, cursorDatabase.calls,
-		)
+	if cursorWalk.calls != 0 || cursorSymlinks.calls != 0 || cursorDatabase.calls != 0 {
+		t.Fatal("construction performed Cursor storage effects")
 	}
 	if _, err := root.Inspect(providersessions.InspectRequest{Session: providers.SessionRef{
 		Provider: providers.IDCodex,
@@ -124,20 +105,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}}); !errors.Is(err, providersessions.ErrSessionNotFound) {
 		t.Fatalf("Inspect() = %v, want ErrSessionNotFound", err)
 	}
-}
-
-type recordingCodexWalkDirectory struct{ calls int }
-
-func (r *recordingCodexWalkDirectory) walk(string, fs.WalkDirFunc) error {
-	r.calls++
-	return nil
-}
-
-type recordingCodexResolveSymlinks struct{ calls int }
-
-func (r *recordingCodexResolveSymlinks) resolve(string) (string, error) {
-	r.calls++
-	return "", nil
 }
 
 type recordingCursorWalkDirectory struct{ calls int }
@@ -167,35 +134,31 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	resolveHome := providersessionsinternal.ResolveHomeDirectory(func() (string, error) { return t.TempDir(), nil })
 	tests := []struct {
 		name                  string
-		files                 providersessionsinternal.FileSystem
-		home                  providersessionsinternal.ResolveHomeDirectory
-		codexWalk             providersessionsinternal.CodexWalkDirectory
-		codexSymlinks         providersessionsinternal.CodexResolveSymlinks
-		cursorWalk            providersessionsinternal.CursorWalkDirectory
-		cursorSymlinks        providersessionsinternal.CursorResolveSymlinks
-		cursorDatabase        providersessionsinternal.CursorOpenSQLDatabase
-		cursorOperatingSystem providersessionsinternal.OperatingSystem
+		files                 FileSystem
+		home                  ResolveHomeDirectory
+		cursorWalk            CursorWalkDirectory
+		cursorSymlinks        CursorResolveSymlinks
+		cursorDatabase        CursorOpenSQLDatabase
+		cursorOperatingSystem OperatingSystem
 	}{
-		{name: "filesystem", home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "home resolver", files: platformfilesystem.Local{}, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Codex walker", files: platformfilesystem.Local{}, home: resolveHome, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Codex symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
-		{name: "operating system", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
+		{name: "filesystem", home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: OperatingSystem(runtime.GOOS)},
+		{name: "home", files: platformfilesystem.Local{}, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: OperatingSystem(runtime.GOOS)},
+		{name: "cursor walk", files: platformfilesystem.Local{}, home: resolveHome, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: OperatingSystem(runtime.GOOS)},
+		{name: "cursor symlinks", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: OperatingSystem(runtime.GOOS)},
+		{name: "cursor database", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: OperatingSystem(runtime.GOOS)},
+		{name: "OS", files: platformfilesystem.Local{}, home: resolveHome, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			service, err := NewService(
 				test.files,
 				test.home,
-				test.codexWalk,
-				test.codexSymlinks,
 				test.cursorWalk,
 				test.cursorSymlinks,
 				test.cursorDatabase,
 				test.cursorOperatingSystem,
+				emptyCapturedReader{},
 			)
 			if err == nil {
 				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
@@ -219,10 +182,9 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		func() (string, error) { return home, nil },
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		providersessionsinternal.OperatingSystem(runtime.GOOS),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -240,42 +202,6 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
-func TestNewForRootsServesPublishedInspectPeerBehavior(t *testing.T) {
-	t.Parallel()
-
-	codexRoot := writeCodexSessionFixture(t, "wire-inspect-1")
-	service, err := NewForRoots(
-		platformfilesystem.Local{},
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
-		sql.Open,
-		codexRoot,
-		t.TempDir(),
-	)
-	if err != nil {
-		t.Fatalf("NewForRoots() error = %v", err)
-	}
-	var root providersessions.Service = service
-	ref := providers.SessionRef{
-		Provider: providers.IDCodex,
-		Kind:     providersessions.SessionIDKind,
-		ID:       "wire-inspect-1",
-	}
-
-	result, err := root.Inspect(providersessions.InspectRequest{Session: ref})
-	if err != nil {
-		t.Fatalf("Inspect() = %v", err)
-	}
-	if result.Session != ref {
-		t.Fatalf("InspectResult.Session = %#v, want %#v", result.Session, ref)
-	}
-	if strings.TrimSpace(result.Source.RelativePath) == "" {
-		t.Fatalf("InspectResult.Source.RelativePath empty")
-	}
-}
-
 func TestNewForRootsReturnsUnsupportedProviderForUnknownProvider(t *testing.T) {
 	t.Parallel()
 
@@ -283,11 +209,9 @@ func TestNewForRootsReturnsUnsupportedProviderForUnknownProvider(t *testing.T) {
 		platformfilesystem.Local{},
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		t.TempDir(),
-		t.TempDir(),
+		emptyCapturedReader{},
 	)
 	if err != nil {
 		t.Fatalf("NewForRoots() error = %v", err)
@@ -304,20 +228,6 @@ func TestNewForRootsReturnsUnsupportedProviderForUnknownProvider(t *testing.T) {
 	}
 }
 
-func writeCodexSessionFixture(t *testing.T, sessionID string) string {
-	t.Helper()
-	root := t.TempDir()
-	sessionDir := filepath.Join(root, "2026", "07", "16")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("mkdir session fixture: %v", err)
-	}
-	path := filepath.Join(sessionDir, "rollout-"+sessionID+".jsonl")
-	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\"}\n"), 0o600); err != nil {
-		t.Fatalf("write session fixture: %v", err)
-	}
-	return root
-}
-
 func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
 	t.Parallel()
 
@@ -325,11 +235,9 @@ func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
 		nil,
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
-		filepath.WalkDir,
-		filepath.EvalSymlinks,
 		sql.Open,
 		t.TempDir(),
-		t.TempDir(),
+		emptyCapturedReader{},
 	)
 	if err == nil {
 		t.Fatal("NewForRoots() error = nil, want missing filesystem dependency")
@@ -337,4 +245,16 @@ func TestNewForRootsRejectsMissingProcessEdges(t *testing.T) {
 	if service != nil {
 		t.Fatalf("NewForRoots() = %#v, want nil service", service)
 	}
+}
+
+type emptyCapturedReader struct{}
+
+func (emptyCapturedReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return recordings.WorkerCapturedCatalogPage{}, nil
+}
+func (emptyCapturedReader) ReadWorkerCapturedActivity(context.Context, recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	panic("unexpected activity read")
+}
+func (emptyCapturedReader) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
+	panic("unexpected lookup")
 }

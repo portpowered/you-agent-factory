@@ -622,11 +622,14 @@ type SessionWorkerSelection struct {
 
 // SessionRecordingSelection carries recording selections for one session.
 type SessionRecordingSelection struct {
-	RecordPath    string
-	ReplayPath    string
-	ResumePath    string
-	WorkflowID    string
-	FlushInterval time.Duration
+	// ImplicitCurrentBoard selects the repository board for a local default
+	// continuous server, without changing explicit or batch recording behavior.
+	ImplicitCurrentBoard bool
+	RecordPath           string
+	ReplayPath           string
+	ResumePath           string
+	WorkflowID           string
+	FlushInterval        time.Duration
 }
 
 // SessionStartRequest is the detached start/open vocabulary for both live and

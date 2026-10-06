@@ -79,6 +79,7 @@ type Config struct {
 	ReplayPath                    string
 	ResumePath                    string
 	DisableDefaultRecording       bool
+	ImplicitCurrentBoard          bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
 	CanonicalSessionID            string
 	FactorySessionID              string
@@ -101,13 +102,18 @@ type Config struct {
 	JSON                          bool
 	CleanInvocationInputSource    InvocationInputSource
 	Output                        io.Writer
+	// FreshCurrentBoard preserves the server command's fresh-session behavior;
+	// continuous run and out-of-box startup may select the retained board.
+	FreshCurrentBoard bool
 	// ReplayMetadataOutput is the raw human stdout sink used for non-fatal
 	// replay drift disclosure even when quiet mode suppresses normal output.
 	ReplayMetadataOutput io.Writer
-	ProgressOutput       io.Writer
-	OpenDashboard        bool
-	StartupOutput        io.Writer
-	Diagnostics          io.Writer
+	// BoardAdoptionOutput carries paths-only legacy recovery warnings on stderr.
+	BoardAdoptionOutput io.Writer
+	ProgressOutput      io.Writer
+	OpenDashboard       bool
+	StartupOutput       io.Writer
+	Diagnostics         io.Writer
 	// DeferHomeDisclosureUntilHostReady keeps an explicitly selected listener
 	// failure free of human startup output while preserving the home-before-
 	// initialization boundary for ordinary auto-port hosting.

@@ -122,6 +122,11 @@ func sessionRequestFromActivation(request factoryruntime.RuntimeActivationReques
 		Mode:        factorysessions.SessionOperationModeLive,
 		Persistence: factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode: factorysessions.SessionRuntimeMode(request.Runtime.Mode),
+			Recording: factorysessions.SessionRecordingSelection{
+				ImplicitCurrentBoard: request.Inputs.Session.ImplicitCurrentBoard,
+				RecordPath:           request.Inputs.Recordings.RecordPath,
+			},
 			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
 			BackendScopeID:     request.Inputs.Session.BackendScopeID,
 			SystemConfigHome:   request.Inputs.Session.SystemConfigHome,
@@ -849,6 +854,7 @@ func runtimeActivationInputs(
 			ExecutionBaseDir: definition.ExecutionBaseDir,
 		},
 		Session: factoryruntime.RuntimeActivationSessionInputs{
+			ImplicitCurrentBoard:        selection.Recording.ImplicitCurrentBoard,
 			CanonicalSessionID:          selection.CanonicalSessionID,
 			CanonicalSessionIDGenerated: canonicalSessionIDGenerated,
 			PersistencePolicy:           string(session.Persistence),

@@ -44,6 +44,7 @@ type FileWriter struct {
 	catalog            map[string]recordings.WorkerSessionCatalogEntry
 	unavailable        map[string]struct{}
 	ambiguous          map[string]struct{}
+	catalogDamaged     bool
 	successors         map[capturedLineageIdentity]map[string]capturedSuccessor
 	catalogLoaded      bool
 	rebuildMu          sync.Mutex

@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +13,10 @@ import (
 // inspectDurableSnapshot uses the canonical persistence field types and their
 // JSON validators, but discards collection members after validation. Startup
 // needs identity, not a second decoded history alongside recording recovery.
-func inspectDurableSnapshot(snapshot []byte) (string, error) {
+func inspectDurableSnapshot(ctx context.Context, snapshot []byte) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if !json.Valid(snapshot) {
 		return "", errors.New("invalid durable snapshot JSON")
 	}
@@ -24,6 +28,9 @@ func inspectDurableSnapshot(snapshot []byte) (string, error) {
 	var persisted PersistedRuntimeSessionState
 	value := reflect.ValueOf(&persisted).Elem()
 	for decoder.More() {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		key, err := decoder.Token()
 		if err != nil {
 			return "", err
@@ -33,7 +40,7 @@ func inspectDurableSnapshot(snapshot []byte) (string, error) {
 			var ignored json.RawMessage
 			err = decoder.Decode(&ignored)
 		} else if field.Kind() == reflect.Slice || field.Kind() == reflect.Map {
-			err = inspectDurableCollection(decoder, field.Type())
+			err = inspectDurableCollection(ctx, decoder, field.Type())
 		} else {
 			err = decoder.Decode(field.Addr().Interface())
 		}
@@ -42,6 +49,9 @@ func inspectDurableSnapshot(snapshot []byte) (string, error) {
 		}
 	}
 	if _, err := decoder.Token(); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	return persisted.Session.SessionID, nil
@@ -70,7 +80,7 @@ func durableProbeField(value reflect.Value, key string) reflect.Value {
 	return reflect.Value{}
 }
 
-func inspectDurableCollection(decoder *json.Decoder, typ reflect.Type) error {
+func inspectDurableCollection(ctx context.Context, decoder *json.Decoder, typ reflect.Type) error {
 	opening, err := decoder.Token()
 	if err != nil || opening == nil {
 		return err
@@ -84,6 +94,9 @@ func inspectDurableCollection(decoder *json.Decoder, typ reflect.Type) error {
 	}
 	member := reflect.New(typ.Elem())
 	for decoder.More() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if typ.Kind() == reflect.Map {
 			if _, err := decoder.Token(); err != nil {
 				return err
