@@ -339,50 +339,7 @@ func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
 			endpoint := f.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
 			waitForScopedUsageCommit(t, ctx, endpoint)
 			before := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
-			var fault error
-			switch kind {
-			case "missing":
-				fault = fs.ErrNotExist
-			case "failed":
-				fault = errors.New("private-capture-path sentinel-secret")
-			}
-			reached := f.captureReads.fault(t, row.WorkerSessionID, fault)
-			// A public transcript read confirms the selected activity boundary is
-			// unavailable. Lists must retain snapshot facts without reacquiring it.
-			probeCtx, stop := context.WithCancel(ctx)
-			defer stop()
-			probe := support.FakeInputs(probeCtx, []string{
-				"you", "--server", f.baseURL, "worker-sessions", "read", "--session", sessionID,
-				"--worker-session-id", row.WorkerSessionID, "--output", "json",
-			})
-			probe.Input.Env = functionalEnvironment(f.homeDir)
-			probe.Input.WorkingDirectory = c.factoryDir
-			done := make(chan error, 1)
-			go func() { done <- f.process.Execute(probe.Input) }()
-			select {
-			case <-reached:
-			case <-ctx.Done():
-				t.Fatalf("selected activity never reached fault boundary: %v", ctx.Err())
-			}
-			if kind == "slow" {
-				stop()
-			}
-			var err error
-			select {
-			case err = <-done:
-			case <-ctx.Done():
-				t.Fatalf("faulted activity probe did not return: %v", ctx.Err())
-			}
-			stop()
-			if kind == "slow" && !errors.Is(err, context.Canceled) {
-				t.Fatalf("slow activity error=%v, want caller cancellation", err)
-			}
-			if err == nil {
-				t.Fatal("faulted optional activity unexpectedly readable")
-			}
-			if strings.Contains(probe.Stdout()+probe.Stderr(), "sentinel-secret") {
-				t.Fatal("capture fault disclosed private details")
-			}
+			assertOptionalCaptureReadUnavailable(t, ctx, c, sessionID, row.WorkerSessionID, kind)
 			after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
 			var actual workerSessionListJSON
 			decodeCLIJSON(t, after, &actual)
@@ -401,5 +358,54 @@ func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
 			}
 			assertNormalizedFleetJSONEqual(t, "optional unavailable preserves all other facts", raw, []byte(after.Stdout()))
 		})
+	}
+}
+
+func assertOptionalCaptureReadUnavailable(t *testing.T, ctx context.Context, c *workerSessionsCLICase, sessionID, workerSessionID, kind string) {
+	t.Helper()
+	f := c.fixture
+	var fault error
+	switch kind {
+	case "missing":
+		fault = fs.ErrNotExist
+	case "failed":
+		fault = errors.New("private-capture-path sentinel-secret")
+	}
+	reached := f.captureReads.fault(t, workerSessionID, fault)
+	// A public transcript read confirms the selected activity boundary is
+	// unavailable. Lists must retain snapshot facts without reacquiring it.
+	probeCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	probe := support.FakeInputs(probeCtx, []string{
+		"you", "--server", f.baseURL, "worker-sessions", "read", "--session", sessionID,
+		"--worker-session-id", workerSessionID, "--output", "json",
+	})
+	probe.Input.Env = functionalEnvironment(f.homeDir)
+	probe.Input.WorkingDirectory = c.factoryDir
+	done := make(chan error, 1)
+	go func() { done <- f.process.Execute(probe.Input) }()
+	select {
+	case <-reached:
+	case <-ctx.Done():
+		t.Fatalf("selected activity never reached fault boundary: %v", ctx.Err())
+	}
+	if kind == "slow" {
+		stop()
+	}
+	var err error
+	select {
+	case err = <-done:
+	case <-ctx.Done():
+		t.Fatalf("faulted activity probe did not return: %v", ctx.Err())
+	}
+	stop()
+	if kind == "slow" && !errors.Is(err, context.Canceled) {
+		t.Fatalf("slow activity error=%v, want caller cancellation", err)
+	}
+	if err == nil {
+		t.Fatal("faulted optional activity unexpectedly readable")
+	}
+	if strings.Contains(probe.Stdout()+probe.Stderr(), "sentinel-secret") {
+		t.Fatal("capture fault disclosed private details")
 	}
 }
