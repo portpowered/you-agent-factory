@@ -188,8 +188,17 @@ Mechanically convert only the retained slice of the Markdown plan into
   `consumers` from the Markdown fenced blocks
 - `userStories`, ordered by semantic dependency
 
-`branchName` may be emitted as a human-readable hint, but workspace setup
-derives the lane branch from the live Work name. Do not attach immutable
+`branchName` is optional. For retained recovery with a non-null
+`context.recovery.workspace` and its matching `recovery-worktree` tag, omit
+the hint or set it exactly to `context.recovery.workspace.branch`; a present
+null or successor-name hint is refused. For example, successor Work `lane-r2`
+adopting retained branch `lane` may emit `"branchName": "lane"` or omit it.
+For fresh setup, including recovery with `workspace: null` and no recovery tag,
+setup derives the branch from the live Work name: omit the hint, set it to
+null, or set it exactly to that name (for example `"branchName": "lane-r2"`).
+The hint never selects a workspace or bypasses recovery validation. Continue
+to forward recovery unchanged and preserve its tags as instructed above.
+Do not attach immutable
 preflight metadata, duplicated hashes, or path allowlists as admission
 requirements. Record expected changed paths as advisory impact analysis when
 useful; discoveries may extend that set when no live conflict exists.
