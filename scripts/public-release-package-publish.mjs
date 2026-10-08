@@ -1,16 +1,31 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, realpath } from "node:fs/promises";
+import {
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { timePackagePhase } from "./package-phase-timing.mjs";
-import { smokeFrontendPackages } from "./public-package-install-smoke.mjs";
-import { assertSourceCommit } from "./package-release-candidate.mjs";
 import { publishPublicPackageCandidates } from "../ui/scripts/public-package-publish.mjs";
 import { API_PACKAGE_NAME } from "./api-package-candidate.mjs";
 import { publishCandidateDirectory as publishApiCandidate } from "./api-package-publish.mjs";
+import { timePackagePhase } from "./package-phase-timing.mjs";
+import {
+	RECONCILIATION_FAILURES,
+	RegistryReconciliationError,
+} from "./package-registry.mjs";
+import { assertSourceCommit } from "./package-release-candidate.mjs";
 import { PACKAGED_FACTORIES_PACKAGE_NAME } from "./packaged-factories-package-candidate.mjs";
 import { publishCandidateDirectory as publishPackagedFactoriesCandidate } from "./packaged-factories-package-publish.mjs";
+import {
+	isolatedConsumerEnvironment,
+	runSmokeCommand,
+	smokeFrontendPackages,
+} from "./public-package-install-smoke.mjs";
 import {
 	assertCandidateSetEvidence,
 	FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -214,14 +229,91 @@ export async function validateTaggedReleaseCandidate({
 	return { evidence, root };
 }
 
+// Keep the existing publication retry/cleanup owner; only the tagged installed
+// consumer changes package manager. All supported exports still run under Node.
+async function runTaggedRegistryConsumer(input, { run, env }) {
+	const { consumerDirectory, packageName, candidateVersion } = input;
+	const dependencies = { [packageName]: candidateVersion };
+	const factories = packageName === PACKAGED_FACTORIES_PACKAGE_NAME;
+	if (factories)
+		Object.assign(dependencies, {
+			ajv: "8.20.0",
+			"ajv-formats": "3.0.1",
+			yaml: "2.9.0",
+		});
+	await writeFile(
+		join(consumerDirectory, "package.json"),
+		JSON.stringify({ private: true, dependencies }),
+	);
+	try {
+		await timePackagePhase(`${packageName} registry install`, () =>
+			run("bun", ["install", "--ignore-scripts"], {
+				cwd: consumerDirectory,
+				env,
+			}),
+		);
+	} catch (cause) {
+		const message = cause.message;
+		const code = /timed out/i.test(message)
+			? RECONCILIATION_FAILURES.REGISTRY_TIMEOUT
+			: /EINTEGRITY|integrity check|integrity mismatch/i.test(message)
+				? RECONCILIATION_FAILURES.REGISTRY_INTEGRITY_FAILED
+				: /E401|ENEEDAUTH|\b401\b/.test(message)
+					? RECONCILIATION_FAILURES.REGISTRY_AUTHENTICATION_FAILED
+					: /E403|\b403\b/.test(message)
+						? RECONCILIATION_FAILURES.REGISTRY_PERMISSION_FAILED
+						: RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED;
+		throw new RegistryReconciliationError(
+			code,
+			"tagged registry consumer install failed",
+			{ cause },
+		);
+	}
+	const module = new URL(
+		factories
+			? "./packaged-factories-package-consumer.mjs"
+			: "./api-package-consumer.mjs",
+		import.meta.url,
+	).href;
+	const source = `import { verifyInstalledPackage } from ${JSON.stringify(module)}; await verifyInstalledPackage(${JSON.stringify({ ...input, expectedVersion: candidateVersion })});`;
+	await timePackagePhase(`${packageName} registry Node operations`, () =>
+		run("node", ["--input-type=module", "-e", source], {
+			cwd: consumerDirectory,
+			env,
+		}),
+	);
+}
+
+export async function verifyTaggedRegistryPackage(
+	input,
+	{ run = runSmokeCommand } = {},
+) {
+	// Publication can retry the same consumer directory. Each attempt owns a
+	// fresh profile/cache and cleans it even when install or Node operations fail.
+	const environmentRoot = await mkdtemp(
+		join(input.consumerDirectory, "environment-"),
+	);
+	try {
+		const env = await isolatedConsumerEnvironment(environmentRoot);
+		return await runTaggedRegistryConsumer(input, { run, env });
+	} finally {
+		await rm(environmentRoot, { recursive: true, force: true });
+	}
+}
+
 export async function publishTaggedReleaseCandidate(
 	{ candidateDirectory, expectedSourceCommit, workspaceDirectory },
 	dependencies = {},
 ) {
-	const publishApi = dependencies.publishApiCandidate ?? publishApiCandidate;
+	const registryDependencies = {
+		installAndVerifyRegistryPackage: verifyTaggedRegistryPackage,
+	};
+	const publishApi =
+		dependencies.publishApiCandidate ??
+		((input) => publishApiCandidate(input, registryDependencies));
 	const publishPackagedFactories =
 		dependencies.publishPackagedFactoriesCandidate ??
-		publishPackagedFactoriesCandidate;
+		((input) => publishPackagedFactoriesCandidate(input, registryDependencies));
 	const publishFrontend =
 		dependencies.publishFrontendCandidates ?? publishPublicPackageCandidates;
 	const { evidence, root } = await validateTaggedReleaseCandidate({

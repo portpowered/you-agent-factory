@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+	access,
 	mkdir,
 	mkdtemp,
 	readFile,
@@ -11,18 +12,127 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-
+import { RECONCILIATION_FAILURES } from "./package-registry.mjs";
+import { smokeFrontendPackages } from "./public-package-install-smoke.mjs";
 import {
 	FRONTEND_ONLY_CANDIDATE_SCOPE,
 	FRONTEND_PUBLIC_PACKAGE_NAMES,
 	TAGGED_RELEASE_CANDIDATE_SCOPE,
 	TAGGED_RELEASE_PUBLIC_PACKAGE_NAMES,
 } from "./public-package-set.mjs";
-import { publishTaggedReleaseCandidate } from "./public-release-package-publish.mjs";
-import { smokeFrontendPackages } from "./public-package-install-smoke.mjs";
+import {
+	publishTaggedReleaseCandidate,
+	verifyTaggedRegistryPackage,
+} from "./public-release-package-publish.mjs";
 
 const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
 const version = "1.2.3";
+
+test("a tagged registry retry owns a new profile and cleans failed and successful attempts", async (t) => {
+	const consumerDirectory = await mkdtemp(
+		join(tmpdir(), "you-tagged-registry-retry-"),
+	);
+	t.after(() => rm(consumerDirectory, { recursive: true, force: true }));
+	const profiles = [];
+	let fail = true;
+	const input = {
+		consumerDirectory,
+		packageName: "@you-agent-factory/api",
+		candidateVersion: version,
+	};
+	const dependencies = {
+		run: async (command, _args, { env }) => {
+			if (command === "bun") {
+				profiles.push(env.HOME);
+				if (fail) throw new Error("GET failed 404");
+			}
+		},
+	};
+	await assert.rejects(verifyTaggedRegistryPackage(input, dependencies));
+	fail = false;
+	await verifyTaggedRegistryPackage(input, dependencies);
+	assert.notEqual(profiles[0], profiles[1]);
+	for (const profile of profiles)
+		await assert.rejects(access(profile), {
+			code: "ENOENT",
+		});
+});
+
+for (const packageName of [
+	"@you-agent-factory/api",
+	"@you-agent-factory/packaged-factories",
+]) {
+	test(`tagged registry consumer installs exact ${packageName} with Bun then checks Node exports`, async (t) => {
+		const consumerDirectory = await mkdtemp(
+			join(tmpdir(), "you-tagged-registry-test-"),
+		);
+		t.after(() => rm(consumerDirectory, { recursive: true, force: true }));
+		const calls = [];
+		await verifyTaggedRegistryPackage(
+			{
+				consumerDirectory,
+				packageName,
+				candidateVersion: version,
+				expectedSourceCommit: sourceCommit,
+				workspaceDirectory: process.cwd(),
+			},
+			{
+				run: async (command, args, options) => {
+					calls.push(command);
+					assert.equal(options.cwd, consumerDirectory);
+					if (command === "bun") {
+						assert.deepEqual(args, ["install", "--ignore-scripts"]);
+						const manifest = JSON.parse(
+							await readFile(join(consumerDirectory, "package.json")),
+						);
+						assert.equal(manifest.dependencies[packageName], version);
+						assert.equal(
+							manifest.dependencies.ajv,
+							packageName.endsWith("packaged-factories") ? "8.20.0" : undefined,
+						);
+					} else {
+						assert.ok(args[2].includes('"expectedVersion":"1.2.3"'));
+						assert.ok(args[2].includes(sourceCommit));
+					}
+				},
+			},
+		);
+		assert.deepEqual(calls, ["bun", "node"]);
+	});
+}
+
+for (const [message, code] of [
+	["bun timed out after 120000ms", RECONCILIATION_FAILURES.REGISTRY_TIMEOUT],
+	["GET failed 401", RECONCILIATION_FAILURES.REGISTRY_AUTHENTICATION_FAILED],
+	["GET failed 403", RECONCILIATION_FAILURES.REGISTRY_PERMISSION_FAILED],
+	["Integrity check failed", RECONCILIATION_FAILURES.REGISTRY_INTEGRITY_FAILED],
+	["GET failed 404", RECONCILIATION_FAILURES.REGISTRY_DOWNLOAD_FAILED],
+]) {
+	test(`tagged Bun install failure preserves ${code} and forbids Node operations`, async (t) => {
+		const consumerDirectory = await mkdtemp(
+			join(tmpdir(), "you-tagged-registry-failure-"),
+		);
+		t.after(() => rm(consumerDirectory, { recursive: true, force: true }));
+		const calls = [];
+		await assert.rejects(
+			verifyTaggedRegistryPackage(
+				{
+					consumerDirectory,
+					packageName: "@you-agent-factory/api",
+					candidateVersion: version,
+				},
+				{
+					run: async (command) => {
+						calls.push(command);
+						throw new Error(message);
+					},
+				},
+			),
+			(error) => error.code === code,
+		);
+		assert.deepEqual(calls, ["bun"]);
+	});
+}
 
 async function writeJson(path, value) {
 	await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
@@ -202,7 +312,7 @@ for (const failure of [null, "install", "operation"]) {
 			candidateDirectory: root,
 			expectedSourceCommit: sourceCommit,
 			log: () => {},
-			runCommand: async (command, args, options) => {
+			runCommand: async (command, _args, options) => {
 				consumerDirectory = options.cwd;
 				calls.push(command);
 				const manifest = JSON.parse(
