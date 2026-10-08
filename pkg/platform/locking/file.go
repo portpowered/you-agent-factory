@@ -103,7 +103,27 @@ func (service localService) TryLockTarget(ctx context.Context, target, marker st
 	if !sameTarget(before, after) {
 		return nil, errors.Join(fmt.Errorf("ownership target %q changed during acquisition", target), lease.Close())
 	}
-	return lease, nil
+	return &targetLock{Closer: lease, service: service, target: target, original: after}, nil
+}
+
+// targetLock retains the identity observed while acquiring the marker so a
+// caller can reject a changed input after reading it, before publishing.
+type targetLock struct {
+	io.Closer
+	service  localService
+	target   string
+	original fs.FileInfo
+}
+
+func (lock *targetLock) Validate() error {
+	current, err := lock.service.inspectTarget(lock.target)
+	if err != nil {
+		return err
+	}
+	if !sameTarget(lock.original, current) {
+		return fmt.Errorf("ownership target %q changed after acquisition", lock.target)
+	}
+	return nil
 }
 
 func sameTarget(before, after fs.FileInfo) bool {

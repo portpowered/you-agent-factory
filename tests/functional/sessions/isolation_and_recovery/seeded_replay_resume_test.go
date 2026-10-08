@@ -271,6 +271,7 @@ type seededReplayResumeProcess struct {
 	serversByPort      map[int]*support.ProcessAPIServer
 	payloadsByPath     map[string][]byte
 	readErrorsByPath   map[string]error
+	replacementsByPath map[string][]byte
 	serverErrorsByPort map[int]error
 	nextPort           atomic.Int32
 }
@@ -403,6 +404,7 @@ func newSeededReplayResumeProcess(t *testing.T, claims ...recordings.RecordingTa
 		serversByPort:      make(map[int]*support.ProcessAPIServer),
 		payloadsByPath:     make(map[string][]byte),
 		readErrorsByPath:   make(map[string]error),
+		replacementsByPath: make(map[string][]byte),
 		serverErrorsByPort: make(map[int]error),
 	}
 	var claim recordings.RecordingTargetClaim
@@ -426,6 +428,59 @@ func newSeededReplayResumeProcess(t *testing.T, claims ...recordings.RecordingTa
 type recordingTargetRelease func() error
 
 func (release recordingTargetRelease) Close() error { return release() }
+
+func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, name := range []string{"first board", "second board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			replacement := []byte("externally replaced retained history")
+			reusable.mu.Lock()
+			reusable.replacementsByPath[filepath.Clean(target)] = replacement
+			reusable.mu.Unlock()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("changed restore input = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or changed replacement history")
+			}
+		})
+	}
+}
 
 func TestRecordStartupSafetyDestinationReplacement(t *testing.T) {
 	t.Parallel()
@@ -724,13 +779,26 @@ func testRecordStartupSafetyReadFailurePreservesTargetAndCause(t *testing.T, reu
 }
 
 func (reusable *seededReplayResumeProcess) readRecording(path string) ([]byte, error) {
-	reusable.mu.RLock()
+	reusable.mu.Lock()
 	err := reusable.readErrorsByPath[filepath.Clean(path)]
-	reusable.mu.RUnlock()
+	replacement := reusable.replacementsByPath[filepath.Clean(path)]
+	delete(reusable.replacementsByPath, filepath.Clean(path))
+	reusable.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	return os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err == nil && replacement != nil {
+		// Return the read prefix while an external actor replaces its source.
+		staging := path + ".replacement"
+		if err := os.WriteFile(staging, replacement, 0o600); err != nil {
+			return nil, err
+		}
+		if err := os.Rename(staging, path); err != nil {
+			return nil, err
+		}
+	}
+	return data, err
 }
 
 func (reusable *seededReplayResumeProcess) startAPIServer(

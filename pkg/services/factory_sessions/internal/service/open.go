@@ -104,6 +104,7 @@ type sessionRuntimeOpening struct {
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
 	activation                  *factoryruntime.RuntimeActivation
+	recordingTargetValidator    recordings.RecordingTargetValidator
 }
 
 func (r *Root) prepareRuntimeOpening(
@@ -394,6 +395,11 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
+	if opening.recordingTargetValidator != nil {
+		if err := opening.recordingTargetValidator.Validate(); err != nil {
+			return err
+		}
+	}
 	if err := r.reserveFreshCurrentBoard(ctx, opening); err != nil {
 		return err
 	}
@@ -448,6 +454,7 @@ func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *session
 		return err
 	}
 	cleanup.OwnRecordingTarget(lease)
+	opening.recordingTargetValidator, _ = lease.(recordings.RecordingTargetValidator)
 	return nil
 }
 

@@ -45,6 +45,36 @@ func TestRecordingTargetOwnershipKeepsSafePathAndCauseIdentity(t *testing.T) {
 	}
 }
 
+func TestRecordingTargetValidationKeepsSafePathAndCauseIdentity(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("PRIVATE_RECORDING_PAYLOAD")
+	service := &combinedService{targetClaim: func(context.Context, string, string) (io.Closer, error) {
+		return &changedRecordingTarget{cause: cause}, nil
+	}}
+	lease, err := service.ClaimRecordingTarget(t.Context(), "board.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = lease.(recordings.RecordingTargetValidator).Validate()
+	var coded interface{ CLIErrorCode() string }
+	if !errors.Is(err, cause) || !errors.Is(err, recordings.ErrRecordingBindingConflict) ||
+		!errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+		t.Fatalf("validation lost typed classification or cause: %v", err)
+	}
+	message := logging.SafeErrorCause(err)
+	if !strings.Contains(message, `"board.json"`) || strings.Contains(message, cause.Error()) {
+		t.Fatalf("unsafe validation diagnostic: %s", message)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type changedRecordingTarget struct{ cause error }
+
+func (*changedRecordingTarget) Close() error          { return nil }
+func (lease *changedRecordingTarget) Validate() error { return lease.cause }
+
 func TestRecordingTargetOwnershipRequiresConfirmedLease(t *testing.T) {
 	t.Parallel()
 	for _, claim := range []recordings.RecordingTargetClaim{nil, func(context.Context, string, string) (io.Closer, error) { return nil, nil }} {

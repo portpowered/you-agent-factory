@@ -70,7 +70,21 @@ func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path s
 	if lease == nil {
 		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
 	}
-	return lease, nil
+	return &recordingTargetLease{Closer: lease, path: path}, nil
+}
+
+type recordingTargetLease struct {
+	io.Closer
+	path string
+}
+
+func (lease *recordingTargetLease) Validate() error {
+	if validator, ok := lease.Closer.(recordings.RecordingTargetValidator); ok {
+		if err := validator.Validate(); err != nil {
+			return &recordingTargetClaimError{path: lease.path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+		}
+	}
+	return nil
 }
 
 type recordingTargetClaimError struct {
