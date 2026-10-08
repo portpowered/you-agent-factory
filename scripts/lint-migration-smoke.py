@@ -772,6 +772,12 @@ def lint_r2_seed(seed: str, binary: Path, artifacts: Path) -> None:
     results = []
     environment = dict(os.environ, GOWORK="off", GOLANGCI_LINT_CACHE=str(artifacts / "analysis-cache"))
     command = ["make", target, "GOLANGCI_PREBUILT=1"]
+    # Docs deliberately sets GOTOOLCHAIN=local; select the compiler already
+    # resolved by this module instead of falling back to an older PATH Go.
+    compiler_bin = Path(checked(["go", "env", "GOROOT"], ROOT).strip()) / "bin"
+    compiler = compiler_bin / ("go.exe" if os.name == "nt" else "go")
+    command.append("GO=" + compiler.as_posix())
+    environment["PATH"] = str(compiler_bin) + os.pathsep + environment["PATH"]
     if os.name == "nt":
         # system32/bash.exe is the WSL launcher on the worker host. Native
         # Make requires the installed Git POSIX shell, with no spaces in its
