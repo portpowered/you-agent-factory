@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -17,6 +18,49 @@ import (
 type currentBoardReferencePersistence interface {
 	LoadCurrentBoard(context.Context, string) (string, error)
 	SaveCurrentBoard(context.Context, string, string) error
+}
+
+// Only a live local default board may become the repository's next board.
+// The configured path is the writer selection, never the resume source.
+func (opening *sessionRuntimeOpening) publishesCurrentBoardWriter() bool {
+	selection := opening.sessionSelection
+	return selection != nil && opening.sessionID == factorysessions.DefaultSessionID &&
+		selection.Mode == factorysessions.SessionRuntimeModeService && selection.Host.Port > 0 &&
+		strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" &&
+		strings.TrimSpace(opening.configured.Recordings.ReplayPath) == ""
+}
+
+func (opening *sessionRuntimeOpening) publishCurrentBoardWriter(ctx context.Context) error {
+	if !opening.publishesCurrentBoardWriter() {
+		return nil
+	}
+	store, err := opening.currentBoardReferenceStore()
+	if err != nil {
+		return err
+	}
+	directory := opening.load.LoadedFactoryCfg.FactoryDir()
+	// Validate before replacement. An explicit invocation may bypass pointer
+	// selection, but it must not overwrite an invalid or foreign reference.
+	if _, err := store.LoadCurrentBoard(ctx, directory); err != nil {
+		return err
+	}
+	path, err := filepath.Abs(factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID))
+	if err != nil {
+		return err
+	}
+	return store.SaveCurrentBoard(ctx, directory, path)
+}
+
+func (opening *sessionRuntimeOpening) orderlyCurrentBoardStop(flush func(context.Context) error) func(context.Context) error {
+	if flush == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		if err := flush(ctx); err != nil {
+			return err
+		}
+		return opening.publishCurrentBoardWriter(ctx)
+	}
 }
 
 // The reference scopes selection, but is not authority for the bytes at its

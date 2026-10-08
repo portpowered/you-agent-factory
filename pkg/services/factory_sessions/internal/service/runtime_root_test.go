@@ -35,6 +35,7 @@ type boardReferenceOwner struct {
 	durableexecution.Service
 	path                        string
 	failure                     error
+	saveFailure                 error
 	durable                     bool
 	loads, saves                int
 	savedFactory, savedArtifact string
@@ -48,6 +49,9 @@ func (owner *boardReferenceOwner) LoadCurrentBoard(context.Context, string) (str
 func (owner *boardReferenceOwner) SaveCurrentBoard(_ context.Context, factory, artifact string) error {
 	owner.saves++
 	owner.savedFactory, owner.savedArtifact = factory, artifact
+	if owner.saveFailure != nil {
+		return owner.saveFailure
+	}
 	return owner.failure
 }
 

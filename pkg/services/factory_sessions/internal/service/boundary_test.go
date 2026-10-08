@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 
 	"go.uber.org/goleak"
@@ -104,6 +106,78 @@ func (service *orderlyRecordingService) FlushRecording(
 }
 
 var _ recordings.Service = (*orderlyRecordingService)(nil)
+
+func TestOrderlyRecordingPublishesCurrentBoardOnlyAfterFlush(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"fresh explicit", "refresh", "flush failure", "publication failure", "invalid reference", "canceled", "batch", "peer", "replay", "no record", "no server"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			artifact := filepath.Join(directory, "actual-writer.json")
+			owner := &boardReferenceOwner{}
+			opening := &sessionRuntimeOpening{
+				sessionID: "~default",
+				sessionSelection: &factorysessions.SessionRuntimeSelection{
+					Mode: factorysessions.SessionRuntimeModeService,
+					Host: factorysessions.RuntimeHostRequest{Port: 1234},
+				},
+				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: artifact}},
+				load:             RuntimeLoad{LoadedFactoryCfg: boardReferenceSource{directory: directory}},
+				durableExecution: DurableExecution{Service: owner},
+			}
+			want := errors.New("controlled failure")
+			wantSave, wantError := true, false
+			switch name {
+			case "refresh":
+				owner.path = filepath.Join(directory, "old-writer.json")
+			case "flush failure", "canceled":
+				wantSave, wantError = false, true
+			case "publication failure":
+				owner.saveFailure, wantError = want, true
+			case "invalid reference":
+				owner.failure = want
+				wantSave, wantError = false, true
+			case "batch":
+				opening.sessionSelection.Mode = factorysessions.SessionRuntimeModeBatch
+				wantSave = false
+			case "peer":
+				opening.sessionID, wantSave = "peer", false
+			case "replay":
+				opening.configured.Recordings.ReplayPath, wantSave = "replay.json", false
+			case "no record":
+				opening.configured.Recordings.RecordPath, wantSave = "", false
+			case "no server":
+				opening.sessionSelection.Host.Port, wantSave = 0, false
+			}
+			flushed := false
+			operation := opening.orderlyCurrentBoardStop(func(ctx context.Context) error {
+				if owner.saves != 0 || owner.loads != 0 {
+					t.Fatal("publication preceded flush")
+				}
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if name == "flush failure" {
+					return want
+				}
+				flushed = true
+				return nil
+			})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if name == "canceled" {
+				cancel()
+			}
+			err := operation(ctx)
+			if (err != nil) != wantError || (owner.saves == 1) != wantSave {
+				t.Fatalf("stop error=%v saves=%d, want error=%v save=%v", err, owner.saves, wantError, wantSave)
+			}
+			if owner.saves == 1 && (!flushed || owner.savedArtifact != artifact || owner.savedFactory != directory) {
+				t.Fatal("reference does not name the flushed writer")
+			}
+		})
+	}
+}
 
 // TestMain fails the package when a test leaves goroutines running, which
 // otherwise surfaces as teardown hangs and cross-test interference.

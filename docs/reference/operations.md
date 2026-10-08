@@ -83,12 +83,15 @@ Two matching readable histories stop startup, including when one is a prefix of 
 Zero matches or an unreadable identified candidate also stop startup without activating workers or replacing retained files.
 A missing or damaged recording selected by an existing reference or explicit path remains fatal.
 
-Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace an existing board reference.
+Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence during startup.
 A continuous server run with explicit `--record` initializes an absent reference after restoring this repository's `~default` board.
 It publishes the absolute recording path after reconstruction and initial opening, before readiness.
 After graceful shutdown, a plain relaunch selects that reference and restores the same board.
-Every existing reference is preserved byte-for-byte, including invalid contents.
-Fresh explicit recordings, batch runs, peer sessions, `--resume`, `--replay`, and `--no-record` do not initialize a reference.
+Graceful shutdown of a continuous server run for `~default` publishes the recording it was writing, after a successful flush.
+This includes fresh explicit recordings and refreshes a valid reference for the same repository.
+If flushing fails, the previous reference remains unchanged.
+An invalid or foreign reference is preserved and shutdown reports an error while releasing runtime resources.
+Fresh explicit recordings do not publish during startup. Batch runs, peer sessions, `--replay`, and `--no-record` cannot publish the default board reference.
 Batch runs continue to create separate dated recordings.
 To use a selected recording during rollback, run the explicit command below with its actual path.
 Preserve the reference, recordings, and durable state files.

@@ -618,11 +618,11 @@ func (r *Root) bindSessionOpeningProducts(
 	opened.activation = opening.activation
 	opened.clock = opening.clock
 	opened.recordings = r.recordingsService
-	opened.orderlyStop = newOrderlyRecordingFlush(
+	opened.orderlyStop = opening.orderlyCurrentBoardStop(newOrderlyRecordingFlush(
 		r.recordingsService,
 		opened.runtimeInstanceID,
 		opening.configured.Recordings.RecordPath,
-	)
+	))
 	opened.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
 	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
 	opened.operatorSettingsPath = opening.operatorSettingsPath

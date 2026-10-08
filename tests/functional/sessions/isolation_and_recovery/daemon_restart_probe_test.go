@@ -69,14 +69,14 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("F1 F2 graceful DAG restart", func(t *testing.T) {
 		testRestartProbeDAG(t, process, boardDir, boardAPIs[:2], runner)
 	})
-	t.Run("F3 explicit restore seeds reference then plain relaunch", func(t *testing.T) {
+	t.Run("F1 fresh explicit shutdown seeds reference then plain relaunch", func(t *testing.T) {
 		// Both journeys exercise local ~default ownership, so run this smallest
 		// cohort in order before the independent parallel projects below.
 		runner.calls.Store(0)
 		home := t.TempDir()
 		invocations := 0
 		var retainedReference []byte
-		var explicitPath string
+		explicitPath := filepath.Join(implicitRepo, "fresh-explicit.json")
 		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:5], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations > 0 {
 				reference, err := os.ReadFile(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json"))
@@ -87,22 +87,19 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 					t.Fatal("graceful restart replaced the selected recording reference")
 				}
 				retainedReference = reference
-				if invocations == 1 {
-					var selected struct{ ArtifactReference string }
-					if err := json.Unmarshal(reference, &selected); err != nil {
-						t.Fatal(err)
-					}
-					explicitPath = selected.ArtifactReference
-					if err := os.Remove(filepath.Join(implicitRepo, ".you-agent-factory", "current-board.json")); err != nil {
-						t.Fatal(err)
-					}
+				var selected struct{ ArtifactReference string }
+				if err := json.Unmarshal(reference, &selected); err != nil {
+					t.Fatal(err)
+				}
+				if selected.ArtifactReference != explicitPath {
+					t.Fatal("shutdown reference does not name the explicit writer")
 				}
 			}
 			invocations++
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = implicitRepo
-			if invocations == 2 {
+			if invocations == 1 {
 				inputs.Input.Args = append(inputs.Input.Args, "--record", explicitPath)
 			}
 			return inputs
@@ -162,24 +159,26 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 		refPath := filepath.Join(dir, ".you-agent-factory", "current-board.json")
-		existing := []byte("invalid reference § —")
 		invocations := 0
 		// Reuse the same process, public ~default identity, root and JSONL
 		// recording across three joined shutdowns, including terminal recovery.
 		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[8:11], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations == 1 {
 				if _, err := os.Stat(refPath); !errors.Is(err, fs.ErrNotExist) {
-					t.Fatalf("fresh explicit initialized reference: %v", err)
+					t.Fatalf("fresh JSONL canonical peer initialized default reference: %v", err)
 				}
-				writeRestartProbeFile(t, refPath, existing)
 			}
 			invocations++
 			inputs := restartProbeInputs(t, dir)
 			inputs.Input.Args[len(inputs.Input.Args)-1] = filepath.Join(dir, "current-board.jsonl")
 			return inputs
 		}, 23201)
-		if !bytes.Equal(mustReadSeededReplayArtifact(t, refPath), existing) {
-			t.Fatal("explicit restore replaced existing invalid reference")
+		var selected struct{ ArtifactReference string }
+		if err := json.Unmarshal(mustReadSeededReplayArtifact(t, refPath), &selected); err != nil {
+			t.Fatal(err)
+		}
+		if selected.ArtifactReference != filepath.Join(dir, "current-board.jsonl") {
+			t.Fatal("restored default board did not publish its JSONL writer")
 		}
 	}) {
 		return
