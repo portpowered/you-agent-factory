@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { execPath, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS } from "./backend-lint-policy.mjs";
+import { selectLintInputs } from "./backend-lint-workflow.mjs";
 import {
 	beginLintRun, startLintTarget, recordLintTarget, collectLintRun, removeLintRun,
 	BACKEND_LINT_COMMENT_MARKER,
@@ -715,5 +716,166 @@ socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
 		assert.notEqual(rejected.code, 0);
 		assert.match(rejected.output, /LINT_JOBS must be a positive integer/);
 		assert.equal(signals.length, 7);
+	}
+});
+
+const selectedInputs = (paths) => selectLintInputs({ event: "pull_request", baseSha: "a".repeat(40), testedSha: "b".repeat(40), paths });
+const passingTarget = (name) => ({ name, status: "pass", durationMillis: 1, output: "clean" });
+
+test("validated optional skips are visible and selected omissions fail closed", () => {
+    const selection = selectedInputs(["ui/src/App.tsx"]);
+    const input = report({ selection, targets: [passingTarget("golangci")] });
+    const summary = summarizeBackendLintReport(input, { selection });
+    assert.equal(summary.ok, true);
+    assert.match(renderBackendLintSummary(summary), /deadcode: skipped/);
+    assert.match(renderBackendLintSummary(summary), /docs-reference-check: skipped/);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: undefined }).ok, false);
+    const docs = selectedInputs(["docs/reference/run.md"]);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: docs }).ok, false);
+    const complete = { ...input, selection: docs, targets: [passingTarget("golangci"), passingTarget("deadcode"), passingTarget("docs-reference-check")] };
+    assert.equal(summarizeBackendLintReport(complete).ok, true);
+    for (const name of ["golangci", "deadcode", "docs-reference-check"]) {
+        const failed = complete.targets.map((target) => target.name === name ? { ...target, status: "fail", output: "tool unavailable" } : target);
+        assert.equal(summarizeBackendLintReport({ ...complete, targets: failed }).ok, false);
+    }
+});
+
+test("mismatched, null, corrupt and duplicate selection reports fail closed", () => {
+    const selection = selectedInputs(["README.md"]);
+    const input = report({ selection, targets: [passingTarget("golangci")] });
+    for (const options of [{ selection: null }, { selectionError: "unreadable selection" }, { selection: selectedInputs(["docs/reference/run.md"]) }, { testedSha: "c".repeat(40) }, { event: "push" }]) {
+        assert.equal(summarizeBackendLintReport(input, options).harnessFailure, true);
+    }
+    assert.equal(summarizeBackendLintReport({ ...input, targets: [passingTarget("golangci"), passingTarget("golangci")] }).harnessFailure, true);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: { ...selection, deadcode: "0" } }).ok, false);
+});
+
+test("collector preserves selection identity and rejects changes during execution", (t) => {
+    const selection = selectedInputs(["README.md"]);
+    const directory = beginLintRun("1", ["golangci"], "", selection);
+    t.after(() => removeLintRun(directory));
+    startLintTarget(directory, "golangci");
+    writeFileSync(join(directory, "golangci.log"), "clean");
+    recordLintTarget(directory, "golangci", "0");
+    assert.throws(() => collectLintRun(directory, ["golangci"]), /selection changed/);
+    assert.throws(() => collectLintRun(directory, ["golangci"], "", selectedInputs(["docs/reference/run.md"])), /selection changed/);
+    const collected = collectLintRun(directory, ["golangci"], "", selection);
+    assert.deepEqual(collected.selection, selection);
+    assert.equal(summarizeBackendLintReport(collected, { selection }).ok, true);
+});
+
+// Maintenance integration: real Make joins controlled linter processes. IPC
+// proves scope overlap and draining; no repository-source inventory or timing gate.
+test("golangci joins every independent scope and propagates each failure", { timeout: 60000 }, async (t) => {
+	const repository = fileURLToPath(new URL("../../", import.meta.url));
+	const root = mkdtempSync(join(tmpdir(), "you-lint-scopes-"));
+	// Run unchanged recursive Make recipes with owned Git prerequisites, even
+	// when the worker checkout is shallow and has no origin/main ref.
+	copyFileSync(join(repository, "Makefile"), join(root, "Makefile"));
+	const fixtureEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+	for (const args of [
+		["init", "--quiet"],
+		["-c", "user.name=Lint fixture", "-c", "user.email=lint@example.test", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "--allow-empty", "-m", "Lint fixture"],
+		["update-ref", "refs/remotes/origin/main", "HEAD"],
+	]) {
+		const result = spawnSync("git", args, { cwd: root, env: fixtureEnv, encoding: "utf8" });
+		assert.equal(result.status, 0, result.stderr);
+	}
+	const script = join(root, "linter.mjs").replaceAll("\\", "/");
+	writeFileSync(join(root, "host-path.txt"), "controlled host");
+	writeFileSync(script, `#!/usr/bin/env node
+import { connect } from 'node:net';
+const args = process.argv.slice(2);
+const config = args[args.indexOf('--config') + 1];
+const socket = connect(Number(process.env.LINT_TEST_PORT), '127.0.0.1', () => socket.write(JSON.stringify({config, args, gogc: process.env.GOGC, memoryLimit: process.env.GOMEMLIMIT}) + '\\n'));
+socket.on('data', () => { console.log(config + ' completed'); socket.end(); });
+socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7 : 0));
+`, { mode: 0o755 });
+	const sockets = new Set();
+	let current;
+	const server = createServer((socket) => {
+		sockets.add(socket);
+		socket.on("close", () => sockets.delete(socket));
+		let data = "";
+		socket.on("data", (chunk) => {
+			data += chunk;
+			if (!data.includes("\n")) return;
+			const signal = JSON.parse(data.trim());
+			current.signals.push(signal);
+			current.waiting.push(socket);
+			// Hold all concurrent scopes before releasing any. With one job,
+			// release each immediately so the next scope can start.
+			if (current.waiting.length === current.jobs) {
+				for (const peer of current.waiting) {
+					current.releases.push(current.signals[current.releases.length].config);
+					peer.write("release");
+				}
+				current.waiting = [];
+			}
+		});
+	});
+	const children = [];
+	const stop = async (child) => {
+		if (child.closed) return;
+		if (platform === "win32") {
+			spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+		} else {
+			try { process.kill(-child.pid, "SIGKILL"); }
+			catch (error) { if (error.code !== "ESRCH") throw error; }
+		}
+		await child.completion;
+	};
+	t.after(async () => {
+		await Promise.all(children.map(stop));
+		for (const socket of sockets) socket.destroy();
+		await new Promise((resolve) => server.close(resolve));
+		rmSync(root, { recursive: true, force: true });
+	});
+	server.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const configs = [".golangci.yml", ".golangci-repository-default.yml", ".golangci-repository.yml"];
+	for (const [jobs, failed] of [[1, ""], [3, ""], ...configs.map((config) => [3, config])]) {
+		current = { jobs, failed, waiting: [], signals: [], releases: [], output: "" };
+		const child = spawn(platform === "win32" ? "make.exe" : "make", [
+			"--no-print-directory", "golangci", "GOLANGCI_PREBUILT=1",
+			`LINT_JOBS=${jobs}`, `GOLANGCI_REPOSITORY=${script}`, `GOLANGCI_DIR=${root.replaceAll("\\", "/")}`,
+			"GOLANGCI_GOGC=200", "GOLANGCI_BUILTIN_GOMEMLIMIT=3GiB", "GOLANGCI_REPOSITORY_GOMEMLIMIT=2GiB",
+			...(platform === "win32" ? ["SHELL=C:/Program Files/Git/bin/sh.exe"] : []),
+		], { detached: platform !== "win32", cwd: root, env: { ...fixtureEnv, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
+		children.push(child);
+		const phase = current;
+		child.stdout.on("data", (data) => { phase.output += data; });
+		child.stderr.on("data", (data) => { phase.output += data; });
+		child.completion = new Promise((resolve) => child.once("close", (status, signal) => {
+			child.closed = true;
+			resolve([status, signal]);
+		}));
+		let timer;
+		let status;
+		try {
+			[status] = await Promise.race([child.completion, new Promise((_, reject) => {
+				// Failure ceiling only: scope starts/releases remain IPC-driven.
+				timer = setTimeout(() => reject(new Error(`golangci phase stalled: ${JSON.stringify({ jobs, failed, signals: phase.signals, releases: phase.releases, waiting: phase.waiting.length, exitCode: child.exitCode, signalCode: child.signalCode, output: phase.output })}`)), 10000);
+				child.once("error", reject);
+			})]);
+		} finally {
+			clearTimeout(timer);
+			await stop(child);
+		}
+		const output = phase.output;
+		const diagnostic = JSON.stringify({ jobs, failed, status, signals: phase.signals, releases: phase.releases, output });
+		assert.equal(status === 0, !failed, diagnostic);
+		assert.deepEqual(current.signals.map((signal) => signal.config).sort(), [...configs].sort(), diagnostic);
+		assert.deepEqual([...phase.releases].sort(), [...configs].sort(), diagnostic);
+		for (const { config, args, gogc, memoryLimit } of current.signals) {
+			assert.equal(gogc, "200", diagnostic);
+			assert.equal(memoryLimit, config === ".golangci.yml" ? "3GiB" : "2GiB", diagnostic);
+			assert.ok(args.includes("--allow-parallel-runners"));
+			assert.ok(args.includes("./..."));
+			assert.ok(output.includes(`${config} completed`), output);
+			if (config === ".golangci-repository.yml") {
+				assert.ok(args.includes("--build-tags=integration,functionallong,backendconformance,factoryartifact,managed_process_integration"));
+			}
+		}
 	}
 });

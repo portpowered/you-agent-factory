@@ -131,7 +131,7 @@ func NewRoot(
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
 
 	runtimeInputLoading *RuntimeInputLoading,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	snapshotSelection *RuntimeSnapshotSelection,
 
 	assembly RuntimeAssembly,
 	durableOpening *DurableOpening,
@@ -177,7 +177,7 @@ func NewRoot(
 		runtimeRouter,
 
 		runtimeInputLoading,
-		decodeReplayConfig,
+		snapshotSelection,
 
 		assembly,
 		durableOpening,
@@ -257,4 +257,18 @@ func NewRuntimeInputLoading(
 ) *RuntimeInputLoading {
 	return service.NewRuntimeInputLoading(loadFactory, newLoadedFactory, decodeReplayConfig,
 		replayInputs, captureLoadedFactorySnapshot, newSessionLogger, baseLogger)
+}
+
+// RuntimeSnapshotSelection is the private selection owner exposed for composition.
+type RuntimeSnapshotSelection = service.RuntimeSnapshotSelection
+
+func NewRuntimeSnapshotSelection(
+	definitions factorydefinitions.Service,
+	decode factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.RuntimeScopeService,
+	paths factorydefinitions.NamedPathResolver,
+	resolveHome factorysessions.HomeDirectoryResolver,
+) *RuntimeSnapshotSelection {
+	return service.NewRuntimeSnapshotSelection(definitions.ResolveRuntimeSnapshot, decode, replayInputs,
+		paths.ResolveCurrentDir, resolveHome)
 }

@@ -180,7 +180,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		selected.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
 	}
 	if request.ValidateOnly {
-		resolution, err := r.resolveActivationSnapshot(ctx, definitionRequestForStart(selected), recordingRequestForStart(selected), nil, nil, selectedID)
+		resolution, err := r.snapshotSelection.Resolve(ctx, definitionRequestForStart(selected), recordingRequestForStart(selected), nil, nil, selectedID)
 		if err != nil {
 			return factorysessions.SessionStartResult{}, err
 		}

@@ -102,7 +102,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Definitions,
 		fixture.RuntimeRouter,
 		NewRuntimeInputLoading(fixture.LoadFactory, fixture.NewLoadedFactory, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, fixture.CaptureLoadedFactorySnapshot, fixture.NewSessionLogger, fixture.Logger),
-		fixture.DecodeReplayConfig,
+		fixture.snapshotSelection(),
 		fixture.Assembly,
 		fixture.DurableOpening,
 		fixture.FactoryScaffoldInitializer,
@@ -351,4 +351,16 @@ func durableOpeningFixture(execution durableexecution.Service, acquire durableex
 		},
 		func(identity string) (string, error) { return identity, nil }, false,
 	)
+}
+
+func (fixture runtimeOpeningFixture) snapshotSelection() *RuntimeSnapshotSelection {
+	var resolve factorydefinitions.RuntimeSnapshotOperation
+	if fixture.Definitions != nil {
+		resolve = fixture.Definitions.ResolveRuntimeSnapshot
+	}
+	var paths factorydefinitions.CurrentFactoryDirectoryResolver
+	if fixture.NamedPaths != nil {
+		paths = fixture.NamedPaths.ResolveCurrentDir
+	}
+	return NewRuntimeSnapshotSelection(resolve, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, paths, fixture.ResolveHome)
 }

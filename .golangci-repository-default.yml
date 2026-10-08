@@ -6,6 +6,15 @@ linters:
   default: none
   enable:
     - repolint
+    - govet
+  exclusions:
+    # Standalone go vet covered generated files too, without a path ratchet.
+    generated: disable
+    rules:
+      # Match the former vet target's explicit roots; third_party was not
+      # selected. Keep repolint's existing repository scope unchanged.
+      - linters: [govet]
+        path-except: ^(cmd|contracts|docs|internal|packages|pkg|scripts|tests|ui)/
   settings:
     custom:
       repolint:

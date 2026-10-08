@@ -293,7 +293,7 @@ func (r *Root) assemblePortableReplayRuntime(
 	observations := replaySessionObservations{mutations: mutationOwner.RecordPetriTokenMutations, progress: observe}
 	// Select the authored live definition only after the durable owner confirms
 	// restorable state. Inspection and unsuccessful probes remain nonexecuting.
-	resolved, err := r.resolveActivationSnapshot(ctx, configured.Definition, recordings.RuntimeSelection{}, nil, nil, configured.Session.SessionID)
+	resolved, err := r.snapshotSelection.Resolve(ctx, configured.Definition, recordings.RuntimeSelection{}, nil, nil, configured.Session.SessionID)
 	if err != nil {
 		return nil, err
 	}

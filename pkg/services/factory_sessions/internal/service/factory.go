@@ -80,7 +80,7 @@ type Root struct {
 	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
 	runtimeInputLoading            *RuntimeInputLoading
-	decodeReplayConfig             factorydefinitions.ReplayRuntimeConfigDecoder
+	snapshotSelection              *RuntimeSnapshotSelection
 	resolveClock                   factoryruntime.ClockResolver
 	baseLogger                     *zap.Logger
 	runtimeLogs                    factoryruntime.RuntimeLogOwner
@@ -117,7 +117,7 @@ func NewRoot(
 	definitions factorydefinitions.Service,
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
 	runtimeInputLoading *RuntimeInputLoading,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	snapshotSelection *RuntimeSnapshotSelection,
 	assembly roles.RuntimeAssembly,
 	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -174,7 +174,7 @@ func NewRoot(
 		factoryWorkflows:               factoryWorkflows,
 		workflowPreview:                workflowPreview,
 		runtimeInputLoading:            runtimeInputLoading,
-		decodeReplayConfig:             decodeReplayConfig,
+		snapshotSelection:              snapshotSelection,
 		resolveClock:                   resolveClock,
 		baseLogger:                     logger,
 		runtimeLogs:                    runtimeLogs,

@@ -196,6 +196,25 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_high_attempt_fresh_setup_installs_exact_recovery_packet(self):
+        init_repository(self.repo_path)
+        for attempt in (3, 7):
+            with self.subTest(attempt=attempt):
+                name = f"fresh-attempt-{attempt}"
+                packet = recovery_packet()
+                packet["branchName"] = name
+                packet["context"]["recovery"].update(attempt=attempt, workspace=None)
+                source = write_packet(self.repo_path, name, packet)
+                result = run_setup_workspace(self.repo_path, name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                receipt = json.loads(result.stdout)
+                self.assertEqual(receipt["status"], "ready")
+                self.assertEqual(receipt["branch"], name)
+                self.assertFalse(receipt["reused"])
+                self.assertEqual(Path(receipt["prd_path"]).read_bytes(), source.read_bytes())
+                self.assertEqual(json.loads(Path(receipt["prd_path"]).read_text())["context"]["recovery"],
+                                 packet["context"]["recovery"])
+
     def test_null_recovery_creates_ordinary_workspace_with_exact_packet(self):
         init_repository(self.repo_path)
         prd_name = "null-recovery-fresh"
@@ -736,7 +755,7 @@ class RecoveryPacketValidationTest(unittest.TestCase):
 
     def test_ordinary_and_fresh_recovery_preserve_name_derived_setup(self):
         self.assertIsNone(self.module.validate_recovery_packet({}, ""))
-        for attempt in (1, 2):
+        for attempt in (1, 2, 3, 7):
             packet = copy.deepcopy(self.packet)
             packet["context"]["recovery"].update(attempt=attempt, workspace=None)
             self.assertEqual(self.module.validate_recovery_packet(packet, "")["attempt"], attempt)
@@ -745,9 +764,12 @@ class RecoveryPacketValidationTest(unittest.TestCase):
 
     def test_valid_retained_packet_is_forwarded_without_rewriting(self):
         for classification in ("visit_cap_with_progress", "breaker_one_blocker", "deterministic_failure"):
-            packet = copy.deepcopy(self.packet)
-            packet["context"]["recovery"]["diagnosis"]["classification"] = classification
-            self.assertIs(self.module.validate_recovery_packet(packet, self.path), packet["context"]["recovery"])
+            for attempt in (1, 2, 3, 7):
+                with self.subTest(classification=classification, attempt=attempt):
+                    packet = copy.deepcopy(self.packet)
+                    packet["context"]["recovery"]["attempt"] = attempt
+                    packet["context"]["recovery"]["diagnosis"]["classification"] = classification
+                    self.assertIs(self.module.validate_recovery_packet(packet, self.path), packet["context"]["recovery"])
 
     def test_absolute_escaping_and_unnormalized_tags_refuse(self):
         for path in ("C:/repo/.claude/worktrees/lane", "/repo/.claude/worktrees/lane",
@@ -771,11 +793,15 @@ class RecoveryPacketValidationTest(unittest.TestCase):
             del value[path[-1]]
             with self.subTest(path=path), self.assertRaises(ValueError):
                 self.module.validate_recovery_packet(packet, self.path)
-        for attempt in (0, 3, True, False, "1", 1.0, None):
+        for attempt in (0, -1, True, False, "1", 1.0, None, "missing"):
             packet = copy.deepcopy(self.packet)
             packet["context"]["recovery"]["attempt"] = attempt
-            with self.subTest(attempt=attempt), self.assertRaisesRegex(ValueError, "integer 1 or 2"):
-                self.module.validate_recovery_packet(packet, self.path)
+            if attempt == "missing":
+                del packet["context"]["recovery"]["attempt"]
+            for workspace, tag in ((packet["context"]["recovery"]["workspace"], self.path), (None, "")):
+                packet["context"]["recovery"]["workspace"] = workspace
+                with self.subTest(attempt=attempt, tag=tag), self.assertRaisesRegex(ValueError, "^recovery attempt must be a positive integer$"):
+                    self.module.validate_recovery_packet(packet, tag)
 
     def test_missing_tag_invalid_workspace_or_unknown_diagnosis_refuse(self):
         for field, value in (("branch", ""), ("worktree", "relative/lane"), ("prUrl", None),
@@ -961,7 +987,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
     This proof makes no claim about compiled Factory routing or live judgment.
     """
 
-    def test_I1_adoption_repeats_without_resetting_commits_dirty_files_or_scaffold(self):
+    def test_E_H_E_B_E_U_high_attempt_adoption_preserves_work_and_refuses_invalid_inputs(self):
         module = load_setup_workspace_module()
         with tempfile.TemporaryDirectory(prefix="retained-recovery-") as directory:
             repo = Path(directory)
@@ -986,8 +1012,32 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             before = git(["status", "--porcelain=v1", "-z"], retained).stdout
             index_before = git(["diff", "--cached", "--binary"], retained).stdout
             packet = recovery_packet(".claude/worktrees/lane", head)
+            packet["context"]["recovery"]["attempt"] = 7
             packet["branchName"] = "lane"
             source = write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
+            for attempt in (0, -1, True):
+                invalid_packet = copy.deepcopy(packet)
+                invalid_packet["context"]["recovery"]["attempt"] = attempt
+                write_packet(repo, "lane-r2", invalid_packet)
+                snapshot = repository_snapshot(repo, (retained,))
+                with self.subTest(attempt=attempt), mock.patch.object(module, "get_repo_root", return_value=repo), \
+                     mock.patch.object(module, "adopt_recovery_workspace") as adopt, \
+                     mock.patch.object(module, "sync_main") as sync, \
+                     mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as refusal:
+                        module.main()
+                    self.assertEqual(refusal.exception.code, 1)
+                    self.assertEqual(stdout.getvalue(), "")
+                    self.assertIn("recovery attempt must be a positive integer", stderr.getvalue())
+                    adopt.assert_not_called()
+                    sync.assert_not_called()
+                self.assertEqual(repository_snapshot(repo, (retained,)), snapshot)
+                self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
+                for name, data in saved.items():
+                    self.assertEqual((retained / name).read_bytes(), data)
+                self.assertFalse((retained / "tasks/todo/lane-r2.json").exists())
+            write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
             # Branch hints cannot authorize adoption or any setup mutation.
             snapshot = repository_snapshot(repo, (retained,))
             for hint in ("lane-r2", "unrelated", None, 7, {"secret": "payload"}):

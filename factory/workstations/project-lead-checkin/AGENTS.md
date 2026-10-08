@@ -73,11 +73,11 @@ Keep all changes scoped to this Project and preserve history, review, CI, accept
 Apply the lead's Corrected successor recovery procedure on this check-in too.
 Diagnose failed/capped lanes from exact idea/plan/task IDs, Worker Sessions,
 Events, PR/head and progress.txt; a supported correction defaults to a new-name
-same-Project successor retaining useful unowned work. At most two accepted
-successors per original lineage includes all wakes/check-ins/generations.
+same-Project successor retaining useful unowned work. Reconstruct lineage and
+the next positive integer attempt, with no ceiling, across wakes/check-ins/generations.
 Reconcile uncertain submission with the same request ID. Missing history that
 prevents proving lineage or ownership is a nonfatal operator hold, never an
-assumed unused budget. Rebind only evidenced failed descendants/existing
+assumed lineage. Rebind only evidenced failed descendants/existing
 loopback by targetWorkId to verified current-Session successors. Never
 duplicate healthy/active/parked/unrelated Work or add per-cycle joins. Work
 controls, equivalent APIs, canonical edits and operatorOverride remain forbidden.
