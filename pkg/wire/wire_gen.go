@@ -694,7 +694,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)
 	v179 := provideWorkVisualizationOperation()
 	visualizeWorkOperation := provideVisualizeWorkOperation(v179)
-	v180 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol)
+	v180 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol, source)
 	v181 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol(source)
 	if err != nil {

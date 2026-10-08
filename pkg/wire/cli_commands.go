@@ -174,8 +174,8 @@ func provideSubmitWorkOperation(read work.PayloadFileReader, transport extendedC
 	return submitcli.NewSubmit(read, transport.Protocol)
 }
 
-func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol) cli.ListWorkerSessionsOperation {
-	return workersessionscli.BindList(transport.Protocol)
+func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol, source platformclock.Source) cli.ListWorkerSessionsOperation {
+	return workersessionscli.BindList(transport.Protocol, source)
 }
 
 func provideShowWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ShowWorkerSessionsOperation {

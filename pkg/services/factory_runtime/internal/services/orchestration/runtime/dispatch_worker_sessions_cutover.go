@@ -285,6 +285,7 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 	ctx context.Context,
 	events []interfaces.FactoryEvent,
 	workID string,
+	live map[string]workersessions.Observation,
 ) ([]workersessions.Observation, bool, error) {
 	if err := observationContextError(ctx); err != nil {
 		return nil, false, err
@@ -317,7 +318,7 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 				return nil, false, err
 			}
 		}
-		if fact.provider != nil {
+		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
 			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
 			if err != nil {
 				return nil, false, err
@@ -465,7 +466,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return workersessions.ListObservationsResult{}, liveErr
 	}
 	events := s.canonicalEvents()
-	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID)
+	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID, listedObservationIndex(live.Observations))
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
