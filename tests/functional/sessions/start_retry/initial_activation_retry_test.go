@@ -612,6 +612,14 @@ type initialOpeningPersistence struct {
 	once      sync.Once
 }
 
+func (files *initialOpeningPersistence) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).ReadFileBounded(path, limit)
+}
+
+func (files *initialOpeningPersistence) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).RenameNoReplace(source, destination)
+}
+
 func (files *initialOpeningPersistence) WriteFile(path string, content []byte, mode fs.FileMode) error {
 	if err := files.Local.WriteFile(path, content, mode); err != nil {
 		return err
