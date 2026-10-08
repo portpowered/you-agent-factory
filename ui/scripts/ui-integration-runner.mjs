@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { appendFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { browserDistReady } from "../integration/browser-build-lock.mjs";
@@ -124,6 +125,10 @@ export async function runBuiltBrowserIntegration({
   run = runBrowserIntegration,
   buildHarness = buildRealBackendBrowserHarness,
   env = process.env,
+  publishBuildSuccess = async () => {
+    if (env.GITHUB_OUTPUT)
+      await appendFile(env.GITHUB_OUTPUT, "harness-compiled=true\n");
+  },
 } = {}) {
   if (!(await ready()))
     throw new Error("Prebuilt dashboard output is missing or invalid");
@@ -133,6 +138,9 @@ export async function runBuiltBrowserIntegration({
   const previous = env[realBackendHarnessArtifactEnvironmentVariable];
   env[realBackendHarnessArtifactEnvironmentVariable] = artifact.artifactPath;
   try {
+    // Save compiler inputs even if a later assertion or an independent peer
+    // fails. The builder returns only after validating its executable output.
+    await publishBuildSuccess();
     await run({ prebuilt: true, exitOnFailure: false });
   } finally {
     if (previous === undefined)

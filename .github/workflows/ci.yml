@@ -142,8 +142,9 @@ jobs:
       # The retained hosted-route browser check uses a real Go backend. Cache
       # compiler inputs, never executables or test results; build once per run.
       - name: Restore frontend backend harness compiler cache
+        id: frontend-harness-cache
         if: success() || failure()
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/go/pkg/mod
@@ -152,10 +153,19 @@ jobs:
           restore-keys: |
             frontend-harness-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Frontend proof
+        id: frontend-proof
         if: success() || failure()
         run: bash scripts/ci/run-frontend-verification.sh
         env:
           AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/factory-graph-visual-group
+      - name: Save successfully populated frontend harness compiler inputs
+        if: always() && !cancelled() && steps.frontend-proof.outputs.harness-compiled == 'true' && steps.frontend-harness-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.frontend-harness-cache.outputs.cache-primary-key }}
       - name: Upload visual group browser evidence
         if: always()
         uses: actions/upload-artifact@v4
