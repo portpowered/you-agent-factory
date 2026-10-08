@@ -31,6 +31,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	sentinel := filepath.Join(dir, "worktrees", "sentinel.txt")
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
 	first := inputs(t, dir)
+	first.Input.Context = context.WithValue(first.Input.Context, restartProbeServerKey{}, apis[0])
 	if port != 0 {
 		first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
 	}
@@ -50,11 +51,24 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
 	second := inputs(t, dir)
+	second.Input.Context = context.WithValue(second.Input.Context, restartProbeServerKey{}, apis[1])
 	if port != 0 {
 		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
 	}
 	reopened := support.StartProcessCommand(t, process, second.Input)
 	url = restartProbeReadyURL(t, apis[1], reopened)
+	for i, arg := range second.Input.Args {
+		if arg == "--resume" {
+			var reference struct{ ArtifactReference string }
+			path := filepath.Join(second.Input.WorkingDirectory, ".you-agent-factory", "current-board.json")
+			if err := json.Unmarshal(mustReadSeededReplayArtifact(t, path), &reference); err != nil {
+				t.Fatal(err)
+			}
+			if reference.ArtifactReference == "" || reference.ArtifactReference == second.Input.Args[i+1] {
+				t.Fatal("resume readiness did not publish a successor reference")
+			}
+		}
+	}
 	after := restartProbeBoardReads(t, url)
 	assertRestartProbeStates(t, after)
 	assertRestartProbeRecoveredWork(t, before, after)
@@ -321,6 +335,7 @@ func assertRestartProbeTerminalRestart(t *testing.T, process support.Process, di
 	// Reopen the same repository/reference/recording again after every
 	// Work is terminal. Reuse is the invariant, so this journey is ordered.
 	third := inputs(t, dir)
+	third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, api)
 	repeated := support.StartProcessCommand(t, process, third.Input)
 	url := restartProbeReadyURL(t, api, repeated)
 	for i, work := range restartProbeBoardReads(t, url) {

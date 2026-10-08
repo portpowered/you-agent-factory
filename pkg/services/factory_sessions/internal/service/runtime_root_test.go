@@ -35,6 +35,7 @@ type boardReferenceOwner struct {
 	durableexecution.Service
 	path                        string
 	failure                     error
+	saveFailure                 error
 	durable                     bool
 	loads, saves                int
 	savedFactory, savedArtifact string
@@ -48,6 +49,9 @@ func (owner *boardReferenceOwner) LoadCurrentBoard(context.Context, string) (str
 func (owner *boardReferenceOwner) SaveCurrentBoard(_ context.Context, factory, artifact string) error {
 	owner.saves++
 	owner.savedFactory, owner.savedArtifact = factory, artifact
+	if owner.saveFailure != nil {
+		return owner.saveFailure
+	}
 	return owner.failure
 }
 
@@ -161,6 +165,12 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
 			}
 			if bypass {
+				if name == "resume" {
+					if owner.loads != 0 || owner.saves != 0 {
+						t.Fatal("resume selected the old reference instead of its explicit source")
+					}
+					return // Successor publication is covered by the explicit eligibility table.
+				}
 				if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.loads != 0 || owner.saves != 0 {
 					t.Fatal("explicit/peer/batch opening touched reference")
 				}
@@ -912,18 +922,44 @@ func TestLegacyCurrentBoardCanonicalSelection(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			matching := make(map[string][]factorydefinitions.FactoryEvent)
+			matching := make(map[string]time.Time)
 			for path, events := range tc.histories {
 				if currentBoardContainsFacts(events, tc.witness) {
-					matching[path] = events
+					matching[path] = time.Time{}
 				}
 			}
-			got, err := selectUniqueCurrentBoard(matching)
+			got, err := selectNewestCurrentBoard(matching)
 			if got != tc.want || (err != nil) != (tc.want == "") {
 				t.Fatalf("selection=%q, %v; want %q", got, err, tc.want)
 			}
 			if err != nil && strings.Contains(err.Error(), "secret") {
 				t.Fatal("diagnostic exposed payload")
+			}
+		})
+	}
+}
+
+func TestLegacyCurrentBoardNewestWriteSelection(t *testing.T) {
+	t.Parallel()
+	old := time.Date(2026, time.July, 29, 0, 0, 0, 0, time.UTC)
+	newest := old.Add(time.Hour)
+	for _, tc := range []struct {
+		name      string
+		histories map[string]time.Time
+		want      string
+	}{
+		{"newest wins opposed path order", map[string]time.Time{"z-old": old, "a-new": newest}, "a-new"},
+		{"other path order", map[string]time.Time{"a-old": old, "z-new": newest}, "z-new"},
+		{"newest tie", map[string]time.Time{"old": old, "new": newest, "copy": newest}, ""},
+		{"older tie irrelevant", map[string]time.Time{"old": old, "copy": old, "new": newest}, "new"},
+		{"unknown order", map[string]time.Time{"unknown": {}, "new": newest}, ""},
+		{"single unknown", map[string]time.Time{"only": {}}, "only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := selectNewestCurrentBoard(tc.histories)
+			if got != tc.want || (err != nil) != (tc.want == "") {
+				t.Fatalf("selection=%q error=%v, want %q", got, err, tc.want)
 			}
 		})
 	}
@@ -1036,7 +1072,11 @@ func TestCurrentBoardReferenceExplicitRestoreEligibility(t *testing.T) {
 			}
 			wantSave := configureExplicitBoardPublication(name, owner, opening)
 			err := opening.publishCurrentBoardReference(t.Context())
-			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != 0 {
+			wantLoads := 0
+			if name == "resume" {
+				wantLoads = 1
+			}
+			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != wantLoads {
 				t.Fatalf("publication error=%v saves=%d loads=%d", err, owner.saves, owner.loads)
 			}
 			if wantSave && owner.savedArtifact != artifact {
@@ -1063,6 +1103,7 @@ func configureExplicitBoardPublication(name string, owner *boardReferenceOwner, 
 		opening.sessionID = "peer"
 	case "resume":
 		opening.configured.Recordings.ResumePath = "resume.json"
+		wantSave = true
 	case "replay":
 		opening.configured.Recordings.ReplayPath = "replay.json"
 	case "no record":

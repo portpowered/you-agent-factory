@@ -92,6 +92,8 @@ type RecordedSessionSummary struct {
 	FactorySessionID  string
 	ArtifactReference string
 	Format            RecordedSessionFormat
+	// ModifiedAt is filesystem write time, not a timestamp from replay events.
+	ModifiedAt time.Time
 }
 
 // RecordedSessionFormat identifies the established on-disk recording format.

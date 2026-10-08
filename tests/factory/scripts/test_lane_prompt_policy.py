@@ -27,8 +27,16 @@ Add at most one short four-line progress.txt entry per visit (visit/story, chang
 Include concise patterns/browser status/deferred handoffs there; put deferred handoffs in the PR body too.
 Evidence/transcripts/audits/CI references go only in PR comments; retain in session before a PR exists.
 Never commit scaffolding/verification records. Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive; only new entries follow these rules.
-Push at most once per visit, at its end, after focused tests/lint; never during running previous-head CI, even final/blocker visits.
-Retain local commits until eligible; no ACCEPTED with final push pending.
+Push at most once per visit, at its end, after focused tests/lint, when the visit changed code.
+If previous-head CI is still running, push anyway; the superseding push cancels it.
+Never spend a visit only waiting for CI or return CONTINUE solely because CI is running.
+No ACCEPTED with final push pending.
+A lane that must stop on a contract conflict commits and pushes verified unblocked changes at visit end
+ after focused tests/lint, within the one-push limit, and opens a non-draft PR naming the blocker;
+ never claim an unresolved current-slice blocker is ready for acceptance.
+Commit verified unblocked changes and push at visit end after focused tests/lint,
+ within the one-push limit, then end the visit with CONTINUE.
+Do not spend process visits watching CI.
 Create/ready a non-draft PR; arm gh pr merge <n> --auto --squash.
 Stop with final head pushed, non-draft PR, CI started and blockers addressed; review owns terminal CI/conflicts/merge.
 Never claim evidence was published when it was not.
@@ -204,6 +212,73 @@ class LanePromptPolicyTest(unittest.TestCase):
                                                           source if owner == 'process' else MAILBOX, LEAD)
                     self.assertTrue(any(r.startswith(f'{owner}:{diagnostic}:') for r in results), results)
 
+    def test_push_p1_complete_and_wrapped_policy(self):
+        self.assertEqual(policy.check_policy(PLAN, PROCESS), [])
+        self.assertEqual(policy.check_policy(PLAN, PROCESS.replace(' ', '\n')), [])
+
+    def test_push_p2_each_working_visit_clause_is_required(self):
+        cases = (
+            ('at most once per visit', 'push-count'),
+            ('at its end', 'push-count'),
+            ('after focused tests/lint', 'push-count'),
+            ('when the visit changed code', 'push-count'),
+            ('If previous-head CI is still running, push anyway', 'running-ci'),
+            ('the superseding push cancels it', 'running-ci'),
+            ('Never spend a visit only waiting for CI', 'no-ci-wait'),
+            ('or return CONTINUE solely because CI is running', 'no-ci-wait'),
+            ('No ACCEPTED with final push pending', 'pending-push'),
+            ('Do not spend process visits watching CI', 'no-watcher'),
+        )
+        for clause, diagnostic in cases:
+            with self.subTest(clause=clause):
+                results = policy.check_policy(PLAN, PROCESS.replace(clause, '', 1))
+                self.assertEqual(results, [
+                    f'process:{diagnostic}: missing policy clause: '
+                    + dict(policy.PROCESS_RULES)[diagnostic]])
+
+    def test_push_p3_old_gate_is_rejected_beside_new_policy(self):
+        for instruction in (
+            'never during running previous-head CI, even final/blocker visits.',
+            'Never push during running previous-head CI.',
+            'Do not push while previous-head CI is running.',
+        ):
+            for text in (instruction, instruction.replace(' ', '\n')):
+                with self.subTest(instruction=text):
+                    self.assertEqual(policy.check_policy(PLAN, PROCESS + text), [
+                        'process:previous-ci-gate: conflicting legacy instruction; remove or reconcile it'])
+
+    def test_push_p4_ci_only_continue_is_rejected(self):
+        for instruction in (
+            'If previous-head CI is running, retain local commits and return CONTINUE with the push pending.',
+            'If previous-head CI is still running, retain local commits and return CONTINUE.',
+            'Return CONTINUE solely because CI is running.',
+        ):
+            with self.subTest(instruction=instruction):
+                self.assertEqual(policy.check_policy(PLAN, PROCESS + instruction.replace(' ', '\n')), [
+                    'process:ci-only-continue: conflicting legacy instruction; remove or reconcile it'])
+
+    def test_push_p5_blocked_visits_keep_verification_end_and_count(self):
+        normalized = ' '.join(PROCESS.split())
+        for diagnostic in ('blocker-push', 'mailbox-push'):
+            clause = dict(policy.PROCESS_RULES)[diagnostic]
+            for obligation in ('verified unblocked changes', 'at visit end',
+                               'after focused tests/lint', 'within the one-push limit'):
+                with self.subTest(diagnostic=diagnostic, obligation=obligation):
+                    source = normalized.replace(clause, clause.replace(obligation, ''))
+                    self.assertEqual(policy.check_policy(PLAN, source), [
+                        f'process:{diagnostic}: missing policy clause: {clause}'])
+
+    def test_push_p6_unrelated_guards_and_watcher_diagnostic_remain(self):
+        for diagnostic in ('non-draft', 'auto-merge', 'handoff', 'review',
+                           'false-pass', 'no-commit', 'comment-failure'):
+            clause = dict(policy.PROCESS_RULES)[diagnostic]
+            with self.subTest(diagnostic=diagnostic):
+                self.assertEqual(policy.check_policy(PLAN, PROCESS.replace(clause, '')), [
+                    f'process:{diagnostic}: missing policy clause: {clause}'])
+        self.assertEqual(policy.check_policy(
+            PLAN, PROCESS + 'CI watching: at most ONE bounded watcher per head.'), [
+                'process:ci-watcher: conflicting legacy instruction; remove or reconcile it'])
+
     def test_compliant_text_and_wrapped_lines(self):
         self.assertEqual(policy.check_policy(PLAN, PROCESS), [])
         self.assertEqual(policy.check_policy(PLAN.replace(' ', '\n'), PROCESS.replace(' ', '\n')), [])
@@ -224,7 +299,7 @@ class LanePromptPolicyTest(unittest.TestCase):
             ('process', 'go only in PR comments', 'evidence'),
             ('process', 'never falsely pass unproved/delegated criteria', 'false-pass'),
             ('process', 'review owns terminal CI/conflicts/merge', 'review'),
-            ('process', 'never during running previous-head CI, even final/blocker visits', 'running-ci'),
+            ('process', 'the superseding push cancels it', 'running-ci'),
         )
         for owner, clause, diagnostic in cases:
             with self.subTest(owner=owner, diagnostic=diagnostic):

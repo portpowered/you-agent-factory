@@ -75,13 +75,14 @@ The first launch creates a dated recording in the operator profile and starts an
 The repository's `.you-agent-factory/current-board.json` reference selects that recording on later launches.
 Startup restores the board before readiness and publishes the reference atomically.
 
-For an older installation without a reference, startup requires exactly one readable matching history from the same profile.
-Repository identity and recorded facts determine the selection; file dates do not determine it.
-Unreadable inventory entries without an identified session are skipped; startup never infers identity from corrupt bytes.
+For an older installation without a reference, startup selects the most recently written readable matching history from the same profile.
+Repository identity and recorded facts determine eligibility; filesystem modification time determines recency across both dated recording layouts.
+Unreadable or corrupt artifacts are skipped; startup never infers identity from corrupt bytes.
 Successful adoption writes one stderr line with the skipped count and JSON-quoted paths, without recording contents or decoder causes.
-Two matching readable histories stop startup, including when one is a prefix of the other.
-Zero matches or an unreadable identified candidate also stop startup without activating workers or replacing retained files.
-A missing recording selected by an existing reference, or a missing or damaged recording selected by an explicit path, remains fatal.
+Matching histories with equally newest or unknown modification times stop startup because their order is ambiguous.
+Zero readable matches or a recording inventory failure also stop startup without activating workers or replacing retained files.
+A missing recording selected by an existing reference remains fatal when a durable snapshot exists.
+Explicitly selected missing or damaged recordings remain fatal.
 
 Foreign or ambiguous history stops startup without activating workers or replacing retained files.
 
@@ -121,12 +122,17 @@ Cause lines redact credentials, prompt and body values, URL queries, and private
 `--debug` does not repeat these cause lines.
 Preserve the selected recording before correcting a load failure.
 
-Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence and do not replace an existing board reference.
+Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence during startup.
 A continuous server run with explicit `--record` initializes an absent reference after restoring this repository's `~default` board.
 It publishes the absolute recording path after reconstruction and initial opening, before readiness.
 After graceful shutdown, a plain relaunch selects that reference and restores the same board.
-Every existing reference is preserved byte-for-byte, including invalid contents.
-Fresh explicit recordings, batch runs, peer sessions, `--resume`, `--replay`, and `--no-record` do not initialize a reference.
+Graceful shutdown of a continuous server run for `~default` publishes the recording it was writing, after a successful flush.
+This includes fresh explicit recordings and refreshes a valid reference for the same repository.
+If flushing fails, the previous reference remains unchanged.
+An invalid or foreign reference is preserved and shutdown reports an error while releasing runtime resources.
+Fresh explicit recordings do not publish during startup. Batch runs, peer sessions, `--replay`, and `--no-record` cannot publish the default board reference.
+A continuous server run with `--resume` publishes its successor recording before readiness, after a successful flush.
+The source recording remains unchanged. A later plain launch restores the successor board.
 Batch runs continue to create separate dated recordings.
 To use a selected recording during rollback, run the explicit command below with its actual path.
 Preserve the reference, recordings, and durable state files.

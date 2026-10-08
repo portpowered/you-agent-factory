@@ -57,19 +57,19 @@ on:
     outputs:
       api_package_result:
         description: Terminal result of API package verification.
-        value: ${{ jobs.verify_api_package.outputs.result }}
+        value: ${{ jobs.verify_api_package.outputs.api_package_result }}
       api_candidate_result:
         description: Terminal result of the API package candidate.
-        value: ${{ jobs.build_api_candidate.outputs.result }}
+        value: ${{ jobs.verify_api_package.outputs.api_candidate_result }}
       packaged_factories_package_result:
         description: Terminal result of Packaged Factories verification.
-        value: ${{ jobs.verify_packaged_factories_package.outputs.result }}
+        value: ${{ jobs.verify_api_package.outputs.packaged_factories_package_result }}
       packaged_factories_candidate_result:
         description: Terminal result of the Packaged Factories candidate.
-        value: ${{ jobs.build_packaged_factories_candidate.outputs.result }}
+        value: ${{ jobs.verify_api_package.outputs.packaged_factories_candidate_result }}
       model_providers_package_result:
         description: Terminal result of Model Providers verification.
-        value: ${{ jobs.verify_model_providers_package.outputs.result }}
+        value: ${{ jobs.verify_api_package.outputs.model_providers_package_result }}
   push:
     branches: [main]
   workflow_run:
@@ -201,10 +201,15 @@ jobs:
           release_version="${release_tag#v}"
           printf 'release_version=%s\n' "$release_version" >> "$GITHUB_OUTPUT"
 
-  prepare-public-package-candidate:
-    name: Prepare Complete Public Package Candidate
+  publish-tagged-release:
+    name: Prepare, Smoke and Publish Tagged Release Candidate
     needs: resolve-release-tag
+    environment: development-publishing
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out release commit
         uses: actions/checkout@v4
@@ -232,273 +237,58 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
+      # npm is retained for the trusted-publisher provenance operation.
+      - run: bun install --global npm@${{ env.NPM_VERSION }}
+
       - name: Prepare the complete public package candidate from the release commit
         run: >-
-          node scripts/public-release-package-candidate.mjs
+          bun run --bun scripts/public-release-package-candidate.mjs
           --output-directory .artifacts/public-release-candidate
           --run-id "${{ github.run_id }}"
           --source-commit "${{ github.event.workflow_run.head_sha }}"
           --version "${{ needs.resolve-release-tag.outputs.release_version }}"
 
-      - name: Upload the complete public package candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-release-candidate-${{ github.run_id }}
-          path: .artifacts/public-release-candidate/
-          if-no-files-found: error
-
-  publish-tagged-release:
-    name: Publish Tagged Release Candidate
-    needs:
-      - resolve-release-tag
-      - prepare-public-package-candidate
-    environment: development-publishing
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - run: npm install --global npm@${{ env.NPM_VERSION }}
-
-      - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
-
-      - name: Download the preserved complete public package candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: public-release-candidate-${{ github.run_id }}
-          path: .artifacts/public-release-candidate
-
       - name: Reconcile, publish, and verify the complete reviewed public package set
         run: >-
-          node scripts/public-release-package-publish.mjs
+          bun run --bun scripts/public-release-package-publish.mjs
           --candidate-directory .artifacts/public-release-candidate
           --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
           --workspace-directory .
 
   verify_api_package:
-    name: API Contract And Package
-    if: ${{ inputs.is_ci_call && inputs.run_api_package }}
+    name: Build and Smoke Selected Packages (No Publish)
+    if: ${{ inputs.is_ci_call && (inputs.run_api_package || inputs.run_packaged_factories_package || inputs.run_model_providers_package) }}
     outputs:
-      result: ${{ steps.record_result.outputs.result }}
+      api_package_result: ${{ steps.record_result.outputs.api_package_result || (inputs.run_api_package && 'failure' || '') }}
+      api_candidate_result: ${{ steps.record_result.outputs.api_candidate_result || (inputs.run_api_package && inputs.run_candidates && 'failure' || '') }}
+      packaged_factories_package_result: ${{ steps.record_result.outputs.packaged_factories_package_result || (inputs.run_packaged_factories_package && 'failure' || '') }}
+      packaged_factories_candidate_result: ${{ steps.record_result.outputs.packaged_factories_candidate_result || (inputs.run_packaged_factories_package && inputs.run_candidates && 'failure' || '') }}
+      model_providers_package_result: ${{ steps.record_result.outputs.model_providers_package_result || (inputs.run_model_providers_package && 'failure' || '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
-      - uses: actions/setup-go@v5
-        if: inputs.behavior_test != true
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - uses: oven-sh/setup-bun@v2
-        if: inputs.behavior_test != true
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-node@v4
         if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Verify API package
+      - name: Assert checked-out source identity
         if: inputs.behavior_test != true
-        run: make ui-deps contracts-smoke api-smoke api-package-verify
-      - name: Exercise API package workflow behavior
-        if: inputs.behavior_test == true
         env:
-          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
-        run: |
-          if [[ "$TEST_FAILURE_LANE" == "api" ]]; then
-            echo "intentional API package behavior failure"
-            exit 1
-          fi
-          echo "API package workflow behavior selected"
-      - name: Record package result
-        if: always()
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
+      - name: Build and smoke selected packages
         id: record_result
-        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"
-
-  verify_packaged_factories_package:
-    name: Packaged Factories Package
-    if: ${{ inputs.is_ci_call && inputs.run_packaged_factories_package }}
-    outputs:
-      result: ${{ steps.record_result.outputs.result }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-        if: inputs.behavior_test != true
-        with:
-          ref: ${{ inputs.source_commit }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        if: inputs.behavior_test != true
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Verify Packaged Factories package
-        if: inputs.behavior_test != true
-        run: make packaged-factory-package-verify
-      - name: Exercise Packaged Factories workflow behavior
-        if: inputs.behavior_test == true
         env:
-          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
-        run: |
-          if [[ "$TEST_FAILURE_LANE" == "packaged" ]]; then
-            echo "intentional Packaged Factories package behavior failure"
-            exit 1
-          fi
-          echo "Packaged Factories package workflow behavior selected"
-      - name: Record package result
-        if: always()
-        id: record_result
-        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"
-
-  verify_model_providers_package:
-    name: Model Providers Package
-    if: ${{ inputs.is_ci_call && inputs.run_model_providers_package }}
-    outputs:
-      result: ${{ steps.record_result.outputs.result }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-        if: inputs.behavior_test != true
-        with:
-          ref: ${{ inputs.source_commit }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        if: inputs.behavior_test != true
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@v2
-        if: inputs.behavior_test != true
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - name: Install model provider package dependencies
-        if: inputs.behavior_test != true
-        run: make ui-deps
-      - name: Verify Model Providers package
-        if: inputs.behavior_test != true
-        run: make model-provider-package-verify
-      - name: Exercise Model Providers workflow behavior
-        if: inputs.behavior_test == true
-        env:
-          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
-        run: |
-          if [[ "$TEST_FAILURE_LANE" == "providers" ]]; then
-            echo "intentional Model Providers package behavior failure"
-            exit 1
-          fi
-          echo "Model Providers package workflow behavior selected"
-      - name: Record package result
-        if: always()
-        id: record_result
-        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"
-
-  build_api_candidate:
-    name: Build API Candidate (No Publish)
-    if: ${{ inputs.is_ci_call && inputs.run_candidates && inputs.run_api_package }}
-    outputs:
-      result: ${{ steps.record_result.outputs.result }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        if: inputs.behavior_test != true
-        with:
-          ref: ${{ inputs.source_commit }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        if: inputs.behavior_test != true
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Build API candidate
-        if: inputs.behavior_test != true
-        run: >-
-          node scripts/api-package-development-command.mjs --action dry-run
-          --event-name pull_request
-          --output-directory .artifacts/api-development-candidate/package
-          --package-directory packages/api
-          --pull-request-head-sha "${{ inputs.pull_request_head_sha }}"
-          --ref "${{ inputs.source_ref }}" --repository "${{ inputs.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ inputs.source_commit }}"
-          --workspace-directory "${{ github.workspace }}"
-      - name: Exercise API candidate workflow behavior
-        if: inputs.behavior_test == true
-        env:
-          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
-        run: |
-          if [[ "$TEST_FAILURE_LANE" == "api_candidate" ]]; then
-            echo "intentional API candidate behavior failure"
-            exit 1
-          fi
-          echo "API candidate workflow behavior selected"
-      - name: Record candidate result
-        if: always()
-        id: record_result
-        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"
-
-  build_packaged_factories_candidate:
-    name: Build Packaged Factories Candidate (No Publish)
-    if: ${{ inputs.is_ci_call && inputs.run_candidates && inputs.run_packaged_factories_package }}
-    outputs:
-      result: ${{ steps.record_result.outputs.result }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        if: inputs.behavior_test != true
-        with:
-          ref: ${{ inputs.source_commit }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        if: inputs.behavior_test != true
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Build Packaged Factories candidate
-        if: inputs.behavior_test != true
-        run: >-
-          node scripts/packaged-factories-package-pr-dry-run.mjs
-          --event-name pull_request
-          --output-directory .artifacts/packaged-factories-development-candidate/package
-          --package-directory packages/packaged-factories
-          --pull-request-head-sha "${{ inputs.pull_request_head_sha }}"
-          --ref "${{ inputs.source_ref }}" --repository "${{ inputs.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ inputs.source_commit }}"
-          --workspace-directory "${{ github.workspace }}"
-      - name: Exercise Packaged Factories candidate workflow behavior
-        if: inputs.behavior_test == true
-        env:
-          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
-        run: |
-          if [[ "$TEST_FAILURE_LANE" == "packaged_candidate" ]]; then
-            echo "intentional Packaged Factories candidate behavior failure"
-            exit 1
-          fi
-          echo "Packaged Factories candidate workflow behavior selected"
-      - name: Record candidate result
-        if: always()
-        id: record_result
-        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"
+          PACKAGE_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          RUN_ID: ${{ github.run_id }}
+        run: bun run --bun scripts/public-package-workflow.mjs
 
   publish-release:
     name: Publish GitHub Release

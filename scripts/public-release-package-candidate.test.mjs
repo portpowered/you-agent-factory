@@ -1,88 +1,89 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-
+import { prepareTaggedReleaseCandidate } from "./public-release-package-candidate.mjs";
 import {
-	prepareTaggedReleaseCandidate,
-	TAGGED_RELEASE_CANDIDATE_SCOPE,
-} from "./public-release-package-candidate.mjs";
+	FRONTEND_PUBLIC_PACKAGE_NAMES,
+	TAGGED_RELEASE_PUBLIC_PACKAGE_NAMES,
+} from "./public-package-set.mjs";
 
 const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
 
-async function exists(path) {
-	try {
-		await access(path);
-		return true;
-	} catch (error) {
-		if (error?.code === "ENOENT") return false;
-		throw error;
-	}
-}
-
-test("tagged release preparation stages each public package once at the requested version without changing source manifests", async (t) => {
+test("tagged preparation represents exactly eight independently prepared packages at the protected identity", async (t) => {
 	const outputDirectory = await mkdtemp(
-		join(tmpdir(), "you-complete-release-candidate-"),
+		join(tmpdir(), "you-tagged-preparation-"),
 	);
 	t.after(() => rm(outputDirectory, { recursive: true, force: true }));
-	const manifests = [
-		"packages/api/package.json",
-		"packages/packaged-factories/package.json",
-		"ui/packages/client/package.json",
-		"ui/packages/factory-replay/package.json",
-		"ui/packages/factory-emulator/package.json",
-		"ui/packages/components/package.json",
-		"ui/packages/factory-visualizers/package.json",
-	];
-	const before = await Promise.all(manifests.map((path) => readFile(path)));
-	const buildOutputsBefore = await Promise.all(
-		manifests.map((path) => exists(path.replace("package.json", "dist"))),
+	const calls = [];
+	const result = await prepareTaggedReleaseCandidate(
+		{ outputDirectory, runId: "42", sourceCommit, version: "1.2.3" },
+		{
+			prepareData: async (input) => {
+				calls.push(input);
+				return {
+					evidence: {
+						packageName: input.packageName,
+						candidateVersion: input.version,
+					},
+					tarballPath: join(input.outputDirectory, "candidate.tgz"),
+				};
+			},
+			prepareFrontend: async (input) => {
+				calls.push(input);
+				return {
+					packages: FRONTEND_PUBLIC_PACKAGE_NAMES.map((name, index) => ({
+						name,
+						version: input.version,
+						filename: `frontend-${index}.tgz`,
+					})),
+				};
+			},
+		},
 	);
-
-	const result = await prepareTaggedReleaseCandidate({
-		outputDirectory,
-		runId: "42",
-		sourceCommit,
-		version: "1.2.3",
-	});
-
-	assert.equal(result.evidence.scope, TAGGED_RELEASE_CANDIDATE_SCOPE);
-	assert.equal(result.evidence.version, "1.2.3");
-	assert.equal(result.evidence.sourceCommit, sourceCommit);
-	assert.equal(result.evidence.packages.length, 7);
-	assert.equal(
-		new Set(result.evidence.packages.map(({ name }) => name)).size,
-		result.evidence.packages.length,
-	);
-	for (const candidate of result.evidence.packages) {
-		assert.equal(candidate.version, "1.2.3");
-		assert.match(
-			candidate.tarball,
-			/^(api|packaged-factories|frontend)\/.+\.tgz$/,
-		);
-	}
+	assert.equal(calls.length, 3);
+	assert.equal(calls[0].sourceCommit, sourceCommit);
+	assert.equal(calls[1].sourceCommit, sourceCommit);
+	assert.equal(calls[0].distTag, "latest");
+	assert.equal(calls[1].distTag, "latest");
 	assert.deepEqual(
-		await Promise.all(manifests.map((path) => readFile(path))),
-		before,
-	);
-	assert.deepEqual(
-		await Promise.all(
-			manifests.map((path) => exists(path.replace("package.json", "dist"))),
-		),
-		buildOutputsBefore,
+		result.evidence.packages.map(({ name }) => name),
+		TAGGED_RELEASE_PUBLIC_PACKAGE_NAMES,
 	);
 	assert.ok(
-		(await readdir(outputDirectory)).includes(
-			"release-candidate-evidence.json",
+		result.evidence.packages.every(
+			({ version, tarball }) =>
+				version === "1.2.3" &&
+				/^(api|packaged-factories|frontend)\/.+\.tgz$/.test(tarball),
 		),
 	);
-	for (const directory of ["api", "packaged-factories"]) {
-		const childEvidence = JSON.parse(
-			await readFile(
-				join(outputDirectory, directory, "candidate-evidence.json"),
-			),
-		);
-		assert.equal(childEvidence.distTag, "latest");
-	}
+	assert.equal(result.evidence.sourceCommit, sourceCommit);
+	assert.deepEqual(
+		JSON.parse(await readFile(result.evidencePath, "utf8")),
+		result.evidence,
+	);
+});
+
+test("a failed child preparation never emits a complete release candidate", async (t) => {
+	const outputDirectory = await mkdtemp(
+		join(tmpdir(), "you-tagged-preparation-"),
+	);
+	t.after(() => rm(outputDirectory, { recursive: true, force: true }));
+	await assert.rejects(
+		prepareTaggedReleaseCandidate(
+			{ outputDirectory, runId: "42", sourceCommit, version: "1.2.3" },
+			{
+				prepareData: async () => {
+					throw new Error("pack failed");
+				},
+				prepareFrontend: async () => ({ packages: [] }),
+			},
+		),
+		/pack failed/,
+	);
+	await assert.rejects(
+		readFile(join(outputDirectory, "release-candidate-evidence.json")),
+		{ code: "ENOENT" },
+	);
 });
