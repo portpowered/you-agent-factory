@@ -163,11 +163,11 @@ type ReadOperation func(ReadConfig) error
 type StreamOperation func(StreamConfig) error
 
 // BindList returns a list operation bound to one injected HTTP protocol.
-func BindList(transport clihttp.Protocol) ListOperation {
-	if transport == nil {
+func BindList(transport clihttp.Protocol, clock clihttp.Clock) ListOperation {
+	if transport == nil || clock == nil {
 		return nil
 	}
-	return NewList(transport)
+	return NewList(transport, clock)
 }
 
 // BindShow returns a show operation bound to one injected HTTP protocol.

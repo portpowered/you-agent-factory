@@ -217,7 +217,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
 	providerFiles := &workerSessionProviderFiles{delegate: providerSessionReadFiles{}}
-	captureReads := &workerSessionCaptureReads{faults: make(map[string]error)}
+	captureReads := &workerSessionCaptureReads{faults: make(map[string]workerSessionCaptureFault)}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		WorkerRecordingWriter:               captureReads,
 		WorkerRecordingStoreObserver:        func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
@@ -578,7 +578,7 @@ func resetprovidersessionscli5State() {
 type workerSessionCaptureReads struct {
 	recordings.WorkerRecordingStore
 	mu     sync.Mutex
-	faults map[string]error
+	faults map[string]workerSessionCaptureFault
 }
 
 func (reads *workerSessionCaptureReads) ReadWorkerCapturedActivity(ctx context.Context, request recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
@@ -588,21 +588,32 @@ func (reads *workerSessionCaptureReads) ReadWorkerCapturedActivity(ctx context.C
 	if !selected {
 		return reads.WorkerRecordingStore.ReadWorkerCapturedActivity(ctx, request)
 	}
-	if fault == nil {
-		<-ctx.Done()
-		fault = ctx.Err()
+	select {
+	case fault.reached <- struct{}{}:
+	default:
 	}
-	return recordings.WorkerCapturedActivityPage{}, fault
+	if fault.err == nil {
+		<-ctx.Done()
+		fault.err = ctx.Err()
+	}
+	return recordings.WorkerCapturedActivityPage{}, fault.err
 }
 
-func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error) {
+type workerSessionCaptureFault struct {
+	err     error
+	reached chan struct{}
+}
+
+func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error) <-chan struct{} {
 	t.Helper()
 	reads.mu.Lock()
-	reads.faults[id] = err
+	reached := make(chan struct{}, 1)
+	reads.faults[id] = workerSessionCaptureFault{err: err, reached: reached}
 	reads.mu.Unlock()
 	t.Cleanup(func() {
 		reads.mu.Lock()
 		delete(reads.faults, id)
 		reads.mu.Unlock()
 	})
+	return reached
 }

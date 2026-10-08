@@ -88,7 +88,7 @@ func testWorkerSessionsCLIListInterrupted(t *testing.T, stage, outcome string) {
 	ctx, cancel := context.WithCancel(t.Context())
 	if outcome == "deadline" {
 		cancel()
-		ctx, cancel = context.WithTimeout(t.Context(), 2*time.Second)
+		ctx, cancel = context.WithTimeout(t.Context(), 2*time.Second) //nolint:testsleep // Exercise real HTTP header/body deadline expiry and DeadlineExceeded propagation, rather than caller cancellation.
 	}
 	defer cancel()
 	inputs := support.FakeInputs(ctx, []string{

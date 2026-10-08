@@ -45,22 +45,24 @@ type ListConfig struct {
 	Output        io.Writer
 	Diagnostics   io.Writer
 	HTTP          clihttp.Protocol
+	clock         clihttp.Clock
 }
 
 // NewList returns the composition-facing list operation bound to one HTTP
-// protocol.
-func NewList(transport clihttp.Protocol) func(ListConfig) error {
+// protocol and observation clock.
+func NewList(transport clihttp.Protocol, clock clihttp.Clock) func(ListConfig) error {
 	return func(config ListConfig) error {
 		config.HTTP = transport
+		config.clock = clock
 		return list(config)
 	}
 }
 
 func list(config ListConfig) error {
-	started := time.Now()
+	started := config.clock.Now()
 	defer func() {
 		clidiag.Printf(config.Diagnostics, config.Debug,
-			"worker sessions list command durationMicros=%d", time.Since(started).Microseconds())
+			"worker sessions list command durationMicros=%d", config.clock.Now().Sub(started).Microseconds())
 	}()
 	config.WorkID = strings.TrimSpace(config.WorkID)
 	config.Scope = strings.TrimSpace(config.Scope)
@@ -122,12 +124,12 @@ func requestWorkerSessionList(config ListConfig, endpoint url.URL, result *facto
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
 		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
 		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkID, config.Scope, len(config.States))
-	started := time.Now()
+	started := config.clock.Now()
 	response, err := config.HTTP.GetJSON(config.Context, endpoint.String(), result)
 	// The protocol duration ends at headers. The enclosing duration includes
 	// request construction, response consumption and JSON decoding, including a
 	// failed body read. This residual is attribution, not a latency assertion.
-	duration := time.Since(started)
+	duration := config.clock.Now().Sub(started)
 	bodyDecodeDuration := max(time.Duration(0), duration-response.Duration)
 	clidiag.Printf(config.Diagnostics, config.Debug,
 		"worker sessions list request timing endpointPath=%s headerWaitMicros=%d bodyDecodeMicros=%d totalMicros=%d",
@@ -266,7 +268,7 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 }
 
 func writeListOutput(config ListConfig, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
-	started := time.Now()
+	started := config.clock.Now()
 	var rendered bytes.Buffer
 	var err error
 	if jsonOutput {
@@ -275,14 +277,14 @@ func writeListOutput(config ListConfig, result factoryapi.ListWorkerSessionsResp
 		err = renderList(&rendered, result)
 	}
 	clidiag.Printf(config.Diagnostics, config.Debug,
-		"worker sessions list render durationMicros=%d bytes=%d", time.Since(started).Microseconds(), rendered.Len())
+		"worker sessions list render durationMicros=%d bytes=%d", config.clock.Now().Sub(started).Microseconds(), rendered.Len())
 	if err != nil {
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to render Worker Session list", err)
 	}
-	started = time.Now()
+	started = config.clock.Now()
 	written, writeErr := io.Copy(config.Output, &rendered)
 	clidiag.Printf(config.Diagnostics, config.Debug,
-		"worker sessions list write durationMicros=%d bytes=%d", time.Since(started).Microseconds(), written)
+		"worker sessions list write durationMicros=%d bytes=%d", config.clock.Now().Sub(started).Microseconds(), written)
 	if writeErr != nil {
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", writeErr)
 	}

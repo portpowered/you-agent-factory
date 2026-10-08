@@ -346,13 +346,37 @@ func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
 			case "failed":
 				fault = errors.New("private-capture-path sentinel-secret")
 			}
-			f.captureReads.fault(t, row.WorkerSessionID, fault)
+			reached := f.captureReads.fault(t, row.WorkerSessionID, fault)
 			// A public transcript read confirms the selected activity boundary is
 			// unavailable. Lists must retain snapshot facts without reacquiring it.
-			probeCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-			probe, err := executeCLIExpectError(t, probeCtx, f.process, functionalEnvironment(f.homeDir), c.factoryDir,
-				"--server", f.baseURL, "worker-sessions", "read", "--session", sessionID, "--worker-session-id", row.WorkerSessionID, "--output", "json")
+			probeCtx, stop := context.WithCancel(ctx)
+			defer stop()
+			probe := support.FakeInputs(probeCtx, []string{
+				"you", "--server", f.baseURL, "worker-sessions", "read", "--session", sessionID,
+				"--worker-session-id", row.WorkerSessionID, "--output", "json",
+			})
+			probe.Input.Env = functionalEnvironment(f.homeDir)
+			probe.Input.WorkingDirectory = c.factoryDir
+			done := make(chan error, 1)
+			go func() { done <- f.process.Execute(probe.Input) }()
+			select {
+			case <-reached:
+			case <-ctx.Done():
+				t.Fatalf("selected activity never reached fault boundary: %v", ctx.Err())
+			}
+			if kind == "slow" {
+				stop()
+			}
+			var err error
+			select {
+			case err = <-done:
+			case <-ctx.Done():
+				t.Fatalf("faulted activity probe did not return: %v", ctx.Err())
+			}
 			stop()
+			if kind == "slow" && !errors.Is(err, context.Canceled) {
+				t.Fatalf("slow activity error=%v, want caller cancellation", err)
+			}
 			if err == nil {
 				t.Fatal("faulted optional activity unexpectedly readable")
 			}
