@@ -329,9 +329,6 @@ func (opening *sessionRuntimeOpening) bindSessionObservations() error {
 
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
-	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
-		return err
-	}
 	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
 		input := opening.configured.Recordings.ResumeInput
 		opening.resumeInput = &input
@@ -387,11 +384,23 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 }
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
+		return err
+	}
+	selectedPath := opening.configured.Recordings.RecordPath
+	if err := r.claimSessionRecordingTarget(ctx, opening, cleanup); err != nil {
+		return err
+	}
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
 	if err := r.reserveFreshCurrentBoard(ctx, opening); err != nil {
 		return err
+	}
+	if strings.TrimSpace(selectedPath) == "" {
+		if err := r.claimSessionRecordingTarget(ctx, opening, cleanup); err != nil {
+			return err
+		}
 	}
 
 	initial, err := r.openInitialSessionEngine(ctx, opening)
@@ -422,6 +431,23 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		return err
 	}
 	opening.warnMissingBoardHistory()
+	return nil
+}
+
+func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	path := strings.TrimSpace(opening.configured.Recordings.RecordPath)
+	if path == "" {
+		return nil
+	}
+	ownership, ok := r.recordingsService.(recordings.RecordingTargetOwnership)
+	if !ok {
+		return fmt.Errorf("%w: recording target %q ownership is unavailable", recordings.ErrRecordingBindingConflict, path)
+	}
+	lease, err := ownership.ClaimRecordingTarget(ctx, factoryruntime.RecordingPath(path).ForSession(opening.sessionID))
+	if err != nil {
+		return err
+	}
+	cleanup.OwnRecordingTarget(lease)
 	return nil
 }
 

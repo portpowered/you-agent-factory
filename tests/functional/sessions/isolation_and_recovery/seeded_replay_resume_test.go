@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +24,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -344,7 +347,7 @@ type seededReplayResumeRun struct {
 	daemon    *support.ProcessCommand
 }
 
-func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
+func newSeededReplayResumeProcess(t *testing.T, claims ...recordings.RecordingTargetClaim) *seededReplayResumeProcess {
 	t.Helper()
 	reusable := &seededReplayResumeProcess{
 		serversByPort:      make(map[int]*support.ProcessAPIServer),
@@ -352,7 +355,12 @@ func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 		readErrorsByPath:   make(map[string]error),
 		serverErrorsByPort: make(map[int]error),
 	}
+	var claim recordings.RecordingTargetClaim
+	if len(claims) == 1 {
+		claim = claims[0]
+	}
 	process := support.BuildProcess(t, serviceedges.Edges{
+		RecordingTargetClaim:                claim,
 		APIServerStarter:                    reusable.startAPIServer,
 		FactorySessionReplayRecordingReader: reusable.readReplayRecording,
 		RecordingReadFile:                   reusable.readRecording,
@@ -363,6 +371,88 @@ func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 	support.CleanupProcess(t, process)
 	reusable.process = process
 	return reusable
+}
+
+type recordingTargetRelease func() error
+
+func (release recordingTargetRelease) Close() error { return release() }
+
+func TestRecordStartupSafetyDestinationOwnership(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	var mu sync.Mutex
+	denied := make(map[string]bool)
+	released := make(map[string]int)
+	busy := errors.New("recording destination already has an owner")
+	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, marker string) (io.Closer, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if denied[marker] {
+			return nil, busy
+		}
+		return recordingTargetRelease(func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			released[marker]++
+			return nil
+		}), nil
+	})
+	for _, name := range []string{"first owned board", "second owned board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			path := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			marker := path + ".recording.lock"
+			if runtime.GOOS == "windows" {
+				marker = strings.ToLower(marker)
+			}
+			mu.Lock()
+			denied[marker] = true
+			mu.Unlock()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" ||
+				!strings.Contains(err.Error(), strconv.Quote(path)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatalf("occupied destination startup = %v; stdout=%s", err, inputs.Stdout())
+			}
+			if !bytes.Equal(original, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("failed ownership acquisition changed retained history")
+			}
+			mu.Lock()
+			delete(denied, marker)
+			mu.Unlock()
+			running := reusable.runForSession(t, dir, path, sessionID, "--record", selected)
+			assertSeededSuccessorWorkAndHistory(t, running, true)
+			running.daemon.Stop(t)
+			mu.Lock()
+			count := released[marker]
+			mu.Unlock()
+			if count != 1 {
+				t.Fatalf("successful shutdown released destination %d times; want one", count)
+			}
+		})
+	}
 }
 
 func (reusable *seededReplayResumeProcess) run(

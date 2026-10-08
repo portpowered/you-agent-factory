@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +49,43 @@ type combinedService struct {
 	replayConfigDecoder    factorydefinitions.ReplayRuntimeConfigDecoder
 	replayInputs           recordings.ReplayInputLoader
 	logger                 logging.Logger
+	targetClaim            recordings.RecordingTargetClaim
+}
+
+func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path string) (io.Closer, error) {
+	if service.targetClaim == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, path, err)
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	lease, err := service.targetClaim(ctx, key+".recording.lock")
+	if err != nil {
+		return nil, &recordingTargetClaimError{path: path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+	}
+	if lease == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	return lease, nil
+}
+
+type recordingTargetClaimError struct {
+	path  string
+	cause error
+}
+
+func (err *recordingTargetClaimError) Error() string { return err.CLIErrorMessage() }
+
+func (err *recordingTargetClaimError) Unwrap() error { return err.cause }
+
+func (*recordingTargetClaimError) CLIErrorCode() string { return "RECORDING_TARGET_CONFLICT" }
+
+func (err *recordingTargetClaimError) CLIErrorMessage() string {
+	return fmt.Sprintf("cannot acquire exclusive ownership of recording target %q; preserve the recording and resolve destination access or ownership before retrying", err.path)
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -251,6 +291,7 @@ func NewCombinedService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
+	targetClaims ...recordings.RecordingTargetClaim,
 ) recordings.Service {
 	service := &combinedService{
 		Ledger:                 ledger,
@@ -271,6 +312,9 @@ func NewCombinedService(
 		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
+	if len(targetClaims) == 1 {
+		service.targetClaim = targetClaims[0]
+	}
 	return service
 }
 

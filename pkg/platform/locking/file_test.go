@@ -104,3 +104,32 @@ func mustService(t *testing.T) Service {
 	}
 	return service
 }
+
+func TestServiceTryLockRefusesBusyOwnerAndReleases(t *testing.T) {
+	t.Parallel()
+	service := mustService(t)
+	path := filepath.Join(t.TempDir(), "recording.lock")
+	owner, err := service.TryLock(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Close() })
+	other := mustService(t)
+	lease, err := other.TryLock(t.Context(), path)
+	if lease != nil || !errors.Is(err, ErrBusy) {
+		t.Fatalf("occupied marker = %v, %v; want no lease and ErrBusy", lease, err)
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lease, err = other.TryLock(t.Context(), path)
+	if err != nil {
+		t.Fatalf("released marker: %v", err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("repeat close: %v", err)
+	}
+}

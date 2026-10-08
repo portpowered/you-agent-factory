@@ -22,6 +22,41 @@ import (
 	"go.uber.org/zap"
 )
 
+type recordingLeaseCloser func() error
+
+func (close recordingLeaseCloser) Close() error { return close() }
+
+func TestRuntimeOpeningCleanupRetainsRecordingLeaseUntilConsumerJoins(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	consumerErr := errors.New("writer has not joined")
+	joined := false
+	releases := 0
+	cleanup.OwnRecordingTarget(recordingLeaseCloser(func() error {
+		releases++
+		if !joined {
+			t.Error("recording ownership released before writer joined")
+		}
+		return nil
+	}))
+	cleanup.Add(func() error {
+		if !joined {
+			return consumerErr
+		}
+		return nil
+	})
+	if err := cleanup.Close(); !errors.Is(err, consumerErr) || releases != 0 {
+		t.Fatalf("failed join: err=%v releases=%d", err, releases)
+	}
+	joined = true
+	if err := cleanup.Close(); err != nil || releases != 1 {
+		t.Fatalf("successful retry: err=%v releases=%d", err, releases)
+	}
+	if err := cleanup.Close(); err != nil || releases != 1 {
+		t.Fatalf("repeat close: err=%v releases=%d", err, releases)
+	}
+}
+
 func TestProjectOperatorModelOverlaysDetachesSourceSettings(t *testing.T) {
 	if got := projectOperatorModelOverlays(nil); got != nil {
 		t.Fatalf("empty model overlays = %+v", got)

@@ -19,10 +19,14 @@ import (
 
 const lockRetryInterval = 10 * time.Millisecond
 
+// ErrBusy means another owner holds the requested coordination marker.
+var ErrBusy = errors.New("filesystem coordination is busy")
+
 // Service is the policy-free cross-process locking effect used by services
 // that need recoverable ownership of a filesystem transaction.
 type Service interface {
 	Lock(context.Context, string) (io.Closer, error)
+	TryLock(context.Context, string) (io.Closer, error)
 }
 
 // File is the narrow host handle required by the OS-specific lock adapter.
@@ -71,6 +75,15 @@ func New(filesystem FileSystem) (Service, error) {
 }
 
 func (service localService) Lock(ctx context.Context, path string) (io.Closer, error) {
+	return service.acquire(ctx, path, true)
+}
+
+// TryLock refuses an occupied marker without waiting for its owner to exit.
+func (service localService) TryLock(ctx context.Context, path string) (io.Closer, error) {
+	return service.acquire(ctx, path, false)
+}
+
+func (service localService) acquire(ctx context.Context, path string, wait bool) (io.Closer, error) {
 	ctx, err := validateContext(ctx, path)
 	if err != nil {
 		return nil, err
@@ -90,6 +103,9 @@ func (service localService) Lock(ctx context.Context, path string) (io.Closer, e
 		}
 		if locked {
 			return &fileLock{file: file}, nil
+		}
+		if !wait {
+			return nil, errors.Join(ErrBusy, file.Close())
 		}
 		timer := time.NewTimer(lockRetryInterval)
 		select {
