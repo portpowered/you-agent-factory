@@ -113,6 +113,9 @@ jobs:
       run_api_package: \${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}
   verification-policy:
     env:
+      RUN_BACKEND_COVERAGE: "true"
+      BACKEND_COVERAGE_RESULT: \${{ needs.backend-coverage.result }}
+      BACKEND_RESULT: \${{ needs.backend-integration.result }}
       DOCS_RESULT: \${{ needs.classify.outputs.docs_result }}
       WORKFLOW_LINT_RESULT: \${{ needs.classify.result }}
       API_RESULT: \${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result }}
@@ -124,6 +127,9 @@ jobs:
 		[workflow.replace("actionlint@v1.7.12", "actionlint@latest"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
 		[workflow.replace("run: make docs-reference-smoke", "run: true"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
 		[workflow.replace("run: bash scripts/ci/run-api-pr-verification.sh", "run: true"), "workflow contract failed: retain API proofs"],
+		[workflow.replace('RUN_BACKEND_COVERAGE: "true"', 'RUN_BACKEND_COVERAGE: "false"'), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
+		[workflow.replace("BACKEND_COVERAGE_RESULT:", "OTHER_COVERAGE:"), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
+		[workflow.replace("BACKEND_RESULT:", "OTHER_BACKEND:"), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
 		[workflow.replace("DOCS_RESULT:", "OTHER_RESULT:"), "workflow contract failed: map merged required proof"],
 		[workflow.replace("API_INDEPENDENT:", "OTHER_FLAG:"), "workflow contract failed: API-only PR does not require reusable children"],
 	]) {

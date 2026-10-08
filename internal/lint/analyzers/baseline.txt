@@ -2139,7 +2139,6 @@ testsleep-deadline-test|tests/functional/workstations/poller|tests/functional/wo
 testsleep-deadline-test|tests/integration/factory/visualization/runtime_metrics_test|tests/integration/factory/visualization/runtime_metrics/probe_cost_test.go::waitForProbeCostTerminal::deadline::1
 testsleep-deadline-test|tests/integration/models/internal/omni_diag|tests/integration/models/internal/omni_diag/real_entry_windows_test.go::TestLocalAIOMNIRealExecutor::deadline::1
 testsleep-deadline-test|tests/integration/models/platform_conformance|tests/integration/models/platform_conformance/runner_test.go::startControlledProcess::deadline::1
-testsleep-deadline-test|tests/integration/models/tts_clean_install|tests/integration/models/tts_clean_install/process_test.go::TestI04TimeoutAndCancellationTerminateOnlyRecordedTree::deadline::1
 testsleep-deadline-test|tests/integration/sessions/restart_test|tests/integration/sessions/restart/board_persistence_cli_observation_test.go::readBoardEvents::deadline::1
 testsleep-deadline-test|tests/integration/sessions/restart_test|tests/integration/sessions/restart/board_persistence_polling_test.go::boardPersistenceDaemonReady::deadline::1
 testsleep-deadline-test|tests/integration/transport/acp/realclient_test|tests/integration/transport/acp/realclient/pinned_acpx_process_test.go::waitForProcessExit::deadline::1

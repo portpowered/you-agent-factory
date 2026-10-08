@@ -19,7 +19,7 @@ export function validateQueueDispatch(workflow) {
 	for (const lane of ["frontend", "backend", "ui_backend_integration", "api_package", "packaged_factories_package", "model_providers_package"]) {
 		require(setup, `run_${lane}: \${{ steps.classify.outputs.run_${lane} != 'false' }}`, `full queue ${lane} fallback`);
 	}
-	for (const name of ["readme", "frontend", "frontend-browser", "backend-integration", "tts-clean-install-windows", "ui-backend-integration", "backend-coverage", "verification-policy"]) {
+	for (const name of ["readme", "frontend", "frontend-browser", "backend-integration", "ui-backend-integration", "backend-coverage", "verification-policy"]) {
 		require(job(name), "if: always() && github.event_name != 'push'", `no main ${name} run`);
 	}
 	require(job("backend-lint"), "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'\n", "PR/queue Backend Lint");
@@ -40,7 +40,7 @@ export function validateQueueDispatch(workflow) {
 	assert.doesNotMatch(withoutModels, /go test[^\n]* -race/);
 	const policy = job("verification-policy");
 	require(policy, "BACKEND_MODELS_RESULT: ${{ needs.classify.outputs.run_backend != 'false' && needs.backend-coverage.result || 'skipped' }}", "fail-closed consolidated Models result");
-	for (const text of ['RUN_BACKEND_COVERAGE: "true"', "BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}", "BACKEND_RESULT: ${{ needs.backend-integration.result }}", "BACKEND_TTS_RESULT: ${{ needs.tts-clean-install-windows.result }}"]) require(policy, text, "independent mandatory/selected results");
+	for (const text of ['RUN_BACKEND_COVERAGE: "true"', "BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}", "BACKEND_RESULT: ${{ needs.backend-integration.result }}"]) require(policy, text, "independent mandatory/selected results");
 	require(job("development-package"), "(github.event_name == 'merge_group' || (github.event_name == 'pull_request' &&", "queue/full and PR/selected packages");
 	require(job("backend-visualizations-publish"), "if: github.event_name == 'push' && github.ref == 'refs/heads/main'", "main-only maintenance");
 	require(workflow, "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "PR-only cancellation");

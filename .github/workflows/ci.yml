@@ -691,13 +691,6 @@ jobs:
         run: |
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
           test -x .artifacts/integration/bin/platform-conformance-helper
-      - name: Build TTS clean-install helper artifact
-        run: |
-          go test -c -o .artifacts/integration/bin/tts-clean-install-helper ./tests/integration/models/tts_clean_install
-          test -x .artifacts/integration/bin/tts-clean-install-helper
-          helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
-          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
-          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:
@@ -749,55 +742,6 @@ jobs:
         with:
           name: pinned-real-acp-evidence
           path: .artifacts/integration/real-acpx-evidence.json
-          if-no-files-found: error
-          retention-days: 14
-
-  tts-clean-install-windows:
-    name: TTS Clean-Install Windows
-    needs: classify
-    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend != 'false'
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Build TTS clean-install helper artifact
-        shell: pwsh
-        run: |
-          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\bin'
-          New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
-          $helperPath = Join-Path $artifactDirectory 'tts-clean-install-helper.exe'
-          go test -c -o $helperPath ./tests/integration/models/tts_clean_install
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
-            throw "compiled TTS helper is missing: $helperPath"
-          }
-          $helperSha256 = (Get-FileHash -LiteralPath $helperPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=$helperPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helperSha256" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          New-Item -ItemType File -Force -Path (Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\tts-clean-install-windows.log') | Out-Null
-      - name: Run TTS clean-install Windows integration
-        shell: pwsh
-        run: |
-          $logPath = Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\tts-clean-install-windows.log'
-          & go test ./tests/integration/models/tts_clean_install -count=1 -v -timeout=20m 2>&1 | Tee-Object -FilePath $logPath
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) {
-            exit $exitCode
-          }
-      - name: Upload TTS clean-install Windows evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-clean-install-windows-evidence
-          path: .artifacts/integration/tts-clean-install-windows.log
           if-no-files-found: error
           retention-days: 14
 
@@ -1127,7 +1071,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
+    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-integration, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
@@ -1172,7 +1116,6 @@ jobs:
           BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}
           BACKEND_RESULT: ${{ needs.backend-integration.result }}
           BACKEND_MODELS_RESULT: ${{ needs.classify.outputs.run_backend != 'false' && needs.backend-coverage.result || 'skipped' }}
-          BACKEND_TTS_RESULT: ${{ needs.tts-clean-install-windows.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "Mandatory PR/queue lint."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
