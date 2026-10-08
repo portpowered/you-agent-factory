@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -127,6 +128,46 @@ func TestHasDurableStateStorageAndCancellation(t *testing.T) {
 		if _, err := service.HasDurableState(ctx, "~default"); !errors.Is(err, context.Canceled) || store.reads != 1 {
 			t.Fatalf("canceled probe read storage: %v", err)
 		}
+	}
+}
+
+func TestHasDurableStateRetainsSafeCauseIdentity(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, snapshot, want string
+		failure              error
+	}{
+		{name: "permission", failure: &fs.PathError{Op: "read", Path: "board.snapshot", Err: fs.ErrPermission}, want: "permission denied"},
+		{name: "private storage error", failure: errors.New("private-snapshot-secret-marker"), want: "could not be read"},
+		{name: "decode type", snapshot: `{"Session":{"SessionID":"~default"},"SourceContent":3}`, want: "JSON type mismatch at byte"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			store := &durableProbeStore{snapshot: []byte(test.snapshot), failure: test.failure}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
+			got, err := service.HasDurableState(t.Context(), "~default")
+			var resumeErr *ResumeError
+			if got || !errors.As(err, &resumeErr) || resumeErr.Outcome != ResumeOutcomeCorruptedPersistence {
+				t.Fatalf("probe outcome = %v, %v", got, err)
+			}
+			if test.failure != nil && !errors.Is(err, test.failure) {
+				t.Fatal("probe discarded the storage cause identity")
+			}
+			if test.failure == nil {
+				var decodeErr *json.UnmarshalTypeError
+				if !errors.As(err, &decodeErr) {
+					t.Fatal("probe discarded the decode cause identity")
+				}
+			}
+			for _, message := range []string{err.Error(), logging.SafeErrorCause(err)} {
+				if !strings.Contains(message, test.want) || strings.Contains(message, "private-snapshot-secret-marker") {
+					t.Fatalf("unsafe or incomplete diagnostic: %s", message)
+				}
+			}
+			if store.reads != 1 || store.writes != 0 || len(service.sessions) != 0 {
+				t.Fatal("failed inspection hydrated or wrote durable state")
+			}
+		})
 	}
 }
 

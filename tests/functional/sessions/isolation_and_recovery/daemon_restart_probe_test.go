@@ -28,6 +28,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 	emptyDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 	corruptDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	permissionDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 	config := seededReplayResumeFactoryConfig()
 	types := config["workTypes"].([]map[string]any)
 	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
@@ -49,7 +50,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		boardAPIs = append(boardAPIs, support.NewProcessAPIServer())
 	}
 	failureAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
-	files := &restartProbeFiles{corruptRoot: corruptDir}
+	files := &restartProbeFiles{corruptRoot: corruptDir, permissionRoot: permissionDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -243,6 +244,10 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		t.Parallel()
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
+	t.Run("durable read failure retains safe cause", func(t *testing.T) {
+		t.Parallel()
+		testRestartProbeCorruptBoard(t, process, permissionDir, files, runner)
+	})
 	t.Cleanup(func() {
 		if starts.Load() != 18 || files.corruptReads.Load() != 1 {
 			t.Errorf("startup attempts=%d corrupt probe reads=%d; want eighteen and one", starts.Load(), files.corruptReads.Load())
@@ -327,6 +332,12 @@ func testRestartProbeCorruptBoard(t *testing.T, process support.Process, dir str
 		t.Fatalf("corrupt snapshot rejection = %v; stderr=%s", err, inputs.Stderr())
 	}
 	output := inputs.Stdout() + inputs.Stderr() + err.Error()
+	if dir == files.permissionRoot {
+		if !errors.Is(err, fs.ErrPermission) || !strings.Contains(inputs.Stderr(), "permission denied") ||
+			!strings.Contains(inputs.Stderr(), "read durable session snapshot") {
+			t.Fatalf("durable read failure lost cause or operation: %v; stderr=%s", err, inputs.Stderr())
+		}
+	}
 	if strings.Contains(output, restartProbeSecret) || strings.Contains(output, "Factory initiated:") || runner.calls.Load() != beforeCalls {
 		t.Fatalf("failed opening exposed payload, published readiness or dispatched: %s", output)
 	}
@@ -518,10 +529,11 @@ func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {
 }
 
 type restartProbeFiles struct {
-	corruptRoot   string
-	corruptReads  atomic.Int32
-	corruptWrites atomic.Int32
-	failReference atomic.Bool
+	corruptRoot    string
+	permissionRoot string
+	corruptReads   atomic.Int32
+	corruptWrites  atomic.Int32
+	failReference  atomic.Bool
 }
 
 func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
@@ -529,6 +541,9 @@ func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
 }
 
 func (files *restartProbeFiles) ReadFile(path string) ([]byte, error) {
+	if files.permissionRoot != "" && strings.HasPrefix(filepath.Clean(path), files.permissionRoot+string(filepath.Separator)) {
+		return nil, &fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}
+	}
 	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptReads.Add(1)
 		return []byte(`{"Session":` + restartProbeSecret), nil
@@ -540,7 +555,8 @@ func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.File
 	if files.failReference.Load() && filepath.Base(path) == "current-board.json" && filepath.Base(filepath.Dir(path)) == ".you-agent-factory" {
 		return errors.New("controlled reference publication failure")
 	}
-	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
+	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) ||
+		(files.permissionRoot != "" && strings.HasPrefix(filepath.Clean(path), files.permissionRoot+string(filepath.Separator))) {
 		files.corruptWrites.Add(1)
 		return errors.New("unexpected write during rejected opening")
 	}

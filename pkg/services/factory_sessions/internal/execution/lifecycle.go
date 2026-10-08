@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
@@ -73,11 +74,11 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
-		return false, &ResumeError{
+		return false, &durableInspectionError{failure: &ResumeError{
 			Outcome:   ResumeOutcomeCorruptedPersistence,
 			SessionID: id,
 			Message:   "persisted session snapshot could not be read",
-		}
+		}, cause: err}
 	}
 
 	persistedSessionID, err := inspectDurableSnapshot(ctx, snapshot)
@@ -85,11 +86,11 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		if cancelErr := ctx.Err(); cancelErr != nil {
 			return false, cancelErr
 		}
-		return false, &ResumeError{
+		return false, &durableInspectionError{failure: &ResumeError{
 			Outcome:   ResumeOutcomeCorruptedPersistence,
 			SessionID: id,
 			Message:   "persisted session snapshot is corrupted and cannot be inspected",
-		}
+		}, cause: err}
 	}
 	if strings.TrimSpace(persistedSessionID) != id {
 		return false, &ResumeError{
@@ -100,6 +101,25 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 	}
 	return true, nil
 }
+
+// Keep the typed resume outcome and original cause available to callers while
+// presenting only recognized diagnostic fields from the persisted input.
+type durableInspectionError struct {
+	failure *ResumeError
+	cause   error
+}
+
+func (e *durableInspectionError) Error() string {
+	message := e.failure.Error()
+	if cause := logging.SafeErrorCause(e.cause); cause != "" {
+		message += ": " + cause
+	}
+	return message
+}
+
+func (e *durableInspectionError) CLIErrorMessage() string { return e.failure.Error() }
+
+func (e *durableInspectionError) Unwrap() error { return errors.Join(e.failure, e.cause) }
 
 // Close cancels every asynchronous durable session owned by this service and
 // waits for the corresponding execution goroutines to finish their terminal
