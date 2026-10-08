@@ -24,6 +24,16 @@ export async function runSequence(steps, { run = runCommand, signal, log = conso
   return !signal?.aborted && [...results.values()].every(Boolean);
 }
 
+// Only independent complete suites opt in. Their internal prerequisites stay
+// ordered by their canonical entrypoints; API/workflow callers stay sequential.
+export async function runConcurrent(steps, options = {}) {
+  if (steps.some((step) => step.needs?.length)) {
+    throw new Error("Concurrent suites must be independent");
+  }
+  const results = await Promise.all(steps.map((step) => runSequence([step], options)));
+  return results.every(Boolean);
+}
+
 export function runCommand(step, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return resolve(false);
@@ -33,13 +43,27 @@ export function runCommand(step, signal) {
       stdio: "inherit", detached: grouped, windowsHide: true,
     });
     let stopped = false;
+    let termination;
     const stop = () => {
+      if (stopped) return;
       stopped = true;
       if (!child.pid) return;
       // Kill the owned group, including make/Bun/browser grandchildren.
       try {
         if (grouped) process.kill(-child.pid, "SIGKILL");
-        else child.kill("SIGKILL");
+        else {
+          // Killing only the shell leaves Bun/browser descendants alive.
+          termination = new Promise((done) => {
+            const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+              stdio: "ignore", windowsHide: true,
+            });
+            killer.once("error", (error) => { reject(error); done(); });
+            killer.once("close", (code) => {
+              if (code !== 0) reject(new Error(`taskkill failed with exit status ${code}`));
+              done();
+            });
+          });
+        }
       } catch (error) {
         if (error.code !== "ESRCH") reject(error);
       }
@@ -51,19 +75,27 @@ export function runCommand(step, signal) {
       signal?.removeEventListener("abort", stop);
     };
     child.once("error", (error) => { cleanup(); reject(error); });
-    child.once("close", (code) => { cleanup(); resolve(!stopped && code === 0); });
+    child.once("close", async (code) => {
+      cleanup();
+      await termination;
+      resolve(!stopped && code === 0);
+    });
   });
 }
 
-export async function runCLI(steps) {
+export async function runCLI(steps, execute = runSequence) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   process.once("SIGTERM", cancel);
   process.once("SIGINT", cancel);
   try {
-    process.exitCode = await runSequence(steps, { signal: controller.signal }) ? 0 : 1;
+    process.exitCode = await execute(steps, { signal: controller.signal }) ? 0 : 1;
   } finally {
     process.removeListener("SIGTERM", cancel);
     process.removeListener("SIGINT", cancel);
   }
+}
+
+export async function runConcurrentCLI(steps) {
+  await runCLI(steps, runConcurrent);
 }

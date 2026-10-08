@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "build-storybook": "storybook build --loglevel warn",
-    "build": "bunx --no-install tsc -b && bunx --no-install vite build && node scripts/normalize-dist-output.mjs",
+    "build": "bunx --no-install tsc -b && bun run build:browser",
+    "build:browser": "bunx --no-install vite build && node scripts/normalize-dist-output.mjs",
     "capture:heap-snapshot": "node scripts/capture-heap-snapshot.mjs",
     "check:feature-root-files": "node scripts/check-feature-root-files.mjs",
     "check:feature-folder-file-count": "node scripts/check-feature-folder-file-count.mjs",
@@ -74,7 +75,7 @@
     "test:component:vitest": "bun scripts/run-vitest-component-tests.ts",
     "test:unit:bun": "bun scripts/run-bun-unit-tests.ts",
     "test:unit:bun:coverage": "bun scripts/run-bun-unit-tests.ts --coverage --coverage-reporter=lcov --coverage-dir=coverage/bun-unit",
-    "test:integration": "bun run build && node scripts/run-ui-integration-with-timings.mjs",
+    "test:integration": "bun run build:browser && node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
     "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs scripts/public-package-publish.test.mjs scripts/public-package-publication-safety.test.mjs",
     "test:public-package-retained-memory": "vitest run src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts",

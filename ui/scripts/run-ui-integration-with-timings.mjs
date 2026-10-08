@@ -1,3 +1,3 @@
-import { runBrowserIntegration } from "./ui-integration-runner.mjs";
+import { runBuiltBrowserIntegration } from "./ui-integration-runner.mjs";
 
-runBrowserIntegration();
+await runBuiltBrowserIntegration();

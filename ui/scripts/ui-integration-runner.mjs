@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
+import { browserDistReady } from "../integration/browser-build-lock.mjs";
 import {
   mockedBackendBrowserIntegrationFiles,
   mockedBackendBrowserIntegrationPhaseName,
@@ -59,6 +61,7 @@ function runVitestIntegrationPass({
   phaseName,
   slowFileSummaryTitle,
   spawn = spawnSync,
+  prebuilt = false,
 }) {
   const startedAt = performance.now();
   const result = spawn("vitest", vitestArgs, {
@@ -69,6 +72,7 @@ function runVitestIntegrationPass({
     env: {
       ...process.env,
       AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION: "true",
+      ...(prebuilt ? { AGENT_FACTORY_BROWSER_PREBUILT: "true" } : {}),
     },
   });
   const elapsedMs = performance.now() - startedAt;
@@ -107,7 +111,17 @@ export function runBrowserIntegration(options = {}) {
     slowFileSummaryTitle: "Browser integration slowest test files",
     exitOnFailure: options.exitOnFailure,
     spawn: options.spawn,
+    prebuilt: options.prebuilt,
   });
+}
+
+export async function runBuiltBrowserIntegration({
+  ready = () => browserDistReady(fileURLToPath(new URL("..", import.meta.url))),
+  run = runBrowserIntegration,
+} = {}) {
+  if (!(await ready()))
+    throw new Error("Prebuilt dashboard output is missing or invalid");
+  run({ prebuilt: true });
 }
 
 export function runFocusedBrowserIntegration(files, options = {}) {

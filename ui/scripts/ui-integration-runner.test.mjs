@@ -8,12 +8,24 @@ import {
   formatPhaseElapsed,
   phaseLogPrefix,
   runBrowserIntegration,
+  runBuiltBrowserIntegration,
   runFocusedBrowserIntegration,
 } from "./ui-integration-runner.mjs";
 import {
   durableSessionRealBackendIntegrationFiles,
   mockedBackendBrowserIntegrationFiles,
 } from "./ui-integration-targets.mjs";
+
+test("built browser entry starts only after ready output and fails without launching on missing or invalid output", async () => {
+  const run = vi.fn();
+  await runBuiltBrowserIntegration({ ready: async () => true, run });
+  expect(run).toHaveBeenCalledWith({ prebuilt: true });
+  run.mockClear();
+  await expect(
+    runBuiltBrowserIntegration({ ready: async () => false, run }),
+  ).rejects.toThrow(/missing or invalid/);
+  expect(run).not.toHaveBeenCalled();
+});
 
 test("builds stable browser integration vitest args", () => {
   expect(buildBrowserIntegrationVitestArgs({})).toEqual([
