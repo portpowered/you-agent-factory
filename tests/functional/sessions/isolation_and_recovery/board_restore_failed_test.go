@@ -2,7 +2,10 @@ package isolation_and_recovery_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -69,6 +72,123 @@ func TestBoardRestoreReproducesFailedAndEscalatedStates(t *testing.T) {
 		if runner.calls.Load() != 2 {
 			t.Fatalf("generation %d provider attempts=%d, want two terminal start failures and no redispatch", generation, runner.calls.Load())
 		}
+	}
+}
+
+// ROOT1 candidate: an idea reaches to-complete before its dependency fails.
+// This protects that recovery shape; it does not reproduce the incident error.
+// The same board's stop/reopen steps serialize ~default ownership.
+func TestBoardRestoreReproducesFailedAndEscalatedStatesAfterIdeaToComplete(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	repo, home := t.TempDir(), t.TempDir()
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, boardRestorePlanThenFailConfig()), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+	for _, name := range []string{"review", "plan"} {
+		support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+	}
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	runner := &boardRestorePlanThenFailRunner{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	var beforeEvents []factoryapi.FactoryEvent
+	want := map[string]boardRestoreWorkState{
+		"task-1": {"task", "escalated", "FAILED"}, "review-1": {"review", "fin", "FAILED"}, "idea-1": {"idea", "failed", "FAILED"},
+	}
+	var recordingPath string
+	for generation, api := range apis {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
+		inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+		inputs.Input.WorkingDirectory = repo
+		if generation == 2 {
+			inputs.Input.Args = append(inputs.Input.Args, "--record", recordingPath)
+		}
+		command := support.StartProcessCommand(t, process, inputs.Input)
+		url := restartProbeReadyURL(t, api, command)
+		if generation == 0 {
+			putPlainBoardBatch(t, url, "failed-join-board", []byte(`{"requestId":"failed-join-board","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"idea-1","name":"idea","workTypeName":"idea","state":"waiting","payload":"synthetic plan"},{"workId":"task-1","name":"task","workTypeName":"task","state":"complete","payload":"synthetic task"},{"workId":"review-1","name":"review","workTypeName":"review","payload":"synthetic review"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"idea","targetWorkName":"task","requiredState":"complete"}]}`))
+			restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/idea-1/move"), []byte(`{"stateName":"init"}`))
+			support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+				return readBoardRestoreStates(t, url)["idea-1"].State == "to-complete"
+			})
+			restartProbeShutdown(t, url, command)
+			var reference struct{ ArtifactReference string }
+			if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &reference); err != nil || reference.ArtifactReference == "" {
+				t.Fatalf("current board reference=%+v, err=%v", reference, err)
+			}
+			recordingPath = reference.ArtifactReference
+			continue
+		}
+		if generation == 1 {
+			restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/task-1/move"), []byte(`{"stateName":"init"}`))
+		}
+		support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+			return status.TotalTokens == 3 && status.Categories.Failed == 3
+		})
+		if board := readBoardRestoreStates(t, url); !reflect.DeepEqual(board, want) {
+			t.Fatalf("generation %d board=%v, want %v", generation, board, want)
+		}
+		events := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		assertBoardRestoreIdeaCascade(t, events)
+		if generation == 1 {
+			beforeEvents = events
+		} else {
+			assertRestartProbeEventFacts(t, beforeEvents, events)
+		}
+		restartProbeShutdown(t, url, command)
+		if runner.calls.Load() != 2 {
+			t.Fatalf("generation %d dispatched %d times, want successful plan then failed task and no redispatch", generation, runner.calls.Load())
+		}
+	}
+}
+
+func boardRestorePlanThenFailConfig() map[string]any {
+	config := boardRestoreFailedConfig()
+	for _, definition := range config["workTypes"].([]map[string]any) {
+		if definition["name"] == "idea" {
+			definition["states"] = append(definition["states"].([]map[string]string), map[string]string{"name": "to-complete", "type": "PROCESSING"}, map[string]string{"name": "waiting", "type": "PROCESSING"})
+		}
+	}
+	for _, station := range config["workstations"].([]map[string]any) {
+		if station["name"] == "plan" {
+			station["outputs"] = []map[string]string{{"workType": "idea", "state": "to-complete"}}
+		}
+	}
+	return config
+}
+
+func assertBoardRestoreIdeaCascade(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
+			continue
+		}
+		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		if err == nil && payload.WorkId == "idea-1" && payload.FromState == "to-complete" && payload.ToState == "failed" && payload.TriggerWorkId != nil && *payload.TriggerWorkId == "task-1" && string(payload.Source) == "cascading-failure" {
+			return
+		}
+	}
+	t.Fatal("missing public idea to-complete -> failed cascade caused by task-1")
+}
+
+type boardRestorePlanThenFailRunner struct{ calls atomic.Int32 }
+
+func (runner *boardRestorePlanThenFailRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if runner.calls.Add(1) == 1 {
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(`{"output":"synthetic completed plan"}`)}, nil
+	}
+	return platformprocess.CommandResult{}, &platformprocess.CommandStartError{
+		Command: "codex", CommandLineLength: 32932, CommandLineLimit: platformprocess.WindowsCommandLineLimit,
+		Cause: errors.New("controlled command line too long"),
 	}
 }
 
