@@ -76,6 +76,8 @@ jobs:
         run: bun run --bun scripts/release/run-phase.mjs dashboard -- bun run --bun --cwd ui build
 
       - name: Build snapshot candidate artifacts without publishing
+        env:
+          GORELEASER_CURRENT_TAG: ${{ steps.tag.outputs.release_tag }}
         run: bun run --bun scripts/release/run-phase.mjs snapshot -- goreleaser release --snapshot --clean --skip=before -f .goreleaser.yml
 
       - name: Upload candidate dist
