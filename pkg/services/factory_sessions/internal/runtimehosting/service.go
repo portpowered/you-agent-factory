@@ -123,15 +123,17 @@ func (service *Service) startAPI(
 				bound <- binding
 			},
 		})
-		exit <- err
-		close(exit)
 		// Terminal listener-binding failures are translated into the public
 		// SERVER_BIND_FAILED response by the caller. Logging the raw starter
 		// error here as well duplicates that response on the CLI's stderr now
 		// that the process-scoped runtime logger is injected during opening.
 		if err != nil && logger != nil && !platformhttpserver.IsBindError(err) {
-			logger.Error("API server error", zap.Error(err))
+			logger.Error("API server error", zap.String("cause", logging.SafeErrorCause(err)))
 		}
+		// The receiver may unwind and close the runtime log immediately. Emit
+		// the safe failure before publishing completion to that owner.
+		exit <- err
+		close(exit)
 	}()
 	return exit
 }
