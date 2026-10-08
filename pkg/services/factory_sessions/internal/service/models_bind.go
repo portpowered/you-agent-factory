@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // modelsRuntimeBind carries the process-scoped Models root and the opaque
@@ -24,10 +26,22 @@ type runtimeOpeningCleanup struct {
 	mu      sync.Mutex
 	actions []func() error
 	models  []func() error
+	targets []func() error
 	closeMu sync.Mutex
 }
 
 var errRuntimeOpeningCleanupPending = errors.New("runtime opening cleanup still owns pending resources")
+
+// OwnRecordingTarget retains destination ownership until every runtime and
+// writer consumer has stopped, including cleanup retries after a failure.
+func (cleanup *runtimeOpeningCleanup) OwnRecordingTarget(lease io.Closer) {
+	if lease == nil {
+		return
+	}
+	cleanup.mu.Lock()
+	cleanup.targets = append(cleanup.targets, lease.Close)
+	cleanup.mu.Unlock()
+}
 
 func (cleanup *runtimeOpeningCleanup) Add(action func() error) {
 	if action == nil {
@@ -71,8 +85,10 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	cleanup.mu.Lock()
 	actions := cleanup.actions
 	models := cleanup.models
+	targets := cleanup.targets
 	cleanup.actions = nil
 	cleanup.models = nil
+	cleanup.targets = nil
 	cleanup.mu.Unlock()
 	pending, closeErr := cleanup.releaseActions(actions)
 	cleanup.mu.Lock()
@@ -80,19 +96,31 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	cleanup.mu.Unlock()
 	// A failed consumer still owns its dependency. Release independent resources
 	// now, but keep Models available until every consumer has closed successfully.
-	if closeErr == nil && !consumersAdded {
-		models, closeErr = cleanup.releaseModels(models)
+	if len(pending) == 0 && !consumersAdded {
+		var err error
+		models, err = cleanup.releaseModels(models)
+		closeErr = errors.Join(closeErr, err)
+	}
+	if len(pending) == 0 && len(models) == 0 && !consumersAdded {
+		var err error
+		targets, err = cleanup.releaseModels(targets)
+		closeErr = errors.Join(closeErr, err)
 	}
 	cleanup.mu.Lock()
 	cleanup.actions = append(pending, cleanup.actions...)
 	cleanup.models = append(models, cleanup.models...)
+	cleanup.targets = append(targets, cleanup.targets...)
 	// Opening callers retain the retry capability only when Close reports an
 	// incomplete release. Ownership registered by a closer must not turn into
 	// a successful release merely because the original batch completed.
-	if closeErr == nil && (len(cleanup.actions) != 0 || len(cleanup.models) != 0) {
+	if closeErr == nil && (len(cleanup.actions) != 0 || len(cleanup.models) != 0 || len(cleanup.targets) != 0) {
 		closeErr = errRuntimeOpeningCleanupPending
 	}
+	complete := len(cleanup.actions) == 0 && len(cleanup.models) == 0 && len(cleanup.targets) == 0
 	cleanup.mu.Unlock()
+	if closeErr != nil {
+		return &recordings.RecordingCleanupError{Cause: closeErr, Complete: complete}
+	}
 	return closeErr
 }
 
@@ -122,6 +150,10 @@ func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() e
 	for index := len(actions) - 1; index >= 0; index-- {
 		if err := actions[index](); err != nil {
 			closeErr = errors.Join(closeErr, err)
+			var terminal *recordings.RecordingCleanupError
+			if errors.As(err, &terminal) && terminal.Complete {
+				actions[index] = nil
+			}
 		} else {
 			actions[index] = nil
 		}

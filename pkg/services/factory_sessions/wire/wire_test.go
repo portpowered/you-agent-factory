@@ -708,7 +708,7 @@ func TestOwnerGatewayPreservesUnavailableRequiredCollaborators(t *testing.T) {
 func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveChangeCoordinator) (*Root, error) {
 	return NewRoot(
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, assembly, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, assembly, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		NewHistoricalReplayBehavior(), liveChangeCoordinator, nil,
 	)

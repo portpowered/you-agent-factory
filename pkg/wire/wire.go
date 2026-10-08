@@ -287,7 +287,7 @@ var servicesSet = wire.NewSet(
 	recordingswire.NewRuntimeLedgerRouter,
 	recordingswire.RuntimeLedger,
 	recordingswire.NewProjectionService,
-	recordingswire.NewRecordingLifecycleOwner,
+	provideRecordingLifecycleOwner,
 	recordingswire.NewCanonicalLedgerOwner,
 	recordingswire.NewArtifactsExportOwner,
 	recordingswire.NewReplayOwner,

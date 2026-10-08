@@ -24,7 +24,6 @@ import (
 // plain and resume generation, with isolated home, files and server handles.
 func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	dir := filepath.Join(repo, "factory")
 	if err := os.Rename(support.ScaffoldFactory(t, boardRestorePlanningConfig()), dir); err != nil {
@@ -174,7 +173,6 @@ func assertPlainPlanningRestoreRejection(t *testing.T, process support.Process, 
 
 func TestBoardRestoreReproducesFailedAndEscalatedStatesSecondRestorePlanning(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	dir := support.ScaffoldFactory(t, boardRestorePlanningConfig())
 	support.WriteAgentConfig(t, dir, "planner", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 	support.WriteAgentConfig(t, dir, "script", "---\ntype: SCRIPT_WORKER\ncommand: synthetic-script\n---\n")

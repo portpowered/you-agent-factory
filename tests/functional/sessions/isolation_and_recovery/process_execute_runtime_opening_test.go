@@ -26,7 +26,6 @@ import (
 // only compatible process wiring is reused.
 func TestProcessExecuteRuntimeOpeningThroughReusableRootProcess(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	router := &reusableRootAPIServerStarter{}
 	identities := &processExecuteOpeningIdentities{}

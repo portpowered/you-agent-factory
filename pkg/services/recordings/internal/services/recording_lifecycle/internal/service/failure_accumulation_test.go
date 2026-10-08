@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,59 @@ import (
 
 type fixedRecordingClock struct {
 	now time.Time
+}
+
+func TestTerminalFlushSuppressesOnlyProducerCancellation(t *testing.T) {
+	t.Parallel()
+	writeErr := errors.New("final storage unavailable")
+	producerErr := errors.New("producer unavailable")
+	for _, test := range []struct {
+		name     string
+		producer error
+		write    error
+		want     error
+	}{
+		{name: "wrapped cancellation", producer: fmt.Errorf("producer: %w", context.Canceled)},
+		{name: "joined cancellations", producer: errors.Join(context.Canceled, fmt.Errorf("peer: %w", context.Canceled))},
+		{name: "joined producer failure", producer: errors.Join(context.Canceled, producerErr), want: producerErr},
+		{name: "final write failure", producer: context.Canceled, write: writeErr, want: writeErr},
+		{name: "final write cancellation", producer: context.Canceled, write: context.Canceled, want: context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			writes := 0
+			root := newFailureTestRoot(func(string, recordings.RecordingSnapshot) error {
+				writes++
+				return test.write
+			}, nil, fixedRecordingClock{now: time.Unix(1_700_000_000, 0)})
+			id := startActiveRecording(t, root, "terminal-cancellation", time.Second)
+			recordEvent(t, root, id, activeFlushEvent(1))
+			if _, err := root.RecordRecordingError(recordings.RecordRecordingErrorRequest{
+				RecordingID: id,
+				Failure:     recordings.RecordingFailure{Code: "producer_boundary_failed", Message: "producer stopped"},
+				Cause:       test.producer,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			finished, finishErr := root.FinishRecording(recordings.FinishRecordingRequest{
+				RecordingID: id, FinishedAt: time.Unix(1_700_000_001, 0),
+			})
+			if !errors.Is(finishErr, context.Canceled) || finished.Status.FinalizedAt == nil || writes != 1 {
+				t.Fatalf("finalization = (%#v, %v, %d writes), want retained cancellation and one terminal publication", finished, finishErr, writes)
+			}
+			_, err := root.FlushRecording(recordings.FlushRecordingRequest{RecordingID: id})
+			if test.want == nil {
+				if err != nil {
+					t.Fatalf("terminal flush = %v, want benign producer cancellation", err)
+				}
+			} else if !errors.Is(err, test.want) || !errors.Is(err, context.Canceled) || err.Error() != finishErr.Error() {
+				t.Fatalf("terminal flush = %v, want complete original failure %v", err, finishErr)
+			}
+			if writes != 1 {
+				t.Fatalf("terminal flush republished recording: %d writes", writes)
+			}
+		})
+	}
 }
 
 func (clock fixedRecordingClock) Now() time.Time {

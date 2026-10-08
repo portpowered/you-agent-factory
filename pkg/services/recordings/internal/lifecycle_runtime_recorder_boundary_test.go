@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,6 +23,160 @@ import (
 type runtimeRoot interface {
 	recordings.Service
 	recordings.RuntimeScopeService
+}
+
+type openingCleanupRecorder struct {
+	recordings.RuntimeRecorder
+	starts, stops, finishes, flushes int
+	err                              error
+	startErr                         error
+	stopErr                          error
+}
+
+func (recorder *openingCleanupRecorder) Start(context.Context) {
+	recorder.starts++
+	if recorder.startErr != nil {
+		recorder.err = recorder.startErr
+	}
+}
+func (recorder *openingCleanupRecorder) Stop() {
+	recorder.stops++
+	if recorder.stopErr != nil {
+		recorder.err = recorder.stopErr
+	}
+}
+func (recorder *openingCleanupRecorder) Err() error { return recorder.err }
+func (recorder *openingCleanupRecorder) Flush() error {
+	recorder.flushes++
+	return recorder.err
+}
+func (recorder *openingCleanupRecorder) Finalize(time.Time) error {
+	recorder.finishes++
+	return recorder.err
+}
+
+func TestRuntimeScopeRecorderCleanupBeforeStartAbortsWithoutPublication(t *testing.T) {
+	t.Parallel()
+	cleanupErr := errors.New("controlled stop failure")
+	inner := &openingCleanupRecorder{err: cleanupErr}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, cleanupErr) {
+			t.Fatalf("abort error = %v, want preserved cleanup cause", err)
+		}
+	}
+	recorder.Start(context.Background())
+	if err := recorder.Flush(); !errors.Is(err, cleanupErr) || inner.flushes != 0 {
+		t.Fatalf("aborted flush = %v, publications = %d, want cleanup cause without publication", err, inner.flushes)
+	}
+	if inner.stops != 1 || inner.finishes != 0 || inner.starts != 0 {
+		t.Fatalf("abort stop/finalize/start = %d/%d/%d, want 1/0/0", inner.stops, inner.finishes, inner.starts)
+	}
+}
+
+func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
+	t.Parallel()
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	recorder.Start(context.Background())
+	recorder.Start(context.Background())
+	recorder.Stop()
+	recorder.Stop()
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := recorder.Flush(); err != nil || inner.flushes != 0 {
+		t.Fatalf("terminal flush = %v, publications = %d, want no publication after finalization", err, inner.flushes)
+	}
+	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 1 {
+		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/1", inner.starts, inner.finishes, inner.stops)
+	}
+}
+
+func TestRuntimeScopeRecorderStoppedOpeningCannotActivateOrPublish(t *testing.T) {
+	t.Parallel()
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		recorder.Stop()
+		recorder.Start(context.Background())
+		if err := recorder.Flush(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if inner.starts != 0 || inner.flushes != 0 || inner.finishes != 0 || inner.stops != 1 {
+		t.Fatalf("stopped opening start/flush/finalize/stop = %d/%d/%d/%d, want 0/0/0/1",
+			inner.starts, inner.flushes, inner.finishes, inner.stops)
+	}
+}
+
+func TestRuntimeScopeRecorderFailedActivationAbortsWithoutPublication(t *testing.T) {
+	t.Parallel()
+	activationErr := errors.New("controlled activation failure")
+	cleanupErr := errors.New("controlled activation cleanup failure")
+	inner := &openingCleanupRecorder{startErr: activationErr, stopErr: cleanupErr}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		recorder.Start(context.Background())
+		if err := recorder.Flush(); !errors.Is(err, activationErr) {
+			t.Fatalf("failed activation flush = %v, want preserved cause", err)
+		}
+	}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+			t.Fatalf("failed activation cleanup = %v, want primary and cleanup causes", err)
+		}
+	}
+	if err := recorder.Err(); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("recorder error = %v, want primary and cleanup causes", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("aborted flush = %v, want primary and cleanup causes", err)
+	}
+	if inner.starts != 1 || inner.stops != 1 || inner.flushes != 0 || inner.finishes != 0 {
+		t.Fatalf("failed activation start/stop/flush/finalize = %d/%d/%d/%d, want 1/1/0/0",
+			inner.starts, inner.stops, inner.flushes, inner.finishes)
+	}
+}
+
+func TestRuntimeScopeRecorderFlushRequiresStartedRun(t *testing.T) {
+	t.Parallel()
+	for _, aborted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aborted=%t", aborted), func(t *testing.T) {
+			t.Parallel()
+			inner := &openingCleanupRecorder{}
+			recorder := &runtimeScopeRecorder{inner: inner}
+			cancelled, cancel := context.WithCancel(context.Background())
+			cancel()
+			recorder.Start(cancelled)
+			if err := recorder.Flush(); err != nil || inner.flushes != 0 {
+				t.Fatalf("unstarted flush = %v, publications = %d", err, inner.flushes)
+			}
+			if aborted {
+				if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			recorder.Start(context.Background())
+			if err := recorder.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if aborted {
+				want = 0
+			}
+			if inner.flushes != want {
+				t.Fatalf("publications = %d, want %d", inner.flushes, want)
+			}
+		})
+	}
 }
 
 // Live scope units supply detached lifecycle facts and completed subscription
@@ -109,9 +264,17 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 		},
 		Payload: []byte(`{"workId":"work-runtime-root"}`),
 	}
+	recorder.Start(t.Context())
 	recorder.RecordEvent(runtimeEvent)
-	if err := recorder.Finalize(finishedAt); err != nil {
-		t.Fatalf("Finalize: %v", err)
+	recorder.Stop()
+	recorder.Stop()
+	for range 2 {
+		if err := recorder.Finalize(finishedAt); err != nil {
+			t.Fatalf("Finalize: %v", err)
+		}
+	}
+	if lifecycle.finishCalls != 1 || lifecycle.stopCalls != 1 {
+		t.Fatalf("completed run finish/stop = %d/%d, want one each", lifecycle.finishCalls, lifecycle.stopCalls)
 	}
 
 	if len(lifecycle.appendRequests) != 3 {
@@ -207,6 +370,7 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 			t.Errorf("Finalize cleanup: %v", err)
 		}
 	})
+	opened.Recorder.Start(context.Background())
 	if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
@@ -528,6 +692,44 @@ type activeRuntimeLifecycle struct {
 	statusRequest recordings.RecordingStatusRequest
 }
 
+type failedBindingLifecycle struct {
+	activeRuntimeLifecycle
+	appendErr error
+	stopErr   error
+	stops     int
+}
+
+func (owner *failedBindingLifecycle) RecordRecordingEvent(recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error) {
+	return recordings.RecordRecordingEventResult{}, owner.appendErr
+}
+
+func (owner *failedBindingLifecycle) StopRecording(recordings.StopRecordingRequest) (recordings.StopRecordingResult, error) {
+	owner.stops++
+	return recordings.StopRecordingResult{}, owner.stopErr
+}
+
+func TestRuntimeRecorderBindingFailureNeverFinishesIncompleteHistory(t *testing.T) {
+	t.Parallel()
+	appendErr := errors.New("initial history rejected")
+	stopErr := errors.New("stop writer failed")
+	owner := &failedBindingLifecycle{
+		activeRuntimeLifecycle: activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{RecordingID: "retained"}},
+		appendErr:              appendErr, stopErr: stopErr,
+	}
+	service := &combinedService{Service: owner}
+	startedAt := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
+	recorder := newLifecycleRecorderForTest(t, startedAt, "retained.json")
+	err := service.bindRuntimeRecorder(recorder, recordings.RuntimeScopeRequest{
+		FactorySessionID: "retained-session", Now: func() time.Time { return startedAt },
+	})
+	if !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("bind error = %v, want primary and cleanup identities", err)
+	}
+	if owner.stops != 1 || len(owner.finishes) != 0 {
+		t.Fatalf("failed bind cleanup: stops=%d finishes=%d, want one stop and no publication", owner.stops, len(owner.finishes))
+	}
+}
+
 func (owner *activeRuntimeLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
 	owner.started = request
 	return recordings.StartRecordingResult{Enabled: true, Status: owner.status}, nil
@@ -638,6 +840,7 @@ func appendActiveScopeEvent(
 
 func finalizeActiveRuntime(t *testing.T, recorder recordings.RuntimeRecorder, now func() time.Time) {
 	t.Helper()
+	recorder.Start(context.Background())
 	finishedAt := now().Add(time.Second)
 	if err := recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize(active): %v", err)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -49,6 +50,7 @@ func TestLifecycleRuntimeRecorderForwardsFailuresFlushAndFinalization(t *testing
 	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
+	recorder.Start(t.Context())
 
 	if err := recorder.Flush(); err != nil {
 		t.Fatalf("initial Flush: %v", err)
@@ -204,13 +206,16 @@ type stubRecordingLifecycle struct {
 	beginErr        error
 	beginRequest    recordings.BeginRecordingRequest
 	appendErr       error
+	appendErrorAt   int
 	appendCalls     int
 	stopCalls       int
+	stopRequest     recordings.StopLifecycleRequest
 	stopErr         error
 	appendRequests  []recordings.AppendLifecycleEventRequest
 	failureRequests []recordings.RecordLifecycleFailureRequest
 	flushRequest    recordings.FlushLifecycleRequest
 	flushCalls      int
+	flushErr        error
 	finishRequest   recordings.FinishLifecycleRequest
 	finishCalls     int
 	finishErr       error
@@ -221,6 +226,98 @@ func (s *stubRecordingLifecycle) Begin(request recordings.BeginRecordingRequest)
 	return s.beginResult, s.beginErr
 }
 
+func TestLifecycleRuntimeRecorderDefersPeriodicStartUntilRuntimeStart(t *testing.T) {
+	t.Parallel()
+	for _, abort := range []bool{false, true} {
+		t.Run(fmt.Sprintf("abort=%t", abort), func(t *testing.T) {
+			t.Parallel()
+			lifecycle := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "prepared"},
+			}}
+			recorder := &lifecycleRuntimeRecorder{target: "retained.json", seen: make(map[string]struct{})}
+			if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			if !lifecycle.beginRequest.DeferPeriodic {
+				t.Fatal("binding activated periodic publication before runtime start")
+			}
+			if abort {
+				recorder.Stop()
+			}
+			recorder.Start(context.Background())
+			if lifecycle.beginRequest.DeferPeriodic != abort {
+				t.Fatalf("deferred publication = %t after abort=%t", lifecycle.beginRequest.DeferPeriodic, abort)
+			}
+			if !abort && lifecycle.beginRequest.RecordingID != "prepared" {
+				t.Fatal("activation did not reuse the prepared history")
+			}
+		})
+	}
+}
+
+func TestLifecycleRuntimeRecorderActivationFailureAbortsWithoutFinalFlush(t *testing.T) {
+	t.Parallel()
+	activationErr := errors.New("controlled activation failure")
+	cleanupErr := errors.New("controlled stop failure")
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "prepared"}},
+		stopErr:     cleanupErr,
+	}
+	recorder := &lifecycleRuntimeRecorder{target: "retained.json", seen: make(map[string]struct{})}
+	if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.beginErr = activationErr
+	recorder.Start(context.Background())
+	if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("activation abort = %v, want primary and cleanup identities", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, activationErr) {
+		t.Fatalf("aborted flush = %v, want activation cause", err)
+	}
+	if lifecycle.stopCalls != 1 || !lifecycle.stopRequest.Abort || lifecycle.finishCalls != 0 || lifecycle.flushCalls != 0 {
+		t.Fatalf("stop/finish/flush = %d/%d/%d, want 1/0/0", lifecycle.stopCalls, lifecycle.finishCalls, lifecycle.flushCalls)
+	}
+}
+
+func TestLifecycleRuntimeRecorderOpeningCleanupCannotPublishOrReactivate(t *testing.T) {
+	t.Parallel()
+	for _, stopFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stopFirst=%t", stopFirst), func(t *testing.T) {
+			t.Parallel()
+			cleanupErr := errors.New("controlled opening cleanup failure")
+			lifecycle := &stubRecordingLifecycle{
+				beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "prepared"}},
+				stopErr:     cleanupErr,
+			}
+			recorder := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := recorder.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			if stopFirst {
+				recorder.Stop()
+			}
+			for range 2 {
+				if err := recorder.Finalize(time.Unix(2, 0)); !errors.Is(err, cleanupErr) {
+					t.Fatalf("opening finalization = %v, want cleanup cause", err)
+				}
+				recorder.Start(t.Context())
+				recorder.Stop()
+				if err := recorder.Flush(); !errors.Is(err, cleanupErr) {
+					t.Fatalf("aborted flush = %v, want preserved cleanup cause", err)
+				}
+			}
+			if lifecycle.appendCalls != 1 || lifecycle.stopCalls != 1 || lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 || !lifecycle.beginRequest.DeferPeriodic {
+				t.Fatalf("opening cleanup published or reactivated: append/stop/flush/finish = %d/%d/%d/%d, deferred = %t",
+					lifecycle.appendCalls, lifecycle.stopCalls, lifecycle.flushCalls, lifecycle.finishCalls, lifecycle.beginRequest.DeferPeriodic)
+			}
+		})
+	}
+}
+
 func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
 	return recordings.RecordingLifecycleResult{}, nil
 }
@@ -228,7 +325,11 @@ func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordin
 func (s *stubRecordingLifecycle) AppendEvent(request recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
 	s.appendCalls++
 	s.appendRequests = append(s.appendRequests, request)
-	return recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{AcceptedEvents: s.appendCalls}}, s.appendErr
+	var err error
+	if s.appendErrorAt == 0 || s.appendCalls == s.appendErrorAt {
+		err = s.appendErr
+	}
+	return recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{AcceptedEvents: s.appendCalls}}, err
 }
 
 func (s *stubRecordingLifecycle) RecordFailure(request recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
@@ -239,11 +340,122 @@ func (s *stubRecordingLifecycle) RecordFailure(request recordings.RecordLifecycl
 func (s *stubRecordingLifecycle) Flush(request recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
 	s.flushRequest = request
 	s.flushCalls++
-	return recordings.RecordingLifecycleResult{}, nil
+	return recordings.RecordingLifecycleResult{}, s.flushErr
 }
 
-func (s *stubRecordingLifecycle) Stop(recordings.StopLifecycleRequest) error {
+func TestLifecycleRuntimeRecorderProtectsPublicationUntilStartupCompletes(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []string{"abort", "activate", "publication failure"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			primary, cleanup := errors.New("write denied"), errors.New("stop failed")
+			owner := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "protected"},
+			}}
+			recorder := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := recorder.BindRecordingLifecycle(owner, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			recorder.DeferRecordingPublication()
+			recorder.Start(t.Context())
+			if err := recorder.Flush(); err != nil || owner.flushCalls != 0 || !owner.beginRequest.DeferPeriodic {
+				t.Fatalf("pre-readiness publication: flush=%d err=%v begin=%+v", owner.flushCalls, err, owner.beginRequest)
+			}
+			if outcome == "abort" {
+				recorder.Stop()
+			} else {
+				assertRecorderPublicationActivation(t, recorder, owner, outcome, primary, cleanup)
+			}
+			assertRecorderPublicationCleanup(t, recorder, owner, outcome)
+		})
+	}
+}
+
+func TestRuntimeScopeRecorderRefusesChangedTargetBeforePublication(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("destination changed after restore")
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner, targetValidator: &changedRecordingTarget{cause: cause}}
+	recorder.DeferRecordingPublication()
+	if err := recorder.ActivateRecordingPublication(t.Context()); !errors.Is(err, cause) {
+		t.Fatalf("activation lost target conflict: %v", err)
+	}
+	recorder.Start(t.Context())
+	_ = recorder.Flush()
+	if err := recorder.Finalize(time.Unix(2, 0)); err != nil {
+		t.Fatalf("successful abort reported primary refusal as cleanup failure: %v", err)
+	}
+	if inner.flushes != 0 || inner.finishes != 0 || inner.starts != 0 || inner.stops != 1 {
+		t.Fatalf("changed target was published: flush=%d finish=%d start=%d stop=%d", inner.flushes, inner.finishes, inner.starts, inner.stops)
+	}
+}
+
+func assertRecorderPublicationActivation(t *testing.T, recorder *lifecycleRuntimeRecorder, owner *stubRecordingLifecycle, outcome string, primary, cleanup error) {
+	t.Helper()
+	if outcome == "publication failure" {
+		owner.flushErr, owner.stopErr = primary, cleanup
+	}
+	err := recorder.ActivateRecordingPublication(t.Context())
+	if outcome == "publication failure" {
+		if !errors.Is(err, primary) || !errors.Is(err, cleanup) {
+			t.Fatalf("activation lost cause identity: %v", err)
+		}
+	} else if err != nil || owner.beginRequest.DeferPeriodic {
+		t.Fatalf("successful activation: %v, begin=%+v", err, owner.beginRequest)
+	}
+}
+
+func assertRecorderPublicationCleanup(t *testing.T, recorder *lifecycleRuntimeRecorder, owner *stubRecordingLifecycle, outcome string) {
+	t.Helper()
+	err := recorder.Finalize(time.Unix(2, 0))
+	if outcome == "activate" {
+		if err != nil || owner.finishCalls != 1 || owner.flushCalls != 1 {
+			t.Fatalf("successful cleanup: %v flush=%d finish=%d", err, owner.flushCalls, owner.finishCalls)
+		}
+	} else if owner.finishCalls != 0 || owner.flushCalls > 1 || (outcome == "abort" && owner.flushCalls != 0) {
+		t.Fatalf("aborted cleanup published: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+	}
+}
+
+func TestRuntimeScopeRecorderForwardsStartupPublicationGate(t *testing.T) {
+	t.Parallel()
+	for _, abort := range []bool{true, false} {
+		t.Run(fmt.Sprintf("abort=%t", abort), func(t *testing.T) {
+			t.Parallel()
+			owner := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "protected"},
+			}}
+			inner := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := inner.BindRecordingLifecycle(owner, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			recorder := &runtimeScopeRecorder{inner: inner}
+			recorder.DeferRecordingPublication()
+			recorder.Start(t.Context())
+			if err := recorder.Flush(); err != nil || owner.flushCalls != 0 {
+				t.Fatalf("prepared scope wrote history: %v flush=%d", err, owner.flushCalls)
+			}
+			if abort {
+				recorder.Stop()
+			} else if err := recorder.ActivateRecordingPublication(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if err := recorder.Finalize(time.Unix(2, 0)); err != nil {
+				t.Fatal(err)
+			}
+			if abort && (owner.flushCalls != 0 || owner.finishCalls != 0) {
+				t.Fatalf("aborted scope wrote history: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+			}
+			if !abort && (owner.flushCalls != 1 || owner.finishCalls != 1) {
+				t.Fatalf("activated scope failed to publish/finalize: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+			}
+		})
+	}
+}
+
+func (s *stubRecordingLifecycle) Stop(request recordings.StopLifecycleRequest) error {
 	s.stopCalls++
+	s.stopRequest = request
 	return s.stopErr
 }
 
@@ -258,6 +470,38 @@ func (s *stubRecordingLifecycle) Status(recordings.LifecycleStatusRequest) (reco
 }
 
 var _ recordings.RecordingLifecycle = (*stubRecordingLifecycle)(nil)
+
+func TestLifecycleRuntimeRecorderBindAbortsOnBufferedEventFailure(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
+	appendErr := errors.New("buffered history append failed")
+	stopErr := errors.New("writer stop failed")
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "buffered-history"}},
+		appendErr:   appendErr, appendErrorAt: 2, stopErr: stopErr,
+	}
+	recorder := newLifecycleRecorderForTest(t, startedAt, "retained.json")
+	for _, id := range []string{"rejected-event", "later-event"} {
+		recorder.RecordEvent(factorydefinitions.FactoryEvent{Id: id, Payload: []byte(`{}`)})
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: "buffered-session"}
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("bind = %v, want buffered append and cleanup causes", err)
+	}
+	recorder.RecordEvent(factorydefinitions.FactoryEvent{Id: "after-abort", Payload: []byte(`{}`)})
+	for _, err := range []error{
+		recorder.BindRecordingLifecycle(lifecycle, scope), recorder.Flush(),
+		recorder.Finalize(startedAt.Add(time.Minute)), recorder.Err(),
+	} {
+		if !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+			t.Fatalf("operation after aborted bind = %v, want preserved causes", err)
+		}
+	}
+	if lifecycle.appendCalls != 2 || lifecycle.stopCalls != 1 || lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 {
+		t.Fatalf("aborted binding calls: append=%d stop=%d flush=%d finish=%d",
+			lifecycle.appendCalls, lifecycle.stopCalls, lifecycle.flushCalls, lifecycle.finishCalls)
+	}
+}
 
 func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *testing.T) {
 	t.Parallel()
@@ -296,6 +540,21 @@ func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *
 	}
 	if recorderErr := recorder.Err(); !errors.Is(recorderErr, stopErr) {
 		t.Fatalf("recorder.Err() = %v, want it to observe the preserved stop cleanup cause", recorderErr)
+	}
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("repeated bind = %v, want original primary and cleanup causes", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("flush after failed binding = %v, want original causes", err)
+	}
+	for range 2 {
+		if err := recorder.Finalize(startedAt.Add(time.Minute)); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+			t.Fatalf("finalize after failed binding = %v, want original causes", err)
+		}
+	}
+	if lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 || lifecycle.appendCalls != 1 {
+		t.Fatalf("failed binding published incomplete history: flush=%d finish=%d append=%d",
+			lifecycle.flushCalls, lifecycle.finishCalls, lifecycle.appendCalls)
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -715,14 +716,21 @@ func FailStartup(
 	runtimeState.RetireActive(sessionID, handle, nil)
 	if handle != nil && stop != nil {
 		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return errors.Join(startupErr, stopErr)
+			startupErr = errors.Join(startupErr, stopErr)
+			if !handle.Completed() {
+				return startupErr
+			}
 		}
 	}
 	if session != nil {
 		bound := SessionStateFrom(session)
 		if bound != nil && bound.Activation != nil {
 			if err := bound.Activation.Close(context.Background()); err != nil {
-				return errors.Join(startupErr, err)
+				startupErr = errors.Join(startupErr, err)
+				var terminal *recordings.RecordingCleanupError
+				if !errors.As(err, &terminal) || !terminal.Complete {
+					return startupErr
+				}
 			}
 		}
 		state.UnregisterGeneration(session)

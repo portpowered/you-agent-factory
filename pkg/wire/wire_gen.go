@@ -140,6 +140,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
+	wireRuntimeArtifactClock := provideRuntimeArtifactClock(source)
+	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
+	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
+	if err != nil {
+		return nil, err
+	}
 	workflowSourceFileSystem := provideFactoryRuntimeWorkflowSources(edges2)
 	workflowHomeResolver := provideFactoryRuntimeWorkflowHome(edges2)
 	workflowSourceResolveSymlinks := provideFactoryRuntimeWorkflowSourceResolveSymlinks(edges2)
@@ -244,7 +250,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v40 := provideRecordingReadFile(edges2)
 	v41 := provideRecordingSnapshotWriter(edges2, storage, v40)
 	v42 := wire5.NewRecordingFlushTickerFactory()
-	v43 := wire5.NewRecordingLifecycleOwner(v6, v41, v42, v36)
+	v43 := provideRecordingLifecycleOwner(v6, v41, v42, v36)
 	portableArtifactPublication, err := provideRecordingPublication(edges2)
 	if err != nil {
 		return nil, err
@@ -549,12 +555,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	runtimeLoggerFactory := provideRuntimeLoggerFactory()
-	wireRuntimeArtifactClock := provideRuntimeArtifactClock(source)
-	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
-	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
-	if err != nil {
-		return nil, err
-	}
 	runtimeMetricsRetentionFileSystem := provideRuntimeMetricsRetentionFileSystem()
 	runtimeMetricsCoordination, err := provideRuntimeMetricsCoordination()
 	if err != nil {
@@ -616,7 +616,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v170 := provideRuntimeModelWorkerExecution(workersService)
 	v171 := wire6.NewRuntimeModelInvocation(modelsService, v169, v170)
 	v172 := wire6.NewHistoricalReplayBehavior()
-	v173, err := wire6.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, source, v17, v18, v19, factorydefinitionsService, definitionRuntimeRouter, v53, v57, v129, v131, v132, v134, v61, runtimeInstanceIDGenerator, homeDirectoryResolver, workService, root, webhooksService, modelsService, recordingsService, v52, workersService, v155, v114, initialRuntimeActivationOperation, v171, v172, liveChangeCoordinator, v39)
+	v173, err := wire6.NewRoot(providersessionsService, logger, factoryRuntimeLogOwner, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, source, v17, v18, v19, factorydefinitionsService, definitionRuntimeRouter, v53, v57, v129, v131, v132, v134, v61, runtimeInstanceIDGenerator, homeDirectoryResolver, workService, root, webhooksService, modelsService, recordingsService, v52, workersService, v155, v114, initialRuntimeActivationOperation, v171, v172, liveChangeCoordinator, v39)
 	if err != nil {
 		return nil, err
 	}
@@ -1087,7 +1087,7 @@ var servicesSet = wire11.NewSet(
 	provideRecordingClock,
 	provideRecordingSnapshotWriter,
 	provideRecordingPublication,
-	provideRecordingReadFile, wire5.NewRuntimeLedgerRouter, wire5.RuntimeLedger, wire5.NewProjectionService, wire5.NewRecordingLifecycleOwner, wire5.NewCanonicalLedgerOwner, wire5.NewArtifactsExportOwner, wire5.NewReplayOwner, wire5.NewHistoricalQueryOwner, wire5.NewRecordingFlushTickerFactory, wire4.FactorySnapshotJSONDecoder, provideRecordingsRoot,
+	provideRecordingReadFile, wire5.NewRuntimeLedgerRouter, wire5.RuntimeLedger, wire5.NewProjectionService, provideRecordingLifecycleOwner, wire5.NewCanonicalLedgerOwner, wire5.NewArtifactsExportOwner, wire5.NewReplayOwner, wire5.NewHistoricalQueryOwner, wire5.NewRecordingFlushTickerFactory, wire4.FactorySnapshotJSONDecoder, provideRecordingsRoot,
 	provideRecordingsRuntimeScopeService,
 	provideReplayArtifactStorage,
 	provideFactoryRuntimeIDGenerator,

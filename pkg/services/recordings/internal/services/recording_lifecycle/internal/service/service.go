@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 type recordingSession struct {
 	artifact         recordings.RecordingArtifactReference
 	serviceTarget    string
+	targetKey        string
 	selection        recordings.RecordingTargetRequest
 	scope            recordings.CanonicalEventScope
 	events           []recordings.CanonicalEvent
@@ -32,6 +34,7 @@ type recordingSession struct {
 	periodicStop chan struct{}
 	periodicDone chan struct{}
 	stopOnce     sync.Once
+	stopped      bool
 
 	finalizing   bool
 	finalizeDone chan struct{}
@@ -46,6 +49,8 @@ type Service struct {
 	tickers         recordings.RecordingFlushTickerFactory
 	clock           recordings.RecordingClock
 	byID            map[string]*recordingSession
+	targetOwners    map[string]string
+	caseInsensitive bool
 	durableThrough  map[string]recordings.CanonicalEventCursor
 	nextRecordingID int
 }
@@ -68,14 +73,17 @@ func New(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
+	caseInsensitive ...bool,
 ) *Service {
 	return &Service{
-		targets:        targets,
-		writer:         writer,
-		tickers:        tickers,
-		clock:          clock,
-		byID:           make(map[string]*recordingSession),
-		durableThrough: make(map[string]recordings.CanonicalEventCursor),
+		targets:         targets,
+		caseInsensitive: len(caseInsensitive) == 1 && caseInsensitive[0],
+		writer:          writer,
+		tickers:         tickers,
+		clock:           clock,
+		byID:            make(map[string]*recordingSession),
+		targetOwners:    make(map[string]string),
+		durableThrough:  make(map[string]recordings.CanonicalEventCursor),
 	}
 }
 
@@ -109,6 +117,9 @@ func (service *Service) StartRecording(
 		return recordings.StartRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
 	if result, handled, err := service.existingStart(request); handled {
+		if err == nil && !request.DeferPeriodic {
+			service.startPeriodic(result.Status.RecordingID, request.FlushInterval)
+		}
 		return result, err
 	}
 	return service.startNewRecording(request)
@@ -172,7 +183,9 @@ func (service *Service) startNewRecording(
 	if err != nil {
 		return recordings.StartRecordingResult{}, err
 	}
-	service.startPeriodic(bound.Status.RecordingID, request.FlushInterval)
+	if !request.DeferPeriodic {
+		service.startPeriodic(bound.Status.RecordingID, request.FlushInterval)
+	}
 	return recordings.StartRecordingResult{Enabled: true, Status: bound.Status}, nil
 }
 
@@ -198,6 +211,10 @@ func (service *Service) bind(
 		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
 		return recordings.BindRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
+	targetKey, err := service.recordingTargetKey(serviceTarget)
+	if err != nil {
+		return recordings.BindRecordingResult{}, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, serviceTarget, err)
+	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	id := strings.TrimSpace(string(request.RecordingID))
@@ -213,13 +230,20 @@ func (service *Service) bind(
 			Status: recordingStatus(recordings.RecordingID(id), existing),
 		}, nil
 	}
+	if _, owned := service.targetOwners[targetKey]; owned {
+		return recordings.BindRecordingResult{}, fmt.Errorf(
+			"%w: recording target %q already has a writer", recordings.ErrRecordingBindingConflict, serviceTarget,
+		)
+	}
 	session := &recordingSession{
 		artifact:      request.Artifact,
 		serviceTarget: serviceTarget,
+		targetKey:     targetKey,
 		selection:     selection,
 		scope:         request.Scope,
 	}
 	service.byID[id] = session
+	service.targetOwners[targetKey] = id
 	return recordings.BindRecordingResult{
 		Status: recordingStatus(recordings.RecordingID(id), session),
 	}, nil
@@ -327,7 +351,21 @@ func (service *Service) StopRecording(
 	if err != nil {
 		return recordings.StopRecordingResult{}, err
 	}
+	service.mu.Lock()
+	session.stopped = true
+	service.mu.Unlock()
 	stopPeriodic(session)
+	if request.Abort {
+		// Wait for any in-flight publication before handing the target to a
+		// successor. The terminal guard makes queued and future writes inert.
+		session.flushMu.Lock()
+		service.mu.Lock()
+		session.terminal = true
+		session.finalizeErr = errors.Join(session.failureCauses...)
+		service.releaseTargetLocked(request.RecordingID, session)
+		service.mu.Unlock()
+		session.flushMu.Unlock()
+	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	return recordings.StopRecordingResult{
@@ -352,6 +390,12 @@ func (service *Service) FinishRecording(
 		return recordings.FinishRecordingResult{
 			Status: recordingStatus(request.RecordingID, session),
 		}, session.finalizeErr
+	}
+	if session.terminal {
+		status := recordingStatus(request.RecordingID, session)
+		err := session.finalizeErr
+		service.mu.Unlock()
+		return recordings.FinishRecordingResult{Status: status}, err
 	}
 	session.finalizing = true
 	session.finalizeDone = make(chan struct{})
@@ -384,6 +428,7 @@ func (service *Service) FinishRecording(
 	service.mu.Lock()
 	session.terminal = true
 	session.finalizeErr = errors.Join(session.failureCauses...)
+	service.releaseTargetLocked(request.RecordingID, session)
 	close(session.finalizeDone)
 	status := recordingStatus(request.RecordingID, session)
 	finalizeErr := session.finalizeErr
@@ -392,6 +437,27 @@ func (service *Service) FinishRecording(
 	return recordings.FinishRecordingResult{
 		Status: status,
 	}, finalizeErr
+}
+
+func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *recordingSession) {
+	key := session.targetKey
+	if service.targetOwners[key] == string(id) {
+		delete(service.targetOwners, key)
+	}
+}
+
+// Keep the caller's path for persistence and diagnostics, but prevent lexical
+// aliases from acquiring independent writer ownership. Windows targets are
+// conservatively case folded, including on volumes with case-sensitive paths.
+func (service *Service) recordingTargetKey(target string) (string, error) {
+	key, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	if service.caseInsensitive {
+		key = strings.ToLower(key)
+	}
+	return key, nil
 }
 
 func stopPeriodic(session *recordingSession) {

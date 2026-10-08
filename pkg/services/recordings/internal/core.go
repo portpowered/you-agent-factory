@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +48,138 @@ type combinedService struct {
 	replayConfigDecoder    factorydefinitions.ReplayRuntimeConfigDecoder
 	replayInputs           recordings.ReplayInputLoader
 	logger                 logging.Logger
+	targetClaim            recordings.RecordingTargetClaim
+	caseInsensitive        bool
+	targetLeases           map[string]*recordingTargetLease
+}
+
+func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path string) (io.Closer, error) {
+	if service.targetClaim == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, path, err)
+	}
+	if service.caseInsensitive {
+		key = strings.ToLower(key)
+	}
+	lease, err := service.targetClaim(ctx, path, key+".recording.lock")
+	if err != nil {
+		return nil, &recordingTargetClaimError{path: path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+	}
+	if lease == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	owned := &recordingTargetLease{Closer: lease, path: path, owner: service, key: key}
+	service.recordingMu.Lock()
+	if service.targetLeases == nil {
+		service.targetLeases = make(map[string]*recordingTargetLease)
+	}
+	service.targetLeases[key] = owned
+	service.recordingMu.Unlock()
+	return owned, nil
+}
+
+type recordingTargetLease struct {
+	io.Closer
+	path          string
+	owner         *combinedService
+	key           string
+	publicationMu sync.Mutex
+	published     bool
+}
+
+func (lease *recordingTargetLease) Close() error {
+	if err := lease.Closer.Close(); err != nil {
+		return err
+	}
+	lease.owner.recordingMu.Lock()
+	defer lease.owner.recordingMu.Unlock()
+	if lease.owner.targetLeases[lease.key] == lease {
+		delete(lease.owner.targetLeases, lease.key)
+	}
+	return nil
+}
+
+func (service *combinedService) recordingTargetValidator(path string) recordings.RecordingTargetValidator {
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+	if service.caseInsensitive {
+		key = strings.ToLower(key)
+	}
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	if lease := service.targetLeases[key]; lease != nil {
+		return lease
+	}
+	return nil
+}
+
+func (lease *recordingTargetLease) Validate() error {
+	lease.publicationMu.Lock()
+	defer lease.publicationMu.Unlock()
+	return lease.validateUnpublished()
+}
+
+func (lease *recordingTargetLease) validateUnpublished() error {
+	if lease.published {
+		return nil
+	}
+	if validator, ok := lease.Closer.(recordings.RecordingTargetValidator); ok {
+		if err := validator.Validate(); err != nil {
+			return &recordingTargetClaimError{path: lease.path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+		}
+	}
+	return nil
+}
+
+// FlushRecording validates retained input before the first owned publication.
+// After that boundary the lease protects a writer, not the old input digest.
+// Public flushes can precede CompleteStartup while startup Work is executing.
+func (service *combinedService) FlushRecording(request recordings.FlushRecordingRequest) (recordings.FlushRecordingResult, error) {
+	service.recordingMu.Lock()
+	hasLeases := len(service.targetLeases) != 0
+	service.recordingMu.Unlock()
+	if !hasLeases {
+		return service.Service.FlushRecording(request)
+	}
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest(request))
+	if err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	validator := service.recordingTargetValidator(string(status.Status.Artifact))
+	lease, ok := validator.(*recordingTargetLease)
+	if !ok {
+		return service.Service.FlushRecording(request)
+	}
+	lease.publicationMu.Lock()
+	defer lease.publicationMu.Unlock()
+	if err := lease.validateUnpublished(); err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	result, err := service.Service.FlushRecording(request)
+	if err == nil && result.Status.FlushedThrough != nil {
+		lease.published = true
+	}
+	return result, err
+}
+
+type recordingTargetClaimError struct {
+	path  string
+	cause error
+}
+
+func (err *recordingTargetClaimError) Error() string { return err.CLIErrorMessage() }
+
+func (err *recordingTargetClaimError) Unwrap() error { return err.cause }
+
+func (*recordingTargetClaimError) CLIErrorCode() string { return "RECORDING_TARGET_CONFLICT" }
+
+func (err *recordingTargetClaimError) CLIErrorMessage() string {
+	return fmt.Sprintf("cannot acquire exclusive ownership of recording target %q; preserve the recording and resolve destination access or ownership before retrying", err.path)
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -251,6 +385,7 @@ func NewCombinedService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
+	targetOptions ...recordings.RecordingTargetOptions,
 ) recordings.Service {
 	service := &combinedService{
 		Ledger:                 ledger,
@@ -271,6 +406,10 @@ func NewCombinedService(
 		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
+	if len(targetOptions) == 1 {
+		service.targetClaim = targetOptions[0].Claim
+		service.caseInsensitive = targetOptions[0].CaseInsensitive
+	}
 	return service
 }
 

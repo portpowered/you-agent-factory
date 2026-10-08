@@ -604,3 +604,16 @@ func TestRuntimeRecordingCancellationKeepsStorageFailureDuringCleanup(t *testing
 		t.Fatalf("terminal recording finalization = (%d, %v)", recording.finalizeCalls, recording.finishedAt)
 	}
 }
+
+func TestRuntimeRecordingCancellationPreservesCompletedCleanup(t *testing.T) {
+	t.Parallel()
+	storageErr := errors.New("terminal storage unavailable")
+	recording := &terminalRecording{finalizeErr: &recordings.RecordingCleanupError{Cause: storageErr, Complete: true}}
+	bundle := &factoryhost.Bundle{Recording: recording}
+	bundle.RecordProducerError(context.Canceled)
+	err := bundle.FinalizeRecording(time.Now())
+	var terminal *recordings.RecordingCleanupError
+	if !errors.Is(err, storageErr) || errors.Is(err, context.Canceled) || !errors.As(err, &terminal) || !terminal.Complete {
+		t.Fatalf("cleanup = %v, want completed cleanup retaining storage failure without cancellation", err)
+	}
+}

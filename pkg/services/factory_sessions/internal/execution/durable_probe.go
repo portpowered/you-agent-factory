@@ -13,7 +13,7 @@ import (
 // durableSnapshotFailure retains the existing typed resume outcome and exposes
 // only an application-authored classification to implicit startup. Decoder
 // errors may contain schema keys or prompt fragments and must not cross this
-// boundary, including through Unwrap.
+// boundary, in public diagnostic rendering.
 type durableSnapshotFailure struct {
 	resume *ResumeError
 	cause  string

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -342,8 +343,13 @@ func runRestartRecoveryFailureCase(t *testing.T, evidence *restartBaselineEviden
 	if !isKnownReplayDiagnostic(failureEvidence.ErrorCode) || failureEvidence.ErrorCode == string(factoryapi.ErrorResponseCode("SERVER_START_FAILED")) {
 		t.Fatalf("%s startup code = %q, want an existing typed Recordings code; output:\n%s", fixture.id, failureEvidence.ErrorCode, output)
 	}
-	if strings.TrimSpace(diagnostics[0].Message) == "" || strings.Contains(diagnostics[0].Message, resumePath) || strings.Contains(diagnostics[0].Message, restartRecoverySecretMarker) {
-		t.Fatalf("%s startup diagnostic is empty or exposes source details: %#v", fixture.id, diagnostics[0])
+	if strings.TrimSpace(diagnostics[0].Message) == "" || strings.Contains(diagnostics[0].Message, restartRecoverySecretMarker) {
+		t.Fatalf("%s startup diagnostic is empty or exposes source payload: %#v", fixture.id, diagnostics[0])
+	}
+	// The selected path is actionable diagnostic context; recording payloads
+	// remain private. Missing-file errors must retain the filesystem operation.
+	if fixture.id == "F-01-missing" && (!strings.Contains(diagnostics[0].Message, strconv.Quote(resumePath)) || !strings.Contains(diagnostics[0].Message, "open")) {
+		t.Fatalf("%s startup diagnostic omits the source path or filesystem cause: %#v", fixture.id, diagnostics[0])
 	}
 	assertRestartRecoveryFailureIsSafe(t, daemon, fixture.id, resumePath, successorPath, candidateHash, &failureEvidence)
 	failureEvidence.Outcome = "PASS"

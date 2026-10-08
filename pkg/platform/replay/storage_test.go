@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -9,6 +10,64 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestFailedSnapshotReplacementPreservesRetainedBytes(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "board.json")
+	retained := []byte("retained board history\n")
+	if err := os.WriteFile(path, retained, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("controlled replacement failure")
+	storage := NewLocal("windows")
+	storage.rename = func(_, target string) error {
+		if target != path {
+			t.Fatalf("replacement target = %q, want %q", target, path)
+		}
+		return failure
+	}
+	err := storage.WriteFile(path, []byte("replacement"))
+	if !errors.Is(err, failure) {
+		t.Fatalf("replacement error = %v, want original cause", err)
+	}
+	got, readErr := os.ReadFile(path)
+	if readErr != nil || !bytes.Equal(got, retained) {
+		t.Fatalf("failed replacement changed retained bytes: got %q, read error %v", got, readErr)
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil || len(entries) != 1 || entries[0].Name() != filepath.Base(path) {
+		t.Fatalf("failed replacement left temporary artifacts: %v, %v", entries, err)
+	}
+}
+
+func TestTransientSnapshotReplacementKeepsPreviousFileUntilPublication(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "board.json")
+	retained := []byte("retained board history\n")
+	if err := os.WriteFile(path, retained, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	storage := NewLocal("windows")
+	attempts := 0
+	storage.rename = func(source, target string) error {
+		attempts++
+		got, err := os.ReadFile(target)
+		if err != nil || !bytes.Equal(got, retained) {
+			t.Fatalf("attempt %d removed retained file before publication: %q, %v", attempts, got, err)
+		}
+		if attempts == 1 {
+			return errors.New("controlled sharing violation")
+		}
+		return os.Rename(source, target)
+	}
+	if err := storage.WriteFile(path, []byte("replacement")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "replacement" || attempts != 2 {
+		t.Fatalf("published bytes = %q, error %v, attempts %d", got, err, attempts)
+	}
+}
 
 func TestWriteAndReadFileReplaceSnapshot(t *testing.T) {
 	storage := NewLocal(runtime.GOOS)
@@ -234,8 +293,11 @@ func TestWriteFileWindowsReplaceRetriesUntilFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("WriteFile() error = nil, want replace failure")
 	}
-	if !strings.Contains(err.Error(), "temp artifact left at") {
-		t.Fatalf("WriteFile() error = %v, want temp artifact context", err)
+	if !strings.Contains(err.Error(), "replace replay artifact from temp file") {
+		t.Fatalf("WriteFile() error = %v, want replacement context", err)
+	}
+	if _, err := os.Stat(filepath.Join(blockingPath, "occupied")); err != nil {
+		t.Fatalf("failed replacement changed occupied target: %v", err)
 	}
 }
 
