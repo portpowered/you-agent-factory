@@ -9688,6 +9688,14 @@ func assertInvokeSessionState(
 ) {
 	t.Helper()
 	got := <-result
+	// A buffered result proves InvokeSession returned, but the producer can
+	// still be scheduled between publishing it and its deferred join signal.
+	// Observe channel closure too, so completed invocations are joined before
+	// assertions and teardown. Early failures retain cancellation and the
+	// cleanup watchdog in startInterruptCharacterizationSession.
+	if _, open := <-result; open {
+		t.Fatalf("%s InvokeSession() published more than one result", label)
+	}
 	if got.Session.State != want {
 		t.Fatalf("%s InvokeSession() = %#v, want %s", label, got.Session, want)
 	}
@@ -9758,6 +9766,8 @@ func startInterruptCharacterizationSession(
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
+		// LIFO defers publish the join signal before closing the result stream.
+		defer close(result)
 		defer close(done)
 		started, err := registry.InvokeSession(ctx, request)
 		if err != nil {
