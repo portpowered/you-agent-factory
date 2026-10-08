@@ -29,9 +29,10 @@ func TestFactoryConfigFlattenExpandRoundTripsThroughRootProcess(t *testing.T) {
 	}
 
 	process := buildDefinitionsProcess(t)
+	environment := isolatedHomeEnvironment(t)
 
 	beforePayload, err := support.FlattenFactoryConfigWithProcessAndEnv(
-		t, process, isolatedHomeEnvironment(t), dir,
+		t, process, environment, dir,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(factory config flatten before expand): %v", err)
@@ -44,7 +45,7 @@ func TestFactoryConfigFlattenExpandRoundTripsThroughRootProcess(t *testing.T) {
 	expandInputs := support.FakeInputs(t.Context(), []string{
 		"you", "factory", "config", "expand", factoryPath,
 	})
-	expandInputs.Input.Env = isolatedHomeEnvironment(t)
+	expandInputs.Input.Env = environment
 	expandInputs.Input.WorkingDirectory = dir
 	if err := process.Execute(expandInputs.Input); err != nil {
 		t.Fatalf(
@@ -60,7 +61,7 @@ func TestFactoryConfigFlattenExpandRoundTripsThroughRootProcess(t *testing.T) {
 
 	assertAuthoredLayoutFilesMaterialized(t, dir)
 	afterPayload, err := support.FlattenFactoryConfigWithProcessAndEnv(
-		t, process, isolatedHomeEnvironment(t), dir,
+		t, process, environment, dir,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(factory config flatten after expand): %v", err)

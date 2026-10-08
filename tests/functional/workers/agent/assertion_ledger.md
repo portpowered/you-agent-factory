@@ -1,26 +1,25 @@
 # MAP-001 agent and concurrency assertion ledger
 
-This ledger freezes the five existing executable rows before the shared-process
-restructure. The row identity and current assertion intent come from the
-checked-in C01 inventory. The post-migration witness names are the contract for
-the retained behavior; the concurrency row remains owned by story `...-003`.
+This ledger identifies the retained customer behavior after shared-process
+consolidation. Constructor-only provider inventory and deliberately failing
+test-executable cleanup probes are removed from the functional lane. Public
+provider validation, cancellation, session deletion and recovery remain.
 
 | Row | Current witness | Current assertion intent | Post-migration witness | Owner/status |
 | --- | --- | --- | --- | --- |
-| 1 | `TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction` | A root-built process is non-nil and exposes canonical `claude`/`codex` identities while unknown providers fail before runtime effects. | `TestAgentSharedProcess/Inert` | Story `...-001` |
 | 2 | `TestBuildProcessExecutesModelWorkerThroughConvergedWorkersService` | One controlled provider call produces one done Work, no failed Work, and an accepted `process` dispatch containing the exact output marker. | `TestAgentSharedProcess/Codex` | Story `...-001` |
 | 3 | `TestBuildProcessResolvesRegisteredAgentThroughProviders` | Registered-agent selection reaches the controlled provider once and preserves done/failed Work counts plus accepted dispatch output. | `TestAgentSharedProcess/Registered` | Story `...-001` |
 | 4 | `TestBuildProcessExecutesProviderAttemptThroughRuntimeRoot` | Runtime-root execution reaches the controlled provider once, preserves one done/zero failed Work, and proves the public Factory Session stream, Worker Session attempt, response Run/Event, dispatch, request, and Work correlations. | `TestAgentSharedProcess/RuntimeRoot` | Story `...-001` |
 | 5 | `TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage` | Two Factory Sessions overlap with distinct prompt/correlation identity; canceling one does not leak into the survivor, which later completes, and active calls return to zero. | `TestConcurrencySharedProcess/Concurrent` | Story `...-003` |
 
-No row is deleted by the migration. New checks for explicit session identity,
-immutable route selection, text input lineage, and one shared process are
-additive witnesses around rows 1–4.
+Explicit session identity, immutable command-route selection, text input lineage
+and customer-visible Work and event outcomes remain. The Agent journey runs in
+parallel with other packages; its adverse cases precede Recovery on the same
+host so the latter continues to prove recovery after failure and cancellation.
 
 ## Additive agent matrix witnesses
 
-These checks expand the requested AG-05 through AG-14 behavior matrix without
-reclassifying the five retained executable rows above.
+These checks cover the customer-facing Agent behavior matrix.
 
 | Matrix case | Observable assertion | Post-migration witness | Owner/status |
 | --- | --- | --- | --- |
@@ -33,4 +32,3 @@ reclassifying the five retained executable rows above.
 | AG-11 | Deterministic timeout produces terminal timeout observations with retries on the same immutable route, no fallback, and zero active calls. | `TestAgentSharedProcess/Timeout` | Story `...-002` |
 | AG-12 | Canceling the held call produces the current terminal response-stream cancellation diagnostic and no active provider call. | `TestAgentSharedProcess/Cancel` | Story `...-002` |
 | AG-13 | A fresh explicit session accepts clean Codex input/output after adverse cases without a prior marker. | `TestAgentSharedProcess/Recovery` | Story `...-002` |
-| AG-14 | Intentional child failure remains visible while cleanup reports deleted sessions, closed stream/process/listener, zero active route/call, and absent roots. | `TestAgentSharedProcess/Cleanup` | Story `...-002` |

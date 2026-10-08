@@ -175,14 +175,8 @@ func testFactorypackagedcrossPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t
 	}
 
 	fixture := factorypackagedcrossSharedCrossProcess(t)
-	namedHomeDir := t.TempDir()
-	namedFactoryDir := support.InstallPackagedFactoryWithProcess(
-		t,
-		fixture.process,
-		isolatedHomeEnvironment(namedHomeDir),
-		t.TempDir(),
-		factorydefinitions.PackagedGoalFactoryName,
-	)
+	// The named invocation uses the parent-owned installation and its own session.
+	namedHomeDir, namedFactoryDir := fixture.homeDir, fixture.factoryDir
 	apiServer := startPackagedGoalParityAPIServer(t, fixture.factoryDir)
 	t.Cleanup(func() { assertPackagedGoalParityAPIServerHealthy(t, apiServer) })
 
@@ -215,7 +209,7 @@ func runPackagedOutcomeParityCase1(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		goalText,
 	)
@@ -247,7 +241,7 @@ func runPackagedOutcomeParityCase2(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		strings.NewReader(goalText),
 	)
 	if err != nil {
@@ -289,7 +283,6 @@ func runPackagedOutcomeParityCase3(t *testing.T, apiServer *packagedGoalParityAP
 		wantPackagedGoalPrimaryResult,
 	)
 	assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "complete")
-	removeCrossOwnedPath(t, "named factory home", homeDir)
 
 }
 func runPackagedOutcomeParityCase4(t *testing.T, apiServer *packagedGoalParityAPIServer) {
@@ -309,7 +302,7 @@ func runPackagedOutcomeParityCase4(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		"   ",
 	)
@@ -334,7 +327,7 @@ func runPackagedOutcomeParityCase5(t *testing.T) {
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		strings.NewReader("from stdin"),
 		"from positional",
 	)
@@ -383,7 +376,7 @@ func runPackagedOutcomeParityCase6(t *testing.T, apiServer *packagedGoalParityAP
 		t,
 		dir,
 		factoryPath,
-		isolatedHomeEnvironment(t.TempDir()),
+		isolatedHomeEnvironment(factorypackagedcrossSharedCrossProcess(t).homeDir),
 		nil,
 		goalText,
 	)

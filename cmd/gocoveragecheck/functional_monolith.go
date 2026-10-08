@@ -237,7 +237,9 @@ func functionalMonolithRegistration(pkg functionalGoListPackage) (string, string
 }
 
 func functionalMonolithNativeReason(source string) string {
-	for _, marker := range []string{".Setenv(", ".Chdir(", "os.Unsetenv(", "SetWorkingDirectory(", "os.Getwd(", "os.Args[0]", "os.Executable(", "exec.Command(", "exec.CommandContext("} {
+	// An external fixture command does not depend on this test binary's
+	// identity. Re-execution and process-wide directory/environment state do.
+	for _, marker := range []string{".Setenv(", ".Chdir(", "os.Unsetenv(", "SetWorkingDirectory(", "os.Getwd(", "os.Args[0]", "os.Executable("} {
 		if strings.Contains(source, marker) {
 			return "process-wide state or executable fixture: preserve native binary"
 		}
@@ -247,7 +249,55 @@ func functionalMonolithNativeReason(source string) string {
 			return "relative fixture, embed, fuzz or example registration: preserve native binary"
 		}
 	}
+	if functionalMonolithNativeCommand(source) {
+		return "executable fixture: preserve native binary"
+	}
 	return ""
+}
+
+func functionalMonolithNativeCommand(source string) bool {
+	if !strings.Contains(source, "exec.Command(") && !strings.Contains(source, "exec.CommandContext(") {
+		return false
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), "", source, 0)
+	if err != nil {
+		file, err = parser.ParseFile(token.NewFileSet(), "", "package fixture\nfunc fixture() {\n"+source+"\n}", 0)
+	}
+	if err != nil {
+		return true
+	}
+	native := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		if call, ok := node.(*ast.CallExpr); ok {
+			native = native || functionalMonolithNativeExec(call)
+		}
+		return true
+	})
+	return native
+}
+
+func functionalMonolithNativeExec(call *ast.CallExpr) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	owner, ok := selector.X.(*ast.Ident)
+	if !ok || owner.Name != "exec" || (selector.Sel.Name != "Command" && selector.Sel.Name != "CommandContext") {
+		return false
+	}
+	index := 0
+	if selector.Sel.Name == "CommandContext" {
+		index = 1
+	}
+	if len(call.Args) <= index {
+		return true
+	}
+	literal, ok := call.Args[index].(*ast.BasicLit)
+	if !ok || literal.Kind != token.STRING {
+		return true
+	}
+	command, err := strconv.Unquote(literal.Value)
+	return err != nil || command != "git"
 }
 
 // Explicit cleanup hooks preserve the native lifecycle only when TestMain has

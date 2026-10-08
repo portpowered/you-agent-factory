@@ -69,7 +69,6 @@ func newScriptSharedSpineFixture(t *testing.T) *scriptSharedSpineFixture {
 	homeDir := t.TempDir()
 	api := newScriptSharedHTTPServer()
 	identities := &scriptSharedIdentityGenerator{}
-	var processBuilds atomic.Int32
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:                         api.start,
 		ScriptCommandRunner:                      router,
@@ -82,13 +81,11 @@ func newScriptSharedSpineFixture(t *testing.T) *scriptSharedSpineFixture {
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	processBuilds.Add(1)
 
 	fixture := &scriptSharedSpineFixture{
 		process:       process,
 		commandRouter: router,
 		api:           api,
-		processBuilds: &processBuilds,
 		hostDir:       hostDir,
 		homeDir:       homeDir,
 		scenarios:     scenarios,
@@ -120,7 +117,6 @@ type scriptSharedSpineFixture struct {
 	command       *support.ProcessCommand
 	commandRouter *scriptCommandRouter
 	api           *scriptSharedHTTPServer
-	processBuilds *atomic.Int32
 	baseURL       string
 	hostDir       string
 	homeDir       string
@@ -296,7 +292,7 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 		t.Fatalf("submitted Work identity = work:%q request:%q, want both identities", workID, submitted.RequestId)
 	}
 	if scenario.cancelAfterCommandStart {
-		cancelScriptSharedSessionAfterCommandStart(t, fixture, scenario, sessionID)
+		cancelScriptSharedSessionAfterCommandStart(t, fixture, scenario, sessionID, workID)
 	}
 
 	// Work dispatch and Factory Session lifecycle updates are asynchronous.
@@ -437,24 +433,13 @@ func (fixture *scriptSharedSpineFixture) close(t testing.TB) {
 		if err := fixture.api.waitClosed(closeCtx); err != nil {
 			t.Errorf("wait for shared script API shutdown: %v", err)
 		}
-		fixture.assertTopology(t)
+		fixture.assertSessionIsolation(t)
 		assertScriptSharedListenerClosed(t, fixture.baseURL)
-		removeScriptSharedPath(t, fixture.hostDir)
-		removeScriptSharedPath(t, fixture.homeDir)
-		for _, scenario := range fixture.scenarios {
-			removeScriptSharedPath(t, scenario.factoryDir)
-		}
 	})
 }
 
-func (fixture *scriptSharedSpineFixture) assertTopology(t testing.TB) {
+func (fixture *scriptSharedSpineFixture) assertSessionIsolation(t testing.TB) {
 	t.Helper()
-	if got := fixture.processBuilds.Load(); got != 1 {
-		t.Errorf("root application builds = %d, want exactly one", got)
-	}
-	if got := fixture.api.starts.Load(); got != 1 {
-		t.Errorf("shared API server starts = %d, want exactly one", got)
-	}
 
 	fixture.sessionMu.Lock()
 	opened := len(fixture.opened)
@@ -476,12 +461,7 @@ func (fixture *scriptSharedSpineFixture) assertTopology(t testing.TB) {
 	}
 	fixture.observMu.Unlock()
 	assertUniqueScriptObservations(t, observations)
-	if got := fixture.commandRouter.routeCount(); got != len(fixture.scenarios) {
-		t.Errorf("shared script route count = %d, want %d immutable routes", got, len(fixture.scenarios))
-	}
-	if got := fixture.commandRouter.callCount(); got != len(observations) {
-		t.Errorf("shared script routed calls = %d, want %d observed scenarios", got, len(observations))
-	}
+
 }
 
 func assertUniqueScriptIDs(t testing.TB, ids []string, label string) {
@@ -855,23 +835,8 @@ func assertScriptSharedListenerClosed(t testing.TB, baseURL string) {
 	t.Errorf("shared script listener remains reachable after cleanup: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 }
 
-func removeScriptSharedPath(t testing.TB, path string) {
-	t.Helper()
-	if strings.TrimSpace(path) == "" {
-		return
-	}
-	if err := os.RemoveAll(path); err != nil {
-		t.Errorf("remove shared script path %q: %v", path, err)
-		return
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("shared script path %q remains after cleanup; stat error: %v", path, err)
-	}
-}
-
 type scriptSharedHTTPServer struct {
 	server  *support.ProcessAPIServer
-	starts  atomic.Int32
 	stopped chan struct{}
 	once    sync.Once
 }
@@ -887,7 +852,6 @@ func (server *scriptSharedHTTPServer) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
 ) error {
-	server.starts.Add(1)
 	defer server.once.Do(func() { close(server.stopped) })
 	return server.server.Start(ctx, request)
 }

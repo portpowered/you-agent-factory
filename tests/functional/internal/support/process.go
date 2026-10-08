@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -64,13 +65,20 @@ type applicationProcess struct {
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
 	factorySessions  FactorySessionStarter
+	ownedDirectory   string
 }
 
 // FactorySessions exposes the session admission capability of the root process.
 func (p applicationProcess) FactorySessions() FactorySessionStarter { return p.factorySessions }
 
 func (p applicationProcess) Close(ctx context.Context) error {
-	return p.close(ctx)
+	if err := p.close(ctx); err != nil {
+		return err
+	}
+	if p.ownedDirectory != "" {
+		return os.RemoveAll(p.ownedDirectory)
+	}
+	return nil
 }
 
 func (p applicationProcess) ACPServer() ACPServer {
@@ -119,8 +127,23 @@ func buildProcessWithContext(
 	ctx context.Context,
 	edges serviceedges.Edges,
 ) (ApplicationProcess, recordings.WorkerRecordingReader, error) {
+	// Recording recovery resolves its project store during construction, before
+	// an invocation supplies Cwd or HOME. Keep that store process-owned unless
+	// a persistence/restart scenario explicitly supplies its project directory.
+	var ownedDirectory string
+	if edges.FactorySessionsWorkingDirectory == nil {
+		directory, err := os.MkdirTemp("", "functional-process-")
+		if err != nil {
+			return nil, nil, err
+		}
+		ownedDirectory = directory
+		edges.FactorySessionsWorkingDirectory = platformfilesystem.Local{WorkingDirectory: directory}
+	}
 	process, err := root.BuildProcess(ctx, serviceedges.Merge(functionalDefaultEdges(), edges))
 	if err != nil {
+		if ownedDirectory != "" {
+			err = errors.Join(err, os.RemoveAll(ownedDirectory))
+		}
 		return nil, nil, err
 	}
 	recordingReader := root.WorkerRecordingReaderFromProcess(process)
@@ -131,6 +154,7 @@ func buildProcessWithContext(
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
 		factorySessions:  process.FactorySessions().FactorySessions().(FactorySessionStarter),
+		ownedDirectory:   ownedDirectory,
 	}
 	return functionalProcess, recordingReader, nil
 }

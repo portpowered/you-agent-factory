@@ -36,6 +36,7 @@ const (
 func assertAPIStageAndSubmitFileCreatesExpectedWork(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	fileBytes := []byte("stage-and-submit-png-bytes")
 	staged := stageSubmitWorkFile(
@@ -44,7 +45,7 @@ func assertAPIStageAndSubmitFileCreatesExpectedWork(
 		"image",
 		stageAndSubmitFileName,
 		stageAndSubmitMediaType,
-		fileBytes,
+		fileBytes, sessionID,
 	)
 	if strings.TrimSpace(staged.StagedFileRef) == "" {
 		t.Fatalf("POST /work/staged-files stagedFileRef is empty, want backend-owned staged reference")
@@ -77,7 +78,7 @@ func assertAPIStageAndSubmitFileCreatesExpectedWork(
 		stageAndSubmitFileName,
 		stageAndSubmitMediaType,
 	)
-	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	submitted := submitSubmissionSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         submissionStringPtr(stageAndSubmitWorkName),
 		WorkTypeName: batchInputsWorkType,
 		Items:        &[]factoryapi.SubmitWorkItem{imageItem},
@@ -90,7 +91,7 @@ func assertAPIStageAndSubmitFileCreatesExpectedWork(
 		t.Fatalf("POST /work workId is empty, want customer-visible work identity")
 	}
 
-	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+workID)
+	endpoint := support.SessionWorkURL(server.URL(), sessionID, "/work/"+workID)
 	got := support.GetJSON[factoryapi.Work](t, endpoint)
 	if got.Name != stageAndSubmitWorkName {
 		t.Fatalf("GET /work/%s name = %q, want %q", workID, got.Name, stageAndSubmitWorkName)
@@ -113,6 +114,7 @@ func stageSubmitWorkFile(
 	fileName string,
 	mediaType string,
 	content []byte,
+	sessionID string,
 ) factoryapi.StageSubmitWorkFileResponse {
 	t.Helper()
 
@@ -125,7 +127,7 @@ func stageSubmitWorkFile(
 	if err != nil {
 		t.Fatalf("marshal stage submit-work request: %v", err)
 	}
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/staged-files")
+	endpoint := support.SessionWorkURL(baseURL, sessionID, "/work/staged-files")
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -148,6 +150,7 @@ func mustStageAndSubmitImageItem(
 	contentURL string,
 	fileName string,
 	mediaType string,
+
 ) factoryapi.SubmitWorkItem {
 	t.Helper()
 
@@ -217,7 +220,7 @@ func assertStageAndSubmitImageWorkContent(
 
 // The staged-file API and Work API must preserve the same media identity for
 // audio and documents as for images in the stage-then-submit flow.
-func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.FunctionalAPIServer) {
+func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
 	t.Helper()
 	for _, scenario := range []struct {
 		itemType, fileName, mediaType, contentType string
@@ -226,7 +229,7 @@ func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.Fu
 		{"document", "notes.pdf", "application/pdf", "BINARY"},
 	} {
 		t.Run(scenario.itemType, func(t *testing.T) {
-			staged := stageSubmitWorkFile(t, server.URL(), scenario.itemType, scenario.fileName, scenario.mediaType, []byte("staged media fixture"))
+			staged := stageSubmitWorkFile(t, server.URL(), scenario.itemType, scenario.fileName, scenario.mediaType, []byte("staged media fixture"), sessionID)
 			payload, err := json.Marshal(map[string]string{
 				"type": scenario.itemType, "stagedFileRef": staged.StagedFileRef,
 				"url": string(staged.Url), "fileName": scenario.fileName, "mediaType": scenario.mediaType,
@@ -238,12 +241,12 @@ func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.Fu
 			if err := json.Unmarshal(payload, &item); err != nil {
 				t.Fatal(err)
 			}
-			submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+			submitted := submitSubmissionSessionWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 				Name: submissionStringPtr("stage-and-submit-" + scenario.itemType), WorkTypeName: batchInputsWorkType,
 				Items: &[]factoryapi.SubmitWorkItem{item},
 			})
 			workID := support.StringPointerValue(submitted.WorkId)
-			got := support.GetJSON[factoryapi.Work](t, support.DefaultSessionWorkURL(server.URL(), "/work/"+workID))
+			got := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(server.URL(), sessionID, "/work/"+workID))
 			if got.Content == nil || len(*got.Content) != 1 {
 				t.Fatalf("Work content = %#v, want one %s part", got.Content, scenario.contentType)
 			}
@@ -292,10 +295,10 @@ func TestSelectedProcessClockControlsStagedSubmissionExpiry(t *testing.T) {
 			configureSubmissionCodexWorkers(t, dir, "worker-a")
 			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, Edges: edges})
 			t.Cleanup(func() { server.Stop(t) })
-			assertAPIStageAndSubmitFileCreatesExpectedWork(t, server)
+			assertAPIStageAndSubmitFileCreatesExpectedWork(t, server, submissionDefaultSessionID)
 			issuedAt := effective.Now()
-			before := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("before expiry"))
-			expired := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("exact expiry"))
+			before := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("before expiry"), submissionDefaultSessionID)
+			expired := stageSubmitWorkFile(t, server.URL(), "image", stageAndSubmitFileName, stageAndSubmitMediaType, []byte("exact expiry"), submissionDefaultSessionID)
 			if override {
 				selected.nanos.Store(base.Add(48 * time.Hour).UnixNano())
 			}

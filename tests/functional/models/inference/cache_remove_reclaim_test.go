@@ -379,7 +379,20 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 	if err := json.Unmarshal(backendBytes, &unsafe); err != nil {
 		t.Fatalf("clone backend reference: %v", err)
 	}
-	unsafe["cachePath"] = "../../outside/backend"
+	// The malformed reference escapes this owned cache into a scenario-owned
+	// sibling, so neither its resolution nor its sentinel depends on test cwd.
+	outside := filepath.Join(home, "outside", "backend")
+	if err := os.MkdirAll(filepath.Dir(outside), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outside, []byte("outside cache sentinel"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	relativeOutside, err := filepath.Rel(cacheRoot, outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsafe["cachePath"] = relativeOutside
 	writeASRPeerBackendReference(t, cacheRoot, "UNSAFE_MODEL", unsafe)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
@@ -404,6 +417,10 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 			t.Fatalf("fail-closed path %q stat error = %v, want retained", path, err)
 		}
 	}
+	if contents, err := os.ReadFile(outside); err != nil || string(contents) != "outside cache sentinel" {
+		t.Fatalf("unsafe reference changed outside-cache data: contents=%q error=%v", contents, err)
+	}
+
 }
 
 func TestModelsPublicOptInRemoveMapsCandidateLockFailureAndPreservesCache(t *testing.T) {

@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,34 +22,29 @@ const factoryEventsUnknownCursorEventID = "factory-events-invalid-cursor-unknown
 // Event history is returned in durable ascending order through the public
 // Factory Events API and that a second retained-history read preserves the same
 // relative order for the same session generation.
-func testEventsfactoryeventsAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
+func testEventsfactoryeventsAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "ordered-durable-history")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	name := "ordered-durable-history-work"
-	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "prove ordered durable history",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
 
-	firstRead := server.GetFactoryEvents(t)
+	firstRead := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(firstRead) < 4 {
 		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(firstRead))
 	}
 	assertFactoryEventsAscendingOrder(t, firstRead)
 
-	secondRead := server.GetFactoryEvents(t)
+	secondRead := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(secondRead) != len(firstRead) {
 		t.Fatalf(
 			"second retained-history read count = %d, want %d for the same session generation",
@@ -65,42 +58,37 @@ func testEventsfactoryeventsAPIGetFactoryEventsReturnsOrderedDurableHistory(t *t
 // TestAPIEventCursorReturnsOnlyNewerEvents proves a valid reconnect cursor
 // through the public Factory Events API returns only events recorded after the
 // acknowledged point and does not re-deliver the acknowledged event itself.
-func testEventsfactoryeventsAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
+func testEventsfactoryeventsAPIEventCursorReturnsOnlyNewerEvents(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "cursor-only-newer-events")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	name := "cursor-only-newer-events-work"
-	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "prove cursor returns only newer events",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
 
-	fullRead := server.GetFactoryEvents(t)
+	fullRead := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(fullRead) < 4 {
 		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(fullRead))
 	}
 
-	cursorIndex, cursorEvent := pickSessionScopedCursorEvent(t, fullRead, factorysessions.DefaultSessionID)
+	cursorIndex, cursorEvent := pickSessionScopedCursorEvent(t, fullRead, sessionID)
 	wantAfter := append([]factoryapi.FactoryEvent(nil), fullRead[cursorIndex+1:]...)
 
-	afterEventIDRead := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+	afterEventIDRead := support.GetFactoryEventsAfterForSessionAt(t, server.URL(), sessionID, support.FactoryEventReadCursor{
 		AfterEventID: cursorEvent.Id,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterEventIDRead)
 
 	reconnectSequence := support.ReconnectSequenceForFactoryEvent(cursorEvent)
-	afterSequenceRead := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+	afterSequenceRead := support.GetFactoryEventsAfterForSessionAt(t, server.URL(), sessionID, support.FactoryEventReadCursor{
 		AfterSequence: &reconnectSequence,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterSequenceRead)
@@ -110,28 +98,23 @@ func testEventsfactoryeventsAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 // through the public Factory Events API return typed invalid-cursor handling
 // instead of silently skipping events, and that a valid retained-history read
 // still works for the same session when cursors are omitted.
-func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
+func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "invalid-event-cursor")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	name := "invalid-event-cursor-work"
-	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "prove invalid cursor returns typed error",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
 
-	retained := server.GetFactoryEvents(t)
+	retained := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(retained) < 4 {
 		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(retained))
 	}
@@ -139,7 +122,7 @@ func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T)
 	unknownEventIDCursor := support.FactoryEventReadCursor{
 		AfterEventID: factoryEventsUnknownCursorEventID,
 	}
-	unknownEventIDError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), unknownEventIDCursor)
+	unknownEventIDError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), sessionID, unknownEventIDCursor)
 	assertFactoryEventsInvalidCursorError(t, unknownEventIDError.Response)
 	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownEventIDError.Body, retained)
 
@@ -147,26 +130,26 @@ func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T)
 	unknownSequenceCursor := support.FactoryEventReadCursor{
 		AfterSequence: &unknownSequence,
 	}
-	unknownSequenceError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), unknownSequenceCursor)
+	unknownSequenceError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), sessionID, unknownSequenceCursor)
 	assertFactoryEventsInvalidCursorError(t, unknownSequenceError.Response)
 	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownSequenceError.Body, retained)
 
-	recovery := support.ProbeFactoryEventStreamRecoveryAt(t, server.URL(), unknownEventIDCursor)
+	recovery := support.ProbeFactoryEventStreamRecoveryAt(t, server.URL(), sessionID, unknownEventIDCursor)
 	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE {
 		t.Fatalf("recovery outcome = %q, want CURSOR_STALE", recovery.Outcome)
 	}
-	if recovery.FactorySessionId != factorysessions.DefaultSessionID {
+	if recovery.FactorySessionId != sessionID {
 		t.Fatalf(
 			"recovery factorySessionId = %q, want %q",
 			recovery.FactorySessionId,
-			factorysessions.DefaultSessionID,
+			sessionID,
 		)
 	}
 	if !recovery.Retry.OmitAfterEventId || !recovery.Retry.OmitAfterSequence {
 		t.Fatalf("recovery retry = %#v, want both omit flags true for stale cursor", recovery.Retry)
 	}
 
-	validRead := server.GetFactoryEvents(t)
+	validRead := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(validRead) != len(retained) {
 		t.Fatalf(
 			"valid retained-history read count = %d, want %d when cursors are omitted",
@@ -180,19 +163,15 @@ func testEventsfactoryeventsAPIInvalidEventCursorReturnsTypedError(t *testing.T)
 // TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent proves explicit trace and
 // chaining trace identities on submit are preserved in the emitted WORK_REQUEST
 // batch event and the public Work projection.
-func testEventsfactoryeventsAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
+func testEventsfactoryeventsAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "trace-aware-submit")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     dir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	const traceID = "trace-request"
 	name := "trace-aware-submit"
-	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:                   &name,
 		WorkTypeName:           "task",
 		CurrentChainingTraceId: eventsfactoryeventsStringPtr(traceID),
@@ -200,7 +179,7 @@ func testEventsfactoryeventsAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *t
 		Payload:                map[string]string{"title": "explicit current"},
 	})
 
-	event := waitForWorkRequestEvent(t, server, submitted.RequestId, 5*time.Second)
+	event := waitForWorkRequestEvent(t, server, sessionID, submitted.RequestId, 5*time.Second)
 	if got := support.StringPointerValue(event.Context.RequestId); got != submitted.RequestId {
 		t.Fatalf("WORK_REQUEST context request ID = %q, want %q", got, submitted.RequestId)
 	}
@@ -227,8 +206,8 @@ func testEventsfactoryeventsAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *t
 		t.Fatalf("work trace ID = %q, want %s", got, traceID)
 	}
 
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(server.URL(), sessionID, "/work"))
 	if len(listed.Results) != 1 ||
 		support.StringPointerValue(listed.Results[0].CurrentChainingTraceId) != traceID {
 		t.Fatalf("public work projection = %#v, want chaining trace identity", listed.Results)
@@ -242,7 +221,7 @@ func eventsfactoryeventsStringPtr(value string) *string {
 func waitForWorkRequestEvent(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
-	requestID string,
+	sessionID, requestID string,
 	timeout time.Duration,
 ) factoryapi.FactoryEvent {
 	t.Helper()
@@ -255,7 +234,7 @@ func waitForWorkRequestEvent(
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		events := server.GetFactoryEvents(t)
+		events := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 		for _, event := range events {
 			if event.Type == factoryapi.FactoryEventTypeWorkRequest &&
 				support.StringPointerValue(event.Context.RequestId) == requestID {
@@ -275,21 +254,11 @@ func waitForWorkRequestEvent(
 // Factory Event SSE stream delivers events in ascending order while the Factory
 // Session is active and closes when the session terminates through the public
 // session boundary.
-func testEventsfactoryeventsFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) {
+func testEventsfactoryeventsFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "stream-order-close")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event stream provider COMPLETE"),
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
-	sessionID := opened.Session.Id
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), sessionID))
 
@@ -312,28 +281,20 @@ func testEventsfactoryeventsFactoryEventStreamIsOrderedAndClosesAtSessionTermina
 
 	support.TerminateFactorySessionAt(t, server.URL(), sessionID)
 	stream.WaitClosed(5 * time.Second)
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
 }
 
 // TestFactoryEventStreamReconnectHasNoGapOrDuplicate proves a dropped Factory
 // Event stream can reconnect from an acknowledged cursor and resume the live
 // timeline without gaps or duplicate deliveries.
-func testEventsfactoryeventsFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
+func testEventsfactoryeventsFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Parallel()
 
 	dir := support.ScaffoldSingleStepFactory(t, "stream-reconnect-continuity")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event reconnect provider COMPLETE"),
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	sessionID := openFactoryEventSession(t, server, dir)
 
 	firstStream := support.OpenFactoryEventStreamAt(
 		t,
-		support.SessionEventsURL(server.URL(), factorysessions.DefaultSessionID),
+		support.SessionEventsURL(server.URL(), sessionID),
 	)
 	firstPrefix := collectFactoryEventStreamUntilCount(t, firstStream, 4, 10*time.Second)
 	cursorIndex, cursorEvent := pickMidStreamCursorEvent(t, firstPrefix)
@@ -341,24 +302,24 @@ func testEventsfactoryeventsFactoryEventStreamReconnectHasNoGapOrDuplicate(t *te
 	firstStream.Close()
 
 	name := "stream-reconnect-continuity-work"
-	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "prove reconnect has no gap or duplicate",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 15*time.Second)
 
 	reconnectStream := support.OpenFactoryEventStreamAt(
 		t,
 		support.SessionEventsURLWithCursor(
 			server.URL(),
-			factorysessions.DefaultSessionID,
+			sessionID,
 			support.FactoryEventReadCursor{AfterEventID: cursorEvent.Id},
 		),
 	)
-	fullRetained := server.GetFactoryEvents(t)
+	fullRetained := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	cursorFullIndex := indexFactoryEventByID(t, fullRetained, cursorEvent.Id)
 	reconnectCount := len(fullRetained) - cursorFullIndex - 1
 	if reconnectCount == 0 {

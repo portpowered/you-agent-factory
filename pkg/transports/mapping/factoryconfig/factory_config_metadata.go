@@ -81,29 +81,23 @@ func decodeGeneratedFactoryBoundaryJSONWithPolicy(
 	data []byte,
 	rejectUnknownFields bool,
 ) (generatedFactoryBoundary, error) {
-	if err := retiredboundary.RejectGeneratedBoundaryAliases(data); err != nil {
-		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
-	}
-	normalizedData, err := normalizeFactoryInputJSON(data)
+	normalizedData, normalizedRoot, err := normalizeFactoryInputJSON(data)
 	if err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := retiredboundary.RejectExhaustionRulesField(normalizedData); err != nil {
+	if err := retiredboundary.RejectExhaustionRulesField(normalizedRoot); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := retiredboundary.RejectFanInField(normalizedData); err != nil {
+	if err := retiredboundary.RejectFanInField(normalizedRoot); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := retiredboundary.RejectCronIntervalField(normalizedData); err != nil {
+	if err := retiredboundary.RejectCronIntervalField(normalizedRoot); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := validatePortableLayoutBoundaryJSON(normalizedData); err != nil {
+	if err := validatePortableLayoutBoundary(normalizedRoot); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	ignoredJSONPaths, err := collectUnknownFactoryJSONPaths(normalizedData)
-	if err != nil {
-		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
-	}
+	ignoredJSONPaths := collectUnknownFactoryValuePaths(normalizedRoot)
 	if rejectUnknownFields && len(ignoredJSONPaths) > 0 {
 		return generatedFactoryBoundary{}, fmt.Errorf(
 			"%s: json: unknown field %q",

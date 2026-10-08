@@ -428,23 +428,27 @@ func TestInterruptCapturedRecipeReadRefusalLeavesSourceControllable(t *testing.T
 func assertRecipeRefusalStillAllowsTermination(t *testing.T, scenario s8InterruptScenario, ids s8ScenarioIdentities) {
 	t.Helper()
 	ctx := scenario.ctx
-	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
-	if findS8Observation(t, listed, ids.workerA).State != "RUNNING" || scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
+	source := showS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, ids.workerA)
+	if source.State != "RUNNING" || scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
 		t.Fatal("failed recipe read stopped source or admitted successor")
 	}
-	for _, item := range listed {
-		if item.WorkerSessionID == ids.successor {
-			t.Fatal("recipe preflight reserved a successor")
-		}
+	// Read the exact identity; unrelated concurrent scenarios can push the
+	// source off the first fleet-wide page.
+	absent := support.FakeInputs(ctx, []string{"you", "--remote", "--server", scenario.serverURL,
+		"--json", "worker-sessions", "show", "--worker-session-id", ids.successor})
+	absent.Input.Env, absent.Input.WorkingDirectory = scenario.env, scenario.factoryDir
+	if err := scenario.manager.Execute(absent.Input); err == nil {
+		t.Fatal("recipe preflight reserved a successor")
 	}
+	assertDirectWorkerSessionCLIError(t, absent, "WORKER_SESSION_NOT_FOUND")
 	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "terminate", ids.workerA})
 	inputs.Input.Env, inputs.Input.WorkingDirectory = scenario.env, scenario.repositoryA.path
 	if err := scenario.manager.Execute(inputs.Input); err != nil {
 		t.Fatalf("terminate after recipe preflight: %v %s", err, inputs.Stderr())
 	}
 	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
-	listed = listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
-	if findS8Observation(t, listed, ids.workerA).State != "TERMINATED" || scenario.runner.CallCount() != 1 {
+	source = showS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, ids.workerA)
+	if source.State != "TERMINATED" || scenario.runner.CallCount() != 1 {
 		t.Fatal("recipe refusal disabled exact termination")
 	}
 }

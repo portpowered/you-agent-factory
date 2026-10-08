@@ -80,13 +80,16 @@ func TestFunctionalMonolithPlanKeepsNativePackages(t *testing.T) {
 }
 
 func TestFunctionalMonolithNativeFixtures(t *testing.T) {
-	for _, source := range []string{`os.Getwd()`, `t.Setenv("A", "B")`, `//go:embed fixture`, `filepath.Join("testdata", "input")`, `exec.Command("helper")`, `func FuzzCustomer(f *testing.F) {}`} {
+	for _, source := range []string{`os.Getwd()`, `t.Setenv("A", "B")`, `//go:embed fixture`, `filepath.Join("testdata", "input")`, `exec.Command("helper")`, `exec.Command(binary)`, `exec.Command(os.Args[0], "-test.run=TestChild")`, `exec.CommandContext(ctx, executable, os.Executable())`, `exec.Command("git", "status"); exec.Command("helper")`, `func FuzzCustomer(f *testing.F) {}`} {
 		if functionalMonolithNativeReason(source) == "" {
 			t.Fatalf("process/fixture dependency accepted: %s", source)
 		}
 	}
 	if reason := functionalMonolithNativeReason(`func TestCustomer(t *testing.T) { t.Parallel(); session := newSession(t); session.Execute() }`); reason != "" {
 		t.Fatal(reason)
+	}
+	if reason := functionalMonolithNativeReason(`command := exec.Command("git", args...); command.Dir = workspace; command.CombinedOutput()`); reason != "" {
+		t.Fatalf("explicit fixture command depends on native test identity: %s", reason)
 	}
 }
 
@@ -151,5 +154,65 @@ func TestFunctionalMonolithPackageWallIncludesParallelChildren(t *testing.T) {
 	}
 	if terminal.Package != "original/package" || terminal.Action != "pass" || terminal.Elapsed != 10 {
 		t.Fatalf("package wall = %+v, want complete ten-second window despite zero parent Elapsed", terminal)
+	}
+}
+
+func TestFunctionalMonolithCustomerFailureKeepsRetryFocused(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output, groups: map[string]string{"A": "original/a", "B": "original/b"}}
+	for _, event := range []string{
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A/TestCustomer","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/B","Action":"pass"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`,
+	} {
+		if _, err := writer.Write([]byte(event + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := decideFlakeRetry(output.String(), "", 2)
+	if !decision.retry || len(decision.failures) != 1 || decision.failures[0].Package != "original/a" || decision.failures[0].Test != "TestCustomer" {
+		t.Fatalf("customer failure lost or retry broadened: %+v; %s", decision, output.String())
+	}
+	if strings.Contains(output.String(), functionalMonolithPackage) {
+		t.Fatalf("coordinator counted as customer failure: %s", output.String())
+	}
+	if death := decideFlakeRetry(output.String(), "panic: coordinator died", 2); death.retry {
+		t.Fatal("panic after a customer failure became an ordinary retry")
+	}
+}
+
+func TestFunctionalMonolithUnattributedFailureRemainsVisible(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output}
+	raw := `{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`
+	if _, err := writer.Write([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), functionalMonolithPackage) || decideFlakeRetry(output.String(), "", 2).retry {
+		t.Fatalf("unattributed process failure hidden or retried: %s", output.String())
+	}
+}
+
+func TestFunctionalMonolithPanicAfterCustomerFailureRejectsRetry(t *testing.T) {
+	var output bytes.Buffer
+	writer := functionalMonolithEventWriter{sink: &output, groups: map[string]string{"A": "original/a"}}
+	for _, event := range []string{
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A/TestCustomer","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Test":"TestFunctionalPackages/A","Action":"fail"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"output","Output":"panic: cleanup died\n"}`,
+		`{"Package":"` + functionalMonolithPackage + `","Action":"fail"}`,
+	} {
+		if _, err := writer.Write([]byte(event + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := decideFlakeRetry(output.String(), "", 2)
+	if decision.retry || !strings.Contains(decision.reason, "panic: cleanup died") {
+		t.Fatalf("actual coordinator panic was hidden by prior child failure: %+v; %s", decision, output.String())
 	}
 }

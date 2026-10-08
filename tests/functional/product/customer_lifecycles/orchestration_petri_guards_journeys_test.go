@@ -3,9 +3,8 @@ package customer_lifecycles_test
 import "testing"
 
 // TestFactoryEligibilityJourneys owns its immutable fixture until all customer scenarios finish.
-func TestFactoryEligibilityJourneys(t *testing.T) {
+func runFactoryEligibilityJourneys(t *testing.T) {
 	t.Parallel()
-	resetorchestrationpetriguards3State()
 	initializeOrchestrationpetriguardsFixture(t)
 	t.Run("TestGuardSameNameMismatchRemainsUndispatched", testOrchestrationpetriguardsGuardSameNameMismatchRemainsUndispatched)
 	t.Run("TestGuardWorkerErrorProducesOneFailedOutcome", testOrchestrationpetriguardsGuardWorkerErrorProducesOneFailedOutcome)

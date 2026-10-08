@@ -40,6 +40,8 @@ func newConfiguredProvidersService(
 	commandFactory platformprocess.CommandFactory,
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	promptFiles providerswire.CodexPromptFileSystem,
+	resolveHome func() (string, error),
 ) (providers.Service, error) {
 	runner := workerswire.NewProviderCommandRunner(agyRunner)
 	antigravity := legacyAgy
@@ -58,7 +60,7 @@ func newConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	registrations, err := providerswire.ExecutionRegistrations(antigravity, providerswire.NewCodexEffect(runner, clock), providerswire.NewClaudeEffect(runner, clock), acpService, config.ACPIntegrations, config.Registrations)
+	registrations, err := providerswire.ExecutionRegistrations(antigravity, providerswire.NewCodexEffect(runner, clock, promptFiles, resolveHome), providerswire.NewClaudeEffect(runner, clock), acpService, config.ACPIntegrations, config.Registrations)
 	if err != nil {
 		return nil, err
 	}

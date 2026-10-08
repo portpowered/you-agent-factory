@@ -277,7 +277,7 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			root, err := newTestProvidersService(IdentityCatalogProbe,
 				platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 				nil,
-				NewCodexEffect((codexRunner).commandEffect(), clock),
+				NewCodexEffect((codexRunner).commandEffect(), clock, nil, nil),
 				NewClaudeEffect((claudeRunner).commandEffect(), clock),
 				Configuration{})
 			if err != nil {

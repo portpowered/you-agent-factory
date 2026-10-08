@@ -177,7 +177,7 @@ func provideConfiguredProvidersService(
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
@@ -186,7 +186,7 @@ func provideConfiguredProvidersService(
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
+			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
@@ -198,7 +198,7 @@ func provideConfiguredProvidersService(
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
+		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
 }
 
 func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
@@ -487,6 +487,8 @@ func provideFactoryDefinitionPersistence(
 	persistenceFileSystem factorydefinitions.PersistenceFileSystem,
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
+	conversions factorydefinitions.SerializedFactoryConfigReader,
+	canonical factorydefinitions.CanonicalFactoryConfigReader,
 ) (factorydefinitions.PackagedFactoryPersistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
@@ -503,6 +505,8 @@ func provideFactoryDefinitionPersistence(
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
+		conversions,
+		canonical,
 	)
 }
 

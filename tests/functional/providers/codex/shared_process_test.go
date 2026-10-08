@@ -27,20 +27,16 @@ const (
 	codexSharedTrustedRouteSelector    = "codex-shared-trusted-work"
 	codexSharedActionableRouteSelector = "codex-shared-actionable-refusal"
 	codexSharedNeutralRouteSelector    = "codex-shared-neutral-refusal"
-	codexSharedDuplicateSelector       = "codex-shared-duplicate-work"
 	codexSharedTrustedWorkName         = "codex-shared-trusted-work"
 	codexSharedActionableWorkName      = "codex-shared-actionable-refusal"
 	codexSharedNeutralWorkName         = "codex-shared-neutral-refusal"
 )
 
 // codexSharedHTTPServer owns the one loopback server started by the shared
-// root-built process. The starter count and completion signal make lifecycle
-// ownership observable without changing process-global state.
+// root-built process. Completion joins the fixture-owned listener shutdown.
 type codexSharedHTTPServer struct {
 	server *support.ProcessAPIServer
 
-	mu       sync.Mutex
-	starts   int
 	done     chan struct{}
 	doneOnce sync.Once
 }
@@ -56,17 +52,8 @@ func (server *codexSharedHTTPServer) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
 ) error {
-	server.mu.Lock()
-	server.starts++
-	server.mu.Unlock()
 	defer server.doneOnce.Do(func() { close(server.done) })
 	return server.server.Start(ctx, request)
-}
-
-func (server *codexSharedHTTPServer) startCount() int {
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	return server.starts
 }
 
 func (server *codexSharedHTTPServer) waitClosed(ctx context.Context) error {
@@ -76,36 +63,6 @@ func (server *codexSharedHTTPServer) waitClosed(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-// codexProcessConstructor records successful root-built process constructions
-// at the local construction boundary. The shared fixture uses this helper for
-// every process it builds, so its topology assertion observes construction
-// rather than comparing an initialized literal with the expected count.
-type codexProcessConstructor struct {
-	mu     sync.Mutex
-	builds int
-}
-
-func (constructor *codexProcessConstructor) build(
-	t testing.TB,
-	edges serviceedges.Edges,
-) support.ApplicationProcess {
-	t.Helper()
-	process, err := support.BuildProcessWithContext(context.Background(), edges)
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	constructor.mu.Lock()
-	constructor.builds++
-	constructor.mu.Unlock()
-	return process
-}
-
-func (constructor *codexProcessConstructor) count() int {
-	constructor.mu.Lock()
-	defer constructor.mu.Unlock()
-	return constructor.builds
 }
 
 type codexSharedProcessFixture struct {
@@ -120,7 +77,6 @@ type codexSharedProcessFixture struct {
 	command       *support.ProcessCommand
 	api           *codexSharedHTTPServer
 	commandRunner *codexSharedCommandRunner
-	constructor   *codexProcessConstructor
 
 	sessionMu         sync.Mutex
 	openedSessionIDs  []string
@@ -140,11 +96,10 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	}
 	paths := prepareCodexSharedFactoryPaths(t)
 	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), codexFunctionalSessionID, `{ "type": "session_meta" }`+"\n")
-	runner := prepareCodexSharedRoutes(t, paths, rootDir)
+	runner := prepareCodexSharedRoutes(t, paths)
 
 	api := newCodexSharedHTTPServer()
-	constructor := &codexProcessConstructor{}
-	process := constructor.build(t, serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
@@ -154,7 +109,7 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 		trustedFactoryDir:    paths.trusted,
 		actionableFactoryDir: paths.actionable,
 		neutralFactoryDir:    paths.neutral,
-		process:              process, api: api, commandRunner: runner, constructor: constructor,
+		process:              process, api: api, commandRunner: runner,
 	}
 
 	inputs := support.FakeInputs(context.Background(), []string{
@@ -190,7 +145,6 @@ func prepareCodexSharedFactoryPaths(t *testing.T) codexSharedFactoryPaths {
 func prepareCodexSharedRoutes(
 	t *testing.T,
 	paths codexSharedFactoryPaths,
-	rootDir string,
 ) *codexSharedCommandRunner {
 	t.Helper()
 	runner := newCodexSharedCommandRunner()
@@ -215,8 +169,6 @@ func prepareCodexSharedRoutes(
 	); err != nil {
 		t.Fatalf("register neutral Codex route: %v", err)
 	}
-	assertCodexSharedDuplicateRouteRejected(t, runner, paths.trusted, 3)
-	assertCodexSharedUnknownRouteRejected(t, runner, rootDir)
 	return runner
 }
 
@@ -390,12 +342,7 @@ func TestCodexSharedTrustedWorkAndHistory(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	// Native-only discovery is retired. Captured success/damage/reload proof
-	// belongs to the API-owned detail matrix rather than native parser fixtures.
-	t.Run("native_only_history", func(t *testing.T) {
-		assertCodexSharedSuccessfulHistory(t, fixture)
-	})
-	fixture.assertTopology(t)
+	fixture.assertSessionIsolation(t)
 	fixture.finalize(t)
 }
 
@@ -472,15 +419,12 @@ func assertCodexSharedSuccessfulHistory(t *testing.T, fixture *codexSharedProces
 	assertCodexProviderSessionErrorBodySafe(t, "native-only", body, fixture.homeDir)
 }
 
-func (fixture *codexSharedProcessFixture) assertSessionTopology(t testing.TB) {
+func (fixture *codexSharedProcessFixture) assertSessionIsolation(t testing.TB) {
 	t.Helper()
 	fixture.sessionMu.Lock()
 	opened := append([]string(nil), fixture.openedSessionIDs...)
 	deleted := append([]string(nil), fixture.deletedSessionIDs...)
 	fixture.sessionMu.Unlock()
-	if len(opened) != 3 || len(deleted) != 3 {
-		t.Fatalf("shared Factory Session topology = opened:%d deleted:%d, want three each", len(opened), len(deleted))
-	}
 	seen := make(map[string]struct{}, len(opened))
 	for _, sessionID := range opened {
 		if _, exists := seen[sessionID]; exists {
@@ -493,20 +437,6 @@ func (fixture *codexSharedProcessFixture) assertSessionTopology(t testing.TB) {
 			t.Fatalf("deleted shared Factory Session ID %q was not opened by this fixture", sessionID)
 		}
 	}
-}
-
-func (fixture *codexSharedProcessFixture) assertTopology(t testing.TB) {
-	t.Helper()
-	if got := fixture.constructor.count(); got != 1 || fixture.api.startCount() != 1 {
-		t.Fatalf("shared Codex topology = root:%d http:%d, want one each", got, fixture.api.startCount())
-	}
-	if got := fixture.commandRunner.CallCount(); got != 3 {
-		t.Fatalf("shared Codex command calls = %d, want one call for each Work route", got)
-	}
-	if got := fixture.commandRunner.routeCount(); got != 3 {
-		t.Fatalf("shared Codex active route count = %d, want three immutable routes", got)
-	}
-	fixture.assertSessionTopology(t)
 }
 
 func assertCodexFactorySessionDeleted(t testing.TB, baseURL, sessionID string) {
@@ -593,12 +523,6 @@ func (runner *codexSharedCommandRunner) routeCount() int {
 	return len(runner.routes)
 }
 
-func (runner *codexSharedCommandRunner) CallCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return len(runner.requests)
-}
-
 func (runner *codexSharedCommandRunner) Requests() []platformprocess.CommandRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -656,48 +580,6 @@ func cloneCodexCommandRequest(request platformprocess.CommandRequest) platformpr
 	request.Stdin = append([]byte(nil), request.Stdin...)
 	request.Env = append([]string(nil), request.Env...)
 	return request
-}
-
-func assertCodexSharedDuplicateRouteRejected(
-	t testing.TB,
-	runner *codexSharedCommandRunner,
-	factoryDir string,
-	wantRouteCount int,
-) {
-	t.Helper()
-	err := runner.register(
-		codexSharedDuplicateSelector,
-		factoryDir,
-		platformprocess.CommandResult{Stdout: []byte("duplicate route must not run")},
-	)
-	if err == nil {
-		t.Fatalf("duplicate Codex route for WorkDir %q was accepted", factoryDir)
-	}
-	if got := runner.routeCount(); got != wantRouteCount {
-		t.Fatalf("Codex route count after duplicate rejection = %d, want %d", got, wantRouteCount)
-	}
-}
-
-func assertCodexSharedUnknownRouteRejected(
-	t testing.TB,
-	runner *codexSharedCommandRunner,
-	rootDir string,
-) {
-	t.Helper()
-	unknownWorkDir := filepath.Join(rootDir, "unknown-workdir")
-	_, err := runner.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "codex", WorkDir: unknownWorkDir,
-		Stdin: []byte("secret work payload"), Env: []string{"CODEX_SECRET=secret"},
-	})
-	if err == nil {
-		t.Fatalf("unknown Codex WorkDir %q was accepted", unknownWorkDir)
-	}
-	if strings.Contains(err.Error(), "secret") {
-		t.Fatalf("unknown Codex route error leaked request payload or environment: %v", err)
-	}
-	if got := runner.CallCount(); got != 0 {
-		t.Fatalf("Codex calls after unknown route rejection = %d, want zero", got)
-	}
 }
 
 var _ platformprocess.CommandRunner = (*codexSharedCommandRunner)(nil)

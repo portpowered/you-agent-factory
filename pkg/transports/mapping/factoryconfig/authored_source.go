@@ -67,9 +67,13 @@ func collectUnknownFactoryJSONPaths(data []byte) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return collectUnknownFactoryValuePaths(value), nil
+}
+
+func collectUnknownFactoryValuePaths(value any) []string {
 	var paths []string
 	collectUnknownJSONPaths(value, reflect.TypeOf(factoryapi.Factory{}), "$", &paths)
-	return sortedUniqueJSONPaths(paths), nil
+	return sortedUniqueJSONPaths(paths)
 }
 
 func decodeOneJSONValue(data []byte) (any, error) {

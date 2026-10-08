@@ -152,6 +152,7 @@ func newCompileLoadLoader(
 		sourceResolver,
 		fileSystem,
 		stubRequiredToolChecker{},
+		nil,
 	)
 }
 

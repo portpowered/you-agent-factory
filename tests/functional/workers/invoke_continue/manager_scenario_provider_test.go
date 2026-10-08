@@ -61,7 +61,8 @@ func (runner *s8RemoteProviderRunner) reset() {
 	runner.requestLog = nil
 	runner.markerLog = make(map[string][]string)
 	runner.errorLog = nil
-	runner.active.Store(0)
+	// Active calls span resets until their deferred completion runs.
+	// Keep lifetime accounting balanced rather than clearing an in-flight count.
 }
 
 func (runner *s8RemoteProviderRunner) CallCount() int {

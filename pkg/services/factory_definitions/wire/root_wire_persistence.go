@@ -6,6 +6,7 @@ import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -26,8 +27,12 @@ func Persistence(
 	persistenceFileSystem contracts.PersistenceFileSystem,
 	namedPaths contracts.NamedPathResolver,
 	replacement contracts.DirectoryReplacementStore,
+	conversions contracts.SerializedFactoryConfigReader,
+	canonical contracts.CanonicalFactoryConfigReader,
 ) (contracts.PackagedFactoryPersistence, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
+	decodeFactory := FactoryConfigDecoder(conversions)
+	encodeFactory := compilationwire.NewCanonicalFactoryConfigEncoder(canonical, mapper.Flatten)
 	writer := factoryauthoredlayout.NewWriter(
 		authoredmapping.RenderWorkerAgentsMarkdown,
 		authoredmapping.RenderWorkstationAgentsMarkdown,
@@ -52,9 +57,9 @@ func Persistence(
 				segment,
 				payload,
 				validator,
-				mapper.Expand,
+				decodeFactory,
 				authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-				mapper.Flatten,
+				encodeFactory,
 			)
 		},
 		func(

@@ -73,8 +73,8 @@ func BuiltInRegistrations(antigravity AgyEffect, codex CodexEffect, claude Claud
 }
 
 // NewCodexEffect constructs one native Codex command effect.
-func NewCodexEffect(runner providerservice.CommandRunner, clock platformclock.Source) CodexEffect {
-	return codexadapter.NewCommandEffect(runner, clock)
+func NewCodexEffect(runner providerservice.CommandRunner, clock platformclock.Source, files providerservice.CodexPromptFileSystem, resolveHome func() (string, error)) CodexEffect {
+	return codexadapter.NewCommandEffect(runner, clock, files, resolveHome)
 }
 
 // NewClaudeEffect constructs one native Claude command effect.

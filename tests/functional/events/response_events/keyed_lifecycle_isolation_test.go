@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -29,9 +28,6 @@ func TestFourExplicitSessionsKeepPeerOutputsAfterSelectedCancellation(t *testing
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: hostDir, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, hostDir)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	assertLifecycleIsolationUnknownControl(t, server.URL())

@@ -5,20 +5,446 @@ Measured October 5, 2026. Initial local source revision:
 
 ## Current result
 
+### Reuse the decoded public input across boundary checks
+
+The generated-model boundary decoded the same input independently for retired
+aliases, normalization, three unsupported-field checks, portable layout and
+unknown-field diagnostics. Reuse the normalized JSON object for the read-only
+checks before decoding the generated model. The standalone authored/layout
+boundaries retain their own parsing, and strict/tolerant field handling and
+generated-model validation remain. No global cache, new effect port or shared
+mutable configuration is introduced.
+
+Two complete customer-package executions per side in B/C/C/B order pass.
+Initial baseline totals 72.895403 CPU-seconds / 37.996198394s elapsed;
+candidate 68.465248 / 38.340250861: **6.1% less CPU / 0.9% more elapsed**.
+A separate confirmation passes with baseline **61.163351 CPU-seconds /
+35.029389710s elapsed** versus candidate **55.638802 / 32.720213763**,
+saving **9.0% CPU / 6.6% elapsed**. Builds are excluded and the initial pair's
+builtin lint overlap is retained as a measurement limitation; confirmation
+has no concurrent local lint/build work. These are package comparisons, not
+complete hosted checkpoint evidence.
+
+All mapping test packages and Factory Definitions Wire pass, as do both
+scoped lint suites and the catalog-generator command tests. The broader
+artifact-generation inventory test fails the same existing @you/subagent
+skipPermissions expectation on the restored baseline and candidate. Do not
+claim that test green or weaken its assertion to justify this change.
+Evidence: `factory-boundary-decode-paired/`,
+`factory-boundary-decode-confirmation/` in `.artifacts/latency-audit/`.
+
+The subsequent full lane on the rebased 45e5504c66 base passes at **133.50s
+supervisor / 122.331s coverage / 423.68 CPU-seconds** (349.25 user, 74.43
+system), 67 packages / 763 results, 761 pass/two skip. There is no flake ledger
+and no retry reported in the supervisor log. It rebuilds **649 compiler
+commands**, consuming 150.529880 CPU-seconds / 48.878179s active compile wall,
+plus **19 links**, 23.291724 CPU-seconds / 22.162300s active link wall. Preserve
+that rebuild cost; this full run is not a controlled speedup comparison.
+It precedes the final missing-field guard, whose focused public-input tests
+pass. Case-insensitive container checks retain the generated model's sorted
+last-field selection, and absent containers do not treat an unrelated empty
+object key as Workstations. All mapping/Wire and focused canonical publication
+tests pass. Evidence: `factory-boundary-live-full/`.
+
+### Hosted rebased canonical loading result, October 6
+
+Head 93d1fd8767 passes hosted Functional Coverage in run 37484727726.
+The complete job runs 15:08:53-15:14:42 UTC, **349s**; its coverage invocation
+takes **259.580s**, with 67 packages / 763 results, 761 pass and two skip.
+The concurrent supervisor takes 290.384s and quarantine verification 125.840s.
+A prefix compiler-archive restore from d2b1f09cc0 still requires **361 compiler
+commands / 16 links**. Retain this substantial rebuild work and distinguish
+coverage invocation, concurrent supervisor and complete job timing. This hosted
+sample does not isolate the loading cleanup's execution effect or prove the
+two-minute checkpoint. Backend Lint later passes, and the complete workflow is
+confirmed terminal with success after its Architecture Preview job finishes.
+Evidence: `canonical-load-cleanup-hosted/` in `.artifacts/latency-audit/`.
+
+A separate cached-decoder binding experiment routes canonical loading through
+the already injected serialized decoder instead of its mapper. Both complete
+customer-package executions per side pass, but baseline totals 63.174784
+CPU-seconds / 35.086235051s elapsed versus candidate 73.983320 /
+38.276307960: **17.1% more CPU / 9.1% more elapsed**. The private source is
+restored; this additional binding does not ship. Evidence:
+`canonical-decoder-binding-paired/` in `.artifacts/latency-audit/`.
+
+### Remove discarded canonical loading serialization
+
+Canonical loading used Expand to validate/map its public input, then cloned the
+result through JSON, removed authored-only inline content, flattened the clone
+to canonical JSON, discarded both clone and bytes, and returned the original
+configuration. The loader subsequently performs its blocking-definition and
+canonical-file checks. Remove the unused authored-output round trip; retain
+Expand and all subsequent selected validation and loading capabilities.
+Persistence still normalizes and serializes authored output when it writes it.
+
+Two complete `product/customer_journeys` executions per side in B/C/C/B order
+all pass. Baseline totals **70.199821 CPU-seconds / 37.198240684s elapsed**;
+candidate **61.468967 / 34.483024415**, saving **12.4% CPU / 7.3% elapsed**.
+Baseline individual wall is 18.512-18.686s; candidate 17.125-17.358s.
+Builds are excluded. The smaller three-journey comparison also passes all six
+repetitions per side, saving 5.3% CPU / 4.0% elapsed. These package measurements
+are not complete hosted checkpoint evidence.
+
+The discarded clone also converted repeated example arguments from []string to
+[]interface{}, causing the output mapper to reject an otherwise valid public
+input. Focused component tests cover repeated argument preservation, independent
+loads, forward-compatible field diagnostics and invalid name/description/
+arguments/trailing-input rejection. The complete Wire, compilation loader and
+two public mapping test packages pass, as do both scoped lint suites.
+Evidence: `canonical-load-cleanup-paired/` and
+`canonical-load-cleanup-full-package/` in `.artifacts/latency-audit/`.
+
+The pre-rebase complete local candidate finishes at **113.93s supervisor /
+113.924s coverage / 343.11 CPU-seconds** (268.94 user, 74.17 system).
+It performs 15 compiler commands (9.132855 CPU-seconds) and 20 links
+(25.144966 CPU-seconds / 24.304098s active link wall). The unchanged retry
+supervisor recovers one ACP child-visibility cancellation failure on the same
+source; retain that failure and do not describe this run as retry-free. This
+single warm measurement is compatibility and diagnostic evidence, not the
+hosted two-minute checkpoint. Evidence: `canonical-load-cleanup-full/`.
+The change is subsequently rebased without conflicts onto live main 45e5504c66
+and published as 93d1fd8767; hosted run 37484727726 is pending verification.
+
+### Cached serialization versus pre-rendered packaged layouts
+
+The current implementation already ships generated native Factory configurations
+and canonical-output bytes for the 20 published packaged Factories. Exact input
+hashes and the serialization version govern hits; customer edits and unsupported
+inputs take the ordinary conversion path. Returned configurations remain owned by
+each operation. These caches avoid conversion work, but do not eliminate layout
+preparation, validation, rendering or destination filesystem writes.
+
+The fresh customer-package profile below supports investigating an immutable
+pre-rendered file manifest next: installation consumes 74.01% of sampled CPU,
+fresh creation 58.46%, and preparation 38.52%. These are overlapping cumulative
+figures for one package, not independent savings or whole-CI attribution.
+Existing managed installations are reconciled rather than blindly reinstalled:
+the service caches expected content identities, rechecks installed files and
+management evidence, and preserves customer modifications. Fresh test homes
+still materialize the publications repeatedly.
+
+A generated manifest should contain relative file paths, bytes and modes, keyed
+by exact publication input plus layout-generator version and output format.
+Reuse immutable rendering, retain independent destination homes and Factory
+Sessions, and keep selected validator/pruning/persistence capabilities, portable
+file handling, atomic replacement and customer-edit detection. A global cache of
+mutable PreparedFactoryLayoutPayload or live session state cannot provide those
+ownership guarantees. The current prepared-payload contract contains Config,
+Canonical and RootFileName; it does not yet expose a rendered-file manifest.
+Measure that larger change against the same customer journeys and full lane
+before attributing a speedup or merging a checkpoint.
+
+Additional small-cache experiments do not justify production changes:
+
+- Memoizing the native envelope initially saves 3.9% CPU / 1.5% elapsed:
+  baseline 12.125798 CPU-seconds / 17.268215101s elapsed, candidate
+  11.651659 / 17.001907400. The subsequent typed-reader approach, which
+  parses envelopes once at catalog loading, regresses in confirmation:
+  baseline 13.973658 / 18.914790433, candidate 14.242807 / 19.381321658,
+  or 1.9% more CPU / 2.5% more elapsed. All six repetitions per side in the
+  confirmation pass. An earlier baseline-only portability failure and a
+  subsequent passing diagnostic are retained; no candidate ran in that failed
+  comparison, and its cause is not established.
+- Reusing canonical-output caching in the loading normalizer initially saves
+  6.1% CPU / 4.2% elapsed, but confirmation is nearly flat: baseline
+  12.601696 CPU-seconds / 17.918361247s elapsed, candidate
+  12.715114 / 17.803706988, or 0.90% more CPU / 0.64% less elapsed.
+  Both six-repetition-per-side comparisons pass.
+
+Builds are excluded from these execution comparisons. All prototype source is
+restored in both checkouts. Evidence is retained in `native-envelope-cache-paired/`,
+`parsed-native-reader-paired/`, `parsed-native-startup-diagnostic/`,
+`parsed-native-reader-confirmation/`, `normalizer-encoder-cache-paired/` and
+`normalizer-encoder-cache-confirmation/` under `.artifacts/latency-audit/`.
+
+### Hosted canonical-cache result and follow-up experiments
+
+Published source `d2b1f09cc0` passes every executed hosted check in run
+37474546433. Functional Coverage takes **270s complete / 204.848s coverage**,
+67 packages / 763 results, 761 pass and two skip. Its prefix compiler archive
+comes from 47760cc66d and it executes **409 compiler commands / 16 links**.
+This is substantially more rebuild work than the preceding 138-compiler run;
+neither sample isolates the canonical cache's execution-time effect. The
+complete two-minute checkpoint remains unmet and PR #2923 remains draft.
+
+Three additional approaches were tested and discarded:
+
+- One initialized CLI process/home for packaged CLI/REST parity, with local
+  invocations serialized, saves 33.7% CPU but increases group elapsed 27.0%.
+  Baseline totals 13.541772 CPU-seconds / 14.249476 elapsed; candidate
+  8.975320 / 18.101596. Six full journey repetitions per side all pass.
+- Sharing just the initialized CLI home, retaining independent parallel CLI
+  processes, initially saves 11.8% CPU / 3.8% elapsed. Its simplified final
+  confirmation regresses: baseline 12.862909 CPU-seconds / 13.565003 elapsed,
+  candidate 13.965284 / 14.094856, or **8.6% more CPU / 3.9% more elapsed**.
+  The initial favorable pair and final unfavorable pair are both retained.
+- A bounded successful-output-schema compilation cache initially saves 4.6%
+  CPU / 3.2% elapsed, but its production confirmation is nearly flat:
+  baseline 12.132046 CPU-seconds / 17.425941 elapsed, candidate
+  12.247028 / 17.324233, or **0.95% more CPU / 0.58% less elapsed**.
+  Both six-per-side customer comparisons pass. The candidate's complete
+  validation package, concurrent-use, error, external-reference and memory-bound
+  tests and both scoped lint suites pass. Correctness alone does not justify
+  keeping an optimization whose performance benefit does not repeat.
+
+All three source experiments are restored in both the shared Windows worktree
+and private Linux checkout. Their data lives under `cross-cli-fixture-paired/`,
+`cross-cli-home-paired/`, `cross-cli-home-confirmation/`,
+`output-schema-cache-paired/` and `output-schema-cache-production-paired/`
+inside `.artifacts/latency-audit/`.
+
+A fresh native profile of the complete `product/customer_journeys` suite on
+d2b1f09cc0 passes at **17.036389s elapsed / 29.826053 CPU-seconds** (22.418198
+user / 7.407855 system). Profiling is enabled; this is diagnostic evidence, not
+a clean speedup measurement. Of 29.44 sampled CPU-seconds, initialization
+accounts for **21.87s / 74.29%**, packaged installation **21.79s / 74.01%**,
+fresh managed creation **17.21s / 58.46%**, preparation **11.34s / 38.52%**,
+JSON unmarshalling **11.49s / 39.03%**, and the uncached mapper's Expand stack
+**7.33s / 24.90%**. These cumulative stacks overlap and cannot be added.
+Syscalls account for 6.57s / 22.32% of flat samples. This profile covers one
+customer package; do not present its percentages as whole-lane attribution.
+Data and cumulative/flat reports are in `canonical-cache-customer-profile/`.
+
+The next substantial target is redundant packaged-definition parsing and fresh
+installation preparation, preserving selected validation and filesystem ports.
+In particular, the serialized decoder still parses its native envelope and then
+parses the contained config again, while preparation and staged validation still
+reach uncached mapping paths. The fresh profile supports inspecting those paths
+before adding more fixture complexity or relying on small favorable samples.
+
+## Packaged Factory cache follow-up, October 6
+
+Rebased source `47760cc66d` includes live-main subagent MCP and daemon-restart
+scenarios. The hosted Functional Coverage job passes in **177s complete /
+122.174s coverage**, with 67 packages / 763 results, 761 pass and two skip.
+The compiler archive is a prefix hit from f367362e37; this run performs **138
+compiler commands and 16 links**. The two-minute complete checkpoint remains
+unmet. All executed hosted jobs are now confirmed successful.
+
+The corresponding local unchanged lane passes at **121.66s supervisor /
+111.549s coverage / 372.63 CPU-seconds** (307.84 user, 64.79 system). Rebuilding
+live-main changes performs 218 compiler commands (80.657503 CPU-seconds) and
+19 links (21.473357 CPU-seconds). Their active wall intervals are 31.423484s
+and 21.285776s and overlap; do not add them to estimate a critical path.
+
+Caching immutable packaged input is worthwhile; sharing mutable Factory Session
+state is not required. The shipped native serialization cache previously saved
+25.9% CPU / 19.0% elapsed in six customer runs per side. Installing once in an
+owned host and opening distinct explicit Factory Sessions avoids more work:
+the Work CLI confirmation comparison saves 47.9% CPU with nearly flat elapsed.
+
+A new private cache of decoded definitions with detached recursive copies saves
+only **0.84% CPU / 1.47% elapsed** across six repetitions per side of three
+customer journeys: baseline 13.307300 CPU-seconds / 18.358842 elapsed versus
+candidate 13.195456 / 18.089478. Discarded; the private source was restored.
+
+A different private cache stores the canonical serialized output after authored
+normalization. Generation checks whole-value round-trip equality for all 20
+published definitions. Lookup keys hash the exact normalized native input;
+nonserialized prompt metadata, unknown fields, edits and misses use the original
+encoder. Returned bytes are detached. This wraps only the concrete canonical
+encoder: validators, pruning, normalization, portable-file effects, writers,
+staged validation and publication still run.
+
+Three unchanged customer journeys, in baseline/candidate/candidate/baseline
+order with three repetitions per block, all pass. Builds are excluded from
+execution timing. Baseline totals **13.136105 CPU-seconds / 18.087352 elapsed**;
+candidate **11.849373 / 17.168674**, a **9.8% CPU / 5.1% elapsed** reduction.
+This supports further canonical-encoder work, but the prototype is not shipped
+and this focused result is not a complete CI speedup claim. Data lives in
+`.artifacts/latency-audit/canonical-encoder-paired/`.
+
+The prototype also passes the full unchanged lane at **113.41s supervisor /
+108.470s coverage / 347.54 CPU-seconds**, with the same 67 packages / 763
+results, 761 pass and two skip. It performs 118 compiler commands (40.151530
+CPU-seconds) and 19 links (21.906707 CPU-seconds), versus the baseline's 218
+compiler commands. Different rebuild work prevents attributing the full-lane
+elapsed or CPU difference to the encoder cache. This is a compatibility result;
+the repeated native-binary pairs are the performance evidence. Private Wire
+source is restored byte-for-byte and the prototype file is removed. Full data
+lives in `.artifacts/latency-audit/canonical-encoder-full/`.
+
+### Canonical-output production candidate
+
+The candidate now generates optional canonical output alongside each native
+conversion and indexes exact normalized-input hashes in the validated catalog.
+Catalog loading splits native and canonical bytes once, so the decoder does not
+repeatedly scan the larger combined asset. Canonical reads and encoder results
+are detached. Missing, stale, malformed and non-object optional output misses
+retain the original encoder. Unknown fields, file-backed prompts and runtime-only
+worker session, concurrency and model metadata also retain original mapping.
+Wire binds the encoder once and injects a distinct typed canonical reader;
+validation, pruning, normalization and persistence effects still run.
+
+The first unsplit production pair is nearly flat: baseline 12.969901
+CPU-seconds / 17.989911 elapsed, candidate 12.759414 / 17.719674. Retained;
+adding encoder output to the native envelope increased repeated decoder work.
+After splitting, a six-per-side confirmation passes at baseline **12.958215
+CPU-seconds / 18.016064 elapsed**, candidate **12.097475 / 17.207918**:
+**6.6% CPU / 4.5% elapsed reduction**. The final metadata-fallback refinement
+also passes six runs per side at baseline **13.427476 / 18.325541**, candidate
+**12.039741 / 17.308812**, saving **10.3% CPU / 5.5% elapsed**. Same three
+customer journeys, alternating blocks and compilation excluded throughout.
+Preserve both valid samples, rather than treating the fastest as a ceiling.
+
+An intervening baseline-only sample fails all three portability repetitions
+with the existing API-server-startup/shutdown timeouts (80.717671 elapsed).
+A fresh WSL instance is observed during investigation; causation is unproven.
+The driver stops before running a candidate. That failed sample is retained in
+`canonical-encoder-production-split-paired/` and excluded from speedup totals.
+The subsequent existing-timeout comparison passes on both sides.
+
+The full production candidate passes unchanged coverage before the additional
+runtime-metadata fallback checks, at **135.19s supervisor / 129.679s coverage /
+388.06 CPU-seconds**, 67 packages / 763 results, 761 pass and two skip. It
+rebuilds 414 compiler commands (72.966217 CPU-seconds) and 19 links
+(22.773331 CPU-seconds). This full run overlaps the Windows custom-linter build
+and checks; use it as compatibility evidence, not a clean latency comparison.
+Final metadata/fallback and all-20-definition equivalence tests pass, together
+with both scoped lint suites and all 11 catalog / 16 packaged-source smoke
+scenarios using a freshly built custom linter. Hosted validation of the new
+candidate is required. The complete two-minute merge checkpoint remains unmet.
+
+The preferred order is: reuse compatible initialized owned hosts with separate
+Factory Sessions; cache verified immutable serialization/renderings for tests
+that need independent installation; retain independent install, persistence and
+restart journeys to exercise those customer paths. A rendered-file cache should
+still write to each owned destination and preserve all selected validation and
+filesystem effects. Never reuse event ledgers, session state or mutated factory
+directories through an immutable packaged cache.
+
+
+Earlier published source `f367362e37` passes all hosted checks.
+Functional Coverage takes **147s complete / 92.644s coverage**, with 67 packages /
+762 results, 760 pass, two skip and no failures or retries. Its restored compiler
+archive is a prefix hit from d9e4f57e8e; coverage runs zero compiler commands and
+16 links. Complete job steps include 98s for the coverage supervisor, 6s checkout,
+8s Go setup, 4s module restore, 4s archive restore, 3s Node setup and 7s compiler
+archive capture/save. Those rounded step durations are not physical CPU data.
+This static-fixture-only revision's faster runtime demonstrates substantial
+cache/machine timing variation; do not attribute its 42s difference to the fixture
+asset. Earlier `d9e4f57e8e` passes hosted Functional
+Coverage in **189s complete / 139.494s coverage**, 67 packages / 762 results,
+760 pass and two skip, with no failures or retries. Its compiler archive is a
+prefix hit from c8b026366d; coverage runs two compiler commands and 16 linker
+commands. Every other executed job passes except Backend Lint: its migration
+smoke fixture publication predates native conversion assets and reports one
+missing conversion in the default clean-source cell. f367362e37 regenerates that
+tiny fixture through the canonical catalog generator with assertions retained.
+All 16 packaged-source and 11 catalog smoke scenarios pass locally, and the
+fresh hosted Backend Lint check passes. Parent c8b026366d passes Functional
+Coverage in 209s / 143.728s but fails the earlier catalog drift expectations,
+corrected in d9e4f57e8e. Earlier source `643e6f3b7b` passes every hosted workflow check in
+201s complete / 142.303s functional coverage with one recovered interrupt
+admission failure. Parent `69eaa32820` takes 210s / 150.914s coverage with
+recovered interrupt and Script failures; its remaining workflow is canceled by
+the next push. The preceding
+`f7e138ae4e` functional job takes 222s complete / 154.403s coverage, with one
+recovered Agent cancellation failure, and its integration job fails the
+released probe-port race. The preceding `e243441e58` workflow passes
+all checks, with Functional Coverage taking **247s complete / 169.073s coverage**,
+no retries, 110 compiler commands and 17 links after a prefix f0 archive restore.
+The complete hosted two-minute checkpoint
+remains **unmet** and the PR stays draft. The earlier warm three-minute
+checkpoint is merged. Keep prior complete 146s, 198s and 207s samples and their
+cache/retry differences; 146 seconds is not a reliable ceiling.
+
+The generated native conversion cache passes complete local validation. A warm
+candidate takes **140.07s complete / 133.380s coverage / 449.12 CPU-seconds**,
+versus a clean repeated disabled-reader baseline at **193.65s / 184.204s /
+636.78 CPU-seconds**, with zero compiler commands and 19 links on each side.
+This one complete comparison saves 27.7% elapsed time / 29.5% CPU. Six-per-side
+native customer journeys save 19.0% elapsed / 25.9% CPU. Cold rebuild cost,
+baseline timing variation and the earlier baseline's recovered admission failure
+are preserved below. Fresh hosted validation is required; 140 seconds remains
+above the complete two-minute checkpoint.
+
+A private rendered-file cache prototype passes the complete unchanged functional
+lane. In one matched four-CPU comparison, baseline takes **181.21s / 564.70
+CPU-seconds**, versus **145.74s / 452.47 CPU-seconds** for the prototype: about
+20% less elapsed time and aggregate CPU. This supports caching immutable,
+format-specific packaged Factory renderings. It does not justify sharing live
+Factory Session state. The prototype is not shipped; it needs the production
+writer and validation dependency boundaries preserved. The failed JSON-only
+prototype and the slower prepared-struct cache experiment are retained below.
+
+The published worker CLI home and native-join change passes full local coverage
+with **38 monolith groups / 569 registrations**, all **68 packages / 738 results**,
+no retries, unchanged coverage floors and quarantine. Finite worker CLI pairs
+use **32.1% less CPU / 11.7% less wall**; removing the invoke/continue framework
+subprocess probe uses **18.0% less CPU / 19.2% less wall** in fresh-process pairs.
+Work watch now joins through lazy setup and owned cleanup. A warm-helper local
+sample takes 140.95s / 451.29 CPU-seconds; final shared-helper correction takes
+204.98s / 688.92 CPU-seconds including 117 compiler commands. Both samples are
+retained, and neither establishes a complete hosted checkpoint.
+The published MCP change shares one initialized, owned client home and model
+cache across independent stdio connections. Six native repetitions per version
+use **42.5% less CPU / 34.1% less elapsed time**. Full local validation preserves
+all 740 results and coverage gates without retries at **143.62s supervisor /
+136.618s coverage**, using **453.12 CPU-seconds**. This full run is slower than
+the previous local 129.30s / 398.02s sample; the controlled package improvement
+must not be presented as a full-lane improvement.
+The published candidate shares one host across lifecycle, dispatch and eligibility
+journeys, retaining all 31 journey selectors with isolated Factory Sessions,
+command routes and owned home/model storage. Six native repetitions per version
+use **36.6% less CPU / 5.8% less wall**. Removing a test-framework subprocess
+probe permits concurrency to join the monolith without weakening its classifier;
+that package uses **41.7% less CPU / 14.1% less wall** across six repetitions.
+These targeted comparisons exclude build time and do not predict hosted totals.
+A full local four-CPU validation passes 68 packages / 744 results without retries
+in **165.72s supervisor / 159.276s coverage**, using 556.32s aggregate CPU.
+
+The published e02 candidate removes a service-only inventory probe, reuses an owned
+home for sequential JavaScript policy invocations, and releases the final-history
+read's unused live subscription before runtime teardown. The policy home change
+uses 42.3% less native execution CPU across six repetitions; separately, fixing
+history subscription ownership cuts six repetitions from 20.713s to 2.631s.
+Focused component regressions and lint pass. The full four-CPU lane passes in
+171.33s supervisor / 165.362s coverage, 68 packages / 743 results, no retries.
+
+The refreshed published-source monolith profile samples **272.45 CPU-seconds**
+over 86.05s wall. System initialization consumes **161.64s cumulative (59.33%)**,
+mostly packaged Factory installation/layout preparation. These nested values
+must not be summed. Package labels include fixture background goroutines:
+
+| Functional package suffix | Sampled CPU | Initialization subset |
+| --- | ---: | ---: |
+| product/customer_lifecycles | 48.34s | 16.98s |
+| product/customer_journeys | 48.33s | 38.86s |
+| factory/execution | 20.97s | 11.75s |
+| product/cli_rest_journeys | 18.26s | 12.55s |
+| transport/mcp/worker_sessions | 14.46s | 12.69s |
+| models/inference | 11.76s | 7.45s |
+
+Prioritize already-initialized owned homes and isolated sessions in customer
+journeys and MCP worker-session setups. Customer lifecycles also has a distinct
+25.30s ReviewFailureRecovery story: its focused stack shows JSON-heavy public
+session opening (9.28s) and Work admission (7.78s), rather than initialization.
+Avoid merging more constructors on the assumption that alone removes bootstrap
+work. The native packages require separate profiling; this table only covers
+the 36-group monolith. Source and measurement caveats are retained below.
+
+### Prior checkpoint measurements
+
 The five-minute checkpoint merged in
 [PR #2867](https://github.com/portpowered/you-agent-factory/pull/2867), commit
 `0dcdbf1fde04e573730e19c4b39fe097e7389d8c`. Its merge-queue functional supervisor
 passed in **272.327s**, including **215.102s coverage invocation**. An identical
 source tree also took 340.850s; both samples and recovered flakes are retained
-below. The three- and two-minute hosted merge checkpoints remain outstanding.
+below. The three-minute warm-cache checkpoint merged in PR #2905; the two-minute checkpoint remains outstanding. Cold-cache hosted jobs remain above three minutes.
 
-Latest head `ec85aae468` passes all 68 packages / 760 results with no retries.
-The changed-source hosted job takes **246s complete / 194.783s supervisor /
-184.590s coverage invocation**, with 110 compiler actions and 25 links. Its
-identical-head rerun hits the archive cache exactly: **223s complete / 185.458s
-supervisor / 167.054s coverage invocation**, zero compiler actions and 25 links.
-The three-minute complete-job checkpoint remains outstanding. These current
-runtime results supersede pre-rebase latency for the merge decision.
+Latest measured head `f5d203cad5` passes all 68 packages / 758 results with
+no retries. The [hosted functional job](https://github.com/portpowered/you-agent-factory/actions/runs/37416481644/job/112116898954)
+takes **226s complete / 161.028s coverage invocation**, with 64 compiler actions
+and 22 links. It combines 33 compatible package groups / 491 tests. Its identical-head warm-cache rerun passes in **155s complete / 111.277s
+coverage**, zero compiler actions and 22 links, with all 758 results and no
+retries. This demonstrates the three-minute checkpoint on a warm cache; the
+changed-source 226s sample remains material. The earlier identical
+`ec85aae468` archive-cache rerun took 223s complete / 167.054s coverage, zero
+compiler actions and 25 links. Changing candidates and runner variability do
+not establish a consistent total-job speedup from the last three links removed.
+These current-runtime results supersede pre-rebase latency for merging.
 
 The last pre-rebase hosted candidate, `592184914d`, passes the complete functional job in **192s (3m12s)**, with **147.527s coverage invocation**, all 68 packages/751 results, and no retries. The complete job remains above the three-minute checkpoint. Successful restored-cache jobs observed during this work range **192–237s**; this is a sequence of changing candidates, not identical-source repetitions. The eight-way candidate reduces concurrency and combines 26 compatible packages/373 tests, while preserving customer guarantees and coverage floors. Cold archive population still takes roughly five minutes.
 
@@ -2827,3 +3253,2499 @@ also resolves through that helper. Both packages pass three native repetitions
 (37.731s and 10.947s), and repository lint is clean. Their cwd/embed exclusions
 can therefore be removed by ordinary source discovery without loosening any
 consolidation classifier. The next combined lane verifies those cases together.
+
+## Current-runtime CPU profile and admission consolidation
+
+A successful full private Linux diagnostic run at `f5d203cad5` takes 173.17s
+elapsed and 527.62 aggregate CPU seconds (413.37 user / 114.25 system), including
+profiling overhead. The combined binary takes 112.91s elapsed / 325.76 CPU;
+its profile contains 318.15 sampled CPU seconds. All 68 packages / 758 selected
+results pass with no retries. This is diagnostic evidence, not an unprofiled
+hosted checkpoint. Labels cover 289.32s (90.94%) of sampled CPU; long-lived
+fixture goroutines inherit the creator's label, so individual test attribution
+can include shared background work.
+
+| Combined package | Sampled CPU seconds |
+| --- | ---: |
+| Product customer journeys | 56.37 |
+| Product customer lifecycles | 55.80 |
+| Work admission | 24.82 |
+| Product CLI/REST journeys | 23.66 |
+| Factory execution | 16.93 |
+| CLI customer commands | 14.61 |
+| Runtime metrics | 11.46 |
+| CLI invocation | 9.69 |
+| MCP Worker Sessions | 8.71 |
+| Session isolation and recovery | 8.10 |
+
+System initialization has 193.30 cumulative sampled CPU seconds (60.76% of the
+combined binary); packaged installation has 192.50, managed Factory creation
+169.55, layout preparation 116.76, JSON unmarshalling 122.05, and configuration
+expansion 86.94. These nested cumulative values overlap and must not be summed.
+Repeated fresh-home installation and definition expansion are the primary next
+CPU targets. Sharing already initialized hosts with explicit sessions preserves
+customer behavior without substituting internal initialization implementations.
+
+The unprofiled 33-group private sample takes 207.52s complete / 196.623s
+coverage, 662.78 CPU seconds, six compiler actions and 25 timed linker processes
+(56.834 CPU seconds / 49.684s active intervals). The preceding 31-group sample
+takes 147.18s complete. Fewer binaries did not yield a consistent measured wall
+improvement on this loaded local host. Claude and Restart contribute only 5.50
+sampled CPU seconds together; their inclusion alone does not explain the
+observed total-run variance.
+
+The next change groups four batch admission journeys behind one initialized
+host: duplicate-name rejection, explicit Work-ID conflicts and exact replay,
+payload-limit diagnostics across file/stdin/inline/dry-run inputs, and relation
+endpoint validation. Every child opens and closes its own explicit Factory
+Session and factory directory. CLI submissions, Work lists and retained events
+all name that session. No public assertion is removed. Three native repetitions
+pass in 7.755s; full-suite and hosted measurements follow separately. Four
+former top-level tests become four named children of one parent, reducing the
+selected top-level inventory by three without removing scenarios.
+
+The same-head hosted warm-cache rerun of `f5d203cad5` completes successfully in
+155s (05:18:26–05:21:01 UTC), with 111.277s coverage, zero compiler actions,
+22 links and an exact archive-cache hit. All 68 packages / 758 results pass with
+no retries. PR #2905 is queued for merge at this validated head. This meets the
+180s complete-job checkpoint for a warm cache; it does not establish a cold
+build guarantee or the 120s checkpoint.
+
+The admission consolidation passes the full private Linux supervisor in
+179.56s. Its selected inventory is 755 results (four former parents become one
+parent), with every customer scenario retained. The source still combines 33
+compatible packages; their top-level registration count becomes 488. Host-load
+variance remains substantial, so this one run is validation rather than a
+claimed throughput improvement. Focused native repetitions and repository lint
+also pass.
+
+### Native-package CPU costs from the successful diagnostic run
+
+These are measured process CPU seconds, not monolith label samples. Wall times
+include concurrency with other packages and profiling overhead. Do not combine
+these wall values into a total or compare them directly with sampled CPU.
+
+| Native package | User + system CPU seconds | Wall seconds |
+| --- | ---: | ---: |
+| Packaged Factory invocation | 26.45 | 35.23 |
+| Models inference | 15.76 | 22.65 |
+| Providers ACP | 14.09 | 19.21 |
+| Chat Sessions ACP | 11.51 | 18.49 |
+| MCP stdio | 10.57 | 16.27 |
+| Worker invoke/continue | 6.94 | 13.22 |
+| Providers | 6.74 | 13.85 |
+| Mock Workers | 5.98 | 6.37 |
+
+These executable/protocol fixtures remain native. Prioritize repeated setup
+within their compatible cases rather than merging away executable isolation.
+
+### Subsequent cold-cache hosted evidence
+
+PR #2905's merge-queue candidate passes functional coverage in **316s complete /
+243.519s coverage**. It has no matched archive cache, 672 compiler actions and
+22 links. This does not contradict its 155s same-head warm-cache rerun, but it
+shows that cache availability is material to the three-minute goal. PR-scoped
+cache entries are not sufficient evidence of default-branch/queue reuse; the
+main-push cache-seeding path must be verified after merging.
+
+The admission candidate `6ce70798aa` passes its initial hosted functional job
+in **310s complete / 235.462s coverage**, all 68 packages / 755 results, with
+no retries, no matched archive cache, 671 compiler actions and 22 links. The
+120s complete-job checkpoint remains unmet. The local full-run CPU is 570.51s
+(449.41 user / 121.10 system); three compiler processes use 1.940 CPU seconds
+and 25 timed linker processes use 48.838 CPU seconds, with 48.516s active linker
+intervals. Peak process RSS is 5,757,144 KiB. CI diagnostic command counts and
+local timed-process counts use different instrumentation and are reported
+separately.
+
+PR #2905 merged on October 6 at 05:39:06 UTC as
+`e9ab358719619483a270f9e32bec547b5af92e5b`, with all merge-queue checks passing.
+The admission-only follow-up is draft PR #2923, rebased onto that merged main
+commit. Its complete hosted 120s checkpoint remains pending; no two-minute
+result is claimed.
+
+The first admission PR full Backend Lint fails gocyclo at complexity 17 after a
+former top-level Test function becomes a private shared-host runner. The
+initial scoped repository-only lint did not run that built-in checker. Extract
+input acquisition and diagnostic assertions into separate helpers without
+changing assertions. Three post-rebase repetitions pass in 5.632s; both the
+built-in `.golangci.yml` and repository `.golangci-repository.yml` scoped runs
+now report zero issues. The hosted correction still needs its fresh full gate;
+no lint allowance is added.
+
+
+## Continued consolidation and customer-boundary cleanup (October 6)
+
+The two-minute complete hosted-job checkpoint remains unmet. The three-minute
+checkpoint previously merged in #2905 was a warm-cache result (155 seconds);
+its merge-queue run took 316 seconds after an archive-cache miss.
+
+### Current-source measurements
+
+| Run | Complete duration | Coverage command | Compile/link tool invocations | Outcome |
+| --- | ---: | ---: | --- | --- |
+| #2923 rebased head `496dca52d5`, hosted initial | 251 s | 191.605 s | 510 / 22 | Passed; complete CI passed |
+| Same head hosted rerun, exact archive-cache hit | 327 s | 251.213 s | 380 / 43 | Failed; excluded from successful timing evidence |
+| Main archive seed `e9ab358719` | 278 s | 204.126 s | 1341 / 43 | Passed; archive-cache miss |
+| Pending cleanup, current-source Linux, Models consolidated | 174.09 s | 167.293 s | 4 / 24 | Passed; 68 original packages, 755 results, 753 pass, 2 skip, no retry |
+
+The last row is a local controlled warm-cache measurement, not hosted checkpoint
+proof. It used four pinned CPUs, GOMAXPROCS=4, GOGC=100, package jobs=8, fresh
+execution (`-count=1`), full functional coverage and unchanged coverage policies.
+Aggregate process CPU was **569.28 seconds** (442.82 user + 126.46 system).
+Compiler CPU was 3.466 seconds; linker CPU was **43.752 seconds**. Linker tools
+were active for 41.412 wall seconds, with an overlapping invocation sum of
+88.784 seconds. Tool CPU is included in aggregate CPU; these numbers must not
+be added together. Largest-process RSS was 6,475,544 KiB, not aggregate memory.
+
+A preceding current-source run passed in 241.90 seconds (221.798 coverage,
+1364 compilers, 25 links). A 12.546-second native Models validation overlapped
+that sample, so it is validation-only and excluded from latency comparisons.
+Neither local sample is a paired estimate of savings against the earlier
+runtime revision. Private-repository Git-history contamination remains the
+previously documented limitation for Git fixture results.
+
+### Changes and retained customer proof
+
+- Removed redundant customer-home initialization before real CLI/API startup
+  in Metrics, response Events, provider-session reads, Work admission/watch,
+  CLI/REST journeys, process-time and worker-concurrency fixtures. Tests retain
+  owned profiles, explicit sessions, model-cache paths, external-effect fakes,
+  and customer assertions. Initializing or repairing the profile is exercised
+  through the actual customer operation.
+- Replaced the 462-line internal invocation probe with REST success, provider
+  failure and caller-timeout journeys. REST status, request/trace/Work identity,
+  Factory Event correlation, private-error redaction, continued Work after
+  timeout, missing-session diagnostics and peer-session reuse are asserted.
+  Existing REST cancellation/session-isolation tests remain. Assertions about
+  private invocation struct layouts and historical implementation behavior
+  were removed from the functional layer.
+- Converted Models inference's eager TestMain fixture into an owned lazy fixture
+  with bounded native and monolith cleanup. Its unsafe sibling-reference case
+  now uses an actual owned outside-cache sentinel and a relative escape path;
+  it still proves fail-closed removal and preservation of both managed cache
+  and outside content. This makes the package independent of process CWD and
+  eligible for the 34th compatible group without weakening the compatibility
+  classifier or sharing model assets between unrelated tests.
+- Corrected coordinator failure attribution: after an original combined-package
+  test failure, redundant Go wrapper failures do not become another customer
+  test/package. The actual original failure and native command error remain;
+  raw panic diagnostics, unattributed process failures and completion checks
+  for every original package remain. Focused retry selection therefore uses
+  the identified customer package, rather than rebuilding the entire combined
+  inventory solely because the synthetic wrapper also failed.
+
+The failed hosted rerun identified the removed internal caller-cancellation
+probe: it required request identity even when the caller returned before
+admission correlation. Its synthetic wrapper failure also exposed the broad
+native rebuild path. This failed run is diagnostic evidence, not a performance
+baseline or justification for silently accepting a failed test.
+
+Focused validation before publication: Metrics cost journeys passed three
+repetitions (54.553 s); replacement REST journeys passed three repetitions
+(14.548 s); native Models package passed (12.546 s), and unsafe sibling removal
+passed five repetitions (1.287 s). Scoped built-in and repository lint passed
+for the nine affected functional package families. Full Linux inventory and
+coverage validation passed as reported above. Coordinator regression tests
+cover focused original-package selection, panic rejection and unattributed
+process-failure visibility; existing partial-inventory checks remain.
+
+The earlier CPU profile still prioritizes packaged installation / managed
+Factory layout preparation and JSON expansion. Current package event windows
+are scheduling-inclusive and overlapping; they are not package CPU estimates.
+The next optimization should remove more repeated initialization inside
+isolated shared-session fixtures, then measure fresh CPU attribution on the
+current runtime. Archive restoration across PR/main/merge-queue scopes also
+needs hosted verification before promising consistent three-minute cold runs.
+
+
+### Current-runtime CPU profile and follow-up cleanup
+
+A fresh instrumented current-source run passed all 68 original packages / 755
+results without retries. Complete local supervisor: 212.92 s; coverage command:
+200.209 s; aggregate process CPU: 686.95 s. The consolidated test process used
+458.80 CPU seconds (349.78 user + 109.02 system) over 141.93 wall seconds.
+The profiler sampled 444.24 CPU seconds; 406.40 seconds (91.48%) carried package
+labels. Instrumentation and scheduling affect absolute performance; this is
+attribution evidence, not a paired savings estimate against an unprofiled run.
+
+| Combined original package | Label-attributed sampled CPU |
+| --- | ---: |
+| product/customer_lifecycles | 100.28 s |
+| product/customer_journeys | 85.31 s |
+| product/cli_rest_journeys | 35.36 s |
+| work/admission | 25.30 s |
+| factory/execution | 19.63 s |
+| transport/mcp/worker_sessions | 18.39 s |
+| models/inference | 17.29 s |
+| transport/cli/customer_commands | 15.29 s |
+| recordings/lifecycle | 11.67 s |
+| factory/definitions | 11.42 s |
+| factory/visualization/runtime_metrics | 8.03 s |
+
+Package labels can include background fixture goroutines inheriting the
+creator's label. They exclude native binaries and unlabeled process work.
+They are sampled CPU, not elapsed package windows. Cumulative stack costs
+nest: InitializeSystem 262.56 s (59.10%), packaged installation 261.88 s,
+managed Factory creation 232.94 s, layout preparation 157.93 s and JSON
+unmarshal 169.41 s must not be added. The immediate CPU target remains repeated
+initialization and Factory expansion, rather than further blanket link merging.
+
+Hosted head `968c90fe99` passed its functional job in **308 seconds**, with a
+230.527-second coverage command, 211 compiler calls and 21 linker calls, all
+68 original packages / 755 results and no failed tests. It restored the previous
+head's compiler archive through a prefix key, rather than an exact key. Its
+bounded capture reached 1,073,741,791 bytes and omitted 924 eligible cache
+entries. This establishes a cache-budget concern, but does not establish that
+all 211 compilations resulted from omission: source changes also invalidate
+archives. An exact-head successful rerun and a controlled cache-budget comparison
+are needed before changing the budget or promising a cold-run target.
+
+Follow-up removes three visualization service-root composition probes and their
+unused tracker/config fixture. Those tests directly invoked Activate/Join,
+Observe and Open/Present/Finalize/Close operations and asserted private method
+counts. Existing component/root-contract tests cover these outcomes under
+`pkg/services/factory_visualization`; customer CLI presentation, REST state and
+Factory Event journeys remain in the functional suite. Metrics costs,
+process-time and concurrency direct-process hosts now inject owned session
+working directories, preserving custom process-time overrides. This matches
+API-helper isolation and prevents implicit repository-directory storage.
+Coordinator output preserves panic/build-death headers even after an ordinary
+customer failure, so such crashes cannot be mistaken for retryable flakes.
+
+
+Follow-up full validation passed: 68 original packages, 752 results (750 pass,
+2 skip), no retry, unchanged coverage policy. The inventory decrease is exactly
+the three removed service-root visualization probes. Complete controlled Linux
+run: **198.36 s**, coverage command: 184.957 s, aggregate CPU: 612.96 s
+(468.42 user + 144.54 system), compiler calls: 12, linker calls: 26. Linker CPU:
+36.350 s; active linker wall: 33.104 s. This run is slower than the earlier
+174.09-second warm sample, so the cleanup is validated but no net latency win
+is established by these unpaired samples. Both scoped linters passed and the
+coordinator regression selection passed after the final panic-header change.
+The two-minute hosted checkpoint remains outstanding.
+
+
+## Exact-head build evidence and shared Work submission host
+
+Head `65efc94442` passed every required hosted check. Its changed-source
+functional job took 241 seconds (06:28:35–06:32:36 UTC), coverage command
+179.466 s, 370 compiler commands and 21 links. Prefix cache restoration used
+`968c90fe99`; capture retained 1,038,345,460 bytes with **zero omissions**.
+The completed-workflow exact-head rerun passed the functional job in **212
+seconds** (06:37:01–06:40:33), coverage 160.286 s, **zero compiler commands**
+and 21 links. Both ran all 68 original packages / 752 results without failures.
+The two-minute complete hosted-job checkpoint remains unmet.
+
+### Compiler archive budget comparison
+
+A build-only controlled comparison restored the same unchanged local compiler
+cache into separate 1 GiB and 2 GiB snapshots. Both compiled the exact selected
+functional inventory and overlay from the preceding full run with `-run=^$`:
+no customer test bodies ran, and the result is not a functional latency sample.
+Snapshots exclude test-result payloads and executables, as before. Both Go
+invocations succeeded in each trial; both required only **one tiny compiler
+invocation (~0.010 CPU seconds)** and 21 links. The 1 GiB build took 19.005 s
+and 50.623 aggregate CPU seconds; the 2 GiB build took 24.407 s and 73.971 CPU
+seconds. This is a sequential budget experiment, not a statistical linker-speed
+comparison. It demonstrates that increasing this local snapshot's budget does
+not recover meaningful missing compilation. The 1 GiB policy remains unchanged.
+The actual hosted exact-head zero-compiler result supports the same next action:
+prioritize execution/setup CPU, rather than a larger compiler cache.
+
+The already-committed workflow skips archive capture and save on exact primary
+cache hits. No additional snapshot-copy optimization is added.
+
+### Three submission hosts become one, with explicit sessions
+
+`TestWorkSubmissionJourneys` owns one initialized API host. Its parallel groups
+for HTTP batch/files, structured content and canonical batch content each open
+and close their own Factory Session and own their Factory directory. The host's
+default Factory is idle. Submission, staging, Work list/get, completion polling,
+upsert identity and the CLI `submit` call all carry the selected session ID.
+The original 13 customer cases and their assertion sets remain: ordered text,
+header-only and rejected empty content, staged file/media metadata, forged
+reference rejection, typed unknown-Work errors, canonical request/Work identity,
+and CLI/REST behavior. Two fewer reported top-level results reflect grouping
+three original tests under one parent; no customer case is removed.
+The reviewed REST endpoint evidence is updated to the new parent and published
+only after its parallel groups join successfully. The 160-scenario manifest
+check passes. Other fixtures explicitly retain their existing default selector
+while the shared helpers now also accept selected-session IDs.
+
+A full controlled Linux inventory/coverage run passes **68 packages / 750
+results**, 748 pass and 2 skip, without retry. Its 196.39-second elapsed and
+186.374-second coverage command overlap independent Windows validation work;
+these timings are **validation-only**, excluded from performance comparisons.
+Aggregate CPU was 639.83 s, with 118 compiler and 24 linker invocations. The
+final response helper was split after lint identified existing complexity at
+the newly modified assertion boundary; HTTP 201, identity and content guarantees
+are retained. Both scoped linters pass; native focused customer journeys pass
+three repetitions and the existing support upsert check passes.
+
+### Paired native execution measurement
+
+Baseline and candidate test binaries were built separately against the same
+runtime, with build time excluded from these execution numbers. Four CPUs were
+pinned, GOMAXPROCS=4, GOGC=100. Runs used five repetitions each in the order
+baseline, candidate, candidate, baseline; source/evidence files were restored
+for the matching binary and the candidate was restored afterward. Every run
+passed the same customer cases.
+
+| Version / run order | Five-repetition wall | User + system CPU |
+| --- | ---: | ---: |
+| Original three hosts, first | 3.525 s | 5.201 s |
+| Shared host, first | 4.507 s | 3.850 s |
+| Shared host, second | 3.255 s | 2.565 s |
+| Original three hosts, second | 3.134 s | 5.096 s |
+
+Across ten repetitions per version, aggregate CPU falls from **10.298 s to
+6.414 s**, approximately **37.7% less compute**. Aggregate wall rises from
+6.660 s to 7.762 s; elapsed samples are variable and no latency win is claimed.
+This is a native cell-level comparison, not a coverage-instrumented whole-CI
+checkpoint. Fresh candidate hosted CI is required. The remaining priority is
+consolidating compatible initialized-session fixtures in the largest measured
+customer packages, without collapsing distinct persistence or recovery proofs.
+
+## Remove remaining legacy and internal-only functional probes
+
+Remove the legacy metadata mapper/serializer/clone/help-renderer probe and the
+invalid programmatic snapshot argument probe from Product customer journeys.
+They call internal operations rather than public customer boundaries. Existing
+Factory snapshot, mapping, and CLI renderer component tests retain their owned
+checks; current customer CLI invocation-help journeys remain in the functional
+suite.
+
+Remove the smoke probe that writes retired exhaustion_rules and calls the loader
+directly. Keep the long customer guarded-loop routing journey. Remove the five
+retired initialization command/flag cells; retain supported initialization,
+invalid current input, atomic failure, and normal-command bootstrap journeys.
+No customer behavior assertion is weakened and no production code changes.
+This cleanup is not claimed as a measured latency improvement.
+
+## Shared submission host hosted measurement and causal payload observation
+
+At ce93d0ef0d, hosted job 112147854840 passes 68 packages / 750 results
+(748 pass, two skip) without retries. It runs 06:57:17–07:01:06 UTC on
+2026-10-06: **229s complete**, **175.035s coverage invocation**. Its archive
+prefix restore is the prior 65ef head; 110 compiler commands and 21 linker
+commands execute. This differs from the prior source and cache state and does
+not establish a paired whole-job improvement. The two-minute checkpoint remains
+unmet. Evidence: .artifacts/latency-audit/pr2923-submission-host-hosted.
+
+Replace review-failure payload prompt polling with notification from the
+controlled ProviderCommandRunner boundary. Each observed prompt closes a
+mutex-protected notification channel and installs the next channel; observers
+check existing prompts and capture the channel under the same lock. This avoids
+lost wakeups and the fixed 50ms sampling delay. A real timeout remains as a
+failure ceiling. Customer admission and payload assertions are unchanged.
+
+### Incidental coverage audit for removed internal probes
+
+The first removal run executes every selected case successfully (68 packages,
+746 results, 744 pass / two skip) in 178.59s supervisor / 172.391s coverage,
+470.57s user plus 114.79s kernel CPU. The overall gate fails on three package
+floors; this is a failed validation, not a checkpoint.
+
+The direct localized metadata calls had covered NameValue validation/resolution
+(72.22% prior floor, 16/54 = 29.6296% after removal). Retained component proof is
+TestNameValueValidationAndResolution, including exact locale fallback and
+invalid locale handling, plus canonical JSON/YAML structured example roundtrip
+checks. Customer CLI invocation help remains. The programmatically invalid
+snapshot mapping call had covered the mapper error return (75.00% prior floor,
+11/16 = 68.75% after removal); retained component proof is
+TestObjectFromFactoryConfigRejectsUnrepresentableExampleArguments. These focused
+component checks pass. That argument-shape error is rejected before customer
+snapshot creation, so reintroducing an internal mapper call into functional
+coverage would recreate the invalid test layer.
+
+Reconcile only these two incidental functional floors to 29.62% and 68.75%,
+respectively, under factory/docs/standards/testing-standards.md's explicit
+requirement to audit retained guarantees and reconcile incidental coverage when
+removing an invalid functional test. Other floors and remediation holds stay
+unchanged. Do not report these floor changes as performance gains.
+
+The third regression affects the public CLI config output handler. Its floor
+stays 62.22%; extend the existing invalid-Factory CLI journey with current
+flatten rejection and a closed customer output stream. Reuse its process and
+use explicit input paths/working directories instead of process-wide Chdir.
+
+Hosted lint on ce93 also finds three new generic support helpers in its
+non-test deadcode inventory. Keep the session-specific observation helpers
+local to Work admission test files instead of growing the support API or its
+deadcode allowance. The existing support API returns to its previous shape.
+
+### Final cleanup validation
+
+The final full Linux supervisor passes **68 packages / 746 results**, 744 pass
+and two skip, without retries. Coverage gates pass with only the two audited
+incidental floors reconciled above. Supervisor wall is 178.66s and coverage
+invocation is 170.727s. Concurrent native linter build/check work overlapped;
+this is **validation-only**, not a comparable performance result or hosted
+checkpoint. Evidence: .artifacts/latency-audit/legacy-customer-final.
+
+Both scoped built-in and freshly rebuilt repository linters report zero issues.
+The causal payload observer passes three focused repetitions. Current CLI
+Factory validation/flatten errors pass, as do retained localized metadata,
+canonical structured JSON/YAML examples, snapshot rejection and invocation-help
+component proofs. Hosted CI still must validate the new source and deadcode
+inventory. The last measured hosted source remains ce93 at 229s.
+
+## Share lifecycle, dispatch and eligibility hosts
+
+Three compatible customer journey groups now share one root-built host under
+TestFactorySessionRuntimeJourneys. Each group retains its own command router,
+scenario Factory directory, explicit Factory Session and causal gates. The
+parent owns host shutdown after all parallel groups and their children finish;
+group cleanup releases only its routes and sessions. Home, workflow storage,
+Factory Session storage and model cache belong to this host. Remove redundant
+bootstrap definitions and two separate process/start/stop implementations.
+All 31 existing journey selectors and their nested cases remain.
+
+Eligibility previously captured internal FactoryDispatchRecord values and
+compared joined Work IDs, ticks and counts. Its existing public Factory Event
+assertions already prove one joined dispatch with exactly the two requested
+Work IDs and causal producer/relationship/join order. Keep those assertions and
+remove the duplicate internal recorder. Validation rejects malformed definitions
+through HTTP 400 with diagnostics and no live session; internal recorder counts
+are unnecessary for those failures.
+
+Four-CPU native paired execution (baseline, candidate, candidate, baseline),
+three repetitions per command, all pass:
+
+| Scope | Baseline CPU | Candidate CPU | Baseline wall | Candidate wall |
+| --- | ---: | ---: | ---: | ---: |
+| Lifecycle + dispatch, six repetitions each | 15.200s | 10.676s | 28.381s | 26.011s |
+| Lifecycle + dispatch + eligibility, six repetitions each | 29.506s | 18.700s | 32.162s | 30.288s |
+
+The final three-group candidate uses **36.6% less aggregate CPU** and **5.8%
+less aggregate elapsed time** in this targeted comparison. Compilation is
+excluded; no other local CPU-heavy validation overlapped these measurements.
+This is not coverage-instrumented whole-job evidence. The two-group intermediate
+also saved 29.8% CPU / 8.4% wall; it does not establish a stronger final gain.
+Evidence: .artifacts/latency-audit/runtime-session-host-three-groups.
+
+## Remove test-framework forced-cleanup subprocess
+
+Remove the concurrency CC-14 cell which deliberately fails a subprocess of the
+test executable and asserts harness process/port/root cleanup. It does not
+invoke a customer CLI, REST or MCP operation. Retain customer capacity,
+concurrency, exact-target cancellation, peer isolation, recovery, timeout,
+idempotency and ordering scenarios and their test-owned cleanup. The causal
+channel helper used by admitted-Work cancellation stays with the controlled
+runner. The assertion ledger records the classification/removal.
+
+Paired native execution, six repetitions per version, all pass. CPU falls from
+**7.207s to 4.200s (41.7%)**, and wall from **9.629s to 8.275s (14.1%)**. No
+local CPU-heavy validation overlaps the timed commands. Removing executable
+self-inspection also permits this package to join the existing monolith through
+its unchanged classifier; do not relax native-binary exclusions.
+Evidence: .artifacts/latency-audit/concurrency-customer-only-paired.
+
+## Hosted cleanup measurement at d3b757b530
+
+Hosted job 112154415136 passes **746 results / 68 packages** in
+07:18:51–07:22:39 UTC on 2026-10-06, **228s complete / 168.592s coverage**.
+It restores the preceding ce93 compiler archive, executes 186 compiler commands
+and 41 links, and records one same-head retry for
+TestConcurrencySharedProcess/Cancel/CC-05. The first run returns HTTP 503 for
+one concurrent exact-target cancel; retry passes. The customer assertion remains
+in place. This is a real defect to investigate, not a no-retry checkpoint or
+proof that adding a wait fixes cancellation. Both paired concurrency versions
+above pass without retries, so they do not reproduce or resolve this defect.
+The two-minute target remains unmet. The entire workflow, including hosted lint, subsequently passes.
+Evidence: .artifacts/latency-audit/pr2923-customer-cleanup-hosted.
+
+## Exact-head hosted cleanup rerun and full shared-host validation
+
+The same d3 source rerun, job 112160465716, finishes successfully at
+07:35:52–07:40:22 UTC on October 6: **270s complete / 176.798s coverage**.
+It accounts for 68 packages / 746 results, 744 pass and two skip, with no raw
+failures or retries. Despite an exact primary compiler archive hit, the coverage
+invocation executes **363 compiler commands and 21 links**. Setup lasts about
+72s before coverage starts; distinguish that overhead from test execution.
+This result does not validate the unpublished shared runtime host. Evidence:
+.artifacts/latency-audit/pr2923-customer-cleanup-warm-hosted.
+
+The combined shared-host and concurrency-cleanup candidate passes the full
+four-CPU Linux supervisor in **165.72s / 159.276s coverage**, 68 packages / 744
+results, 742 pass and two skip, without retries. All existing coverage gates,
+scenario decisions and quarantine checks remain enabled. Aggregate CPU is
+**556.32s** (458.95s user / 97.37s kernel). Tooltimer records six compiler
+commands and 23 supervisor-wide links, including tool builds; linker CPU totals
+34.38s, with 29.65s union elapsed activity. Do not sum overlapping link elapsed
+times into critical-path wall. No other local CPU-heavy work overlaps this run.
+Evidence: .artifacts/latency-audit/shared-runtime-host-customer-only.
+
+Factory definition flatten/expand now reuses one test-owned environment across
+its three CLI calls instead of constructing three isolated homes for one
+customer journey. Model storage remains owned by the test. Three focused Linux
+repetitions pass; the scoped repository linter reports zero issues. The earlier
+full 165.72s run precedes this final environment simplification.
+
+The final source, including the flatten/expand environment simplification,
+passes a second full four-CPU run: **185.36s supervisor / 178.845s coverage**,
+68 packages / 744 results, 742 pass and two skip, no retries. CPU totals
+**620.79s** (513.95s user / 106.84s kernel). It executes two compiler commands
+and 23 supervisor-wide links, 34.94s linker CPU / 35.28s union linker activity.
+The unchanged classifier now combines **35 packages / 549 original tests**,
+with 19 native exclusions. The 160 reviewed scenario decisions remain current.
+This full-run variability (165.72s versus 185.36s) prevents a claim of consistent
+whole-job latency reduction from these targeted changes. Keep the paired
+package measurements separate from complete-lane observations. Evidence:
+.artifacts/latency-audit/shared-runtime-host-final.
+
+## Customer-only inventory and owned JavaScript policy setup
+
+Remove TestGatewayServiceInventoryExclusionAndFiltersPreservePeers and its
+three service-only helpers from the functional lane. It calls StartSync and
+ListSessions directly through the process service and tests status filters and
+history exclusion unavailable through the customer REST inventory. Retain
+TestGatewaySessionInventoriesPreserveIdentityAndHistory: CLI recording plus
+REST live/history/persisted/all scopes, exact identities, stable ordering,
+partial history failure and recovery. Existing component checks for listing
+filters/normalization, recorded history exclusion, assembly source selection
+and scoped merging pass in three service packages.
+
+Paired native inventory execution (baseline/candidate/candidate/baseline,
+three repetitions per command) passes. Aggregate CPU is **3.985s → 2.639s,
+33.8% lower**; wall is **2.584s → 2.733s, 5.8% higher**. Removal saves compute,
+not measured elapsed time in this small comparison. Evidence:
+.artifacts/latency-audit/gateway-customer-only-paired.
+
+The CLI JavaScript policy fixture now owns one home/model cache for its three
+sequential invocations, preserving fresh Factory directories, request IDs and
+Factory Session IDs. These calls do not run concurrently, so mutable first-run
+installation is never shared across concurrent invocations. Inject owned
+Factory Session storage/home and workflow storage. Remove unused host workflow,
+API server startup/stream counters, hosted process machinery and synthesized
+resource reports; neither retained policy scenario starts that server. Keep
+the no-provider-dispatch assertion and stable public failure diagnostics.
+
+Six native repetitions per version pass: **5.062s → 2.921s CPU (42.3% lower)**
+and **22.771s → 20.792s wall (8.7% lower)**. This comparison precedes the
+subscription ownership fix below and excludes compilation. Evidence:
+.artifacts/latency-audit/policy-owned-home-paired.
+
+## Release final-history subscription before runtime teardown
+
+A block profile of the policy CLI journey identifies about one second per
+invocation in FactoryEventHistory.CloseLiveSubscriptions. The final-history
+presentation read opens a live subscription using its caller context, reads
+History, then leaves that subscription active. Subsequent runtime termination
+waits for the one-second bounded drain deadline because the read has no live
+consumer. This is avoidable subscription lifetime, not customer execution time.
+
+readFactoryEventHistory now derives and cancels its own context on return for
+both default live history and durable session history. Clone/present all history
+before releasing it. Preserve the real subscriber drain deadline and queued
+terminal-event delivery. The focused bridge regression fails in both live and
+durable cases before the fix, then passes after it, checking history release,
+caller context preservation, exact presented event IDs and no duplicates. All
+Factory Sessions wire and Recordings event component tests pass, including
+queued terminal delivery and unread-subscriber bounding. Scoped built-in and
+repository linters report zero issues.
+
+A separate paired comparison keeps the simplified policy fixture identical
+and changes only the history-read fix: six repetitions per version pass with
+**20.713s → 2.631s wall (87.3% lower)** and **2.857s → 2.437s CPU (14.7% lower)**.
+No other local CPU-heavy validation overlaps the pairs. Do not add this gain
+to other percentages or extrapolate it to whole CI. Evidence:
+.artifacts/latency-audit/policy-event-history-release-paired.
+
+## Hosted shared-runtime source at d5d14fe082
+
+Hosted functional job 112164923707 passes at 07:51:16–07:55:15 UTC on October 6:
+**239s complete / 173.206s coverage**, 68 packages / 744 results, 742 pass and
+two skip, no retries. It restores the preceding d3 compiler archive, executes
+369 compiler commands and **20 links**. Backend lint also passes. Archive
+capture reaches 1,073,730,377 bytes and omits 172 eligible files; a prefix restore
+is not a warm build. These measurements precede the new inventory/policy/history
+changes. The complete two-minute checkpoint remains unmet. Evidence:
+.artifacts/latency-audit/pr2923-runtime-host-hosted.
+
+### Combined history-release candidate validation
+
+The full four-CPU Linux supervisor passes **68 packages / 743 results**, 741
+pass and two skip, no failures or retries, in **171.33s complete / 165.362s
+coverage**. All existing coverage floors and holds pass unchanged; quarantine
+and 160 reviewed scenario decisions remain enabled/current. Aggregate CPU is
+**581.48s** (490.38s user / 91.10s kernel). Seven compiler commands and 23
+supervisor-wide links consume 7.375s compiler CPU and 31.429s linker CPU;
+linker union elapsed activity is 31.365s. No other local CPU-heavy validation
+runs concurrently. This is changed-source local evidence; do not infer a
+hosted two-minute checkpoint or claim a matched whole-lane speedup. Evidence:
+.artifacts/latency-audit/policy-history-release-full.
+
+## Named Factory and session CLI fixture simplification
+
+Named Factory lifecycle and remote session commands have identical immutable
+process wiring. One parent TestFactoryAndSessionCLIJourneys now owns the process
+until both parallel groups join. Each scenario keeps its own home, working
+directory, HTTP target and command buffers; every current create/list/update/
+delete, packaged-install, profile-isolation, missing-home/help and selected-
+session command assertion remains. Rename the misleading composition-routing
+cell to SessionCommandsPreserveSelectedTargets. Remove only the standalone
+legacy submit --port rejection and the deprecated session-show --port tail;
+retain supported session-create port selection and default-session failure.
+
+Six native repetitions per version pass. CPU **4.132s → 4.228s** and wall
+**1.663s → 1.673s** show no measured performance gain. This is structural setup
+simplification and retired-flag cleanup, not a claimed latency optimization.
+Both scoped linters pass. Full Linux coverage passes 68 packages / 742 results,
+740 pass and two skip, no retries, in **222.48s supervisor / 214.107s coverage**,
+680.83s CPU (569.15 user / 111.68 kernel). Other WSL integration Go/Git work is
+observed concurrently; this whole-lane result is validation-only. The coordinator
+combines 35 packages / 547 top-level tests and preserves all native exclusions.
+Evidence: .artifacts/latency-audit/factory-session-cli-host-full and
+.artifacts/latency-audit/factory-session-cli-host-paired.
+
+Concurrent-cancellation investigation repeats the exact public CC-05 selector
+50 times using JSON results and verifies **50 leaf passes / zero failures**.
+This does not reproduce or fix the earlier hosted HTTP503; its customer assertion
+remains unchanged. An initial shell wrapper printed the passing Go result but
+failed to propagate its status; the corrected script records and verifies each
+selected leaf result explicitly. Evidence in private Linux:
+.artifacts/cc05-cancellation-stress.jsonl.
+
+## Hosted final-history release at e02e408d02
+
+Hosted job 112169220807 passes at 08:01:38–08:05:39 UTC on October 6:
+**241s complete / 169.801s coverage**, 68 packages / 743 results, 741 pass and
+two skip, no retries. It restores d5 compiler archives, executes **seven
+compiler commands and 20 links**. Entire workflow subsequently succeeds.
+This prefix archive recovers most compilation; execution and supervisor overhead
+now dominate this sample. Steps before the coverage supervisor total about
+33s. The coverage supervisor step lasts 189s, including tool startup and
+quarantine work beyond the measured 169.801s coverage invocation. Post-coverage
+capture/save/report/cleanup occupies the remaining roughly 19s. The complete
+two-minute target remains unmet. Evidence:
+.artifacts/latency-audit/pr2923-history-release-hosted.
+
+A private scheduling experiment now removes only coordinator-level package
+parallelism while preserving each original scenario's t.Parallel and the eight
+native build/run jobs. The current all-overlapping coordinator is observed at
+about 15.5 GiB resident memory late in execution; test-owned hosts remain alive
+while nested scenario children wait for shared Go test slots. This is a
+measurement hypothesis, not proof that sequential package groups improve CPU
+or elapsed time. Coverage, inventory, quarantine and native exclusions remain
+enabled for the experiment. Canonical generator source is unchanged pending
+evidence; the private source is restored after the experiment finishes.
+
+### Serialized-package experiment: rejected
+
+The private serialized-group variant passes all 68 packages / 742 results,
+740 pass and two skip, no retries, but takes **258.99s supervisor / 252.957s
+coverage** and **705.73s CPU** (603.47 user / 102.26 kernel). Peak process RSS is
+17,540,296 KiB. Twenty-three supervisor links use 32.652s CPU and 34.100s union
+elapsed activity. This does not justify changing default package scheduling;
+the canonical generator remains unchanged, and the private generator is verified
+byte-identical to it after restoration. Evidence:
+.artifacts/latency-audit/serial-functional-groups-full.
+
+A separate diagnostic-only repeat adds process CPU counters around each serial
+package epoch and writes a post-GC heap profile after all groups join. Original
+scenario parallelism, inventory and coverage gates remain enabled. Its purpose
+is attribution of retained memory and package CPU, not a candidate CI schedule.
+
+### Recording recovery attribution and default functional process isolation
+
+The diagnostic serialized-group run passed customer and coverage gates, but its
+post-GC heap retained **9,157.61 MB**. Pprof attributes **7,321.77 MB (79.95%)
+cumulative** to Worker capture `FileWriter.hydrate`, **7,422.64 MB (81.05%)** to
+`Local.ScanDirectory`, and **7,177.47 MB (78.38%)** to `recoverRecordingOwner`.
+These nested values overlap; do not sum them. Flat allocations include
+3,151.76 MB in `events.Record.Detached`, 1,916.09 MB in
+`recordingSession.acceptRecord`, and 1,370.77 MB in JSON literal decoding.
+This is retained memory, **not a CPU profile or hosted memory measurement**.
+
+Construction resolves Worker recordings through
+`FactorySessionsWorkingDirectory.Getwd()`, before CLI inputs provide Cwd/HOME.
+The functional helper previously retained the OS working directory. The private
+workspace contains **68 MB** of old Worker journals under
+`pkg/monolithpilot/.you-agent-factory/worker-recordings`, plus package-local
+journals. Many independent hosts repeatedly hydrate that store. Repeated private
+measurements amplify history; a fresh hosted job does not start with it, but
+can generate and reread peer journals within one suite. Do not extrapolate the
+entire private heap reduction to hosted CI.
+
+The pending helper supplies a unique real temporary working directory when a
+scenario has not supplied `FactorySessionsWorkingDirectory`. Real production
+composition, storage, recovery and public readers are retained. Explicit paths
+and writers are preserved for persistence/restart scenarios. The process removes
+its owned directory after successful Close and on construction failure. A Close
+failure retains it while resources may still be live. Invocation Cwd/HOME remain
+explicit. Existing shared journals are left untouched.
+
+The earlier diagnostic intended to collect package CPU deltas, but the generated
+counter only supported Windows; Linux returned unsupported, so **no package CPU
+measurements were produced**. The pending generator adds Linux Getrusage.
+Parallel group deltas include peers and must not be summed or presented as
+package CPU attribution. No sequential scheduling change is proposed.
+Rejected serialized repeats passed at 258.99s / 705.73s CPU and, with heap
+diagnostics, 278.75s / 781.13s CPU. Diagnostic overhead prevents using the
+latter as a candidate timing checkpoint.
+
+The owned-store candidate passes the complete four-CPU Linux supervisor at
+**143.70s overall / 137.174s coverage**, **470.78s aggregate CPU** (384.16 user /
+86.62 kernel), peak process RSS **6,447,928 KiB**. It retains 68 selected packages
+and 742 results (740 pass / two skip), no retries, all existing floors and holds.
+This changed source compiles 119 commands (51.887s CPU) and links 23 commands
+(37.138s CPU / 36.200s union active wall). Compared with published e02's local
+171.33s / 581.48s CPU, it is a promising sample; these are not controlled paired
+runs and compile state differs. The earlier pending CLI-only run was also
+contended, so its 222.48s sample is validation rather than a baseline speedup.
+Artifacts: `.artifacts/latency-audit/owned-recording-store-full`.
+
+Unitlane and coverage supervisor component suites pass. The generated Linux CPU
+counter is compiled by full verification; an isolated test of that exact generated
+source verifies Getrusage advances (0.008560 CPU seconds). The canonical manifest
+check confirms all 160 reviewed scenarios remain current. The helper's owned
+store does not replace real customer recording behavior with a mock.
+
+### Published owned-store hosted result and further compatible consolidation
+
+Published `b1d1087428` passes hosted Functional Coverage job 112182439929 in
+**222s complete / 170.789s coverage**, 68 packages / 742 results, 740 pass and
+two skip, no test failures/retries, 111 compiler commands and 20 links after a prefix e02 archive restore. The preceding e02 coverage interval was
+169.801s: **execution latency is essentially unchanged in these hosted samples**.
+Do not attribute the 19s complete-job difference entirely to store isolation.
+Before-supervisor overhead is 27s and post-supervisor overhead 15s; the
+supervisor step takes 180s. The complete workflow, including Backend lint, subsequently passes.
+Artifacts: `.artifacts/latency-audit/pr2923-owned-recording-hosted`.
+
+A private cleanup-hook experiment on five native suites exposed additional
+native constraints: executable fixtures (Providers, ACP chat, Codex), test-level
+quarantine (AGY), and relative-path strings (Docs smoke). No classifier or
+quarantine policy was weakened. The first diagnostic source accidentally
+changed UTF-8 punctuation while editing on Windows; its full run failed a
+Providers docs marker and is invalid for performance conclusions. All five
+files were restored byte-for-byte from the published head before the corrected
+changes. The unsupported hooks were discarded, not shipped.
+
+Docs smoke now retains current CLI headings, content markers, topic index,
+alias behavior, embedding prerequisite guidance and unknown-topic diagnostics.
+It removes 19 legacy absence tables, retired topic rejection checks, obsolete
+executable-name regex checks, removed duplicate-tree path checks and old goal
+topology checks. These retirement assertions were a relative-path false
+positive in the existing classifier. The same owned cleanup finalizer runs in
+native TestMain and the existing monolith package cleanup hook, after children
+join. Native Docs smoke passes. Full verification passes **36 merged groups /
+551 top-level registrations**, 68 packages / 742 results, no retries, unchanged
+gates, at **127.01s supervisor / 121.423s coverage**, **409.71s CPU**. Four
+compiler actions use 0.287s CPU; 22 supervisor links use 38.608s CPU / 34.135s
+union active wall. Warmer compilation explains part of the difference from the
+prior 143.70s sample; one removed binary does not explain the entire gain.
+
+A further pending parent consolidates Named Factories, Session commands,
+authored JSON/YAML parity and validation/persistence onto one process, retaining
+all scenario leaves. Its provider router preserves the existing command-scoped
+validation observation and session-specific authored-source routes. Validation
+still rejects API startup; authored runtime calls retain their owned server.
+Duplicated initialization/reset/teardown helpers are removed. Three focused
+repetitions and six paired repetitions per source pass. CPU **17.662s baseline
+versus 18.944s candidate** and wall **7.987s versus 8.187s** are neutral to
+slightly worse, not a speedup claim. The change is setup simplification; the
+full lane is being validated before publication. Baseline has three processes
+for four journey families; the artifact folder's historical four-host name
+counts families, not process instances.
+
+The final compatible-CLI source passes full verification at **129.30s supervisor /
+123.035s coverage**, **398.02s CPU** (319.90 user / 78.12 kernel), peak process
+RSS 6,501,336 KiB. It retains **68 packages / 740 results**, 738 pass and two
+skip, no failures/retries, 36 monolith groups / 549 top-level registrations.
+The two fewer top-level results are removed journey wrappers, not customer
+scenario leaves. Five compiler commands use 2.883s CPU and 23 supervisor links
+use 33.304s CPU / 32.127s union active wall. The previous Docs-only full sample
+was 127.01s / 409.71s CPU; neither sample proves a wall-time gain from sharing
+two more process constructors. Source simplicity and reduced total fixture
+graphs justify this cleanup, while the next performance work must address
+repeated initialization rather than treating constructor merging as sufficient.
+All 160 canonical decisions remain current. Artifact directory:
+`.artifacts/latency-audit/factory-cli-four-host-full`.
+
+### Refreshed published-source CPU attribution and CI blocker
+
+Profiling `21bde1452a` passes all 68 packages / 740 results with no retries,
+unchanged gates, at 125.94s supervisor / 119.874s coverage and 404.83s total CPU.
+This diagnostic adds CPU profiles and goroutine labels, so it is not a hosted
+checkpoint. Monolith duration is 86.05s with 272.45s sampled CPU; 246.89s (90.62%)
+is package-labelled. InitializeSystem accounts for 161.64s cumulative, including
+161.21s packaged installation, 99.19s managed-layout preparation and 74.59s
+FactoryConfigMapper expansion. JSON unmarshalling is 107.83s cumulative and
+Syscall6 is 43.40s flat. These costs overlap. Filtered initialization labels
+identify customer journeys (38.86s), customer lifecycles (16.98s), MCP worker
+sessions (12.69s), CLI/REST journeys (12.55s) and Factory execution (11.75s).
+The diagnostic generator is restored byte-for-byte afterward. Artifact:
+`.artifacts/latency-audit/owned-source-current-cpu`.
+
+Hosted source 21 passes Functional Coverage job 112188112819 in **146s complete /
+102.318s coverage**, 68 packages / 740 results, no retries, six compilers and 19
+links following a prefix b1 archive restore. Source b1's 111 compile commands
+versus six here materially affects the comparison. The two-minute complete job
+checkpoint is still unmet. Artifact:
+`.artifacts/latency-audit/pr2923-compatible-cli-hosted`.
+
+The same workflow's API Contract And Package job 112188113716 fails in
+`TestDefaultRegistryValidFixtures`: canonical runtime-api.json is momentarily
+invalid JSON. Contract staging generation rewrites that authored projection;
+its repository-mutating tests already acquire LockRepositoryStagingForTest.
+The validator's repository-root helper did not acquire the lock. The pending
+correction acquires the existing cross-process lock for canonical repository
+reads and releases it at test cleanup. No validation assertion is weakened or
+retry added. A contract-suite repetition is validating this merge unblocker.
+
+All contract tool packages pass three repetitions with the reader lock, including
+contractstaging and contractvalidator running as separate concurrent binaries.
+The API blocker correction changes test ownership only; no functional-runtime
+behavior, source contract or coverage floor changes.
+
+Both scoped linters pass for the contract reader correction. This corrective
+push is authorized to unblock CI; the previous head's Backend Lint job was
+still running when the completed API failure was corrected. No latency checkpoint
+is inferred from the correction and the PR remains draft.
+
+
+### Owned MCP client home: measured package improvement
+
+The shared remote-client process previously allocated a new HOME for each MCP
+connection, repeatedly installing packaged Factories. It now completes public
+`you init --provider codex` once before parallel children, then binds all client
+commands to the parent's owned HOME/USERPROFILE and model cache. Each connection
+retains its own context, pipes and working directory. Real server hosts retain
+their independent stores, sessions, persistence and restart paths. Selected-host
+routing, cancellation, failure, lineage and public response assertions remain.
+
+Controlled native execution compares baseline/candidate in B3/C3/C3/B3 order,
+six repetitions per version on four CPUs, excluding build/link time:
+
+| Version | Total execution CPU | Total elapsed |
+| --- | ---: | ---: |
+| Baseline | 104.943s | 36.716s |
+| Owned client home | 60.330s | 24.204s |
+| Reduction | 42.5% | 34.1% |
+
+All repetitions pass. The final canonical full lane passes 68 packages / 740
+results (738 passes, two skips), no retries, unchanged coverage floors and
+quarantine gates. Supervisor 143.62s; coverage 136.618s; CPU 453.12s (360.31 user,
+92.81 system); maximum RSS 6,606,656 KiB. Four compiler commands consume 0.993s
+CPU. Twenty-two supervisor links consume 32.198s CPU and 29.095s union active
+wall; their overlapping elapsed durations must not be summed into total latency.
+The earlier local source sample was 129.30s / 398.02s CPU. Both are retained;
+full-lane variability prevents inferring a complete-job gain from this sample.
+Both scoped linters pass and all 160 reviewed scenario decisions remain current.
+Artifacts: `.artifacts/latency-audit/mcp-client-home-paired` and
+`.artifacts/latency-audit/mcp-client-home-full`.
+
+The corrective contract-reader head `deec6a6f0f` passes its entire hosted workflow
+37440563162, including API job 112193456824. Functional job 112193454540 takes
+198s complete (09:06:46–09:10:04 UTC), 142.217s coverage, zero compiler commands
+and 19 links after a prefix 21 archive restore. Source 21's 146s complete sample
+used six compilers; neither warming nor the component-test-only correction
+explains away the slower valid sample. The observed runtime-identical hosted
+range is 146–198s. Two-minute merge remains gated on the complete hosted job,
+not just coverage execution. Artifact:
+`.artifacts/latency-audit/pr2923-contract-reader-hosted`.
+
+
+### Hosted MCP source: recovered interrupt race retained
+
+Functional job 112198276041 (workflow 37442087379, source `78153f7b20`) succeeds
+in **207s complete**, 09:19:40–09:23:07 UTC, with **153.481s coverage**, all
+68 packages / 740 final results. Eight compiler commands and 37 links are
+reported after a prefix deec archive restore. One initial `TestInterruptRace`
+failure recovers on the enabled exact-test retry. The CLI caller returned
+`WORKER_SESSION_INTERRUPT_ADMISSION_FAILED` during the simultaneous CLI/HTTP
+interrupt journey, where both identical requests must return the same accepted
+successor. This is a customer guarantee, so retain the test and raw failure;
+do not remove it or loosen its assertion for speed. This run cannot establish
+a no-retry checkpoint or a complete-job gain from the focused MCP reduction.
+The complete workflow finishes successfully, including Backend Lint.
+Artifact: `.artifacts/latency-audit/pr2923-mcp-client-home-hosted`.
+
+### Factory Event session-host experiments
+
+Six compatible retained-history, cursor, trace and stream cases previously
+started independent hosts, several using the default session. The first
+candidate keeps mock-worker and controlled-provider cases on two shared hosts,
+with one explicit session per case. All six repetitions per version pass, but
+baseline execution uses **49.204s CPU / 26.773s wall** versus candidate
+**51.162s CPU / 42.181s wall**. Reject that two-host performance candidate.
+Artifact: `.artifacts/latency-audit/events-session-host-paired`.
+
+The next candidate uses one controlled-provider host for these public event
+assertions; they do not require a particular worker implementation. Each case
+owns its explicit Factory Session, authored directory, submitted Work and event
+cursor. Mock-dependent topology edits, initial CLI/recorded sessions and webhook
+fault cases retain their existing dedicated fixtures. All current ordering,
+no-gap/no-duplicate, typed cursor error/recovery, trace propagation and stream
+termination assertions remain. Parent host cleanup follows child session cleanup.
+
+Six native repetitions per version in B3/C3/C3/B3 order pass. Baseline execution
+uses **48.870s CPU / 25.896s wall**; candidate **38.389s CPU / 24.070s wall**,
+**21.4% less CPU / 7.1% less wall**. This excludes compilation/linking and does
+not predict hosted total. Both scoped linters pass and all 160 reviewed scenario
+decisions remain current. Full canonical coverage validation passes.
+Artifact: `.artifacts/latency-audit/events-single-host-paired`.
+
+
+The single-host event candidate's complete local lane passes all 68 packages /
+740 results (738 passes, two skips), no retries, unchanged coverage gates,
+quarantine selectors, 36 monolith groups and 549 registrations. Supervisor
+**150.57s**, coverage **143.117s**, aggregate CPU **493.18s** (397.63 user,
+95.55 system), maximum RSS 6,815,132 KiB. The shared support source change
+requires **115 compiler commands / 51.132s CPU / 28.410s union active wall**;
+22 supervisor links consume **36.041s CPU / 34.968s union active wall**.
+The preceding MCP-only local run had four compiler commands / 0.993s CPU.
+Record these complete samples without claiming a whole-lane speedup from the
+controlled event comparison. Artifact:
+`.artifacts/latency-audit/events-single-host-full`.
+
+Remaining native-binary exclusions are retained: executable/helper-process,
+process-wide environment/Cwd, relative fixtures and unsupported TestMain
+semantics still require native registration. The safe Docs join is already
+included. Do not weaken the classifier merely to reduce link count. Existing
+selected-time automation journeys already advance injected clocks only after
+registration/readiness acknowledgements; their wall deadlines bound failure
+rather than successful completion. Network/filesystem observation is not made
+virtual by blindly wrapping it in synctest.
+
+
+### Finite worker CLI home and additional native-package joins
+
+Finite worker CLI lifecycle journeys now initialize one parent-owned home
+through public `you init --provider codex` before parallel children. Every run
+retains its explicit UUID Factory Session, authored Factory, Cwd, streams and
+provider-command route. Hosted adverse scenarios keep their independent homes.
+The environment helper replaces inherited model-cache overrides with a cache
+under each owned home. Parent teardown precedes removal of the shared home.
+
+Six native repetitions per version in B3/C3/C3/B3 order pass. Baseline uses
+**33.537s CPU / 14.627s wall**, candidate **22.778s CPU / 12.921s wall**:
+**32.1% less CPU / 11.7% less wall**. Artifact:
+`.artifacts/latency-audit/worker-cli-home-paired`.
+
+Remove `TestInvokeContinueForcedAssertionCleansOwnedResources` and its report
+helpers: it launches an intentionally failing test executable and examines
+framework cleanup counters rather than a customer operation. Retain actual
+CLI/HTTP invoke, continue, live stream, persistence, peer-session and interrupt
+assertions, including TestInterruptRace. Reuse native TestMain's existing close
+routine as FunctionalMonolithCleanup after children, allowing invoke/continue
+to join without weakening the classifier.
+
+The initial `-test.count=3` comparison is invalid: the baseline's package-wide
+fixture reuses request identities across repeated m.Run iterations and fails
+with request-ID conflicts. It is not a candidate regression or a performance
+sample. Correct measurement launches a fresh native process for each repetition,
+with the canonical parallelism of eight. Six fresh processes per version pass:
+baseline **15.930s CPU / 15.432s wall**, candidate **13.069s CPU / 12.470s wall**,
+**18.0% less CPU / 19.2% less wall**. This excludes build/link time. Artifacts:
+`.artifacts/invoke-continue-probe-paired` (private invalid attempt) and
+`.artifacts/latency-audit/invoke-continue-fresh-process-paired` (valid comparison).
+
+Work watch's process/profile setup becomes lazy and shared. Both native TestMain
+and FunctionalMonolithCleanup close the same selected-clock/legacy-clock
+processes after all children and then remove their owned profile root. Source-
+relative recorded-ledger fixture lookup remains unchanged and passes in the
+monolith. Remove a context-helper-only top-level probe; all customer CLI watch
+stream, child-deadline, cancellation, reconnect and retained-history cases remain.
+The existing real teardown timeout has a justified failure-ceiling comment;
+remove its single obsolete TestMain timeout baseline entry. No replacement debt
+is added. The rebuilt repository linter and focused analyzer tests pass.
+
+The first complete candidate passes in **140.95s supervisor / 134.554s coverage**,
+**451.29s CPU** (359.65 user / 91.64 system), RSS 6,639,120 KiB. Eight compilers
+consume 7.043s CPU; **20 supervisor links** consume 31.827s CPU / 31.046s union
+active wall. All 738 results, 736 passes/two skips, no retries, unchanged gates.
+Two removed framework-only results explain the count change. Compared with
+22 supervisor links before the joins, two separate binaries are removed.
+Artifact: `.artifacts/latency-audit/worker-home-and-native-joins-full`.
+
+### Hosted event source and corrective cursor-helper reuse
+
+Source f0's functional job 112202027678 succeeds in **220s complete**,
+09:29:41–09:33:21 UTC, **167.250s coverage**, all 740 results, no retries,
+110 compiler commands and 19 links after a prefix 781 archive restore. Artifact:
+`.artifacts/latency-audit/pr2923-events-single-host-hosted`.
+
+The final workflow fails Backend Lint and Frontend Browser. Deadcode's 2530
+reported findings differ from its 2528 inherited baseline by exactly the two
+new exported scoped-cursor support helpers. Correction removes the duplicate
+file and makes the existing unused cursor-error/recovery helpers require the
+explicit session ID. All callers use the same public session-scoped endpoint;
+no baseline allowance is widened. The UI failure waits ten seconds for Add
+workstation; retain the customer UI assertion and diagnose recurrence on the
+next head. Failure artifacts:
+`.artifacts/latency-audit/pr2923-events-single-host-lint` and
+`.artifacts/latency-audit/pr2923-events-single-host-ci-failure.log`.
+
+The final corrected source passes full canonical coverage in **204.98s supervisor
+/ 197.160s coverage**, **688.92 CPU-seconds** (538.75 user / 150.17 system),
+RSS 6,648,936 KiB, all 68 packages / 738 results, no retries. The shared support
+source change incurs **117 compilers / 71.866s CPU / 35.851s union active wall**;
+20 supervisor links consume **45.410s CPU / 48.517s union active wall**. Preserve
+this slower valid sample. Compilation alone does not account for all additional
+CPU, so no complete-lane improvement is claimed. Both scoped linters and all
+160 reviewed decisions pass. Artifact:
+`.artifacts/latency-audit/worker-home-and-native-joins-final`.
+## Refreshed CPU attribution after worker home and native joins
+
+The current corrected candidate passes the complete profiled lane with no
+retry. This diagnostic takes 162.52 seconds and 516.17 CPU-seconds; it is not
+a hosted checkpoint or a comparable uninstrumented timing sample. The
+monolith profile samples 351.78 CPU-seconds over 113.08 seconds. Initialization
+accounts for 204.73 cumulative CPU-seconds (58.20%), and packaged Factory
+installation accounts for 204.10 (58.02%). These overlapping stacks must not
+be summed. Two compiler commands consume 0.225 CPU-seconds; 20 supervisor
+links consume 35.120 CPU-seconds across 34.554 seconds of active wall time.
+
+| Labelled functional package | Sampled CPU seconds | Initialization CPU seconds |
+| --- | ---: | ---: |
+| product/customer_journeys | 79.29 | 63.37 |
+| product/customer_lifecycles | 58.73 | 19.88 |
+| factory/execution | 25.45 | 13.80 |
+| product/cli_rest_journeys | 19.90 | 13.48 |
+| transport/cli/customer_commands | 13.80 | 9.99 |
+| models/inference | 13.76 | 8.80 |
+| work/admission | 11.71 | 8.84 |
+| transport/mcp/worker_sessions | 10.67 | 8.72 |
+
+Package labels propagate into fixture background goroutines and cover 89.76%
+of sampled monolith CPU. They identify the next inspection targets, rather
+than establish isolated per-package regressions against older profiles.
+Customer journeys' repeated initialization is the largest remaining measured
+target. Preserve independently owned persistence/restart paths and explicitly
+isolated session routes when sharing setup. The review failure/recovery journey
+alone accounts for 30.79 sampled CPU-seconds, including actual session opening
+and Work admission that cannot be removed as fixture overhead.
+
+Raw diagnostic evidence: `.artifacts/latency-audit/worker-joined-source-cpu/`.
+
+## Packaged Factory preparation cache experiment and causal cancellation
+
+The existing installer memoizes publication fingerprints by install root,
+Factory name, authored root filename and payload digest. New homes still
+perform preparation and actual materialization. The current monolith profile
+attributes 121.45 cumulative sampled CPU-seconds (34.52%) to
+PreparePackagedFactoryLayout; generated-boundary mapping accounts for 91.97
+(26.14%). These costs overlap initialization and JSON decoding; do not sum
+them or promise equivalent elapsed-time savings.
+
+A bounded, persistence-service-owned prototype cached validated prepared
+layouts by Factory name and payload SHA-256, cloning configuration and
+canonical bytes before use. It retained fresh filesystem reconciliation,
+atomic writes and customer-edit handling. Six repetitions per version of the
+native CLI process journey, in baseline/candidate/candidate/baseline blocks,
+all pass. Baseline consumes 29.892559 CPU-seconds and 15.823867484 seconds wall;
+candidate consumes 30.900592 CPU-seconds and 16.974246406 seconds wall. User CPU
+falls from 22.939407 to 19.661966, but kernel CPU rises from 6.953152 to
+11.238626. Total CPU is 3.4% higher and wall is 7.3% higher. Reject and remove
+this prototype; the measurement does not establish that pre-rendered caching
+is ineffective. It measures only this service-scoped cloned-layout design in
+this customer group, without coverage instrumentation.
+
+A separate initialized-home experiment for the two CLI worker-outcome cases
+also passes six repetitions per version but raises CPU from 32.131414 to
+34.530866 and wall from 16.481528131 to 17.739607701. Remove it. Help/version
+and validation cases retain their clean homes and filesystem-effect assertions.
+
+The next cache design should reuse immutable generated, pre-rendered packaged
+files across roots, keyed by packaged payload digest and rendering policy.
+Materialize them into each owned home through the existing filesystem boundary,
+and keep current stamp/customer-edit detection, refresh backups, cancellation
+and atomic publication. Validate identical JSON/YAML, Worker/Workstation
+prompts, portable files and inbox sentinels, payload invalidation, detached
+session state and cross-process ownership before claiming a gain. This design
+is a follow-up hypothesis; no pre-rendered production cache is shipped here.
+
+Replace the partial-result provider's 5ms cancellation polling loop with the
+provider's own cancellation acknowledgement channel. Keep the existing 5s
+failure ceiling and the customer HTTP interrupt/durable-status assertions.
+Three focused native journey repetitions pass in 1.178 seconds. Remove the
+exact now-stale sleep baseline entry rather than add any allowance.
+
+Hosted current consolidation head e243441e58 passes functional CI in 247s
+complete (09:58:31–10:02:38 UTC), with 169.073s coverage, 68 packages and 738
+final results. Diagnostics record 110 compiler commands and 17 links, compared
+with the preceding head's 19 hosted links. The complete hosted two-minute
+checkpoint remains unmet. Its previously failing Add workstation browser
+journey passes on this run without a UI change. Backend lint remains pending
+at the initial observation. Its workflow subsequently completes successfully,
+including Backend Lint, confirming the duplicate helper correction.
+
+Raw evidence: `.artifacts/latency-audit/packaged-preparation-cache-paired/`,
+`.artifacts/latency-audit/cli-outcome-home-paired/` and
+`.artifacts/latency-audit/pr2923-worker-home-joins-hosted/`.
+
+## Rendered-file prototype: full functional proof and matched timing
+
+A private Linux prototype captures the current installer's materialized output
+for 20 embedded packaged Factories. It reuses file bytes across process
+instances while creating every case's fresh home and retaining staged layout
+validation, ownership leases, stamps, customer-edit reconciliation, refresh
+backups and atomic publication. The production tree does not contain this
+prototype. Its snapshot input is a private audit artifact, and custom writer
+and validation-dependency selection is not yet suitable for production.
+
+Initial JSON-only snapshots pass six native repetitions per version of the
+invocation/result and dispatch-usage customer groups: baseline consumes
+14.776348 CPU-seconds / 14.493914341 seconds wall, candidate 7.398516 /
+9.223422374. The full lane then correctly fails three YAML/YML customer leaves
+because the requested roots are missing. Preserve this failure; do not claim
+the narrow passing comparison establishes a complete optimization.
+
+Corrected snapshots come from real public installs in JSON, YAML and YML: 60
+format variants, 588 files, 1,822,949 bytes in the serialized snapshot artifact.
+Capture permissions from Linux, not Windows UNC stat results. Preserve actual
+directory and file modes and select the requested root filename. The unchanged
+CLI format, validation, customer-edit preservation and explicit replacement
+assertions pass. Six native repetitions per version, now including packaged
+YAML portability, all pass: baseline consumes 27.578133 CPU-seconds /
+29.166335468 seconds wall; candidate 11.599016 / 16.946829844. This is 57.9%
+less CPU and 41.9% less wall for these selected customer groups.
+
+The corrected prototype passes two complete, unweakened functional coverage
+runs: all 68 packages / 738 results, 736 pass and two skip, without retries.
+The first takes 139.07s supervisor / 129.857s coverage / 429.04 CPU-seconds,
+with zero compiler commands and 20 supervisor links. This is not a hosted
+checkpoint and is not directly comparable with earlier changed-source runs.
+
+For a stronger comparison, run baseline then corrected prototype in one
+continuous Linux session with the same four CPUs, jobs=8, GOGC=100, coverage
+manifest and quarantine. Both complete without retries. Baseline takes
+181.21s supervisor / 167.779s coverage / 564.70 CPU-seconds; prototype takes
+145.74s / 134.493s / 452.47 CPU-seconds. Total CPU falls 19.9% and supervisor
+wall 19.6% in this one matched pair. Baseline has three compiler commands
+(7.513292 CPU-seconds); prototype has zero. Both have 20 links, but prototype
+link CPU rises from 39.759837 to 64.912419 and active link wall from 37.695s to
+46.225s. Preserve that variation and do not equate this pair with a stable
+hosted speedup. The private source is restored to canonical after comparison.
+
+The production implementation should generate immutable format-specific
+renderings through the canonical compiler/writer, bind them to exact packaged
+payload and rendering policy, and load them through the owning Factory
+Definitions composition. Replay through the authored writer's filesystem
+boundary rather than the prototype's persistence-filesystem shortcut. Preserve
+portable-file effects and custom dependency behavior, cancellation, file modes,
+fresh runtime/session state and final staged validation. Keep arbitrary or
+changed payloads on the existing preparation path. The prototype proves useful
+potential; it does not prove that bypassing arbitrary supplied validation or
+writer ports is correct.
+
+Published cancellation-cleanup head f7e138ae4e passes hosted functional CI in
+222s complete / 154.403s coverage with six compiler commands and 33 links. One
+TestAgentSharedProcess/Cancel failure recovers on the existing same-head retry;
+retain its flake ledger and do not claim it is fixed. Workflow fails Backend
+Integration when a released probe port is claimed before the browser-test
+server binds. The successful browser cases now use server-owned automatic port
+binding and derive the observed endpoint from the public dashboard readiness
+line. The deliberately occupied explicit-listen failure remains. All launcher
+suppression, concurrent endpoint distinction and post-stop port-reuse assertions
+remain. Three focused Linux repetitions pass in 11.454s; both scoped linters
+pass. No timeout or retry allowance is increased.
+
+Evidence: `.artifacts/latency-audit/rendered-layout-spike-paired/`,
+`.artifacts/latency-audit/rendered-layout-spike-full/` (failed first prototype),
+`.artifacts/latency-audit/rendered-layout-formats-spike-paired/`,
+`.artifacts/latency-audit/rendered-layout-formats-spike-full/`,
+`.artifacts/latency-audit/rendered-layout-formats-matched-baseline/`,
+`.artifacts/latency-audit/rendered-layout-formats-matched-candidate/`,
+`.artifacts/latency-audit/pr2923-causal-hosted/` and
+`.artifacts/latency-audit/pr2923-causal-flakes/`.
+
+
+## Agent customer cleanup and one additional shared-binary package
+
+Remove the Agent package's constructor-only provider inventory child and its
+deliberately failing test-executable cleanup census. The latter constructs a
+second host, installs packaged Factories again and reports internal fixture
+counts and paths. It does not prove a customer operation. Keep actual process,
+listener, stream and Factory Session cleanup, public session deletion, provider
+selection, Work/output/event identity, failure, timeout, cancellation and later
+recovery assertions. Let testing's owned temporary directories manage their own
+removal rather than manually deleting and rechecking them.
+
+The Agent journey runs in parallel with other packages. Its cases remain
+sequential because Recovery must observe the same host after adverse cases.
+Every operation filters inherited home and model-cache overrides and uses an
+owned home/model cache. Before cancellation, wait for the public Work query to
+show the exact admitted Work in init/PROCESSING. Provider command entry does not
+acknowledge publication of that projection. Preserve the same stopped-runtime,
+terminal response stream, canceled edge and post-cancellation Work assertions;
+no timeout, retry or accepted-state allowance is increased.
+
+Six fresh native processes per version, in baseline/candidate/candidate/baseline
+blocks of three, all pass. Baseline uses 9.508912 CPU-seconds / 16.692884793s
+elapsed; candidate uses 6.344212 / 13.631833126s: 33.3% less aggregate execution
+CPU and 18.3% less elapsed time for this journey. Build time is excluded. Both
+scoped linters pass, and all 160 reviewed scenario decisions remain current.
+Twenty additional focused cancellation repetitions pass with the processing
+observation in place. This is local evidence, not proof that every hosted
+cancellation race has been eliminated.
+
+The unchanged classifier now joins Agent automatically: 39 package groups /
+570 top-level registrations. Full four-CPU validation passes all 68 packages /
+738 selected results, 736 pass and two skip, without retries and with unchanged
+coverage gates and quarantine. It takes 209.95s supervisor / 200.927s coverage /
+679.97 CPU-seconds (519.06 user, 160.91 kernel). Four compiler commands consume
+0.718873 CPU-seconds. Nineteen links consume 39.862169 CPU-seconds over 39.309s
+active link wall, one fewer supervisor link than the preceding 20-link local
+layout-cache comparison. This slower full sample does not establish a complete
+lane speedup or the two-minute checkpoint.
+
+Parent 69eaa32820 passes hosted functional coverage in 210s complete / 150.914s
+coverage. Integration passes the port-binding correction. Preserve its recovered
+TestInterruptRace admission failure and Script Cancellation init/INITIAL failure,
+including the extra routed-call observation; neither is claimed fixed by the
+Agent change. These are recorded in the same-head flake ledger.
+
+Evidence: `.artifacts/latency-audit/agent-customer-cleanup-paired/`,
+`.artifacts/latency-audit/agent-customer-cleanup-full/`,
+`.artifacts/latency-audit/pr2923-server-port-hosted/` and
+`.artifacts/latency-audit/pr2923-server-port-flakes/`.
+
+
+## Generated native conversion cache
+
+The supported implementation caches immutable serialized Factory definitions,
+not initialized sessions or rendered filesystem effects. Generation runs the
+canonical strict public-to-native mapper for each of the 20 packaged Factories,
+serializes the result and verifies whole-value round-trip equality. The generated
+assets add 440,152 bytes. Each entry records its conversion format version and
+exact source payload SHA-256. Existing generated-catalog drift checks regenerate
+these assets with the current mapper; the ordinary JSON/YAML publications and
+manifest remain unchanged.
+
+The validated packaged catalog supplies detached optional bytes through the
+canonical Wire graph. The compilation implementation checks version and source
+identity, then decodes a fresh independent native definition. Missing, stale or
+malformed entries retain canonical conversion and its diagnostics. Arbitrary
+customer input continues on that path. Installation still executes definition
+validation, layout pruning, authored normalization, canonical formatting,
+portable-file effects, the authored writer, staged validation and atomic
+publication. There is no rendered-file shortcut or shared mutable runtime state.
+
+The source profile attributes 91.97 cumulative CPU-seconds (26.14% of the
+351.78-second monolith sample) to generated conversion; this overlaps JSON and
+installation stacks and must not be added to them. Six fresh customer-journey
+repetitions per side compare the same graph and generated assets with only the
+optional reader disabled for baseline. Both binaries are built before timing.
+The three existing public journeys verify API terminal results, canonical
+stream dispatch usage and installed-factory invocation outside the repository
+with bootstrap parity. Baseline/candidate/candidate/baseline blocks of three
+all pass. Baseline totals **27.481948 CPU-seconds / 29.172077655s elapsed**;
+candidate totals **20.350384 / 23.626741598s**: **25.9% less aggregate execution
+CPU and 19.0% less elapsed time** for these selected journeys. This is not a
+claim about complete hosted CI timing or linker improvement.
+
+Focused isolated decoder checks cover independently mutable returned definitions
+and canonical fallback diagnostics; generation checks cover deterministic output
+and replacement. Existing focused authored-layout/required-tool/persistence
+checks pass. Both scoped lint suites pass after placing the decoder under the
+compilation service's private implementation and constructing it in its owning
+Wire provider. No architecture exception or lint allowance is added.
+
+Evidence: `.artifacts/latency-audit/serialized-reader-paired/comparison.json`
+and `.artifacts/latency-audit/pr2923-agent-cleanup-hosted/`, plus the recovered
+interrupt evidence under `pr2923-agent-cleanup-flakes/`. The first complete candidate run passes all 68 packages / 738 results (736 pass,
+two skip), with no failures or retries and unchanged gates. It takes **211.35s
+supervisor / 187.850s coverage / 722.97 CPU-seconds** (585.05 user, 137.92
+kernel). Changed-source coverage compiles 1,068 units, consuming 232.189588
+CPU-seconds over 75.558s active compiler wall. Nineteen links consume 31.204730
+CPU-seconds over 33.322s active link wall. Keep this cold build cost; it does not
+establish a full-lane speedup. Evidence is under `serialized-reader-full/`.
+The continuous four-CPU full comparison passes both versions. Baseline takes
+**169.74s supervisor / 161.948s coverage / 544.19 CPU-seconds**; candidate takes
+**140.07s / 133.380s / 449.12 CPU-seconds**. Baseline recovers one
+TestInterruptRace CLI admission failure on the unchanged same-head retry; retain
+that ledger and do not claim a clean matched full speedup from this pair.
+Baseline has eight compiler commands (13.142591 CPU-seconds) and 20 links
+(37.620202 CPU-seconds / 37.444s active wall); candidate has zero compiler
+commands and 19 links (34.985537 CPU-seconds / 34.340s active wall). Candidate
+has no failures or retries. Both preserve 68 packages / 738 results and all
+gates. This local candidate is still above the complete hosted two-minute
+checkpoint. Evidence: `serialized-reader-matched-baseline/` and
+`serialized-reader-matched-candidate/`. Repeat baseline after candidate without changing CPU/coverage settings. It passes
+without failures or retries at **193.65s supervisor / 184.204s coverage /
+636.78 CPU-seconds** (474.41 user, 162.37 kernel), with zero compiler commands
+and 19 links (35.578623 CPU-seconds / 37.074s active wall). Candidate's
+140.07s / 449.12 CPU-seconds is **27.7% less supervisor wall and 29.5% less
+aggregate CPU** than this clean baseline. Baseline variation from 169.74s to
+193.65s remains visible; the first includes one recovered admission failure.
+This is one complete candidate sample between two baselines, not a stable hosted
+ceiling. The independent six-per-side native customer comparison supports the
+conversion improvement. Confirmation evidence is under
+`serialized-reader-confirmation-baseline/`.
+
+The full internal packaged-catalog unit suite also runs against the parent source
+through an overlay and against candidate. Both fail the same five top-level
+tests: the validation-ledger inventory lacks the new dub-video Factory; two TTS
+characterizations expect the former builtin-command model instead of the current
+owned model resource; the subagent prompt inventory expects the former file
+layout; and a generated-artifact check expects the former skipPermissions shape.
+These existing assertions are not weakened to pass this cache change. New
+focused decoder/generation/authoring checks and the complete functional lane
+pass; the entire catalog unit suite is not claimed green. Exact parent/candidate
+failure lists and JSON event logs are under `catalog-baseline-overlay/`.
+
+
+## Live-main rebase and Script customer cleanup
+
+After publication of cache head 110e1b3bd9, GitHub reports the PR conflicting
+with advanced main; no workflow run exists for that head. Rebase the optimization
+branch onto main 8cc84d34c6. The only conflict is generated Wire code; regenerate
+it from the combined handwritten graph instead of choosing either generated
+side. Cache generation leaves published assets unchanged, and focused decoder,
+generator and authoring checks pass on the combined source. Both rebuilt
+repository lint and builtin scoped lint pass.
+
+Script cancellation has the same causal gap observed previously in Agent:
+controlled command entry precedes publication of the exact processing Work.
+Before cancellation, observe that Work through its explicit Factory Session's
+public query, retaining the existing bounded timeout, state requirements,
+stopped-runtime, event, command, deletion and isolation assertions. Twenty
+focused cancellation repetitions pass. Remove the test-router constructor-only
+probe, fixture build/server-start counters and manual temporary-directory census.
+Keep per-scenario command requests and public session/Work/event identity,
+listener shutdown, failure and recovery checks. Testing owns directory removal.
+
+Six fresh native processes per side all pass, including the public shared Script
+journey. Baseline totals 3.253245 CPU-seconds / 3.429897654s elapsed; candidate
+3.464901 / 3.582569223s. The additional public processing observation increases
+this short sample by 6.5% CPU / 4.5% elapsed (about 0.035 CPU-seconds per process).
+This is a causal readiness/retry-risk correction and customer-test cleanup, not
+an execution speedup; preserve the cost rather than treating removed fixture
+assertions as measurable CPU savings. No retry or timeout allowance increases.
+The package retains its genuine host-environment privacy proof and corresponding
+native-binary safety exception.
+
+Live-main discovery selects 67 packages / 762 results from 75 discovered
+packages / 763 results; unchanged quarantine excludes eight packages and one
+selector. The unchanged shared-binary classifier joins 39 package groups / 595
+top-level registrations. These counts include new customer behavior merged on
+main; historical 68/738 captures are not current-source validation. Complete
+combined-source coverage is recorded separately under `cache-live-script-full/`.
+Evidence: `script-customer-paired/comparison.json`, preserved native logs and
+`cache-live-delta.tar` / deletion manifest. The latter records the exact source
+delta applied to the owned Linux mirror; it is not a benchmark result.
+
+
+Complete live-main validation passes all **67 packages / 762 results**, 760 pass
+and two skip, in **172.00s supervisor / 163.712s coverage / 555.61 CPU-seconds**
+(449.78 user, 105.83 kernel). Changed-source compilation runs 519 commands,
+consuming 127.433284 CPU-seconds over 46.843s active compiler wall. Twenty links
+consume 34.182308 CPU-seconds over 32.732s active link wall. All 160 reviewed
+scenario decisions remain current and coverage/quarantine gates are unchanged.
+One TestInterruptExplicitModes/recorded failure recovers on the unchanged
+same-head retry: the expected Worker Session is absent from the public list.
+Retain this distinct lookup failure in its flake ledger; it is not the earlier
+TestInterruptRace admission diagnostic and is not resolved by the Script
+correction. This combined source is not the earlier clean 140.07s sample,
+and does not establish the complete hosted two-minute checkpoint.
+
+
+## Exact Worker Session reads, cache drift coverage and refreshed CPU profile
+
+The recovered TestInterruptExplicitModes/recorded lookup reads only the first
+page of a fleet-wide list to find known source/successor identities. The public
+list defaults to 50 results; a shared host retains unrelated sessions. Use
+existing CLI worker-sessions show calls for the exact two IDs and retain source
+CANCELED, successor RUNNING and both interrupt-lineage assertions. Other customer
+list tests remain. No page-size or accepted-state allowance is increased.
+
+Twenty repeated explicit-mode runs pass their customer assertions, then initially
+fail fixture cleanup with an active provider count of -1. Reset clears active
+accounting while an older call still owes its deferred decrement. Remove that
+counter reset from both controlled providers; keep balanced lifetime accounting
+and the existing zero-active cleanup assertion. The next 20 repetitions pass,
+including cleanup. Six fresh processes per side also pass. Baseline totals
+4.687995 CPU-seconds / 7.163311929s elapsed; candidate 4.831780 / 7.121415181s:
+3.1% more CPU and 0.6% less elapsed in this small sparse-host sample. This is an
+exact-read/retained-host reliability correction, not a measured package speedup.
+
+Hosted c8b026366d reports the native cache's extra asset correctly, but old
+analyzer unit expectations omit it in missing, added and renamed Factory cases.
+Update those expected findings using the content-address contract, retaining
+all existing read-only and unexpected-output assertions. Add explicit stale,
+missing and non-regular native conversion checks. All PackagedFactoryCatalog
+analyzer tests pass. The exact hosted race-check selection and both complete analyzer/plugin unit
+suites pass; both scoped lint suites pass. Backend Lint's later
+missing-Bun/deadcode evidence errors follow its failed race step, which skips
+the normal setup/build steps; do not treat those cascades as an independent
+runtime dependency fix. Packaging and lint failures are preserved in terminal
+job logs under the latency audit artifacts.
+
+The complete instrumented lane passes 67 packages / 762 results without failures
+or retries at 186.77s supervisor / 175.736s coverage / 571.79 CPU-seconds (441.22
+user, 130.57 kernel). It has two compiler commands (2.140022 CPU-seconds) and 19
+links (36.843303 CPU-seconds / 33.589s active wall). Profiling affects timing;
+this slower sample is retained and is not a full-lane speedup claim. The monolith
+profile spans 134.89s and samples 411.61 CPU-seconds. Initialization accounts for
+209.43 cumulative seconds (50.88%), packaged installation 208.78 (50.72%), layout
+preparation 110.04 (26.73%), definition validation 67.52 (16.40%), and generated
+config expansion 69.07 (16.78%). JSON unmarshal accounts for 143.29 cumulative
+seconds; syscall.Syscall6 has 69.19 flat seconds. These nested stacks overlap.
+This capture lacks package labels; do not infer per-package CPU by adding
+concurrent process deltas. Earlier labelled package priorities remain historical.
+
+The next major target is repeated canonical loading/validation during immutable
+packaged preparation and publication. Inspect exact byte forms and cache hits,
+then measure reuse of canonical conversions or generated renderings through the
+owning compiler/writer ports. Preserve customer edits, validator calls, portable
+files, file modes, independent values and atomic publication. Do not replace
+those ports with the rejected filesystem shortcut or share session state.
+
+Evidence: `interrupt-identity-paired/`, `interrupt-identity-profile/`,
+`pr2923-cache-live-hosted/`, `job-112262243278-terminal.log`,
+`job-112262243397-terminal.log` and `cache-live-backend-lint-failed.log`.
+
+
+## Packaged serialization, canonical encodings and installation reuse
+
+The existing immutable native conversion cache is effective on its selected
+decoder port: a private stderr probe of three existing customer journeys passes
+with 242 reads, 241 hits and one miss (20 distinct published inputs). This is
+read accounting, not a timing experiment. It does not imply installation is
+cached: each initialized home still validates, prepares, writes and publishes
+its own definitions and portable files. Session/runtime state stays independent.
+
+Canonical pre-persist validation marshals the submitted generated API value,
+then the loader expands that different JSON encoding. A private experiment
+routes the normalizer through the existing decoder, preserving authored
+normalization, Flatten validation and every loader/validator operation. The
+same three journeys pass, but reads become 483 / 241 hits / 242 misses, with 21
+distinct misses. Simply binding the existing reader cannot remove this cost.
+
+A second experiment generates the exact pre-persist encoding's SHA alongside
+the published source SHA, verifies whole native configuration equality through
+both strict mappings, and accepts only those two exact inputs. It retains all
+validation, writer ports, independent decoded values and customer-edit fallback.
+Generation, focused serializer/analyzer tests, scoped builtin lint and the
+customer journeys pass. Probe coverage rises to 482 hits / 483 reads across 40
+exact published/canonical forms. However, measured execution gets worse.
+
+In B3/C3/C3/B3 order, six repetitions per side of the same three customer journeys
+all pass. Baseline consumes 23.729038 CPU-seconds / 26.347894477s elapsed;
+candidate 25.862887 / 28.864202045: **9.0% more CPU / 9.6% more elapsed**. Valid
+three-repetition samples span 12.921-13.427s baseline and 13.741-15.123s candidate.
+Binary builds are excluded from these execution totals. This is a small sample,
+but it provides no performance justification for shipping the alias expansion.
+Restore all experiment-only source, generated assets and tests; retain its patch
+and results under private latency artifacts. No additional production cache or
+changed cache-hit allowance is installed.
+
+Prioritize avoiding repeated installation through package-owned initialized
+test homes and isolated Factory Sessions, then investigate a prepared-layout
+cache through the existing authoring writer and persistence ports. Cache only
+immutable definition/file preparation, keep destination writes, validators,
+permissions, portable artifacts and atomic replacement, and invalidate against
+exact source plus serializer/generator version. Retain dedicated fresh-install
+customer coverage. The earlier rendered-file prototype's full-lane 20% saving
+remains historical evidence for that direction, not a validated production
+shortcut or an estimate for current main. Sharing live Factory Session state is
+not part of this optimization.
+
+Hosted d9e4f57e8e's functional ledger explicitly reports no test failures.
+The catalog drift unit/packaging corrections pass in that workflow; the separate
+lint migration fixture omission must also be repaired. Complete 189s exceeds
+the two-minute checkpoint, so PR #2923 stays draft.
+
+The regenerated synthetic publication supplies the missing native asset without
+changing authored inputs, JSON/YAML pairs, manifest or smoke assertions. Both
+delivered-plugin smoke cohorts pass: 16 packaged-source and 11 catalog cases.
+
+Evidence: `serialized-cache-read-probe/`, `canonical-cache-read-probe/`,
+`canonical-cache-alias-read-probe/`, `canonical-cache-paired/`,
+`canonical-cache-candidate.patch`, `pr2923-identity-hosted/`,
+`identity-hosted-functional.log` and `identity-hosted-lint-failed.log`.
+
+## Work CLI scenarios share installation through explicit Factory Sessions
+
+The Work CLI group originally owns one command process plus four server
+processes and four server homes. Each parallel scenario also uses a separate
+CLI home and targets its server's default Factory Session. The scenarios test
+Work filters/counts, three-page REST traversal versus CLI aggregation, exact
+detail lookup beyond the first page, and same-name supersession history.
+
+The parent now starts one root-built host in one initialized owned home and
+uses that host's Process.Execute for CLI requests. Each child still scaffolds
+its own Factory directory, opens a distinct public Factory Session, supplies
+its exact --session to every CLI submission/move/read and scopes its independent
+REST page walk to that ID. Child cleanup terminates/deletes only its own session;
+the parent's existing server/process cleanup runs after all parallel children.
+Overlapping Work IDs remain deliberately present. All original customer output,
+count, state, pagination and history assertions remain. No global environment
+mutation, binary invocation, timeout change or retry allowance is added.
+
+Six fresh Linux processes per side pass in B3/C6/B3 order. The first pair totals
+10.645610 CPU-seconds / 3.765948623s baseline versus 4.193485 / 2.921788809s
+candidate, but baseline wall varies 0.387-1.193s. Retain that variance rather
+than using its large percentage as the headline. A fresh confirmation pair
+totals **6.619411 CPU-seconds / 2.541354250s baseline versus 3.448197 /
+2.495368699s candidate**, saving **47.9% CPU / 1.8% elapsed**. Per-process elapsed
+is 0.393-0.460s baseline and 0.387-0.466s candidate. Builds are excluded from
+execution totals. Windows customer scenarios and both scoped lint suites pass.
+
+The exact Work CLI candidate passes the complete lane at 103.05s supervisor /
+98.240s coverage / 310.37 CPU-seconds (247.17 user, 63.20 kernel), with 67/762,
+760 pass/two skip, no failures or retries. Two compilers consume 2.468672 CPU
+seconds; 19 links consume 22.714726 CPU seconds / 22.053s active link wall.
+A subsequent same-budget previous-source full run also passes without retries
+at 123.34s / 118.506s / 374.89 CPU-seconds. This single full pair improves, but
+the focused Work group cannot explain the whole difference. Do not extrapolate
+its small package saving into a reliable full-suite ceiling or a hosted claim.
+
+Additional cleanup-hook experiments preserve all finalizers and pass native
+tests, scoped lint and full coverage, but do not change the 39-group monolith
+inventory. After custom TestMain is handled, metadata exposes additional
+constraints: packaged Fix and Codex have executable Git fixtures, AGY has a
+live quarantined selector, and base Providers uses the Go test executable as a
+mock script child. Preserve those constraints; restore all ineffective hook
+changes. The broader hook probe takes 121.99s / 113.638s coverage / 368.19 CPU
+seconds; the base Providers hook probe takes 110.43s / 305.86 CPU-seconds. They are retained
+experiments, not linker reductions. Future consolidation requires resolving
+the actual executable/quarantine construction, not bypassing native selection.
+
+Evidence: `work-cli-sessions-paired/`, `work-cli-sessions-confirmation/`,
+`work-cli-sessions-full/`, `work-cli-sessions-baseline-full/`,
+`compatible-cleanup-hooks-full/`, `provider-cleanup-hook-full/`,
+`pr2923-smoke-fixture-hosted/` and `smoke-fixture-hosted-functional.log`.
+Complete hosted timing remains above 120s, so PR #2923 stays draft.
+
+### October 6: remaining initialization cost and publication synchronization
+
+Hosted run 37487752183 at ae23bdff07 passes Functional Coverage in 229s
+complete / 154.149s coverage invocation: 67 packages, 763 results, 761 passes
+and two skips. The supervisor takes 165.768s, including 15.259s quarantine.
+The prefix-restored build executes 136 compiler commands and 16 links. This
+sample remains above the two-minute checkpoint and is not a controlled
+comparison with earlier runners. The workflow fails Backend Lint: its exact
+deadcode set adds one helper, validatePortableLayoutBoundaryJSON, to 2,528
+existing findings. The corrective change inlines that decoding into the
+existing public wrapper; it does not raise the baseline or change validation.
+All factoryconfig package tests and both scoped linters pass after correction.
+
+A fresh native customer_journeys profile exposes an intermittent transcript
+publication race: completed live state precedes durable capture. One of ten
+focused baseline repetitions fails with WORKER_SESSION_TRANSCRIPT_UNAVAILABLE.
+The customer test now observes its existing public terminal stream before its
+existing transcript read. That stream joins terminal publication. The change
+adds no requests, retries, sleeps or timeout allowance; all session correlation,
+continuation and lineage assertions remain. Fifty Linux and twenty Windows
+focused repetitions pass; the complete profiled customer package also passes.
+
+The passing profile measures 16.930s elapsed and 27.516843 CPU-seconds
+(19.587286 user, 7.929557 system), with profiling enabled. Initialization owns
+69.62% of sampled CPU; packaged installation owns 69.29%; fresh creation
+54.18%; layout preparation 32.22%; JSON unmarshalling 34.33%; filesystem syscall
+execution is 24.17% flat. These cumulative shares overlap and cannot be added.
+The sample is one native customer package, not whole-lane attribution or a
+controlled before/after speedup. Existing serialized native configurations and
+canonical-output caches remove conversions, but retain selected validation,
+layout preparation and operation-owned files. Sharing compatible initialized
+hosts with explicit independent Sessions remains the first priority; immutable
+rendered layout content is the next cache candidate, preserving selected ports
+and file validation. Mutable live Factory state must remain session-owned.
+
+A shared-host YAML portability experiment fails correctness before timing:
+public folder-based Session creation resolves factory.json, while this scenario
+invokes a materialized YAML root through the CLI's explicit factory-file route.
+The experiment is restored rather than dropping YAML invocation coverage or
+changing the public resolver to obtain a favorable benchmark.
+
+Evidence: boundary-decode-hosted/, canonical-boundary-customer-profile/,
+remote-transcript-reproduction/, remote-transcript-barrier/,
+canonical-boundary-barrier-profile/ and
+packaged-portability-shared-session-attempt.patch under the ignored local
+latency-audit artifact directory.
+
+### October 6: reuse CLI output processes and remove duplicate reads
+
+The four successful/failed invocation-output cases retain their isolated homes,
+working directories, model caches and parallel execution. Each now bootstraps
+its packaged Factory and invokes the customer command through the same owned
+root-built process, removing a redundant graph and separate initializer.
+Failed output uses a Codex command-runner result with exit code 7 rather than
+the unrelated mock-workers feature. All existing stdout, stderr, terminal
+result, lifecycle ordering and redaction assertions remain.
+
+Build-excluded Linux baseline/candidate/candidate/baseline runs, ten focused
+repetitions per invocation, total 25.018137 CPU-seconds / 12.655299s baseline
+versus 14.358964 / 9.685830 candidate: 42.6% less CPU and 23.5% less elapsed.
+Two whole customer-package runs per side total 52.965068 CPU-seconds /
+31.750835s baseline versus 50.165006 / 30.780398 candidate: 5.3% less CPU and
+3.1% less elapsed. All runs pass. The whole-package comparison measures the
+combined process reuse and command-runner cleanup; it does not isolate either
+change. Both scoped linters pass.
+
+The first complete local lane takes 106.98s supervisor / 102.905s coverage,
+308.73 CPU-seconds (244.24 user, 64.49 system), with 83 compiler commands
+(41.239288 CPU-seconds / 17.390561s active wall) and 20 links
+(22.851636 CPU-seconds / 20.331758s active wall). Final results are 67 packages,
+763 tests, 761 passes and two skips. This is not a retry-free result:
+TestProviderSessionCLIJourneys recovers one truncated-native-transcript case
+through the existing retry policy. The retained failure is another read racing
+durable publication after live completion. No retry allowance changes.
+
+That read cell now opens the public live stream for its exact Worker Session
+and observes scoped terminal delivery before reading. The attempted replay-only
+barrier fails focused Linux repetitions because its snapshot can end at
+recording-complete before a terminal event is published; retain this distinction
+rather than accepting an incomplete snapshot. The live-stream version passes
+50 Linux and 20 Windows focused repetitions and both scoped linters. A duplicate
+show/read pair is removed: this fault-specific cell needs one captured read and
+a final association check; separate public CLI coverage already verifies
+repeated read stability. Four commands replace five, including the publication
+observation. The existing context deadline remains unchanged.
+
+Evidence: output-process-reuse-paired/, output-process-reuse-full/ and
+terminal-provider-read-publication/ under the ignored local latency-audit
+artifact directory. The complete rerun with the terminal-stream correction
+passes in 99.23s supervisor / 93.831s coverage and 282.20 CPU-seconds
+(217.90 user, 64.30 system): 67 packages / 763 results, 761 passes, two skips,
+no retry ledger and no logged retries. It has four compiler commands
+(2.181784 CPU-seconds) and 19 links (24.522591 CPU-seconds / 20.719161s active
+wall). The warmer build and absence of the earlier retry make this a full-lane
+verification result, not a controlled whole-lane improvement claim. Evidence
+is retained in output-terminal-publication-full/. Both local complete results
+use base ca7ed9388e; live main has since advanced to d6151587f0 with Factory
+Session construction changes. Hosted checkpoint verification remains required.
+
+### October 6: consolidate four Git-fixture packages
+
+Hosted run 37492932822 at rebased head 912c4ba874 is fully green. Backend
+Functional Coverage takes 204s complete / 147.446s coverage invocation,
+67 packages / 763 results, 761 passes and two skips. Its prefix-restored build
+executes 298 compiler commands and 16 links. The supervisor takes 158.176s;
+quarantine takes 51.613s. The hosted two-minute checkpoint remains unmet.
+
+The same hosted elapsed report puts Work Watch among the longest overlapping
+groups. A fresh build-excluded standalone profile on live base d6151587f0
+passes in 0.824432s, using 0.587066 CPU-seconds (0.475060 user, 0.112006
+system). It is not a material CPU target. Consolidated group elapsed values
+include their scheduling and overlap; they must not be used as package CPU
+rankings. Evidence: work-watch-live-profile/ and output-process-hosted/.
+
+Four packages prepare or clean up Git repositories through literal git
+commands with explicit working directories or -C paths. Those commands do not
+depend on the Go test executable identity. The monolith eligibility check now
+parses command calls and permits literal Git fixture commands while retaining
+native execution for unknown, dynamic and re-executed helpers, process-wide
+directory/environment mutations, relative assets and quarantine selectors.
+Both new cleanup hooks use the same finalizers as their native TestMain and
+run only after all package children finish. No customer cases are deleted.
+
+The resulting shared binary contains 43 groups / 629 registrations, versus
+39 groups / 596 registrations before this change. The four added packages are
+factory/packaged/fix, factory/packaged/invocation, providers/codex and
+workers/inference/codex. The exact native link commands for these four are
+absent in the final run. They previously consumed 4.789973 CPU-seconds; this
+is removed native link work, not a claim of equivalent end-to-end wall savings
+or zero added shared-binary link cost. link-package-comparison.json retains
+the individual records and their presence/absence.
+
+The initial broader command-eligibility probe passes the full lane in 103.71s
+supervisor / 98.424s coverage and 285.89 CPU-seconds, with 138 compiler commands
+and 18 links. It recovers one pre-existing ACP structured-result cancellation
+through the unchanged retry policy; retain that ledger. Eligibility is then
+tightened to literal Git commands, with component checks preserving unknown,
+dynamic, mixed-command and test-binary exceptions. The final full lane passes
+without retries in 88.07s supervisor / 83.281s coverage and 241.05 CPU-seconds
+(186.29 user, 54.76 system), 67 packages / 764 results (762 passes, two skips).
+It executes two compiler commands (2.034966 CPU-seconds) and 17 links
+(16.384572 CPU-seconds / 12.404227s active wall). The differing cache state,
+retry and changed live base preclude a controlled whole-lane speedup claim.
+All selected test inventory and coverage checks remain enabled.
+
+Evidence: external-fixture-consolidation-full/ retains the probe and recovered
+failure; external-fixture-git-final-full/ retains final verification and exact
+link records under the ignored local latency-audit artifact directory.
+The native Windows Fix and Codex inference suites also pass. The full run
+precedes a behavior-preserving extraction of command classification to satisfy
+the complexity lint limit; monolith component checks and both scoped linters
+pass after that extraction. Fresh hosted verification is required on the pushed
+head before evaluating the two-minute merge checkpoint.
+
+### October 6: detach packaged Workers and file bodies without JSON copying
+
+Hosted run 37495204012 at head 6183caec73 passes Backend Functional Coverage
+in 201s complete / 142.883s coverage, 67 packages / 764 results, 762 passes
+and two skips. It restores a compiler-cache prefix from head 912c4ba874 and
+executes 848 compiler commands and 23 links. This includes one recovered
+TestInterruptInputByteRefusalLeavesSourceControllable failure: the source
+Worker Session falls outside the first fleet-wide page as unrelated scenarios
+accumulate on the shared host. Retain the raw failure instead of claiming a
+retry-free result. The supervisor takes 156.717s and quarantine takes 47.775s.
+The complete hosted workflow, including Backend Lint, subsequently passes.
+
+The refusal helper now reads its exact source Worker Session before and after
+termination and verifies the proposed successor's exact public ID returns
+WORKER_SESSION_NOT_FOUND. The original provider admission/cancellation checks
+remain. An attempted Work-scoped list fails because these direct invocations
+do not create admitted Work records; it is discarded. Exact-ID lookup also
+passes the oversized successor identity case, preserving that input-budget
+coverage. The complete native Windows invoke_continue package passes in
+24.181s after the correction. No paging limits, timeouts or retry allowances
+are increased.
+
+CloneFactoryConfig previously serialized and decoded Worker prompts, portable
+file bodies and the rest of the definition on every detached copy. It now uses
+the existing typed Worker clone and a detached portable-manifest copy for those
+fields, retaining JSON copying for the remaining configuration. Worker runtime
+Session/concurrency/model-fallback metadata is still omitted, prompt-source
+identity is preserved, and nested argument, description, operation and tool
+argument storage remains detached. This extends immutable packaged-data reuse
+without caching mutable Factory Sessions or skipping install validation,
+selected writers, file restoration or atomic publication.
+
+A build-excluded B/C/C/B comparison runs the entire customer_journeys package
+twice per side on four pinned Linux CPUs, GOMAXPROCS=4 and GOGC=100. All runs
+pass. Baseline consumes 53.450528 CPU-seconds / 31.776384s combined wall;
+candidate consumes 49.571702 / 30.659223: 7.3% less CPU and 3.5% less wall.
+This is a package comparison, not a whole-lane improvement claim. Contracts,
+authored mapping and Factory Definitions Wire suites pass, including the new
+targeted detachment/runtime-metadata regression test. Both scoped linters pass.
+Evidence: factory-clone-paired/ under the ignored local latency-audit directory.
+
+The full candidate lane on live base d6151587f0 passes in 121.60s supervisor /
+115.422s coverage, using 325.24 CPU-seconds (259.09 user, 66.15 system),
+67 packages / 764 results (762 passes, two skips), without a retry ledger or
+logged retries. It includes 438 compiler commands consuming 74.578896
+CPU-seconds / 31.655297s active wall and 17 links consuming 17.165646
+CPU-seconds / 11.855997s active wall. This changed-source rebuild
+cannot be compared directly to the preceding warmer 88.07s run. Evidence:
+typed-clone-exact-worker-full/. The hosted complete-job two-minute checkpoint
+remains unmet; fresh hosted checks are required for this candidate.
+
+### October 6: simplify CLI recovery and remove constructor-only coverage
+
+Hosted run 37497457280 at head 9ed110dd01 passes Functional Coverage in 269s
+complete / 186.691s coverage, 67 packages / 764 results, 762 passes and two
+skips. Its raw-failure index is complete with no failures and no flake artifact
+is published. The exact-ID refusal correction does not trigger a retry. A
+prefix restore from 6183caec73 still requires 432 compiler commands and 12
+links. The coverage supervisor takes 214.411s; concurrent quarantine takes
+54.585s. Approximately 55s surrounds that supervisor in setup, cache capture,
+upload and reporting. Backend Lint remains active when the next batch is
+prepared. This is not hosted two-minute checkpoint evidence.
+
+The old retained-opening test initializes a fresh home for every run, missing
+Factory attempt and help command even though it is testing one reusable
+process. TestCLIRunRecoversAfterMissingFactory now keeps one owned home, model
+cache and process, while using distinct Factory folders for its successful
+invocations. Both successful CLI invocations, the missing-file diagnostic and
+public help output remain. Constructor/session/runtime/listener counter
+assertions are removed; they do not observe customer CLI results.
+
+Build-excluded B/C/C/B measurements run ten focused repetitions per run and
+one entire customer_journeys package per run, twice per side, on four pinned
+Linux CPUs. All eight runs pass. Focused totals fall from 7.320407 CPU-seconds /
+7.672012s wall to 3.602018 / 3.954127: 50.8% less CPU and 48.5% less wall.
+Whole-package totals are nearly unchanged: 46.902564 CPU-seconds / 30.084325s
+wall versus 46.462900 / 29.900649. Do not claim a material whole-lane speedup
+from that small difference. Evidence: cli-run-recovery-paired/.
+
+The former FSCP-03 graph witness is named
+TestFactorySessionLifecycleAndIsolation in factory_session_lifecycle_test.go.
+Its constructor-count/help-activation/repeated-Process.Close cell and
+retrospective PASS-log census are removed. Durable identity, failure recovery,
+controls, timeout branches and live isolation remain. Two unchanged large
+assertion flows are split at their invocation and dispatch/response boundaries
+to satisfy complexity lint after the file rename; no new lint exclusions are
+introduced. The native Windows customer_journeys package and both scoped
+linters pass. The controlled paired measurement precedes this additional
+constructor-only deletion and assertion-helper extraction.
+
+The final consolidated candidate passes in 93.81s supervisor / 89.417s coverage
+with 258.74 CPU-seconds (198.65 user, 60.09 system), 67 packages / 764 results
+(762 passes, two skips), a complete empty raw-failure index and no retry ledger.
+It executes four compiler commands (5.224345 CPU-seconds / 3.776300s active
+wall) and 15 links (16.964977 CPU-seconds / 11.892396s active wall). This warmer
+run verifies the final cleanup; it is not a controlled whole-lane improvement
+over the preceding changed-production rebuild. Evidence:
+cli-recovery-cleanup-full/. Main remains d6151587f0; no rebase is required.
+Fresh hosted complete-job timing and required checks remain the merge gate.
+
+### October 6: remeasure startup and reuse the workflow error fixture's home
+
+Hosted run 37498753463 at head 412189ffe9 passes Functional Coverage in 176s
+complete / 116.200s coverage. All 67 packages / 764 results finish: 762 pass,
+two skip; the complete raw-failure index is empty. A compiler-cache prefix
+restore from 9ed110dd01 still requires 176 compiler commands and 12 links.
+Backend Lint remains active at preparation time. The two-minute complete-job
+checkpoint is still unmet.
+
+A fresh native customer_journeys profile at 412189ffe9 passes in 15.199475s,
+using 23.472474 CPU-seconds (16.358188 user, 7.114286 system). Of 23.14s sampled
+CPU, packaged installation accounts for 15.75s / 68.06%, preparation for
+7.25s / 31.33%, JSON unmarshal for 7.24s / 31.29%, and mkdir for
+3.97s / 17.16%. These are overlapping cumulative samples, not additive costs
+or complete-lane package rankings. Repeated initialization and filesystem work
+remain the main targets. Evidence: customer-412189-profile/.
+
+The missing JavaScript import and TypeScript authored-source-location error
+cases previously supplied fresh homes to an already shared loading fixture.
+Both now use fixture.homeDir. Each CLI invocation already receives an explicit
+unique Factory Session through loadingArgsWithIsolatedSession; Factory source
+directories, errors, source-map locations, provider-dispatch refusals and
+success/recovery scenarios remain unchanged. No test is removed.
+
+Build-excluded B/C/C/B comparisons on four pinned Linux CPUs retain mixed
+whole-package evidence. The initial full customer package totals are baseline
+49.289263 CPU-seconds / 31.239973s wall versus candidate 52.464789 / 31.830172:
+6.4% more CPU and 1.9% more wall. A confirmation using the same built binaries
+is baseline 57.840686 / 39.177067 versus candidate 55.546280 / 37.681616:
+4.0% less CPU and 3.8% less wall. The combined comparisons do not demonstrate
+a reliable whole-package speedup. All eight full-package runs pass.
+
+Ten repetitions of the two actual error cells per run, twice per side, consume
+8.157753 CPU-seconds / 6.341039s wall on baseline versus 4.467311 / 4.715012 on
+candidate: 45.2% less CPU and 25.6% less elapsed. The initial focused selector
+matched no tests and is discarded; only the corrected parent/child selector
+provides focused evidence. Ten complete native Windows workflow-loading group
+repetitions and both scoped linters pass. Evidence: loading-home-paired/,
+loading-home-focused-paired/ and loading-home-whole-confirmation/.
+
+Main advances to 2d1d83f424 with archived Work attribution and additional public
+Worker Session scenarios. Rebase and full consolidated verification on that
+live base are required before pushing this batch; measurements above precede
+those upstream changes.
+
+
+### October 6: live-base MCP initialization and shared archive client
+
+The branch rebases onto main 2d1d83f424. The support-process conflict retains
+both upstream Factory Sessions access and the owned directory's cleanup.
+Hosted run 37498753463 subsequently finishes all required checks successfully;
+its 176s complete functional job still misses the two-minute checkpoint.
+
+The first rebased full run fails after 11:29.42 supervisor / 679.068s coverage
+capture, using 545.10 CPU-seconds (439.75 user, 105.35 system). Compilation
+consumes 213.619175 CPU-seconds across 1176 commands (69.917730s active wall);
+15 links consume 19.964437 CPU-seconds (13.180778s active wall). Capture is
+incomplete: the new upstream MCP archive scenarios do not finish. Retain both
+raw failure records and the incomplete inventory in loading-home-live-full/;
+this run is not a passing performance sample.
+
+A focused native named-close probe also times out at 90s, with both clients
+blocked writing MCP initialization into a pipe. The upstream tests used bare
+root processes with no owned initialized home/environment, bypassing the
+existing selected-host client fixture. Command termination also left protocol
+pipes open. Archive scenarios now use that fixture, and command exit closes
+both protocol pipe ends with the command's error. No timeout or retry allowance
+changes. Five archive test parents share one initialized client process/home/
+model cache, while retaining separate host stores/profiles, contexts and all
+customer paging, corruption, identity and recorded/unrecorded assertions.
+
+Build-excluded whole-MCP-package B/C/C/B runs on four pinned Linux CPUs all pass.
+The baseline already includes the corrected owned clients and pipe closure;
+the candidate adds sharing of those five client setups. Baseline totals are
+19.347023 CPU-seconds / 8.517919s wall; candidate totals are 18.166816 /
+8.257819: 6.1% less CPU and 3.1% less wall. These are package measurements,
+not whole-lane improvement claims. Evidence: archived-client-paired/.
+The complete native Windows candidate package passes in 19.168s and both
+scoped linters pass.
+
+The latest hosted cache capture reaches its 1 GiB ceiling: 19566 files,
+1073741684 bytes, and 546 omitted eligible compiler artifacts. This can cause
+avoidable compilation after restoration, but raising the ceiling also adds
+transfer cost. A controlled cache-size comparison is still needed; no larger
+cache has been enabled and no performance benefit is claimed.
+
+The corrected complete lane passes in 95.84s supervisor / 91.032s capture,
+using 263.75 CPU-seconds (201.42 user, 62.33 system). All 67 packages / 765
+results finish: 763 pass and two skip. The raw-failure index is complete and
+empty, and no retry ledger is produced. Four compiler commands consume
+0.984033 CPU-seconds / 1.263044s active wall; 15 links consume 18.542264
+CPU-seconds / 13.778736s active wall. Shared archive test registration reduces
+five parents to one without dropping their customer scenarios. Evidence:
+loading-home-mcp-owned-full/. This warmer verification run is not a controlled
+whole-lane improvement over the preceding failed changed-base rebuild.
+Source is rebased d9120b42f1 plus the two MCP corrections; the private checkout's
+raw index Git head is stale and is not source identity for this run. Fresh
+hosted complete-job timing remains required before the two-minute checkpoint.
+
+
+### October 6: controlled bounded compiler-cache comparison
+
+A fixed snapshot of the completed candidate's Go cache is filtered through the
+existing compiler-only classifier and one-hour retention window. At 1 GiB,
+16418 files / 1073740699 bytes remain and 1051 eligible files are omitted.
+At 2 GiB, all 17469 files / 1690670095 bytes remain. Neither snapshot includes
+cached test executions or test binaries. This local snapshot differs from the
+hosted capture above; do not equate its omitted-file count with hosted CI.
+
+The original build-only probe cannot write two distinct acp.test binaries into
+one output directory. Its failed baseline is retained in cache-cap-paired/ and
+excluded. The corrected probe compiles one ACP package separately, identically
+for both candidates. It runs the coverage capture's recorded package/overlay/
+coverpkg/build flags with go test -c, separate binary output and no execution,
+four pinned CPUs, fresh snapshot copies, in 1g/2g/2g/1g order. All twelve build
+commands pass. No functional test is removed or executed by this comparison.
+
+Two 1 GiB runs use 176.631559 CPU-seconds / 52.590825s wall in total; two 2 GiB
+runs use 33.596564 / 12.614955: 81.0% less build CPU and 76.0% less build wall.
+Each 1 GiB run invokes 466 compiler commands, versus 13 with 2 GiB. Both sizes
+still link twelve binaries per run. The build comparison excludes snapshot
+capture/copy and network transfer. Local copy times vary with disk warming;
+no hosted transfer or complete-job improvement is claimed. Evidence:
+cache-cap-paired-v2/. The next hosted run must evaluate the extra cache transfer
+against saved compilation.
+
+The workflow's compiler archive bound increases to 2 GiB. The v2 key creates
+new larger captures, with v1 prefix fallback so existing useful archives still
+seed the first trial. Go content-based invalidation, compiler-only filtering,
+recent-use retention, dependency fallback and test execution remain unchanged.
+The existing workflow contract tests, four compiler-cache tests (including real
+coverage reuse), and actionlint pass. The corrected full functional lane above
+precedes this workflow-only change; hosted verification is required.
+
+Hosted run 37503527863 at 0a2bea7690 passes Functional Coverage in 288s complete
+/ 211.006s capture, with all 67 packages / 765 results (763 pass, two skip),
+a complete empty raw-failure index and no retry ledger. Prefix restore uses
+412189ffe9 and still executes 530 compiler commands and 12 links. Capture
+keeps 17331 files / 1073740288 bytes and omits 839 eligible artifacts. Evidence:
+mcp-live-hosted/ and mcp-live-hosted-job.log. Backend Lint and two packaged
+Factory jobs remain active at preparation time; do not call this workflow
+fully green. This changed-base run is not two-minute checkpoint evidence.
+The larger-cache candidate requires fresh hosted verification; local build-only
+savings exclude hosted transfer cost and do not establish the merge checkpoint.
+
+
+### October 6: reuse the owned CLI/REST parity fixture
+
+Main advances to f1516fc7d2 with architecture visualization documentation only.
+The branch rebases cleanly, preserving a pre-rebase backup. Hosted run
+37503527863 is subsequently terminal/cancelled; its completed passing functional
+job remains useful timing evidence, but the workflow is not fully green.
+The 2 GiB cache trial 37504542537 remains queued while this batch is prepared.
+
+Five CLI/REST primary-outcome parity cases previously gave each CLI invocation
+an uninitialized home and newly constructed process, despite their parent
+owning an initialized isolated root. They now reuse that owned home/model cache
+and process, with a unique explicit Factory Session for every CLI invocation.
+The separately materialized named-Factory home and server homes stay distinct.
+Each case retains its Factory directory and its positional/stdin/named, empty,
+conflicting-source or unresolved-output behavior and public parity assertions.
+Cleanup removes only a child-owned home; the parent's owned home survives
+until the parent's process and all parallel children finish. No test, timeout
+or retry allowance changes.
+
+Build-excluded four-CPU B/C/C/B comparisons all pass. Three complete parity-group
+repetitions per run, twice per side, consume 11.524597 CPU-seconds / 12.528129s
+wall on baseline versus 7.591057 / 11.117733 on candidate: 34.1% less CPU and
+11.3% less wall. Whole customer_lifecycles package totals are 73.034523 /
+42.926787 versus 72.395691 / 42.843807, a nearly unchanged package result.
+Do not claim a material whole-lane improvement from that difference. Evidence:
+parity-home-paired/. Three complete native Windows parity-group repetitions
+pass in 19.394s, and both scoped linters pass. The native first compile attempt
+exposed a newly unused import; it is removed before those passing results.
+The full consolidated candidate lane remains to be measured on the live base.
+
+The consolidated candidate passes on f1516fc7d2 in 91.25s supervisor / 87.639s
+capture, using 253.63 CPU-seconds (193.41 user, 60.22 system). All 67 packages /
+765 results finish: 763 pass, two skip, a complete empty raw-failure index and
+no retry ledger. Two compiler commands consume 3.640080 CPU-seconds / 3.502894s
+active wall; 15 links consume 19.025817 CPU-seconds / 12.915302s active wall.
+Evidence: parity-home-live-full/. This is warmer verification, not a controlled
+whole-lane speedup claim. Source is e84d14dd14 plus the three parity fixture
+files; the private raw-index Git identity is stale. Main subsequently advances
+to a1f5c7a63c with confirmed-board restart recovery and new functional scenarios.
+This full result precedes that runtime change; rebase and verification on the
+new live base are required before pushing the batch.
+
+The clean rebase onto a1f5c7a63c passes complete consolidated verification in
+210.22s supervisor / 197.920s capture, using 591.47 CPU-seconds (459.36 user,
+132.11 system). All 67 packages / 766 results finish (764 pass, two skip),
+with a complete empty failure index and no retry ledger. Changed-source
+compilation executes 648 commands, consuming 148.201666 CPU-seconds /
+49.634970s active wall. Fifteen links consume 19.571482 CPU-seconds /
+14.722038s active wall. Evidence: board-main-parity-full/. Preserve this slower
+valid range alongside the earlier 91.25s warm result; neither comparison
+isolates the parity fixture's effect. Source is 9998f72985 on a1f5c7a63c; the
+private raw-index Git identity is stale.
+
+Build-excluded native profiles before the board-recovery rebase independently
+measure customer_lifecycles at 34.680674 CPU-seconds / 21.005309s wall,
+customer_journeys at 23.183550 / 15.104464, and cli_rest_journeys at 8.390345 /
+4.366449. Their separately measured build CPU/wall is 3.412548 / 2.425584,
+6.482796 / 3.005123, and 4.467684 / 2.267564 respectively. All three pass.
+Evidence: customer-package-e84-profiles/, source e84d14dd14 plus parity fixture
+changes. These are independent package execution costs, not reconstructed
+monolith group elapsed sums and not measurements of the later main revision.
+
+The lifecycle profile samples 34.17 CPU-seconds. JSON unmarshal accounts for
+15.52s / 45.42% cumulatively; the Work default-type resolver accounts for
+6.43s / 18.82%, serializing a full editable Factory through API representations
+before resolving one work type. The existing native Factory Session projection
+is a candidate to remove that conversion chain. Installation remains 6.08s /
+17.79% cumulatively. These samples overlap; do not sum their percentages.
+No resolver change or performance benefit is yet implemented or claimed.
+
+Hosted 2 GiB trial 37504542537 at 16c7729f90 passes Functional Coverage in
+171s complete / 109.233s capture: 67 packages / 765 results (763 pass, two
+skip), three compiler commands and 12 links, no failures or retries. It uses
+the v1 snapshot from 0a2bea7690, and captures 13397 files / 1008142845 bytes
+with zero omissions. Its capture actually fits below 1 GiB: this run does not
+establish that a larger transfer improves complete hosted timing. Other
+required jobs remain active; no fully green workflow or two-minute checkpoint
+is claimed. Evidence: two-gib-hosted/ and two-gib-hosted-job.log.
+
+Main next advances to d173d3b17f with factory workspace setup-script handling
+and its Python tests only. No Go source or functional Go test changes; the
+branch rebases that update before the next push. Fresh hosted checks remain
+the merge gate, and the complete-job two-minute checkpoint is still unmet.
+
+
+### October 6: resolve default Work Type from the native session projection
+
+Work's omitted-type resolver previously read the full editable Factory through
+Factory Definitions' API adapter, serialized its snapshot to generated API
+representations, and converted that representation back to native configuration.
+It now reads the existing public Factory Sessions live-control projection and
+passes that projection's native configuration to the unchanged invocation
+work-type policy. The composition binding uses the already injected root.
+No new effect port, cache, public endpoint or session registry is introduced.
+Content-endpoint session-existence validation remains on its existing binding.
+
+The focused resolver component test retains missing-collaborator, missing
+session/current-Factory, policy-error and opaque-error outcomes; its successful
+case now checks that the policy receives the selected native Factory. The Work
+HTTP default-type admission boundary test and both scoped linters pass. The
+first native compile exposes an unused generated-API import in the updated test
+fake; it is removed before the passing checks.
+
+Build-excluded B/C/C/B whole customer_lifecycles runs use four pinned Linux CPUs,
+count one, CPU profiles for every run, and separately built native binaries.
+All eight initial/confirmation executions pass. Initial totals are baseline
+89.116140 CPU-seconds / 48.512779s wall versus candidate 58.104046 / 40.062619:
+34.8% less CPU and 17.4% less wall. Baseline CPU varies markedly (53.904875
+versus 35.211265 per run), so confirmation reuses those same built binaries.
+Confirmation totals are baseline 72.934559 / 54.529236 versus candidate
+56.474695 / 50.149307: 22.6% less CPU and 8.0% less wall. Retain both ranges;
+do not headline only the stronger initial sample. Evidence:
+native-default-work-type-paired/ and native-default-work-type-confirmation/.
+
+The initial baseline profile samples 10.92s / 20.64% cumulatively in the
+omitted-type resolver; the candidate's resolver is below its top-80 cumulative
+threshold. Candidate JSON decoding and Factory Session opening still consume
+substantial CPU. These profiles overlap in cumulative attribution; no complete
+lane speedup is inferred. Source is c034a3f136 plus the three resolver files,
+with the same Go source as the private checkout's a1f5c7a63c base before this
+change. Full consolidated verification is required before pushing.
+
+The complete consolidated candidate passes on live base d173d3b17f in 112.62s
+supervisor / 108.398s capture, using 325.03 CPU-seconds (249.78 user, 75.25
+system). All 67 packages / 766 results finish (764 pass, two skip), with a
+complete empty failure index and no retry ledger. Compilation executes 116
+commands, consuming 40.262287 CPU-seconds / 15.549924s active wall. Fifteen
+links consume 18.791994 CPU-seconds / 12.622867s active wall. Evidence:
+native-default-work-type-full/. This changed-production verification is not
+a controlled complete-lane comparison to the preceding runtime-base rebuild.
+Source is c034a3f136 plus the three resolver files; the private raw-index Git
+identity is stale. Main remains d173d3b17f when the batch is prepared.
+
+Hosted run 37506845531 on preceding head c034a3f136 passes Functional Coverage
+in 233s complete / 167.382s capture, with all 67 packages / 766 results, no
+failures or retries, 280 compiler commands and 12 links. The v2 snapshot from
+16c7729f90 restores approximately 231 MiB compressed; the new compiler capture
+keeps 15126 files / 1390011382 bytes with zero omissions. This captures more
+than 1 GiB after the runtime rebase, but does not isolate cache-size benefit
+from source/base changes. Evidence: parity-larger-cache-hosted/ and
+parity-larger-cache-hosted-job.log. Other required jobs remain active; the
+workflow is not claimed fully green. The previous 16c7729f90 workflow is now
+terminal/cancelled, with a failed Verification Policy job; no fully green
+status is claimed for it either. Fresh hosted checks and complete-job timing
+are still required for this resolver batch and the two-minute checkpoint.
+
+
+### October 6: avoid JSON copying immutable workstation prompt text
+
+After the native Work-type resolver, a candidate lifecycle profile still shows
+3.34s / 12.01% cumulative CPU in CloneWorkstationConfig. That operation and
+CloneFactoryConfig serialize workstation Body and PromptTemplate strings while
+copying mutable configuration. Both now retain valid UTF-8 prompt strings
+outside the JSON copy, restore them afterward, and retain the ordinary JSON
+path for the remaining mutable fields. Invalid UTF-8 text stays in the JSON
+path so existing replacement-character normalization remains. Prompt source
+identity/template metadata, nil/empty serialization, remaining encoding errors
+and JSON-copy fallback behavior remain unchanged. No cache or effect-port
+bypass is introduced.
+
+All contract component tests and both scoped linters pass. The focused clone
+proof covers standalone and enclosing Factory copies, exact multilingual/
+control-character text, invalid UTF-8 normalization, prompt source metadata,
+and detachment of description maps, environment maps, stop words and nested
+input guards. It uses tiny synthetic data, not the packaged catalog.
+
+Four build-excluded whole lifecycle-package B/C/C/B executions on four pinned
+Linux CPUs all pass. Baseline totals are 59.716043 CPU-seconds / 39.972377s wall;
+candidate totals are 48.539256 / 37.265284: 18.7% less CPU and 6.8% less wall.
+Each paired candidate uses less CPU and wall than its baseline. CPU profiles
+are collected identically in every run; the baseline's workstation clone
+accounts for 3.85s / 12.36% cumulatively, while it falls below the candidate's
+top-80 cumulative threshold. Evidence: workstation-text-paired/.
+These are package comparisons, not additive or complete-lane savings.
+
+Complete consolidated verification on d173d3b17f passes in 122.60s supervisor /
+117.805s capture, using 329.71 CPU-seconds (260.22 user, 69.49 system). All 67
+packages / 766 results finish (764 pass, two skip), with a complete empty
+failure index and no retry ledger. Changed-source compilation executes 439
+commands, consuming 76.405853 CPU-seconds / 33.554119s active wall; 15 links
+consume 18.190696 CPU-seconds / 13.031436s active wall. Preserve that rebuild
+cost rather than claiming a controlled whole-lane improvement over the earlier
+112.62s resolver verification with only 116 compiler commands. Evidence:
+workstation-text-full/. Source is 967582dc9c plus the two contract clone files;
+the private raw-index Git identity remains stale.
+
+Hosted run 37508964007 on preceding head 967582dc9c passes Functional Coverage
+in 205s complete / 132.890s capture, all 67 packages / 766 results, 112 compiler
+commands and 12 links, with no failures or retries. It restores the v2 cache
+from c034a3f136 (approximately 320 MiB compressed) and captures 16618 files /
+1562548061 bytes with zero omissions. Other required jobs remain active; the
+workflow is not fully green and the two-minute complete-job checkpoint is
+still unmet. Evidence: native-work-type-hosted/ and
+native-work-type-hosted-job.log. The preceding c034a3f136 workflow is now
+terminal/cancelled; its completed functional result remains timing evidence.
+
+Main advances to 7b80612014 with architecture visualization documentation only.
+The branch rebases that update before pushing this batch. No Go source or
+functional Go tests change in that main update; the complete verification above
+covers the same Go sources. Fresh hosted complete-job timing and required checks
+remain the merge gate for the workstation clone optimization.
+
+
+### October 6: output modes reuse installed Factory definitions
+
+Successful invocation output modes now share one parent-owned initialized
+process/home/model cache; failure output modes share another. Each of the four
+parallel scenarios uses its own explicit UUID Factory Session and working
+directory. Installation finishes before children run, and parent cleanup keeps
+the fixture alive until they finish. All human/JSON lifecycle, terminal failure,
+error envelope and quiet-result assertions remain. No installation/restart
+behavior is removed and no production cache, writer bypass or timing change is
+introduced. Four identical installations become two.
+
+The initial focused probe failed because the shared queued provider edge
+contained only one intended result and the second invocation consumed its
+default response. The corrected fixture supplies the same outcome to both
+parallel scenarios. Three focused Windows repetitions then pass (7.451s); both
+scoped built-in and repository linters pass with zero issues.
+
+Whole customer_journeys binaries are built separately from the same af9077 source
+archive, with only the two output files differing. Fresh B/C/C/B execution uses
+four pinned CPUs, GOGC=100 and GOMAXPROCS=4; build time is excluded. The initial
+comparison overlapped Windows lint work and is retained but excluded from the
+performance claim. The uncontended confirmation reuses those same binaries;
+all four complete package runs pass. Baseline totals 51.017334
+CPU-seconds / 31.887844376s elapsed; candidate
+49.834589 / 31.260729055: 2.3% less CPU and
+2.0% less elapsed. Baseline wall samples span 15.816-16.072s, candidate
+15.589-15.671s. This is a modest whole-package improvement.
+
+A focused three-repetition B/C/C/B comparison, after the full run has exited,
+also passes every scenario. Baseline totals 5.767888
+CPU-seconds / 3.918184996s elapsed; candidate
+3.881844 / 3.785110168: 32.7% less CPU
+and 3.4% less elapsed. Baseline wall samples span 1.865-2.053s, candidate
+1.835-1.950s. Profiling overhead is included in both sides. An earlier focused
+probe accidentally overlapped the still-running full monolith and is excluded;
+its observed totals (baseline 7.657599 CPU / 8.239196s, candidate 5.354548 CPU /
+9.560033s) provide no uncontended wall-latency claim.
+
+The complete candidate functional run passes 67 selected packages / 766 results
+(764 pass, two skip), empty complete raw failures and no retry ledger. It records
+147.37s supervisor / 142.602s capture / 349.37 CPU-seconds (259.34 user, 90.03
+system). Four compilers consume 6.723546 CPU-seconds / 4.994958 active wall; 15
+links consume 19.926497 CPU-seconds / 14.038410 active wall. This warm-cache full
+run briefly overlapped the discarded focused probe, so it establishes coverage
+but is not a controlled speedup. Source provenance is Windows archive af9077
+plus the two output-mode candidate files; private Linux Git identity is stale.
+
+Hosted run 37511920959 at af9077 passes Functional Coverage in 258 complete-job
+seconds, with 185.093s main capture, 67 packages / 766 results, 764 pass and two
+skip. It recovers one TestInterruptRace HTTP 503 admission failure on same-head
+retry; this is not a clean first-pass result. The diagnostics record 866 compile
+commands and 23 links, restoring the v2 cache from 967582d. Coverage/quarantine
+step wall time is 206s; cache restore/apply takes seven seconds, capture/save
+13 seconds. Keep the recovered admission race as a follow-up latency/correctness
+target rather than increasing retry limits. Other required checks were still
+active at this observation. The two-minute complete hosted checkpoint remains
+unmet and PR #2923 remains draft.
+
+The new main 4efd1f3 changes only factory/workstations/review/AGENTS.md prompt
+text, with no Go or functional source changes. Rebase this tested candidate to
+that live base before the next push. Evidence: output-home-paired/,
+output-home-paired-confirmation/, output-home-focused/, output-home-full/,
+workstation-text-hosted/ and workstation-text-hosted-ledger/.
+
+
+### October 6: eliminate discarded body rendering in the layout writer
+
+The authored-layout writer previously rendered worker/workstation body bytes
+before selecting structured frontmatter rendering, immediately discarding the
+body result for that branch. It now calls only the selected renderer. Existing
+file checks, structured rendering errors, prompt paths, directory creation,
+write operations, permissions and validators retain their original paths.
+No new cache or persistence bypass is introduced. Skipped existing workers no
+longer perform the discarded body allocation either.
+
+All authoring-layout component tests pass; both scoped linters report zero
+issues. The complete customer_journeys package is built separately for baseline
+and candidate from Windows archive 4720f2c38e, differing only in writer.go.
+Build time is excluded. Four pinned CPUs, GOGC=100, GOMAXPROCS=4 and fresh
+B/C/C/B executions with CPU profiles retain every existing customer scenario.
+No lint or other performance experiments overlap these executions. All pass.
+
+Baseline consumes 51.664002 CPU-seconds / 32.131229899s elapsed; candidate
+47.675854 / 30.755341631: observed 7.7% less CPU / 4.3% less elapsed. Baseline
+wall samples span 15.532-16.599s (24.382374-27.281628 CPU-seconds); candidate
+15.353-15.402s (23.613788-24.062066 CPU-seconds). Preserve this variability rather
+than extrapolating the point estimate to the complete hosted suite. Each
+corresponding baseline/candidate pair improves. Profiles are overlapping
+cumulative samples, not additive attribution.
+
+The complete warm-cache candidate functional measurement passes 67 selected
+packages / 766 results (764 pass, two skip), empty complete raw failures and no
+retry ledger. Supervisor wall is 92.15s; main capture 87.511s; CPU 246.90 seconds
+(185.84 user, 61.06 system). Three compiler commands consume 1.799002 CPU-seconds
+/ 0.911322 active wall; 15 links consume 17.817588 CPU-seconds / 12.493673 active
+wall. No other measurements overlap. This is a full local warm measurement,
+not a controlled comparison against the preceding 147.37s run and not proof
+that complete hosted CI meets the two-minute checkpoint.
+
+During measurement, main advanced to 903fce4694 (#2968), changing Factory Session
+board recovery, CLI/runtime wiring and its customer restart proof. The branch
+rebased cleanly to that source after the writer commit. The paired and full
+measurements above use the pre-rebase 4720f2 archive plus writer.go; private
+Linux Git identity is stale. Fresh hosted checks must verify the combined
+runtime/recovery source. The earlier af907 workflow 37511920959 is terminal
+canceled (functional job succeeded with its recorded retry); output-fixture
+workflow 37513430783 remained queued at this observation. No checkpoint merge
+is claimed. Evidence: writer-render-paired/ and writer-render-full/.
+
+
+### October 6: remove fixture census and mock-router self-tests
+
+Provider fixture construction now calls the canonical support BuildProcess
+boundary directly. Remove the constructor-count wrappers, listener-start
+counters, aggregate Codex route/call census, unused topology assertions and
+two direct self-tests of the fake command router. These checked harness
+implementation rather than customer behavior. Remove the Automations host's
+BeforeStart constructor-effect census and its counting submission wrapper;
+the selected external submission recorder still receives the same records.
+Public provider responses, refusal behavior, transcripts, Factory Events,
+Work output, distinct Factory Session identities and HTTP deletion observations
+remain. Fixture cleanup still joins process/listener completion and releases
+owned routes. Codex's retained identity check is named assertSessionIsolation.
+The three fixture files lose 221 lines and add 19; no customer Test registration
+is removed, no timeout/retry limit is increased, and no percentage CPU speedup
+is attributed to this cleanup.
+
+Both complete provider packages pass three Windows repetitions (providers
+14.610s, Codex 12.787s). The Automations recovery/ingress group passes three
+repetitions in 6.875s. Both scoped linters report zero issues.
+
+The complete functional measurement on recovery base 903fce4694 passes 67
+selected packages / 766 results (764 pass, two skip), an empty complete raw
+failure index and no retry ledger. Supervisor wall is 114.08s, main capture
+108.051s, user CPU 260.40s and system CPU 72.51s (332.91 total). 147 compiler
+commands consume 71.739026 CPU-seconds / 25.763867 active wall; 15 links consume
+25.087029 CPU-seconds / 15.172275 active wall. Active walls are interval unions,
+not additive overlapping tool durations. Source is the Windows f5e79654cf
+archive plus the three candidate fixture files, not the private Linux Git head.
+No concurrent measurements or lint work overlap this run. The different base
+and compiler workload prevent comparison to the preceding warm 92.15s run.
+
+Investigation of the Work staged-content session scope found that replacing
+the editable Factory lookup with the existing native detail lookup would also
+add runtime observation and world projection failure conditions. Leave that
+candidate unshipped; a narrowly owned existence/configuration capability would
+need its own behavioral evidence.
+
+Hosted workflow 37514240019 at f5e796 remained pending without assigned jobs.
+Its superseded predecessor 37513430783 at 4720f2 was confirmed live and an
+explicit cancellation request was accepted to free the PR concurrency group.
+Do not claim that cancellation is terminal until a later authoritative poll.
+Commit this cleanup locally and let verification of the already-pushed source
+finish before superseding it again. Complete hosted two-minute evidence and
+required-check success remain missing; PR #2923 remains draft. Evidence:
+fixture-census-full/ and fixture-census-baseline/.
+
+
+### October 6: live interrupt reservation can race durable recovery lookup
+
+The unchanged public TestInterruptRace passes 30 Windows repetitions in 21.240s;
+this does not reproduce or dismiss the recorded hosted 503. Inspection reveals
+a concrete interleaving: replayDurableInterrupt checks the live reservation map,
+then reads a durable control record. Another caller can reserve the same request
+and persist its pending intent during that read. The second caller previously
+treated that pending record as owner-loss recovery and returned execution
+unavailable instead of joining the live operation.
+
+A component test controls that interleaving at the injected journal store. Both
+matching and conflicting request cells fail before the fix with found=true and
+InterruptPhaseValidation / ErrInterruptExecutionUnavailable. Recheck the live
+reservation after the journal load and delegate to normal admission when it now
+exists. The matching request then joins the same replay; the conflicting tuple
+still returns ErrInterruptRequestIDConflict. Existing owner-loss recovery,
+pending-phase and durable failure tests remain. No timeout, retry count,
+functional assertion or provider behavior is weakened.
+
+All Worker Sessions registry component tests pass in 0.120s; both scoped linters
+report zero issues. Thirty unchanged public race repetitions pass after the fix
+in 23.951s, and the entire invoke_continue customer package passes in 25.866s.
+These native Windows correctness runs are not controlled latency comparisons;
+no speedup or elimination of every possible hosted failure is claimed. This
+deterministic error matches the recorded failure classification but does not
+prove it was the only cause of the earlier CI 503. Hosted replay/race verification
+is still required. Evidence: interrupt-interleaving-before.log,
+interrupt-interleaving-after.log, interrupt-race-reproduction.log,
+interrupt-race-fixed-repetition.log and interrupt-fixed-package.log.
+
+Superseded workflow 37513430783 is now confirmed terminal canceled. Current
+f5e796 workflow 37514240019 has started its functional job at 19:02:17Z, so keep
+that specific run alive to obtain complete hosted timing. Main has advanced to
+f79408d2bf (#2959), changing captured Codex detail projection, provider/session
+fixtures, generated clients, recordings and workflow coverage selection. Rebase
+the local cleanup and interrupt fix to that source and verify the affected
+fixtures before the next push; measurements above precede that rebase.
+
+
+## October 6: reuse installed homes for input rejection and named parity
+
+The latest completed hosted run, 37514240019 at f5e79654cf, passes Functional
+Tests in 198 seconds for the complete job. Its main capture is 139.637s,
+67 packages / 766 results (764 pass, two skip), with 94 compiler commands
+and twelve links. The overall workflow fails: the unit replay/start race
+selection observes one execution before the asynchronous successor starts,
+and the browser discard/leave scenario times out waiting for Edit mode.
+Coverage holds are not the cause of that unit failure. The browser failure
+is still unresolved and has no established relationship to these Go changes.
+
+The branch is rebased onto live main f79408d2bf83a965a8744b665a4097b70683132f.
+Wire conflicts were resolved by regeneration. Captured Codex detail expectations
+follow the new public contract; the duplicate native-only-history child that
+called the same successful-history assertion is removed. Final Go sources have
+no conflict markers, generated Wire has no drift, and diff whitespace passes.
+The rebased Worker Sessions component, providers, Codex and CLI/REST packages
+pass focused execution and both scoped linters. This does not replace hosted
+required checks.
+
+The unit late-output characterization now observes the accepted successor's
+controlled execution before checking publication effects. Acceptance reserves
+the successor before asynchronous execution starts; an immediate count read
+was not a synchronization boundary. One hundred focused race repetitions pass,
+as does the preceding CI command's two-repetition replay/start selection for
+Worker Sessions and invoke_continue. No sleeps, enlarged deadlines or weakened
+effect assertions are introduced. Hosted CI remains authoritative for gates.
+
+Two compatible functional setups now reuse installed homes:
+
+- Required-input rejection invokes the same test-owned installed home through
+  an explicit UUID Factory Session. Remove the obsolete seed-copy machinery,
+  backend-scope JSON rewriting, duplicate filesystem census and pass-through
+  invocation wrapper. Keep the CLI refusal, missing-input diagnostic and
+  no-provider-execution assertions.
+- Named CLI/REST outcome parity uses its parent fixture's installed Factory,
+  home and isolated model cache. Each CLI/API invocation already opens its
+  own explicit session. The child no longer deletes the parent's home;
+  parent-owned teardown remains responsible for its installation.
+
+Uncontended B/C/C/B comparison uses separate compiled native Linux binaries,
+four pinned CPUs, GOMAXPROCS4, GOGC100, and two fresh executions per sample.
+Compilation/linking are excluded. Both entire customer groups run, rather
+than only the changed assertion. All eight group executions per side pass.
+
+| Side | CPU seconds, summed samples | Wall seconds, summed samples | Wall range per sample |
+| --- | ---: | ---: | ---: |
+| Baseline | 7.023789 | 7.610737358 | 3.776065023–3.834672335 |
+| Candidate | 6.076905 | 7.156714274 | 3.571954919–3.584759355 |
+
+Observed savings are 13.5% CPU and 6.0% elapsed for these two groups. This is
+not a claim of an equivalent whole-suite gain. Source is Windows HEAD
+9d04b4e914 plus the causal unit-test change and these two candidate files;
+the private Linux checkout is synchronized from its Git archive, with exact
+upstream deleted files removed first. Private checkout Git identity is stale
+and is not source provenance. Baselines, builds, logs and profiles remain
+under private installation-reuse-paired artifacts. Both scoped linters pass
+for Worker Sessions and customer_lifecycles.
+
+The complete functional supervisor and quarantine pass in 115.90s, with
+110.918s main capture and 341.04 CPU-seconds (268.73 user / 72.31 system).
+All 67 packages finish: 763 results, 761 pass and two skip. Complete raw
+failure capture contains no failures and no retry ledger is created.
+470 compiler commands consume 88.282990 CPU-seconds / 29.311676s active
+wall; fifteen links consume 18.183157 CPU-seconds / 13.416034s active wall.
+These active intervals overlap execution and one another and are not additive
+wall phases. Changed-source compile misses after the live-main rebase make
+this a fresh candidate measurement, not a controlled comparison with the
+older 92.15s warm run or a hosted checkpoint. Private artifacts are retained
+under installation-reuse-full.
+
+The complete hosted two-minute checkpoint remains unmet. Publish this reviewed
+batch for fresh hosted evidence, retain the PR draft until the checkpoint and
+required checks pass, and continue reducing repeated initialization through
+owned homes and explicit Factory Sessions. Immutable pre-rendered file caching
+remains a measured follow-up hypothesis; no additional production cache or
+shared live session state is introduced in this batch.
+
+
+## October 6: reuse run-scoped server/site installations
+
+Hosted run 37518562040 on c72a4bd925 passes Backend Functional Coverage in
+244 complete job seconds (19:26:50–19:30:54 UTC). Main capture is 158.696s,
+67 packages / 763 results, 761 pass and two skip. Complete raw failure
+evidence contains no failures. Restored compiler archives come from f5e79654cf;
+the live-main rebase invalidates 465 compiler commands. Twelve links run.
+Supervisor coverage duration is 174.86s; reported phases are list 5.460s,
+plan 7.083s, test 161.382s, canonicalize 0.244s, evaluate 0.023s and
+manifest 0.025s. Do not add overlapping capture, supervisor or phase times.
+Browser and unit coverage both pass; at this observation only Backend Lint
+remains live. The complete hosted two-minute checkpoint remains unmet.
+
+The named/file and raw-JavaScript server/site groups now each own one
+initialized process, installed home and model cache before their parallel
+children execute. Each invocation receives an explicit UUID Factory Session,
+its own working directory and its own listener-start/stop/browser observation.
+The selected external-effect callbacks receive that observation through the
+invocation context, preserving per-scenario effect assertions without an
+aggregate counter that could mask one scenario's failure with another's success.
+The parent process outlives its children. The pure JavaScript workflow no longer
+passes the unrelated mock-worker flag. Dashboard-handler behavior remains
+asserted for raw-JavaScript hosting. No customer scenario or assertion is removed.
+
+Three focused native Windows repetitions pass. The initial editing probe
+did not compile because it referenced another test package's home helper and
+retained an unused import; correct those before all measured executions.
+Both scoped linters subsequently pass with zero issues.
+
+Uncontended B/C/C/B executions on pinned four-CPU native Linux binaries,
+GOMAXPROCS4 and GOGC100 exclude builds/linking. Each sample runs both complete
+groups three fresh times. All six repetitions per side pass.
+
+| Side | CPU seconds, summed samples | Wall seconds, summed samples | Wall range per sample |
+| --- | ---: | ---: | ---: |
+| Baseline | 3.983277 | 3.342539487 | 1.619870424–1.722669063 |
+| Candidate | 2.674118 | 3.108522997 | 1.514310516–1.594212481 |
+
+Observed savings are 32.9% CPU / 7.0% elapsed for these two groups. The earlier
+named/file-only pilot is retained separately; its wall ranges overlap and
+must not be substituted for this final candidate. Source is c72a4bd925 plus
+the single candidate test file. Private artifacts remain in scoped-host-both-paired.
+
+The complete functional supervisor and quarantine pass locally in 100.69s,
+95.973s main capture, with 280.96 CPU-seconds (209.87 user / 71.09 system).
+All 67 packages finish: 763 results, 761 pass and two skip. Complete failure
+capture is empty and no retry ledger is created. Three compiler commands
+consume 5.955994 CPU-seconds / 4.614339s active wall. Fifteen links consume
+19.889146 CPU-seconds / 14.204202s active wall. This is a warm candidate run,
+not a controlled whole-suite comparison with the preceding rebase's 470
+compiles or a hosted checkpoint. Full artifacts remain in scoped-host-full.
+
+Do not supersede the preceding workflow while its last required gate is live.
+Keep the reviewed batch ready for publication after that outcome is recorded;
+keep PR #2923 draft until the complete hosted two-minute target and required
+checks pass. Broader installation reuse and compatible binary consolidation
+remain the next targets; saved local fixture CPU does not erase hosted setup,
+cache transfer or changed-source compilation costs.

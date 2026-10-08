@@ -11,43 +11,39 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestStructuredSubmissionSimplePipeline preserves the simple-pipeline
+// runStructuredSubmissionSimplePipeline preserves the simple-pipeline
 // structured submission witnesses on one serialized Factory fixture. Every
 // case uses a distinct name or trace, so prior completed Work cannot satisfy a
 // later case's public projection assertions.
-func TestStructuredSubmissionSimplePipeline(t *testing.T) {
-	t.Parallel()
-	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
-	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
-	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
-	defer server.Stop(t)
+func runStructuredSubmissionSimplePipeline(t *testing.T, server *support.FunctionalAPIServer) {
+	factoryDir, sessionID := openSubmissionSession(t, server)
 
 	t.Run("TestAPIPOSTSubmitAndQueryWork", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("slow config-driven REST submit/query functional test")
 		}
-		assertAPIPOSTSubmitAndQueryWork(t, server)
+		assertAPIPOSTSubmitAndQueryWork(t, server, sessionID)
 	})
 	t.Run("TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission", func(t *testing.T) {
-		assertAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(t, server)
+		assertAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(t, server, sessionID)
 	})
 	t.Run("TestCLIWorkTypeNameReachesLiveAPIHandler", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("slow CLI submit functional test")
 		}
-		assertCLIWorkTypeNameReachesLiveAPIHandler(t, server, factoryDir)
+		assertCLIWorkTypeNameReachesLiveAPIHandler(t, server, factoryDir, sessionID)
 	})
 	t.Run("TestAPISubmitWorkRejectsEmptyStructuredSubmission", func(t *testing.T) {
-		assertAPISubmitWorkRejectsEmptyStructuredSubmission(t, server)
+		assertAPISubmitWorkRejectsEmptyStructuredSubmission(t, server, sessionID)
 	})
 	t.Run("TestAPISubmitWorkAcceptsOrderedTextSubmission", func(t *testing.T) {
-		assertAPISubmitWorkAcceptsOrderedTextSubmission(t, server)
+		assertAPISubmitWorkAcceptsOrderedTextSubmission(t, server, sessionID)
 	})
 	t.Run("TestAPISubmitWorkAcceptsCanonicalContentParts", func(t *testing.T) {
-		assertAPISubmitWorkAcceptsCanonicalContentParts(t, server)
+		assertAPISubmitWorkAcceptsCanonicalContentParts(t, server, sessionID)
 	})
 	t.Run("TestAPISubmitWorkRejectsForgedStructuredFileReference", func(t *testing.T) {
-		assertAPISubmitWorkRejectsForgedStructuredFileReference(t, server)
+		assertAPISubmitWorkRejectsForgedStructuredFileReference(t, server, sessionID)
 	})
 }
 
@@ -57,6 +53,7 @@ func TestStructuredSubmissionSimplePipeline(t *testing.T) {
 func assertAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	body, err := json.Marshal(map[string]any{
 		"name":         "submission-header-only",
@@ -66,12 +63,12 @@ func assertAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	submitted := postSubmitWork(t, server.URL(), body)
+	submitted := postSubmitWork(t, server.URL(), body, sessionID)
 	if submitted.TraceId == "" {
 		t.Fatalf("submit response traceId is empty, want customer-visible trace identity")
 	}
 
-	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second, sessionID)
 	work := requireWorkByTrace(t, listed, submitted.TraceId)
 	if work.Name != "submission-header-only" ||
 		support.StringPointerValue(work.WorkTypeName) != "task" {
@@ -87,6 +84,7 @@ func assertAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(
 func assertAPISubmitWorkRejectsEmptyStructuredSubmission(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	body, err := json.Marshal(map[string]any{
 		"name":         "submission-empty-items",
@@ -98,7 +96,7 @@ func assertAPISubmitWorkRejectsEmptyStructuredSubmission(
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	postSubmitWorkExpectStatus(t, server.URL(), body, 400)
+	postSubmitWorkExpectStatus(t, server.URL(), body, 400, sessionID)
 }
 
 // assertAPISubmitWorkAcceptsOrderedTextSubmission proves ordered structured text
@@ -106,6 +104,7 @@ func assertAPISubmitWorkRejectsEmptyStructuredSubmission(
 func assertAPISubmitWorkAcceptsOrderedTextSubmission(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	body, err := json.Marshal(map[string]any{
 		"name":         "submission-items-text",
@@ -118,9 +117,9 @@ func assertAPISubmitWorkAcceptsOrderedTextSubmission(
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	submitted := postSubmitWork(t, server.URL(), body)
+	submitted := postSubmitWork(t, server.URL(), body, sessionID)
 
-	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second, sessionID)
 	work := requireWorkByTrace(t, listed, submitted.TraceId)
 	content := work.Content
 	if content == nil || len(*content) != 2 {
@@ -144,6 +143,7 @@ func assertAPISubmitWorkAcceptsOrderedTextSubmission(
 func assertAPISubmitWorkAcceptsCanonicalContentParts(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	body, err := json.Marshal(map[string]any{
 		"name":         "submission-content-text",
@@ -156,9 +156,9 @@ func assertAPISubmitWorkAcceptsCanonicalContentParts(
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	submitted := postSubmitWork(t, server.URL(), body)
+	submitted := postSubmitWork(t, server.URL(), body, sessionID)
 
-	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second, sessionID)
 	work := requireWorkByTrace(t, listed, submitted.TraceId)
 	content := work.Content
 	if content == nil || len(*content) != 2 {
@@ -208,7 +208,7 @@ func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
 		"image",
 		"review.png",
 		"image/png",
-		[]byte("png-bytes"),
+		[]byte("png-bytes"), submissionDefaultSessionID,
 	)
 	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         submissionStringPtr("submission-items-mixed"),
@@ -219,7 +219,7 @@ func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
 		},
 	})
 
-	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	listed := waitForWorkByTraceComplete(t, server.URL(), submitted.TraceId, 10*time.Second, submissionDefaultSessionID)
 	work := requireWorkByTrace(t, listed, submitted.TraceId)
 	content := work.Content
 	if content == nil || len(*content) != 1 {
@@ -264,7 +264,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 		"image",
 		"review.png",
 		"image/png",
-		[]byte("png-bytes"),
+		[]byte("png-bytes"), submissionDefaultSessionID,
 	)
 	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         submissionStringPtr("submission-items-unsupported-mixed"),
@@ -275,7 +275,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 		},
 	})
 
-	listed := waitForWorkByTraceAtPlace(t, server.URL(), submitted.TraceId, "task:failed", 10*time.Second)
+	listed := waitForWorkByTraceAtPlace(t, server.URL(), submitted.TraceId, "task:failed", 10*time.Second, submissionDefaultSessionID)
 	work := requireWorkByTrace(t, listed, submitted.TraceId)
 	if submissionWorkStateName(work.State) != "failed" {
 		t.Fatalf("GET /work state = %#v, want failed work state", work.State)
@@ -294,6 +294,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 func assertAPISubmitWorkRejectsForgedStructuredFileReference(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	sessionID string,
 ) {
 	body, err := json.Marshal(factoryapi.SubmitWorkRequest{
 		Name:         submissionStringPtr("submission-forged-staged-ref"),
@@ -311,7 +312,7 @@ func assertAPISubmitWorkRejectsForgedStructuredFileReference(
 	if err != nil {
 		t.Fatalf("marshal forged staged-ref request: %v", err)
 	}
-	postSubmitWorkExpectStatus(t, server.URL(), body, 400)
+	postSubmitWorkExpectStatus(t, server.URL(), body, 400, sessionID)
 }
 
 func mustSubmitWorkTextItem(t *testing.T, text string) factoryapi.SubmitWorkItem {

@@ -40,6 +40,7 @@ const (
 // the source event order and request-derived model-response identities;
 // corrected recorder identity proof remains in recorder tests.
 func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
+	ensureWatchFixture(t)
 	fixture := loadProductionLedgerFixture(t)
 	assertProductionLedgerFixture(t, fixture)
 

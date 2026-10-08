@@ -2,11 +2,9 @@ package cli_rest_journeys_test
 
 import "testing"
 
-// TestFactoryValidationPersistenceJourneys owns its immutable fixture until all customer scenarios finish.
-func TestFactoryValidationPersistenceJourneys(t *testing.T) {
+// runFactoryValidationPersistenceJourneys owns its immutable fixture until all customer scenarios finish.
+func runFactoryValidationPersistenceJourneys(t *testing.T) {
 	t.Parallel()
-	resetfactorydefinitionstransportsclivalidatepersist0State()
-	initializeFactorydefinitionstransportsclivalidatepersistFixture(t)
 	t.Run("TestFactoryValidateRejectsUnsupportedJoinArity", testFactorydefinitionstransportsclivalidatepersistFactoryValidateRejectsUnsupportedJoinArity)
 	t.Run("TestFactoryValidateAcceptsSupportedTwoInputJoinArity", testFactorydefinitionstransportsclivalidatepersistFactoryValidateAcceptsSupportedTwoInputJoinArity)
 	t.Run("TestFactoryValidateRejectsReservedInvocationFlag", testFactorydefinitionstransportsclivalidatepersistFactoryValidateRejectsReservedInvocationFlag)

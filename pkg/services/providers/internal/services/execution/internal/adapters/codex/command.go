@@ -25,7 +25,7 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds the completed runner and duration source to Codex.
-func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
+func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, files providerservice.CodexPromptFileSystem, resolveHome func() (string, error)) Effect {
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,
@@ -36,6 +36,12 @@ func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
+		prepared := promptPreparation{files: files, resolveHome: resolveHome}
+		cleanup, err := prepared.prepare(&command, request.ExecuteRequest)
+		if err != nil {
+			return EffectResult{}, nativeCommandError(ctx, err)
+		}
+		defer cleanup()
 		result, runErr := runStreaming(ctx, runner, request.ExecuteRequest, command, observe)
 		effectResult := EffectResult{DurationMillis: clock.Now().Sub(started).Milliseconds()}
 		if runErr != nil {

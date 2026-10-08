@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,11 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock"
@@ -34,6 +36,7 @@ const (
 // TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles proves hosted invocation cleanup across selectors.
 func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T) {
 	t.Parallel()
+	process, environment, factoryDir := newScopedHostFixture(t)
 	tests := []struct {
 		name        string
 		site        bool
@@ -52,31 +55,9 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			homeDir := t.TempDir()
 			workingDirectory := t.TempDir()
-			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-				Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
-			})
-			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-					listenerStarts.Add(1)
-					request.OnBound(platformhttpserver.Binding{Port: request.Port})
-					<-ctx.Done()
-					listenerStops.Add(1)
-					return ctx.Err()
-				},
-				BrowserOpener: func(context.Context, string) error {
-					browserCalls.Add(1)
-					return nil
-				},
-				ProviderCommandRunner: providerRunner,
-			})
-			if err != nil {
-				t.Fatalf("BuildProcess() error = %v", err)
-			}
-			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-			factoryDir := initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
+			observation := &scopedHostObservation{}
+			invocation := scopedHostInvocation{process: process, observation: observation}
 			selection := []string{"--named", TransportRunScopedServerGoalFactoryName}
 			if test.file {
 				selection = []string{"--factory", filepath.Join(factoryDir, "factory.json")}
@@ -85,7 +66,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			if test.site {
 				mode = "--with-site"
 			}
-			args := append([]string{"you", "run"}, selection...)
+			args := append([]string{"you", "run", "--session", uuid.NewString()}, selection...)
 			args = append(args,
 				"--executor-provider", "codex",
 				"--executor-model", "gpt-5-codex",
@@ -93,7 +74,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			)
 			args = append(args, test.input...)
 			stdout, stderr := TransportRunScopedServerExecute(
-				t, process, environment, workingDirectory, args, test.stdin,
+				t, invocation, environment, workingDirectory, args, test.stdin,
 			)
 			if !strings.Contains(stdout, "[0] factory started") ||
 				!strings.Contains(stdout, "--- primary result ---") ||
@@ -103,23 +84,78 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			if stderr != "" || !strings.Contains(stdout, "workstation started: "+goalWorkstationName) {
 				t.Fatalf("redirected invocation omitted stable milestones or leaked diagnostics: stdout=%q stderr=%q", stdout, stderr)
 			}
-			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+			if observation.starts.Load() != 1 || observation.stops.Load() != 1 {
 				t.Fatalf(
 					"listener lifecycle = starts:%d stops:%d, want exactly one joined server",
-					listenerStarts.Load(),
-					listenerStops.Load(),
+					observation.starts.Load(),
+					observation.stops.Load(),
 				)
 			}
-			if browserCalls.Load() != test.wantBrowser {
-				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
+			if observation.browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", observation.browserCalls.Load(), test.wantBrowser)
 			}
 		})
 	}
 }
 
+// The parent completes installation before parallel children open sessions.
+func newScopedHostFixture(t *testing.T) (support.Process, []string, string) {
+	t.Helper()
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, "models"))
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			observation, ok := ctx.Value(scopedHostObservationKey{}).(*scopedHostObservation)
+			if !ok {
+				return fmt.Errorf("hosted invocation observation is required")
+			}
+			observation.starts.Add(1)
+			if observation.assertHandler != nil {
+				observation.assertHandler(request.Handler)
+			}
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			<-ctx.Done()
+			observation.stops.Add(1)
+			return ctx.Err()
+		},
+		BrowserOpener: func(ctx context.Context, _ string) error {
+			observation, ok := ctx.Value(scopedHostObservationKey{}).(*scopedHostObservation)
+			if !ok {
+				return fmt.Errorf("hosted invocation observation is required")
+			}
+			observation.browserCalls.Add(1)
+			return nil
+		},
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(`{"decision":"accepted","feedback":"","output":"mock worker accepted"}`),
+	})
+	factoryDir := initializeGoalFactory(t, process, environment, t.TempDir(), homeDir)
+	return process, environment, factoryDir
+}
+
+// Each external effect receives the invocation's observation through its
+// request context; parallel scenarios retain independent lifecycle assertions.
+type scopedHostObservationKey struct{}
+
+type scopedHostObservation struct {
+	starts, stops, browserCalls atomic.Int32
+	assertHandler               func(http.Handler)
+}
+
+type scopedHostInvocation struct {
+	process     support.Process
+	observation *scopedHostObservation
+}
+
+func (invocation scopedHostInvocation) Execute(input root.Input) error {
+	input.Context = context.WithValue(input.Context, scopedHostObservationKey{}, invocation.observation)
+	return invocation.process.Execute(input)
+}
+
 // TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness proves raw JavaScript hosting shares one lifecycle.
 func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 	t.Parallel()
+	process, environment, _ := newScopedHostFixture(t)
 	for _, test := range []struct {
 		name        string
 		mode        string
@@ -135,40 +171,24 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 			if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 				t.Fatalf("write workflow: %v", err)
 			}
-			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-					listenerStarts.Add(1)
-					assertDashboardHandler(t, request.Handler)
-					request.OnBound(platformhttpserver.Binding{Port: request.Port})
-					<-ctx.Done()
-					listenerStops.Add(1)
-					return ctx.Err()
-				},
-				BrowserOpener: func(context.Context, string) error {
-					browserCalls.Add(1)
-					return nil
-				},
-			})
-			if err != nil {
-				t.Fatalf("BuildProcess() error = %v", err)
+			observation := &scopedHostObservation{
+				assertHandler: func(handler http.Handler) { assertDashboardHandler(t, handler) },
 			}
-			homeDir := t.TempDir()
-			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-			stdout, stderr := TransportRunScopedServerExecute(t, process, environment, workingDirectory, []string{
-				"you", "run", "--factory", workflowPath, "--with-mock-workers", test.mode,
+			invocation := scopedHostInvocation{process: process, observation: observation}
+			stdout, stderr := TransportRunScopedServerExecute(t, invocation, environment, workingDirectory, []string{
+				"you", "run", "--session", uuid.NewString(), "--factory", workflowPath, test.mode,
 			}, "")
 			if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
 				t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
 			}
-			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+			if observation.starts.Load() != 1 || observation.stops.Load() != 1 {
 				t.Fatalf(
 					"listener lifecycle = starts:%d stops:%d, want exactly one joined server",
-					listenerStarts.Load(), listenerStops.Load(),
+					observation.starts.Load(), observation.stops.Load(),
 				)
 			}
-			if browserCalls.Load() != test.wantBrowser {
-				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
+			if observation.browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", observation.browserCalls.Load(), test.wantBrowser)
 			}
 		})
 	}

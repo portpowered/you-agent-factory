@@ -14,7 +14,7 @@ type restorableStateProbe interface {
 	HasRestorableState(context.Context, string) (bool, error)
 }
 
-func (s *Service) handedOffOwner() (fse.Service, bool) {
+func (s *Scope) handedOffOwner() (fse.Service, bool) {
 	if s == nil {
 		return nil, false
 	}
@@ -23,7 +23,7 @@ func (s *Service) handedOffOwner() (fse.Service, bool) {
 	return s.live, s.handedOff && s.live != nil
 }
 
-func (s *Service) handedOffOwnerForSession(sessionID string) (fse.Service, bool) {
+func (s *Scope) handedOffOwnerForSession(sessionID string) (fse.Service, bool) {
 	owner, handedOff := s.handedOffOwner()
 	if !handedOff || s.session(sessionID) != nil {
 		return nil, false
@@ -31,7 +31,7 @@ func (s *Service) handedOffOwnerForSession(sessionID string) (fse.Service, bool)
 	return owner, true
 }
 
-func (s *Service) handedOffOwnerForSessionOperation(sessionID string) (fse.Service, error) {
+func (s *Scope) handedOffOwnerForSessionOperation(sessionID string) (fse.Service, error) {
 	if err := s.session(sessionID); err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (s *Service) handedOffOwnerForSessionOperation(sessionID string) (fse.Servi
 	return owner, nil
 }
 
-func (s *Service) resumeOwnerLocked(ctx context.Context, sessionID string) (fse.Service, error) {
+func (s *Scope) resumeOwnerLocked(ctx context.Context, sessionID string) (fse.Service, error) {
 	if err := s.session(sessionID); err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) resumeOwnerLocked(ctx context.Context, sessionID string) (fse.
 	return s.live, nil
 }
 
-func (s *Service) markHandedOff() {
+func (s *Scope) markHandedOff() {
 	if s == nil {
 		return
 	}

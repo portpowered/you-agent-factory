@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -21,10 +22,8 @@ import (
 )
 
 const (
-	concurrencySharedProcessTimeout   = 20 * time.Second
-	concurrencyForcedCleanupChildEnv  = "YOU_CONCURRENCY_FORCED_CLEANUP_CHILD"
-	concurrencyForcedCleanupReportEnv = "YOU_CONCURRENCY_FORCED_CLEANUP_REPORT"
-	concurrencyFailureMessage         = "concurrency controlled authentication failure"
+	concurrencySharedProcessTimeout = 20 * time.Second
+	concurrencyFailureMessage       = "concurrency controlled authentication failure"
 )
 
 type concurrencyRunnerBehavior string
@@ -43,10 +42,6 @@ const (
 // live at the controlled command edge so the scheduler remains genuinely
 // concurrent and no fixture-wide scenario lock can hide capacity behavior.
 func TestConcurrencySharedProcess(t *testing.T) {
-	if os.Getenv(concurrencyForcedCleanupChildEnv) == "1" {
-		runConcurrencyForcedCleanupChild(t)
-		return
-	}
 	t.Parallel()
 
 	fixture := newConcurrencySharedProcessFixture(t)
@@ -74,7 +69,6 @@ func TestConcurrencySharedProcess(t *testing.T) {
 		t.Run("CC-13", func(t *testing.T) { t.Parallel(); fixture.runRecovery(t) })
 	})
 	t.Run("Timeout", func(t *testing.T) { t.Parallel(); fixture.runTimeoutRecovery(t) })
-	t.Run("Cleanup", func(t *testing.T) { t.Parallel(); runConcurrencyForcedCleanupParent(t) })
 }
 
 type concurrencySharedProcessFixture struct {
@@ -142,6 +136,7 @@ func newConcurrencySharedProcessFixture(t *testing.T) *concurrencySharedProcessF
 			return err
 		},
 		ProviderCommandRunner:                  fixture.router,
+		FactorySessionsWorkingDirectory:        platformfilesystem.Local{WorkingDirectory: hostDir},
 		FactorySessionIDGenerator:              fixture.identities.nextSessionID,
 		FactorySessionResponseEventIDGenerator: fixture.identities.nextResponseEventID,
 	})
@@ -160,9 +155,7 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 		t.Fatal("shared concurrency process started more than once")
 	}
 	env := append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
-	// First-run profile installation is fixture setup, not server readiness.
-	// Complete it through the same public process before starting the host.
-	support.InitializeCustomerHomeWithProcess(t, fixture.process, env, fixture.hostDir)
+
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--dir", fixture.hostDir,

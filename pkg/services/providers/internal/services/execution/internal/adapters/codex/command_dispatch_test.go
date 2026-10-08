@@ -21,7 +21,7 @@ import (
 func TestCommandEffectPreservesSystemPromptAsOneConfigValue(t *testing.T) {
 	t.Parallel()
 	runner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(runner), platformclock.Real{}, nil, nil)
 	prompt := "Read \"quoted\" instructions\nC:\\workspace\\file\tand Unicode: café"
 	_, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider: providers.IDCodex, AttemptID: "system-prompt", SystemPrompt: prompt, UserMessage: "user input",
@@ -44,7 +44,7 @@ func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 	t.Parallel()
 
 	runner := &recordingProviderCommandRunner{}
-	effect := codex.NewCommandEffect((runner).commandEffect(), platformclock.Real{})
+	effect := codex.NewCommandEffect((runner).commandEffect(), platformclock.Real{}, nil, nil)
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -95,7 +95,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{}, nil, nil)
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -117,7 +117,7 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{}, nil, nil)
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -157,7 +157,7 @@ func TestCommandEffectForwardsWorkerArgsBeforeResumeAndPrompt(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{}, nil, nil)
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -201,7 +201,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(fixtureCommandRunner(platformRunner), platformclock.Real{}, nil, nil)
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -257,7 +257,7 @@ func TestCommandEffectUsesInjectedRunnerAndClockOnTerminalPaths(t *testing.T) {
 				clock.SetTick(37)
 				return providerservice.CommandResult{Stdout: []byte("delivered"), Stderr: []byte("private diagnostic")}, tc.runErr
 			})
-			effect := codex.NewCommandEffect((runner).commandEffect(), clock)
+			effect := codex.NewCommandEffect((runner).commandEffect(), clock, nil, nil)
 			var observed strings.Builder
 			result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:    providers.IDCodex,

@@ -82,6 +82,7 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 
 	// BFS: cascade failure transitively.
 	var mutations []interfaces.MarkingMutation
+	var stateChanges []work.WorkStateChangeRecord
 	cascaded := make(map[string]bool) // token IDs already moved
 
 	now := cf.now()
@@ -119,6 +120,15 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 					Attempt:      0,
 				}},
 			})
+			stateChanges = append(stateChanges, work.WorkStateChangeRecord{
+				WorkID: dep.Color.WorkID, WorkTypeID: dep.Color.WorkTypeID,
+				WorkTypeName:  cf.state.WorkTypes[dep.Color.WorkTypeID].Name,
+				FromState:     cf.state.Places[dep.PlaceID].State,
+				ToState:       cf.state.Places[failedPlace].State,
+				Source:        work.WorkStateChangeSourceCascadingFailure,
+				TriggerWorkID: currentWorkID,
+				Reason:        fmt.Sprintf("cascading failure: dependency %s failed", currentWorkID),
+			})
 
 			// Queue newly-failed token for transitive cascading.
 			queue = append(queue, dep.Color.WorkID)
@@ -129,7 +139,7 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 		return nil, nil
 	}
 
-	return &interfaces.TickResult{Mutations: mutations}, nil
+	return &interfaces.TickResult{Mutations: mutations, WorkStateChanges: stateChanges}, nil
 }
 
 func shouldRouteTerminalFailureToFailedState(result resolvedWorkResult) bool {

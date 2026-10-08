@@ -254,8 +254,22 @@ func requestEventContent(parts []work.WorkContentPart) []work.WorkContentPart {
 	return work.CloneWorkContentParts(out)
 }
 
-func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
-	out := eventWorks(items)
+func (h *FactoryEventHistory) dispatchOutputWorkPtr(completed interfaces.CompletedDispatch) *[]work.WorkRequestEventWork {
+	out := eventWorks(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens))
+	for index := range out {
+		item := &out[index]
+		if item.State == nil {
+			continue
+		}
+		// Authored state names are arbitrary: fin and escalated can be FAILED.
+		// Keep the legacy inference only when topology has no category fact.
+		for _, place := range h.initialStructure.Places {
+			if place.TypeID == item.WorkTypeID && place.State == item.State.Name && place.Category != "" {
+				item.State.Type = strings.ToUpper(place.Category)
+				break
+			}
+		}
+	}
 	return &out
 }
 

@@ -103,7 +103,7 @@ func cancelScriptSharedSessionAfterCommandStart(
 	t *testing.T,
 	fixture *scriptSharedSpineFixture,
 	scenario scriptSharedScenario,
-	sessionID string,
+	sessionID, workID string,
 ) {
 	t.Helper()
 	runner, ok := scenario.runner.Delegate().(*blockingCancellationCommandRunner)
@@ -111,6 +111,9 @@ func cancelScriptSharedSessionAfterCommandStart(
 		t.Fatalf("%s command delegate = %T, want blocking cancellation runner", scenario.name, scenario.runner.Delegate())
 	}
 	waitForScriptSharedSignal(t, runner.StartedSignal(), "script command admission")
+	// Command entry precedes publication of the Work projection. Cancel only
+	// after the public contract acknowledges the exact processing Work.
+	waitForScriptProcessingWork(t, fixture.baseURL, sessionID, workID)
 	control := cancelScriptSharedSessionAt(t, fixture.baseURL, sessionID)
 	if control.Operation != factoryapi.FactorySessionLifecycleControlKindCancel {
 		t.Fatalf("%s cancellation operation = %q, want CANCEL", scenario.name, control.Operation)
@@ -122,6 +125,22 @@ func cancelScriptSharedSessionAfterCommandStart(
 		t.Fatalf("%s cancellation session id = %q, want %q", scenario.name, control.SessionId, sessionID)
 	}
 	waitForScriptSharedSignal(t, runner.TerminatedSignal(), "script command cancellation and termination")
+}
+
+func waitForScriptProcessingWork(t testing.TB, baseURL, sessionID, workID string) {
+	t.Helper()
+	listed, err := support.WaitForObservation(scriptSharedSpineTimeout,
+		func() (factoryapi.ListWorkResponse, error) { return listScriptSessionWork(t, baseURL, sessionID), nil },
+		func(listed factoryapi.ListWorkResponse) bool {
+			if len(listed.Results) != 1 {
+				return false
+			}
+			item := listed.Results[0]
+			return support.StringPointerValue(item.WorkId) == workID && item.State != nil && item.State.Name == "init" && item.State.Type == factoryapi.WorkStateTypePROCESSING
+		})
+	if err != nil {
+		t.Fatalf("observe processing Work %q before cancellation: %v; listed=%#v", workID, err, listed)
+	}
 }
 
 func waitForScriptSharedSignal(t *testing.T, signal <-chan struct{}, label string) {

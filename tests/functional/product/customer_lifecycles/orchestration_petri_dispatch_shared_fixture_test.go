@@ -2,7 +2,6 @@ package customer_lifecycles_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -13,15 +12,11 @@ import (
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-const sharedPetriFixtureShutdownTimeout = 15 * time.Second
 
 // Shared scenarios retain their t.Parallel coverage, but the shared
 // application process should not be driven by every scenario at once.
@@ -55,39 +50,21 @@ func initializeOrchestrationpetridispatchFixture(t *testing.T) {
 			}
 		}
 		if code != 0 {
-			t.
-
-				// sharedPetriProcessFixture owns the one root-built application process used
-				// by the eligible dispatch scenarios. Factory definitions and session state
-				// stay scenario-local; only immutable process wiring and the loopback API are
-				// shared.
-				Error("customer fixture cleanup failed; see preceding diagnostic")
+			t.Error("customer fixture cleanup failed; see preceding diagnostic")
 		}
 	})
 }
 
+// sharedPetriProcessFixture owns dispatch routes and sessions on the common
+// lifecycle host. The parent closes the host after all journey groups finish.
 type sharedPetriProcessFixture struct {
-	rootDir      string
-	homeDir      string
-	bootstrapDir string
-	baseURL      string
+	baseURL string
 
-	process support.ApplicationProcess
-	command *sharedPetriHostedCommand
-	api     *support.ProcessAPIServer
-	router  *sharedPetriCommandRouter
+	router *sharedPetriCommandRouter
 
 	sessionMu        sync.Mutex
 	openedSessionIDs map[string]struct{}
 	closedSessionIDs map[string]struct{}
-}
-
-type sharedPetriHostedCommand struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-
-	mu  sync.Mutex
-	err error
 }
 
 func sharedPetriProcess(t testing.TB) *sharedPetriProcessFixture {
@@ -106,106 +83,20 @@ func sharedPetriProcess(t testing.TB) *sharedPetriProcessFixture {
 
 func newSharedPetriProcessFixture(t testing.TB) (*sharedPetriProcessFixture, error) {
 	t.Helper()
-	rootDir, err := os.MkdirTemp("", "you-functional-petri-dispatch-")
-	if err != nil {
-		return nil, fmt.Errorf("create fixture root: %w", err)
-	}
-	cleanupRoot := func() { _ = os.RemoveAll(rootDir) }
-	homeDir := filepath.Join(rootDir, "home")
-	bootstrapDir := filepath.Join(rootDir, "bootstrap")
-	if err := os.MkdirAll(homeDir, 0o755); err != nil {
-		cleanupRoot()
-		return nil, fmt.Errorf("create fixture home: %w", err)
-	}
-	if err := writeSharedPetriBootstrapFactory(bootstrapDir); err != nil {
-		cleanupRoot()
-		return nil, fmt.Errorf("write bootstrap Factory: %w", err)
-	}
-
-	router := newSharedPetriCommandRouter()
-	api := support.NewProcessAPIServer()
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      sharedPetriAPIServerStarter(api),
-		ProviderCommandRunner: router,
-		ScriptCommandRunner:   router,
-	})
-	if err != nil {
-		cleanupRoot()
-		return nil, fmt.Errorf("build root process: %w", err)
-	}
-
-	fixture := &sharedPetriProcessFixture{
-		rootDir:          rootDir,
-		homeDir:          homeDir,
-		bootstrapDir:     bootstrapDir,
-		process:          process,
-		api:              api,
-		router:           router,
+	host := orchestrationpetricrossSharedCrossProcess(t)
+	return &sharedPetriProcessFixture{
+		baseURL:          host.baseURL,
+		router:           host.dispatchRouter,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
-	}
-	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "run",
-		"--dir", bootstrapDir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	inputs.Input.WorkingDirectory = bootstrapDir
-	fixture.command = startSharedPetriHostedCommand(process, inputs.Input)
-	baseURL, err := api.WaitForBaseURL(sharedPetriFixtureShutdownTimeout)
-	if err != nil {
-		_ = fixture.close()
-		cleanupRoot()
-		return nil, fmt.Errorf("wait for loopback API: %w", err)
-	}
-	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, sharedPetriFixtureShutdownTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
-	return fixture, nil
-}
-
-func sharedPetriAPIServerStarter(api *support.ProcessAPIServer) func(context.Context, platformhttpserver.StartRequest) error {
-	return api.Start
-}
-
-func startSharedPetriHostedCommand(process support.Process, input root.Input) *sharedPetriHostedCommand {
-	parent := input.Context
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithCancel(parent)
-	input.Context = ctx
-	command := &sharedPetriHostedCommand{cancel: cancel, done: make(chan struct{})}
-	go func() {
-		err := process.Execute(input)
-		command.mu.Lock()
-		command.err = err
-		command.mu.Unlock()
-		close(command.done)
-	}()
-	return command
+	}, nil
 }
 
 func (fixture *sharedPetriProcessFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
-	var commandErr error
-	if fixture.command != nil {
-		commandErr = fixture.command.stop()
-	}
-	closeErr := commandErr
-	if fixture.process != nil {
-		closeContext, cancel := context.WithTimeout(context.Background(), sharedPetriFixtureShutdownTimeout)
-		processErr := fixture.process.Close(closeContext)
-		cancel()
-		closeErr = errors.Join(closeErr, processErr)
-	}
+	var closeErr error
 	if fixture.router != nil {
 		if got := fixture.router.routeCount(); got != 0 {
 			closeErr = errors.Join(
@@ -215,24 +106,6 @@ func (fixture *sharedPetriProcessFixture) close() error {
 		}
 	}
 	lifecycleErr := fixture.sessionLifecycleError()
-	if removeErr := os.RemoveAll(fixture.rootDir); removeErr != nil {
-		return errors.Join(
-			closeErr,
-			lifecycleErr,
-			fmt.Errorf("remove fixture root: %w", removeErr),
-		)
-	}
-	if _, statErr := os.Stat(fixture.rootDir); statErr == nil {
-		closeErr = errors.Join(
-			closeErr,
-			fmt.Errorf("shared Petri fixture root still exists after cleanup: %s", fixture.rootDir),
-		)
-	} else if !os.IsNotExist(statErr) {
-		closeErr = errors.Join(
-			closeErr,
-			fmt.Errorf("probe removed shared Petri fixture root: %w", statErr),
-		)
-	}
 	return errors.Join(closeErr, lifecycleErr)
 }
 
@@ -252,31 +125,6 @@ func (fixture *sharedPetriProcessFixture) sessionLifecycleError() error {
 		}
 	}
 	return nil
-}
-
-func (command *sharedPetriHostedCommand) stop() error {
-	if command == nil {
-		return nil
-	}
-	command.cancel()
-	select {
-	case <-command.done:
-		command.mu.Lock()
-		err := command.err
-		command.mu.Unlock()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return err
-		}
-		return nil
-	case <-time.After(sharedPetriFixtureShutdownTimeout):
-		command.mu.Lock()
-		if command.err == nil {
-			command.err = fmt.Errorf("timed out waiting for hosted process shutdown")
-		}
-		err := command.err
-		command.mu.Unlock()
-		return err
-	}
 }
 
 // sharedPetriCommandRouter is a synchronized, path-keyed edge. Each route is
@@ -782,46 +630,6 @@ func listSharedPetriSessionWork(t testing.TB, baseURL, sessionID string) factory
 	return support.GetJSON[factoryapi.ListWorkResponse](
 		t,
 		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/work",
-	)
-}
-
-func writeSharedPetriBootstrapFactory(dir string) error {
-	if err := os.MkdirAll(filepath.Join(dir, "workstations", "process"), 0o755); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "workers", "worker-a"), 0o755); err != nil {
-		return err
-	}
-	factory := map[string]any{
-		"name": "shared-petri-bootstrap",
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	}
-	encoded, err := json.Marshal(factory)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "factory.json"), encoded, 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(
-		filepath.Join(dir, "workers", "worker-a", "AGENTS.md"),
-		[]byte("---\nmodel: test-model\ntype: MODEL_WORKER\nstopToken: COMPLETE\n---\nBootstrap worker.\n"),
-		0o644,
 	)
 }
 

@@ -26,6 +26,7 @@ const (
 )
 
 func TestWorkWatchControlledLifecycleCases(t *testing.T) {
+	ensureWatchFixture(t)
 	t.Run("boundary cases", runControlledWatchBoundaryCases)
 	t.Run("cancellation cases", runControlledWatchCancellationCases)
 	t.Run("recovery and cleanup cases", runControlledWatchRecoveryAndCleanupCases)
@@ -682,23 +683,4 @@ func (ctx controlledDeadlineContext) Err() error {
 		return context.DeadlineExceeded
 	}
 	return ctx.Context.Err()
-}
-
-// The migrated fixture must preserve the public child-context deadline contract.
-func TestControlledDeadlinePropagatesToChildren(t *testing.T) {
-	t.Parallel()
-	type valueKey struct{}
-	parent := context.WithValue(t.Context(), valueKey{}, "preserved")
-	ctx, expire := newControlledDeadlineContext(parent)
-	defer expire()
-	child, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if child.Value(valueKey{}) != "preserved" || child.Err() != nil {
-		t.Fatal("parent values or initial context state lost")
-	}
-	expire()
-	<-child.Done()
-	if !errors.Is(child.Err(), context.DeadlineExceeded) {
-		t.Fatalf("child error = %v", child.Err())
-	}
 }

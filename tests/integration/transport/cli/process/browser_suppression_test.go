@@ -38,20 +38,11 @@ func TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases(t *testing.
 
 	t.Run("success-and-cancellation", func(t *testing.T) {
 		sentinel := newBrowserLauncherSentinel(t)
-		session := harness.NewSession(t).WithNoExternalServer(t)
+		session := harness.NewSession(t)
 		server := startBuiltBrowserServer(t, binaryPath, session, sentinel)
 		t.Cleanup(func() { server.cleanup(t) })
 
-		dashboardURL := waitForDashboardURL(
-			t,
-			server.lines,
-			server.scanErr,
-			&server.stderr,
-			builtBrowserSuppressionTimeout,
-		)
-		if want := session.ServerURL + "/dashboard/ui"; dashboardURL != want {
-			t.Fatalf("dashboard URL = %q, want %q", dashboardURL, want)
-		}
+		_ = observeBuiltBrowserDashboardURL(t, session, server)
 		assertBrowserLauncherNotObserved(t, sentinel)
 
 		server.stop(t)
@@ -83,16 +74,10 @@ func TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases(t *testing.
 		assertBrowserLauncherNotObserved(t, sentinel)
 
 		recoverySentinel := newBrowserLauncherSentinel(t)
-		recoverySession := harness.NewSession(t).WithNoExternalServer(t)
+		recoverySession := harness.NewSession(t)
 		recoveryServer := startBuiltBrowserServer(t, binaryPath, recoverySession, recoverySentinel)
 		t.Cleanup(func() { recoveryServer.cleanup(t) })
-		_ = waitForDashboardURL(
-			t,
-			recoveryServer.lines,
-			recoveryServer.scanErr,
-			&recoveryServer.stderr,
-			builtBrowserSuppressionTimeout,
-		)
+		_ = observeBuiltBrowserDashboardURL(t, recoverySession, recoveryServer)
 		recoveryServer.stop(t)
 		assertServerPortReusable(t, recoverySession.ServerURL)
 		assertBrowserLauncherNotObserved(t, recoverySentinel)
@@ -101,8 +86,8 @@ func TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases(t *testing.
 	t.Run("concurrent-isolated-children", func(t *testing.T) {
 		firstSentinel := newBrowserLauncherSentinel(t)
 		secondSentinel := newBrowserLauncherSentinel(t)
-		firstSession := harness.NewSession(t).WithNoExternalServer(t)
-		secondSession := harness.NewSession(t).WithNoExternalServer(t)
+		firstSession := harness.NewSession(t)
+		secondSession := harness.NewSession(t)
 		first := startBuiltBrowserServer(t, binaryPath, firstSession, firstSentinel)
 		second := startBuiltBrowserServer(t, binaryPath, secondSession, secondSentinel)
 		t.Cleanup(func() {
@@ -110,8 +95,8 @@ func TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases(t *testing.
 			second.cleanup(t)
 		})
 
-		firstURL := waitForDashboardURL(t, first.lines, first.scanErr, &first.stderr, builtBrowserSuppressionTimeout)
-		secondURL := waitForDashboardURL(t, second.lines, second.scanErr, &second.stderr, builtBrowserSuppressionTimeout)
+		firstURL := observeBuiltBrowserDashboardURL(t, firstSession, first)
+		secondURL := observeBuiltBrowserDashboardURL(t, secondSession, second)
 		if firstURL == secondURL {
 			t.Fatalf("concurrent dashboard URLs both resolved to %q; want isolated ports", firstURL)
 		}
@@ -188,7 +173,9 @@ func startBuiltBrowserServer(
 ) *builtBrowserServer {
 	t.Helper()
 	writeIdleCurrentFactory(t, session.WorkDir)
-	args := []string{"server", "--listen", serverListenAddress(t, session.ServerURL)}
+	// Let the server own port selection and binding. A released probe port can
+	// be claimed by a concurrent integration process before this child starts.
+	args := []string{"server"}
 	command := exec.Command(binaryPath, args...)
 	command.Dir = session.WorkDir
 	command.Env = sentinel.environment(t, session)
@@ -215,6 +202,17 @@ func startBuiltBrowserServer(
 		close(server.scanDone)
 	}()
 	return server
+}
+
+func observeBuiltBrowserDashboardURL(t testing.TB, session *builtcliacceptance.Session, server *builtBrowserServer) string {
+	t.Helper()
+	dashboardURL := waitForDashboardURL(t, server.lines, server.scanErr, &server.stderr, builtBrowserSuppressionTimeout)
+	parsed, err := url.Parse(dashboardURL)
+	if err != nil || parsed.Scheme != "http" || (parsed.Hostname() != "localhost" && !net.ParseIP(parsed.Hostname()).IsLoopback()) || parsed.Port() == "" || parsed.Path != "/dashboard/ui" {
+		t.Fatalf("dashboard URL = %q, want loopback HTTP dashboard with a bound port", dashboardURL)
+	}
+	session.ServerURL = "http://" + parsed.Host
+	return dashboardURL
 }
 
 func runBuiltBrowserServerUntilExit(

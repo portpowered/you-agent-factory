@@ -221,6 +221,10 @@ func readFactoryEventHistory(
 	if reader == nil {
 		return nil, errors.New("Factory Session event reader is required")
 	}
+	// This operation consumes history only; release the live subscription before
+	// runtime teardown waits for active streams to drain.
+	historyCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	sessionID = strings.TrimSpace(sessionID)
 	var (
 		stream *factorydefinitions.FactoryEventStream
@@ -228,11 +232,11 @@ func readFactoryEventHistory(
 	)
 	if sessionID != "" && sessionID != factorysessions.DefaultSessionID {
 		stream, err = reader.ReadDurableFactorySessionEventStream(
-			ctx, sessionID, factorysessions.EventReconnectRequest{},
+			historyCtx, sessionID, factorysessions.EventReconnectRequest{},
 		)
 	} else {
 		stream, err = reader.SubscribeFactoryEventsForSession(
-			ctx, factorysessions.DefaultSessionID, nil,
+			historyCtx, factorysessions.DefaultSessionID, nil,
 		)
 	}
 	if err != nil {
