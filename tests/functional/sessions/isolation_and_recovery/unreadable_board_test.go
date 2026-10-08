@@ -109,7 +109,7 @@ func testUnreadableOpeningFailures(t *testing.T, process support.Process, repo, 
 	t.Helper()
 	// These attempts reopen the same default board after its joined shutdown.
 	// Serial execution protects the customer-visible single-writer invariant.
-	for _, cell := range []string{"F7 preservation denied", "F12 cancel before quarantine", "F12 cancel before publication"} {
+	for _, cell := range []string{"F7 preservation denied", "F7 stream read failure with preservation denied", "F12 cancel before quarantine", "F12 cancel before publication"} {
 		t.Run(cell, func(t *testing.T) {
 			snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
 			reference := filepath.Join(repo, ".you-agent-factory", "current-board.json")
@@ -122,6 +122,7 @@ func testUnreadableOpeningFailures(t *testing.T, process support.Process, repo, 
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			fault := &unreadableOpeningFault{path: snapshot, operation: "rename"}
+			fault.readError = strings.Contains(cell, "stream read failure")
 			if strings.Contains(cell, "cancel") {
 				fault.cancel = cancel
 			}
@@ -159,6 +160,8 @@ type unreadableOpeningFault struct {
 	path, operation string
 	cancel          context.CancelFunc
 	observed        atomic.Bool
+	readError       bool
+	readObserved    atomic.Bool
 }
 
 type unreadableOpeningFiles struct {
@@ -177,6 +180,31 @@ func (files *unreadableOpeningFiles) fail(path, operation string) error {
 		return fs.ErrPermission
 	}
 	return nil
+}
+
+func (files *unreadableOpeningFiles) Open(path string) (io.ReadCloser, error) {
+	file, err := files.Local.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if fault := files.fault.Load(); fault != nil && fault.path == path && fault.readError {
+		return &unreadableOpeningStream{ReadCloser: file, fault: fault}, nil
+	}
+	return file, nil
+}
+
+type unreadableOpeningStream struct {
+	io.ReadCloser
+	fault *unreadableOpeningFault
+}
+
+func (stream *unreadableOpeningStream) Read([]byte) (int, error) {
+	stream.fault.readObserved.Store(true)
+	return 0, fs.ErrPermission
+}
+
+func (files *unreadableOpeningFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return platformfilesystem.NewRecovery(files, files.Local).ReadFileBounded(path, limit)
 }
 
 func (files *unreadableOpeningFiles) RenameNoReplace(source, destination string) error {
@@ -372,6 +400,9 @@ func assertQuietMissingSnapshot(t *testing.T, repo string, inputs *support.Captu
 
 func assertUnreadableOpeningFailureCause(t *testing.T, fault *unreadableOpeningFault, err error) {
 	t.Helper()
+	if fault.readError && !fault.readObserved.Load() {
+		t.Fatal("failed opening did not encounter the snapshot stream error")
+	}
 	if fault.cancel != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("startup lost cancellation: %v", err)
 	}
