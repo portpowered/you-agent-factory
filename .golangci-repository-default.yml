@@ -6,6 +6,10 @@ linters:
   default: none
   enable:
     - repolint
+    - govet
+  exclusions:
+    # Standalone go vet covered generated files too, without a path ratchet.
+    generated: disable
   settings:
     custom:
       repolint:

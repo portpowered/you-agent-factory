@@ -327,7 +327,15 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	requireWorkflowText(job, "scripts/lint-migration-smoke.py ci-smoke", "real plugin diagnostic smoke");
 	requireWorkflowText(job, "scripts/build-golangci.py --restore", "validated artifact restore");
 	requireWorkflowText(job, 'GOLANGCI_PREBUILT: "1"', "canonical prebuilt plugin reuse");
-	requireWorkflowText(makefile, "LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check", "complete base enforcement inventory");
+	requireWorkflowText(makefile, "LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check", "base enforcement without duplicate vet loading");
+	requireWorkflowText(job, 'LINT_BACKEND_ONLY: "1"', "Frontend owns UI gates");
+	if (/make ui-(deps|lint|deadcode)|oven-sh\/setup-bun/.test(job)) throw new Error("Backend Lint must not repeat Frontend setup or gates");
+	requireWorkflowText(workflowJobSection(workflow, "frontend"), "run: make ui-lint ui-deadcode", "Frontend runs both UI gates");
+	requireWorkflowText(job, "--selection .artifacts/backend-lint/selection.json", "render uses the collector selection record");
+	requireWorkflowText(job, "LINT_SELECTION_FILE: .artifacts/backend-lint/selection.json", "collector uses the input selection record");
+	requireWorkflowOrder(job, "- name: Select lint inputs", "- name: Verify direct upstream deadcode boundary", "resolve input selection before optional smoke");
+	requireWorkflowText(workflowStepSection(job, "Verify direct upstream deadcode boundary"), "if: steps.lint-inputs.outputs.direct_boundary != '0'", "unknown smoke selection remains conservative");
+	requireWorkflowText(workflowStepSection(job, "Upload normalized deadcode evidence"), "if: always() && steps.lint-inputs.outputs.deadcode != '0'", "selected missing deadcode evidence remains a failure");
 	requireWorkflowText(makefile, "golangci-lint-run: golangci-build", "built-in checks use the prepared custom binary");
 	return { name: "backend-lint-workflow", status: "pass" };
 }

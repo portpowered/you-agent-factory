@@ -13,6 +13,9 @@ import {
 	resolveBackendLintParallelism,
 	selectBackendLint,
 	upsertBackendLintComment,
+	selectLintInputs,
+	validateLintSelection,
+	readLintInputPaths,
 } from "./backend-lint-workflow.mjs";
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
@@ -87,6 +90,55 @@ test("uses the healthy runner-parallelism selection when the helper loads", asyn
 		jobs: 8,
 		warning: "",
 	});
+});
+
+test("Backend Lint uses exactly one job on a one-CPU runner without changing other lanes", async () => {
+	assert.deepEqual(await resolveBackendLintParallelism("1"), { logicalCPUs: 1, jobs: 1, warning: "" });
+	assert.match((await resolveBackendLintParallelism("")).warning, /fallback/);
+});
+
+const inputs = (paths, event = "pull_request") => selectLintInputs({ event, baseSha: SHA("a"), testedSha: SHA("b"), paths });
+
+test("only known independent UI/prose changes skip optional checks", () => {
+	for (const path of ["README.md", "ui/src/App.tsx"]) {
+		const selected = inputs([path]);
+		assert.deepEqual([selected.docs, selected.deadcode, selected.directBoundary], [0, 0, 0]);
+		assert.equal(validateLintSelection(selected), selected);
+	}
+	assert.deepEqual([inputs(["docs/architecture/architecture.md"]).docs, inputs(["docs/architecture/architecture.md"]).deadcode], [1, 0]);
+	for (const path of ["go.mod", "go.sum", "pkg/service/asset.json", "ui/fallback_dist/index.html", ".golangci.yml", "Makefile", "scripts/deadcode-report.py", "unknown.txt"]) {
+		const selected = inputs([path]);
+		assert.deepEqual([selected.docs, selected.deadcode, selected.directBoundary], [1, 1, 1], path);
+	}
+});
+
+test("compiler, embedded docs and analyzer changes select their gates", () => {
+	assert.equal(inputs(["pkg/service/code.go"]).deadcode, 1);
+	assert.equal(inputs(["docs/reference/run.md"]).deadcode, 1);
+	assert.equal(inputs(["docs/reference/run.md"]).docs, 1);
+	assert.equal(inputs(["internal/lint/analyzers/code.go"]).directBoundary, 1);
+	assert.equal(inputs(["tools/golangcilintplugin/plugin.go"]).directBoundary, 1);
+});
+
+test("unknown, empty, missing Git metadata and main push are conservative", () => {
+	for (const selection of [inputs([]), inputs(null), inputs(["README.md"], "push"), selectLintInputs(), inputs(["README.md"], "unknown")]) {
+		assert.deepEqual([selection.docs, selection.deadcode, selection.directBoundary], [1, 1, 1]);
+	}
+	assert.equal(readLintInputPaths(SHA("a"), SHA("b"), () => { throw new Error("missing commit"); }), null);
+	let argumentsUsed;
+	const paths = readLintInputPaths(SHA("a"), SHA("b"), (_, args) => { argumentsUsed = args; return "docs/reference/run.md\0README.md\0"; });
+	assert.deepEqual(paths, ["docs/reference/run.md", "README.md"]);
+	assert.ok(argumentsUsed.includes("--no-renames"));
+	assert.equal(inputs(paths).deadcode, 1);
+});
+
+test("selection rejects malformed flags, reasons and mismatched identities", () => {
+	const selection = inputs(["README.md"]);
+	for (const invalid of [null, {}, { ...selection, deadcode: "0" }, { ...selection, reasons: {} }, { ...selection, baseSha: "" }, { ...selection, event: "push" }]) {
+		assert.throws(() => validateLintSelection(invalid), /selection/);
+	}
+	assert.throws(() => validateLintSelection(selection, { testedSha: SHA("c") }), /selection/);
+	assert.throws(() => validateLintSelection(selection, { event: "merge_group" }), /selection/);
 });
 
 test("exports a positive fallback and warning when the helper cannot load", async () => {

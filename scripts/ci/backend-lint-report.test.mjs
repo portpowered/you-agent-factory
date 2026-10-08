@@ -10,6 +10,7 @@ import { execPath, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS } from "./backend-lint-policy.mjs";
+import { selectLintInputs } from "./backend-lint-workflow.mjs";
 import {
 	beginLintRun, startLintTarget, recordLintTarget, collectLintRun, removeLintRun,
 	BACKEND_LINT_COMMENT_MARKER,
@@ -716,4 +717,49 @@ socket.on("close", () => process.exit(name === "middle" ? 0 : 7));
 		assert.match(rejected.output, /LINT_JOBS must be a positive integer/);
 		assert.equal(signals.length, 7);
 	}
+});
+
+const selectedInputs = (paths) => selectLintInputs({ event: "pull_request", baseSha: "a".repeat(40), testedSha: "b".repeat(40), paths });
+const passingTarget = (name) => ({ name, status: "pass", durationMillis: 1, output: "clean" });
+
+test("validated optional skips are visible and selected omissions fail closed", () => {
+    const selection = selectedInputs(["ui/src/App.tsx"]);
+    const input = report({ selection, targets: [passingTarget("golangci")] });
+    const summary = summarizeBackendLintReport(input, { selection });
+    assert.equal(summary.ok, true);
+    assert.match(renderBackendLintSummary(summary), /deadcode: skipped/);
+    assert.match(renderBackendLintSummary(summary), /docs-reference-check: skipped/);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: undefined }).ok, false);
+    const docs = selectedInputs(["docs/reference/run.md"]);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: docs }).ok, false);
+    const complete = { ...input, selection: docs, targets: [passingTarget("golangci"), passingTarget("deadcode"), passingTarget("docs-reference-check")] };
+    assert.equal(summarizeBackendLintReport(complete).ok, true);
+    for (const name of ["golangci", "deadcode", "docs-reference-check"]) {
+        const failed = complete.targets.map((target) => target.name === name ? { ...target, status: "fail", output: "tool unavailable" } : target);
+        assert.equal(summarizeBackendLintReport({ ...complete, targets: failed }).ok, false);
+    }
+});
+
+test("mismatched, null, corrupt and duplicate selection reports fail closed", () => {
+    const selection = selectedInputs(["README.md"]);
+    const input = report({ selection, targets: [passingTarget("golangci")] });
+    for (const options of [{ selection: null }, { selectionError: "unreadable selection" }, { selection: selectedInputs(["docs/reference/run.md"]) }, { testedSha: "c".repeat(40) }, { event: "push" }]) {
+        assert.equal(summarizeBackendLintReport(input, options).harnessFailure, true);
+    }
+    assert.equal(summarizeBackendLintReport({ ...input, targets: [passingTarget("golangci"), passingTarget("golangci")] }).harnessFailure, true);
+    assert.equal(summarizeBackendLintReport({ ...input, selection: { ...selection, deadcode: "0" } }).ok, false);
+});
+
+test("collector preserves selection identity and rejects changes during execution", (t) => {
+    const selection = selectedInputs(["README.md"]);
+    const directory = beginLintRun("1", ["golangci"], "", selection);
+    t.after(() => removeLintRun(directory));
+    startLintTarget(directory, "golangci");
+    writeFileSync(join(directory, "golangci.log"), "clean");
+    recordLintTarget(directory, "golangci", "0");
+    assert.throws(() => collectLintRun(directory, ["golangci"]), /selection changed/);
+    assert.throws(() => collectLintRun(directory, ["golangci"], "", selectedInputs(["docs/reference/run.md"])), /selection changed/);
+    const collected = collectLintRun(directory, ["golangci"], "", selection);
+    assert.deepEqual(collected.selection, selection);
+    assert.equal(summarizeBackendLintReport(collected, { selection }).ok, true);
 });

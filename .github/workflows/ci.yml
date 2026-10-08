@@ -143,7 +143,7 @@ jobs:
         run: make typecheck
       - name: Lint frontend
         if: success() || failure()
-        run: make ui-lint
+        run: make ui-lint ui-deadcode
       - name: Run frontend unit and replay coverage
         if: success() || failure()
         env:
@@ -887,8 +887,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/golangci-lint
-          key: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ hashFiles('go.mod', '**/*.go', '.golangci*.yml', '.custom-gcl.yml') }}
           restore-keys: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+      - name: Select lint inputs
+        id: lint-inputs
+        env:
+          LINT_EVENT: ${{ github.event_name }}
+          LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          LINT_HEAD: ${{ github.sha }}
+        run: node scripts/ci/backend-lint-workflow.mjs --select-inputs --event "$LINT_EVENT" --base "$LINT_BASE" --head "$LINT_HEAD" --output .artifacts/backend-lint/selection.json
       - name: Identify plugin compiler inputs
         id: plugin-inputs
         run: echo "key=$(python3 scripts/build-golangci.py --cache-key)" >> "$GITHUB_OUTPUT"
@@ -908,13 +915,11 @@ jobs:
       - name: Smoke-test shared lint plugin
         run: python3 scripts/lint-migration-smoke.py ci-smoke --golangci "$PWD/.artifacts/golangci/golangci-repository"
       - name: Verify direct upstream deadcode boundary
+        if: steps.lint-inputs.outputs.direct_boundary != '0'
         run: |
           python3 -m unittest discover -s scripts -p "build_golangci_test.py"
           python3 -m unittest discover -s scripts -p "deadcode_report_test.py"
           python3 scripts/deadcode-host-smoke.py --reporter "$PWD/scripts/deadcode-report.py" -- go run golang.org/x/tools/cmd/deadcode@v0.25.1
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
       - name: Verify Backend Lint event selection
         env:
           BACKEND_LINT_EVENT_NAME: ${{ github.event_name }}
@@ -957,9 +962,6 @@ jobs:
           console.log(`Backend Lint CI runner: logical_cpus=${logicalCPUs} jobs=${jobs}`);
           appendFileSync(process.env.GITHUB_OUTPUT, `jobs=${jobs}\n`);
           NODE
-      - name: Install UI dependencies for canonical UI lint targets
-        if: always()
-        run: make ui-deps
       - name: Run complete canonical Backend Lint inventory
         id: run-backend-lint
         if: always()
@@ -975,6 +977,10 @@ jobs:
         env:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
           LINT_FULL: "1"
+          LINT_BACKEND_ONLY: "1"
+          LINT_RUN_DOCS: ${{ steps.lint-inputs.outputs.docs || '1' }}
+          LINT_RUN_DEADCODE: ${{ steps.lint-inputs.outputs.deadcode || '1' }}
+          LINT_SELECTION_FILE: .artifacts/backend-lint/selection.json
           GOLANGCI_PREBUILT: "1"
           GOLANGCI_PROFILE_DIR: .artifacts/backend-lint/profiles
       - name: Render Backend Lint summary and gate
@@ -985,12 +991,14 @@ jobs:
           --log "$LINT_LOG_FILE"
           --summary "$GITHUB_STEP_SUMMARY"
           --comment "$LINT_COMMENT_FILE"
+          --selection .artifacts/backend-lint/selection.json
       - name: Upload complete Backend Lint diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-lint-diagnostics
           path: |
+            .artifacts/backend-lint/selection.json
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
@@ -1000,7 +1008,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Upload normalized deadcode evidence
-        if: always()
+        if: always() && steps.lint-inputs.outputs.deadcode != '0'
         uses: actions/upload-artifact@v4
         with:
           name: backend-deadcode-evidence

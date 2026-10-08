@@ -225,9 +225,15 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check
-LINT_TARGETS_UI := ui-lint ui-deadcode
-LINT_TARGETS_CI_ONLY := deadcode
+LINT_BACKEND_ONLY ?= 0
+LINT_RUN_DOCS ?= 1
+LINT_RUN_DEADCODE ?= 1
+LINT_SELECTION_FILE ?=
+$(foreach flag,LINT_BACKEND_ONLY LINT_RUN_DOCS LINT_RUN_DEADCODE,$(if $(and $(filter 1,$(words $($(flag)))),$(filter 0 1,$($(flag)))),,$(error $(flag) must be 0 or 1)))
+LINT_TARGETS_DOCS := $(if $(filter 1,$(LINT_RUN_DOCS)),docs-reference-check)
+LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check
+LINT_TARGETS_UI := $(if $(filter 1,$(LINT_BACKEND_ONLY)),,ui-lint ui-deadcode)
+LINT_TARGETS_CI_ONLY := $(if $(filter 1,$(LINT_RUN_DEADCODE)),deadcode)
 LINT_FULL ?=
 LINT_UI_CHANGED = $(shell base=$$(git merge-base HEAD origin/main 2>/dev/null) && { git diff --quiet $$base -- ui && test -z "$$(git ls-files --others --exclude-standard ui)" || echo 1; } || echo 1)
 LINT_TARGETS ?= $(if $(or $(strip $(CI)),$(strip $(LINT_FULL)),$(strip $(LINT_UI_CHANGED))),$(LINT_TARGETS_UI) )$(LINT_TARGETS_BASE)$(if $(or $(strip $(CI)),$(strip $(LINT_FULL))), $(LINT_TARGETS_CI_ONLY))
@@ -1025,11 +1031,11 @@ endif
 
 .PHONY: lint-run
 lint-run:
-	@run_dir=$$("$(NODE)" scripts/ci/backend-lint-report.mjs --begin-run --jobs "$(LINT_JOBS)" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)); \
+	@run_dir=$$("$(NODE)" scripts/ci/backend-lint-report.mjs --begin-run --jobs "$(LINT_JOBS)" $(if $(LINT_SELECTION_FILE),--selection "$(LINT_SELECTION_FILE)",) $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS)); \
 	test -n "$$run_dir" || exit 1; \
 	status=0; \
 	"$(LINT_MAKE)" --no-print-directory --keep-going --jobs="$(LINT_JOBS)" --output-sync=target lint-observe-selected LINT_RUN_DIR="$$run_dir" || status=$$?; \
-	"$(NODE)" scripts/ci/backend-lint-report.mjs --collect-run "$$run_dir" $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS) || status=1; \
+	"$(NODE)" scripts/ci/backend-lint-report.mjs --collect-run "$$run_dir" $(if $(LINT_SELECTION_FILE),--selection "$(LINT_SELECTION_FILE)",) $(if $(LINT_REPORT_FILE),--report "$(LINT_REPORT_FILE)",) -- $(LINT_TARGETS) || status=1; \
 	"$(NODE)" scripts/ci/backend-lint-report.mjs --remove-run "$$run_dir" || status=1; \
 	exit $$status
 

@@ -8,6 +8,7 @@ import {
 } from "./backend-lint-policy.mjs";
 
 import { tmpdir } from "node:os";
+import { validateLintSelection } from "./backend-lint-workflow.mjs";
 
 const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
@@ -185,6 +186,13 @@ export function summarizeBackendLintReport(report, options = {}) {
 	if (report.targets.length === 0) {
 		return harnessFailureSummary("the report contained zero checker results", report, options);
 	}
+	const selection = Object.hasOwn(options, "selection") ? options.selection : (report.selection ?? null);
+	try {
+		if (options.selectionError) throw new Error(options.selectionError);
+		if (selection || Object.hasOwn(options, "selection") || Object.hasOwn(report, "selection")) validateLintSelection(selection, { testedSha: options.testedSha, event: options.event });
+		if (options.selection && JSON.stringify(options.selection) !== JSON.stringify(report.selection)) throw new Error("lint selection changed between collection and rendering");
+		if (new Set(report.targets.map((target) => target.name)).size !== report.targets.length) throw new Error("duplicate checker entries");
+	} catch (error) { return harnessFailureSummary(error.message, report, options); }
 
 	const targets = report.targets.map((target) => {
 		const status = normalizedStatus(target.status);
@@ -200,7 +208,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 			addedFindings: extractAddedFindings(target.output),
 		};
 	});
-	const policy = evaluateBackendLintPolicy(targets);
+	const policy = evaluateBackendLintPolicy(targets, selection);
 
 	return {
 		ok: policy.ok,
@@ -212,6 +220,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 		requiredTargets: policy.requiredTargets,
 		totalDurationMillis: numericValue(report.totalDurationMillis),
 		jobs: Number.isInteger(report.jobs) ? report.jobs : null,
+		selection,
 	};
 }
 
@@ -380,6 +389,11 @@ export function renderBackendLintSummary(summary) {
 			`| ${target.name} | \`${target.status}\` | ${effectiveBaseline(target)} | ${formatCount(target.violationCount)} | ${formatSignedDelta(target.violationCount, effectiveBaseline(target))} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
 		);
 	}
+	if (summary.selection) {
+		for (const [name, key] of [["docs-reference-check", "docs"], ["deadcode", "deadcode"], ["direct upstream boundary smoke", "directBoundary"]]) {
+			lines.push(`- ${name}: ${summary.selection[key] ? "selected" : "skipped"} (${summary.selection.reasons[key]})`);
+		}
+	}
 
 	lines.push(
 		"",
@@ -504,7 +518,7 @@ function targetPath(directory, name, suffix) {
 	return join(metadata.directory, `${name}.${suffix}`);
 }
 
-export function beginLintRun(jobs, targets, reportPath = "") {
+export function beginLintRun(jobs, targets, reportPath = "", inputSelection = null) {
 	// Invalidate the previous report before validation or any child can fail.
 	if (reportPath) {
 		mkdirSync(dirname(resolve(reportPath)), { recursive: true });
@@ -514,8 +528,9 @@ export function beginLintRun(jobs, targets, reportPath = "") {
 		throw new Error("LINT_JOBS must be a positive integer");
 	}
 	const selection = selectedTargets(targets);
+	if (inputSelection) validateLintSelection(inputSelection);
 	const directory = realpathSync(mkdtempSync(join(tmpdir(), "you-lint-run-")));
-	writeFileSync(join(directory, "run.json"), JSON.stringify({ directory, jobs: Number(jobs), targets: selection, started: Date.now() }));
+	writeFileSync(join(directory, "run.json"), JSON.stringify({ directory, jobs: Number(jobs), targets: selection, selection: inputSelection, started: Date.now() }));
 	return directory.replaceAll("\\", "/");
 }
 
@@ -540,8 +555,10 @@ export function recordLintTarget(directory, name, exitCode) {
 	writeFileSync(targetPath(directory, name, "result.json"), JSON.stringify(result), { flag: "wx" });
 }
 
-export function collectLintRun(directory, targets, reportPath = "") {
+export function collectLintRun(directory, targets, reportPath = "", inputSelection = null) {
 	const metadata = runMetadata(directory);
+	if (JSON.stringify(inputSelection) !== JSON.stringify(metadata.selection ?? null)) throw new Error("lint input selection changed during run");
+	if (inputSelection) validateLintSelection(inputSelection);
 	if (JSON.stringify(selectedTargets(targets)) !== JSON.stringify(metadata.targets)) throw new Error("lint selection changed during run");
 	const results = metadata.targets.map((name) => {
 		const result = JSON.parse(readFileSync(targetPath(directory, name, "result.json"), "utf8"));
@@ -549,6 +566,7 @@ export function collectLintRun(directory, targets, reportPath = "") {
 		return result;
 	});
 	const report = { version: REPORT_VERSION, jobs: metadata.jobs, totalDurationMillis: Math.max(0, Date.now() - metadata.started), targets: results };
+	if (inputSelection) report.selection = inputSelection;
 	if (reportPath) {
 		mkdirSync(dirname(resolve(reportPath)), { recursive: true });
 		writeFileSync(reportPath, JSON.stringify(report, null, 2) + "\n");
@@ -562,10 +580,13 @@ export function removeLintRun(directory) {
 }
 
 function runBookkeeping(args) {
+	if (!["--begin-run", "--start-target", "--record-target", "--remove-run", "--collect-run"].some((flag) => args.includes(flag))) return false;
 	const targets = args.includes("--") ? args.slice(args.indexOf("--") + 1) : [];
 	const reportPath = args.includes("--report") ? optionValue(args, "--report") : "";
+	const selection = args.includes("--selection") ? JSON.parse(readFileSync(optionValue(args, "--selection"), "utf8")) : null;
+	if (args.includes("--selection")) validateLintSelection(selection, { testedSha: process.env.BACKEND_LINT_TESTED_SHA, event: process.env.GITHUB_EVENT_NAME });
 	if (args.includes("--begin-run")) {
-		process.stdout.write(beginLintRun(optionValue(args, "--jobs"), targets, reportPath) + "\n");
+		process.stdout.write(beginLintRun(optionValue(args, "--jobs"), targets, reportPath, selection) + "\n");
 	} else if (args.includes("--start-target")) {
 		startLintTarget(optionValue(args, "--start-target"), optionValue(args, "--name"));
 	} else if (args.includes("--record-target")) {
@@ -573,7 +594,7 @@ function runBookkeeping(args) {
 	} else if (args.includes("--remove-run")) {
 		removeLintRun(optionValue(args, "--remove-run"));
 	} else if (args.includes("--collect-run")) {
-		const report = collectLintRun(optionValue(args, "--collect-run"), targets, reportPath);
+		const report = collectLintRun(optionValue(args, "--collect-run"), targets, reportPath, selection);
 		for (const target of report.targets) {
 			process.stdout.write(`===== lint target: ${target.name} =====\n${target.output}\n${target.error || ""}\n===== lint target: ${target.name}: ${target.status.toUpperCase()} =====\n`);
 		}
@@ -581,6 +602,7 @@ function runBookkeeping(args) {
 		process.stdout.write(failures.length ? `LINT FAILED: ${failures.length} target(s)\n` : `LINT PASSED: ${report.targets.length} target(s) completed successfully\n`);
 		for (const target of failures) process.stdout.write(`  ${target.name} (rerun: make ${target.name})\n`);
 		if (failures.length) process.exitCode = 1;
+		if (selection && !summarizeBackendLintReport(report).ok) process.exitCode = 1;
 	} else {
 		return false;
 	}
@@ -594,6 +616,12 @@ function runCli() {
 	const summaryPath = optionValue(args, "--summary");
 	const commentPath = optionValue(args, "--comment");
 	const input = readReport(reportPath, args.includes("--log") ? optionValue(args, "--log") : "");
+	if (args.includes("--selection")) {
+		try { input.selection = JSON.parse(readFileSync(optionValue(args, "--selection"), "utf8")); }
+		catch (error) { input.selectionError = error.message; }
+	}
+	input.testedSha = process.env.BACKEND_LINT_TESTED_SHA;
+	input.event = process.env.GITHUB_EVENT_NAME;
 	const summary = summarizeBackendLintReport(input.report, input);
 	const markdown = renderBackendLintSummary(summary);
 	appendFileSync(summaryPath, markdown);
