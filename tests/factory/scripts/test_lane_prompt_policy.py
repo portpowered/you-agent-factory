@@ -94,6 +94,17 @@ Post-merge or integrated Project validation stays with its named later gate.
 
 
 class LanePromptPolicyTest(unittest.TestCase):
+    def test_optional_inventory_fatal_instructions_conflict_with_mission(self):
+        prompts = {owner: '\n'.join(clause for _, clause in rules)
+                   for owner, rules in policy.LOOPBACK_RULES.items()}
+        for instruction in ('Fail with the final command evidence when the helper exhausts its budget.',
+                            'On a failed CLI operation or unverified admission, return FAILED.',
+                            'If inventory fails return FAILED.'):
+            changed = dict(prompts)
+            changed['ideafy'] += '\n' + instruction
+            self.assertEqual(policy.check_loopback_policy(changed),
+                             ['ideafy:loopback-inventory-fatal: conflicting optional inventory failure policy'])
+
     def test_loopback_handoff_resolution_and_wrapping(self):
         prompts = {owner: '\n'.join(clause for _, clause in rules)
                    for owner, rules in policy.LOOPBACK_RULES.items()}
