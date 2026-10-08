@@ -103,6 +103,14 @@ func (owner *constructorHistorical) QueryHistoricalRecording(request recordings.
 	return recordings.HistoricalRecordingQueryResult{}, owner.err
 }
 
+func (owner *constructorHistorical) ReadHistoricalEvents(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	return owner.QueryHistoricalRecording(request)
+}
+
+func (owner *constructorHistorical) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, _ []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	return owner.QueryHistoricalRecording(request)
+}
+
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 	ledger := &recordingLedger{}

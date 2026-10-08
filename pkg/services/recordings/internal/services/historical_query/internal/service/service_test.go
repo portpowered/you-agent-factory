@@ -358,6 +358,12 @@ func TestHistoricalEventReadPreservesFactsAndFreshness(t *testing.T) {
 	if !reflect.DeepEqual(compact, full) || peer.events != nil {
 		t.Fatalf("event facts differ from canonical query or reached world projection: %v", err)
 	}
+	decoded, err := query.DecodeHistoricalEvents(request, payload)
+	if err != nil || !reflect.DeepEqual(decoded, compact) {
+		t.Fatalf("already-read decoder differs: %v", err)
+	}
+	_, err = query.DecodeHistoricalEvents(request, []byte("broken"))
+	assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 	compact.Events[0].Payload = "changed detached result"
 	fresh, err := query.ReadHistoricalEvents(request)
 	if err != nil || fresh.Events[0].Payload != full.Events[0].Payload {

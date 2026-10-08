@@ -11,4 +11,5 @@ type Service interface {
 	// ReadHistoricalEvents validates the selected artifact for derived readers
 	// that do not consume a reconstructed world or workstation requests.
 	ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	DecodeHistoricalEvents(recordings.HistoricalRecordingQueryRequest, []byte) (recordings.HistoricalRecordingQueryResult, error)
 }

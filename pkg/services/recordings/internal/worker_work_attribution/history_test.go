@@ -3,13 +3,17 @@ package workerworkattribution
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type canonicalQueryFake struct {
+	mu       sync.Mutex
 	requests []recordings.HistoricalRecordingQueryRequest
 	result   recordings.HistoricalRecordingQueryResult
 	err      error
@@ -17,6 +21,8 @@ type canonicalQueryFake struct {
 }
 
 func (f *canonicalQueryFake) ReadHistoricalEvents(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.requests = append(f.requests, request)
 	if f.cancel != nil {
 		f.cancel()
@@ -34,7 +40,7 @@ func TestWorkerWorkAttributionExactAndLegacyArtifact(t *testing.T) {
 			reader := NewArtifactHistoryReader(query, func(_ context.Context, scope string) (recordings.RecordingArtifactReference, error) {
 				scopes = append(scopes, scope)
 				return "/current/scope.json", nil
-			})
+			}, nil)
 			page := recordings.WorkerCapturedActivityPage{Catalog: recordings.WorkerSessionCatalogEntry{RecordingID: "capture", FactorySessionID: "scope", OriginatingArtifact: artifact}}
 			got, err := reader.ReadWorkerFactoryHistory(t.Context(), page)
 			wantArtifact := artifact
@@ -78,7 +84,7 @@ func TestWorkerWorkAttributionArtifactFailuresAndCancellation(t *testing.T) {
 				query.cancel = cancel
 				want = context.Canceled
 			}
-			reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return "", fallbackErr })
+			reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return "", fallbackErr }, nil)
 			_, err := reader.ReadWorkerFactoryHistory(ctx, page)
 			if scenario == "missing-legacy" {
 				var typed *recordings.HistoricalRecordingQueryError
@@ -92,5 +98,132 @@ func TestWorkerWorkAttributionArtifactFailuresAndCancellation(t *testing.T) {
 				t.Fatal("unavailable legacy guessed a history artifact")
 			}
 		})
+	}
+}
+
+func (f *canonicalQueryFake) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, _ []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	return f.ReadHistoricalEvents(request)
+}
+
+func TestRetainedNamesFreshnessAndRetry(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	captures := &captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": page}}
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	payload := []byte("first")
+	var readErr error
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return payload, readErr })
+	service := New(captures, reader)
+	request := []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work"}}
+	check := func(name string, unavailable bool) {
+		t.Helper()
+		got, err := service.ResolveWorkerWorkAttribution(t.Context(), request)
+		if err != nil || len(got) != 1 || got[0].WorkName != name || got[0].HistoryUnavailable != unavailable {
+			t.Fatalf("names = %+v, %v", got, err)
+		}
+	}
+	check("Alpha", false)
+	check("Alpha", false)
+	if len(query.requests) != 1 {
+		t.Fatal("unchanged artifact decoded again")
+	}
+	// Equal byte length represents replacement that metadata-only caching misses.
+	payload = []byte("other")
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Beta")
+	check("Beta", false)
+	if len(query.requests) != 2 {
+		t.Fatal("replacement was not decoded")
+	}
+	readErr = os.ErrNotExist
+	check("", true)
+	readErr = nil
+	check("Beta", false)
+	if len(query.requests) != 2 {
+		t.Fatal("temporary unavailability poisoned the projection")
+	}
+	payload = []byte("broken")
+	query.err = recordings.ErrInvalidProjectionInput
+	if _, err := service.ResolveWorkerWorkAttribution(t.Context(), request); !errors.Is(err, query.err) {
+		t.Fatalf("corrupt replacement = %v", err)
+	}
+	query.err = nil
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Gamma")
+	check("Gamma", false)
+	if len(query.requests) != 4 {
+		t.Fatal("failed projection was cached")
+	}
+}
+
+func TestRetainedNamesLegacySelectionAndScope(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = ""
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	artifact := recordings.RecordingArtifactReference("first.json")
+	var selected []string
+	reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return artifact, nil }, func(path string) ([]byte, error) { selected = append(selected, path); return []byte("same"), nil })
+	if _, err := reader.readWorkerFactoryNames(t.Context(), page); err != nil {
+		t.Fatal(err)
+	}
+	artifact = "second.json"
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Beta")
+	got, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || got.names["work"] != "Beta" || len(query.requests) != 2 || !reflect.DeepEqual(selected, []string{"first.json", "second.json"}) {
+		t.Fatalf("legacy selection = %+v, %v, %v", got, err, selected)
+	}
+	page.Catalog.FactorySessionID = "foreign"
+	if _, err := reader.readWorkerFactoryNames(t.Context(), page); !errors.Is(err, recordings.ErrInvalidProjectionScope) {
+		t.Fatalf("foreign scope = %v", err)
+	}
+}
+
+func TestRetainedNamesCanceledDecodeIsRetryable(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha"), cancel: cancel}
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	if _, err := reader.readWorkerFactoryNames(ctx, page); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel = %v", err)
+	}
+	query.cancel = nil
+	got, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != 2 {
+		t.Fatalf("retry = %+v, %v", got, err)
+	}
+}
+
+func TestRetainedNamesConcurrentReadsAndEviction(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	// Parallel consumers share only immutable projections. No lock spans artifact IO.
+	var readers sync.WaitGroup
+	for range 32 {
+		readers.Go(func() {
+			got, err := reader.readWorkerFactoryNames(t.Context(), page)
+			if err != nil || got.names["work"] != "Alpha" {
+				t.Errorf("concurrent names = %+v, %v", got, err)
+			}
+		})
+	}
+	readers.Wait()
+	for index := range maxNameArtifacts + 1 {
+		candidate := page
+		candidate.Catalog.OriginatingArtifact = fmt.Sprintf("artifact-%d.json", index)
+		got, err := reader.readWorkerFactoryNames(t.Context(), candidate)
+		if err != nil || got.names["work"] != "Alpha" {
+			t.Fatalf("eviction list = %+v, %v", got, err)
+		}
+	}
+	calls := len(query.requests)
+	got, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != calls+1 {
+		t.Fatalf("evicted artifact retry = %+v, %v", got, err)
 	}
 }

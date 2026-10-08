@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"os"
 	"strings"
 
@@ -75,7 +74,7 @@ func (s *Service) ResolveWorkerWorkAttribution(ctx context.Context, requests []r
 	return results, ctx.Err()
 }
 
-type historyIdentity struct{ factory, recording, artifact string }
+type historyIdentity struct{ factory, recording, generation, artifact string }
 
 type attributionQuery struct {
 	service     *Service
@@ -174,9 +173,19 @@ func (q *attributionQuery) capture(ctx context.Context, workerID string) (record
 }
 
 func (q *attributionQuery) projection(ctx context.Context, page recordings.WorkerCapturedActivityPage, factory string) (nameProjection, error) {
-	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.OriginatingArtifact}
+	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, page.Catalog.OriginatingArtifact}
 	projection, loaded := q.projections[key]
 	if !loaded {
+		if reader, ok := q.service.history.(interface {
+			readWorkerFactoryNames(context.Context, recordings.WorkerCapturedActivityPage) (nameProjection, error)
+		}); ok {
+			projection, err := reader.readWorkerFactoryNames(ctx, page)
+			if err != nil {
+				return nameProjection{}, err
+			}
+			q.projections[key] = projection
+			return projection, ctx.Err()
+		}
 		history, err := q.service.history.ReadWorkerFactoryHistory(ctx, page)
 		if canceled := ctx.Err(); canceled != nil {
 			return nameProjection{}, canceled
@@ -184,21 +193,10 @@ func (q *attributionQuery) projection(ctx context.Context, page recordings.Worke
 		if err != nil {
 			return nameProjection{}, err
 		}
-		// Default recordings retain their reported ~default token while the
-		// capture retains the canonical UUID. Accept that source-native alias
-		// only from the selected artifact; exact captured association checks below
-		// remain mandatory. A foreign explicit scope is never accepted.
-		sourceScope := history.Recording.Scope.FactorySessionID
-		if sourceScope != factory {
-			if _, err := uuid.Parse(factory); err != nil || sourceScope != "~default" {
-				return nameProjection{}, recordings.ErrInvalidProjectionScope
-			}
-		}
-		projection, err = projectNames(history, sourceScope)
+		projection, err = scopedNames(history, factory)
 		if err != nil {
 			return nameProjection{}, err
 		}
-		projection.reportedDefault = sourceScope != factory
 		q.projections[key] = projection
 	}
 	return projection, nil

@@ -103,6 +103,26 @@ func (service *Service) readHistoricalEvents(request recordings.HistoricalRecord
 		}
 		return recordings.HistoricalRecordingQueryResult{}, 0, historicalQueryError(kind, identity, "", err)
 	}
+	return service.decodeHistoricalEvents(request, payload)
+}
+
+// DecodeHistoricalEvents validates already-read bytes with the same canonical
+// decoder as artifact queries. Callers can retain compact derived facts without
+// retaining the source history or reading a second snapshot during validation.
+func (service *Service) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, payload []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	result, _, err := service.decodeHistoricalEvents(request, payload)
+	if err != nil {
+		return recordings.HistoricalRecordingQueryResult{}, err
+	}
+	result.Dispatches, err = projectHistoricalDispatches(result.Recording, result.Events)
+	return result, err
+}
+
+func (service *Service) decodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, payload []byte) (recordings.HistoricalRecordingQueryResult, int, error) {
+	identity, err := validHistoricalRecordingIdentity(request.Recording)
+	if err != nil {
+		return recordings.HistoricalRecordingQueryResult{}, 0, err
+	}
 	if request.InferFactorySessionScope {
 		identity, err = inferRecordedScope(payload, identity)
 		if err != nil {
