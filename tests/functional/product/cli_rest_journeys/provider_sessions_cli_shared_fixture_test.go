@@ -285,6 +285,10 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-alpha", "session_fixture_codex_fleet_alpha")
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
+	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
+	for index := range workScopedAttemptCount {
+		addSuccessRoute(workScopedRoute(index), fmt.Sprintf("session_fixture_codex_scoped_%03d", index))
+	}
 	for index, workName := range boundedFleetWorkNames() {
 		providerSessionID := boundedFleetProviderSessionID(index)
 		if index%2 == 0 {
