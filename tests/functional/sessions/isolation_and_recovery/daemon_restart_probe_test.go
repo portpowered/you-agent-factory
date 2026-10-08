@@ -76,7 +76,7 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 	t.Helper()
 	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
 	previous := mustReadSeededReplayArtifact(t, refPath)
-	for _, name := range []string{"missing source", "corrupt source", "flush failure", "publication failure"} {
+	for _, name := range []string{"missing source", "corrupt source", "flush failure", "publication failure", "cancellation"} {
 		t.Run(name, func(t *testing.T) {
 			selected := source
 			if name == "missing source" || name == "corrupt source" {
@@ -88,10 +88,17 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:24101", "--resume", selected, "--record", filepath.Join(repo, name+"-successor.json")})
 			inputs.Input.WorkingDirectory = repo
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			ctx, cancel := context.WithCancel(inputs.Input.Context)
+			defer cancel()
+			inputs.Input.Context = ctx
+			if name == "cancellation" {
+				files.cancelReference.Store(&cancel)
+			}
 			files.failReference.Store(name == "publication failure")
 			files.failRecording.Store(name == "flush failure")
 			before := runner.calls.Load()
 			err := process.Execute(inputs.Input)
+			files.cancelReference.Store(nil)
 			files.failReference.Store(false)
 			files.failRecording.Store(false)
 			if err == nil || runner.calls.Load() != before || !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) {
@@ -134,6 +141,9 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	for port := 24100; port < 24106; port++ {
 		resumeServers[port] = support.NewProcessAPIServer()
 	}
+	for port := 24200; port < 24230; port++ {
+		resumeServers[port] = support.NewProcessAPIServer()
+	}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		FactorySessionRuntimePersistenceFileSystem: files,
 		RecordingWriteFile: func(path string, data []byte) error {
@@ -150,15 +160,12 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		},
 		ProviderCommandRunner: runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			if server := resumeServers[request.Port]; server != nil {
+			starts.Add(1)
+			if server, ok := ctx.Value(restartProbeServerKey{}).(*support.ProcessAPIServer); ok {
 				return server.Start(ctx, request)
 			}
-			// The two ordered local journeys own the first five starts. Route
-			// the exact-command journey without changing its default listener.
-			if index := starts.Add(1); index <= int32(len(boardAPIs)) {
-				return boardAPIs[index-1].Start(ctx, request)
-			} else if index <= int32(len(boardAPIs)+len(failureAPIs)) {
-				return failureAPIs[index-int32(len(boardAPIs))-1].Start(ctx, request)
+			if server := resumeServers[request.Port]; server != nil {
+				return server.Start(ctx, request)
 			}
 			return api.Start(ctx, request)
 		},
@@ -324,6 +331,12 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("PlainBoard F3 resume successor before readiness", func(t *testing.T) {
 		testResumeBoardPublishesSuccessorBeforeReadiness(t, process, runner, resumeServers, files)
 	})
+	t.Run("PlainBoard F8 stop failures preserve previous board", func(t *testing.T) {
+		testPlainBoardStopFailures(t, process, resumeServers, files)
+	})
+	t.Run("PlainBoard F9 excluded publishers preserve reference", func(t *testing.T) {
+		testPlainBoardExcludedPublishers(t, process, resumeServers)
+	})
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
 		t.Parallel()
 		testRestartProbeFreshBoard(t, process, emptyDir, api, runner)
@@ -333,10 +346,124 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 14 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want fourteen and one", starts.Load(), files.corruptReads.Load())
+		if files.corruptReads.Load() != 1 {
+			t.Errorf("corrupt probe reads=%d; want one", files.corruptReads.Load())
 		}
 	})
+}
+
+// Invocation-owned transport routing preserves the customer's exact argv
+// without depending on the number or ordering of other server starts.
+type restartProbeServerKey struct{}
+
+func plainBoardFailureInputs(t *testing.T, repo, home string, port int, args ...string) *support.CapturedInputs {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "run", "--continuously", "--with-server", "--listen", "127.0.0.1:" + strconv.Itoa(port)}, args...))
+	inputs.Input.WorkingDirectory = repo
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	return inputs
+}
+
+func scaffoldPlainBoardFailureRepository(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	if err := os.Rename(support.ScaffoldFactory(t, seededReplayResumeFactoryConfig()), filepath.Join(repo, "factory")); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+func testPlainBoardStopFailures(t *testing.T, process support.Process, servers map[int]*support.ProcessAPIServer, files *restartProbeFiles) {
+	t.Helper()
+	for index, name := range []string{"flush failure", "publication failure", "invalid reference"} {
+		t.Run(name, func(t *testing.T) {
+			repo, home, port := scaffoldPlainBoardFailureRepository(t), t.TempDir(), 24200+index*3
+			source := filepath.Join(repo, "previous.json")
+			seed := plainBoardFailureInputs(t, repo, home, port, "--record", source)
+			command := support.StartProcessCommand(t, process, seed.Input)
+			url := restartProbeReadyURL(t, servers[port], command)
+			restartProbeShutdown(t, url, command)
+			refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+			previous := mustReadSeededReplayArtifact(t, refPath)
+			validReference := previous
+			sourceBytes := mustReadSeededReplayArtifact(t, source)
+			inputs := plainBoardFailureInputs(t, repo, home, port+1, "--record", filepath.Join(repo, "new-writer.json"))
+			command = support.StartProcessCommand(t, process, inputs.Input)
+			url = restartProbeReadyURL(t, servers[port+1], command)
+			if name == "invalid reference" {
+				previous = []byte(`{"private":"` + restartProbeSecret + `"`)
+				writeRestartProbeFile(t, refPath, previous)
+			}
+			files.failRecording.Store(name == "flush failure")
+			files.failReference.Store(name == "publication failure")
+			command.AcceptError()
+			restartProbePost(t, url+"/shutdown", []byte(`{}`))
+			select {
+			case <-command.Done():
+			case <-time.After(15 * time.Second):
+				t.Fatal("failed stop did not finish cleanup")
+			}
+			files.failRecording.Store(false)
+			files.failReference.Store(false)
+			if command.Err() == nil || !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) || !bytes.Equal(sourceBytes, mustReadSeededReplayArtifact(t, source)) {
+				t.Fatalf("failed stop advanced reference or damaged previous history: %v", command.Err())
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr()+command.Err().Error(), restartProbeSecret) {
+				t.Fatal("stop failure leaked reference contents")
+			}
+			if name == "invalid reference" {
+				writeRestartProbeFile(t, refPath, validReference)
+			}
+			// Reopen through the public command to prove failure released ownership.
+			reopen := plainBoardFailureInputs(t, repo, home, port+2)
+			command = support.StartProcessCommand(t, process, reopen.Input)
+			url = restartProbeReadyURL(t, servers[port+2], command)
+			if works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work")); len(works.Results) != 0 {
+				t.Fatal("failed stop substituted another board")
+			}
+			restartProbeShutdown(t, url, command)
+		})
+	}
+}
+
+func testPlainBoardExcludedPublishers(t *testing.T, process support.Process, servers map[int]*support.ProcessAPIServer) {
+	t.Helper()
+	repo, home := scaffoldPlainBoardFailureRepository(t), t.TempDir()
+	source := filepath.Join(repo, "source.json")
+	seed := plainBoardFailureInputs(t, repo, home, 24210, "--record", source)
+	command := support.StartProcessCommand(t, process, seed.Input)
+	url := restartProbeReadyURL(t, servers[24210], command)
+	restartProbeShutdown(t, url, command)
+	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	previous := mustReadSeededReplayArtifact(t, refPath)
+	for index, name := range []string{"no record", "peer", "replay", "batch"} {
+		t.Run(name, func(t *testing.T) {
+			port := 24211 + index
+			args := []string{"--record", filepath.Join(repo, name+".json")}
+			switch name {
+			case "no record":
+				args = []string{"--no-record"}
+			case "peer":
+				args = append(args, "--session", "ac7a2a22-c730-4c1e-b3fa-5b99762cff92")
+			case "replay":
+				args = []string{"--replay", source, "--no-record"}
+			}
+			inputs := plainBoardFailureInputs(t, repo, home, port, args...)
+			if name == "batch" {
+				inputs.Input.Args = []string{"you", "run", "--record", filepath.Join(repo, "batch.json")}
+				if err := process.Execute(inputs.Input); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				command := support.StartProcessCommand(t, process, inputs.Input)
+				url := restartProbeReadyURL(t, servers[port], command)
+				restartProbeShutdown(t, url, command)
+			}
+			if !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) {
+				t.Fatal("excluded invocation replaced the default board reference")
+			}
+		})
+	}
 }
 
 func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name string, starts *atomic.Int32, runner *restartProbeUnexpectedRunner) {
@@ -607,11 +734,12 @@ func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {
 }
 
 type restartProbeFiles struct {
-	corruptRoot   string
-	corruptReads  atomic.Int32
-	corruptWrites atomic.Int32
-	failReference atomic.Bool
-	failRecording atomic.Bool
+	corruptRoot     string
+	corruptReads    atomic.Int32
+	corruptWrites   atomic.Int32
+	failReference   atomic.Bool
+	failRecording   atomic.Bool
+	cancelReference atomic.Pointer[context.CancelFunc]
 }
 
 func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
@@ -619,6 +747,11 @@ func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
 }
 
 func (files *restartProbeFiles) ReadFile(path string) ([]byte, error) {
+	if filepath.Base(path) == "current-board.json" && filepath.Base(filepath.Dir(path)) == ".you-agent-factory" {
+		if cancel := files.cancelReference.Load(); cancel != nil {
+			(*cancel)()
+		}
+	}
 	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptReads.Add(1)
 		return []byte(`{"Session":` + restartProbeSecret), nil

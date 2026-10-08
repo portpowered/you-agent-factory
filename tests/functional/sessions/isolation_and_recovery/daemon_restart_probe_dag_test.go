@@ -31,6 +31,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	sentinel := filepath.Join(dir, "worktrees", "sentinel.txt")
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
 	first := inputs(t, dir)
+	first.Input.Context = context.WithValue(first.Input.Context, restartProbeServerKey{}, apis[0])
 	if port != 0 {
 		first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
 	}
@@ -50,6 +51,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
 	second := inputs(t, dir)
+	second.Input.Context = context.WithValue(second.Input.Context, restartProbeServerKey{}, apis[1])
 	if port != 0 {
 		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
 	}
@@ -333,6 +335,7 @@ func assertRestartProbeTerminalRestart(t *testing.T, process support.Process, di
 	// Reopen the same repository/reference/recording again after every
 	// Work is terminal. Reuse is the invariant, so this journey is ordered.
 	third := inputs(t, dir)
+	third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, api)
 	repeated := support.StartProcessCommand(t, process, third.Input)
 	url := restartProbeReadyURL(t, api, repeated)
 	for i, work := range restartProbeBoardReads(t, url) {
