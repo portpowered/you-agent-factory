@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -73,7 +75,7 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 			if !reflect.DeepEqual(result.Sessions, want) {
 				t.Fatalf("sessions = %#v, want %#v", result.Sessions, want)
 			}
-			if !reflect.DeepEqual(loader.calls, sortedCopy(paths)) {
+			if !reflect.DeepEqual(sortedCopy(loader.calls), sortedCopy(paths)) {
 				t.Fatalf("loader calls = %#v, want %#v", loader.calls, sortedCopy(paths))
 			}
 			if len(loader.metadataOnly) != len(paths) {
@@ -262,6 +264,7 @@ func TestListRecordedSessionsSkipsConflictingLegacySessionIdentities(t *testing.
 }
 
 type recordedInputLoader struct {
+	mu           sync.Mutex
 	inputs       map[string]recordings.LoadReplayInputResult
 	errors       map[string]error
 	calls        []string
@@ -269,6 +272,8 @@ type recordedInputLoader struct {
 }
 
 func (loader *recordedInputLoader) LoadReplayInput(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	loader.mu.Lock()
+	defer loader.mu.Unlock()
 	loader.calls = append(loader.calls, request.Path)
 	loader.metadataOnly = append(loader.metadataOnly, request.MetadataOnly)
 	if err := loader.errors[request.Path]; err != nil {
@@ -386,4 +391,61 @@ func TestListRecordedSessionsPreservesDirectoryFailure(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestListRecordedSessionsBoundsMetadataReadersAndOrdersWarnings(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for i := range 12 {
+		writeRecordingFile(t, root, filepath.Join("2026", "10", "08", fmt.Sprintf("%02d.json", i)), "fixture")
+	}
+	loader := &gatedMetadataLoader{entered: make(chan struct{}, 12), release: make(chan struct{})}
+	inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, logging.NoopLogger{})
+	done := make(chan recordings.RecordedSessionInventoryResult, 1)
+	go func() {
+		result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+		if err != nil {
+			t.Error(err)
+		}
+		done <- result
+	}()
+	// All four readers must overlap before any can finish. Cancellation is
+	// only a failure ceiling; no sleep/timing assertion controls this proof.
+	for range 4 {
+		select {
+		case <-loader.entered:
+		case <-t.Context().Done():
+			close(loader.release)
+			t.Fatal("metadata readers did not overlap")
+		}
+	}
+	close(loader.release)
+	result := <-done
+	if loader.maximum.Load() != 4 || len(result.Sessions) != 0 || len(result.Warnings) != 12 {
+		t.Fatalf("max readers=%d result=%#v", loader.maximum.Load(), result)
+	}
+	for i, warning := range result.Warnings {
+		if warning.ArtifactReference != fmt.Sprintf("2026/10/08/%02d.json", i) {
+			t.Fatalf("warning order: %#v", result.Warnings)
+		}
+	}
+}
+
+type gatedMetadataLoader struct {
+	entered         chan struct{}
+	release         chan struct{}
+	active, maximum atomic.Int32
+}
+
+func (loader *gatedMetadataLoader) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	active := loader.active.Add(1)
+	defer loader.active.Add(-1)
+	for maximum := loader.maximum.Load(); active > maximum; maximum = loader.maximum.Load() {
+		if loader.maximum.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	loader.entered <- struct{}{}
+	<-loader.release
+	return recordings.LoadReplayInputResult{}, errors.New("controlled unreadable artifact")
 }

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -16,6 +17,14 @@ import (
 )
 
 type directoryReader func(string) ([]fs.DirEntry, error)
+
+// Bound simultaneous filesystem reads, including transient decoder buffers.
+const metadataReaderCount = 4
+
+type metadataResult struct {
+	summary recordings.RecordedSessionSummary
+	err     error
+}
 
 // Service implements the private Recordings history-inventory capability.
 type Service struct {
@@ -66,9 +75,9 @@ func (inventory *Service) ListRecordedSessions(
 
 	summaries := make([]recordings.RecordedSessionSummary, 0, len(paths))
 	warnings := make([]recordings.RecordedSessionDiagnostic, 0)
-	for _, path := range paths {
-		summary, err := inventory.summaryForPath(root, path)
-		if err != nil {
+	results := inventory.readMetadata(root, paths)
+	for index, path := range paths {
+		if results[index].err != nil {
 			// One unreadable or corrupt recording must never make the whole
 			// history unlistable; it is skipped and reported for diagnosis.
 			reference, _ := filepath.Rel(root, path)
@@ -86,7 +95,7 @@ func (inventory *Service) ListRecordedSessions(
 			)
 			continue
 		}
-		summaries = append(summaries, summary)
+		summaries = append(summaries, results[index].summary)
 	}
 	if len(warnings) > 0 {
 		inventory.logger.Warn(
@@ -103,6 +112,27 @@ func (inventory *Service) ListRecordedSessions(
 	})
 	inventory.logOutcome("success", len(summaries))
 	return recordings.RecordedSessionInventoryResult{Sessions: summaries, Warnings: warnings}, nil
+}
+
+func (inventory *Service) readMetadata(root string, paths []string) []metadataResult {
+	results := make([]metadataResult, len(paths))
+	jobs := make(chan int)
+	var readers sync.WaitGroup
+	for range min(metadataReaderCount, len(paths)) {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for index := range jobs {
+				results[index].summary, results[index].err = inventory.summaryForPath(root, paths[index])
+			}
+		}()
+	}
+	for index := range paths {
+		jobs <- index
+	}
+	close(jobs)
+	readers.Wait()
+	return results
 }
 
 func (inventory *Service) recordingPaths(root string) ([]string, error) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
@@ -281,4 +282,45 @@ func assertPopulatedHistoryScope(t *testing.T, result factoryapi.ListFactorySess
 	} else if result.Warnings != nil || result.RecordedSessions != nil {
 		t.Fatalf("scope %s included history", scope)
 	}
+}
+
+func TestHistoryListingRefreshesChangedArtifactsDuringConcurrentReads(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	factory := support.ScaffoldSingleStepFactory(t, "history-refresh")
+	recordingRoot := filepath.Join(home, ".you-agent-factory", "recordings")
+	rows, warnings := seedHistory(t, recordingRoot, "healthy")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factory, Env: builtcliacceptance.ProcessEnvForIsolatedHome(home),
+		Edges: historyEdges(home, recordingRoot, "healthy"),
+	})
+	read := func(want []string) {
+		t.Helper()
+		response, err := http.Get(server.URL() + "/factory-sessions?scope=all")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer response.Body.Close()
+		var result factoryapi.ListFactorySessionsResponse
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil || response.StatusCode != http.StatusOK {
+			t.Errorf("ALL: status=%d error=%v", response.StatusCode, err)
+			return
+		}
+		assertHistoryResult(t, result, true, want, warnings)
+	}
+	read(rows)
+	changed := strings.ReplaceAll(healthyHistory, rows[0], "00000000-0000-4000-8000-000000000003")
+	for _, name := range []string{"healthy.json", "duplicate.json"} {
+		if err := os.WriteFile(filepath.Join(recordingRoot, "2026", "10", "03", name), []byte(changed), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{rows[1], "00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000003"}
+	var readers sync.WaitGroup
+	for range 3 {
+		readers.Add(1)
+		go func() { defer readers.Done(); read(want) }()
+	}
+	readers.Wait()
 }
