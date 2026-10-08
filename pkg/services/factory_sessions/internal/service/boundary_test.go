@@ -126,29 +126,7 @@ func TestOrderlyRecordingPublishesCurrentBoardOnlyAfterFlush(t *testing.T) {
 				durableExecution: DurableExecution{Service: owner},
 			}
 			want := errors.New("controlled failure")
-			wantSave, wantError := true, false
-			switch name {
-			case "refresh":
-				owner.path = filepath.Join(directory, "old-writer.json")
-			case "flush failure", "canceled":
-				wantSave, wantError = false, true
-			case "publication failure":
-				owner.saveFailure, wantError = want, true
-			case "invalid reference":
-				owner.failure = want
-				wantSave, wantError = false, true
-			case "batch":
-				opening.sessionSelection.Mode = factorysessions.SessionRuntimeModeBatch
-				wantSave = false
-			case "peer":
-				opening.sessionID, wantSave = "peer", false
-			case "replay":
-				opening.configured.Recordings.ReplayPath, wantSave = "replay.json", false
-			case "no record":
-				opening.configured.Recordings.RecordPath, wantSave = "", false
-			case "no server":
-				opening.sessionSelection.Host.Port, wantSave = 0, false
-			}
+			wantSave, wantError := configureOrderlyBoardPublicationCase(name, directory, opening, owner, want)
 			flushed := false
 			operation := opening.orderlyCurrentBoardStop(func(ctx context.Context) error {
 				if owner.saves != 0 || owner.loads != 0 {
@@ -177,6 +155,33 @@ func TestOrderlyRecordingPublishesCurrentBoardOnlyAfterFlush(t *testing.T) {
 			}
 		})
 	}
+}
+
+func configureOrderlyBoardPublicationCase(name, directory string, opening *sessionRuntimeOpening, owner *boardReferenceOwner, failure error) (wantSave, wantError bool) {
+	wantSave = true
+	switch name {
+	case "refresh":
+		owner.path = filepath.Join(directory, "old-writer.json")
+	case "flush failure", "canceled":
+		wantSave, wantError = false, true
+	case "publication failure":
+		owner.saveFailure, wantError = failure, true
+	case "invalid reference":
+		owner.failure = failure
+		wantSave, wantError = false, true
+	case "batch":
+		opening.sessionSelection.Mode = factorysessions.SessionRuntimeModeBatch
+		wantSave = false
+	case "peer":
+		opening.sessionID, wantSave = "peer", false
+	case "replay":
+		opening.configured.Recordings.ReplayPath, wantSave = "replay.json", false
+	case "no record":
+		opening.configured.Recordings.RecordPath, wantSave = "", false
+	case "no server":
+		opening.sessionSelection.Host.Port, wantSave = 0, false
+	}
+	return wantSave, wantError
 }
 
 // TestMain fails the package when a test leaves goroutines running, which
