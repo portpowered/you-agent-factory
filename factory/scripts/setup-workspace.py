@@ -1338,12 +1338,18 @@ def select_prd_candidate(repo_root, prd_name, records, recovery_worktree=""):
     if not isinstance(prd, dict):
         raise TypeError("PRD must be a JSON object")
 
+    recovery = validate_recovery_packet(prd, recovery_worktree)
+    workspace = recovery["workspace"] if recovery else None
+    expected_branch = workspace["branch"] if workspace is not None else prd_name
     packet_branch = prd.get("branchName")
-    if packet_branch is not None and packet_branch != prd_name:
+    has_branch_hint = "branchName" in prd if workspace is not None else packet_branch is not None
+    if has_branch_hint and packet_branch != expected_branch:
+        observed_branch = (safe_identity_display(packet_branch) if isinstance(packet_branch, str)
+                           else f"<{type(packet_branch).__name__}>")
         raise ValueError(
             "PRD branchName mismatch: expected "
-            f"{safe_identity_display(prd_name)}, observed "
-            f"{safe_identity_display(packet_branch)}"
+            f"{safe_identity_display(expected_branch)}, observed "
+            f"{observed_branch}"
         )
 
     if not candidate["is_root"] and not (

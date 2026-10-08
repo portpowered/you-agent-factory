@@ -645,6 +645,62 @@ def recovery_packet(worktree=".claude/worktrees/lane", head="a" * 40):
     }}}
 
 
+class BranchHintAdmissionTest(unittest.TestCase):
+    """One admission component with controlled discovery, IO and validation."""
+
+    def setUp(self):
+        self.module = load_setup_workspace_module()
+        self.repo = Path.cwd()
+        self.candidate = {
+            "is_root": True, "worktree_path": self.repo,
+            "prd_json_path": self.repo / "tasks/todo/lane-r2.json",
+            "prd_json_candidate_path": self.repo / "tasks/todo/lane-r2.json",
+        }
+
+    def admit(self, packet, recovery, tag="", error=None):
+        with mock.patch.object(self.module, "packet_candidates", return_value=[self.candidate]), \
+             mock.patch.object(self.module, "read_prd", return_value=packet), \
+             mock.patch.object(self.module, "validate_recovery_packet", return_value=recovery,
+                               side_effect=error) as validate, \
+             mock.patch.object(self.module, "canonical_packet_file_path", return_value=None), \
+             mock.patch.object(self.module, "validate_nested_packet_freshness") as freshness:
+            try:
+                return self.module.select_prd_candidate(self.repo, "lane-r2", [], tag)
+            finally:
+                validate.assert_called_once_with(packet, tag)
+                freshness.assert_not_called()
+
+    def test_retained_matching_or_omitted_hint_accepts(self):
+        recovery = recovery_packet()["context"]["recovery"]
+        for packet in ({}, {"branchName": "lane"}):
+            with self.subTest(packet=packet):
+                self.assertIs(self.admit(packet, recovery, ".claude/worktrees/lane"), self.candidate)
+
+    def test_retained_present_inconsistent_hint_refuses(self):
+        recovery = recovery_packet()["context"]["recovery"]
+        for hint in ("lane-r2", "unrelated", None, 1, False, [], {"secret": "payload"}):
+            with self.subTest(hint=hint), self.assertRaisesRegex(ValueError, "branchName mismatch") as raised:
+                self.admit({"branchName": hint}, recovery, ".claude/worktrees/lane")
+            self.assertNotIn("secret", str(raised.exception))
+
+    def test_fresh_and_null_workspace_keep_work_name_rules(self):
+        fresh_recovery = recovery_packet()["context"]["recovery"]
+        fresh_recovery["workspace"] = None
+        for recovery in (None, fresh_recovery):
+            for packet in ({}, {"branchName": None}, {"branchName": "lane-r2"}):
+                with self.subTest(recovery=recovery, packet=packet):
+                    self.assertIs(self.admit(packet, recovery), self.candidate)
+            for hint in ("lane", "unrelated", 1, False, [], {}):
+                with self.subTest(recovery=recovery, hint=hint), self.assertRaisesRegex(ValueError, "branchName mismatch"):
+                    self.admit({"branchName": hint}, recovery)
+
+    def test_recovery_validation_failure_precedes_hint_comparison(self):
+        for diagnostic in ("missing recovery", "tag mismatch", "null workspace with tag", "invalid context"):
+            with self.subTest(diagnostic=diagnostic), self.assertRaisesRegex(ValueError, diagnostic):
+                self.admit({"branchName": "lane"}, None, ".claude/worktrees/lane",
+                           error=ValueError(diagnostic))
+
+
 class RecoveryPacketValidationTest(unittest.TestCase):
     """Unit proof of one packet validator with no Git or external processes."""
 
@@ -930,8 +986,34 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             before = git(["status", "--porcelain=v1", "-z"], retained).stdout
             index_before = git(["diff", "--cached", "--binary"], retained).stdout
             packet = recovery_packet(".claude/worktrees/lane", head)
-            packet["branchName"] = "lane-r2"
+            packet["branchName"] = "lane"
             source = write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
+            # Branch hints cannot authorize adoption or any setup mutation.
+            snapshot = repository_snapshot(repo, (retained,))
+            for hint in ("lane-r2", "unrelated", None, 7, {"secret": "payload"}):
+                invalid_packet = copy.deepcopy(packet)
+                invalid_packet["branchName"] = hint
+                write_packet(repo, "lane-r2", invalid_packet)
+                with self.subTest(hint=hint), mock.patch.object(module, "get_repo_root", return_value=repo), \
+                     mock.patch.object(module, "adopt_recovery_workspace") as adopt, \
+                     mock.patch.object(module, "sync_main") as sync, \
+                     mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as refusal:
+                        module.main()
+                    self.assertEqual(refusal.exception.code, 1)
+                    self.assertEqual(stdout.getvalue(), "")
+                    self.assertIn("branchName mismatch", stderr.getvalue())
+                    self.assertNotIn("secret", stderr.getvalue())
+                    adopt.assert_not_called()
+                    sync.assert_not_called()
+                self.assertEqual(repository_snapshot(repo, (retained,)), snapshot)
+                self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
+                for name, data in saved.items():
+                    self.assertEqual((retained / name).read_bytes(), data)
+                self.assertFalse((retained / "tasks/todo/lane-r2.json").exists())
+                self.assertFalse((retained / "tasks/todo/lane-r2.md").exists())
+            write_packet(repo, "lane-r2", packet, markdown="# retained slice\n")
             # Invalid tags cannot change any retained file or Git identity.
             snapshot = repository_snapshot(repo, (retained,))
             for invalid in (str(retained), ".claude/worktrees/../lane"):
