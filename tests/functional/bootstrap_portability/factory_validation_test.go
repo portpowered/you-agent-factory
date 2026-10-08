@@ -52,9 +52,8 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 	if fakeEnv.Stdout() != "" {
 		t.Errorf("expected no stdout before validation failed, got: %q", fakeEnv.Stdout())
 	}
-	support.RequireSafeCLIDiagnostic(t, fakeEnv.Stderr())
+	support.RequireSafeCLIDiagnostic(t, fakeEnv.Stderr(), true)
 	assertFlattenFailuresAreCustomerVisible(t, process, dir, homeDir)
-
 }
 
 func assertFlattenFailuresAreCustomerVisible(t *testing.T, process support.Process, invalidDir, homeDir string) {

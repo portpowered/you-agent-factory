@@ -483,6 +483,7 @@ func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) erro
 		return executeCommandFailure(diagnostics, err)
 	}
 	if diagnostics != nil && diagnostics.DiagnosticRendered() {
+		clidiag.WriteStartupCauses(diagnostics, err)
 		return err
 	}
 	return executeCommandFailure(diagnostics, err)
@@ -504,6 +505,7 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 		return context.Canceled
 	}
 	if clidiag.DiagnosticRendered(diagnostics) {
+		clidiag.WriteStartupCauses(diagnostics, err)
 		writeDebugFailure(diagnostics, err)
 		return err
 	}
@@ -517,6 +519,7 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 		return err
 	}
 	clidiag.WriteFailure(diagnostics, normalized)
+	clidiag.WriteStartupCauses(diagnostics, err)
 	writeDebugFailure(diagnostics, err)
 	return normalized
 }
@@ -586,6 +589,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		cmd, cfg, promptArgs, globals, operatorDefaults, policy, rootOptions, defaultInvocation,
 	)
 	if err != nil {
+		if !remotePlacementSelected(globals) {
+			return clidiag.WithStartupCause(err)
+		}
 		return err
 	}
 	cfg = preparedCfg
@@ -596,7 +602,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		)
 	}
 	if rootOptions.initializer == nil {
-		return errors.New("run service initializer is required")
+		return clidiag.WithStartupCause(errors.New("run service initializer is required"))
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
 }
@@ -627,6 +633,7 @@ func remotePlacementSelected(globals *cliGlobalOptions) bool {
 }
 
 func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
+	startupCause := clidiag.HasStartupCause(err)
 	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
 	err = runcli.MapServerFailureForInvocation(err, strings.TrimSpace(resolvedConfig.ResumePath) != "")
 	if currentFactorySelected {
@@ -636,6 +643,9 @@ func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig
 	}
 	if len(promptArgs) > 0 {
 		err = runcli.MapInvocationFailure(err)
+	}
+	if startupCause {
+		err = clidiag.WithStartupCause(err)
 	}
 	if writeRunIncompleteDrainError(cmd, err) {
 		return err

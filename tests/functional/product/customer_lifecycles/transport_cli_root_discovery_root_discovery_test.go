@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -223,10 +224,7 @@ func runCurrentFactoryFailureCaseForCommand(
 	if executeErr == nil {
 		t.Fatalf("Process.Execute(Current Factory) succeeded; stdout=%q stderr=%q", stdout, stderr)
 	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal(bytes.TrimSpace([]byte(stderr)), &response); err != nil {
-		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", err, stderr)
-	}
+	response := requireStartupCLIDiagnostic(t, stderr)
 	if response.Code != wantCode {
 		t.Fatalf("ErrorResponse = %#v, want code %s", response, wantCode)
 	}
@@ -826,13 +824,10 @@ func (provider countingProvider) Execute(context.Context, providers.ExecuteReque
 func assertServerBindFailureDiagnostic(t *testing.T, stderr string) {
 	t.Helper()
 	stderrLines := strings.Split(strings.TrimSpace(stderr), "\n")
-	if len(stderrLines) != 2 || !strings.Contains(stderrLines[0], "--server is deprecated") || !strings.Contains(stderrLines[0], "--listen") {
+	if len(stderrLines) < 2 || !strings.Contains(stderrLines[0], "--server is deprecated") || !strings.Contains(stderrLines[0], "--listen") {
 		t.Fatalf("server stderr = %q, want one migration warning followed by one ErrorResponse", stderr)
 	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(stderrLines[1]), &response); err != nil {
-		t.Fatalf("server stderr ErrorResponse is invalid: %v\n%s", err, stderr)
-	}
+	response := requireStartupCLIDiagnostic(t, strings.Join(stderrLines[1:], "\n"))
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
 	}
@@ -857,3 +852,34 @@ func assertStartupHomeDisclosure(t *testing.T, events []string, homeDir string, 
 		t.Fatalf("stdout = %q, want prefix %q", got, want)
 	}
 }
+
+// requireStartupCLIDiagnostic accepts one envelope followed only by the bounded
+// local startup cause contract. Callers retain scenario-specific privacy checks.
+// Ordinary and remote diagnostics should continue using strict JSON decoding.
+func requireStartupCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(stderr), "\n")
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(lines[0]), &response); err != nil {
+		t.Fatalf("decode startup envelope: %v; stderr=%q", err, stderr)
+	}
+	if response.Code == "" || response.Family == "" || response.Message == "" {
+		t.Fatalf("incomplete startup envelope: %#v", response)
+	}
+	if len(lines) > 18 {
+		t.Fatalf("startup causes exceed 16 nodes plus truncation: %q", stderr)
+	}
+	for index, line := range lines[1:] {
+		prefix := fmt.Sprintf("cause[%d]=", index)
+		if !strings.HasPrefix(line, prefix) {
+			t.Fatalf("unexpected trailing startup diagnostic: %q", line)
+		}
+		cause := strings.TrimPrefix(line, prefix)
+		if cause == "" || len(cause) > 515 || unsafeStartupCause.MatchString(cause) {
+			t.Fatalf("unbounded or unsafe startup cause: %q", line)
+		}
+	}
+	return response
+}
+
+var unsafeStartupCause = regexp.MustCompile(`(?i)(?:^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\|\.\.?[\\/]|~/|/)[^\s]+|https?://[^\s]*[?@#]|\b(?:password|secret|token|prompt|payload|body|authorization)\s*[:=]\s*(?:[^<\s]|<(?:[^r]|r[^e]))`)

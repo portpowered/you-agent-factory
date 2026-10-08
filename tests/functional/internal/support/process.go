@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -159,11 +161,33 @@ func buildProcessWithContext(
 
 // RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a
 // command failure has no authored public diagnostic contract.
-func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+func RequireSafeCLIDiagnostic(t testing.TB, stderr string, startup ...bool) factoryapi.ErrorResponse {
 	t.Helper()
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
-		t.Fatalf("decode safe CLI diagnostic: %v\nstderr=%q", err, stderr)
+	if len(startup) > 0 && startup[0] {
+		lines := strings.Split(strings.TrimSpace(stderr), "\n")
+		if err := json.Unmarshal([]byte(lines[0]), &response); err != nil {
+			t.Fatalf("decode startup envelope: %v; stderr=%q", err, stderr)
+		}
+		// The common assertion below validates the startup code and message.
+		if response.Family == "" {
+			t.Fatalf("incomplete startup envelope: %#v", response)
+		}
+		if len(lines) > 18 {
+			t.Fatalf("startup causes exceed 16 nodes plus truncation: %q", stderr)
+		}
+		for index, line := range lines[1:] {
+			prefix := fmt.Sprintf("cause[%d]=", index)
+			if !strings.HasPrefix(line, prefix) {
+				t.Fatalf("unexpected trailing startup diagnostic: %q", line)
+			}
+			cause := strings.TrimPrefix(line, prefix)
+			if cause == "" || len(cause) > 515 || unsafeStartupCause.MatchString(cause) {
+				t.Fatalf("unbounded or unsafe startup cause: %q", line)
+			}
+		}
+	} else if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode safe CLI diagnostic: %v; stderr=%q", err, stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("CLI_COMMAND_FAILED") || response.Message != "command failed" {
 		t.Fatalf("safe CLI diagnostic = %#v, want CLI_COMMAND_FAILED/command failed", response)
@@ -648,3 +672,5 @@ func (command *ProcessCommand) Err() error {
 	defer command.mu.Unlock()
 	return command.err
 }
+
+var unsafeStartupCause = regexp.MustCompile(`(?i)(?:^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\|\.\.?[\\/]|~/|/)[^\s]+|https?://[^\s]*[?@#]|\b(?:password|secret|token|prompt|payload|body|authorization)\s*[:=]\s*(?:[^<\s]|<(?:[^r]|r[^e]))`)
