@@ -108,10 +108,14 @@ function runNpmPack(packageDirectory, packDestination) {
 	});
 }
 
-export async function packPackage({ packageDirectory, packDestination }) {
+export async function packPackage({
+	packageDirectory,
+	packDestination,
+	npmPack = runNpmPack,
+}) {
 	const packageRoot = resolve(packageDirectory);
 	const destination = resolve(packDestination);
-	const stdout = await runNpmPack(packageRoot, destination);
+	const stdout = await npmPack(packageRoot, destination);
 
 	let reports;
 	try {

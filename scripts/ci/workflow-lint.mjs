@@ -21,14 +21,83 @@ export function discoverWorkflowFiles(workflowDirectory = ".github/workflows") {
 
 function workflowJobSection(workflow, jobName) {
 	const match = workflow.match(
-		new RegExp(`\\n  ${jobName}:\\n([\\s\\S]*?)(?=\\n  [a-z0-9-]+:\\n|\\s*$)`),
+		new RegExp(`\\n  ${jobName}:\\n([\\s\\S]*?)(?=\\n  [a-z0-9_-]+:\\n|\\s*$)`),
 	);
 	if (!match) throw new Error(`workflow contract is missing job: ${jobName}`);
 	return match[0];
 }
 
+export function validateTaggedPackageWorkflowContract({ workflow } = {}) {
+	const job = workflowJobSection(workflow, "publish-tagged-release");
+	requireWorkflowText(
+		workflow,
+		"BUN_VERSION: 1.3.12",
+		"tagged Bun must remain pinned",
+	);
+	requireWorkflowText(
+		job,
+		"needs: resolve-release-tag",
+		"tagged preparation and publication share one job",
+	);
+	requireWorkflowText(
+		job,
+		"environment: development-publishing",
+		"tagged publishing environment is unchanged",
+	);
+	requireWorkflowText(
+		job,
+		"id-token: write",
+		"tagged provenance retains OIDC permission",
+	);
+	requireWorkflowText(
+		job,
+		"ref: ${{ github.event.workflow_run.head_sha }}",
+		"tagged checkout retains verified source",
+	);
+	requireWorkflowText(
+		job,
+		'--expected-source-commit "${{ github.event.workflow_run.head_sha }}"',
+		"publisher validates source identity",
+	);
+	requireWorkflowOrder(
+		job,
+		"bun run --bun scripts/public-release-package-candidate.mjs",
+		"bun run --bun scripts/public-release-package-publish.mjs",
+		"tagged candidate is prepared before publication",
+	);
+	if (
+		/\n  prepare-public-package-candidate:|actions\/(?:upload|download)-artifact|npm install/.test(
+			job,
+		) ||
+		/\n  prepare-public-package-candidate:/.test(workflow)
+	) {
+		throw new Error(
+			"tagged preparation must not have an artifact hop or repeated setup",
+		);
+	}
+	return { name: "tagged-package-workflow", status: "pass" };
+}
+
 function requireWorkflowMatch(value, pattern, description) {
 	if (!pattern.test(value)) throw new Error(`workflow contract failed: ${description}`);
+}
+
+export function validateReusablePackageWorkflowContract({ workflow } = {}) {
+	const job = workflowJobSection(workflow, "verify_api_package");
+	const results = ["api_package_result", "api_candidate_result", "packaged_factories_package_result", "packaged_factories_candidate_result", "model_providers_package_result"];
+	for (const name of results) {
+		requireWorkflowText(workflow, `value: \${{ jobs.verify_api_package.outputs.${name} }}`, "retain all five reusable outputs");
+		requireWorkflowText(job, `steps.record_result.outputs.${name}`, "retain independent results");
+	}
+	requireWorkflowText(job, "inputs.is_ci_call && (inputs.run_api_package || inputs.run_packaged_factories_package || inputs.run_model_providers_package)", "retain selection");
+	requireWorkflowText(job, "ref: ${{ inputs.source_commit }}", "check out requested source");
+	requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "pin shared Bun setup");
+	requireWorkflowText(job, "PACKAGE_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}", "preserve typed inputs/defaults");
+	requireWorkflowText(job, "bun run --bun scripts/public-package-workflow.mjs", "single read-only artifact runner");
+	if (/\n  (?:build_api_candidate|build_packaged_factories_candidate|verify_packaged_factories_package|verify_model_providers_package):/.test(workflow) || /id-token:|contents: write|npm |actions\/(?:upload|download)-artifact|continue-on-error/.test(job)) {
+		throw new Error("reusable package verification must remain one read-only job without artifact hops");
+	}
+	return { name: "reusable-package-workflow", status: "pass" };
 }
 
 function requireWorkflowText(value, text, description) {
@@ -234,6 +303,12 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	return {
 		contracts: [
+			validateReusablePackageWorkflowContract({
+				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
+			}),
+			validateTaggedPackageWorkflowContract({
+				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
+			}),
 			validateBackendLintWorkflowContract({
 				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
