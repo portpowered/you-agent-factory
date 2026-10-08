@@ -323,9 +323,9 @@ endef
 # Make implementation that still launched real work. These aggregators remain
 # serialized to preserve the old stop-on-failure behavior even with -j.
 # Before GNU Make 4.4, even a targeted .NOTPARALLEL serializes the whole
-# invocation. The lint scheduler is a separate recursive invocation and must
-# retain its explicit job budget on those versions too.
-ifeq (,$(filter lint-observe-selected,$(MAKECMDGOALS)))
+# invocation. Both lint schedulers use separate recursive invocations and
+# must retain their explicit job budgets on those versions too.
+ifeq (,$(filter lint-observe-selected golangci-lint-run repository-lint-run,$(MAKECMDGOALS)))
 .NOTPARALLEL: default test
 endif
 # Bare `make` runs the complete generation, frontend, build, test, and lint

@@ -769,7 +769,6 @@ test("collector preserves selection identity and rejects changes during executio
 test("golangci joins every independent scope and propagates each failure", { timeout: 60000 }, async (t) => {
 	const repository = fileURLToPath(new URL("../../", import.meta.url));
 	const root = mkdtempSync(join(tmpdir(), "you-lint-scopes-"));
-	t.after(() => rmSync(root, { recursive: true, force: true }));
 	// Run unchanged recursive Make recipes with owned Git prerequisites, even
 	// when the worker checkout is shallow and has no origin/main ref.
 	copyFileSync(join(repository, "Makefile"), join(root, "Makefile"));
@@ -807,34 +806,66 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 			// Hold all concurrent scopes before releasing any. With one job,
 			// release each immediately so the next scope can start.
 			if (current.waiting.length === current.jobs) {
-				for (const peer of current.waiting) peer.write("release");
+				for (const peer of current.waiting) {
+					current.releases.push(current.signals[current.releases.length].config);
+					peer.write("release");
+				}
 				current.waiting = [];
 			}
 		});
 	});
 	const children = [];
-	t.after(() => {
-		for (const child of children) if (child.exitCode === null) child.kill();
+	const stop = async (child) => {
+		if (child.closed) return;
+		if (platform === "win32") {
+			spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+		} else {
+			try { process.kill(-child.pid, "SIGKILL"); }
+			catch (error) { if (error.code !== "ESRCH") throw error; }
+		}
+		await child.completion;
+	};
+	t.after(async () => {
+		await Promise.all(children.map(stop));
 		for (const socket of sockets) socket.destroy();
-		server.close();
+		await new Promise((resolve) => server.close(resolve));
+		rmSync(root, { recursive: true, force: true });
 	});
 	server.listen(0, "127.0.0.1");
 	await once(server, "listening");
 	const configs = [".golangci.yml", ".golangci-repository-default.yml", ".golangci-repository.yml"];
 	for (const [jobs, failed] of [[1, ""], [3, ""], ...configs.map((config) => [3, config])]) {
-		current = { jobs, waiting: [], signals: [] };
+		current = { jobs, failed, waiting: [], signals: [], releases: [], output: "" };
 		const child = spawn(platform === "win32" ? "make.exe" : "make", [
 			"--no-print-directory", "golangci", "GOLANGCI_PREBUILT=1",
 			`LINT_JOBS=${jobs}`, `GOLANGCI_REPOSITORY=${script}`, `GOLANGCI_DIR=${root.replaceAll("\\", "/")}`,
 			...(platform === "win32" ? ["SHELL=C:/Program Files/Git/bin/sh.exe"] : []),
-		], { cwd: root, env: { ...fixtureEnv, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
+		], { detached: platform !== "win32", cwd: root, env: { ...fixtureEnv, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
 		children.push(child);
-		let output = "";
-		child.stdout.on("data", (data) => { output += data; });
-		child.stderr.on("data", (data) => { output += data; });
-		const [status] = await once(child, "close");
-		assert.equal(status === 0, !failed, output);
-		assert.deepEqual(current.signals.map((signal) => signal.config).sort(), [...configs].sort(), output);
+		const phase = current;
+		child.stdout.on("data", (data) => { phase.output += data; });
+		child.stderr.on("data", (data) => { phase.output += data; });
+		child.completion = new Promise((resolve) => child.once("close", (status, signal) => {
+			child.closed = true;
+			resolve([status, signal]);
+		}));
+		let timer;
+		let status;
+		try {
+			[status] = await Promise.race([child.completion, new Promise((_, reject) => {
+				// Failure ceiling only: scope starts/releases remain IPC-driven.
+				timer = setTimeout(() => reject(new Error(`golangci phase stalled: ${JSON.stringify({ jobs, failed, signals: phase.signals, releases: phase.releases, waiting: phase.waiting.length, exitCode: child.exitCode, signalCode: child.signalCode, output: phase.output })}`)), 10000);
+				child.once("error", reject);
+			})]);
+		} finally {
+			clearTimeout(timer);
+			await stop(child);
+		}
+		const output = phase.output;
+		const diagnostic = JSON.stringify({ jobs, failed, status, signals: phase.signals, releases: phase.releases, output });
+		assert.equal(status === 0, !failed, diagnostic);
+		assert.deepEqual(current.signals.map((signal) => signal.config).sort(), [...configs].sort(), diagnostic);
+		assert.deepEqual([...phase.releases].sort(), [...configs].sort(), diagnostic);
 		for (const { config, args } of current.signals) {
 			assert.ok(args.includes("--allow-parallel-runners"));
 			assert.ok(args.includes("./..."));
