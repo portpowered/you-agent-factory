@@ -19,6 +19,7 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	t.Run("TestWSRFT001OpeningRecordPrecedesProviderOutput", testProvidersessionscliWSRFT001OpeningRecordPrecedesProviderOutput)
 	t.Run("TestWSRFT002LiveAndReplayCorrelationRemainStable", testProvidersessionscliWSRFT002LiveAndReplayCorrelationRemainStable)
 	t.Run("TestWorkerSessionsCLI", testProvidersessionscliWorkerSessionsCLI)
+	t.Run("TestWorkerSessionsCLIListReceivedFailures", testWorkerSessionsCLIListReceivedFailures)
 	t.Run("TestWorkerSessionsFleetActiveListDeadlineRepair", testProvidersessionscliWorkerSessionsFleetActiveListDeadlineRepair)
 	t.Run("TestWorkerSessionsFleetListBoundedRootPages", testProvidersessionscliWorkerSessionsFleetListBoundedRootPages)
 	t.Run("TestWorkerSessionsFleetListCLIConcurrent", testProvidersessionscliWorkerSessionsFleetListCLIConcurrent)

@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,39 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func testWorkerSessionsCLIListReceivedFailures(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"decode", "body"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			c := newWorkerSessionsCLICase(t)
+			f := c.fixture
+			sessionID := c.openSession(t)
+			workID := "list-received-failure-" + kind
+			var calls atomic.Int32
+			f.api.listFault(t, sessionID, workID, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if r.Method != http.MethodGet {
+					t.Errorf("list request method=%s, want GET", r.Method)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				if kind == "body" {
+					// Advertise more bytes than delivered: the real client receives
+					// headers, then reports unexpected EOF while reading the body.
+					w.Header().Set("Content-Length", "1000")
+				}
+				_, _ = fmt.Fprint(w, "{")
+			}))
+			inputs, err := executeCLIExpectError(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir,
+				"--server", f.baseURL, "worker-sessions", "list", "--session", sessionID, "--work-id", workID, "--output", "json")
+			if err == nil || strings.TrimSpace(inputs.Stdout()) != "" || calls.Load() != 1 {
+				t.Fatalf("received failure err=%v stdout=%q GETs=%d", err, inputs.Stdout(), calls.Load())
+			}
+			assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), "WORKER_SESSION_LIST_FAILED", kind)
+		})
+	}
+}
 
 const (
 	workerSessionsCodexSuccessID = "session_fixture_codex_success"

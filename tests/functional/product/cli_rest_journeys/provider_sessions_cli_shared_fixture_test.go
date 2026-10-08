@@ -67,10 +67,11 @@ type workerSessionsCLIAPIServer struct {
 	server *support.ProcessAPIServer
 	starts atomic.Int32
 
-	stopped  chan struct{}
-	stopOnce sync.Once
-	readMu   sync.Mutex
-	readGate *workerSessionReadGate
+	stopped    chan struct{}
+	stopOnce   sync.Once
+	readMu     sync.Mutex
+	readGate   *workerSessionReadGate
+	listFaults map[string]http.Handler
 }
 
 // A single scenario owns this marker and the received/drained signals. Peers
@@ -97,7 +98,12 @@ func (server *workerSessionsCLIAPIServer) start(
 	request.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		server.readMu.Lock()
 		gate := server.readGate
+		fault := server.listFaults[r.URL.Path+"?workId="+r.URL.Query().Get("workId")]
 		server.readMu.Unlock()
+		if fault != nil {
+			fault.ServeHTTP(w, r)
+			return
+		}
 		if gate != nil && r.URL.Path == "/worker-sessions" && r.URL.Query().Get("nextToken") == gate.token {
 			close(gate.received)
 			<-r.Context().Done()
@@ -108,6 +114,24 @@ func (server *workerSessionsCLIAPIServer) start(
 	err := server.server.Start(ctx, request)
 	server.stopOnce.Do(func() { close(server.stopped) })
 	return err
+}
+
+// Each fault belongs to one exact Session/Work route, leaving peer requests
+// on the production handler. Register before launching the customer command.
+func (server *workerSessionsCLIAPIServer) listFault(t *testing.T, sessionID, workID string, handler http.Handler) {
+	t.Helper()
+	key := "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + workID
+	server.readMu.Lock()
+	if server.listFaults == nil {
+		server.listFaults = make(map[string]http.Handler)
+	}
+	server.listFaults[key] = handler
+	server.readMu.Unlock()
+	t.Cleanup(func() {
+		server.readMu.Lock()
+		delete(server.listFaults, key)
+		server.readMu.Unlock()
+	})
 }
 
 type workerSessionsCLIHostedCommand struct {

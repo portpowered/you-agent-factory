@@ -526,8 +526,12 @@ func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T
 				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true,
 			})
 			var typed *CLIError
-			if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" {
-				t.Fatalf("error = %v, want FACTORY_UNREACHABLE", err)
+			wantCode := "WORKER_SESSION_LIST_FAILED"
+			if testCase.wantStage == "transport" {
+				wantCode = "FACTORY_UNREACHABLE"
+			}
+			if !errors.As(err, &typed) || typed.Code != wantCode {
+				t.Fatalf("error = %v, want %s", err, wantCode)
 			}
 			if !strings.Contains(diagnostics.String(), "errorStage="+testCase.wantStage) {
 				t.Fatalf("diagnostics = %q, want errorStage=%s", diagnostics.String(), testCase.wantStage)
@@ -583,8 +587,8 @@ func TestListCanceledContextIsTypedAndDoesNotReturnCollection(t *testing.T) {
 		Context: ctx, Server: "http://factory.test", WorkID: "work-1", OutputFormat: "json", Output: &output,
 	})
 	var typed *CLIError
-	if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" || !errors.Is(err, context.Canceled) {
-		t.Fatalf("error = %v, want FACTORY_UNREACHABLE wrapping context.Canceled", err)
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_LIST_FAILED" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want WORKER_SESSION_LIST_FAILED wrapping context.Canceled", err)
 	}
 	if strings.Contains(output.String(), `"sessions"`) {
 		t.Fatalf("canceled output contains a success collection: %q", output.String())
@@ -632,6 +636,54 @@ func TestWorkerSessionsListTransportErrorClassifiesClientTimeout(t *testing.T) {
 	refused := workerSessionsListTransportError(endpoint, errors.New("dial tcp: connection refused"))
 	if refused.Code != "FACTORY_UNREACHABLE" {
 		t.Fatalf("refused error code = %s, want FACTORY_UNREACHABLE", refused.Code)
+	}
+}
+
+func TestListReceivedResponseFailuresPreserveCauseAndRequestBound(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		body  io.Reader
+		cause error
+		code  string
+	}{
+		{name: "missing body", code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "malformed", body: strings.NewReader("{"), code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "trailing value", body: strings.NewReader(`{"sessions":[]} {}`), code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "body canceled", cause: context.Canceled, code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "body deadline", cause: context.DeadlineExceeded, code: WorkerSessionListRequestTimeoutCode},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			protocol, err := clihttp.NewProtocol(listDoerFunc(func(request *http.Request) (*http.Response, error) {
+				calls++
+				if request.Method != http.MethodGet || request.URL.Path != "/factory-sessions/owner/worker-sessions" || request.URL.Query().Get("workId") != "work-1" {
+					t.Fatalf("unexpected list request: %s %s", request.Method, request.URL)
+				}
+				response := &http.Response{StatusCode: http.StatusOK}
+				if test.cause != nil {
+					response.Body = io.NopCloser(listFailingReader{err: test.cause})
+				} else if test.body != nil {
+					response.Body = io.NopCloser(test.body)
+				}
+				return response, nil
+			}), testClock{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			err = NewList(protocol)(ListConfig{Context: t.Context(), Server: "http://factory.test", SessionID: "owner", WorkID: "work-1", Output: &output, JSON: true})
+			if cliErrorCode(err) != test.code || calls != 1 {
+				t.Fatalf("list error=%v calls=%d, want %s and one GET", err, calls, test.code)
+			}
+			if test.cause != nil && !errors.Is(err, test.cause) {
+				t.Fatalf("list lost cause %v: %v", test.cause, err)
+			}
+			if strings.Contains(output.String(), `"sessions"`) {
+				t.Fatalf("failed list emitted success: %s", output.String())
+			}
+		})
 	}
 }
 

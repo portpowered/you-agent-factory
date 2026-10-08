@@ -281,16 +281,21 @@ func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsRespo
 // which is a different fact from the factory being unreachable.
 const WorkerSessionListRequestTimeoutCode = "WORKER_SESSION_LIST_REQUEST_TIMEOUT"
 
-// workerSessionsListTransportError classifies a failure that produced no HTTP
-// response: a client deadline reports a timeout, anything else stays unreachable.
+// workerSessionsListTransportError distinguishes connection failures from
+// failures reading a received response and caller cancellation. Keep the cause
+// so central diagnostics can still recognize cancellation and deadlines.
 func workerSessionsListTransportError(endpoint string, cause error) *CLIError {
 	var networkError net.Error
 	if errors.Is(cause, context.DeadlineExceeded) || (errors.As(cause, &networkError) && networkError.Timeout()) {
 		return newCLIError(
 			WorkerSessionListRequestTimeoutCode,
-			fmt.Sprintf("no response from %s before the client request timeout; the factory may still be working, retry or narrow the request", endpoint),
+			fmt.Sprintf("Worker Session list request to %s exceeded the client request timeout; the factory may still be working, retry or narrow the request", endpoint),
 			cause,
 		)
+	}
+	stage := workerSessionsListFailureStage(cause)
+	if errors.Is(cause, context.Canceled) || stage == "body" || stage == "decode" {
+		return newCLIError("WORKER_SESSION_LIST_FAILED", "failed to read Worker Session list", cause)
 	}
 	return newCLIError("FACTORY_UNREACHABLE", fmt.Sprintf("factory not reachable at %s", endpoint), cause)
 }
