@@ -40,6 +40,7 @@ type assemblyWorldStateOpening struct {
 	tick    int
 	events  []interfaces.FactoryEvent
 	request recordings.RuntimeScopeRequest
+	err     error
 }
 
 func (opening *assemblyWorldStateOpening) OpenRuntime(
@@ -56,7 +57,7 @@ func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
 ) (interfaces.FactoryWorldState, error) {
 	opening.events = events
 	opening.tick = selectedTick
-	return opening.state, nil
+	return opening.state, opening.err
 }
 
 func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
@@ -256,6 +257,66 @@ func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
 	}
 	if len(opening.events) != 1 || opening.events[0].Id != "resume-event" {
 		t.Fatalf("reconstructed resume events = %#v, want selected recording event", opening.events)
+	}
+}
+
+func TestConfigureRestoredWorldStatePlainAndResumeUseSameContinuation(t *testing.T) {
+	t.Parallel()
+	events := []interfaces.FactoryEvent{
+		{Id: "predecessor-placement", Type: interfaces.FactoryEventTypeWorkStateChange, Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 41}},
+		{Id: "resume-boundary", Type: interfaces.FactoryEventTypeSessionResumed, Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 42}},
+		{Id: "successor-failure", Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 43}},
+	}
+	input := &recordings.LoadResumeInputResult{Input: recordings.LoadReplayInputResult{
+		Legacy: &recordings.ReplayArtifact{Events: events},
+	}}
+	assembly := &Assembly{}
+	plainSpec, resumeSpec := &factoryruntime.SessionBuildSpec{}, &factoryruntime.SessionBuildSpec{}
+	plainOpening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 69}}
+	resumeOpening := &assemblyWorldStateOpening{state: plainOpening.state}
+	staleHistoricalView := &interfaces.FactoryWorldState{Tick: 68}
+	if err := assembly.configureRestoredWorldState(plainSpec, nil, nil, staleHistoricalView, events, plainOpening); err != nil {
+		t.Fatal(err)
+	}
+	if err := assembly.configureRestoredWorldState(resumeSpec, nil, input, nil, nil, resumeOpening); err != nil {
+		t.Fatal(err)
+	}
+	if plainOpening.tick != 69 || !reflect.DeepEqual(plainOpening.events, resumeOpening.events) {
+		t.Fatalf("plain/resume reconstruction differs: ticks=%d/%d events=%v/%v", plainOpening.tick, resumeOpening.tick, plainOpening.events, resumeOpening.events)
+	}
+	if plainSpec.RestoredWorldState == staleHistoricalView || !reflect.DeepEqual(plainSpec.RestoredWorldState, resumeSpec.RestoredWorldState) {
+		t.Fatal("plain opening reused stale historical projection instead of shared live reconstruction")
+	}
+	if !reflect.DeepEqual(plainSpec.ResumeCanonicalEvents, events) || !reflect.DeepEqual(resumeSpec.ResumeCanonicalEvents, events) {
+		t.Fatal("continuation changed canonical source event identities, sequences or ticks")
+	}
+	plainSpec.ResumeCanonicalEvents[0].Id = "changed-copy"
+	if events[0].Id != "predecessor-placement" || resumeSpec.ResumeCanonicalEvents[0].Id != events[0].Id {
+		t.Fatal("continuations share mutable canonical event storage")
+	}
+}
+
+func TestConfigureRestoredWorldStatePreservesSnapshotOnlyOpening(t *testing.T) {
+	t.Parallel()
+	snapshot := &interfaces.FactoryWorldState{Tick: 7}
+	spec := &factoryruntime.SessionBuildSpec{}
+	if err := (&Assembly{}).configureRestoredWorldState(spec, nil, nil, snapshot, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if spec.RestoredWorldState != snapshot {
+		t.Fatal("snapshot-only opening lost its starting state")
+	}
+}
+
+func TestConfigureRestoredWorldStatePlainRejectsUnreconstructableHistory(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("controlled reconstruction failure")
+	opening := &assemblyWorldStateOpening{err: cause}
+	spec := &factoryruntime.SessionBuildSpec{}
+	err := (&Assembly{}).configureRestoredWorldState(spec, nil, nil,
+		&interfaces.FactoryWorldState{Tick: 7}, []interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{Tick: 7}}}, opening)
+	if !errors.Is(err, cause) || spec.RestoredWorldState != nil {
+		t.Fatalf("plain opening fell back to historical state on reconstruction failure: state=%v error=%v", spec.RestoredWorldState, err)
 	}
 }
 

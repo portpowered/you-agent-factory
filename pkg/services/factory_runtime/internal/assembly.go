@@ -257,10 +257,12 @@ func (a *Assembly) configureRestoredWorldState(
 		spec.SkipRestoredDispatchReconciliation = true
 		return nil
 	}
-	// Live daemon openings supply detached current-board state explicitly.
-	if restoredWorldState != nil {
+	// A snapshot without event history remains a supported opening input. When
+	// current-board history is available, reconstruct it through the same live
+	// continuation path as explicit resume: the historical view has tick ordering
+	// semantics that can select stale predecessor state after a daemon restart.
+	if restoredWorldState != nil && len(restoredEventHistory) == 0 {
 		spec.RestoredWorldState = restoredWorldState
-		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEventHistory)
 		return nil
 	}
 	// Resume is a live continuation: reconstruct the successor's starting
@@ -270,7 +272,10 @@ func (a *Assembly) configureRestoredWorldState(
 	if err != nil {
 		return err
 	}
-	if resumeInput != nil {
+	if resumeInput == nil && len(restoredEventHistory) > 0 {
+		restoredEvents = restoredEventHistory
+	}
+	if resumeInput != nil || len(restoredEventHistory) > 0 {
 		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
 	}
 	restored, err := reconstructRestoredWorldStateForResume(recordingsRuntime, restoredEvents)

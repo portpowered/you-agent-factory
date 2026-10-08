@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -42,6 +43,37 @@ func TestRestoreRestoredActiveDispatchResolvesUniqueCanonicalPlace(t *testing.T)
 	tokens := marking.TokensInPlace("task:init")
 	if len(tokens) != 1 || tokens[0].Color.WorkID != "work-missing-place" {
 		t.Fatalf("restored task:init tokens = %#v, want the original Work identity", tokens)
+	}
+}
+
+func TestRestoreWorkConflictRetainsOriginalSequenceWithoutPrivatePayload(t *testing.T) {
+	t.Parallel()
+	ids := []string{"synthetic-conflict"}
+	events := []interfaces.FactoryEvent{
+		{Type: interfaces.FactoryEventTypeWorkStateChange, Context: interfaces.FactoryEventContext{Sequence: 41, Tick: 68},
+			Payload: []byte(`{"workId":"synthetic-conflict","toPlaceId":"idea:to-complete","private":"PRIVATE-PROMPT"}`)},
+		{Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{Sequence: 42, Tick: 1, WorkIDs: &ids},
+			Payload: []byte(`{"private":"PRIVATE-SECRET"}`)},
+		{Type: interfaces.FactoryEventTypeWorkStateChange, Context: interfaces.FactoryEventContext{Sequence: 43},
+			Payload: []byte(`{"workId":"unrelated"}`)},
+	}
+	cause := errors.New("PRIVATE-CAUSE")
+	restore := &factoryruntime.WorkRestoreError{Reason: factoryruntime.WorkRestoreInvalidHistory,
+		WorkID: "synthetic-conflict", PlaceIDs: []string{"idea:to-complete"}, Cause: cause}
+	wrapped := fmt.Errorf("startup: %w", restore)
+	got := restoredWorkErrorWithEvents(wrapped, events)
+	if got != wrapped || !errors.Is(got, cause) {
+		t.Fatal("provenance changed error identity or cause")
+	}
+	want := []factoryruntime.WorkRestoreEvent{
+		{Sequence: 41, Kind: interfaces.FactoryEventTypeWorkStateChange},
+		{Sequence: 42, Kind: interfaces.FactoryEventTypeDispatchResponse},
+	}
+	if !reflect.DeepEqual(restore.Events, want) || events[0].Context.Tick != 68 || events[1].Context.Tick != 1 {
+		t.Fatalf("wrong provenance or changed source: %#v", restore.Events)
+	}
+	if strings.Contains(got.Error(), "PRIVATE") || strings.Contains(got.Error(), "43") {
+		t.Fatalf("diagnostic leaked private or unrelated facts: %s", got)
 	}
 }
 
