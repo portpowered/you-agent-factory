@@ -77,13 +77,11 @@ func TestPreparedRecordingDefersPeriodicPublicationUntilActivation(t *testing.T)
 				t.Fatalf("activation ticker count = %d, want one", tickerCalls)
 			}
 			ticker.ticks <- time.Now()
-			select {
-			case snapshot := <-written:
-				if len(snapshot.Events) != 1 || snapshot.Events[0].ID != activeFlushEvent(1).ID {
-					t.Fatalf("activated history = %#v", snapshot.Events)
-				}
-			case <-time.After(2 * time.Second):
-				t.Fatal("activated recording did not publish on controlled tick")
+			// The injected tick and writer completion are the synchronization
+			// boundary; the test runner owns the failure deadline.
+			snapshot := <-written
+			if len(snapshot.Events) != 1 || snapshot.Events[0].ID != activeFlushEvent(1).ID {
+				t.Fatalf("activated history = %#v", snapshot.Events)
 			}
 		})
 	}

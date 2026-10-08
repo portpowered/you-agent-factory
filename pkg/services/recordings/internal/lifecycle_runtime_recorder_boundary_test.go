@@ -264,9 +264,17 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 		},
 		Payload: []byte(`{"workId":"work-runtime-root"}`),
 	}
+	recorder.Start(t.Context())
 	recorder.RecordEvent(runtimeEvent)
-	if err := recorder.Finalize(finishedAt); err != nil {
-		t.Fatalf("Finalize: %v", err)
+	recorder.Stop()
+	recorder.Stop()
+	for range 2 {
+		if err := recorder.Finalize(finishedAt); err != nil {
+			t.Fatalf("Finalize: %v", err)
+		}
+	}
+	if lifecycle.finishCalls != 1 || lifecycle.stopCalls != 1 {
+		t.Fatalf("completed run finish/stop = %d/%d, want one each", lifecycle.finishCalls, lifecycle.stopCalls)
 	}
 
 	if len(lifecycle.appendRequests) != 3 {

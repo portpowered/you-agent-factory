@@ -50,6 +50,7 @@ func TestLifecycleRuntimeRecorderForwardsFailuresFlushAndFinalization(t *testing
 	if err := recorder.BindRecordingLifecycle(lifecycle, scope); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
+	recorder.Start(t.Context())
 
 	if err := recorder.Flush(); err != nil {
 		t.Fatalf("initial Flush: %v", err)
@@ -274,6 +275,44 @@ func TestLifecycleRuntimeRecorderActivationFailureAbortsWithoutFinalFlush(t *tes
 	}
 	if lifecycle.stopCalls != 1 || lifecycle.finishCalls != 0 || lifecycle.flushCalls != 0 {
 		t.Fatalf("stop/finish/flush = %d/%d/%d, want 1/0/0", lifecycle.stopCalls, lifecycle.finishCalls, lifecycle.flushCalls)
+	}
+}
+
+func TestLifecycleRuntimeRecorderOpeningCleanupCannotPublishOrReactivate(t *testing.T) {
+	t.Parallel()
+	for _, stopFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stopFirst=%t", stopFirst), func(t *testing.T) {
+			t.Parallel()
+			cleanupErr := errors.New("controlled opening cleanup failure")
+			lifecycle := &stubRecordingLifecycle{
+				beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "prepared"}},
+				stopErr:     cleanupErr,
+			}
+			recorder := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := recorder.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			if stopFirst {
+				recorder.Stop()
+			}
+			for range 2 {
+				if err := recorder.Finalize(time.Unix(2, 0)); !errors.Is(err, cleanupErr) {
+					t.Fatalf("opening finalization = %v, want cleanup cause", err)
+				}
+				recorder.Start(t.Context())
+				recorder.Stop()
+				if err := recorder.Flush(); !errors.Is(err, cleanupErr) {
+					t.Fatalf("aborted flush = %v, want preserved cleanup cause", err)
+				}
+			}
+			if lifecycle.appendCalls != 1 || lifecycle.stopCalls != 1 || lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 || !lifecycle.beginRequest.DeferPeriodic {
+				t.Fatalf("opening cleanup published or reactivated: append/stop/flush/finish = %d/%d/%d/%d, deferred = %t",
+					lifecycle.appendCalls, lifecycle.stopCalls, lifecycle.flushCalls, lifecycle.finishCalls, lifecycle.beginRequest.DeferPeriodic)
+			}
+		})
 	}
 }
 

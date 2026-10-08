@@ -43,6 +43,7 @@ type lifecycleRuntimeRecorder struct {
 	stopErr            error
 	started            bool
 	stopped            bool
+	finalized          bool
 	pending            []pendingRuntimeRecording
 }
 
@@ -176,9 +177,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 func (recorder *lifecycleRuntimeRecorder) abortBindingLocked(cause error) error {
 	// A partially accepted prefix is not a writable board. Stop joins the
 	// periodic writer; preserve both causes and prohibit cleanup publication.
-	recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
-		RecordingID: recorder.recordingID,
-	})
+	recorder.stopLocked()
 	recorder.bindErr = errors.Join(cause, recorder.stopErr)
 	recorder.pending = nil
 	return recorder.bindErr
@@ -190,7 +189,7 @@ func (recorder *lifecycleRuntimeRecorder) Start(ctx context.Context) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.started || recorder.stopped || recorder.bindErr != nil || recorder.lifecycle == nil || (ctx != nil && ctx.Err() != nil) {
+	if recorder.started || recorder.stopped || recorder.finalized || recorder.bindErr != nil || recorder.lifecycle == nil || (ctx != nil && ctx.Err() != nil) {
 		return
 	}
 	_, err := recorder.lifecycle.Begin(recordings.BeginRecordingRequest{
@@ -212,6 +211,13 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	recorder.stopLocked()
+}
+
+func (recorder *lifecycleRuntimeRecorder) stopLocked() {
+	if recorder.stopped {
+		return
+	}
 	recorder.stopped = true
 	if recorder.lifecycle == nil {
 		return
@@ -341,6 +347,12 @@ func (recorder *lifecycleRuntimeRecorder) Flush() error {
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
+	if recorder.finalized {
+		return recorder.finalizeErr
+	}
+	if !recorder.started {
+		return nil
+	}
 	_, err := recorder.lifecycle.Flush(recordings.FlushLifecycleRequest{
 		RecordingID: recorder.recordingID,
 	})
@@ -375,7 +387,15 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
-	if recorder.finalizeErr != nil {
+	if recorder.finalized {
+		return recorder.finalizeErr
+	}
+	recorder.finalized = true
+	if !recorder.started {
+		// A bound prefix remains read-only until activation. Opening cleanup
+		// joins its owner without appending terminal events or replacing history.
+		recorder.stopLocked()
+		recorder.finalizeErr = recorder.stopErr
 		return recorder.finalizeErr
 	}
 	if err := recorder.recordEventLocked(recordingevents.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
