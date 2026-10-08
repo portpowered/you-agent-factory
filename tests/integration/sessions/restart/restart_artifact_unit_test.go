@@ -67,7 +67,7 @@ func TestRestartArtifactPlatformMismatchFailsPreflightBeforeFixtureOrProcessSetu
 				runtime.GOOS,
 				runtime.GOARCH,
 				func(_, _ string) (restartCLIArtifactIdentity, error) {
-					return restartCLIArtifactIdentity{BuildGOOS: test.buildGOOS, BuildGOARCH: test.buildGOARCH}, nil
+					return restartCLIArtifactIdentity{BuildGOOS: test.buildGOOS, BuildGOARCH: test.buildGOARCH, EmbeddedVCSRevision: strings.Repeat("a", 40)}, nil
 				},
 			)
 			mismatch := test.buildGOOS != runtime.GOOS || test.buildGOARCH != runtime.GOARCH
@@ -79,6 +79,33 @@ func TestRestartArtifactPlatformMismatchFailsPreflightBeforeFixtureOrProcessSetu
 			}
 			if !mismatch && identity == nil {
 				t.Fatalf("resolve matching target %s/%s returned no artifact identity", test.buildGOOS, test.buildGOARCH)
+			}
+		})
+	}
+}
+
+func TestRestartArtifactWrongRevisionFailsBeforeProcessSetup(t *testing.T) {
+	t.Parallel()
+	wantHead := strings.Repeat("a", 40)
+	for _, embeddedHead := range []string{wantHead, strings.Repeat("b", 40), ""} {
+		t.Run("revision="+embeddedHead, func(t *testing.T) {
+			t.Parallel()
+			identity, err := resolveRestartCLIArtifactForTarget(
+				"caller-built-cli", true, wantHead, runtime.GOOS, runtime.GOARCH,
+				func(_, _ string) (restartCLIArtifactIdentity, error) {
+					return restartCLIArtifactIdentity{
+						EmbeddedVCSRevision: embeddedHead, BuildGOOS: runtime.GOOS, BuildGOARCH: runtime.GOARCH,
+					}, nil
+				},
+			)
+			if embeddedHead == wantHead {
+				if err != nil || identity == nil {
+					t.Fatalf("matching revision = (%#v, %v), want usable artifact", identity, err)
+				}
+				return
+			}
+			if err == nil || identity != nil || !strings.Contains(err.Error(), "does not match requested source head") {
+				t.Fatalf("wrong revision = (%#v, %v), want preflight revision refusal", identity, err)
 			}
 		})
 	}
