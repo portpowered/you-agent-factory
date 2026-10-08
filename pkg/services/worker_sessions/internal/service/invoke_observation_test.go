@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -94,6 +95,76 @@ func observationMetadata() *observation {
 		turnID:    "turn-1",
 		attemptID: "attempt-1",
 		startedAt: time.Date(2026, 8, 8, 11, 59, 58, 0, time.UTC),
+	}
+}
+
+type listUsageRecordingFake struct {
+	observationRecordingReaderStub
+	loads int
+	err   error
+}
+
+func (f *listUsageRecordingFake) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	f.loads++
+	return f.snapshot, f.err
+}
+
+func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	f := &listUsageRecordingFake{}
+	f.snapshot.RecordingID = "recording"
+	r.recording = f
+	for i := range 3 {
+		id := fmt.Sprintf("worker-%d", i)
+		r.sessions[id] = observationSession(id, workersessions.StateRunning)
+		r.observations[id] = observationMetadata()
+		r.publications[id] = &publication{recordingID: "recording"}
+		f.snapshot.Sessions = append(f.snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+			WorkerSessionID: id, Records: []events.Record{{Payload: []byte(fmt.Sprintf(
+				`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"totalTokens":%d}}`, i+1))}},
+		})
+	}
+	read := func() workersessions.ListObservationsResult {
+		t.Helper()
+		got, err := r.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: "work-1"})
+		if err != nil || len(got.Observations) != 3 {
+			t.Fatalf("list = %+v, %v", got, err)
+		}
+		return got
+	}
+	first := read()
+	for i, row := range first.Observations {
+		if row.WorkerSessionID != fmt.Sprintf("worker-%d", i) || row.TokenUsage == nil ||
+			row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != i+1 ||
+			row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 0 || row.TokenUsage.OutputTokens != nil {
+			t.Fatalf("usage row %d = %+v", i, row)
+		}
+		*row.TokenUsage.TotalTokens = -1
+	}
+	if f.loads != 1 {
+		t.Fatalf("recording reads = %d, want one per request", f.loads)
+	}
+	f.snapshot.Sessions[0].Records = append(f.snapshot.Sessions[0].Records, events.Record{
+		Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"totalTokens":99}}`),
+	})
+	second := read()
+	if f.loads != 2 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
+		t.Fatalf("fresh detached usage = %+v, loads=%d", second, f.loads)
+	}
+	for _, fault := range []string{"missing", "wrong-recording"} {
+		if fault == "missing" {
+			f.err = errors.New("capture unavailable")
+		} else {
+			f.err = nil
+			f.snapshot.RecordingID = "other"
+		}
+		got := read()
+		for _, row := range got.Observations {
+			if row.TokenUsage != nil || row.State != workersessions.StateRunning || !row.ProviderSessionAvailable {
+				t.Fatalf("%s capture hid identity or fabricated usage: %+v", fault, row)
+			}
+		}
 	}
 }
 

@@ -62,24 +62,68 @@ func (r *registry) capturedObservationUsage(ctx context.Context, id string) *wor
 }
 
 func capturedSnapshotUsage(snapshot recordings.WorkerRecordingSnapshot, id string, head uint64) *workersessions.TokenUsage {
-	var usage *workersessions.TokenUsage
 	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID != id {
+		if session.WorkerSessionID == id {
+			return capturedSessionUsage(session, head)
+		}
+	}
+	return nil
+}
+
+func capturedSessionUsage(session recordings.WorkerSessionRecordingSnapshot, head uint64) *workersessions.TokenUsage {
+	var usage *workersessions.TokenUsage
+	for _, record := range session.Records {
+		if uint64(record.ID.Position) > head {
 			continue
 		}
-		for _, record := range session.Records {
-			if uint64(record.ID.Position) > head {
-				continue
-			}
-			var draft workers.Draft
-			if json.Unmarshal(record.Payload, &draft) != nil {
-				continue
-			}
-			if captured, _, ok := usageProjectionFromDraft(draft); ok {
-				usage = captured
-			}
+		var draft workers.Draft
+		if json.Unmarshal(record.Payload, &draft) != nil {
+			continue
 		}
-		break
+		if captured, _, ok := usageProjectionFromDraft(draft); ok {
+			usage = captured
+		}
+	}
+	return usage
+}
+
+// A list owns its detached snapshot for this request only. Loading the entire
+// recording for each row repeats copies of every sibling's accumulated history.
+// Group by recording, reduce each selected worker once, and never reuse the
+// result across requests: the next list must observe new committed facts.
+func (r *registry) capturedListUsage(ctx context.Context, ids []observationOrder) map[string]*workersessions.TokenUsage {
+	groups := make(map[string]map[string]string)
+	usage := make(map[string]*workersessions.TokenUsage)
+	for _, item := range ids {
+		pub := r.publicationFor(item.id)
+		if pub == nil {
+			continue
+		}
+		usage[item.id] = nil // An unavailable capture must clear live usage.
+		pub.mu.Lock()
+		recordingID := pub.recordingID
+		pub.mu.Unlock()
+		if recordingID == "" {
+			continue
+		}
+		if groups[recordingID] == nil {
+			groups[recordingID] = make(map[string]string)
+		}
+		groups[recordingID][publicWorkerID(item.id)] = item.id
+	}
+	for recordingID, selected := range groups {
+		snapshot, err := r.LoadWorkerRecording(ctx, recordingID)
+		if err != nil || snapshot.RecordingID != recordingID {
+			continue
+		}
+		for _, session := range snapshot.Sessions {
+			id, exists := selected[session.WorkerSessionID]
+			if !exists {
+				continue
+			}
+			usage[id] = capturedSessionUsage(session, ^uint64(0))
+			delete(selected, session.WorkerSessionID) // Preserve first-match semantics.
+		}
 	}
 	return usage
 }

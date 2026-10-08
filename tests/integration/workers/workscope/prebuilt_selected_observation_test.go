@@ -74,7 +74,6 @@ func startSelectedArtifactScenario(t *testing.T, ctx context.Context) (selectedA
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	f := selectedArtifactScenario{binary: resolvePrebuiltWorkscopeBinary(t), factoryDir: factoryDir, providerID: uuid.NewString()}
-	writeSelectedArtifactTranscript(t, home, f.providerID)
 	f.environment = builtcliacceptance.ProcessEnvForIsolatedHome(home)
 	f.environment = replacePrebuiltWorkscopeEnv(f.environment, "PATH", providerDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	f.environment = replacePrebuiltWorkscopeEnv(f.environment, selectedProviderSessionEnv, f.providerID)
@@ -146,18 +145,6 @@ func writeSelectedArtifactFactory(t *testing.T, dir string) {
 	}
 }
 
-func writeSelectedArtifactTranscript(t *testing.T, home, providerID string) {
-	t.Helper()
-	dir := filepath.Join(home, ".codex", "sessions", "2026", "10", "04")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	contents := fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"timestamp\":\"2026-10-04T19:34:00Z\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"message\":\"Owned artifact transcript COMPLETE\"}}\n", providerID)
-	if err := os.WriteFile(filepath.Join(dir, "rollout-"+providerID+".jsonl"), []byte(contents), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func (f selectedArtifactScenario) waitProvider(t *testing.T, ctx context.Context, workerID string) {
 	t.Helper()
 	// The provider stdout pipe and association publication are asynchronous.
@@ -223,15 +210,14 @@ func (f selectedArtifactScenario) assertParity(t *testing.T, ctx context.Context
 	}
 	for i, row := range []factoryapi.WorkerSessionObservation{matching[0], work.Sessions[0], shown} {
 		wantTranscript := factoryapi.WorkerSessionObservationTranscriptAVAILABLE
-		if i == 0 {
+		// Scoped reads expose a transcript only after capture completes. Fleet
+		// reads retain identity facts without projecting captured transcripts.
+		if i == 0 || active {
 			wantTranscript = factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
 		}
 		f.assertExpectedFacts(t, row, workerID, wantState, wantTranscript)
-		if i == 0 && (row.TurnUsage != nil || row.Parse.EventCount != 0 || len(row.Parse.Errors) != 0) {
-			t.Fatalf("fleet invented native enrichment: %#v", row)
-		}
-		if i != 0 && row.Parse.EventCount == 0 {
-			t.Fatalf("selected detail lost native parse: %#v", row)
+		if row.TurnUsage != nil || row.Parse.EventCount != 0 || len(row.Parse.Errors) != 0 {
+			t.Fatalf("observation invented native enrichment: %#v", row)
 		}
 		if row.ConfirmationState != matching[0].ConfirmationState || !reflect.DeepEqual(row.RecordingHealth, matching[0].RecordingHealth) || !reflect.DeepEqual(row.RecordingHealthReason, matching[0].RecordingHealthReason) {
 			t.Fatalf("compiled observation health/confirmation disagree: fleet=%#v scoped=%#v", matching[0], row)

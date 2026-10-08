@@ -339,9 +339,16 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	sortObservationOrder(ids)
 
 	projectionStartedAt := r.clock.Now()
+	usage := r.capturedListUsage(ctx, ids)
 	observations := make([]workersessions.Observation, 0, len(ids))
 	for _, item := range ids {
-		projected, err := r.projectObservation(ctx, item.id)
+		projected, err := r.projectWorkerSessionIdentity(ctx, item.id)
+		if err == nil {
+			if captured, exists := usage[item.id]; exists {
+				projected.TokenUsage = captured
+			}
+			projected, err = r.completeObservation(ctx, projected)
+		}
 		if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 			return workersessions.ListObservationsResult{}, err
 		}
@@ -433,6 +440,10 @@ func (r *registry) projectObservation(ctx context.Context, id string, factorySes
 	if r.publicationFor(ownerID) != nil {
 		projected.TokenUsage = r.capturedObservationUsage(ctx, ownerID)
 	}
+	return r.completeObservation(ctx, projected)
+}
+
+func (r *registry) completeObservation(ctx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {
 	if r.logs != nil && projected.State.Terminal() && projected.ProviderSessionAvailable {
 		_, transcriptErr := r.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: projected.WorkerSessionID, FactorySessionID: projected.FactorySessionID})
 		if transcriptErr == nil {
