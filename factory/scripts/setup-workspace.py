@@ -1398,8 +1398,8 @@ def validate_recovery_packet(prd, recovery_worktree):
         uuid.UUID(recovery["originalSessionId"])
     except ValueError as error:
         raise ValueError("recovery originalSessionId must be a UUID") from error
-    if type(recovery.get("attempt")) is not int or recovery["attempt"] not in (1, 2):
-        raise ValueError("recovery attempt must be integer 1 or 2")
+    if type(recovery.get("attempt")) is not int or recovery["attempt"] <= 0:
+        raise ValueError("recovery attempt must be a positive integer")
     diagnosis = recovery.get("diagnosis")
     if not isinstance(diagnosis, dict) or diagnosis.get("classification") not in (
         "visit_cap_with_progress", "breaker_one_blocker", "deterministic_failure",
