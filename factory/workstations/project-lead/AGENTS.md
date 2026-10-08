@@ -113,9 +113,8 @@ Admit ready fixes with explicit-session dry-run, submission and verified receipt
 Record the proposal path, origin, request ID, edits and receipt Work IDs or
 hold reason. Reconcile an uncertain receipt with the same request ID before
 retrying; a duplicate notice does not authorize another admission.
-Apply Corrected successor recovery, including the two-successor lineage
-budget, retained workspace adoption and verified current-Session targetWorkId
-dependencies, to proposals recovering failed lanes. Never reset that budget.
+Apply Corrected successor recovery, preserving lineage, retained workspace
+adoption and verified current-Session targetWorkId dependencies, to failed lanes.
 Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.
 Missing/invalid proposals take a nonfatal recorded hold and tooling escalation.
 
@@ -130,13 +129,13 @@ hold must not fail the Project.
 
 Reconstruct lineage across Sessions, wakes, check-ins and generations before
 admission. Count accepted successors by originalSessionId/originalLaneWorkId,
-not visits or names: at most two accepted successors per original lineage
-(r2 then r3). Preserve the original identity when recovering a successor; set
-predecessorWorkId to the failed predecessor and attempt to integer 1 or 2.
+not visits or names. Preserve the original identity when recovering a successor;
+set predecessorWorkId to the failed predecessor and attempt to the next positive
+integer, with no ceiling.
 Reconcile uncertain/duplicate submission with the same request ID against
 retained requests and admitted Work before any retry. Never spend another
-attempt or invent a new request ID to resolve uncertainty. Exhausted or
-unverifiable lineage or ownership takes a nonfatal operator hold.
+attempt or invent a new request ID to resolve uncertainty. Unverifiable lineage
+or ownership takes a nonfatal operator hold.
 
 Admit a new-name same-Project idea:init through the ordinary explicit-session
 dry-run/submit/receipt path. Attach an optional payload.recovery object:
@@ -177,8 +176,8 @@ existing loopback only under new names; never duplicate healthy, active,
 parked or unrelated Work and never add per-cycle joins. Preserve every real
 prerequisite. Bind replacements by targetWorkId to verified current-Session
 successors after their receipts; never bind a prior-Session ID or a same-name
-guess. A not-yet-admitted prerequisite remains an explicit hold. Each recovered
-lineage has its own two-successor budget; do not reset it for a cascade.
+guess. A not-yet-admitted prerequisite remains an explicit hold. Preserve each
+recovered lineage's identity and attempt across cascades.
 This existing-loopback exception does not authorize new speculative joins.
 
 For oversized recovery, retain the independently mergeable PR slice with at

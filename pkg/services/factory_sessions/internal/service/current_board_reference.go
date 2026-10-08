@@ -339,7 +339,11 @@ func (opening *sessionRuntimeOpening) restoresExplicitCurrentBoard() bool {
 }
 
 func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) error {
-	if !opening.usesImplicitCurrentBoard() || strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" {
+	// A selected history is recovery input, never the successor writer. Keep
+	// explicit --record policy with its owning lane; implicit adoption always
+	// reserves a fresh target before the runtime can open a recorder.
+	if !opening.usesImplicitCurrentBoard() ||
+		(strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" && opening.restoredWorldState == nil) {
 		return nil
 	}
 	if err := ctx.Err(); err != nil {

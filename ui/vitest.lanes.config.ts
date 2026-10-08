@@ -23,8 +23,11 @@ export default mergeConfig(
           },
         },
         {
-          extends: true,
+          // Copy the dashboard config rather than merging an empty inline
+          // array into the inherited one (Vite concatenates those arrays).
+          ...viteConfig,
           test: {
+            ...viteConfig.test,
             environment: "jsdom",
             include: ["src/**/*.component.test.ts", "src/**/*.test.tsx"],
             exclude: [
@@ -32,6 +35,12 @@ export default mergeConfig(
               "src/**/performance/*.test.tsx",
             ],
             name: "dashboard-component",
+            // Let Node load library graphs natively rather than reevaluating
+            // them through Vite. Source, mocks, globals and DOM stay isolated.
+            server: {
+              ...viteConfig.test?.server,
+              deps: { ...viteConfig.test?.server?.deps, inline: [] },
+            },
           },
         },
       ],

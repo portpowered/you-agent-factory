@@ -49,6 +49,7 @@ describe("component test worker selection", () => {
       "--config",
       "vitest.lanes.config.ts",
       "--project=dashboard-component",
+      "--pool=threads",
       "--maxWorkers=4",
       "--retry=0",
       "--reporter=verbose",

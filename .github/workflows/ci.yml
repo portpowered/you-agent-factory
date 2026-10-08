@@ -122,12 +122,39 @@ jobs:
         run: make typecheck
       - name: Lint frontend
         if: success() || failure()
-        run: make ui-lint
+        run: make ui-lint ui-deadcode
       - name: Run frontend unit and replay coverage
         if: success() || failure()
         env:
           UI_COVERAGE_MAIN_MAX_WORKERS: "4"
         run: make test-ui-coverage
+
+      - name: Frontend component proof
+        if: success() || failure()
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: component
+
+  # Keep complete component and browser suites on separate runners: jsdom
+  # imports must not compete with two bundlers, Chromium and the Go compiler.
+  frontend-browser:
+    name: Frontend Browser
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Restore Bun download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+      - name: Install locked frontend dependencies
+        run: cd ui && bun install --frozen-lockfile
 
       - name: Restore Playwright Chromium
         id: playwright-browser
@@ -139,11 +166,34 @@ jobs:
       - name: Install Playwright Chromium
         if: (success() || failure()) && steps.playwright-browser.outputs.cache-hit != 'true'
         run: make ui-install-playwright
+      # The retained hosted-route browser check uses a real Go backend. Cache
+      # compiler inputs, never executables or test results; build once per run.
+      - name: Restore frontend backend harness compiler cache
+        id: frontend-harness-cache
+        if: success() || failure()
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: frontend-harness-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('pkg/**/*.go', 'tests/functional/internal/support/**/*.go') }}
+          restore-keys: |
+            frontend-harness-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Frontend proof
+        id: frontend-proof
         if: success() || failure()
         run: bash scripts/ci/run-frontend-verification.sh
         env:
+          FRONTEND_SUITE: browser
           AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/factory-graph-visual-group
+      - name: Save successfully populated frontend harness compiler inputs
+        if: always() && !cancelled() && steps.frontend-proof.outputs.harness-compiled == 'true' && steps.frontend-harness-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.frontend-harness-cache.outputs.cache-primary-key }}
       - name: Upload visual group browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -774,15 +824,52 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        id: backend-lint-go
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
+      # Analysis-cache hits still need compiler export data for every tag scope.
+      # Keep lint's warmed non-race build outputs separate from coverage writers;
+      # setup-go remains the bootstrap on the first run. Go validates each entry
+      # against compiler inputs, so the prefix safely reuses unchanged packages.
+      - name: Restore Backend Lint Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: backend-lint-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('**/*.go', '**/go.mod', '**/go.sum', 'Makefile', '.golangci*.yml', '.custom-gcl.yml', 'docs/reference/**', 'packages/**', 'ui/fallback_dist/**') }}
+          restore-keys: backend-lint-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/golangci-lint
-          key: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          key: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ hashFiles('go.mod', '**/*.go', '.golangci*.yml', '.custom-gcl.yml') }}
           restore-keys: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+      - name: Select lint inputs
+        id: lint-inputs
+        env:
+          LINT_EVENT: ${{ github.event_name }}
+          LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          LINT_HEAD: ${{ github.sha }}
+        run: node scripts/ci/backend-lint-workflow.mjs --select-inputs --event "$LINT_EVENT" --base "$LINT_BASE" --head "$LINT_HEAD" --output .artifacts/backend-lint/selection.json
+      - name: Identify Markdown tool runtime
+        id: markdown-runtime
+        if: steps.lint-inputs.outputs.docs != '0'
+        run: echo "python=$(python -c 'import platform; print(platform.python_version())')" >> "$GITHUB_OUTPUT"
+      - name: Restore pinned Markdown tools
+        id: markdown-tools
+        if: steps.lint-inputs.outputs.docs != '0'
+        uses: actions/cache@v4
+        with:
+          path: .cache/docs-markdown-lint
+          key: backend-lint-markdown-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ steps.markdown-runtime.outputs.python }}-${{ hashFiles('Makefile', 'scripts/docs-markdown-lint-requirements.txt') }}
+      - name: Activate exact Markdown tool cache
+        if: steps.markdown-tools.outputs.cache-hit == 'true'
+        run: |
+          # The exact key covers both prerequisite contents. Checkout mtimes
+          # must not reinstall the same tools; actual checks still run below.
+          test -x .cache/docs-markdown-lint/bin/gomarklint
+          python -c 'import sys; sys.path.insert(0, ".cache/docs-markdown-lint/python"); import pymarkdown, check_jsonschema'
+          touch .cache/docs-markdown-lint/ready
       - name: Identify plugin compiler inputs
         id: plugin-inputs
         run: echo "key=$(python3 scripts/build-golangci.py --cache-key)" >> "$GITHUB_OUTPUT"
@@ -802,13 +889,11 @@ jobs:
       - name: Smoke-test shared lint plugin
         run: python3 scripts/lint-migration-smoke.py ci-smoke --golangci "$PWD/.artifacts/golangci/golangci-repository"
       - name: Verify direct upstream deadcode boundary
+        if: steps.lint-inputs.outputs.direct_boundary != '0'
         run: |
           python3 -m unittest discover -s scripts -p "build_golangci_test.py"
           python3 -m unittest discover -s scripts -p "deadcode_report_test.py"
           python3 scripts/deadcode-host-smoke.py --reporter "$PWD/scripts/deadcode-report.py" -- go run golang.org/x/tools/cmd/deadcode@v0.25.1
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
       - name: Verify Backend Lint event selection
         env:
           BACKEND_LINT_EVENT_NAME: ${{ github.event_name }}
@@ -851,9 +936,6 @@ jobs:
           console.log(`Backend Lint CI runner: logical_cpus=${logicalCPUs} jobs=${jobs}`);
           appendFileSync(process.env.GITHUB_OUTPUT, `jobs=${jobs}\n`);
           NODE
-      - name: Install UI dependencies for canonical UI lint targets
-        if: always()
-        run: make ui-deps
       - name: Run complete canonical Backend Lint inventory
         id: run-backend-lint
         if: always()
@@ -869,8 +951,18 @@ jobs:
         env:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
           LINT_FULL: "1"
+          LINT_BACKEND_ONLY: "1"
+          LINT_RUN_DOCS: ${{ steps.lint-inputs.outputs.docs || '1' }}
+          LINT_RUN_DEADCODE: ${{ steps.lint-inputs.outputs.deadcode || '1' }}
+          LINT_SELECTION_FILE: .artifacts/backend-lint/selection.json
           GOLANGCI_PREBUILT: "1"
           GOLANGCI_PROFILE_DIR: .artifacts/backend-lint/profiles
+          # Reduce the measured heap-scanning cost without unbounded heap growth.
+          # Limits are soft Go-runtime budgets, not RSS caps; three scopes share
+          # 7 GiB of budgets and leave room for the other canonical targets.
+          GOLANGCI_GOGC: "200"
+          GOLANGCI_BUILTIN_GOMEMLIMIT: "3GiB"
+          GOLANGCI_REPOSITORY_GOMEMLIMIT: "2GiB"
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
@@ -879,12 +971,14 @@ jobs:
           --log "$LINT_LOG_FILE"
           --summary "$GITHUB_STEP_SUMMARY"
           --comment "$LINT_COMMENT_FILE"
+          --selection .artifacts/backend-lint/selection.json
       - name: Upload complete Backend Lint diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-lint-diagnostics
           path: |
+            .artifacts/backend-lint/selection.json
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
@@ -894,7 +988,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Upload normalized deadcode evidence
-        if: always()
+        if: always() && steps.lint-inputs.outputs.deadcode != '0'
         uses: actions/upload-artifact@v4
         with:
           name: backend-deadcode-evidence
@@ -1037,7 +1131,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, readme, frontend, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
+    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1078,8 +1172,8 @@ jobs:
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_BROWSER_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend.result }}
+          FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
+          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-browser.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"

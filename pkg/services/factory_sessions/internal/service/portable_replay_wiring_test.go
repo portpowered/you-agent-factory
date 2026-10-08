@@ -504,11 +504,11 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	dependencies.DurableOpening = durableOpeningFixture(owner, func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 		return nil, func(context.Context) error { return owner.Close() }, nil
 	})
+	dependencies.NamedPaths = nil
 	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
-	factory.namedPaths = nil
 	return factory
 }
 
@@ -767,10 +767,9 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
-		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
 			return replayRuntimeConfigStub{}, nil
-		},
+		}, nil, nil, nil),
 	}
 	opened, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},

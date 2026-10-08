@@ -227,8 +227,8 @@ and failed thoughts each emit one origin-preserving report through the existing
 project-report/wake path; busy leads leave reports pending. The owning lead
 reviews/edits against immutable authority and live ownership, admits ready fixes
 with a verified receipt or records a reason/release event in progress.md, and
-deduplicates by request/origin. Recovery retains the two-successor lineage,
-workspace adoption and current-Session dependency rules. Untagged loopbacks
+deduplicates by request/origin. Recovery attempts are positive integers with no
+ceiling; lineage, workspace adoption and current-Session dependency rules remain. Untagged loopbacks
 retain self-submission/receipt or accepted hold. This creates no new joins and
 does not authorize lead Work controls.
 

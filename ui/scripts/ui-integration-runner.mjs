@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { appendFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
+import { browserDistReady } from "../integration/browser-build-lock.mjs";
+import {
+  buildRealBackendBrowserHarness,
+  realBackendHarnessArtifactEnvironmentVariable,
+} from "../integration/browser-test-harness.mjs";
 import {
   mockedBackendBrowserIntegrationFiles,
   mockedBackendBrowserIntegrationPhaseName,
@@ -59,6 +66,7 @@ function runVitestIntegrationPass({
   phaseName,
   slowFileSummaryTitle,
   spawn = spawnSync,
+  prebuilt = false,
 }) {
   const startedAt = performance.now();
   const result = spawn("vitest", vitestArgs, {
@@ -69,6 +77,7 @@ function runVitestIntegrationPass({
     env: {
       ...process.env,
       AGENT_FACTORY_BROWSER_ARTIFACT_WORKER_ISOLATION: "true",
+      ...(prebuilt ? { AGENT_FACTORY_BROWSER_PREBUILT: "true" } : {}),
     },
   });
   const elapsedMs = performance.now() - startedAt;
@@ -107,7 +116,38 @@ export function runBrowserIntegration(options = {}) {
     slowFileSummaryTitle: "Browser integration slowest test files",
     exitOnFailure: options.exitOnFailure,
     spawn: options.spawn,
+    prebuilt: options.prebuilt,
   });
+}
+
+export async function runBuiltBrowserIntegration({
+  ready = () => browserDistReady(fileURLToPath(new URL("..", import.meta.url))),
+  run = runBrowserIntegration,
+  buildHarness = buildRealBackendBrowserHarness,
+  env = process.env,
+  publishBuildSuccess = async () => {
+    if (env.GITHUB_OUTPUT)
+      await appendFile(env.GITHUB_OUTPUT, "harness-compiled=true\n");
+  },
+} = {}) {
+  if (!(await ready()))
+    throw new Error("Prebuilt dashboard output is missing or invalid");
+  // Compilation is setup, not backend readiness. All browser sessions consume
+  // this one artifact rather than compiling inside their readiness deadline.
+  const artifact = await buildHarness();
+  const previous = env[realBackendHarnessArtifactEnvironmentVariable];
+  env[realBackendHarnessArtifactEnvironmentVariable] = artifact.artifactPath;
+  try {
+    // Save compiler inputs even if a later assertion or an independent peer
+    // fails. The builder returns only after validating its executable output.
+    await publishBuildSuccess();
+    await run({ prebuilt: true, exitOnFailure: false });
+  } finally {
+    if (previous === undefined)
+      delete env[realBackendHarnessArtifactEnvironmentVariable];
+    else env[realBackendHarnessArtifactEnvironmentVariable] = previous;
+    await artifact.cleanup();
+  }
 }
 
 export function runFocusedBrowserIntegration(files, options = {}) {

@@ -53,7 +53,7 @@ never create a second PR or overwrite root PRD/progress. Refuse mismatched
 adoption without reset/rebase/stash/clean or other retained mutation. Ordinary
 input without this tag keeps root prd.json and the name-derived directory.
 Work controls, equivalent APIs, canonical edits and operatorOverride remain
-forbidden; recovery does not reset the original lineage's two-successor budget.
+forbidden; preserve original lineage and positive integer attempt, with no ceiling.
 
 ### Step 1 — Gather context
 1. Read prd.json to understand what was implemented

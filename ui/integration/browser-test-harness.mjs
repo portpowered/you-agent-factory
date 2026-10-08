@@ -22,7 +22,10 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
 
-import { runSharedBrowserBuild } from "./browser-build-lock.mjs";
+import {
+  browserDistReady,
+  runSharedBrowserBuild,
+} from "./browser-build-lock.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
@@ -1174,22 +1177,6 @@ function sanitizeArtifactLabel(value) {
 function localPackageBinaryCommand(name) {
   const suffix = process.platform === "win32" ? ".cmd" : "";
   return path.join(packageRoot, "node_modules", ".bin", `${name}${suffix}`);
-}
-
-async function browserDistReady() {
-  try {
-    await stat(path.join(packageRoot, "dist", "index.html"));
-    await stat(path.join(packageRoot, "dist", "assets", "index.js"));
-    await stat(path.join(packageRoot, "dist", "assets", "index.css"));
-    const bundle = await readFile(
-      path.join(packageRoot, "dist", "assets", "index.js"),
-      "utf8",
-    );
-    // Rebuild when the preview bundle predates session sync-preflight bootstrap.
-    return bundle.includes("/sync-preflight");
-  } catch {
-    return false;
-  }
 }
 
 export async function findAvailablePort() {
@@ -2520,7 +2507,8 @@ async function createBrowserPreview(ports = null) {
         },
       ),
     buildCacheKey,
-    ready: browserDistReady,
+    ready: () => browserDistReady(packageRoot),
+    prebuilt: process.env.AGENT_FACTORY_BROWSER_PREBUILT === "true",
   });
 
   const previewProcess = spawnRuntime(

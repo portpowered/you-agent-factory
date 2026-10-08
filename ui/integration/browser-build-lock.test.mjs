@@ -5,6 +5,22 @@ import { describe, expect, it, vi } from "vitest";
 import { runSharedBrowserBuild } from "./browser-build-lock.mjs";
 
 describe("shared browser build lock", () => {
+  it("prebuilt previews consume ready output and never rebuild missing output", async () => {
+    const build = vi.fn();
+    for (const ready of [true, false]) {
+      const running = runSharedBrowserBuild({
+        build,
+        buildState: {},
+        buildCacheKey: "prebuilt",
+        ready: async () => ready,
+        prebuilt: true,
+      });
+      if (ready) await expect(running).resolves.toBeUndefined();
+      else await expect(running).rejects.toThrow(/missing or invalid/);
+    }
+    expect(build).not.toHaveBeenCalled();
+  });
+
   it("shares one pending build across concurrent preview setup", async () => {
     const buildState = {};
     let releaseBuild;

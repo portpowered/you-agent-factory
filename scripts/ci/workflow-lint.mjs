@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BACKEND_LINT_FALLBACK_JOBS } from "./backend-lint-workflow.mjs";
 import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
@@ -122,6 +123,7 @@ function requireWorkflowOrder(value, first, second, description) {
 // CI topology belongs in Workflow Lint, rather than a product runtime test.
 export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	const frontend = workflowJobSection(workflow, "frontend");
+	const browser = workflowJobSection(workflow, "frontend-browser");
 	const policy = workflowJobSection(workflow, "verification-policy");
 	requireWorkflowText(workflow, "BUN_VERSION: 1.3.12", "frontend Bun must remain pinned");
 	requireWorkflowText(frontend, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
@@ -150,13 +152,23 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	}
 	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}", "Component shares aggregate result");
 	for (const result of ["FRONTEND_BROWSER_RESULT", "FRONTEND_STORYBOOK_RESULT"]) {
-		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "browser proofs share aggregate result");
+		requireWorkflowText(policy, `${result}: \${{ needs.frontend-browser.result }}`, "browser proofs share their own aggregate result");
 	}
-	requireWorkflowText(frontend, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
-	requireWorkflowText(frontend, "path: ~/.cache/ms-playwright", "retain browser cache");
-	requireWorkflowText(frontend, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
-	requireWorkflowText(frontend, "run: make ui-install-playwright", "install browsers on cache miss");
-	if (/\n  frontend-(component|browser|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
+	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
+	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
+		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
+		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
+		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");
+		if (job.split("bun install --frozen-lockfile").length !== 2) throw new Error("workflow contract requires one frozen install per frontend job");
+		requireWorkflowText(job, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
+		requireWorkflowText(job, `FRONTEND_SUITE: ${suite}`, "complete suites use separate runners");
+	}
+	requireWorkflowText(browser, "path: ~/.cache/ms-playwright", "retain browser cache");
+	requireWorkflowText(browser, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
+	requireWorkflowText(browser, "run: make ui-install-playwright", "install browsers on cache miss");
+	if (/\n  frontend-(component|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
 	if (policy.includes("ui-coverage")) throw new Error("policy must not depend on removed coverage job");
 	return { name: "frontend-shared-setup-workflow", status: "pass" };
 }
@@ -322,6 +334,22 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 
 export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	const job = workflowJobSection(workflow, "backend-lint");
+	for (const name of ["Select Backend Lint runner parallelism", "Run complete canonical Backend Lint inventory"]) {
+		requireWorkflowMatch(workflowStepSection(job, name), /\n\s+if: always\(\)/, `${name} must run after an earlier failure`);
+	}
+	requireWorkflowText(workflowStepSection(job, "Run complete canonical Backend Lint inventory"),
+		`LINT_JOBS: \${{ steps.backend-lint-parallelism.outputs.jobs || '${BACKEND_LINT_FALLBACK_JOBS}' }}`,
+		"canonical inventory must retain positive fallback concurrency");
+	requireWorkflowMatch(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/, "required checks run on merge groups");
+	requireWorkflowMatch(workflow,
+		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
+		"classification uses merge group base and head identities");
+	requireWorkflowMatch(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/, "classify both PR and merge group inputs");
+	requireWorkflowMatch(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/, "retain fallback classification for other events");
+	requireWorkflowText(job, "github.event_name == 'merge_group'", "Backend Lint reports for merge groups");
+	const developmentPackage = workflowJobSection(workflow, "development-package");
+	requireWorkflowText(developmentPackage, "github.event_name == 'merge_group'", "development package reports for merge groups");
+	requireWorkflowText(developmentPackage, "run_candidates: ${{ github.event_name == 'pull_request' }}", "development candidates remain PR-only");
 	if (/go test[^\n]*-race/.test(job)) throw new Error("Backend Lint must not run a race step");
 	for (const duplicate of ["Exercise packaged Markdown enforcement", "Check Go formatting", "Build and smoke-test shared lint plugin"]) {
 		if (job.includes(`- name: ${duplicate}`)) throw new Error(`Backend Lint repeats enforcement: ${duplicate}`);
@@ -331,7 +359,15 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	requireWorkflowText(job, "scripts/lint-migration-smoke.py ci-smoke", "real plugin diagnostic smoke");
 	requireWorkflowText(job, "scripts/build-golangci.py --restore", "validated artifact restore");
 	requireWorkflowText(job, 'GOLANGCI_PREBUILT: "1"', "canonical prebuilt plugin reuse");
-	requireWorkflowText(makefile, "LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check", "complete base enforcement inventory");
+	requireWorkflowText(makefile, "LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check", "base enforcement without duplicate vet loading");
+	requireWorkflowText(job, 'LINT_BACKEND_ONLY: "1"', "Frontend owns UI gates");
+	if (/make ui-(deps|lint|deadcode)|oven-sh\/setup-bun/.test(job)) throw new Error("Backend Lint must not repeat Frontend setup or gates");
+	requireWorkflowText(workflowJobSection(workflow, "frontend"), "run: make ui-lint ui-deadcode", "Frontend runs both UI gates");
+	requireWorkflowText(job, "--selection .artifacts/backend-lint/selection.json", "render uses the collector selection record");
+	requireWorkflowText(job, "LINT_SELECTION_FILE: .artifacts/backend-lint/selection.json", "collector uses the input selection record");
+	requireWorkflowOrder(job, "- name: Select lint inputs", "- name: Verify direct upstream deadcode boundary", "resolve input selection before optional smoke");
+	requireWorkflowText(workflowStepSection(job, "Verify direct upstream deadcode boundary"), "if: steps.lint-inputs.outputs.direct_boundary != '0'", "unknown smoke selection remains conservative");
+	requireWorkflowText(workflowStepSection(job, "Upload normalized deadcode evidence"), "if: always() && steps.lint-inputs.outputs.deadcode != '0'", "selected missing deadcode evidence remains a failure");
 	requireWorkflowText(makefile, "golangci-lint-run: golangci-build", "built-in checks use the prepared custom binary");
 	return { name: "backend-lint-workflow", status: "pass" };
 }

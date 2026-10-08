@@ -191,7 +191,7 @@ PR. A branch/worktree mismatch is a bounded blocker; never reset, rebase, stash,
 clean or overwrite retained artifacts to repair adoption. Ordinary input
 without the tag continues to use root prd.json and its name-derived directory.
 Recovery does not permit Work controls, equivalent APIs, canonical edits or
-operatorOverride, and does not reset the original lineage's attempt budget.
+operatorOverride. Preserve original lineage and positive integer attempt, with no ceiling.
 
 ## Bounded visit records
 

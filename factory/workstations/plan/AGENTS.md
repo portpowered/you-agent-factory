@@ -29,7 +29,7 @@ attempt. For retained adoption, require workspace.worktree and its tag to be the
 `.claude/worktrees/<original-lane>` path; reject absolute paths and `..`.
 Preserve the project and recovery-worktree tags on downstream Work.
 Validate originalSessionId, originalLaneWorkId, predecessorWorkId, integer
-attempt 1/2 (not bool), supported classification visit_cap_with_progress,
+attempt as a positive integer (not bool), with no ceiling; supported classification visit_cap_with_progress,
 breaker_one_blocker or deterministic_failure, evidence, one blocker and concrete
 correction. workspace must be null for fresh setup (no recovery-worktree tag),
 or contain branch/worktree/prUrl/headSha strings matching the tag and retained

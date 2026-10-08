@@ -22,7 +22,14 @@ const (
 	WorkRestoreInvalidHistory       WorkRestoreReason = "invalid_history"
 	workRestoreIdentifierLimit                        = 128
 	workRestorePlaceLimit                             = 8
+	workRestoreEventLimit                             = 8
 )
+
+// WorkRestoreEvent identifies a canonical history fact without its payload.
+type WorkRestoreEvent struct {
+	Sequence int
+	Kind     factorydefinitions.FactoryEventType
+}
 
 // WorkRestoreError carries structural identifiers only. Cause retains error
 // identity but is never rendered: it may contain prompts or other private data.
@@ -30,6 +37,7 @@ type WorkRestoreError struct {
 	Reason   WorkRestoreReason
 	WorkID   string
 	PlaceIDs []string
+	Events   []WorkRestoreEvent
 	Cause    error
 }
 
@@ -48,16 +56,41 @@ func (e *WorkRestoreError) Error() string {
 	}
 	switch e.Reason {
 	case WorkRestoreMissingPlacement:
-		return fmt.Sprintf("restore Work board: Work %s has no current place occupancy", workID)
+		return fmt.Sprintf("restore Work board: Work %s has no current place occupancy%s", workID, e.eventSequence())
 	case WorkRestoreConflictingPlacement:
-		return fmt.Sprintf("restore Work board: Work %s has conflicting current places %s", workID, strings.Join(places, " and "))
+		return fmt.Sprintf("restore Work board: Work %s has conflicting current places %s%s", workID, strings.Join(places, " and "), e.eventSequence())
 	case WorkRestoreUnknownPlace:
-		return fmt.Sprintf("restore Work board: Work %s references place %s, which is not present in the current Factory topology", workID, strings.Join(places, ", "))
+		return fmt.Sprintf("restore Work board: Work %s references place %s, which is not present in the current Factory topology%s", workID, strings.Join(places, ", "), e.eventSequence())
 	case WorkRestoreInvalidHistory:
-		return fmt.Sprintf("restore Work board: Work %s has inconsistent recorded placement or history (places: %s)", workID, strings.Join(places, ", "))
+		return fmt.Sprintf("restore Work board: Work %s has inconsistent recorded placement or history (places: %s%s)", workID, strings.Join(places, ", "), e.eventSequence())
 	default:
 		return "restore Work board: structural restore failed"
 	}
+}
+
+func (e *WorkRestoreError) eventSequence() string {
+	if len(e.Events) == 0 {
+		return ""
+	}
+	sequence := make([]string, 0, min(len(e.Events), workRestoreEventLimit))
+	for index, event := range e.Events {
+		if index == workRestoreEventLimit {
+			sequence = append(sequence, "...")
+			break
+		}
+		kind := "UNKNOWN"
+		switch event.Kind {
+		case factorydefinitions.FactoryEventTypeWorkRequest,
+			factorydefinitions.FactoryEventTypeWorkStateChange,
+			factorydefinitions.FactoryEventTypeDispatchRequest,
+			factorydefinitions.FactoryEventTypeDispatchResponse,
+			factorydefinitions.FactoryEventTypeDispatchInterrupted,
+			factorydefinitions.FactoryEventTypeDispatchReconciled:
+			kind = string(event.Kind)
+		}
+		sequence = append(sequence, fmt.Sprintf("%d %s", event.Sequence, kind))
+	}
+	return "; event sequence: " + strings.Join(sequence, " -> ")
 }
 
 func (e *WorkRestoreError) Unwrap() error {

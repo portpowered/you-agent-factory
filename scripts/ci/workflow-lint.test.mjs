@@ -59,6 +59,8 @@ env:
   BUN_VERSION: 1.3.12
 jobs:
   frontend:
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     env:
       UI_COVERAGE_MAIN_MAX_WORKERS: "4"
     steps:
@@ -77,18 +79,51 @@ jobs:
       - name: Run frontend unit and replay coverage
         if: success() || failure()
         run: make test-ui-coverage
+      - name: Frontend component proof
+        if: success() || failure()
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: component
+  frontend-browser:
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend != 'false'
+    steps:
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: \${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}-\${{ env.BUN_VERSION }}-\${{ hashFiles('ui/bun.lock') }}
+      - run: cd ui && bun install --frozen-lockfile
+      - name: Restore Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1-\${{ runner.os }}-\${{ runner.arch }}-\${{ hashFiles('ui/bun.lock') }}
+      - run: make ui-install-playwright
+      - name: Frontend proof
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: browser
   verification-policy:
-    needs: [frontend]
+    needs: [frontend, frontend-browser]
     env:
       FRONTEND_RESULT: \${{ needs.frontend.result }}
       FRONTEND_COVERAGE_RESULT: \${{ needs.frontend.result }}
+      FRONTEND_COMPONENT_RESULT: \${{ needs.frontend.result }}
+      FRONTEND_BROWSER_RESULT: \${{ needs.frontend-browser.result }}
+      FRONTEND_STORYBOOK_RESULT: \${{ needs.frontend-browser.result }}
 `;
+	assert.equal(validateFrontendSharedSetupWorkflowContract({ workflow }).status, "pass");
 	for (const [before, after, diagnostic] of [
 		["bun install --frozen-lockfile", "bun install", "install frozen dependencies"],
 		["frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}", "frontend-bun-v1", "cache identity must include platform, Bun and frozen lock"],
 		["if: success() || failure()", "if: success()", "attempt later proof after failures, but not cancellation"],
 		["run: make test-ui-coverage", "run: make ui-test", "retain the complete proof command"],
 		["FRONTEND_COVERAGE_RESULT:", "OTHER_RESULT:", "static and coverage share the aggregate result"],
+		["FRONTEND_SUITE: browser", "FRONTEND_SUITE: all", "complete suites use separate runners"],
+		["FRONTEND_BROWSER_RESULT: \${{ needs.frontend-browser.result }}", "FRONTEND_BROWSER_RESULT: \${{ needs.frontend.result }}", "browser proofs share their own aggregate result"],
 	]) {
 		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
 			workflow: workflow.replace(before, after),

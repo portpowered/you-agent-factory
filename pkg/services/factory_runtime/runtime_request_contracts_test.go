@@ -44,6 +44,34 @@ func TestWorkRestoreErrorBoundsEscapesAndPreservesCause(t *testing.T) {
 	}
 }
 
+func TestWorkRestoreErrorReportsBoundedSafeCanonicalSequence(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("PRIVATE-PROMPT")
+	restore := &WorkRestoreError{Reason: WorkRestoreInvalidHistory, WorkID: "synthetic-conflict",
+		PlaceIDs: []string{"idea:to-complete"}, Cause: cause,
+		Events: []WorkRestoreEvent{
+			{Sequence: 41, Kind: factorydefinitions.FactoryEventTypeWorkStateChange},
+			{Sequence: 42, Kind: factorydefinitions.FactoryEventTypeDispatchResponse},
+		}}
+	message := restore.Error()
+	for _, want := range []string{"synthetic-conflict", "idea:to-complete", "event sequence: 41 WORK_STATE_CHANGE -> 42 DISPATCH_RESPONSE"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("diagnostic missing %q: %q", want, message)
+		}
+	}
+	if strings.Contains(message, "PRIVATE") || !errors.Is(restore, cause) {
+		t.Fatal("diagnostic exposed cause or lost cause identity")
+	}
+	restore.Events = make([]WorkRestoreEvent, 1000)
+	for index := range restore.Events {
+		restore.Events[index] = WorkRestoreEvent{Sequence: index, Kind: "PRIVATE\nKIND"}
+	}
+	message = restore.Error()
+	if strings.Contains(message, "PRIVATE") || strings.Contains(message, "\n") || len(message) > 500 || !strings.Contains(message, "...") {
+		t.Fatalf("unbounded or unsafe diagnostic: %q", message)
+	}
+}
+
 func TestObservationScopeRequestPublishesRuntimeRootVocabulary(t *testing.T) {
 	t.Parallel()
 
