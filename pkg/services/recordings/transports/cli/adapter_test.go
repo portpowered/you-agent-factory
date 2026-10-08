@@ -696,3 +696,15 @@ func TestReplayStructuralCLIErrorNilAndEmptyValueDefaults(t *testing.T) {
 		t.Fatalf("zero-value structural CLI error = %q / %q / %q", emptyError.Error(), emptyError.CLIErrorMessage(), emptyError.CLIErrorCode())
 	}
 }
+
+func TestAdapterMissingResumeSourceDefersToReplayLoader(t *testing.T) {
+	t.Parallel()
+	source := filepath.Join(t.TempDir(), "missing.json")
+	target := filepath.Join(t.TempDir(), "successor.json")
+	resolved, err := New(deniedRecordingPathInspector{cause: os.ErrNotExist}).ResolveRecordPath(InvocationRequest{
+		ResumePath: source, RecordPath: target,
+	})
+	if err != nil || resolved.ServicePath != target {
+		t.Fatalf("missing source selection = %#v, %v; want unchanged destination for replay loader", resolved, err)
+	}
+}

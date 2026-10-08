@@ -140,6 +140,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
+	wireRuntimeArtifactClock := provideRuntimeArtifactClock(source)
+	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
+	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
+	if err != nil {
+		return nil, err
+	}
 	workflowSourceFileSystem := provideFactoryRuntimeWorkflowSources(edges2)
 	workflowHomeResolver := provideFactoryRuntimeWorkflowHome(edges2)
 	workflowSourceResolveSymlinks := provideFactoryRuntimeWorkflowSourceResolveSymlinks(edges2)
@@ -545,12 +551,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
 	runtimeLoggerFactory := provideRuntimeLoggerFactory()
-	wireRuntimeArtifactClock := provideRuntimeArtifactClock(source)
-	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
-	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
-	if err != nil {
-		return nil, err
-	}
 	runtimeMetricsRetentionFileSystem := provideRuntimeMetricsRetentionFileSystem()
 	runtimeMetricsCoordination, err := provideRuntimeMetricsCoordination()
 	if err != nil {
@@ -612,7 +612,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v166 := provideRuntimeModelWorkerExecution(workersService)
 	v167 := wire5.NewRuntimeModelInvocation(modelsService, v165, v166)
 	v168 := wire5.NewHistoricalReplayBehavior()
-	v169, err := wire5.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, sessionLoggerFactory, source, v17, v18, v19, v28, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v36, v37, replayRuntimeConfigDecoder, v38, v114, v116, factoryScaffoldInitializer, editableFactoryValidator, v118, v42, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, workService, root, webhooksService, modelsService, recordingsService, v150, workersService, v151, v96, backendScopeEnsurer, initialRuntimeActivationOperation, v167, v168, liveChangeCoordinator)
+	v169, err := wire5.NewRoot(providersessionsService, logger, factoryRuntimeLogOwner, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, sessionLoggerFactory, source, v17, v18, v19, v28, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v36, v37, replayRuntimeConfigDecoder, v38, v114, v116, factoryScaffoldInitializer, editableFactoryValidator, v118, v42, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, workService, root, webhooksService, modelsService, recordingsService, v150, workersService, v151, v96, backendScopeEnsurer, initialRuntimeActivationOperation, v167, v168, liveChangeCoordinator)
 	if err != nil {
 		return nil, err
 	}

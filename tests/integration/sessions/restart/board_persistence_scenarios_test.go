@@ -210,9 +210,10 @@ func TestRecordStartupSafetyFailedRestore(t *testing.T) {
 	if strings.Contains(output, privateMarker) || bytes.Contains(encodedLogs, []byte(privateMarker)) {
 		t.Fatal("startup diagnostic exposed recording payload")
 	}
-	// Runtime file logging opens after history reconstruction. This cell proves
-	// CLI diagnostics and retained bytes; RF-2/I1 still require an early-failure
-	// file-log witness before the story can be handed to review.
+	if len(logs) == 0 || !bytes.Contains(encodedLogs, []byte("runtime_startup_failed")) ||
+		!bytes.Contains(encodedLogs, []byte("invalid JSON at byte 84")) {
+		t.Fatalf("failed restore runtime logs lack the safe startup cause: %s", encodedLogs)
+	}
 	t.Logf("RF-I1 failed restore: exit=1, retained bytes=%d, safe JSON cause in ErrorResponse, payload withheld; runtime log files=%d", len(contents), len(logs))
 }
 

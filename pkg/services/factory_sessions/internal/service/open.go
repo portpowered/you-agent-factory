@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -56,6 +57,12 @@ func (r *Root) openRuntimeWithOptions(
 			if cleanupErr := cleanup.Close(); cleanupErr != nil {
 				err = errors.Join(err, cleanupErr)
 				products.closeArtifacts = cleanup.Close
+			}
+			if opening.initial == nil {
+				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
+					err = errors.Join(err, logErr)
+					products.closeArtifacts = cleanup.Close
+				}
 			}
 		}
 	}()
@@ -793,4 +800,40 @@ func runtimeWorkerAttemptStarter(
 
 type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+}
+
+// A history read can fail before Factory Runtime has opened its sinks. Retain
+// that failed opening's diagnostic through the same injected log owner, without
+// constructing a runtime or binding a recording merely to report its failure.
+func (r *Root) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
+	if opening.configured.Runtime.FileLoggingPolicy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
+		return nil
+	}
+	if r.runtimeLogs == nil {
+		return fmt.Errorf("log failed session opening: runtime log owner is required")
+	}
+	sink, openErr := r.runtimeLogs.Open(opening.logger, factoryruntime.RuntimeLogScopeRequest{
+		SessionID: opening.sessionID, RuntimeInstanceID: opening.configured.Runtime.RuntimeInstanceID,
+		FactoryDirectory: opening.load.LoadedFactoryCfg.FactoryDir(),
+		RootDirectory:    opening.configured.Runtime.LogDirectory,
+		Policy:           opening.configured.Runtime.FileLoggingPolicy, Config: opening.configured.Runtime.LogConfig,
+	})
+	if sink == nil {
+		if openErr != nil {
+			return fmt.Errorf("log failed session opening: %w", openErr)
+		}
+		return fmt.Errorf("log failed session opening: runtime log owner returned nil scope")
+	}
+	if logger := sink.Logger(); logger != nil {
+		logger.Error("Factory Session runtime startup failed",
+			zap.String("session_id", opening.sessionID),
+			zap.String("failure_class", "runtime_startup_failed"),
+			zap.String("cause", logging.SafeErrorCause(cause)),
+		)
+	}
+	closeErr := sink.Close()
+	if closeErr != nil {
+		cleanup.Add(sink.Close)
+	}
+	return errors.Join(openErr, closeErr)
 }

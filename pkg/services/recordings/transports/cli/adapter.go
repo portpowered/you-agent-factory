@@ -140,6 +140,11 @@ func (adapter defaultAdapter) validateResumeDestination(request InvocationReques
 		return &clidiag.LocalFailure{Code: "RECORDING_SOURCE_CONFLICT", Message: fmt.Sprintf("cannot verify --record target %q is distinct from the --resume source", target)}
 	}
 	sourceInfo, err := adapter.paths.Stat(sourcePath)
+	// An absent source has no OS alias. The replay loader owns the typed
+	// missing-source diagnostic and fails before any successor is opened.
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return resumeDestinationInspectionFailure(source, err)
 	}

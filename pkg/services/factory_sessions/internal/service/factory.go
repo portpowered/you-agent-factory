@@ -85,6 +85,7 @@ type Root struct {
 	resolveClock                   factoryruntime.ClockResolver
 	newSessionLogger               factoryruntime.SessionLoggerFactory
 	baseLogger                     *zap.Logger
+	runtimeLogs                    factoryruntime.RuntimeLogOwner
 	processRuntimeFactory          roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope     operatorsettings.BackendScopeEnsurer
 	generateSessionID              factorysessions.SessionIDGenerator
@@ -104,6 +105,7 @@ type Root struct {
 func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
@@ -181,6 +183,7 @@ func NewRoot(
 		resolveClock:                   resolveClock,
 		newSessionLogger:               newSessionLogger,
 		baseLogger:                     logger,
+		runtimeLogs:                    runtimeLogs,
 		processRuntimeFactory:          processRuntimeFactory,
 		generateSessionID:              generateSessionID,
 		ensureOperatorBackendScope:     ensureBackendScope,
