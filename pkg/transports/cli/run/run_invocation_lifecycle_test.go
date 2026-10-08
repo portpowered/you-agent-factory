@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.T) {
@@ -290,6 +292,46 @@ func TestRunFactoryServiceAndEmitResultLeavesEngineErrorsUnclassified(t *testing
 	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want original engine error", err)
+	}
+}
+
+func TestMapServerFailureRetainsSafePrimaryAndCleanupFileCauses(t *testing.T) {
+	t.Parallel()
+	primary := &fs.PathError{Op: "read recording", Path: "current-board.json", Err: fs.ErrPermission}
+	cleanup := &fs.PathError{Op: "close recording", Path: "successor.json", Err: fs.ErrClosed}
+	startup := &initializer.RuntimeHostStartupError{Cause: errors.Join(
+		fmt.Errorf("restore PRIVATE payload: %w", primary), cleanup, errors.New("PRIVATE token"))}
+	mapped := MapServerFailure(startup)
+	var stderr bytes.Buffer
+	if !WriteInvocationError(&stderr, mapped, false) {
+		t.Fatal("startup failure did not render an ErrorResponse")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(stderr.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != ServerStartFailedCode || response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unexpected startup code/family: %#v", response)
+	}
+	core, logs := observer.New(zap.ErrorLevel)
+	logRunServiceOutcome(context.Background(), RunConfig{Logger: zap.New(core), WithServer: true}, startup)
+	if logs.Len() != 1 {
+		t.Fatalf("failure log count = %d", logs.Len())
+	}
+	loggedCause, _ := logs.All()[0].ContextMap()["cause"].(string)
+	for _, diagnostic := range []string{response.Message, loggedCause} {
+		for _, want := range []string{`read recording "current-board.json": permission denied`,
+			`close recording "successor.json": file already closed`} {
+			if !strings.Contains(diagnostic, want) {
+				t.Fatalf("diagnostic %q omits %q", diagnostic, want)
+			}
+		}
+		if strings.Contains(diagnostic, "PRIVATE") {
+			t.Fatalf("diagnostic leaks payload: %q", diagnostic)
+		}
+	}
+	if !errors.Is(mapped, primary) || !errors.Is(mapped, cleanup) {
+		t.Fatal("startup mapping lost original cause identities")
 	}
 }
 

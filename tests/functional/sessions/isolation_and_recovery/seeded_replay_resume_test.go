@@ -1,10 +1,12 @@
 package isolation_and_recovery_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,15 +97,85 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 			running.daemon.Stop(t)
 		})
 	}
+	t.Run("successor history", func(t *testing.T) {
+		testSeededReplayResumePreservesSuccessorHistory(t, reusable)
+	})
+	t.Run("startup publication safety", func(t *testing.T) {
+		testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t, reusable)
+	})
+}
+
+// A successor must remain recoverable after the live ledger has been released.
+// Each format owns its files, session, profile and host on one shared process.
+func testSeededReplayResumePreservesSuccessorHistory(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	for _, format := range []string{"json", "jsonl"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(dir, "source.json")
+			successor := filepath.Join(dir, "successor."+format)
+			payload := seededReplayResumeArtifactPayload(t, true)
+			sessionID := uuid.NewString()
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(payload, &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			payload, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(source, payload, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			resumed := reusable.runForSession(t, dir, source, sessionID, "--resume", source, "--record", successor)
+			assertSeededSuccessorWorkAndHistory(t, resumed, true)
+			resumed.daemon.Stop(t)
+			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) {
+				t.Fatal("resume changed its source recording")
+			}
+			replayed := reusable.runForSession(t, dir, successor, sessionID, "--replay", successor, "--no-record")
+			assertSeededSuccessorWorkAndHistory(t, replayed, false)
+			replayed.daemon.Stop(t)
+		})
+	}
+}
+
+func assertSeededSuccessorWorkAndHistory(t *testing.T, running seededReplayResumeRun, retainedHistory bool) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(running.url, running.sessionID))
+	waitForSeededReplayRuntimeStart(t, stream)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(running.url, running.sessionID, "/work"))
+	if len(listed.Results) != 1 || !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", "task:complete") {
+		t.Fatalf("successor lost the recorded terminal Work: %#v", listed.Results)
+	}
+	if !retainedHistory {
+		return
+	}
+	events := support.GetFactoryEventsForSessionAt(t, running.url, running.sessionID)
+	wantPrefix := []string{"run-request", "work-request", "work-state-change", "run-response"}
+	if len(events) < len(wantPrefix) {
+		t.Fatalf("successor history has %d events, want retained prefix %v", len(events), wantPrefix)
+	}
+	for index, id := range wantPrefix {
+		if events[index].Id != id {
+			t.Fatalf("successor event %d = %q, want retained %q", index, events[index].Id, id)
+		}
+	}
 }
 
 type seededReplayResumeProcess struct {
 	process support.Process
 
-	mu             sync.RWMutex
-	serversByPort  map[int]*support.ProcessAPIServer
-	payloadsByPath map[string][]byte
-	nextPort       atomic.Int32
+	mu               sync.RWMutex
+	serversByPort    map[int]*support.ProcessAPIServer
+	payloadsByPath   map[string][]byte
+	readErrorsByPath map[string]error
+	nextPort         atomic.Int32
 }
 
 type seededReplayResumeRun struct {
@@ -115,12 +187,14 @@ type seededReplayResumeRun struct {
 func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 	t.Helper()
 	reusable := &seededReplayResumeProcess{
-		serversByPort:  make(map[int]*support.ProcessAPIServer),
-		payloadsByPath: make(map[string][]byte),
+		serversByPort:    make(map[int]*support.ProcessAPIServer),
+		payloadsByPath:   make(map[string][]byte),
+		readErrorsByPath: make(map[string]error),
 	}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    reusable.startAPIServer,
 		FactorySessionReplayRecordingReader: reusable.readReplayRecording,
+		RecordingReadFile:                   reusable.readRecording,
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 			Stdout: support.CodexSuccessStdout("unexpected replay dispatch COMPLETE"),
 		}),
@@ -135,6 +209,25 @@ func (reusable *seededReplayResumeProcess) run(
 	factoryDir string,
 	artifactPath string,
 ) seededReplayResumeRun {
+	return reusable.runWithRecordingArgs(t, factoryDir, artifactPath, "--replay", artifactPath, "--no-record")
+}
+
+func (reusable *seededReplayResumeProcess) runWithRecordingArgs(
+	t *testing.T,
+	factoryDir string,
+	artifactPath string,
+	recordingArgs ...string,
+) seededReplayResumeRun {
+	return reusable.runForSession(t, factoryDir, artifactPath, uuid.NewString(), recordingArgs...)
+}
+
+func (reusable *seededReplayResumeProcess) runForSession(
+	t *testing.T,
+	factoryDir string,
+	artifactPath string,
+	sessionID string,
+	recordingArgs ...string,
+) seededReplayResumeRun {
 	t.Helper()
 	api := support.NewProcessAPIServer()
 	port := 22000 + int(reusable.nextPort.Add(1))
@@ -148,7 +241,6 @@ func (reusable *seededReplayResumeProcess) run(
 		delete(reusable.payloadsByPath, filepath.Clean(artifactPath))
 		reusable.mu.Unlock()
 	})
-	sessionID := uuid.NewString()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--session", sessionID,
@@ -156,8 +248,8 @@ func (reusable *seededReplayResumeProcess) run(
 		"--listen", fmt.Sprintf("127.0.0.1:%d", port),
 		"--dir", factoryDir,
 		"--provider", "CODEX", "--model", "gpt-5-codex",
-		"--replay", artifactPath, "--no-record",
 	})
+	inputs.Input.Args = append(inputs.Input.Args, recordingArgs...)
 	home := t.TempDir()
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = factoryDir
@@ -185,11 +277,78 @@ func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {
 func (reusable *seededReplayResumeProcess) readReplayRecording(path string) ([]byte, error) {
 	reusable.mu.RLock()
 	payload := reusable.payloadsByPath[filepath.Clean(path)]
+	err := reusable.readErrorsByPath[filepath.Clean(path)]
 	reusable.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
 	if len(payload) == 0 {
 		return nil, errors.New("seeded replay payload was not registered for this invocation")
 	}
 	return append([]byte(nil), payload...), nil
+}
+
+// Denied target preparation is a pre-readiness publication failure. It also
+// exercises repeated final-flush cleanup without permitting a write to history.
+func testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	for _, name := range []string{"first board", "independent board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			path := filepath.Join(dir, "retained.jsonl")
+			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+			before := []byte("retained recording bytes")
+			if err := os.WriteFile(path, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cause := &fs.PathError{Op: "read recording", Path: path, Err: fs.ErrPermission}
+			reusable.mu.Lock()
+			reusable.readErrorsByPath[path] = cause
+			reusable.mu.Unlock()
+			t.Cleanup(func() {
+				reusable.mu.Lock()
+				delete(reusable.readErrorsByPath, path)
+				reusable.mu.Unlock()
+			})
+			sessionID := uuid.NewString()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", path,
+				"--provider", "CODEX", "--model", "gpt-5-codex"})
+			home := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			if !errors.Is(err, cause) {
+				t.Fatalf("startup error = %v, want original read cause; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); decodeErr != nil {
+				t.Fatalf("decode ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
+			}
+			if response.Code != "SERVER_START_FAILED" || response.Family != factoryapi.ErrorFamilyInternalServerError ||
+				!strings.Contains(response.Message, fmt.Sprintf("%q", path)) || !strings.Contains(response.Message, "permission denied") {
+				t.Fatalf("startup response omits selected path or file cause: %#v", response)
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness")
+			}
+			if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("failed startup cleanup changed the retained recording")
+			}
+		})
+	}
+}
+
+func (reusable *seededReplayResumeProcess) readRecording(path string) ([]byte, error) {
+	reusable.mu.RLock()
+	err := reusable.readErrorsByPath[filepath.Clean(path)]
+	reusable.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
 }
 
 func (reusable *seededReplayResumeProcess) startAPIServer(

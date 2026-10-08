@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
@@ -125,6 +126,9 @@ func logRunServiceFailure(
 	err error,
 	recovery *recordings.ResumeRecoveryMetadata,
 ) {
+	if cause := logging.SafeErrorCause(err); cause != "" {
+		fields = append(fields, zap.String("cause", cause))
+	}
 	cfg.Logger.Error("run service failed", fields...)
 	var startupErr *initializer.RuntimeHostStartupError
 	if errors.As(err, &startupErr) {
@@ -331,15 +335,23 @@ func MapServerFailureForInvocation(err error, resumeInput bool) error {
 	}
 
 	if coded, ok := safeCLIError(cause); ok {
+		diagnostic := logging.SafeErrorCause(cause)
+		if diagnostic == "" {
+			diagnostic = coded.message
+		}
 		return &InvocationError{
 			Code:    coded.code,
-			Message: fmt.Sprintf("requested server did not start: %s: %s", coded.code, coded.message),
+			Message: fmt.Sprintf("requested server did not start: %s: %s", coded.code, diagnostic),
 			Cause:   err,
 		}
 	}
+	message := "requested server did not start: runtime startup failed"
+	if diagnostic := logging.SafeErrorCause(cause); diagnostic != "" {
+		message += ": " + diagnostic
+	}
 	return &InvocationError{
 		Code:    ServerStartFailedCode,
-		Message: "requested server did not start: runtime startup failed (failure_class=runtime_startup_failed)",
+		Message: message + " (failure_class=runtime_startup_failed)",
 		Cause:   err,
 	}
 }
