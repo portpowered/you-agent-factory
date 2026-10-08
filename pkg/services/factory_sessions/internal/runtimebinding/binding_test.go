@@ -841,7 +841,7 @@ func TestFailStartupClosesActivationBeforeRetirementAndRetainsIncompleteCleanup(
 	t.Parallel()
 	startupErr := errors.New("listener failed")
 	cleanupErr := errors.New("cleanup failed")
-	for _, phase := range []string{"success", "stop failure", "activation failure"} {
+	for _, phase := range []string{"success", "stop failure", "joined stop failure", "activation failure"} {
 		t.Run(phase, func(t *testing.T) {
 			t.Parallel()
 			sessions := newRuntimeBindingState()
@@ -866,14 +866,17 @@ func TestFailStartupClosesActivationBeforeRetirementAndRetainsIncompleteCleanup(
 					return cleanupErr
 				}
 				got.CancelRun()
+				if phase == "joined stop failure" {
+					return errors.Join(got.Wait(), cleanupErr)
+				}
 				return got.Wait()
 			}
 			err := runtimebinding.FailStartup(sessions, &active, session.ID, handle, stop, startupErr)
 			if !errors.Is(err, startupErr) || active.Active() != nil {
 				t.Fatalf("rollback error = %v, active = %#v; want original failure and no active selection", err, active.Active())
 			}
-			if phase == "success" {
-				if !closed || sessions.Resolve(session.ID) != nil || errors.Is(err, cleanupErr) {
+			if phase == "success" || phase == "joined stop failure" {
+				if !closed || sessions.Resolve(session.ID) != nil || errors.Is(err, cleanupErr) != (phase == "joined stop failure") {
 					t.Fatal("successful rollback did not clean and retire its session")
 				}
 				return

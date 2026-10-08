@@ -60,6 +60,74 @@ func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
 	return opening.state, opening.err
 }
 
+func TestNormalizeRestoredEventTicksDistinguishesGracefulReopenFromAsyncResponse(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		events []interfaces.FactoryEvent
+		ticks  []int
+	}{
+		{"graceful reopen", []interfaces.FactoryEvent{
+			{Id: "start-first", Type: interfaces.FactoryEventTypeSessionStarted, Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 1}},
+			{Id: "plan", Context: interfaces.FactoryEventContext{Tick: 10, Sequence: 2}},
+			{Id: "start-second", Type: interfaces.FactoryEventTypeSessionStarted, Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 3}},
+			{Id: "failure", Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 4}},
+		}, []int{0, 10, 11, 15}},
+		{"single start with async response", []interfaces.FactoryEvent{
+			{Id: "start", Type: interfaces.FactoryEventTypeSessionStarted, Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 1}},
+			{Id: "dispatch", Context: interfaces.FactoryEventContext{Tick: 10, Sequence: 2}},
+			{Id: "async-response", Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 3}},
+		}, []int{0, 10, 4}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			before := cloneFactoryEvents(test.events)
+			normalized := normalizeRestoredEventTicks(test.events)
+			for index, want := range test.ticks {
+				if normalized[index].Context.Tick != want {
+					t.Fatalf("event %s tick=%d, want %d", normalized[index].Id, normalized[index].Context.Tick, want)
+				}
+				normalized[index].Context.Tick = before[index].Context.Tick
+				if !reflect.DeepEqual(normalized[index], before[index]) {
+					t.Fatalf("normalization changed an original event field other than its detached tick: %s", before[index].Id)
+				}
+			}
+			if !reflect.DeepEqual(test.events, before) {
+				t.Fatal("normalization mutated the retained event prefix")
+			}
+		})
+	}
+}
+
+func TestLiveOpeningReconstructsHistoryAndRetainsSnapshotOnlyCompatibility(t *testing.T) {
+	t.Parallel()
+	stale := &interfaces.FactoryWorldState{Tick: 10}
+	events := []interfaces.FactoryEvent{
+		{Id: "first-start", Type: interfaces.FactoryEventTypeSessionStarted, Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 1}},
+		{Id: "predecessor", Context: interfaces.FactoryEventContext{Tick: 10, Sequence: 2}},
+		{Id: "second-start", Type: interfaces.FactoryEventTypeSessionStarted, Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 3}},
+		{Id: "failure", Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 15}}
+	spec := &factoryruntime.SessionBuildSpec{}
+	assembly := &Assembly{}
+	if err := assembly.configureRestoredWorldState(spec, nil, nil, stale, events, opening); err != nil {
+		t.Fatal(err)
+	}
+	if spec.RestoredWorldState == stale || spec.RestoredWorldState == nil || spec.RestoredWorldState.Tick != 15 || opening.tick != 15 {
+		t.Fatalf("live opening used stale state: restored=%v selected tick=%d", spec.RestoredWorldState, opening.tick)
+	}
+	if !reflect.DeepEqual(spec.ResumeCanonicalEvents, events) || events[3].Context.Tick != 4 {
+		t.Fatal("live opening rewrote its retained canonical prefix")
+	}
+	snapshotOnly := &factoryruntime.SessionBuildSpec{}
+	if err := assembly.configureRestoredWorldState(snapshotOnly, nil, nil, stale, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if snapshotOnly.RestoredWorldState != stale {
+		t.Fatal("snapshot-only opening lost its supplied state")
+	}
+}
+
 func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 	events := []interfaces.FactoryEvent{
 		{Context: interfaces.FactoryEventContext{Tick: 2}},

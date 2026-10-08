@@ -17,3 +17,9 @@ func tryLockFile(file File) (bool, error) {
 func unlockFile(file File) error {
 	return unix.Flock(int(file.Fd()), unix.LOCK_UN)
 }
+
+func fileLinkCount(file File) (uint64, error) {
+	var info unix.Stat_t
+	err := unix.Fstat(int(file.Fd()), &info)
+	return uint64(info.Nlink), err
+}

@@ -115,6 +115,7 @@ var (
 func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
@@ -154,6 +155,7 @@ func NewRoot(
 	return service.NewRoot(
 		providerSessions,
 		logger,
+		runtimeLogs,
 		factoryWorkflows,
 		workflowPreview,
 		runtimeRoot,

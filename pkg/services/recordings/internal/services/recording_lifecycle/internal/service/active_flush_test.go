@@ -28,6 +28,65 @@ func manualTickerHandle(ticker *manualFlushTicker) recordings.RecordingFlushTick
 	}
 }
 
+func TestPreparedRecordingDefersPeriodicPublicationUntilActivation(t *testing.T) {
+	t.Parallel()
+	for _, abort := range []bool{false, true} {
+		t.Run(map[bool]string{false: "activate", true: "abort"}[abort], func(t *testing.T) {
+			t.Parallel()
+			ticker := newManualFlushTicker()
+			var tickerCalls int
+			written := make(chan recordings.RecordingSnapshot, 1)
+			owner := newActiveFlushRoot(func(_ string, snapshot recordings.RecordingSnapshot) error {
+				written <- snapshot
+				return nil
+			}, func(time.Duration) recordings.RecordingFlushTicker {
+				tickerCalls++
+				return manualTickerHandle(ticker)
+			})
+			request := recordings.StartRecordingRequest{
+				Enabled: true, RecordingID: "prepared", DeferPeriodic: true,
+				Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+				Target: recordings.RecordingTargetRequest{Artifact: "artifact:active"},
+			}
+			result, err := owner.StartRecording(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := result.Status.RecordingID
+			t.Cleanup(func() { stopRecording(t, owner, id) })
+			recordEvent(t, owner, id, activeFlushEvent(1))
+			if tickerCalls != 0 || recordingStatus(t, owner, id).FlushedThrough != nil {
+				t.Fatal("prepared history started background publication")
+			}
+			if abort {
+				stopRecording(t, owner, id)
+			}
+			request.DeferPeriodic = false
+			for range 2 {
+				if _, err := owner.StartRecording(request); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if abort {
+				if tickerCalls != 0 {
+					t.Fatal("aborted history reactivated publication")
+				}
+				return
+			}
+			if tickerCalls != 1 {
+				t.Fatalf("activation ticker count = %d, want one", tickerCalls)
+			}
+			ticker.ticks <- time.Now()
+			// The injected tick and writer completion are the synchronization
+			// boundary; the test runner owns the failure deadline.
+			snapshot := <-written
+			if len(snapshot.Events) != 1 || snapshot.Events[0].ID != activeFlushEvent(1).ID {
+				t.Fatalf("activated history = %#v", snapshot.Events)
+			}
+		})
+	}
+}
+
 func TestActiveRecordingUsesConfiguredAndDefaultFlushCadence(t *testing.T) {
 	t.Parallel()
 
@@ -68,7 +127,7 @@ func TestActiveFlushWritesOnlyDirtyConsistentSnapshots(t *testing.T) {
 	var snapshots []recordings.RecordingSnapshot
 	root := newActiveFlushRoot(
 		func(target string, snapshot recordings.RecordingSnapshot) error {
-			if target != "artifact:active" {
+			if target != "artifact:active:recording-active" {
 				t.Errorf("write target = %q", target)
 			}
 			mu.Lock()
@@ -444,7 +503,7 @@ func startActiveRecording(
 		Enabled:       true,
 		RecordingID:   recordingID,
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: "session-active"},
-		Target:        recordings.RecordingTargetRequest{Artifact: "artifact:active"},
+		Target:        recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("artifact:active:" + string(recordingID))},
 		FlushInterval: interval,
 	})
 	if err != nil {

@@ -755,6 +755,14 @@ type genericLockPathRecorder struct {
 	state    *genericLockPathState
 }
 
+func (coordination *genericLockPathRecorder) TryLock(ctx context.Context, path string) (io.Closer, error) {
+	return coordination.delegate.TryLock(ctx, path)
+}
+
+func (coordination *genericLockPathRecorder) TryLockTarget(ctx context.Context, target, marker string) (io.Closer, error) {
+	return coordination.delegate.TryLockTarget(ctx, target, marker)
+}
+
 func mustPlatformLockingService(t *testing.T) platformlocking.Service {
 	t.Helper()
 	service, err := platformlocking.New(platformlocking.LocalFileSystem{})

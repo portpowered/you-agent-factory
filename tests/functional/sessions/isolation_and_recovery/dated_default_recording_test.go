@@ -22,7 +22,6 @@ import (
 // artifacts, while the immutable process wiring is constructed once.
 func TestRecordingFormatsRemainObservableThroughReusableRootProcess(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	t.Run("default recording reserves distinct dated UUID artifacts and replays", func(t *testing.T) {

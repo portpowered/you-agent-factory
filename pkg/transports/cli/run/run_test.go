@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/google/uuid"
@@ -628,21 +630,21 @@ func (adapter stubRecordingsCLIAdapter) ResolveRecordPathWithContext(
 	ctx context.Context,
 	request recordingscli.InvocationRequest,
 ) (recordingscli.ResolvedRecordPath, error) {
-	return recordingscli.New().ResolveRecordPathWithContext(ctx, request)
+	return recordingscli.New(distinctRecordingPathInspector{}).ResolveRecordPathWithContext(ctx, request)
 }
 
 func (adapter stubRecordingsCLIAdapter) ReportRecordingPathOnShutdown(
 	output io.Writer,
 	resolved recordingscli.ResolvedRecordPath,
 ) {
-	recordingscli.New().ReportRecordingPathOnShutdown(output, resolved)
+	recordingscli.New(distinctRecordingPathInspector{}).ReportRecordingPathOnShutdown(output, resolved)
 }
 
 func (adapter stubRecordingsCLIAdapter) RecordingDiagnosticsLabel(
 	resolved recordingscli.ResolvedRecordPath,
 	replayPath string,
 ) string {
-	return recordingscli.New().RecordingDiagnosticsLabel(resolved, replayPath)
+	return recordingscli.New(distinctRecordingPathInspector{}).RecordingDiagnosticsLabel(resolved, replayPath)
 }
 
 func TestResolveRecordPathForRunRequiresInjectedRecordingsCLIAdapter(t *testing.T) {
@@ -659,7 +661,7 @@ func TestResolveRecordPathForRunRequiresInjectedRecordingPlanner(t *testing.T) {
 
 	_, err := resolveRecordPathForRun(RunConfig{
 		HomeDir:       "home",
-		RecordingsCLI: recordingscli.New(),
+		RecordingsCLI: recordingscli.New(distinctRecordingPathInspector{}),
 	})
 	if err == nil || err.Error() != "Recordings live recording target planner is required" {
 		t.Fatalf("resolveRecordPathForRun() error = %v, want required planner", err)
@@ -1055,4 +1057,11 @@ type inspectionFailureWriter struct {
 func (w *inspectionFailureWriter) Write(data []byte) (int, error) {
 	_, _ = w.output.Write(data)
 	return 0, w.err
+}
+
+// Run-policy fixtures use distinct virtual recording inputs.
+type distinctRecordingPathInspector struct{}
+
+func (distinctRecordingPathInspector) Stat(string) (fs.FileInfo, error) {
+	return (fstest.MapFS{"input": &fstest.MapFile{}}).Stat("input")
 }

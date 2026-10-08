@@ -109,7 +109,7 @@ func run(ctx context.Context, plan Plan, ready func()) error {
 	}
 
 	waitErr := primary.Component.(Waiter).Wait(runCtx)
-	orderlyStop := errors.Is(waitErr, context.Canceled) || errors.Is(runCtx.Err(), context.Canceled)
+	orderlyStop := CancellationOnly(waitErr) || errors.Is(runCtx.Err(), context.Canceled)
 	cancel()
 	return finish(context.Background(), started, plan, waitErr, orderlyStop)
 }
@@ -146,12 +146,12 @@ func finish(
 	orderlyStop bool,
 ) error {
 	errs := make([]error, 0, len(started)+len(plan.Resources)+1)
-	if cause != nil && !errors.Is(cause, context.Canceled) {
+	if cause != nil && !CancellationOnly(cause) {
 		errs = append(errs, cause)
 	}
 	for index := len(started) - 1; index >= 0; index-- {
 		candidate := started[index]
-		if err := candidate.Component.Stop(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := candidate.Component.Stop(ctx); err != nil && !CancellationOnly(err) {
 			errs = append(errs, fmt.Errorf("stop %s: %w", candidate.Name, err))
 		}
 	}
@@ -272,7 +272,7 @@ func (r *Runner) Stop(context.Context) error {
 	<-done
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if errors.Is(r.runErr, context.Canceled) {
+	if CancellationOnly(r.runErr) {
 		return nil
 	}
 	return r.runErr
@@ -306,4 +306,25 @@ func (f Functions) Stop(ctx context.Context) error {
 		return nil
 	}
 	return f.StopFunc(ctx)
+}
+
+// CancellationOnly reports whether every leaf cause is ordinary cancellation.
+// Joined startup or cleanup failures must survive lifecycle normalization.
+func CancellationOnly(err error) bool {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		causes := joined.Unwrap()
+		if len(causes) == 0 {
+			return false
+		}
+		for _, cause := range causes {
+			if !CancellationOnly(cause) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return CancellationOnly(wrapped.Unwrap())
+	}
+	return errors.Is(err, context.Canceled)
 }

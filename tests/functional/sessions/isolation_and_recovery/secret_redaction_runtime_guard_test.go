@@ -16,7 +16,6 @@ import (
 // TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary proves declared secrets are redacted before recording persistence.
 func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	secret := "story003-declared-secret-9e5c2a7f"
 	control := "story003-visible-control"
@@ -167,7 +166,6 @@ func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
 // controls, outputs, event lineage, cleanup, and replay.
 func TestRecordedFactoryRedactsSecretStepsAcrossLifecycle(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("story003-two-step-output"),

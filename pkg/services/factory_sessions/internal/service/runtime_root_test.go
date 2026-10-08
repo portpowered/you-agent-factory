@@ -1042,6 +1042,9 @@ func TestCurrentBoardMissingSnapshotSkipsStaleHistory(t *testing.T) {
 			}
 			// No history reader is injected: missing state must never replay the
 			// stale reference, even if its target is unreadable or absent.
+			if err := (&Root{}).selectCurrentBoardReference(t.Context(), opening); err != nil {
+				t.Fatal(err)
+			}
 			if err := (&Root{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
 				t.Fatal(err)
 			}

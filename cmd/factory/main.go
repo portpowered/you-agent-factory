@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"os"
 	"os/signal"
 	"strings"
@@ -72,7 +73,7 @@ func processExitCode(err, contextErr error, args []string) int {
 	switch {
 	case err == nil:
 		return exitSuccess
-	case errors.Is(err, context.Canceled):
+	case lifecycle.CancellationOnly(err):
 		return declaredCancellationExitCode(args)
 	case isCanonicalInvocationCancellation(err):
 		return declaredCancellationExitCode(args)

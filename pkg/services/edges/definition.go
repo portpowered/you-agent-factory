@@ -235,6 +235,7 @@ type Edges struct {
 	RecordingRemovePath              recordings.RecordingRemovePath
 	RecordingRenamePath              recordings.RecordingRenamePath
 	RecordingReadFile                recordings.RecordingReadFile
+	RecordingTargetClaim             recordings.RecordingTargetClaim
 	RecordingOpenFile                recordings.RecordingOpenFile
 	RecordingReadDirectory           func(string) ([]fs.DirEntry, error)
 	APIServerStarter                 platformhttpserver.Starter
@@ -653,6 +654,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingReadFile != nil {
 		defaults.RecordingReadFile = replacements.RecordingReadFile
+	}
+	if replacements.RecordingTargetClaim != nil {
+		defaults.RecordingTargetClaim = replacements.RecordingTargetClaim
 	}
 	if replacements.RecordingOpenFile != nil {
 		defaults.RecordingOpenFile = replacements.RecordingOpenFile
