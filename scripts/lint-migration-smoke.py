@@ -772,6 +772,19 @@ def lint_r2_seed(seed: str, binary: Path, artifacts: Path) -> None:
     results = []
     environment = dict(os.environ, GOWORK="off", GOLANGCI_LINT_CACHE=str(artifacts / "analysis-cache"))
     command = ["make", target, "GOLANGCI_PREBUILT=1"]
+    if os.name == "nt":
+        # system32/bash.exe is the WSL launcher on the worker host. Native
+        # Make requires the installed Git POSIX shell, with no spaces in its
+        # executable path; do not change any repository recipe for this host.
+        import ctypes
+        shell = Path(os.environ.get("ProgramW6432", os.environ["ProgramFiles"])) / "Git/bin/sh.exe"
+        if not shell.is_file():
+            raise RuntimeError("r2-seeds requires the installed Git POSIX shell")
+        buffer = ctypes.create_unicode_buffer(32768)
+        if not ctypes.windll.kernel32.GetShortPathNameW(str(shell), buffer, len(buffer)):
+            raise RuntimeError("cannot resolve Git shell path for native Make")
+        command.append("SHELL=" + buffer.value.replace("\\", "/"))
+        environment["PATH"] = str(shell.parent) + os.pathsep + environment["PATH"]
 
     def check(label, expected):
         started = time.monotonic()
