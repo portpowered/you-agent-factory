@@ -21,6 +21,57 @@ import (
 
 const workScopedAttemptCount = 200
 
+func testWorkerSessionsListWorkScopedFreshCommit(t *testing.T) {
+	t.Parallel()
+	c := newWorkerSessionsCLICase(t)
+	c.registerRoutes(t, "worker-session-scoped-fresh")
+	f := c.fixture
+	f.runner.mu.Lock()
+	gate := f.runner.definitions["worker-session-scoped-fresh"].gate
+	f.runner.mu.Unlock()
+	defer gate.release()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	sessionID := c.openSession(t)
+	env := functionalEnvironment(f.homeDir)
+	workID := submitWork(t, ctx, f.process, env, c.factoryDir, f.baseURL, sessionID, "worker-session-scoped-fresh")
+	active := waitForWorkerSessionState(t, ctx, f.process, env, c.factoryDir, f.baseURL, sessionID, workID, "RUNNING")
+	inputs := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL,
+		"worker-sessions", "list", "--session", sessionID, "--work-id", workID, "--output", "json")
+	var before workerSessionListJSON
+	decodeCLIJSON(t, inputs, &before)
+	if len(before.Sessions) != 1 || before.Sessions[0].WorkerSessionID != active.WorkerSessionID || before.Sessions[0].TokenUsage != nil {
+		t.Fatalf("uncommitted provider facts appeared: %+v", before)
+	}
+	gate.release()
+	endpoint := f.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
+	waitForScopedUsageCommit(t, ctx, endpoint)
+	after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+	var committed workerSessionListJSON
+	decodeCLIJSON(t, after, &committed)
+	if len(committed.Sessions) != 1 || committed.Sessions[0].WorkerSessionID != active.WorkerSessionID || committed.Sessions[0].State != "COMPLETED" {
+		t.Fatalf("subsequent read lost committed identity/state: %+v", committed)
+	}
+	assertScopedCapturedUsage(t, committed.Sessions[0])
+}
+
+func waitForScopedUsageCommit(t *testing.T, ctx context.Context, endpoint string) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		listed := support.GetJSON[workerSessionListJSON](t, endpoint)
+		if len(listed.Sessions) == 1 && listed.Sessions[0].State == "COMPLETED" && listed.Sessions[0].TokenUsage != nil {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("usage never committed: %v", ctx.Err())
+		}
+	}
+}
+
 func workScopedRoute(index int) string { return fmt.Sprintf("worker-session-scoped-%03d", index) }
 
 // The customer authors a sequence of workstations over one Work. Each attempt

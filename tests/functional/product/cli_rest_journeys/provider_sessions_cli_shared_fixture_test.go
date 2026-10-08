@@ -287,6 +287,7 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
 	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
+	addSuccessRoute("worker-session-scoped-fresh", "session_fixture_codex_scoped_fresh")
 	for index := range workScopedAttemptCount {
 		addSuccessRoute(workScopedRoute(index), fmt.Sprintf("session_fixture_codex_scoped_%03d", index))
 	}
@@ -301,9 +302,10 @@ func newWorkerSessionsCLISharedRouteRunner(
 
 	fleetGate := newProviderCommandRouteGate()
 	fleetRoutes := map[string]*providerCommandRouteGate{
-		"worker-session-fleet-alpha": fleetGate,
-		"worker-session-fleet-beta":  fleetGate,
-		"worker-session-fleet-gamma": fleetGate,
+		"worker-session-scoped-fresh": newProviderCommandRouteGate(),
+		"worker-session-fleet-alpha":  fleetGate,
+		"worker-session-fleet-beta":   fleetGate,
+		"worker-session-fleet-gamma":  fleetGate,
 	}
 	return newProviderCommandRouteRunnerWithDynamicGates(routes, fleetRoutes), fleetGate
 }
