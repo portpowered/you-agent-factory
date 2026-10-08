@@ -204,6 +204,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	result := liveStartResult(session)
+	result.StartupRecovery = products.startupRecovery
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
 	}
@@ -405,6 +406,7 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.Logger = products.logger
 	bound.Clock = products.clock
 	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
+	bound.StartupRecovery = products.startupRecovery
 	bound.OperatorSettingsPath = products.operatorSettingsPath
 	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)

@@ -324,13 +324,36 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t 
 	}
 }
 
+type classifiedBoardFailure string
+
+func (failure classifiedBoardFailure) Error() string                { return "safe probe failure" }
+func (failure classifiedBoardFailure) SnapshotFailureCause() string { return string(failure) }
+
+type quarantineOpeningOwner struct {
+	durableexecution.Service
+	calls      int
+	failure    error
+	onPreserve func()
+}
+
+func (owner *quarantineOpeningOwner) QuarantineCurrentBoard(ctx context.Context, _ time.Time, _ string) (string, string, error) {
+	owner.calls++
+	if owner.onPreserve != nil {
+		owner.onPreserve()
+	}
+	if owner.failure != nil {
+		return "", "", owner.failure
+	}
+	return "selected.json", "selected.json.unreadable.archive", nil
+}
+
 func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMissingBoardRead(t *testing.T) {
 	t.Parallel()
 	const sessionID = "~default"
 	projectRoot := t.TempDir()
 	store, err := runtimepersist.NewLazyProjectStore(
 		projectRoot,
-		platformfilesystem.Local{},
+		platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}),
 	)
 	if err != nil {
 		t.Fatalf("NewLazyProjectStore: %v", err)

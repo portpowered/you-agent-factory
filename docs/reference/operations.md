@@ -81,7 +81,40 @@ Unreadable or corrupt artifacts are skipped; startup never infers identity from 
 Successful adoption writes one stderr line with the skipped count and JSON-quoted paths, without recording contents or decoder causes.
 Matching histories with equally newest or unknown modification times stop startup because their order is ambiguous.
 Zero readable matches or a recording inventory failure also stop startup without activating workers or replacing retained files.
-A missing or damaged recording selected by an existing reference or explicit path remains fatal.
+A missing recording selected by an existing reference remains fatal when a durable snapshot exists.
+Explicitly selected missing or damaged recordings remain fatal.
+
+Foreign or ambiguous history stops startup without activating workers or replacing retained files.
+
+If the selected durable snapshot is absent, startup creates an empty board without a recovery warning.
+An old reference does not cause replay when that snapshot is absent.
+
+For implicit continuous-server startup, unreadable snapshots are preserved before an empty board starts.
+This includes truncated JSON, invalid snapshot schemas, read failures, and snapshots larger than 67,108,864 bytes.
+The size limit is inclusive.
+Startup moves the snapshot and existing board reference to separate archives without replacing earlier archives.
+Each archive uses `<path>.unreadable.<UTC YYYYMMDDTHHMMSSfffffffffZ>.<unique-id>`; collisions receive a numbered suffix.
+Unreadable local board references also start an empty board after preservation.
+A corrupt recording permits fallback only when a valid repository reference selects it inside the current profile's recording directory.
+Startup archives that recording and related snapshot/reference files before publishing a fresh board.
+Foreign selections and ambiguous histories still stop startup without fallback.
+Previous healthy recordings remain available.
+If preservation fails, startup stops before readiness or worker activation.
+
+Without `--debug`, stderr prints one line:
+
+```text
+Durable state "<path>" quarantined as "<archive>": <safe cause>. Started an empty board.
+```
+
+`GET /status` and `GET /factory-sessions/~default/status` include the same condition in `startupRecovery`.
+Its fields are `code`, `file`, `cause`, and `quarantinedFile`.
+The code is `DURABLE_STATE_QUARANTINED`.
+Causes are `INVALID_JSON`, `INVALID_SCHEMA`, `SIZE_LIMIT`, or `READ_FAILED`; damaged content is never included.
+The condition remains until that Factory Session closes and is absent after a healthy restart.
+New Work persists normally on the fresh board.
+Archives can contain prompts or credentials; preserve them securely when investigating the failure.
+Startup does not repair or partially recover damaged snapshots.
 
 Local startup and recording-load failures print safe cause lines to stderr without `--debug`.
 The coded error stays first, followed by bounded `cause[0]=...` lines.

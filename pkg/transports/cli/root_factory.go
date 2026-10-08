@@ -232,6 +232,7 @@ func configureRunFactoryOutput(
 	configureRunProgressOutput(cmd, cfg, basePolicy)
 	configureRunFactoryStreams(cmd, cfg, cleanInvocation, textInvocation, runPolicy)
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
+	cfg.StartupRecoveryOutput = cmd.ErrOrStderr()
 	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
 	cfg.BoardAdoptionOutput = cmd.ErrOrStderr()
 	cfg.JSONOutput = globals.json

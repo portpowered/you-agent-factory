@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -379,7 +380,7 @@ const (
 	// Session snapshot before the persistence writer is invoked. The limit is
 	// deliberately a byte count because JSON encoding and filesystem writes are
 	// byte-oriented operations.
-	defaultPersistedSnapshotMaxBytes = 64 << 20
+	defaultPersistedSnapshotMaxBytes = runtimepersist.SnapshotMaxBytes
 )
 
 // SnapshotSizeLimitError reports a durable snapshot rejected before any

@@ -92,6 +92,8 @@ type sessionRuntimeOpening struct {
 	boardHistoryOpening         currentBoardHistoryOpening
 	skippedBoardRecordings      []string
 	hasCurrentBoardReference    bool
+	emptyCurrentBoard           bool
+	startupRecovery             *currentBoardStartupRecovery
 	initial                     *factoryruntime.RuntimeInitialOpening
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
@@ -320,6 +322,9 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
 		return err
 	}
+	if opening.emptyCurrentBoard {
+		return nil
+	}
 	if strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
 		input := opening.configured.Recordings.ResumeInput
 		opening.resumeInput = &input
@@ -352,6 +357,9 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 			opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
 		)
 		if err != nil {
+			if opening.usesImplicitCurrentBoard() {
+				return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
+			}
 			logCurrentBoardHistoryFailure(
 				opening.logger,
 				opening.sessionID,
@@ -417,6 +425,11 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	}
 	if err := opening.publishCurrentBoardReference(ctx); err != nil {
 		return err
+	}
+	if recovery := opening.startupRecovery; recovery != nil && opening.logger != nil {
+		opening.logger.Warn("unreadable durable state quarantined; started an empty board",
+			zap.String("file", recovery.file), zap.String("quarantined_file", recovery.quarantinedFile),
+			zap.String("cause", recovery.cause))
 	}
 	opening.warnMissingBoardHistory()
 	return nil
@@ -626,6 +639,12 @@ func (r *Root) bindSessionOpeningProducts(
 	))
 	opened.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
 	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
+	if recovery := opening.startupRecovery; recovery != nil {
+		opened.startupRecovery = &factorysessions.StartupRecovery{
+			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
+			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
+		}
+	}
 	opened.operatorSettingsPath = opening.operatorSettingsPath
 	opened.workerSettings = opening.durableExecution.WorkerSettings
 	opened.replayMetadataWarnings = append(

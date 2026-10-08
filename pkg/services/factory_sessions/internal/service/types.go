@@ -31,6 +31,7 @@ func recoveryRecordingID(recordingID string) string {
 // runtimeProducts is the invocation-local output of Factory Runtime assembly.
 // It is consumed by canonical Start and never stored as another session graph.
 type runtimeProducts struct {
+	startupRecovery        *factorysessions.StartupRecovery
 	process                roles.ProcessRuntime
 	lifecycle              roles.LifecycleRuntime
 	sessions               roles.SessionGateway

@@ -251,6 +251,7 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 	}
 	return runtimePersistenceFileSystem{
 		directories: platformfilesystem.Local{},
+		recovery:    platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}),
 		storage:     platformreplay.NewLocal(runtime.GOOS),
 	}
 }
@@ -259,7 +260,8 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 // lifecycle effect while routing snapshot bytes through replay.Storage's
 // temp-write, sync, close, and replace implementation.
 type runtimePersistenceFileSystem struct {
-	directories platformfilesystem.DirectoryCreator
+	directories platformfilesystem.Local
+	recovery    platformfilesystem.Recovery
 	storage     platformreplay.Storage
 }
 
@@ -269,6 +271,14 @@ func (files runtimePersistenceFileSystem) MkdirAll(path string, mode fs.FileMode
 
 func (files runtimePersistenceFileSystem) ReadFile(path string) ([]byte, error) {
 	return files.storage.ReadFile(path)
+}
+
+func (files runtimePersistenceFileSystem) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return files.recovery.ReadFileBounded(path, limit)
+}
+
+func (files runtimePersistenceFileSystem) RenameNoReplace(source, destination string) error {
+	return files.recovery.RenameNoReplace(source, destination)
 }
 
 func (files runtimePersistenceFileSystem) WriteFile(path string, data []byte, _ fs.FileMode) error {

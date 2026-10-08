@@ -73,11 +73,12 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot could not be read",
+		cause := "READ_FAILED"
+		var sizeErr interface{ ReadSizeLimit() int64 }
+		if errors.As(err, &sizeErr) {
+			cause = "SIZE_LIMIT"
 		}
+		return false, snapshotProbeFailure(id, cause, "persisted session snapshot could not be read")
 	}
 
 	persistedSessionID, err := inspectDurableSnapshot(ctx, snapshot)
@@ -85,18 +86,14 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 		if cancelErr := ctx.Err(); cancelErr != nil {
 			return false, cancelErr
 		}
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot is corrupted and cannot be inspected",
+		cause := "INVALID_SCHEMA"
+		if !json.Valid(snapshot) {
+			cause = "INVALID_JSON"
 		}
+		return false, snapshotProbeFailure(id, cause, "persisted session snapshot is corrupted and cannot be inspected")
 	}
 	if strings.TrimSpace(persistedSessionID) != id {
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot has no matching session identity",
-		}
+		return false, snapshotProbeFailure(id, "INVALID_SCHEMA", "persisted session snapshot has no matching session identity")
 	}
 	return true, nil
 }

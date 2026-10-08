@@ -560,10 +560,56 @@ func TestCurrentBoardUnavailableScopeDoesNotUsePeerStore(t *testing.T) {
 
 type currentBoardScopeStore struct {
 	durableProbeStore
-	artifact string
-	factory  string
-	reads    int
-	writes   int
+	artifact        string
+	factory         string
+	reads           int
+	writes          int
+	quarantines     int
+	quarantineError error
+}
+
+func (store *currentBoardScopeStore) SnapshotPath(id string) string {
+	return store.artifact + "/" + id + ".json"
+}
+
+func (store *currentBoardScopeStore) QuarantineCurrentBoard(ctx context.Context, _ time.Time, _ string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	store.quarantines++
+	if store.quarantineError != nil {
+		return "", store.quarantineError
+	}
+	return store.artifact + "/archive", nil
+}
+
+func TestCurrentBoardQuarantineUsesOnlyAcquiredDefaultScope(t *testing.T) {
+	t.Parallel()
+	selected := &currentBoardScopeStore{artifact: "selected"}
+	peer := &currentBoardScopeStore{artifact: "peer"}
+	router := NewScopePersistence(nil)
+	router.scopes["~default"] = &durableScope{store: selected}
+	router.scopes["peer"] = &durableScope{store: peer}
+	service := &JavaScriptRuntimeService{persistence: router}
+	file, archive, err := service.QuarantineCurrentBoard(t.Context(), time.Time{}, "id")
+	if err != nil || file != "selected/~default.json" || archive != "selected/archive" || selected.quarantines != 1 || peer.quarantines != 0 {
+		t.Fatalf("quarantine = %q, %q, %v; selected=%d peer=%d", file, archive, err, selected.quarantines, peer.quarantines)
+	}
+	failure := errors.New("preservation denied")
+	selected.quarantineError = failure
+	file, archive, err = service.QuarantineCurrentBoard(t.Context(), time.Time{}, "id")
+	if !errors.Is(err, failure) || file != "" || archive != "" {
+		t.Fatalf("failed quarantine = %q, %q, %v", file, archive, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, _, err := service.QuarantineCurrentBoard(ctx, time.Time{}, "id"); !errors.Is(err, context.Canceled) || selected.quarantines != 2 {
+		t.Fatalf("canceled quarantine = %v", err)
+	}
+	router.scopes["~default"].retiring = true
+	if _, _, err := service.QuarantineCurrentBoard(t.Context(), time.Time{}, "id"); !errors.Is(err, ErrSessionNotFound) || peer.quarantines != 0 {
+		t.Fatalf("retired quarantine = %v", err)
+	}
 }
 
 func (store *currentBoardScopeStore) LoadCurrentBoard(ctx context.Context, factoryDirectory string) (string, error) {

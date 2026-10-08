@@ -37,3 +37,21 @@ func FactoryStatusToAPI(status factoryruntime.FactoryStatus) factoryapi.StatusRe
 	}
 	return response
 }
+
+// FactorySessionStatusToAPI adds the preserved startup condition to runtime status.
+func FactorySessionStatusToAPI(status FactorySessionStatus) factoryapi.StatusResponse {
+	response := FactoryStatusToAPI(status.FactoryStatus)
+	if recovery := status.StartupRecovery; recovery != nil {
+		response.StartupRecovery = &struct {
+			Cause           factoryapi.StatusResponseStartupRecoveryCause `json:"cause"`
+			Code            factoryapi.StatusResponseStartupRecoveryCode  `json:"code"`
+			File            string                                        `json:"file"`
+			QuarantinedFile string                                        `json:"quarantinedFile"`
+		}{
+			Cause: factoryapi.StatusResponseStartupRecoveryCause(recovery.Cause),
+			Code:  factoryapi.StatusResponseStartupRecoveryCode(recovery.Code),
+			File:  recovery.File, QuarantinedFile: recovery.QuarantinedFile,
+		}
+	}
+	return response
+}

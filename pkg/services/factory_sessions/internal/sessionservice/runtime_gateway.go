@@ -29,6 +29,24 @@ func (a *Assembly) ResolveFactorySessionRuntimeScope(sessionID string) (string, 
 	return livesession.CanonicalID(session), session.IsDefault, nil
 }
 
+// StartupRecoveryForSession returns a detached diagnostic for the selected live
+// session. Closing the session removes this diagnostic with its runtime state.
+func (a *Assembly) StartupRecoveryForSession(ctx context.Context, sessionID string) (*factorysessions.StartupRecovery, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	session := a.Resolve(sessionID)
+	if session == nil {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	state := runtimebinding.SessionStateFrom(session)
+	if state == nil || state.StartupRecovery == nil {
+		return nil, nil
+	}
+	recovery := *state.StartupRecovery
+	return &recovery, nil
+}
+
 // ObserveForSession routes a status read through the live-runtime capability
 // bound to the requested Factory Session.
 func (s *Service) ObserveForSession(
