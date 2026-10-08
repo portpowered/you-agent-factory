@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -141,6 +143,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		})
 	}
 
+	t.Run("fixed observations select empty and completed Work", func(t *testing.T) {
+		t.Parallel()
+		testFixedOpeningReads(t, sessions, api.WaitForURL(t))
+	})
 	t.Run("failed resource opening retries with the same identity", func(t *testing.T) {
 		t.Parallel()
 		testFailedInitialOpeningRetry(t, sessions, process, failed, effects)
@@ -497,17 +503,18 @@ func assertInitialOpeningNotPublished(t *testing.T, sessions factorysessions.Ser
 	}
 }
 
-func assertInitialOpeningInvocation(t *testing.T, sessions factorysessions.Service, sessionID string) {
+func assertInitialOpeningInvocation(t *testing.T, sessions factorysessions.Service, sessionID string) factorysessions.InvocationResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
 	defer cancel()
 	result, err := sessions.Invoke(ctx, factorysessions.SessionInvokeRequest{
 		SessionID: sessionID, ContentProvided: true,
-		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "prove this session remains usable"}},
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: sessionID + " prove this session remains usable"}},
 	})
 	if err != nil || result.Status != factorysessions.InvocationTerminalStatusCompleted || len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "initial opening COMPLETE" {
 		t.Fatalf("Invoke %s = %#v, %v, want completed controlled worker output", sessionID, result, err)
 	}
+	return result
 }
 
 func initialOpeningHistory(t *testing.T, sessions factorysessions.Service, sessionID string) *factorydefinitions.FactoryEventStream {
@@ -640,4 +647,52 @@ func (effects *initialOpeningEffects) forScenario(scenario initialOpeningScenari
 		}
 	}
 	return result
+}
+
+func testFixedOpeningReads(t *testing.T, sessions factorysessions.Service, baseURL string) {
+	t.Helper()
+	scenario := newInitialOpeningScenario(t)
+	request := scenario.request()
+	request.RuntimeSelection.Recording.RecordPath = filepath.Join(t.TempDir(), "selected.jsonl")
+	startInitialOpeningSession(t, sessions, request)
+	peer := scenario.request()
+	peer.SessionID = scenario.peerID
+	peer.FolderPath = scenario.peerDir
+	peer.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	peer.RuntimeSelection.DefinitionSourcePath = filepath.Join(scenario.peerDir, "factory.json")
+	peer.RuntimeSelection.ExecutionBaseDir = scenario.peerDir
+	peer.RuntimeSelection.Recording.RecordPath = filepath.Join(t.TempDir(), "peer.jsonl")
+	startInitialOpeningSession(t, sessions, peer)
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+		if len(listed.Results) != 0 {
+			t.Fatalf("empty selected Work %s = %#v", id, listed)
+		}
+		_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive})
+		if !errors.Is(err, factorysessions.ErrResultUnavailable) {
+			t.Fatalf("empty Petri result %s = %v", id, err)
+		}
+	}
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		assertInitialOpeningInvocation(t, sessions, id)
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+		if len(listed.Results) != 1 || listed.Results[0].WorkId == nil || fmt.Sprint(listed.Results[0].Payload) != id+" prove this session remains usable" {
+			t.Fatalf("selected Work %s = %#v", id, listed)
+		}
+		detail := support.GetJSON[factoryapi.WorkRead](t, support.SessionWorkURL(baseURL, id, "/work/"+url.PathEscape(*listed.Results[0].WorkId)))
+		if detail.WorkId == nil || *detail.WorkId != *listed.Results[0].WorkId || fmt.Sprint(detail.Payload) != id+" prove this session remains usable" || detail.State == nil || detail.State.Name != "complete" {
+			t.Fatalf("selected detail = %#v", detail)
+		}
+		for i := 0; i < 2; i++ {
+			_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive})
+			if !errors.Is(err, factorysessions.ErrResultUnavailable) {
+				t.Fatalf("completed Petri result %s = %v", id, err)
+			}
+		}
+		initialOpeningHistory(t, sessions, id)
+	}
+	_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: "unknown-fixed-observation", Mode: factorysessions.SessionOperationModeLive})
+	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing selected result = %v", err)
+	}
 }

@@ -403,12 +403,9 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.ModelsScope = products.modelsScope
 	bound.SetWorkerSessions(products.workerSessions)
 	bound.Logger = products.logger
-	bound.Reader = products.reader
-	bound.Projections = products.projections
 	bound.Clock = products.clock
 	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
 	bound.OperatorSettingsPath = products.operatorSettingsPath
-	bound.Recordings = products.recordings
 	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
 	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata

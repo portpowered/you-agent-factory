@@ -492,11 +492,15 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	oldInstance := &hostedInstanceFake{}
 	oldHandle := newHostedHandleFake(oldInstance)
+	recovery := &recordings.ResumeRecoveryMetadata{}
+	warnings := []recordings.MetadataMismatchWarning{{}}
+	clock := platformclock.Real{}
 	preparedSpec := &struct{ Name string }{Name: "prepared"}
 	sessions.Register(sessionruntime.Registration{
 		SessionID: "session-1", FactoryDir: "/old", FolderPath: "/workspace",
 		ExecutionBaseDir: "/old-execution", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "alpha"},
-		Handle:  &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec},
+		Handle: &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec, Clock: clock,
+			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl"},
 		Default: false, Project: "project", Select: true,
 	})
 	original := sessions.Resolve("session-1")
@@ -546,6 +550,16 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	newHandle := runtimebinding.HandleFromSession(updated)
 	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
 	assertActiveReplacement(t, &runtimeState, updated, newHandle)
+	bound := runtimebinding.SessionStateFrom(updated)
+	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" ||
+		len(bound.ReplayMetadataWarnings) != 1 || bound.ResumeRecoveryMetadata == nil || bound.ResumeRecoveryMetadata == recovery {
+		t.Fatalf("replacement lost scoped facts or failed to detach recovery metadata: %#v", bound)
+	}
+	bound.ReplayMetadataWarnings[0] = recordings.MetadataMismatchWarning{}
+	if &bound.ReplayMetadataWarnings[0] == &warnings[0] {
+		t.Fatal("replacement aliases prior warning slice")
+	}
+
 	newHandle.CancelRun()
 	<-newHandle.RunDoneCh()
 }

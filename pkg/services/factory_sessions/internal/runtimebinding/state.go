@@ -168,14 +168,11 @@ type SessionState struct {
 	FactoryRuntime factoryruntime.Service
 	ModelsScope    models.RuntimeScopeRef
 	Logger         *zap.Logger
-	Reader         roles.RuntimeReader
-	Projections    recordings.ProjectionService
 	Clock          factoryruntime.Clock
 	// ProjectionBackendScope retains the opening override as a keyed fact.
 	ProjectionBackendScope string
 	CurrentBoardRecordPath string
 	OperatorSettingsPath   string
-	Recordings             recordings.Service
 	SkippedBoardRecordings []string
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
@@ -211,12 +208,9 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	s.SetOperatorDefaults(previous.OperatorDefaults())
 	s.SetWorkerSettings(previous.WorkerSettingsSnapshot())
 	s.Logger = previous.Logger
-	s.Reader = previous.Reader
-	s.Projections = previous.Projections
 	s.Clock = previous.Clock
 	s.CurrentBoardRecordPath = previous.CurrentBoardRecordPath
 	s.OperatorSettingsPath = previous.OperatorSettingsPath
-	s.Recordings = previous.Recordings
 	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), previous.ReplayMetadataWarnings...)
 	if previous.ResumeRecoveryMetadata != nil {
 		metadata := *previous.ResumeRecoveryMetadata

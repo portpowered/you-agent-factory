@@ -41,9 +41,6 @@ type runtimeProducts struct {
 	factoryRuntime         factoryruntime.Service
 	modelsScope            models.RuntimeScopeRef
 	workerSessions         workersessions.ObservationService
-	reader                 roles.RuntimeReader
-	projections            recordings.ProjectionService
-	recordings             recordings.Service
 	clock                  factoryruntime.Clock
 	logger                 *zap.Logger
 	diagnostics            factoryruntime.RuntimeLogDiagnostics
@@ -99,8 +96,6 @@ func assembleRuntimeProducts(
 	startup runtimeports.RuntimeInstance,
 	lifecycle roles.LifecycleRuntime,
 	process roles.ProcessRuntime,
-	reader roles.RuntimeReader,
-	projections recordings.ProjectionService,
 	directory string,
 	runtimeInstanceID string,
 	backendScopeID string,
@@ -132,8 +127,7 @@ func assembleRuntimeProducts(
 		factoryRuntime:  factoryRuntime,
 		modelsScope:     modelsScope,
 		workerSessions:  workerSessions,
-		reader:          reader, projections: projections,
-		logger: startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
+		logger:          startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
 		directory: directory, runtimeInstanceID: runtimeInstanceID, backendScopeID: backendScopeID,
 		closeArtifacts: closeResources,
 	}

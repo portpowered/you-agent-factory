@@ -358,13 +358,6 @@ func lifecycleEventFromCanonical(event recordings.CanonicalEvent) recordings.Lif
 	}
 }
 
-func (service *combinedService) Projection() recordings.ProjectionService {
-	if service == nil {
-		return nil
-	}
-	return service.ProjectionService
-}
-
 // ReconstructCanonicalFactoryWorldState publishes the typed canonical
 // reduction through the Recordings root without exposing its implementation
 // package to runtime callers.

@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -195,6 +196,7 @@ func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (
 }
 
 type rootTestInputs struct {
+	sessions                     []sessionruntime.Registration
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
@@ -251,6 +253,9 @@ func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
 		return nil, err
 	}
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, in.clock, in.eventIDs, in.sessionIDs, in.responseStreams)
+	for _, registration := range in.sessions {
+		state.Register(registration)
+	}
 	streams := stream.NewManagerWithResponseService(state, sessionruntime.NewResponseStreamObserver(nil), responses, in.responseStreams)
 	return legacyservice.NewAssembly(
 		legacyservice.NewWithLiveChangeCoordinator(legacyservice.SessionServiceHost(state, nil, nil, nil, "", in.identity, in.clock, nil, in.newJavaScriptCheckpointStore, nil), streams, nil, in.sessionResultProjection, in.responseStreams, in.liveChangeCoordinator, legacyservice.NewRecordedHistory(in.resolveHome, in.recordedSessionInventory), nil, nil, nil, nil),
@@ -369,3 +374,64 @@ var _ responsestreamservice.Service = rootTestResponseStreams{}
 type rootTestClock struct{}
 
 func (rootTestClock) Now() time.Time { return time.Unix(0, 0) }
+
+// Presentation selection is tested with controlled session facts and capabilities;
+// no runtime activation, files or composed application participates.
+func TestFixedObservationPresentationPreservesCapabilitiesAndScopedFacts(t *testing.T) {
+	t.Parallel()
+	inputs := validRootInputs(livechange.NewCoordinator())
+	for _, id := range []string{"selected", "peer"} {
+		inputs.sessions = append(inputs.sessions, sessionruntime.Registration{SessionID: id,
+			Handle: &runtimebinding.SessionState{Process: historicalReplayProcessRuntime{},
+				Clock: rootTestClock{}, Logger: zap.NewNop(), OperatorSettingsPath: id + ".yaml",
+				Diagnostics: factoryruntime.RuntimeLogDiagnostics{MetricsRootDir: id + "-metrics"}}})
+	}
+	root, err := inputs.call()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("controlled observation failure")
+	root.factorySessionsRuntimeAssembly = fixedObservationReader{err: cause}
+	root.recordingProjections = fixedObservationProjection{err: cause}
+	root.recordingsService = &orderlyRecordingService{err: cause}
+	for _, id := range []string{"selected", "peer"} {
+		presentation, err := root.SessionPresentation(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if presentation.OperatorSettingsPath != id+".yaml" || presentation.MetricsRootDir != id+"-metrics" ||
+			!presentation.Clock.Now().Equal((rootTestClock{}).Now()) || presentation.Logger == nil {
+			t.Fatalf("scoped presentation %s = %#v", id, presentation)
+		}
+		if err := presentation.Reader.WithRuntimeRead(func(*factorysessions.LiveRuntime) error { return nil }); !errors.Is(err, cause) {
+			t.Fatalf("read cause = %v", err)
+		}
+		if _, err := presentation.Projections.ReconstructFactoryWorldState(nil, 0); !errors.Is(err, cause) {
+			t.Fatalf("projection cause = %v", err)
+		}
+		if _, err := presentation.Recordings.FlushRecording(recordings.FlushRecordingRequest{RecordingID: recordings.RecordingID(id)}); !errors.Is(err, cause) {
+			t.Fatalf("recording cause = %v", err)
+		}
+	}
+	if _, err := root.SessionPresentation("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing presentation = %v", err)
+	}
+}
+
+type fixedObservationReader struct {
+	roles.RuntimeAssembly
+	err error
+}
+
+func (r fixedObservationReader) WithRuntimeRead(func(*factorysessions.LiveRuntime) error) error {
+	return r.err
+}
+
+type fixedObservationProjection struct {
+	recordings.ProjectionService
+	err error
+}
+
+func (p fixedObservationProjection) ReconstructFactoryWorldState([]recordings.FactoryEvent, int) (recordings.FactoryWorldState, error) {
+	return recordings.FactoryWorldState{}, p.err
+}

@@ -275,7 +275,6 @@ type RuntimeScopeService interface {
 	// contract and never the reducer or projection implementation.
 	ReconstructCanonicalFactoryWorldState([]FactoryEvent, int) (FactoryWorldState, error)
 	LoadResumeInput(LoadResumeInputRequest) (LoadResumeInputResult, error)
-	Projection() ProjectionService
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (
 		providers.Service,

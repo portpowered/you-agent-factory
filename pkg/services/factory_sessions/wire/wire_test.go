@@ -749,5 +749,6 @@ func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveCha
 		nil,
 		NewHistoricalReplayBehavior(),
 		liveChangeCoordinator,
+		nil,
 	)
 }
