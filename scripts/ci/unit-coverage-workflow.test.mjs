@@ -34,11 +34,14 @@ test("unit coverage owns the only required backend unit execution", () => {
 
 test("the ACP replacement SDK and delivered-response boundary retain explicit CI gates", () => {
 	const workflow = read(".github/workflows/ci.yml");
-	const sdkStep = stepSection(backendCoverageJob(workflow),
-		"      - name: Run retained ACP SDK regression tests",
-		"      - name: Save unit coverage Go build and test cache");
+	const job = backendCoverageJob(workflow);
+	const sdkStep = stepSection(job,
+		"      - name: Run backend coverage",
+		"      - name: Verify Wire generation");
 	assert.match(sdkStep, /if: matrix\.suite == 'unit'/);
-	assert.match(sdkStep, /run: make test-acp-sdk/);
+	assert.match(sdkStep, /go test -p=4 [^\n]*\\\n\s+\.\/third_party\/acp-go-sdk\/\.\.\./);
+	assert.doesNotMatch(job, /go test[^\n]* -race/);
+	assert.doesNotMatch(workflow, /backend-models-verification|Backend Models Wire and Race/);
 	const processStep = stepSection(workflow,
 		"      - name: Run delivered ACP response integration",
 		"      - name: Run pinned real ACP integration");
@@ -94,15 +97,15 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 	assert.doesNotMatch(buildCache, /functional-coverage-build-/);
 
 	const save = stepSection(job, "      - name: Save unit coverage Go build and test cache", "      # This existing coverage tier");
-	assert.match(save, /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true'/);
-	assert.match(job, /find ~\/\.cache\/go-build -type f ! -newermt "\$JOB_START" -delete/);
+	assert.match(save, /if: always\(\) && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true' && \(\(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\) \|\| !contains\(steps\.unit-go-build-cache\.outputs\.cache-matched-key, 'unit-coverage-build-v2-'\)\)/);
+	assert.match(job, /find ~\/\.cache\/go-build -type f -mtime \+3 -delete/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);
 	assert.match(save, /key: \$\{\{ steps\.unit-go-build-cache\.outputs\.cache-primary-key \}\}/);
 });
 
 test("unit coverage pins hosted package concurrency while local callers retain platform defaults", () => {
 	const workflow = backendCoverageJob(read(".github/workflows/ci.yml"));
-	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Save unit coverage Go build and test cache");
+	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Verify Wire generation");
 	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "4"/);
 
 	const makefile = read("Makefile");

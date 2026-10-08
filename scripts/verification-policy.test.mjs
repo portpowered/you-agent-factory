@@ -13,7 +13,6 @@ const laneNames = [
 	"README",
 	"Frontend",
 	"Backend",
-	"Backend Models Wire and Race",
 	"Backend Conformance",
 	"Backend Lint",
 	"Workflow Lint",
@@ -68,7 +67,7 @@ test("API-only PR requires both independent proofs and permits skipped reusable 
 		base[`${prefix}_RESULT`] = "skipped";
 	}
 	for (const suffix of ["COMPONENT", "COVERAGE", "BROWSER", "STORYBOOK"]) base[`FRONTEND_${suffix}_RESULT`] = "skipped";
-	Object.assign(base, { BACKEND_MODELS_RESULT: "skipped", API_CANDIDATE_RESULT: "success",
+	Object.assign(base, { API_CANDIDATE_RESULT: "success",
 		RUN_API: "true", API_RESULT: "success", PACKAGED_CANDIDATE_RESULT: "skipped" });
 	const invoke = (env) => spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], { encoding: "utf8", env });
 	assert.equal(invoke(base).status, 0);
@@ -100,53 +99,6 @@ test("a selected lane that is skipped, missing, or failed fails closed", () => {
 	}
 });
 
-test("selected Models verification requires successful hosted Wire and race results", () => {
-	for (const result of ["success", "skipped", "", "cancelled", "timed_out", "failure"]) {
-		const evaluation = evaluateVerificationPolicy(
-			policy({
-				lanes: [
-					lane("Backend", true, "success"),
-					lane("Backend Models Wire and Race", true, result),
-				],
-			}),
-		);
-		assert.equal(evaluation.ok, result === "success");
-		if (result !== "success") {
-			assert.match(evaluation.failures[0], /Backend Models Wire and Race was selected/);
-		}
-	}
-});
-
-test("policy CLI consumes the hosted Models result independently of backend coverage", () => {
-	const env = {
-		...process.env,
-		GITHUB_STEP_SUMMARY: "",
-		CLASSIFICATION_RESULT: "success",
-		CLASSIFICATION: "backend",
-		PACKAGE_WORKFLOW_RESULT: "skipped",
-		RUN_CANDIDATES: "false",
-	};
-	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
-		env[`RUN_${prefix}`] = "false";
-		env[`${prefix}_RESULT`] = "skipped";
-	}
-	for (const suffix of ["COMPONENT", "COVERAGE", "BROWSER", "STORYBOOK"]) {
-		env[`FRONTEND_${suffix}_RESULT`] = "skipped";
-	}
-	env.RUN_BACKEND = "true";
-	env.BACKEND_RESULT = "success";
-	for (const result of ["success", "failure", "skipped", ""]) {
-		const child = spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], {
-			encoding: "utf8",
-			env: { ...env, BACKEND_MODELS_RESULT: result },
-		});
-		assert.equal(child.status, result === "success" ? 0 : 1, child.stderr);
-		if (result !== "success") {
-			assert.match(child.stderr, /Backend Models Wire and Race was selected/);
-		}
-	}
-});
-
 test("policy CLI fails closed for shared Frontend proof and independent frontend jobs", () => {
 	const env = { ...process.env, GITHUB_STEP_SUMMARY: "",
 		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend",
@@ -156,7 +108,6 @@ test("policy CLI fails closed for shared Frontend proof and independent frontend
 		env[`RUN_${prefix}`] = "false";
 		env[`${prefix}_RESULT`] = "skipped";
 	}
-	env.BACKEND_MODELS_RESULT = "skipped";
 	const results = ["success", "failure", "cancelled", "timed_out", "skipped", ""];
 	for (const selected of ["true", "false"]) {
 		for (const result of results) {
