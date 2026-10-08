@@ -136,7 +136,7 @@ env:
 jobs:
   frontend:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     env:
       UI_COVERAGE_MAIN_MAX_WORKERS: "4"
     steps:
@@ -162,7 +162,7 @@ jobs:
           FRONTEND_SUITE: component
   frontend-browser:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     steps:
       - uses: oven-sh/setup-bun@v2
         with:

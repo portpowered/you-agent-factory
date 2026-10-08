@@ -205,7 +205,7 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
 	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
 		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
-		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
 		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
 		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
 		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");

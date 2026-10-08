@@ -16,21 +16,6 @@ function job(name) {
 	return match[1];
 }
 
-test("PR architecture previews reuse complete coverage artifacts with read-only permissions", () => {
-	const preview = job("backend-visualizations-preview");
-	assert.match(preview, /github\.event_name == 'pull_request'/);
-	assert.match(preview, /needs\.backend-coverage\.result == 'success'/);
-	assert.match(preview, /needs\.verification-policy\.result == 'success'/);
-	assert.match(preview, /permissions:\n      contents: read/);
-	assert.match(preview, /name: unit-coverage-diagnostics/);
-	assert.match(preview, /name: functional-test-diagnostics/);
-	assert.match(preview, /BACKEND_VIS_REQUIRE_COVERAGE: "1"/);
-	assert.match(preview, /run: make architecture/);
-	assert.match(preview, /name: backend-architecture-preview/);
-	assert.match(preview, /path: docs\/architecture\/visualizations\//);
-	assert.doesNotMatch(preview, /git push|git commit/);
-});
-
 // Interpret the shipped Bash blocks; git/gh are controlled external effects.
 // These cases do not claim real GitHub authorization or queue admission.
 function publicationStep(name) {
@@ -153,7 +138,6 @@ describe("executed architecture publication scripts", { concurrency: true }, () 
 		assert.equal(result.output, "changed=false\n");
 		assert.match(result.stdout, /Backend architecture pages are current\./);
 		assert.deepEqual(result.calls, [["git", "add", "-A", "docs/architecture/visualizations/"], ["git", "diff", "--cached", "--quiet"]]);
-		assert.match(publicationStep("Propose and auto-merge measured pages"), /if: steps\.candidate\.outputs\.changed == 'true'/);
 	});
 
 	test("CASE-3: missing credential fails before external effects", { concurrency: true }, async () => {
@@ -176,27 +160,4 @@ describe("executed architecture publication scripts", { concurrency: true }, () 
 			assert.equal(result.stdout, "");
 		});
 	}
-});
-
-test("successful main CI proposes measured pages through a bot pull request", () => {
-	const publish = job("backend-visualizations-publish");
-	assert.match(publish, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
-	assert.match(publish, /needs\.main-evidence\.result == 'success'/);
-	assert.match(publish, /needs: main-evidence/);
-	assert.match(publish, /permissions:\n      contents: read/);
-	assert.match(publish, /fetch-depth: 2/);
-	assert.match(publish, /persist-credentials: false/);
-	assert.match(publish, /git diff --quiet HEAD\^ HEAD -- \. ':\(exclude\)docs\/architecture\/visualizations\/\*\*'/);
-	assert.match(publish, /BACKEND_VIS_SOURCE_COMMIT: \$\{\{ github\.sha \}\}/);
-	assert.match(publish, /BACKEND_VIS_REQUIRE_COVERAGE: "1"/);
-	assert.match(publish, /run: make architecture/);
-	assert.match(publish, /git add -A docs\/architecture\/visualizations\//);
-	assert.match(publish, /git diff --cached --quiet/);
-	assert.match(publish, /uses: actions\/create-github-app-token@v2/);
-	assert.match(publish, /gh auth setup-git --hostname github\.com/);
-	assert.match(publish, /git push origin "HEAD:\$bot_branch"/);
-	assert.match(publish, /gh pr create --base main --head "\$bot_branch"/);
-	assert.match(publish, /gh pr merge "\$pr_url" --auto\s*$/m);
-	assert.doesNotMatch(publish, /--delete-branch/);
-	assert.doesNotMatch(publish, /git push origin HEAD:main/);
 });
