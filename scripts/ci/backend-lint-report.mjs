@@ -417,7 +417,7 @@ export function renderBackendLintSummary(summary) {
 		"",
 		"### No-allowance targets",
 		"",
-		"These targets carry no allowance and must appear in every report; any failure fails the policy on its first run.",
+		"These targets carry no allowance and must appear when selected (legacy reports require every listed target); any failure fails the policy on its first run.",
 		"",
 		"| Checker | Observed | Status | Reason | Owner/lane |",
 		"| --- | ---: | --- | --- | --- |",

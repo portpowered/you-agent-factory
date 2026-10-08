@@ -17,7 +17,7 @@ export const BACKEND_LINT_REQUIRED_TARGETS = Object.freeze({
 		ownerOrLane: "Shared repository lint",
 	},
 	deadcode: {
-		reason: "Exact normalized backend dead-code finding set: the committed baseline is the sole durable tolerance source, and the analyzer must run on every Backend Lint report.",
+		reason: "Exact normalized backend dead-code finding set: the committed baseline is the sole durable tolerance source; selected inputs and legacy reports require the analyzer.",
 		ownerOrLane: "Backend dead-code gate",
 	},
 });

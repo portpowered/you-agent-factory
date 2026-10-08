@@ -155,13 +155,40 @@ export function readLintInputPaths(baseSha, testedSha, git = execFileSync) {
 	} catch { return null; }
 }
 
+export function pathsMayBeEmbedded(paths, testedSha, git = execFileSync) {
+	try {
+		// A cheap Git read guards otherwise independent UI/prose inputs against
+		// newly authored embeds. Inspect all tags conservatively, without loading
+		// Go packages again. Quoted/complex patterns are never grounds to skip.
+		const records = git("git", ["grep", "-z", "--full-name", "-e", "^[[:space:]]*//go:embed ", testedSha, "--", "*.go"], { encoding: "utf8" });
+		for (const record of records.split("\n").filter(Boolean)) {
+			const separator = record.indexOf("\0");
+			if (separator < 0 || !record.startsWith(testedSha + ":")) return true;
+			const directory = dirname(record.slice(testedSha.length + 1, separator));
+			const relative = paths.filter((path) => directory === "." || path.startsWith(directory + "/"))
+				.map((path) => directory === "." ? path : path.slice(directory.length + 1));
+			if (!relative.length) continue;
+			const patterns = record.slice(separator + 1).trim().replace(/^\/\/go:embed\s+/, "").split(/\s+/);
+			for (let pattern of patterns) {
+				pattern = pattern.replace(/^all:/, "");
+				if (/[\[\]"`\\]/.test(pattern)) return true;
+				const expression = new RegExp("^" + pattern.replace(/[.+^${}()|]/g, "\\$&").replaceAll("*", "[^/]*").replaceAll("?", "[^/]") + "$");
+				if (relative.some((path) => path.split("/").some((_, index, parts) => expression.test(parts.slice(0, index + 1).join("/"))))) return true;
+			}
+		}
+		return false;
+	} catch (error) { return error.status !== 1; }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
 	try {
 		const args = process.argv.slice(2);
 		const value = (name) => { const index = args.indexOf(name); if (index < 0 || args[index + 1] === undefined) throw new Error(`missing ${name}`); return args[index + 1]; };
 		if (!args.includes("--select-inputs")) throw new Error("expected --select-inputs");
 		const event = value("--event"), baseSha = value("--base"), testedSha = value("--head"), output = value("--output");
-		const selection = selectLintInputs({ event, baseSha, testedSha, paths: readLintInputPaths(baseSha, testedSha) });
+		let paths = readLintInputPaths(baseSha, testedSha);
+		if (paths?.length && pathsMayBeEmbedded(paths, testedSha)) paths = null;
+		const selection = selectLintInputs({ event, baseSha, testedSha, paths });
 		// Unavailable Git metadata must still produce an all-selected record.
 		mkdirSync(dirname(resolve(output)), { recursive: true });
 		writeFileSync(output, JSON.stringify(selection, null, 2) + "\n");

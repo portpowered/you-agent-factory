@@ -16,6 +16,7 @@ import {
 	selectLintInputs,
 	validateLintSelection,
 	readLintInputPaths,
+	pathsMayBeEmbedded,
 } from "./backend-lint-workflow.mjs";
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
@@ -139,6 +140,17 @@ test("selection rejects malformed flags, reasons and mismatched identities", () 
 	}
 	assert.throws(() => validateLintSelection(selection, { testedSha: SHA("c") }), /selection/);
 	assert.throws(() => validateLintSelection(selection, { event: "merge_group" }), /selection/);
+});
+
+test("new embeds prevent UI or prose inputs from being skipped", () => {
+	const record = (source, patterns) => () => `${SHA("b")}:${source}\0//go:embed ${patterns}\n`;
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "fallback_dist fallback_dist/*")), false);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "all:src")), true);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "src/*.tsx")), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), record("embed.go", "README.md")), true);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", '"src"')), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), () => { throw new Error("unavailable metadata"); }), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), () => { throw { status: 1 }; }), false);
 });
 
 test("exports a positive fallback and warning when the helper cannot load", async () => {
