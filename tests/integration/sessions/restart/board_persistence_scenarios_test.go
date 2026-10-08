@@ -170,6 +170,7 @@ func TestRecordStartupSafetyFailedRestore(t *testing.T) {
 	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
 	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "RF-I1-failed-restore", t.Name())
+	evidence.StoryID = "record-flag-never-destroys-an-existing-recording-001"
 	t.Cleanup(func() { evidence.publishRestartScenario(t) })
 	const privateMarker = "private-recording-decoder-marker"
 	corruptPayload := []byte(`{"schemaVersion":"replay.v1","private":"` + privateMarker + `","events":[`)
@@ -213,6 +214,81 @@ func TestRecordStartupSafetyFailedRestore(t *testing.T) {
 	// CLI diagnostics and retained bytes; RF-2/I1 still require an early-failure
 	// file-log witness before the story can be handed to review.
 	t.Logf("RF-I1 failed restore: exit=1, retained bytes=%d, safe JSON cause in ErrorResponse, payload withheld; runtime log files=%d", len(contents), len(logs))
+}
+
+// This cell consumes the same prebuilt CLI as the failed-restore cell. Work
+// stays in states without a workstation, so recovery needs no worker process.
+func TestRecordStartupSafetyResumeCopy(t *testing.T) {
+	t.Parallel()
+	scenario := newBoardPersistenceScenario(t)
+	delete(scenario.expected, boardPersistenceProcessingWorkID)
+	for id, want := range scenario.expected {
+		want.RequestID = boardPersistenceNewRequestID
+		want.RelationTarget = ""
+		scenario.expected[id] = want
+	}
+	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "RF-I1-resume-copy", t.Name())
+	evidence.StoryID = "record-flag-never-destroys-an-existing-recording-001"
+	t.Cleanup(func() { evidence.publishRestartScenario(t) })
+	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	evidence.trackDaemon(t, "source-graceful-stop", first)
+	batch := boardPersistenceBatchJSON(t, boardPersistenceNewRequestID, []boardPersistenceBatchWork{
+		{Name: "board-init", WorkID: boardPersistenceInitialWorkID, State: "init", TraceID: "trace-board-init", Content: "durable init content"},
+		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
+	})
+	submitBoardPersistenceBatchThroughCLI(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batch, boardPersistenceNewRequestID, 2)
+	assertBoardCLIListAndShows(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
+	first.stop(t)
+	source, err := os.ReadFile(scenario.recordPath)
+	if err != nil || len(source) == 0 {
+		t.Fatalf("read gracefully stopped source: bytes=%d, error=%v", len(source), err)
+	}
+	copyPath := filepath.Join(t.TempDir(), "board-backup.json")
+	if err := os.WriteFile(copyPath, source, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.recordSourceRecording(copyPath); err != nil {
+		t.Fatal(err)
+	}
+	successorPath := filepath.Join(t.TempDir(), "successor.json")
+	assertRecordStartupSafetyCopyGeneration(t, scenario, evidence, "resume-copy", copyPath, successorPath)
+	assertRecordStartupSafetyUnchangedFile(t, scenario.recordPath, source)
+	assertRecordStartupSafetyUnchangedFile(t, copyPath, source)
+	successor, err := os.ReadFile(successorPath)
+	if err != nil || len(successor) == 0 {
+		t.Fatalf("read flushed successor: bytes=%d, error=%v", len(successor), err)
+	}
+	// A fresh customer profile rules out recovering Work from the source's
+	// durable snapshot instead of reconstructing the selected successor.
+	assertRecordStartupSafetyCopyGeneration(t, scenario, evidence, "resume-successor", successorPath, filepath.Join(t.TempDir(), "next.json"))
+	assertRecordStartupSafetyUnchangedFile(t, successorPath, successor)
+	if err := evidence.verifySourceRecordingUnchanged(copyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.recordSuccessorRecordings(copyPath, successorPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("RF-I1 resume copy: original and backup unchanged (%d bytes); successor readable (%d bytes); Work IDs/states retained", len(source), len(successor))
+}
+
+func assertRecordStartupSafetyCopyGeneration(t *testing.T, scenario *boardPersistenceScenario, evidence *restartBaselineEvidence, name, source, target string) {
+	t.Helper()
+	home := t.TempDir()
+	daemon := startBoardPersistenceResumeDaemon(t, scenario.binaryPath, scenario.factoryDir, home, source, target, scenario.releasePath)
+	evidence.trackDaemon(t, name, daemon)
+	assertBoardCLIListAndShows(t, daemon, scenario.binaryPath, scenario.factoryDir, home, scenario.expected)
+	daemon.stop(t)
+}
+
+func assertRecordStartupSafetyUnchangedFile(t *testing.T, path string, expected []byte) {
+	t.Helper()
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, expected) {
+		t.Fatalf("resume changed retained source %q", path)
+	}
 }
 
 func assertRecordStartupSafetyRestoreDiagnostic(t *testing.T, output, recordPath string) {
