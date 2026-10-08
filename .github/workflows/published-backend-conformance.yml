@@ -2,7 +2,7 @@ name: Published LocalAI Backend Conformance
 
 # This low-frequency lane is enabled for the immutable release after the
 # lai-v1-publish-real-backend-artifacts work publishes the manifest's assets.
-# It is deliberately separate from pull-request CI because it performs HEAD
+# It is deliberately separate from pull-request CI because it performs GET
 # requests to public release URLs.
 on:
   schedule:

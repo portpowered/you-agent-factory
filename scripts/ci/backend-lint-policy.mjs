@@ -12,6 +12,10 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({});
 // dropping a target from LINT_TARGETS would otherwise be a silent way to turn
 // a red ratchet green without doing the decoupling work it is measuring.
 export const BACKEND_LINT_REQUIRED_TARGETS = Object.freeze({
+	"test-backend-conformance": {
+		reason: "Shipped backend manifests and reachable targets require offline validation without allowance.",
+		ownerOrLane: "Models manifest lint",
+	},
 	golangci: {
 		reason: "Built-in and shared compiler diagnostics, including live CLI manifest authority, must run without any report allowance.",
 		ownerOrLane: "Shared repository lint",

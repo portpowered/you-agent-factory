@@ -53,6 +53,9 @@ export function buildVitestComponentArgs({
     "--config",
     "vitest.lanes.config.ts",
     "--project=dashboard-component",
+    // Reuse worker threads while retaining Vitest's per-file isolation. Forking
+    // a fresh Node process for every jsdom file competes with the browser lanes.
+    "--pool=threads",
     `--maxWorkers=${getComponentTestMaxWorkers(env, logicalCpuCount)}`,
     "--retry=0",
     ...forwardedArgs,

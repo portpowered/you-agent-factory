@@ -230,11 +230,15 @@ func (s *Service) runRunner(
 		})
 	}
 	if identity != runners.AgentIdentity {
-		return s.runners.Execute(ctx, runners.ExecuteRequest{
+		result, err := s.runners.Execute(ctx, runners.ExecuteRequest{
 			Identity:             identity,
 			RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
 			Attempt:              runnerRequest,
 		})
+		if err == nil && identity == runners.ScriptIdentity && usesDecisionEnvelopeRequest(runnerRequest) {
+			return s.normalizeScriptDecisionEnvelope(result, runnerRequest)
+		}
+		return result, err
 	}
 	return s.executeProviderWithRetry(ctx, runnerRequest, func(
 		attempt workers.RunnerExecutionRequest,

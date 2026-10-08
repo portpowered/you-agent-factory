@@ -242,6 +242,11 @@ func genericFailureResult(
 	}
 	if content := strings.TrimSpace(runnerResult.Content); content != "" {
 		result.Output = proposedOutputFromContent(content)
+		if request.Target.RunnerID == runners.ScriptIdentity && usesDecisionEnvelopeRequest(workers.RunnerExecutionRequest{
+			OutputFormat: request.Target.Output.Format, DecisionEnvelope: request.Target.Output.DecisionEnvelope,
+		}) {
+			result.Output = proposedOutputFromRunnerResult(runnerResult)
+		}
 	}
 	return result
 }

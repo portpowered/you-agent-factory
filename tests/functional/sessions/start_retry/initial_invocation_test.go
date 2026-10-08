@@ -15,7 +15,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -579,4 +581,112 @@ func assertSelectedHostedLegacyReplay(t *testing.T, sessions factorysessions.Ser
 		}
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerBefore)
+}
+
+// K-F3 holds two live provider commands while the ordinary CLI inspects a
+// recording on that same process. Recorded time must remain distinct from the
+// selected 2041 process timestamp; closing inspection must preserve live Work.
+func assertPreparationReplayBesideLiveWork(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario) {
+	t.Helper()
+	id := uuid.NewString()
+	recordedAt := time.Date(2026, 7, 12, 12, 0, 2, 0, time.UTC)
+	path, payload := writePreparationRecording(t, id, recordedAt)
+	writer := &preparationInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	unblock := func() { writer.once.Do(func() { close(writer.release) }) }
+	t.Cleanup(unblock)
+	inputs := selectedReplayRetryInputs(t, scenario, path)
+	inputs.Input.Args = []string{"you", "run", "--dir", scenario.candidateDir, "--session", uuid.NewString(), "--replay", path, "--no-record"}
+	inputs.Input.Stdout = writer
+	done := make(chan error, 1)
+	go func() { done <- process.Execute(inputs.Input); close(done) }()
+	t.Cleanup(func() {
+		unblock()
+		if err := <-done; err != nil {
+			t.Errorf("historical CLI inspection: %v", err)
+		}
+	})
+	select {
+	case <-writer.entered:
+	case err := <-done:
+		t.Fatalf("inspection ended before readiness: %v; %s", err, inputs.Stderr())
+	case <-t.Context().Done():
+		t.Fatal("inspection never reached CLI output")
+	}
+	assertPreparationHistoricalFacts(t, sessions, scenario, id, recordedAt, path, payload)
+	unblock()
+}
+
+func writePreparationRecording(t *testing.T, id string, recordedAt time.Time) (string, []byte) {
+	t.Helper()
+	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
+		SessionID: id, Status: "SUCCEEDED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/selected.js",
+		SourceHash: "sha256:" + strings.Repeat("1", 64), PolicyHash: "sha256:" + strings.Repeat("3", 64),
+		Artifacts:  []recordings.PortableRecordingCanonicalArtifact{{ID: "checkpoint-artifact", Kind: "CHECKPOINT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("4", 64), SizeBytes: 42, CreatedAt: recordedAt, SecretsRedacted: 2}},
+		Checkpoint: &recordings.PortableRecordingCanonicalCheckpoint{ID: "selected-checkpoint", ArtifactID: "checkpoint-artifact", Timestamp: recordedAt},
+		Events: []json.RawMessage{
+			json.RawMessage(`{"id":"recorded-start","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T12:00:00Z"},"payload":{}}`),
+			json.RawMessage(`{"id":"recorded-checkpoint","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T12:00:01Z","checkpointId":"selected-checkpoint"},"payload":{"artifactIds":["checkpoint-artifact"]}}`),
+			json.RawMessage(`{"id":"recorded-done","type":"SESSION_COMPLETED","context":{"sequence":2,"eventTime":"2026-07-12T12:00:02Z"},"payload":{}}`),
+		},
+		Result: &recordings.PortableRecordingCanonicalResult{Status: "FINAL", Mode: "final", PrimaryResult: json.RawMessage(`{"answer":"recorded"}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "selected.json")
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path, payload
+}
+
+func assertPreparationHistoricalFacts(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, id string, recordedAt time.Time, path string, payload []byte) {
+	t.Helper()
+	read, err := sessions.GetSession(t.Context(), id)
+	if err != nil || read.ResolvedSource.SourceRef != "workflow/selected.js" || read.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("selected historical facts = %#v, %v", read, err)
+	}
+	after := 1
+	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{AfterSequence: &after})
+	if err != nil || len(events.Events) != 1 {
+		t.Fatalf("selected recorded events = %#v, %v", events, err)
+	}
+	var event struct {
+		ID      string `json:"id"`
+		Context struct {
+			EventTime time.Time `json:"eventTime"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal(events.Events[0], &event); err != nil || event.ID != "recorded-done" || !event.Context.EventTime.Equal(recordedAt) {
+		t.Fatalf("replay time leaked process clock: %s, %v", events.Events[0], err)
+	}
+	for _, liveID := range []string{scenario.candidateID, scenario.peerID} {
+		initialOpeningHistory(t, sessions, liveID)
+	}
+	result, err := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal})
+	if err != nil || string(result.PrimaryResult) != `{"answer":"recorded"}` {
+		t.Fatalf("historical result = %#v, %v", result, err)
+	}
+	afterPayload, err := os.ReadFile(path)
+	if err != nil || string(afterPayload) != string(payload) {
+		t.Fatalf("inspection modified recording: %v", err)
+	}
+}
+
+type preparationInspectionWriter struct {
+	entered, release chan struct{}
+	once             sync.Once
+	ready            sync.Once
+}
+
+func (writer *preparationInspectionWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "Replayed Factory Session:") {
+		writer.ready.Do(func() { close(writer.entered) })
+		<-writer.release
+	}
+	return len(p), nil
 }

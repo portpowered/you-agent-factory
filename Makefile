@@ -231,7 +231,7 @@ LINT_RUN_DEADCODE ?= 1
 LINT_SELECTION_FILE ?=
 $(foreach flag,LINT_BACKEND_ONLY LINT_RUN_DOCS LINT_RUN_DEADCODE,$(if $(and $(filter 1,$(words $($(flag)))),$(filter 0 1,$($(flag)))),,$(error $(flag) must be 0 or 1)))
 LINT_TARGETS_DOCS := $(if $(filter 1,$(LINT_RUN_DOCS)),docs-reference-check)
-LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check
+LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check test-backend-conformance
 LINT_TARGETS_UI := $(if $(filter 1,$(LINT_BACKEND_ONLY)),,ui-lint ui-deadcode)
 LINT_TARGETS_CI_ONLY := $(if $(filter 1,$(LINT_RUN_DEADCODE)),deadcode)
 LINT_FULL ?=
@@ -593,7 +593,7 @@ test-acp-provider-prebuilt:
 	$(GO) test ./tests/integration/providers/acp -run '^TestPrebuiltACPDeliveredResultsSurvivePeerExit$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/verification-sequence.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/merge-queue-evidence.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/flake-ledger-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/verification-sequence.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)

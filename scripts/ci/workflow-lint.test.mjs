@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,10 +9,88 @@ import test from "node:test";
 import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
+	validateCIJobGrowth,
+	validateBackendConformanceWorkflowContract,
+	validateCIJobGrowthFromHistory,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
 	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("CI job guard accepts legacy jobs, deletion and formatting, but rejects added IDs", () => {
+	const baselineWorkflow = "name: CI\njobs:\n  unit:\n    steps:\n      - run: go test -race ./pkg/example\n  legacy:\n    steps: []\n";
+	for (const workflow of [baselineWorkflow, baselineWorkflow.replace("  legacy:\n    steps: []\n", ""),
+		baselineWorkflow.replace("  unit:", "  'unit': # formatting").replaceAll("\n", "\r\n")]) {
+		assert.equal(validateCIJobGrowth({ workflow, baselineWorkflow }).status, "pass");
+	}
+	assert.throws(() => validateCIJobGrowth({ baselineWorkflow, workflow: `${baselineWorkflow}  witness:\n    steps: []\n` }),
+		/added job IDs witness; put checks in their primary suite job or lint instead/);
+	for (const workflow of ["jobs: { unit: {} }", "jobs:\n  <<: *jobs", "jobs:\n  unit: *job", "jobs:\n  unit:\n  unit:\n", "jobs:\njobs:\n"]) {
+		assert.throws(() => validateCIJobGrowth({ workflow, baselineWorkflow }), /CI job guard/);
+	}
+});
+
+test("CI job guard fails closed on absent merge base or unreadable baseline", () => {
+	for (const failure of [{ status: 128 }, { error: new Error("git missing") }, { status: 0, stdout: "" }]) {
+		assert.throws(() => validateCIJobGrowthFromHistory({ spawn: () => failure }), /comparison history unavailable.*fetch full origin\/main/);
+	}
+	let calls = 0;
+	assert.throws(() => validateCIJobGrowthFromHistory({ spawn: () => ++calls === 1 ? { status: 0, stdout: "deadbeef" } : { status: 128 } }),
+		/comparison history unavailable.*\(show\)/);
+});
+
+test("real workflow lint CLI compares isolated Git history and reports added jobs", async (t) => {
+	const actionlint = process.env.ACTIONLINT_BIN || "actionlint";
+	if (spawnSync(actionlint, ["-version"], { windowsHide: true }).error) {
+		t.skip("pinned actionlint is supplied by hosted Workflow proof");
+		return;
+	}
+	const root = await mkdtemp(join(tmpdir(), "workflow-lint-history-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	await mkdir(join(root, "scripts/ci"), { recursive: true });
+	await mkdir(join(root, ".github/workflows"), { recursive: true });
+	// Include the checker's transitive lint dependencies in the isolated CLI fixture.
+	for (const file of [
+		"scripts/ci/workflow-lint.mjs",
+		"scripts/ci/queue-dispatch.mjs",
+		"scripts/ci/verification-plans.mjs",
+		"scripts/ci/backend-lint-workflow.mjs",
+		"scripts/ci/backend-lint-report.mjs",
+		"scripts/ci/backend-lint-policy.mjs",
+		"scripts/ci/runner-parallelism.mjs",
+		"Makefile",
+	]) {
+		await copyFile(file, join(root, file));
+	}
+	for (const file of discoverWorkflowFiles()) await copyFile(file, join(root, ".github/workflows", file.split(/[\\/]/).at(-1)));
+	const git = (...args) => {
+		const result = spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true });
+		assert.equal(result.status, 0, result.stderr);
+		return result.stdout.trim();
+	};
+	git("init", "--quiet");
+	git("add", ".");
+	git("-c", "user.name=Lint Fixture", "-c", "user.email=lint@example.invalid", "commit", "--quiet", "-m", "baseline");
+	git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+	const cli = () => spawnSync(process.execPath, ["scripts/ci/workflow-lint.mjs", "--actionlint", actionlint], {
+		cwd: root, encoding: "utf8", windowsHide: true,
+	});
+	const workflowPath = join(root, ".github/workflows/ci.yml");
+	const baseline = readFileSync(workflowPath, "utf8");
+	await writeFile(workflowPath, `${baseline}\n# Formatting-only edit\n`);
+	let result = cli();
+	assert.equal(result.status, 0, result.stderr);
+	assert.match(result.stdout, /WORKFLOW_LINT_STATIC_CONTRACTS_OK/);
+	await writeFile(workflowPath, `${baseline}\n  added-witness:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo witness\n`);
+	result = cli();
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /added job IDs added-witness/);
+	await writeFile(workflowPath, baseline);
+	git("update-ref", "-d", "refs/remotes/origin/main");
+	result = cli();
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /comparison history unavailable/);
+});
 
 test("consolidated workflow checker identifies the invalid proof or result mapping", () => {
 	const workflow = `name: fixture
@@ -24,7 +102,7 @@ jobs:
     steps:
       - run: go install example/actionlint@v1.7.12
       - run: bash scripts/ci/run-workflow-verification.sh
-      - if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+      - if: success() || failure()
         run: make docs-reference-smoke
   api-pr-verification:
     if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'
@@ -59,6 +137,8 @@ env:
   BUN_VERSION: 1.3.12
 jobs:
   frontend:
+    needs: classify
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     env:
       UI_COVERAGE_MAIN_MAX_WORKERS: "4"
     steps:
@@ -77,18 +157,51 @@ jobs:
       - name: Run frontend unit and replay coverage
         if: success() || failure()
         run: make test-ui-coverage
+      - name: Frontend component proof
+        if: success() || failure()
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: component
+  frontend-browser:
+    needs: classify
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
+    steps:
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: \${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}-\${{ env.BUN_VERSION }}-\${{ hashFiles('ui/bun.lock') }}
+      - run: cd ui && bun install --frozen-lockfile
+      - name: Restore Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1-\${{ runner.os }}-\${{ runner.arch }}-\${{ hashFiles('ui/bun.lock') }}
+      - run: make ui-install-playwright
+      - name: Frontend proof
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: browser
   verification-policy:
-    needs: [frontend]
+    needs: [frontend, frontend-browser]
     env:
       FRONTEND_RESULT: \${{ needs.frontend.result }}
       FRONTEND_COVERAGE_RESULT: \${{ needs.frontend.result }}
+      FRONTEND_COMPONENT_RESULT: \${{ needs.frontend.result }}
+      FRONTEND_BROWSER_RESULT: \${{ needs.frontend-browser.result }}
+      FRONTEND_STORYBOOK_RESULT: \${{ needs.frontend-browser.result }}
 `;
+	assert.equal(validateFrontendSharedSetupWorkflowContract({ workflow }).status, "pass");
 	for (const [before, after, diagnostic] of [
 		["bun install --frozen-lockfile", "bun install", "install frozen dependencies"],
 		["frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}", "frontend-bun-v1", "cache identity must include platform, Bun and frozen lock"],
 		["if: success() || failure()", "if: success()", "attempt later proof after failures, but not cancellation"],
 		["run: make test-ui-coverage", "run: make ui-test", "retain the complete proof command"],
 		["FRONTEND_COVERAGE_RESULT:", "OTHER_RESULT:", "static and coverage share the aggregate result"],
+		["FRONTEND_SUITE: browser", "FRONTEND_SUITE: all", "complete suites use separate runners"],
+		["FRONTEND_BROWSER_RESULT: \${{ needs.frontend-browser.result }}", "FRONTEND_BROWSER_RESULT: \${{ needs.frontend.result }}", "browser proofs share their own aggregate result"],
 	]) {
 		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
 			workflow: workflow.replace(before, after),
@@ -237,4 +350,45 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 		"WORKFLOW_LINT_STATIC_CONTRACTS_OK",
 		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
 	]);
+});
+
+const conformanceContract = {
+	workflow: "jobs:\n  backend-lint:\n    steps:\n      - run: make lint\n",
+	makefile: "LINT_TARGETS_BASE := golangci test-backend-conformance\ntest-backend-conformance:\n\t$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance -count=1\n\ntest-backend-conformance-live:\n\t$(GO) test -tags=functionallong ./pkg/services/models/internal/backendconformance\n",
+	publishedWorkflow: `on:
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # github.event.repository.default_branch
+    steps:
+      - run: node scripts/ci/published-backend-conformance-workflow.mjs
+      - run: make test-backend-conformance-live
+`,
+};
+
+test("conformance checker accepts one canonical offline target and monthly live owner", () => {
+	assert.equal(validateBackendConformanceWorkflowContract(conformanceContract).status, "pass");
+});
+
+test("conformance checker rejects retired outputs and policy or job references", () => {
+	for (const reference of ["backend-conformance:", "needs.backend-conformance.result", "needs: [classify, backend-conformance, backend-lint]", "run_backend_conformance", "backend_conformance_reason", "backend_conformance_command", "BACKEND_CONFORMANCE_RESULT", "RUN_BACKEND_CONFORMANCE"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + reference }), /retired Backend Conformance/);
+	}
+});
+
+test("conformance checker rejects missing offline validation and PR or duplicate live execution", () => {
+	for (const makefile of [conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci"), conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci test-backend-conformance test-backend-conformance")]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile }), /exactly once/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-tags=backendconformance", "-tags=functionallong") }), /offline decoder/);
+	for (const command of ["make test-backend-conformance-live", "go test -run TestPublishedBackendArtifactLocations"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + command }), /monthly\/manual/);
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, otherWorkflows: [command] }), /monthly\/manual/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, publishedWorkflow: conformanceContract.publishedWorkflow.replace("  workflow_dispatch:", "  pull_request:") }), /monthly\/manual/);
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-count=1", "-count=1\n\t$(MAKE) test-backend-conformance-live") }), /must not invoke live/);
 });

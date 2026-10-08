@@ -80,16 +80,17 @@ func prepareCoverageRunWithFunctionalMetadata(
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
 		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
 	}
+	// Required Backend Lint runs vet across the repository. Repeating it on the
+	// instrumented graph adds static-analysis work to every test binary without
+	// exercising another behavior. Coverage evidence retains Go's stack symbols
+	// and source coordinates; debugger-only DWARF data is unnecessary, and
+	// omitting it shortens the link of every instrumented test binary.
+	coverageTestArgs = append(coverageTestArgs, "-vet=off", "-ldflags=-w")
 	if cfg.suite == functionalCoverageSuite {
-		// Required Backend Lint runs vet across the repository. Repeating it
-		// on the instrumented functional graph adds static-analysis work to
-		// the customer-behavior lane without exercising another behavior.
-		// Functional evidence retains Go's stack symbols and source coordinates;
-		// debugger-only DWARF data is unnecessary for customer scenarios.
 		// Consolidated suites contain independent, session-owned IO journeys.
 		// Use the lane budget for their concurrency as well as package builds;
 		// Go's CPU-count default otherwise serializes those waits after a merge.
-		coverageTestArgs = append(coverageTestArgs, "-count=1", "-vet=off", "-ldflags=-w", fmt.Sprintf("-parallel=%d", cfg.testJobs(targetOS, logicalCPUs)))
+		coverageTestArgs = append(coverageTestArgs, "-count=1", fmt.Sprintf("-parallel=%d", cfg.testJobs(targetOS, logicalCPUs)))
 	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")
