@@ -29,10 +29,11 @@ type ArtifactHistoryReader struct {
 	mu           sync.Mutex
 	names        map[historyIdentity]cachedNames
 	decodes      map[nameDecodeKey]*nameDecode
+	reads        map[historyIdentity]*artifactRead
 }
 
 func NewArtifactHistoryReader(query CanonicalHistoryQuery, currentBoard CurrentBoardArtifact, readFile recordings.RecordingReadFile) *ArtifactHistoryReader {
-	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, names: make(map[historyIdentity]cachedNames), decodes: make(map[nameDecodeKey]*nameDecode)}
+	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, names: make(map[historyIdentity]cachedNames), decodes: make(map[nameDecodeKey]*nameDecode), reads: make(map[historyIdentity]*artifactRead)}
 }
 
 func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, page recordings.WorkerCapturedActivityPage) (recordings.HistoricalRecordingQueryResult, error) {
@@ -82,6 +83,13 @@ type nameDecode struct {
 	err        error
 }
 
+type artifactRead struct {
+	done    chan struct{}
+	payload []byte
+	digest  [sha256.Size]byte
+	err     error
+}
+
 func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page recordings.WorkerCapturedActivityPage) (nameProjection, error) {
 	if err := ctx.Err(); err != nil {
 		return nameProjection{}, err
@@ -98,20 +106,64 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 	if artifact == "" {
 		return nameProjection{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: identity.RecordingID}
 	}
-	payload, err := r.readFile(string(artifact))
-	if canceled := ctx.Err(); canceled != nil {
-		return nameProjection{}, canceled
-	}
+	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, string(artifact)}
+	read, err := r.sharedArtifact(ctx, key)
 	if err != nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return nameProjection{}, canceled
+		}
 		kind := recordings.HistoricalRecordingQueryErrorUnavailable
 		if errors.Is(err, os.ErrNotExist) {
 			kind = recordings.HistoricalRecordingQueryErrorMissingHistory
 		}
 		return nameProjection{}, &recordings.HistoricalRecordingQueryError{Kind: kind, RecordingID: identity.RecordingID, Cause: err}
 	}
-	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, string(artifact)}
-	digest := sha256.Sum256(payload)
-	return r.sharedNames(ctx, nameDecodeKey{key, digest}, identity, payload)
+	return r.sharedNames(ctx, nameDecodeKey{key, read.digest}, identity, read.payload)
+}
+
+// Share only an in-flight source read, not a completed source snapshot. Each
+// fresh query still observes replacements and temporary unavailability. Bytes
+// are owned by the participating calls and never retained in the name cache.
+// The synchronous leader owns the IO; canceled waiters leave independently and
+// surviving waiters retry a canceled leader with a new source snapshot.
+func (r *ArtifactHistoryReader) sharedArtifact(ctx context.Context, key historyIdentity) (*artifactRead, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		if pending, ok := r.reads[key]; ok {
+			r.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-pending.done:
+				if errors.Is(pending.err, context.Canceled) || errors.Is(pending.err, context.DeadlineExceeded) {
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				return pending, pending.err
+			}
+		}
+		pending := &artifactRead{done: make(chan struct{})}
+		r.reads[key] = pending
+		r.mu.Unlock()
+
+		pending.payload, pending.err = r.readFile(key.artifact)
+		if pending.err == nil {
+			pending.digest = sha256.Sum256(pending.payload)
+		}
+		if err := ctx.Err(); err != nil {
+			pending.payload, pending.err = nil, err
+		}
+		r.mu.Lock()
+		delete(r.reads, key)
+		close(pending.done)
+		r.mu.Unlock()
+		return pending, pending.err
+	}
 }
 
 // The leading caller owns the synchronous decode; no detached work needs a

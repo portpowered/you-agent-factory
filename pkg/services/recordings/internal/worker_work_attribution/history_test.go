@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -366,5 +367,225 @@ func TestRetainedNamesSurvivesCanceledLeader(t *testing.T) {
 	got, err := reader.readWorkerFactoryNames(t.Context(), page)
 	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != 2 {
 		t.Fatalf("fresh result = %+v, %v; decode count = %d", got, err, len(query.requests))
+	}
+}
+
+type namesResult struct {
+	projection nameProjection
+	err        error
+}
+
+func startNamesRead(ctx context.Context, reader *ArtifactHistoryReader, page recordings.WorkerCapturedActivityPage) <-chan namesResult {
+	result := make(chan namesResult, 1)
+	go func() {
+		projection, err := reader.readWorkerFactoryNames(ctx, page)
+		result <- namesResult{projection: projection, err: err}
+	}()
+	return result
+}
+
+func awaitNamesResult(t *testing.T, result <-chan namesResult, name string, want error) {
+	t.Helper()
+	select {
+	case got := <-result:
+		if !errors.Is(got.err, want) || (want == nil && got.projection.names["work"] != name) {
+			t.Fatalf("names = %+v, %v; want %q, %v", got.projection, got.err, name, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("name read did not complete")
+	}
+}
+
+func awaitNamesSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("name read did not reach the controlled edge")
+	}
+}
+
+func TestRetainedNamesSharesArtifactReadWithIndependentCancellation(t *testing.T) {
+	t.Parallel()
+	for _, canceled := range []string{"waiter", "leader"} {
+		t.Run(canceled, func(t *testing.T) {
+			t.Parallel()
+			page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+			page.Catalog.OriginatingArtifact = "exact.json"
+			query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			t.Cleanup(unblock)
+			var reads atomic.Int32
+			reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+				if reads.Add(1) == 1 {
+					close(entered)
+					<-release
+				}
+				return []byte("same"), nil
+			})
+			leaderCtx, cancelLeader := context.WithCancel(t.Context())
+			defer cancelLeader()
+			waiterCtx, cancelWaiter := context.WithCancel(t.Context())
+			defer cancelWaiter()
+			leader := startNamesRead(leaderCtx, reader, page)
+			awaitNamesSignal(t, entered)
+			waitCtx := &observedWaitContext{Context: waiterCtx, waiting: make(chan struct{})}
+			waiter := startNamesRead(waitCtx, reader, page)
+			awaitNamesSignal(t, waitCtx.waiting)
+			if reads.Load() != 1 {
+				t.Fatal("concurrent waiter read the artifact again")
+			}
+			if canceled == "waiter" {
+				cancelWaiter()
+				awaitNamesResult(t, waiter, "", context.Canceled)
+				unblock()
+				awaitNamesResult(t, leader, "Alpha", nil)
+			} else {
+				cancelLeader()
+				unblock()
+				awaitNamesResult(t, leader, "", context.Canceled)
+				awaitNamesResult(t, waiter, "Alpha", nil)
+			}
+			before := reads.Load()
+			awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Alpha", nil)
+			if reads.Load() != before+1 || len(query.requests) != 1 {
+				t.Fatalf("fresh read/decode counts = %d/%d", reads.Load(), len(query.requests))
+			}
+		})
+	}
+}
+
+func TestRetainedNamesSharedUnavailableReadRetries(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	var reads atomic.Int32
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		if reads.Add(1) == 1 {
+			close(entered)
+			<-release
+			return nil, os.ErrNotExist
+		}
+		return []byte("restored"), nil
+	})
+	leader := startNamesRead(t.Context(), reader, page)
+	awaitNamesSignal(t, entered)
+	waitCtx := &observedWaitContext{Context: t.Context(), waiting: make(chan struct{})}
+	waiter := startNamesRead(waitCtx, reader, page)
+	awaitNamesSignal(t, waitCtx.waiting)
+	unblock()
+	for _, result := range []<-chan namesResult{leader, waiter} {
+		select {
+		case got := <-result:
+			if !isUnavailableHistory(got.err) || !errors.Is(got.err, os.ErrNotExist) {
+				t.Fatalf("unavailable source = %v", got.err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("shared unavailable read did not complete")
+		}
+	}
+	if reads.Load() != 1 || len(query.requests) != 0 {
+		t.Fatalf("unavailable read/decode counts = %d/%d", reads.Load(), len(query.requests))
+	}
+	awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Alpha", nil)
+	if reads.Load() != 2 || len(query.requests) != 1 {
+		t.Fatalf("restored read/decode counts = %d/%d", reads.Load(), len(query.requests))
+	}
+}
+
+func TestRetainedNamesInFlightReadKeepsProvenanceSeparate(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	var reads atomic.Int32
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		if reads.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return []byte("same"), nil
+	})
+	leader := startNamesRead(t.Context(), reader, page)
+	awaitNamesSignal(t, entered)
+	for _, dimension := range []string{"factory", "recording", "generation", "artifact"} {
+		candidate := page
+		var want error
+		switch dimension {
+		case "factory":
+			candidate.Catalog.FactorySessionID = "foreign"
+			want = recordings.ErrInvalidProjectionScope
+		case "recording":
+			candidate.Catalog.RecordingID = "another-recording"
+		case "generation":
+			candidate.Catalog.RecordingGenerationID = "another-generation"
+		case "artifact":
+			candidate.Catalog.OriginatingArtifact = "another.json"
+		}
+		// Each different provenance completes while the original source is gated.
+		awaitNamesResult(t, startNamesRead(t.Context(), reader, candidate), "Alpha", want)
+	}
+	if reads.Load() != 5 {
+		t.Fatalf("distinct provenance reads = %d", reads.Load())
+	}
+	unblock()
+	awaitNamesResult(t, leader, "Alpha", nil)
+}
+
+type replacedNamesQuery struct {
+	canonicalQueryFake
+	first, replacement recordings.HistoricalRecordingQueryResult
+	entered, release   chan struct{}
+}
+
+func (query *replacedNamesQuery) DecodeHistoricalEvents(_ recordings.HistoricalRecordingQueryRequest, payload []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	if string(payload) == "first" {
+		close(query.entered)
+		<-query.release
+		return query.first, nil
+	}
+	return query.replacement, nil
+}
+
+func TestRetainedNamesFreshReadDuringOlderDecodeObservesReplacement(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &replacedNamesQuery{
+		first:       namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha"),
+		replacement: namedHistory(t, "scope", "worker", "dispatch", "work", "Beta"),
+		entered:     make(chan struct{}), release: make(chan struct{}),
+	}
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(query.release) }) }
+	t.Cleanup(unblock)
+	var reads atomic.Int32
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		if reads.Add(1) == 1 {
+			return []byte("first"), nil
+		}
+		return []byte("other"), nil
+	})
+	older := startNamesRead(t.Context(), reader, page)
+	awaitNamesSignal(t, query.entered)
+	// The old decode stays gated; a new call must read the replacement instead
+	// of joining a completed read whose bytes no longer represent the source.
+	awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Beta", nil)
+	unblock()
+	awaitNamesResult(t, older, "Alpha", nil)
+	awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Beta", nil)
+	if reads.Load() != 3 {
+		t.Fatalf("fresh source reads = %d", reads.Load())
 	}
 }
