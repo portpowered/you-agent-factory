@@ -81,6 +81,15 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	overlap := newInitialOpeningProviderScenario(t)
+	providerGate := &selectedProviderGate{paths: map[string]string{
+		overlap.candidateDir: overlap.candidateID, overlap.peerDir: overlap.peerID,
+	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	t.Cleanup(providerGate.unblock)
+	for dir, id := range providerGate.paths {
+		support.WriteAgentConfig(t, dir, "worker-a", strings.ReplaceAll(support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"), "Process the input task.", "Selected source "+id))
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nSelected request {{ (index .Inputs 0).Payload }}\n")
+	}
 	defaulted := newInitialOpeningDefaultProviderScenario(t, "", "")
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	durable := newInitialOpeningScenario(t)
@@ -88,7 +97,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
-	for _, dir := range []string{reused.candidateDir, reused.peerDir} {
+	for _, dir := range []string{reused.candidateDir, reused.peerDir, overlap.candidateDir, overlap.peerDir} {
 		if err := os.MkdirAll(filepath.Join(dir, factorydefinitions.InputsDir), 0o755); err != nil {
 			t.Fatalf("prepare authored inputs: %v", err)
 		}
@@ -113,7 +122,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter:                           api.Start,
 	})
@@ -185,6 +194,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("selected Codex provider executes independently attributed sessions", func(t *testing.T) {
 		t.Parallel()
 		testInitialOpeningProviderSelection(t, sessions, selected, effects)
+	})
+	t.Run("selected prompts and results survive overlapping live Work", func(t *testing.T) {
+		t.Parallel()
+		testSelectedProviderOverlap(t, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
 	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
 		t.Parallel()
@@ -448,13 +461,19 @@ func initialOpeningScenarioWithConfig(t *testing.T, config map[string]any) initi
 	}
 }
 
-type initialOpeningProviderRunner struct{ effects *initialOpeningEffects }
+type initialOpeningProviderRunner struct {
+	effects  *initialOpeningEffects
+	selected *selectedProviderGate
+}
 
-func (runner initialOpeningProviderRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	if request.Command != string(modelprovider.ProviderCodex) || !strings.Contains(strings.Join(request.Args, " "), "gpt-5-codex") {
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.selected != nil && runner.selected.paths[request.WorkDir] != "" {
+		return runner.selected.run(ctx, request)
+	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
 }
 
@@ -465,6 +484,95 @@ func assertInitialOpeningProviderSelection(t *testing.T, effects *initialOpening
 	if calls[filepath.Clean(dir)+"|worker.codex"] != 1 || calls[filepath.Clean(dir)+"|worker.run"] != 0 {
 		t.Fatalf("selected provider effects for %s = %v, want one Codex execution", dir, calls)
 	}
+}
+
+// Immutable path registration attributes the external command; both commands
+// must enter before either is released, proving overlapping customer Work.
+type selectedProviderGate struct {
+	paths   map[string]string
+	entered chan platformprocess.CommandRequest
+	release chan struct{}
+	once    sync.Once
+}
+
+func (gate *selectedProviderGate) unblock() { gate.once.Do(func() { close(gate.release) }) }
+
+func (gate *selectedProviderGate) run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case gate.entered <- request:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case <-gate.release:
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(gate.paths[request.WorkDir] + " COMPLETE")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
+	t.Helper()
+	defer gate.unblock()
+	startInitialOpeningSession(t, sessions, scenario.request())
+	peer := scenario.request()
+	peer.SessionID, peer.FolderPath = scenario.peerID, scenario.peerDir
+	peer.RuntimeSelection.DefinitionSourcePath = filepath.Join(scenario.peerDir, "factory.json")
+	peer.RuntimeSelection.ExecutionBaseDir, peer.RuntimeSelection.RuntimeInstanceID = scenario.peerDir, uuid.NewString()
+	startInitialOpeningSession(t, sessions, peer)
+	assertInitialOpeningDiagnostics(t, logs, scenario.candidateID, scenario.candidateDir)
+	assertInitialOpeningDiagnostics(t, logs, scenario.peerID, scenario.peerDir)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	done := make(chan error, 2)
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		go func() { done <- selectedProviderInvoke(ctx, sessions, id) }()
+	}
+	seen := make(map[string]bool)
+	for range 2 {
+		select {
+		case request := <-gate.entered:
+			id := gate.paths[request.WorkDir]
+			prompt := string(request.Stdin) + strings.Join(request.Args, " ")
+			if seen[id] || !strings.Contains(prompt, "Selected source "+id) || !strings.Contains(prompt, id+" selected Work") {
+				t.Fatalf("selected expanded prompt/path mixed sessions: %s %q", request.WorkDir, prompt)
+			}
+			seen[id] = true
+		case <-ctx.Done():
+			t.Fatal("both selected providers did not enter before release")
+		}
+	}
+	gate.unblock()
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+		if len(listed.Results) != 1 || fmt.Sprint(listed.Results[0].Payload) != id+" selected Work" {
+			t.Fatalf("selected Work route %s = %#v", id, listed)
+		}
+		initialOpeningHistory(t, sessions, id)
+	}
+	peerHistory := initialOpeningHistory(t, sessions, scenario.peerID)
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	if err := selectedProviderInvoke(ctx, sessions, scenario.peerID); err != nil {
+		t.Fatal(err)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+}
+
+func selectedProviderInvoke(ctx context.Context, sessions factorysessions.Service, id string) error {
+	result, err := sessions.Invoke(ctx, factorysessions.SessionInvokeRequest{SessionID: id, ContentProvided: true,
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: id + " selected Work"}}})
+	if err != nil {
+		return err
+	}
+	if result.Status != factorysessions.InvocationTerminalStatusCompleted || len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != id+" COMPLETE" {
+		return fmt.Errorf("selected result %s = %#v", id, result)
+	}
+	return nil
 }
 
 func (scenario initialOpeningScenario) request() factorysessions.SessionStartRequest {

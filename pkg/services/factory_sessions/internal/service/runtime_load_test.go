@@ -769,14 +769,33 @@ func TestRuntimeInputLoadingFreshFactsAndRetry(t *testing.T) {
 	if !errors.Is(err, cause) || !strings.HasPrefix(err.Error(), "load factory config: ") {
 		t.Fatalf("failure = %v", err)
 	}
-	if failed.LoadedFactoryCfg != nil || failed.SessionLogger != nil || failed.ReplayArtifact != nil || failed.HistoricalReplay != nil {
-		t.Fatalf("failure published partial inputs: %#v", failed)
-	}
+	assertRuntimeInputFailureIsEmpty(t, failed)
 	corrected, err := loader.Load(RuntimeInputLoadRequest{Dir: "/corrected", ExecutionBaseDir: "/corrected-base", FactoryRootDir: "/corrected-root", SessionID: "candidate",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "selected-model"}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertRuntimeInputRetryFacts(t, first, corrected, calls)
+	entries := logs.FilterMessage("loading factory config").All()
+	if len(entries) != 3 {
+		t.Fatalf("accepted load logs = %v", entries)
+	}
+	for i, want := range []string{"peer", "candidate", "candidate"} {
+		if entries[i].ContextMap()["session_id"] != want || entries[i].ContextMap()["source"] != calls[i] {
+			t.Fatalf("load attribution = %v", entries[i].ContextMap())
+		}
+	}
+}
+
+func assertRuntimeInputFailureIsEmpty(t *testing.T, failed RuntimeLoad) {
+	t.Helper()
+	if failed.LoadedFactoryCfg != nil || failed.SessionLogger != nil || failed.ReplayArtifact != nil || failed.HistoricalReplay != nil {
+		t.Fatalf("failure published partial inputs: %#v", failed)
+	}
+}
+
+func assertRuntimeInputRetryFacts(t *testing.T, first, corrected RuntimeLoad, calls []string) {
+	t.Helper()
 	if first.LoadedFactoryCfg.FactoryDir() != "/peer" || first.LoadedFactoryCfg.RuntimeBaseDir() != "/peer-base" || corrected.LoadedFactoryCfg.RuntimeBaseDir() != "/corrected-base" {
 		t.Fatal("a later request changed selected paths")
 	}
@@ -786,15 +805,6 @@ func TestRuntimeInputLoadingFreshFactsAndRetry(t *testing.T) {
 	}
 	if len(calls) != 3 || calls[0] != "/peer" || calls[1] != "/failed" || calls[2] != "/corrected" {
 		t.Fatalf("selected reads = %v", calls)
-	}
-	entries := logs.FilterMessage("loading factory config").All()
-	if len(entries) != 3 {
-		t.Fatalf("accepted load logs = %v", entries)
-	}
-	for i, want := range []string{"peer", "candidate", "candidate"} {
-		if entries[i].ContextMap()["session_id"] != want || entries[i].ContextMap()["source"] != calls[i] {
-			t.Fatalf("load attribution = %v", entries[i].ContextMap())
-		}
 	}
 }
 
