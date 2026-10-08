@@ -2,6 +2,7 @@
 """Project valid mission replies; request exactly one shape correction."""
 
 import json
+import math
 import sys
 
 INVALID_PREFIX = "mission-output-invalid:"
@@ -14,6 +15,13 @@ def nonblank(value):
 
 def reject_constant(_):
     raise ValueError("non-JSON number")
+
+
+def finite_float(raw):
+    value = float(raw)
+    if not math.isfinite(value):
+        raise ValueError("number exceeds finite range")
+    return value
 
 
 def validate_reply(reply):
@@ -47,9 +55,13 @@ def validate_reply(reply):
 
 def check_mission_output(raw, rejection_feedback=""):
     try:
-        reply = json.loads(raw, parse_constant=reject_constant)
+        reply = json.loads(raw, parse_constant=reject_constant, parse_float=finite_float)
         reason = validate_reply(reply)
-    except (ValueError, TypeError, RecursionError):
+        if not reason:
+            reply = {field: reply[field] for field in ("decision", "feedback", "output")}
+            # Keep serialization failures inside the same bounded correction path.
+            json.dumps(reply, ensure_ascii=False, allow_nan=False)
+    except (ValueError, TypeError, OverflowError, RecursionError):
         reason = "reply must be valid JSON"
     if reason:
         return {
@@ -57,7 +69,7 @@ def check_mission_output(raw, rejection_feedback=""):
             "feedback": INVALID_PREFIX + " " + reason,
             "output": {"invalidReply": raw[:MAX_DIAGNOSTIC]},
         }
-    return {field: reply[field] for field in ("decision", "feedback", "output")}
+    return reply
 
 
 def main(argv=None):

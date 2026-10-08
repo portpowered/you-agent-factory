@@ -1,9 +1,11 @@
 """Isolated routing and reply validation with controlled JSON values."""
 
 import importlib.util
+import io
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 def load_script(name):
@@ -37,15 +39,36 @@ class MissionRouteTests(unittest.TestCase):
 
 
 class MissionOutputTests(unittest.TestCase):
+    def run_checker(self, raw, feedback=""):
+        stdout = io.StringIO()
+        with patch.object(checker.sys, "stdout", stdout):
+            self.assertEqual(checker.main([raw, feedback]), 0)
+        return json.loads(stdout.getvalue())
+
     def valid(self, value=0):
         return {"decision": "ACCEPTED", "feedback": "measured", "output": {
             "measurements": [{"name": "pending", "value": value, "source": "you work list"}]}}
 
     def test_native_values_and_evidence_preserved(self):
-        for value in (0, False, None, "", {"count": 0}, [1, 2]):
+        for value in (0, False, None, "", {"count": 0}, [1, 2], 1.5, 1e308):
             reply = self.valid(value)
             reply["output"].update(receipt="request-1", proposal="path", reads=[{"attempts": 2}])
             self.assertEqual(checker.check_mission_output(json.dumps(reply)), reply)
+            self.assertEqual(self.run_checker(json.dumps(reply)), reply)
+
+    def test_overflow_rejects_once_then_fails_without_process_error(self):
+        for number in ("1e999", "-1e999"):
+            for value in (number, '{"nested":[' + number + ']}'):
+                raw = json.dumps(self.valid("OVERFLOW")).replace('"OVERFLOW"', value)
+                with self.subTest(number=number, value=value):
+                    first = self.run_checker(raw)
+                    self.assertEqual(first["decision"], "REJECTED")
+                    self.assertEqual(first["feedback"], checker.INVALID_PREFIX + " reply must be valid JSON")
+                    self.assertIsInstance(first["output"], dict)
+                    second = self.run_checker(raw, first["feedback"])
+                    self.assertEqual(second["decision"], "FAILED")
+                    self.assertEqual(second["feedback"], first["feedback"])
+                    self.assertEqual(second["output"]["invalidReply"], raw[:512])
 
     def test_precondition_with_available_values_and_failed_reply(self):
         for decision in ("ACCEPTED", "FAILED"):
