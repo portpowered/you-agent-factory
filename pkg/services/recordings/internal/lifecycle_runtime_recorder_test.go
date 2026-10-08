@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -220,6 +221,60 @@ type stubRecordingLifecycle struct {
 func (s *stubRecordingLifecycle) Begin(request recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
 	s.beginRequest = request
 	return s.beginResult, s.beginErr
+}
+
+func TestLifecycleRuntimeRecorderDefersPeriodicStartUntilRuntimeStart(t *testing.T) {
+	t.Parallel()
+	for _, abort := range []bool{false, true} {
+		t.Run(fmt.Sprintf("abort=%t", abort), func(t *testing.T) {
+			t.Parallel()
+			lifecycle := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "prepared"},
+			}}
+			recorder := &lifecycleRuntimeRecorder{target: "retained.json", seen: make(map[string]struct{})}
+			if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			if !lifecycle.beginRequest.DeferPeriodic {
+				t.Fatal("binding activated periodic publication before runtime start")
+			}
+			if abort {
+				recorder.Stop()
+			}
+			recorder.Start(context.Background())
+			if lifecycle.beginRequest.DeferPeriodic != abort {
+				t.Fatalf("deferred publication = %t after abort=%t", lifecycle.beginRequest.DeferPeriodic, abort)
+			}
+			if !abort && lifecycle.beginRequest.RecordingID != "prepared" {
+				t.Fatal("activation did not reuse the prepared history")
+			}
+		})
+	}
+}
+
+func TestLifecycleRuntimeRecorderActivationFailureAbortsWithoutFinalFlush(t *testing.T) {
+	t.Parallel()
+	activationErr := errors.New("controlled activation failure")
+	cleanupErr := errors.New("controlled stop failure")
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "prepared"}},
+		stopErr:     cleanupErr,
+	}
+	recorder := &lifecycleRuntimeRecorder{target: "retained.json", seen: make(map[string]struct{})}
+	if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.beginErr = activationErr
+	recorder.Start(context.Background())
+	if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("activation abort = %v, want primary and cleanup identities", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, activationErr) {
+		t.Fatalf("aborted flush = %v, want activation cause", err)
+	}
+	if lifecycle.stopCalls != 1 || lifecycle.finishCalls != 0 || lifecycle.flushCalls != 0 {
+		t.Fatalf("stop/finish/flush = %d/%d/%d, want 1/0/0", lifecycle.stopCalls, lifecycle.finishCalls, lifecycle.flushCalls)
+	}
 }
 
 func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordings.RecordingLifecycleResult, error) {

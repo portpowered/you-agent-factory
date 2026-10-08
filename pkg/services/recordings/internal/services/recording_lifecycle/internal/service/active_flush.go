@@ -28,7 +28,7 @@ func (service *Service) startPeriodic(
 	}
 	service.mu.Lock()
 	session, err := service.sessionLocked(id)
-	if err != nil || session.periodicDone != nil {
+	if err != nil || session.periodicDone != nil || session.stopped || session.finalizing || session.terminal {
 		service.mu.Unlock()
 		return
 	}

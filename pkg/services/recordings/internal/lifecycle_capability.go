@@ -108,6 +108,7 @@ func (service *combinedService) Begin(
 			ReportedSessionID:  request.ReportedSessionID,
 		},
 		FlushInterval: request.FlushInterval,
+		DeferPeriodic: request.DeferPeriodic,
 	})
 	if err != nil {
 		return recordings.RecordingLifecycleResult{}, translateLifecycleError(err)

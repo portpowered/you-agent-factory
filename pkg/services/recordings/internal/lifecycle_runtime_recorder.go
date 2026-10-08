@@ -41,6 +41,8 @@ type lifecycleRuntimeRecorder struct {
 	finalizeErr        error
 	bindErr            error
 	stopErr            error
+	started            bool
+	stopped            bool
 	pending            []pendingRuntimeRecording
 }
 
@@ -140,6 +142,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 		CanonicalSessionID: recorder.canonicalSessionID,
 		ReportedSessionID:  scope.FactorySessionID,
 		FlushInterval:      recorder.flushInterval,
+		DeferPeriodic:      true,
 	})
 	if err != nil {
 		return err
@@ -181,7 +184,27 @@ func (recorder *lifecycleRuntimeRecorder) abortBindingLocked(cause error) error 
 	return recorder.bindErr
 }
 
-func (recorder *lifecycleRuntimeRecorder) Start(context.Context) {}
+func (recorder *lifecycleRuntimeRecorder) Start(ctx context.Context) {
+	if recorder == nil {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.started || recorder.stopped || recorder.bindErr != nil || recorder.lifecycle == nil || (ctx != nil && ctx.Err() != nil) {
+		return
+	}
+	_, err := recorder.lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled: true, RecordingID: recorder.recordingID,
+		Scope:    recordings.LifecycleScope{FactorySessionID: recorder.scope.FactorySessionID},
+		Artifact: recorder.target, CanonicalSessionID: recorder.canonicalSessionID,
+		ReportedSessionID: recorder.scope.FactorySessionID, FlushInterval: recorder.flushInterval,
+	})
+	if err != nil {
+		_ = recorder.abortBindingLocked(fmt.Errorf("activate Factory recording: %w", err))
+		return
+	}
+	recorder.started = true
+}
 
 func (recorder *lifecycleRuntimeRecorder) Stop() {
 	if recorder == nil {
@@ -189,6 +212,7 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	recorder.stopped = true
 	if recorder.lifecycle == nil {
 		return
 	}

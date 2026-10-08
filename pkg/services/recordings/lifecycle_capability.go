@@ -131,6 +131,9 @@ type BeginRecordingRequest struct {
 	CanonicalSessionID string
 	ReportedSessionID  string
 	FlushInterval      time.Duration
+	// DeferPeriodic prepares history without starting background publication.
+	// Repeat Begin with the returned identity and false to activate it.
+	DeferPeriodic bool
 }
 
 // BindLifecycleRequest identifies the Factory Session and opaque artifact

@@ -1015,6 +1015,8 @@ type StartRecordingRequest struct {
 	Scope         CanonicalEventScope
 	Target        RecordingTargetRequest
 	FlushInterval time.Duration
+	// DeferPeriodic reserves and seeds a recording before runtime activation.
+	DeferPeriodic bool
 }
 
 // StartRecordingResult reports whether recording was enabled and, when it was,

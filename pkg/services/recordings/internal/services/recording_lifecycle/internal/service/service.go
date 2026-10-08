@@ -32,6 +32,7 @@ type recordingSession struct {
 	periodicStop chan struct{}
 	periodicDone chan struct{}
 	stopOnce     sync.Once
+	stopped      bool
 
 	finalizing   bool
 	finalizeDone chan struct{}
@@ -109,6 +110,9 @@ func (service *Service) StartRecording(
 		return recordings.StartRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
 	if result, handled, err := service.existingStart(request); handled {
+		if err == nil && !request.DeferPeriodic {
+			service.startPeriodic(result.Status.RecordingID, request.FlushInterval)
+		}
 		return result, err
 	}
 	return service.startNewRecording(request)
@@ -172,7 +176,9 @@ func (service *Service) startNewRecording(
 	if err != nil {
 		return recordings.StartRecordingResult{}, err
 	}
-	service.startPeriodic(bound.Status.RecordingID, request.FlushInterval)
+	if !request.DeferPeriodic {
+		service.startPeriodic(bound.Status.RecordingID, request.FlushInterval)
+	}
 	return recordings.StartRecordingResult{Enabled: true, Status: bound.Status}, nil
 }
 
@@ -327,6 +333,9 @@ func (service *Service) StopRecording(
 	if err != nil {
 		return recordings.StopRecordingResult{}, err
 	}
+	service.mu.Lock()
+	session.stopped = true
+	service.mu.Unlock()
 	stopPeriodic(session)
 	service.mu.Lock()
 	defer service.mu.Unlock()
