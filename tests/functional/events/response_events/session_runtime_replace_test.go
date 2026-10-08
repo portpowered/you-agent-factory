@@ -2,9 +2,13 @@ package response_events
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/root"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"io"
 	"io/fs"
 	"net/http"
@@ -13,6 +17,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -79,10 +84,16 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		nil,
 	)
 
+	var process support.Process
+	var sessions factorysessions.Service
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
+		BeforeStart: func(_ testing.TB, built support.Process, _ root.Input) {
+			process = built
+			sessions = built.(support.ApplicationProcess).FactorySessions().(factorysessions.Service)
+		},
 	})
 	baseURL := server.URL()
 
@@ -98,9 +109,22 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	peerDir := support.ScaffoldFactory(t, sessionRuntimeReplaceFactoryConfig())
 	support.WriteAgentConfig(t, peerDir, "worker-a",
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	peerID := openSessionRuntimeReplaceDefaultTargetSession(t, baseURL, peerDir)
+	peerID := uuid.NewString()
+	peerRecording := filepath.Join(t.TempDir(), "peer.jsonl")
+	_, err := sessions.Start(t.Context(), factorysessions.SessionStartRequest{
+		SessionID: peerID, Mode: factorysessions.SessionOperationModeLive, FolderPath: peerDir, ActivationOnly: true,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: t.TempDir(),
+			DefinitionSourcePath: filepath.Join(peerDir, "factory.json"), ExecutionBaseDir: peerDir, RuntimeInstanceID: uuid.NewString(),
+			Recording: factorysessions.SessionRecordingSelection{RecordPath: peerRecording},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	assertSessionRuntimeReplaceInvocationCompleted(t,
 		postSessionRuntimeReplaceInvocation(t, baseURL, peerID, "peer before replacement"))
+	peerWork := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, peerID, "/work"))
 	peerFactory := getSessionRuntimeReplaceCurrentFactory(t, baseURL, peerID)
 	peerBefore := support.GetFactoryResponseEventsAt(t, baseURL, peerID)
 	if len(peerBefore) == 0 {
@@ -167,6 +191,7 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 			)
 		}
 	}
+	assertReplacementResponseCursor(t, baseURL, sessionID, secondEvents[len(secondEvents)-1].Sequence, nil)
 	assertReplacementResponseCursor(t, baseURL, sessionID, firstMax, secondEvents)
 	// Fail only this candidate's next opening, after a successful replacement.
 	candidateFiles.fail.Store(true)
@@ -185,6 +210,9 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	assertReplacementResponseCursor(t, baseURL, sessionID,
 		secondEvents[len(secondEvents)-1].Sequence, afterFailure[len(secondEvents):])
 
+	if got := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, peerID, "/work")); len(got.Results) != 1 || len(peerWork.Results) != 1 || !reflect.DeepEqual(got.Results[0].WorkId, peerWork.Results[0].WorkId) || !reflect.DeepEqual(got.Results[0].Payload, peerWork.Results[0].Payload) || got.Results[0].State == nil || got.Results[0].State.Name != "complete" {
+		t.Fatalf("replacement changed peer Work: got %#v, want %#v", got, peerWork)
+	}
 	assertSessionRuntimeReplaceInvocationCompleted(t,
 		postSessionRuntimeReplaceInvocation(t, baseURL, peerID, "peer after replacement and control"))
 	peerAfter := support.GetFactoryResponseEventsAt(t, baseURL, peerID)
@@ -194,6 +222,7 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	assertResponseEventsAscendingSequence(t, peerAfter)
 	assertReplacementResponseCursor(t, baseURL, peerID,
 		peerBefore[len(peerBefore)-1].Sequence, peerAfter[len(peerBefore):])
+	assertReplacementPeerRecording(t, process, sessions, peerID, peerRecording)
 }
 
 func assertReplacementResponseCursor(t *testing.T, baseURL, sessionID string, cursor int64, want []factoryapi.FactoryResponseEvent) {
@@ -449,5 +478,36 @@ func assertReplacementOpeningFailure(t *testing.T, baseURL, sessionID string) {
 	}
 	if response.StatusCode != http.StatusBadRequest || failure.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY || failure.Message != "Factory payload is not a valid Agent Factory definition." {
 		t.Fatalf("failed replacement = HTTP %d: %s, want candidate opening failure", response.StatusCode, payload)
+	}
+}
+
+func assertReplacementPeerRecording(t *testing.T, process support.Process, sessions factorysessions.Service, peerID, path string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	history, err := sessions.SubscribeFactoryEventsForSession(ctx, peerID, nil)
+	if err != nil || history == nil || len(history.History) == 0 {
+		t.Fatalf("peer canonical history = %#v, %v", history, err)
+	}
+	result, err := sessions.Control(t.Context(), factorysessions.SessionControlRequest{SessionID: peerID, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose})
+	if err != nil || !result.Closed {
+		t.Fatalf("close recorded peer = %#v, %v", result, err)
+	}
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", t.TempDir(), "--replay", path, "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("peer replay: %v %s", err, inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), "Replayed Factory Session: "+peerID) {
+		t.Fatalf("wrong peer replay: %s", inputs.Stdout())
+	}
+	previous := -1
+	for _, event := range history.History {
+		position := strings.Index(inputs.Stdout(), fmt.Sprintf("%s (%s)", event.Type, event.Id))
+		if position <= previous {
+			t.Fatalf("peer recording lost ordered event %s", event.Id)
+		}
+		previous = position
 	}
 }

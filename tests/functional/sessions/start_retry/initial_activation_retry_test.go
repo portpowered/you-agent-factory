@@ -2,10 +2,12 @@ package start_retry_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -153,7 +155,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("cancellation while opening unwinds before same identity retry", func(t *testing.T) {
 		t.Parallel()
-		testCanceledInitialOpening(t, sessions, canceled, gate)
+		testCanceledInitialOpening(t, sessions, process, canceled, gate)
 	})
 	t.Run("closed recording preserves attributed history and live peer", func(t *testing.T) {
 		t.Parallel()
@@ -291,6 +293,7 @@ func testFailedInitialOpeningRetry(t *testing.T, sessions factorysessions.Servic
 	assertInitialOpeningReplay(t, process, recordPath, scenario.candidateID, history)
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	assertFixedPeerReplay(t, sessions, process, scenario)
 }
 
 func assertInitialOpeningDiagnostics(t *testing.T, logs *observer.ObservedLogs, sessionID, dir string) {
@@ -306,7 +309,7 @@ func assertInitialOpeningDiagnostics(t *testing.T, logs *observer.ObservedLogs, 
 	}
 }
 
-func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *initialOpeningGate) {
+func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, gate *initialOpeningGate) {
 	t.Helper()
 	t.Cleanup(gate.unblock)
 	peerHistory := scenario.startPeer(t, sessions)
@@ -339,6 +342,7 @@ func testCanceledInitialOpening(t *testing.T, sessions factorysessions.Service, 
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 	startInitialOpeningSession(t, sessions, request)
 	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertFixedPeerReplay(t, sessions, process, scenario)
 }
 
 func assertInitialOpeningReplay(t *testing.T, process support.Process, recordPath, sessionID string, history *factorydefinitions.FactoryEventStream) {
@@ -464,6 +468,7 @@ func (scenario initialOpeningScenario) startPeer(t *testing.T, sessions factorys
 	request.RuntimeSelection.DefinitionSourcePath = filepath.Join(scenario.peerDir, "factory.json")
 	request.RuntimeSelection.ExecutionBaseDir = scenario.peerDir
 	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	request.RuntimeSelection.Recording.RecordPath = filepath.Join(scenario.peerDir, "peer.jsonl")
 	startInitialOpeningSession(t, sessions, request)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 	return initialOpeningHistory(t, sessions, scenario.peerID)
@@ -691,8 +696,118 @@ func testFixedOpeningReads(t *testing.T, sessions factorysessions.Service, baseU
 		}
 		initialOpeningHistory(t, sessions, id)
 	}
+	for _, suffix := range []string{"/state", "/work", "/work/unknown-work"} {
+		assertFixedMissingRead(t, support.SessionWorkURL(baseURL, "unknown-fixed-observation", suffix), suffix)
+	}
 	_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: "unknown-fixed-observation", Mode: factorysessions.SessionOperationModeLive})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing selected result = %v", err)
 	}
+}
+
+// Only this scenario's recording destination faults; concurrent peers use the
+// same composed Recordings owner with independent external effects.
+type fixedRecordingFault struct {
+	directory string
+	cause     error
+	fail      atomic.Bool
+}
+
+func (fault *fixedRecordingFault) write(path string, data []byte) error {
+	if fault.fail.Load() && strings.HasPrefix(filepath.Clean(path), fault.directory+string(filepath.Separator)) {
+		return fault.cause
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func testFixedRecordingFault(t *testing.T, sessions factorysessions.Service, process support.Process, fault *fixedRecordingFault) {
+	t.Helper()
+	scenario := newInitialOpeningScenario(t)
+	peer := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	request.RuntimeSelection.Recording.RecordPath = filepath.Join(fault.directory, "fault.json")
+	if _, err := sessions.Start(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	fault.fail.Store(true)
+	defer fault.fail.Store(false)
+	result, err := sessions.Control(t.Context(), factorysessions.SessionControlRequest{
+		SessionID: scenario.candidateID, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
+	})
+	if !errors.Is(err, fault.cause) || result.Closed {
+		t.Fatalf("faulted recording close = %#v, %v, want selected write cause and no false close success", result, err)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	assertFixedPeerReplay(t, sessions, process, scenario)
+}
+
+func assertFixedPeerReplay(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario) {
+	t.Helper()
+	history := initialOpeningHistory(t, sessions, scenario.peerID)
+	closeInitialOpeningSession(t, sessions, scenario.peerID)
+	assertInitialOpeningReplay(t, process, filepath.Join(scenario.peerDir, "peer.jsonl"), scenario.peerID, history)
+}
+
+func assertFixedMissingRead(t *testing.T, endpoint, suffix string) {
+	t.Helper()
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var diagnostic factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	wantStatus, wantCode := http.StatusNotFound, factoryapi.ErrorResponseCodeNOTFOUND
+	if strings.HasPrefix(suffix, "/work") {
+		wantStatus, wantCode = http.StatusInternalServerError, factoryapi.ErrorResponseCode("INTERNAL_ERROR")
+	}
+	if response.StatusCode != wantStatus || diagnostic.Code != wantCode {
+		t.Fatalf("missing selected read = %d, %#v", response.StatusCode, diagnostic)
+	}
+	// Missing identities must not expose filesystem or provider credentials.
+	text := fmt.Sprint(diagnostic)
+	for _, secret := range []string{"Bearer ", "sk-", "USERPROFILE", "C:\\Users"} {
+		if strings.Contains(text, secret) {
+			t.Fatalf("unsafe selected read diagnostic: %s", text)
+		}
+	}
+}
+
+// A terminal recording fault deliberately survives cleanup. This fixture owns
+// its process so that the expected retained failure cannot contaminate peers
+// in the reusable healthy-process matrix.
+func TestFixedObservationTerminalFlushFailure(t *testing.T) {
+	t.Parallel()
+	fault := &fixedRecordingFault{directory: t.TempDir(), cause: errors.New("selected recording write failed")}
+	api := support.NewProcessAPIServer()
+	effects := &initialOpeningEffects{calls: make(map[string]int)}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		Clock: initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		RecordingWriteFile: fault.write, APIServerStarter: api.Start,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), initialOpeningReadCeiling)
+		defer cancel()
+		err := process.Close(ctx)
+		if !errors.Is(err, fault.cause) {
+			t.Errorf("terminal process cleanup = %v, want retained recording cause", err)
+		}
+	})
+	directory, home := support.ScaffoldFactory(t, initialOpeningFactoryConfig()), t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", directory, "--continuously", "--with-server", "--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = directory
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	api.WaitForURL(t)
+	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	testFixedRecordingFault(t, sessions, process, fault)
+	// Execute may also surface the already asserted terminal resource error.
+	command.AcceptError()
 }
