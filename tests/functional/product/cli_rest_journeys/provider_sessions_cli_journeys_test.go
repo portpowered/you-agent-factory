@@ -23,6 +23,7 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	t.Run("TestWorkerSessionsCLIListReceivedFailures", testWorkerSessionsCLIListReceivedFailures)
 	t.Run("TestWorkerSessionsListWorkScopedBoundedParity", testWorkerSessionsListWorkScopedBoundedParity)
 	t.Run("TestWorkerSessionsListWorkScopedFreshCommit", testWorkerSessionsListWorkScopedFreshCommit)
+	t.Run("TestWorkerSessionsListWorkScopedOptionalCapture", testWorkerSessionsListWorkScopedOptionalCapture)
 	t.Run("TestWorkerSessionsFleetActiveListDeadlineRepair", testProvidersessionscliWorkerSessionsFleetActiveListDeadlineRepair)
 	t.Run("TestWorkerSessionsFleetListBoundedRootPages", testProvidersessionscliWorkerSessionsFleetListBoundedRootPages)
 	t.Run("TestWorkerSessionsFleetListCLIConcurrent", testProvidersessionscliWorkerSessionsFleetListCLIConcurrent)

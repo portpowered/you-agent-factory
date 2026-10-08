@@ -3,8 +3,10 @@ package cli_rest_journeys_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -78,6 +80,14 @@ func workScopedRoute(index int) string { return fmt.Sprintf("worker-session-scop
 // has its own provider identity; no private observation or history is seeded.
 func writeWorkScopedFactory(t *testing.T, c *workerSessionsCLICase) {
 	t.Helper()
+	writeWorkScopedFactoryDefinition(t, c.factoryDir)
+	for index := range workScopedAttemptCount {
+		c.registerRoutes(t, workScopedRoute(index))
+	}
+}
+
+func writeWorkScopedFactoryDefinition(t *testing.T, factoryDir string) {
+	t.Helper()
 	states := []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "done", "type": "TERMINAL"}, map[string]any{"name": "failed", "type": "FAILED"}}
 	stations := make([]any, 0, workScopedAttemptCount)
 	input := "init"
@@ -89,15 +99,14 @@ func writeWorkScopedFactory(t *testing.T, c *workerSessionsCLICase) {
 		}
 		name := fmt.Sprintf("step-%03d", index)
 		stations = append(stations, map[string]any{"name": name, "worker": "worker", "inputs": []any{map[string]any{"workType": "task", "state": input}}, "outputs": []any{map[string]any{"workType": "task", "state": output}}, "onFailure": []any{map[string]any{"workType": "task", "state": "failed"}}})
-		support.WriteWorkstationConfig(t, c.factoryDir, name, "---\ntype: MODEL_WORKSTATION\n---\nworker-session-route="+workScopedRoute(index)+"\n")
-		c.registerRoutes(t, workScopedRoute(index))
+		support.WriteWorkstationConfig(t, factoryDir, name, "---\ntype: MODEL_WORKSTATION\n---\nworker-session-route="+workScopedRoute(index)+"\n")
 		input = output
 	}
 	raw, err := json.Marshal(map[string]any{"name": "scoped-list", "workTypes": []any{map[string]any{"name": "task", "states": states}}, "workers": []any{map[string]any{"name": "worker"}}, "workstations": stations})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(c.factoryDir, "factory.json"), raw, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), raw, 0600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -243,12 +252,13 @@ func assertScopedCapturedUsage(t *testing.T, row workerSessionJSON) {
 func testWorkerSessionsListWorkScopedDefault(t *testing.T) {
 	c := newWorkerSessionsCLICase(t)
 	f := c.fixture
-	c.registerRoutes(t, "worker-session-scoped-default")
-	ctx := t.Context()
+	for index := range workScopedAttemptCount {
+		c.registerRoutes(t, workScopedRoute(index))
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancel()
 	workID := submitWork(t, ctx, f.process, functionalEnvironment(f.homeDir), f.hostFactory,
 		f.baseURL, "~default", "worker-session-scoped-default")
-	row := waitForWorkerSessionState(t, ctx, f.process, functionalEnvironment(f.homeDir), f.hostFactory,
-		f.baseURL, "~default", workID, "COMPLETED")
 	endpoint := f.baseURL + "/factory-sessions/~default/worker-sessions?workId=" + url.QueryEscape(workID)
 	waitForDefaultScopedCommit(t, ctx, endpoint)
 	omitted := observeWorkScopedRead(t, ctx, c, "~default", workID, endpoint, true)
@@ -256,10 +266,10 @@ func testWorkerSessionsListWorkScopedDefault(t *testing.T) {
 	assertNormalizedFleetJSONEqual(t, "default versus explicit default", []byte(omitted.Stdout()), []byte(explicit.Stdout()))
 	var listed workerSessionListJSON
 	decodeCLIJSON(t, omitted, &listed)
-	if len(listed.Sessions) != 1 || listed.Sessions[0].WorkerSessionID != row.WorkerSessionID ||
-		listed.Sessions[0].WorkID == nil || *listed.Sessions[0].WorkID != workID {
-		t.Fatalf("default selector lost owned Work: %#v", listed)
+	if len(listed.Sessions) != workScopedAttemptCount || listed.Sessions[0].FactorySessionID == nil {
+		t.Fatalf("default selector lost complete Work: rows=%d", len(listed.Sessions))
 	}
+	assertCommittedScopedRows(t, listed, *listed.Sessions[0].FactorySessionID, workID)
 }
 
 func waitForDefaultScopedCommit(t *testing.T, ctx context.Context, endpoint string) {
@@ -271,8 +281,11 @@ func waitForDefaultScopedCommit(t *testing.T, ctx context.Context, endpoint stri
 	defer ticker.Stop()
 	for {
 		listed := support.GetJSON[workerSessionListJSON](t, endpoint)
-		if len(listed.Sessions) == 1 && listed.Sessions[0].ConfirmationState == "CONFIRMED" &&
-			listed.Sessions[0].TokenUsage != nil {
+		complete := len(listed.Sessions) == workScopedAttemptCount
+		for _, row := range listed.Sessions {
+			complete = complete && row.ConfirmationState == "CONFIRMED" && row.State == "COMPLETED" && row.TokenUsage != nil
+		}
+		if complete {
 			return
 		}
 		select {
@@ -306,5 +319,63 @@ func testWorkerSessionsListWorkScopedEmpty(t *testing.T) {
 		"--server", f.baseURL, "worker-sessions", "list", "--session", sessionID, "--work-id", workID)
 	if strings.TrimSpace(human.Stdout()) != "No worker sessions found." {
 		t.Fatalf("empty human list=%q", human.Stdout())
+	}
+}
+
+func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"slow", "missing", "failed"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			c := newWorkerSessionsCLICase(t)
+			route := "worker-session-optional-" + kind
+			c.registerRoutes(t, route)
+			f := c.fixture
+			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+			defer cancel()
+			sessionID := c.openSession(t)
+			workID := submitWork(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, route)
+			row := waitForWorkerSessionState(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, workID, "COMPLETED")
+			endpoint := f.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
+			waitForScopedUsageCommit(t, ctx, endpoint)
+			before := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			var fault error
+			switch kind {
+			case "missing":
+				fault = fs.ErrNotExist
+			case "failed":
+				fault = errors.New("private-capture-path sentinel-secret")
+			}
+			f.captureReads.fault(t, row.WorkerSessionID, fault)
+			// A public transcript read confirms the selected activity boundary is
+			// unavailable. Lists must retain snapshot facts without reacquiring it.
+			probeCtx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+			probe, err := executeCLIExpectError(t, probeCtx, f.process, functionalEnvironment(f.homeDir), c.factoryDir,
+				"--server", f.baseURL, "worker-sessions", "read", "--session", sessionID, "--worker-session-id", row.WorkerSessionID, "--output", "json")
+			stop()
+			if err == nil {
+				t.Fatal("faulted optional activity unexpectedly readable")
+			}
+			if strings.Contains(probe.Stdout()+probe.Stderr(), "sentinel-secret") {
+				t.Fatal("capture fault disclosed private details")
+			}
+			after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			var actual workerSessionListJSON
+			decodeCLIJSON(t, after, &actual)
+			if len(actual.Sessions) != 1 || actual.Sessions[0].WorkerSessionID != row.WorkerSessionID || actual.Sessions[0].Transcript != "UNAVAILABLE" {
+				t.Fatalf("optional failure lost row/unavailable fact: %+v", actual)
+			}
+			assertScopedCapturedUsage(t, actual.Sessions[0])
+			var expectedRaw map[string]any
+			if err := json.Unmarshal([]byte(before.Stdout()), &expectedRaw); err != nil {
+				t.Fatal(err)
+			}
+			expectedRaw["sessions"].([]any)[0].(map[string]any)["transcript"] = "UNAVAILABLE"
+			raw, err := json.Marshal(expectedRaw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertNormalizedFleetJSONEqual(t, "optional unavailable preserves all other facts", raw, []byte(after.Stdout()))
+		})
 	}
 }

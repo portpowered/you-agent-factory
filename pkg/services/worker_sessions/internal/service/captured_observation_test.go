@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -234,5 +235,22 @@ func TestObservationProviderBindingBeforeAssociationAndFailedPublication(t *test
 				t.Fatalf("bound provider without association: %+v %v", got, err)
 			}
 		})
+	}
+}
+
+func TestListOptionalTranscriptBudgetRetainsIdentityAndCallerCancellation(t *testing.T) {
+	t.Parallel()
+	r := &registry{}
+	optionalCtx, cancelOptional := context.WithCancel(t.Context())
+	cancelOptional()
+	row := workersessions.Observation{WorkerSessionID: "owned-worker", State: workersessions.StateCompleted, Transcript: workersessions.TranscriptAvailabilityAvailable}
+	got, err := r.completeListObservation(t.Context(), optionalCtx, row)
+	if err != nil || got.WorkerSessionID != row.WorkerSessionID || got.State != row.State || got.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("optional budget erased authoritative identity: %+v, %v", got, err)
+	}
+	callerCtx, cancelCaller := context.WithCancel(t.Context())
+	cancelCaller()
+	if _, err := r.completeListObservation(callerCtx, optionalCtx, row); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("caller cancellation became success: %v", err)
 	}
 }

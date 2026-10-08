@@ -320,6 +320,10 @@ func projectObservationEvent(record events.Record, workerSessionIDArgs ...string
 	}
 }
 
+// One budget covers optional transcript checks for the complete scoped list.
+// An unavailable capture must not hold authoritative rows until the client deadline.
+const scopedListTranscriptBudget = 250 * time.Millisecond
+
 func (r *registry) ListObservations(ctx context.Context, req workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
 	listStartedAt := r.clock.Now()
 	if err := req.Validate(); err != nil {
@@ -340,6 +344,8 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 
 	projectionStartedAt := r.clock.Now()
 	usage := r.capturedListUsage(ctx, ids)
+	optionalCtx, cancelOptional := context.WithTimeout(ctx, scopedListTranscriptBudget)
+	defer cancelOptional()
 	observations := make([]workersessions.Observation, 0, len(ids))
 	for _, item := range ids {
 		projected, err := r.projectWorkerSessionIdentity(ctx, item.id)
@@ -347,7 +353,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 			if captured, exists := usage[item.id]; exists {
 				projected.TokenUsage = captured
 			}
-			projected, err = r.completeObservation(ctx, projected)
+			projected, err = r.completeListObservation(ctx, optionalCtx, projected)
 		}
 		if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 			return workersessions.ListObservationsResult{}, err
@@ -365,6 +371,19 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	)
 	r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "success", "result_count", len(observations))
 	return workersessions.ListObservationsResult{Observations: observations}, nil
+}
+
+// Preserve the owned identity if optional activity exceeds the list budget.
+// Caller cancellation is still a failed read, never a successful partial list.
+func (r *registry) completeListObservation(ctx, optionalCtx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {
+	if optionalCtx.Err() == nil {
+		completed, err := r.completeObservation(optionalCtx, projected)
+		if optionalCtx.Err() == nil || ctx.Err() != nil {
+			return completed, err
+		}
+	}
+	projected.Transcript = workersessions.TranscriptAvailabilityUnavailable
+	return projected, observationContextError(ctx)
 }
 
 func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObservationRequest) (workersessions.Observation, error) {

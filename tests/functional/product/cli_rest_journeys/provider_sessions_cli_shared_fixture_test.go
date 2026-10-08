@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -56,7 +57,9 @@ type workerSessionsCLISharedFixture struct {
 	api     *workerSessionsCLIAPIServer
 	runner  *providerCommandRouteRunner
 
-	fleetGate *providerCommandRouteGate
+	fleetGate     *providerCommandRouteGate
+	providerFiles *workerSessionProviderFiles
+	captureReads  *workerSessionCaptureReads
 
 	sessionMu        sync.Mutex
 	openedSessionIDs map[string]struct{}
@@ -209,13 +212,19 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	}
 	support.ClearSeedInputs(t, hostFactory)
 	support.WriteAgentConfig(t, hostFactory, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
-	writeWorkerSessionRouteWorkstation(t, hostFactory)
+	writeWorkScopedFactoryDefinition(t, hostFactory)
 
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
+	providerFiles := &workerSessionProviderFiles{delegate: providerSessionReadFiles{}}
+	captureReads := &workerSessionCaptureReads{faults: make(map[string]error)}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      api.start,
-		ProviderCommandRunner: runner,
+		WorkerRecordingWriter:               captureReads,
+		WorkerRecordingStoreObserver:        func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
+		APIServerStarter:                    api.start,
+		ProviderCommandRunner:               runner,
+		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		ProviderSessionFileSystem:           providerFiles,
 	})
 	if err != nil {
 		t.Fatalf("build Provider Sessions CLI shared process: %v", err)
@@ -239,6 +248,8 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		api:              api,
 		runner:           runner,
 		fleetGate:        fleetGate,
+		providerFiles:    providerFiles,
+		captureReads:     captureReads,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}
@@ -288,6 +299,9 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
 	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
 	addSuccessRoute("worker-session-scoped-fresh", "session_fixture_codex_scoped_fresh")
+	for _, kind := range []string{"slow", "missing", "failed"} {
+		addSuccessRoute("worker-session-optional-"+kind, "session_fixture_codex_optional_"+kind)
+	}
 	for index := range workScopedAttemptCount {
 		addSuccessRoute(workScopedRoute(index), fmt.Sprintf("session_fixture_codex_scoped_%03d", index))
 	}
@@ -557,4 +571,38 @@ func resetprovidersessionscli5State() {
 		sync.Once
 		fixture *workerSessionsCLISharedFixture
 	}{}
+}
+
+// Optional activity faults select one Worker identity. Authoritative snapshot
+// and commit operations retain the real Wire-built durable implementation.
+type workerSessionCaptureReads struct {
+	recordings.WorkerRecordingStore
+	mu     sync.Mutex
+	faults map[string]error
+}
+
+func (reads *workerSessionCaptureReads) ReadWorkerCapturedActivity(ctx context.Context, request recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	reads.mu.Lock()
+	fault, selected := reads.faults[request.WorkerSessionID]
+	reads.mu.Unlock()
+	if !selected {
+		return reads.WorkerRecordingStore.ReadWorkerCapturedActivity(ctx, request)
+	}
+	if fault == nil {
+		<-ctx.Done()
+		fault = ctx.Err()
+	}
+	return recordings.WorkerCapturedActivityPage{}, fault
+}
+
+func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error) {
+	t.Helper()
+	reads.mu.Lock()
+	reads.faults[id] = err
+	reads.mu.Unlock()
+	t.Cleanup(func() {
+		reads.mu.Lock()
+		delete(reads.faults, id)
+		reads.mu.Unlock()
+	})
 }
