@@ -857,6 +857,16 @@ func TestRuntimeInputLoadingDetachedMetadataSurvivesPeerSelection(t *testing.T) 
 func assertDetachedRuntimeMetadata(t *testing.T, selected RuntimeLoad, snapshot factorydefinitions.RuntimeSnapshot, withSpans bool) {
 	t.Helper()
 	source := selected.LoadedFactoryCfg
+	assertDetachedRuntimePathsAndProvenance(t, source, snapshot)
+	if withSpans {
+		assertDetachedRuntimeSpans(t, source)
+		return
+	}
+	assertDetachedRuntimePointers(t, source)
+}
+
+func assertDetachedRuntimePathsAndProvenance(t *testing.T, source factorydefinitions.MutableLoadedFactorySource, snapshot factorydefinitions.RuntimeSnapshot) {
+	t.Helper()
 	if source.FactoryDir() != snapshot.FactoryDir || source.RuntimeBaseDir() != snapshot.RuntimeBaseDir {
 		t.Fatal("peer changed selected source/base paths")
 	}
@@ -866,20 +876,25 @@ func assertDetachedRuntimeMetadata(t *testing.T, selected RuntimeLoad, snapshot 
 	if !workerOK || !stationOK || worker.Body != "selected ${input}" || station.Body != "selected ${task}" {
 		t.Fatalf("detached provenance = %#v, %#v", worker, station)
 	}
-	if withSpans {
-		lookup := source.(interface {
-			InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan
-		})
-		spans := lookup.InvocationSensitiveJSONSpans()
-		if len(spans) != 1 || spans[0].JSONPointer != "/workers/0/body" || spans[0].Start != 2 || spans[0].End != 7 {
-			t.Fatalf("selected spans = %v", spans)
-		}
-		spans[0].Start = 99
-		if lookup.InvocationSensitiveJSONSpans()[0].Start != 2 {
-			t.Fatal("span accessor exposed mutable metadata")
-		}
-		return
+}
+
+func assertDetachedRuntimeSpans(t *testing.T, source factorydefinitions.MutableLoadedFactorySource) {
+	t.Helper()
+	lookup := source.(interface {
+		InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan
+	})
+	spans := lookup.InvocationSensitiveJSONSpans()
+	if len(spans) != 1 || spans[0].JSONPointer != "/workers/0/body" || spans[0].Start != 2 || spans[0].End != 7 {
+		t.Fatalf("selected spans = %v", spans)
 	}
+	spans[0].Start = 99
+	if lookup.InvocationSensitiveJSONSpans()[0].Start != 2 {
+		t.Fatal("span accessor exposed mutable metadata")
+	}
+}
+
+func assertDetachedRuntimePointers(t *testing.T, source factorydefinitions.MutableLoadedFactorySource) {
+	t.Helper()
 	lookupPointers := source.(interface{ InvocationSensitiveJSONPointers() []string })
 	pointers := lookupPointers.InvocationSensitiveJSONPointers()
 	if len(pointers) != 1 || pointers[0] != "/workers/0/body" {
