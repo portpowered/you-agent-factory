@@ -1085,6 +1085,30 @@
         "content": {
           "encoding": "utf-8"
         }
+      },
+      {
+        "id": "factory/scripts/route-thoughts.py",
+        "targetPath": "factory/scripts/route-thoughts.py",
+        "type": "SCRIPT",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/scripts/check-mission-output.py",
+        "targetPath": "factory/scripts/check-mission-output.py",
+        "type": "SCRIPT",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/scripts/mission-read.py",
+        "targetPath": "factory/scripts/mission-read.py",
+        "type": "SCRIPT",
+        "content": {
+          "encoding": "utf-8"
+        }
       }
     ]
   },
@@ -1101,6 +1125,21 @@
           "id": "init",
           "name": "init",
           "type": "INITIAL"
+        },
+        {
+          "id": "supervising",
+          "name": "supervising",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "mission-ready",
+          "name": "mission-ready",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "mission-check",
+          "name": "mission-check",
+          "type": "PROCESSING"
         },
         {
           "id": "reporting-complete",
@@ -1556,6 +1595,47 @@
       "model": "gpt-6.1-sol",
       "reasoningEffort": "medium",
       "skipPermissions": true
+    },
+    {
+      "args": [
+        "--config",
+        "mcp_servers.playwright={command=\"none\",enabled=false}",
+        "--config",
+        "mcp_servers.chrome-devtools={command=\"none\",enabled=false}",
+        "--config",
+        "mcp_servers.node_repl={command=\"none\",enabled=false}",
+        "--disable",
+        "plugins"
+      ],
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
+      "id": "mission-verifier",
+      "name": "mission-verifier",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "id": "thoughts-router",
+      "name": "thoughts-router",
+      "type": "SCRIPT_WORKER",
+      "command": "python",
+      "args": [
+        "factory/scripts/route-thoughts.py",
+        "{{ (index .Inputs 0).Payload }}"
+      ]
+    },
+    {
+      "id": "mission-output-checker",
+      "name": "mission-output-checker",
+      "type": "SCRIPT_WORKER",
+      "command": "python",
+      "args": [
+        "factory/scripts/check-mission-output.py",
+        "{{ (index .Inputs 0).PreviousOutput }}",
+        "{{ (index .Inputs 0).RejectionFeedback }}"
+      ]
     }
   ],
   "workstations": [
@@ -1787,7 +1867,7 @@
       "id": "ideafy",
       "inputs": [
         {
-          "state": "init",
+          "state": "supervising",
           "workType": "thoughts"
         }
       ],
@@ -2736,6 +2816,114 @@
         {
           "capacity": 1,
           "name": "executor-slot"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "route-thoughts",
+      "name": "route-thoughts",
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "thoughts-router",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "init"
+        }
+      ],
+      "classificationRoutes": [
+        {
+          "label": "mission",
+          "outputs": [
+            {
+              "workType": "thoughts",
+              "state": "mission-ready"
+            }
+          ]
+        },
+        {
+          "label": "supervision",
+          "outputs": [
+            {
+              "workType": "thoughts",
+              "state": "supervising"
+            }
+          ]
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-failed"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "verify-mission",
+      "name": "verify-mission",
+      "type": "AGENT_RUN",
+      "worker": "mission-verifier",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "mission-ready"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "thoughts",
+          "state": "mission-check"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-failed"
+        }
+      ],
+      "resources": [
+        {
+          "name": "executor-slot",
+          "capacity": 1
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "check-mission-output",
+      "name": "check-mission-output",
+      "type": "SCRIPT_RUN",
+      "worker": "mission-output-checker",
+      "outcomeFormat": "decision-envelope",
+      "inputs": [
+        {
+          "workType": "thoughts",
+          "state": "mission-check"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-complete"
+        }
+      ],
+      "onRejection": [
+        {
+          "workType": "thoughts",
+          "state": "mission-ready"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "thoughts",
+          "state": "reporting-failed"
         }
       ],
       "workPropagation": {

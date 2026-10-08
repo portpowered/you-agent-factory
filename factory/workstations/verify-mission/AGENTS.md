@@ -1,0 +1,47 @@
+# Bound mission verification
+
+Payload: {{ (index .Inputs 0).Payload }}
+Work ID: {{ (index .Inputs 0).WorkID }}
+Factory Session: {{.Context.SessionID}}
+Tags: {{ (index .Inputs 0).Tags }}
+Correction feedback: {{ (index .Inputs 0).RejectionFeedback }}
+
+Execute only the bound mission, including cron-origin missions. Run every named
+command/read and report every named value, unit and source; never invent evidence.
+Use canonical server http://127.0.0.1:7437 and the explicit bound Factory Session
+for all API-backed commands. Preserve the payload, Work identity and project tag.
+Read factory/docs/batch-inputs.md for corrective batch shape and relations.
+Use python factory/scripts/mission-read.py [--required] -- <read-command> [args...]
+for authorized reads, including GitHub reads. Mark --required only when the
+mission requires that read. Each failed read retries once; retain both attempts
+and available output. Optional exhaustion is a recorded gap, not alone FAILED.
+Never retry mutations through the helper or add an agent retry after exhaustion.
+Required read/command failures return FAILED with the exact reason and available
+values. An unmet precondition must be named; a bare hold or empty list is invalid.
+On correction feedback, correct the output shape while retaining the mission,
+measurements and original failure evidence; do not reset the rejection marker.
+
+For gaps, prepare a narrow corrective batch plus its own dependent loopback.
+For untagged Work, use a stable request ID, dry-run, idempotent submission and
+verified receipt. Inspect by request ID before repeating an uncertain submission.
+Verify returned request ID, Session ID, Work count and Work IDs and read the Work.
+Use you --server http://127.0.0.1:7437 --json submit batch --dry-run --session {{.Context.SessionID}} <file>,
+then the same command without --dry-run. Keep the receipt and named values.
+For tagged Work, resolve the main checkout as the parent of the absolute git
+common directory. Save the raw proposal at
+docs/temp/projects/<project>/proposals/<loopback-name>.json in the main checkout.
+Keep stable request ID, origin Work ID and original validation findings.
+Dry-run only in the bound Factory Session; submit no Project children.
+The existing project-report route informs the owning lead, who owns admission
+and follow-up validation. Keep measurements and proposal path; do not emit
+another report or thoughts join. Admission ownership alone never causes FAILED.
+Write/dry-run/admission failures return FAILED with exact reason and any saved path.
+Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.
+
+Return only decision, feedback and output. decision is ACCEPTED or FAILED,
+feedback is a string, and output is a native JSON object containing non-empty
+measurements [{"name":"value name","value":0,"source":"command or evidence"}]
+or a non-empty precondition naming the unmet requirement with available values.
+Every supplied measurements list must be non-empty; name/source must be non-blank.
+Keep optional read records, units, corrective receipt and proposal path in output.
+A path or receipt alone cannot complete a mission.

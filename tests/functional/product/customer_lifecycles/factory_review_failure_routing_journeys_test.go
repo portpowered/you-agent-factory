@@ -4,10 +4,10 @@ import "testing"
 
 // TestReviewFailureRecoveryJourneys owns its immutable fixture until all customer scenarios finish.
 func TestReviewFailureRecoveryJourneys(t *testing.T) {
+	initializeFactoryreviewfailureroutingFixture(t)
 	t.Parallel()
 	resetfactoryreviewfailurerouting1State()
 	resetfactoryreviewfailurerouting7State()
-	initializeFactoryreviewfailureroutingFixture(t)
 	t.Run("TestEscalatePlanFailure_ConsumesFailedPlanSoRestoredIdeaIsNotReescalated", testFactoryreviewfailureroutingEscalatePlanFailure_ConsumesFailedPlanSoRestoredIdeaIsNotReescalated)
 	t.Run("TestMergedPRRoute_CompletionAndUnmergedLimits", testFactoryreviewfailureroutingMergedPRRoute_CompletionAndUnmergedLimits)
 	t.Run("TestReviewRetirement_RequiresMatchingCompletedTask", testReviewRetirement_RequiresMatchingCompletedTask)

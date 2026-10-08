@@ -60,8 +60,33 @@ test("minimal selected verification passes and unselected lanes may be skipped",
 	assert.deepEqual(result, { ok: true, failures: [] });
 });
 
+test("unit-only PR accepts unselected skips and fails every mandatory or selected result independently", () => {
+	const env = { ...process.env, GITHUB_STEP_SUMMARY: "", CLASSIFICATION_RESULT: "success",
+		CLASSIFICATION: "documentation", PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "true", API_INDEPENDENT: "true" };
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+		env[`RUN_${prefix}`] = "false";
+		env[`${prefix}_RESULT`] = "skipped";
+	}
+	for (const suffix of ["COMPONENT", "COVERAGE", "BROWSER", "STORYBOOK"]) env[`FRONTEND_${suffix}_RESULT`] = "skipped";
+	for (const key of ["BACKEND_MODELS_RESULT", "BACKEND_TTS_RESULT", "API_CANDIDATE_RESULT", "PACKAGED_CANDIDATE_RESULT"]) env[key] = "skipped";
+	for (const prefix of ["DOCS", "README", "BACKEND_COVERAGE", "BACKEND_LINT", "WORKFLOW_LINT"]) {
+		env[`RUN_${prefix}`] = "true";
+		env[`${prefix}_RESULT`] = "success";
+	}
+	const invoke = (values) => spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], { encoding: "utf8", env: values });
+	assert.equal(invoke(env).status, 0);
+	for (const key of ["CLASSIFICATION_RESULT", "DOCS_RESULT", "README_RESULT", "BACKEND_COVERAGE_RESULT", "BACKEND_LINT_RESULT", "WORKFLOW_LINT_RESULT"]) {
+		for (const result of ["", "skipped", "failure", "cancelled"]) assert.equal(invoke({ ...env, [key]: result }).status, 1, key);
+	}
+	const selected = { ...env, RUN_BACKEND: "true", BACKEND_RESULT: "success", BACKEND_TTS_RESULT: "success", BACKEND_MODELS_RESULT: "success" };
+	assert.equal(invoke(selected).status, 0);
+	for (const key of ["BACKEND_RESULT", "BACKEND_TTS_RESULT", "BACKEND_MODELS_RESULT"]) {
+		for (const result of ["", "skipped", "failure", "cancelled"]) assert.equal(invoke({ ...selected, [key]: result }).status, 1, key);
+	}
+});
+
 test("API-only PR requires both independent proofs and permits skipped reusable children", () => {
-	const base = { ...process.env, GITHUB_STEP_SUMMARY: "", CLASSIFICATION_RESULT: "success",
+	const base = { ...process.env, GITHUB_STEP_SUMMARY: "", BACKEND_COVERAGE_RESULT: "success", RUN_BACKEND_COVERAGE: "true", BACKEND_TTS_RESULT: "skipped", CLASSIFICATION_RESULT: "success",
 		CLASSIFICATION: "api-package", PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "true", API_INDEPENDENT: "true" };
 	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
 		base[`RUN_${prefix}`] = "false";
@@ -120,7 +145,7 @@ test("selected Models verification requires successful hosted Wire and race resu
 test("policy CLI consumes the hosted Models result independently of backend coverage", () => {
 	const env = {
 		...process.env,
-		GITHUB_STEP_SUMMARY: "",
+		GITHUB_STEP_SUMMARY: "", BACKEND_COVERAGE_RESULT: "success", RUN_BACKEND_COVERAGE: "true", BACKEND_TTS_RESULT: "skipped",
 		CLASSIFICATION_RESULT: "success",
 		CLASSIFICATION: "backend",
 		PACKAGE_WORKFLOW_RESULT: "skipped",
@@ -135,6 +160,7 @@ test("policy CLI consumes the hosted Models result independently of backend cove
 	}
 	env.RUN_BACKEND = "true";
 	env.BACKEND_RESULT = "success";
+	env.BACKEND_TTS_RESULT = "success";
 	for (const result of ["success", "failure", "skipped", ""]) {
 		const child = spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], {
 			encoding: "utf8",
@@ -148,15 +174,14 @@ test("policy CLI consumes the hosted Models result independently of backend cove
 });
 
 test("policy CLI fails closed for shared Frontend proof and independent frontend jobs", () => {
-	const env = { ...process.env, GITHUB_STEP_SUMMARY: "",
-		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend",
+	const env = { ...process.env, GITHUB_STEP_SUMMARY: "", BACKEND_COVERAGE_RESULT: "success", RUN_BACKEND_COVERAGE: "true", BACKEND_TTS_RESULT: "skipped",
+		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend", BACKEND_MODELS_RESULT: "skipped",
 		PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "false" };
 	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE",
 		"BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
 		env[`RUN_${prefix}`] = "false";
 		env[`${prefix}_RESULT`] = "skipped";
 	}
-	env.BACKEND_MODELS_RESULT = "skipped";
 	const results = ["success", "failure", "cancelled", "timed_out", "skipped", ""];
 	for (const selected of ["true", "false"]) {
 		for (const result of results) {

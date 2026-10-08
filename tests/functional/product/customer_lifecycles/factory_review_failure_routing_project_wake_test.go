@@ -33,8 +33,12 @@ func openProjectWakeScenario(t *testing.T) *projectWakeScenario {
 }
 
 func openProjectWakeScenarioWithProvider(t *testing.T, provider reviewFailureCommandResponder) *projectWakeScenario {
+	return openProjectWakeScenarioWithConfig(t, reviewFailureRouteConfig{provider: provider})
+}
+
+func openProjectWakeScenarioWithConfig(t *testing.T, config reviewFailureRouteConfig) *projectWakeScenario {
 	t.Helper()
-	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{provider: provider})
+	scenario := openReviewFailureScenario(t, config)
 	wake := &projectWakeScenario{
 		reviewFailureScenario: scenario,
 		ownerName:             scenario.marker + "-zulu",

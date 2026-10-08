@@ -9774,7 +9774,7 @@ type WorkstationOperationBindingSelector struct {
 	AdditionalProperties map[string]interface{}     `json:"-"`
 }
 
-// WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+// WorkstationOutcomeFormat Optional worker-output parsing mode. With `decision-envelope`, agent output and successful script stdout use the reviewer/checker envelope. The envelope supplies WorkResult outcome, feedback, output, and optional recorded output work. Script process failures keep their existing failure policy.
 type WorkstationOutcomeFormat string
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.

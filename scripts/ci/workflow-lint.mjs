@@ -4,8 +4,56 @@ import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKEND_LINT_FALLBACK_JOBS } from "./backend-lint-workflow.mjs";
 import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
+import { validateQueueDispatch } from "./queue-dispatch.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
+
+// Deliberately accept only a block mapping, not YAML aliases or flow mappings.
+// actionlint checks the full schema; unsupported inventory syntax fails closed.
+function ciJobIds(workflow) {
+	const lines = workflow.replace(/\r\n/g, "\n").split("\n");
+	const roots = lines.flatMap((line, index) => /^jobs:\s*(?:#.*)?$/.test(line) ? [index] : []);
+	if (roots.length !== 1) throw new Error("CI job guard requires one top-level jobs block mapping");
+	const ids = [];
+	let indentation;
+	for (const line of lines.slice(roots[0] + 1)) {
+		if (/^\s*(?:#.*)?$/.test(line)) continue;
+		const width = line.match(/^ */)[0].length;
+		if (width === 0) break;
+		indentation ??= width;
+		if (width < indentation) throw new Error("CI job guard found inconsistent jobs indentation");
+		if (width > indentation) continue;
+		const key = line.trim().match(/^(?:([A-Za-z_][A-Za-z0-9_-]*)|'([A-Za-z_][A-Za-z0-9_-]*)'|"([A-Za-z_][A-Za-z0-9_-]*)"):\s*(?:#.*)?$/);
+		if (!key) throw new Error("CI job guard requires plain job block mappings (no aliases or flow mappings)");
+		ids.push(key[1] ?? key[2] ?? key[3]);
+	}
+	if (!ids.length || new Set(ids).size !== ids.length) throw new Error("CI job guard requires nonempty, unique job IDs");
+	return ids;
+}
+
+export function validateCIJobGrowth({ workflow, baselineWorkflow }) {
+	const baseline = new Set(ciJobIds(baselineWorkflow));
+	const added = ciJobIds(workflow).filter((id) => !baseline.has(id));
+	if (added.length) {
+		throw new Error(`CI job guard: added job IDs ${added.join(", ")}; put checks in their primary suite job or lint instead`);
+	}
+	return { name: "ci-job-growth", status: "pass" };
+}
+
+export function validateCIJobGrowthFromHistory({ repositoryRoot = process.cwd(), spawn = spawnSync } = {}) {
+	const git = (args) => {
+		const result = spawn("git", args, { cwd: repositoryRoot, encoding: "utf8", windowsHide: true });
+		if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+			throw new Error(`CI job guard: comparison history unavailable; fetch full origin/main history (${args[0]})`);
+		}
+		return result.stdout.trim();
+	};
+	const base = git(["merge-base", "HEAD", "origin/main"]);
+	return validateCIJobGrowth({
+		workflow: readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"),
+		baselineWorkflow: git(["show", `${base}:.github/workflows/ci.yml`]),
+	});
+}
 
 function comparePaths(left, right) {
 	if (left < right) return -1;
@@ -157,7 +205,7 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
 	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
 		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
-		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
 		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
 		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
 		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");
@@ -179,7 +227,7 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	const packages = workflowJobSection(workflow, "development-package");
 	const policy = workflowJobSection(workflow, "verification-policy");
 	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
-		"docs_result: ${{ steps.docs-reference.outcome }}", "if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'", "run: make docs-reference-smoke"]) {
+		"docs_result: ${{ steps.docs-reference.outcome }}", "if: success() || failure()", "run: make docs-reference-smoke"]) {
 		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
 	}
 	requireWorkflowText(packages, "run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}", "retain non-PR API selection");
@@ -341,11 +389,7 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 		`LINT_JOBS: \${{ steps.backend-lint-parallelism.outputs.jobs || '${BACKEND_LINT_FALLBACK_JOBS}' }}`,
 		"canonical inventory must retain positive fallback concurrency");
 	requireWorkflowMatch(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/, "required checks run on merge groups");
-	requireWorkflowMatch(workflow,
-		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
-		"classification uses merge group base and head identities");
-	requireWorkflowMatch(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/, "classify both PR and merge group inputs");
-	requireWorkflowMatch(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/, "retain fallback classification for other events");
+	requireWorkflowText(workflowJobSection(workflow, "classify"), "if: github.event_name == 'pull_request'\n        run: go run ./cmd/ciclassify", "only PR paths select lanes; queue defaults full");
 	requireWorkflowText(job, "github.event_name == 'merge_group'", "Backend Lint reports for merge groups");
 	const developmentPackage = workflowJobSection(workflow, "development-package");
 	requireWorkflowText(developmentPackage, "github.event_name == 'merge_group'", "development package reports for merge groups");
@@ -421,6 +465,8 @@ export function runWorkflowLint({
 		throw new Error(`Workflow schema lint failed with exit code ${result.status}${termination}.`);
 	}
 	if (validateRepositoryContracts) {
+		validateCIJobGrowthFromHistory();
+		validateQueueDispatch(readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"));
 		validateConsolidatedCIWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});
