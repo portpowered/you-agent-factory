@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -80,12 +81,21 @@ func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Proc
 			endpoint := host.URL() + "/worker-sessions/" + id
 			prefix := getHost(t, endpoint+"/logs")
 			artifact := filepath.Join(dir, "damaged-history.json")
+			original, err := os.ReadFile(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Prime both views before removing/replacing the joined writer's
+			// artifact. A cached name must not hide the unavailable source.
+			retained := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
 			if damage == "missing" {
 				if err := os.Remove(artifact); err != nil {
 					t.Fatal(err)
 				}
-				page := historyParityPage(t, ctx, session, host, "archived", "factory", "")
-				closed := assertArchivedAttributionRow(t, page, id, rows[0].(map[string]any), false)
+				closed := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), false)
+				if closed["workName"] != nil {
+					t.Fatalf("missing history fabricated a Work name: %v", closed)
+				}
 				selected := getHost(t, endpoint)
 				assertJSONEqual(t, closed, selected)
 				assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
@@ -97,17 +107,45 @@ func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Proc
 				}
 				assertHistoryReadFailure(t, host, id, http.StatusInternalServerError, "INTERNAL_ERROR")
 				assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id}), "worker_session.internal_error", false)
-				assertArchivedAttributionListFailure(t, ctx, host)
-				assertToolError(t, callAction(t, ctx, session, "LIST", map[string]any{"history": "archived", "scope": "factory"}), "worker_session.internal_error", false)
+				for _, view := range []string{"archived", "all"} {
+					assertAttributionListFailure(t, ctx, host, view)
+					assertToolError(t, callAction(t, ctx, session, "LIST", map[string]any{"history": view, "scope": "factory"}), "worker_session.internal_error", false)
+				}
 			}
+			// Restoration is observed on this same process, without restarting
+			// or changing capture identity, through fresh CLI/HTTP/MCP lists.
+			if err := os.WriteFile(artifact, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			restored := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
+			assertJSONEqual(t, retained, restored)
 			assertJSONEqual(t, prefix, getHost(t, endpoint+"/logs"))
 		})
 	}
 }
 
-func assertArchivedAttributionListFailure(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer) {
+func assertRetainedAttributionViews(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string, live map[string]any, named bool) map[string]any {
 	t.Helper()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/worker-sessions?history=archived&scope=factory", nil)
+	var archived map[string]any
+	for _, view := range []string{"archived", "all"} {
+		page := historyParityPage(t, ctx, session, host, view, "factory", "")
+		if len(page["sessions"].([]any)) != 1 {
+			t.Fatalf("%s lost or duplicated the retained row: %v", view, page)
+		}
+		// Preserve the current unavailable optional-name/provider
+		// representation and the authoritative capture identity/lifecycle.
+		row := assertArchivedAttributionRow(t, page, id, live, named)
+		if archived != nil {
+			assertJSONEqual(t, archived, row)
+		}
+		archived = row
+	}
+	return archived
+}
+
+func assertAttributionListFailure(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer, view string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/worker-sessions?history="+view+"&scope=factory", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +161,7 @@ func assertArchivedAttributionListFailure(t *testing.T, ctx context.Context, hos
 	if response.StatusCode != http.StatusInternalServerError || diagnostic.Code != "INTERNAL_ERROR" {
 		t.Fatalf("corrupt history list: %d %+v", response.StatusCode, diagnostic)
 	}
-	inputs := support.FakeInputs(ctx, []string{"you", "--server", host.URL(), "worker-sessions", "list", "--history", "archived", "--json"})
+	inputs := support.FakeInputs(ctx, []string{"you", "--server", host.URL(), "worker-sessions", "list", "--history", view, "--json"})
 	if err := host.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" || !strings.Contains(inputs.Stderr(), "INTERNAL_ERROR") {
 		t.Fatalf("corrupt history CLI list: %v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
 	}
@@ -170,18 +208,50 @@ func runArchivedWorkAttributionReusedWorkID(t *testing.T, process support.Proces
 		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 		assertFactoryCLIParity(t, host, id, selected)
 	}
-	first := callWorker(t, ctx, session, "list", map[string]any{"history": "archived", "scope": "factory", "limit": 1})["result"].(map[string]any)
-	if rows := first["sessions"].([]any); len(rows) != 1 {
-		t.Fatalf("first archived page: %v", first)
-	} else {
-		assertJSONEqual(t, rows[0], archived[0])
+	assertFrozenAttributionAfterSiblingClose(t, ctx, session, host)
+}
+
+func assertFrozenAttributionAfterSiblingClose(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer) {
+	t.Helper()
+	expected := make(map[string][]any)
+	tokens := make(map[string]string)
+	continuations := make(map[string]map[string]any)
+	for _, view := range []string{"archived", "all"} {
+		expected[view] = historyParityPage(t, ctx, session, host, view, "factory", "")["sessions"].([]any)
+		first := callWorker(t, ctx, session, "list", map[string]any{"history": view, "scope": "factory", "limit": 1})["result"].(map[string]any)
+		if rows := first["sessions"].([]any); len(rows) != 1 {
+			t.Fatalf("first %s page: %v", view, first)
+		} else {
+			// Independent snapshots can observe a different live duration.
+			// Replaying the same token below still compares every field exactly.
+			assertRuntimeObservationParity(t, rows[0], expected[view][0])
+		}
+		tokens[view] = first["paginationContext"].(map[string]any)["nextToken"].(string)
+		continuations[view] = historyParityPage(t, ctx, session, host, view, "factory", tokens[view])
+		if len(continuations[view]["sessions"].([]any)) != len(expected[view])-1 {
+			t.Fatalf("%s continuation lost initial membership: %v", view, continuations[view])
+		}
 	}
-	token := first["paginationContext"].(map[string]any)["nextToken"].(string)
-	last := historyParityPage(t, ctx, session, host, "archived", "factory", token)["sessions"].([]any)
-	if len(last) != 1 {
-		t.Fatalf("last archived page: %v", last)
+	// The existing live sibling becomes archived after snapshot creation.
+	// Both views must retain their original membership and row content,
+	// including the all-view snapshot's former live sibling.
+	shadow := historyParityPage(t, ctx, session, host, "active", "factory", "")["sessions"].([]any)
+	if len(shadow) != 1 {
+		t.Fatalf("live shadow membership: %v", shadow)
 	}
-	assertJSONEqual(t, last[0], archived[1])
+	shadowRow := shadow[0].(map[string]any)
+	shadowID, shadowScope := shadowRow["workerSessionId"].(string), shadowRow["factorySessionId"].(string)
+	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+shadowScope+"/pause", map[string]any{}, http.StatusOK)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": shadowID, "operation": "CANCEL"})
+	support.CloseFactorySessionAt(t, host.URL(), shadowScope)
+	fresh := historyParityPage(t, ctx, session, host, "archived", "factory", "")["sessions"].([]any)
+	if len(fresh) != 3 {
+		t.Fatalf("fresh archive did not observe committed sibling: %v", fresh)
+	}
+	for _, view := range []string{"archived", "all"} {
+		page := historyParityPage(t, ctx, session, host, view, "factory", tokens[view])
+		assertJSONEqual(t, continuations[view], page)
+	}
 }
 
 func startRecordedAttributionHost(t *testing.T) (*support.FunctionalAPIServer, support.FactorySessionStarter, controlHostRunner, string) {
