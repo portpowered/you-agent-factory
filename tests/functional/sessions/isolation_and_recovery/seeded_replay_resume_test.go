@@ -317,6 +317,55 @@ func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 	}
 }
 
+func TestRecordStartupSafetyRefusesAliasedDestination(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, kind := range []string{"hard link", "symbolic link"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(dir, "board.json")
+			before := seededReplayResumeArtifactPayload(t, true)
+			if err := os.WriteFile(source, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "alias.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			if kind == "hard link" {
+				if err := os.Link(source, target); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Symlink(source, target); err != nil {
+				t.Skipf("OS does not permit scenario symlink: %v", err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("aliased destination startup = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			for _, path := range []string{source, target} {
+				if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+					t.Fatalf("refused alias changed %q", path)
+				}
+			}
+		})
+	}
+}
+
 func seededResumeSourceAlias(t *testing.T, kind, source string) string {
 	t.Helper()
 	directory := filepath.Dir(source)
@@ -384,7 +433,7 @@ func TestRecordStartupSafetyDestinationOwnership(t *testing.T) {
 	denied := make(map[string]bool)
 	released := make(map[string]int)
 	busy := errors.New("recording destination already has an owner")
-	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, marker string) (io.Closer, error) {
+	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, _ string, marker string) (io.Closer, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		if denied[marker] {

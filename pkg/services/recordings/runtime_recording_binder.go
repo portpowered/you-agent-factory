@@ -7,7 +7,8 @@ import (
 
 // RecordingTargetClaim acquires exclusive destination ownership without
 // changing its bytes. The returned lease outlives all reads and writes.
-type RecordingTargetClaim func(context.Context, string) (io.Closer, error)
+// Arguments are the target path and its stable coordination marker path.
+type RecordingTargetClaim func(context.Context, string, string) (io.Closer, error)
 
 // RecordingTargetOwnership protects a live opening before it reads history.
 type RecordingTargetOwnership interface {

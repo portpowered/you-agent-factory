@@ -3,10 +3,46 @@ package locking
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestTargetClaimRefusesHardLinksWithoutChangingBytes(t *testing.T) {
+	t.Parallel()
+	service := mustService(t)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "history.json")
+	alias := filepath.Join(dir, "alias.json")
+	want := []byte("retained history")
+	if err := os.WriteFile(target, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(target, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{target, alias} {
+		lease, err := service.TryLockTarget(t.Context(), path, path+".lock")
+		if lease != nil || err == nil {
+			t.Fatalf("hard-linked target acquired: %v, %v", lease, err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != string(want) {
+			t.Fatalf("target bytes changed: %q, %v", got, err)
+		}
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := service.TryLockTarget(t.Context(), target, target+".lock")
+	if err != nil {
+		t.Fatalf("single-link target refused: %v", err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestServiceSerializesAndReleasesOwnership(t *testing.T) {
 	service := mustService(t)

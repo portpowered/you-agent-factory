@@ -27,6 +27,7 @@ var ErrBusy = errors.New("filesystem coordination is busy")
 type Service interface {
 	Lock(context.Context, string) (io.Closer, error)
 	TryLock(context.Context, string) (io.Closer, error)
+	TryLockTarget(context.Context, string, string) (io.Closer, error)
 }
 
 // File is the narrow host handle required by the OS-specific lock adapter.
@@ -81,6 +82,48 @@ func (service localService) Lock(ctx context.Context, path string) (io.Closer, e
 // TryLock refuses an occupied marker without waiting for its owner to exit.
 func (service localService) TryLock(ctx context.Context, path string) (io.Closer, error) {
 	return service.acquire(ctx, path, false)
+}
+
+// TryLockTarget refuses aliases that cannot share a stable pathname marker.
+// The caller selects both the protected target and its coordination marker.
+func (service localService) TryLockTarget(ctx context.Context, target, marker string) (io.Closer, error) {
+	if err := service.validateTarget(target); err != nil {
+		return nil, err
+	}
+	lease, err := service.TryLock(ctx, marker)
+	if err != nil {
+		return nil, err
+	}
+	if err := service.validateTarget(target); err != nil {
+		return nil, errors.Join(err, lease.Close())
+	}
+	return lease, nil
+}
+
+func (service localService) validateTarget(path string) error {
+	info, err := service.filesystem.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect ownership target %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("ownership target %q must be a regular file without aliases", path)
+	}
+	file, err := service.filesystem.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("open ownership target %q: %w", path, err)
+	}
+	count, inspectErr := fileLinkCount(file)
+	closeErr := file.Close()
+	if err := errors.Join(inspectErr, closeErr); err != nil {
+		return fmt.Errorf("inspect ownership target links %q: %w", path, err)
+	}
+	if count != 1 {
+		return fmt.Errorf("ownership target %q has multiple hard links; use a separate copy", path)
+	}
+	return nil
 }
 
 func (service localService) acquire(ctx context.Context, path string, wait bool) (io.Closer, error) {

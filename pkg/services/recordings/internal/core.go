@@ -63,7 +63,7 @@ func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path s
 	if runtime.GOOS == "windows" {
 		key = strings.ToLower(key)
 	}
-	lease, err := service.targetClaim(ctx, key+".recording.lock")
+	lease, err := service.targetClaim(ctx, path, key+".recording.lock")
 	if err != nil {
 		return nil, &recordingTargetClaimError{path: path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
 	}

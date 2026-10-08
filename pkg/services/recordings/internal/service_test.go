@@ -27,8 +27,8 @@ func TestRecordingTargetOwnershipKeepsSafePathAndCauseIdentity(t *testing.T) {
 	}
 	marker += ".recording.lock"
 	cause := errors.New("PRIVATE_RECORDING_PAYLOAD")
-	service := &combinedService{targetClaim: func(ctx context.Context, got string) (io.Closer, error) {
-		if ctx != t.Context() || got != marker {
+	service := &combinedService{targetClaim: func(ctx context.Context, target, got string) (io.Closer, error) {
+		if ctx != t.Context() || target != path || got != marker {
 			t.Errorf("claim did not receive the opening context and absolute marker: %q", got)
 		}
 		return nil, cause
@@ -47,7 +47,7 @@ func TestRecordingTargetOwnershipKeepsSafePathAndCauseIdentity(t *testing.T) {
 
 func TestRecordingTargetOwnershipRequiresConfirmedLease(t *testing.T) {
 	t.Parallel()
-	for _, claim := range []recordings.RecordingTargetClaim{nil, func(context.Context, string) (io.Closer, error) { return nil, nil }} {
+	for _, claim := range []recordings.RecordingTargetClaim{nil, func(context.Context, string, string) (io.Closer, error) { return nil, nil }} {
 		service := &combinedService{targetClaim: claim}
 		lease, err := service.ClaimRecordingTarget(t.Context(), "board.json")
 		if lease != nil || !errors.Is(err, recordings.ErrRecordingBindingConflict) {

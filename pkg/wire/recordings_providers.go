@@ -56,9 +56,9 @@ func provideRecordingTargetClaim(edges serviceedges.Edges) recordings.RecordingT
 	}
 	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
 	if err != nil {
-		return func(context.Context, string) (io.Closer, error) { return nil, err }
+		return func(context.Context, string, string) (io.Closer, error) { return nil, err }
 	}
-	return coordination.TryLock
+	return coordination.TryLockTarget
 }
 
 func provideRecordingClock(clock factoryruntime.Clock) (recordings.RecordingClock, error) {
