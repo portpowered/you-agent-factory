@@ -486,6 +486,90 @@ func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
 	}
 }
 
+func TestRecordStartupSafetyDestinationChangesBeforePublication(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	replacement := []byte("external history changed after restoration")
+	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, target, _ string) (io.Closer, error) {
+		return &startupPublicationTarget{target: target, replacement: replacement}, nil
+	})
+	for _, name := range []string{"first board", "second board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			api := support.NewProcessAPIServer()
+			port := 22000 + int(reusable.nextPort.Add(1))
+			reusable.mu.Lock()
+			reusable.serversByPort[port] = api
+			reusable.mu.Unlock()
+			t.Cleanup(func() {
+				reusable.mu.Lock()
+				delete(reusable.serversByPort, port)
+				reusable.mu.Unlock()
+			})
+			inputs.Input.Args = append(inputs.Input.Args, "--listen", fmt.Sprintf("127.0.0.1:%d", port))
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("late destination change = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or overwrote replacement history")
+			}
+		})
+	}
+}
+
+// The first validation represents completed restore. The next check models
+// an external edit before activation, through the supported ownership edge.
+type startupPublicationTarget struct {
+	target      string
+	replacement []byte
+	checks      int
+}
+
+func (*startupPublicationTarget) Close() error { return nil }
+
+func (lease *startupPublicationTarget) Validate() error {
+	lease.checks++
+	if lease.checks == 1 {
+		return nil
+	}
+	if err := os.WriteFile(lease.target, lease.replacement, 0o600); err != nil {
+		return err
+	}
+	return errors.New("destination changed before publication")
+}
+
 func TestRecordStartupSafetyDestinationReplacement(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)

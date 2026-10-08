@@ -614,6 +614,7 @@ func (service *combinedService) openRuntimeRecordingScope(
 	service.scopeMu.Unlock()
 	return &runtimeScopeRecorder{
 		inner: recorder, owner: service, scope: ref, routeKey: routeKey, ledger: ledger,
+		targetValidator: service.recordingTargetValidator(string(recorder.target)),
 	}, ref, nil
 }
 
@@ -835,6 +836,7 @@ type runtimeScopeRecorder struct {
 	startErr            error
 	finalized           bool
 	finalizeErr         error
+	targetValidator     recordings.RecordingTargetValidator
 }
 
 func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
@@ -887,6 +889,15 @@ func (recorder *runtimeScopeRecorder) ActivateRecordingPublication(ctx context.C
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if recorder.targetValidator != nil {
+		if err := recorder.targetValidator.Validate(); err != nil {
+			// Refusal is an opening error, not a failed writer. Abort the
+			// prepared scope before it publishes; cleanup retains only genuine
+			// cleanup failures so successful abort can release its lease.
+			recorder.stopLocked()
+			return errors.Join(err, recorder.inner.Err())
+		}
 	}
 	if startup, ok := recorder.inner.(recordings.RuntimeRecordingStartup); ok {
 		recorder.startErr = startup.ActivateRecordingPublication(ctx)

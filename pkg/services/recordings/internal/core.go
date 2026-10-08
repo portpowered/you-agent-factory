@@ -50,6 +50,7 @@ type combinedService struct {
 	replayInputs           recordings.ReplayInputLoader
 	logger                 logging.Logger
 	targetClaim            recordings.RecordingTargetClaim
+	targetLeases           map[string]*recordingTargetLease
 }
 
 func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path string) (io.Closer, error) {
@@ -70,12 +71,49 @@ func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path s
 	if lease == nil {
 		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
 	}
-	return &recordingTargetLease{Closer: lease, path: path}, nil
+	owned := &recordingTargetLease{Closer: lease, path: path, owner: service, key: key}
+	service.recordingMu.Lock()
+	if service.targetLeases == nil {
+		service.targetLeases = make(map[string]*recordingTargetLease)
+	}
+	service.targetLeases[key] = owned
+	service.recordingMu.Unlock()
+	return owned, nil
 }
 
 type recordingTargetLease struct {
 	io.Closer
-	path string
+	path  string
+	owner *combinedService
+	key   string
+}
+
+func (lease *recordingTargetLease) Close() error {
+	if err := lease.Closer.Close(); err != nil {
+		return err
+	}
+	lease.owner.recordingMu.Lock()
+	defer lease.owner.recordingMu.Unlock()
+	if lease.owner.targetLeases[lease.key] == lease {
+		delete(lease.owner.targetLeases, lease.key)
+	}
+	return nil
+}
+
+func (service *combinedService) recordingTargetValidator(path string) recordings.RecordingTargetValidator {
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	if lease := service.targetLeases[key]; lease != nil {
+		return lease
+	}
+	return nil
 }
 
 func (lease *recordingTargetLease) Validate() error {

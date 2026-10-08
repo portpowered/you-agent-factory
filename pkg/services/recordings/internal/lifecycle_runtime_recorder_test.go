@@ -371,6 +371,25 @@ func TestLifecycleRuntimeRecorderProtectsPublicationUntilStartupCompletes(t *tes
 	}
 }
 
+func TestRuntimeScopeRecorderRefusesChangedTargetBeforePublication(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("destination changed after restore")
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner, targetValidator: &changedRecordingTarget{cause: cause}}
+	recorder.DeferRecordingPublication()
+	if err := recorder.ActivateRecordingPublication(t.Context()); !errors.Is(err, cause) {
+		t.Fatalf("activation lost target conflict: %v", err)
+	}
+	recorder.Start(t.Context())
+	_ = recorder.Flush()
+	if err := recorder.Finalize(time.Unix(2, 0)); err != nil {
+		t.Fatalf("successful abort reported primary refusal as cleanup failure: %v", err)
+	}
+	if inner.flushes != 0 || inner.finishes != 0 || inner.starts != 0 || inner.stops != 1 {
+		t.Fatalf("changed target was published: flush=%d finish=%d start=%d stop=%d", inner.flushes, inner.finishes, inner.starts, inner.stops)
+	}
+}
+
 func assertRecorderPublicationActivation(t *testing.T, recorder *lifecycleRuntimeRecorder, owner *stubRecordingLifecycle, outcome string, primary, cleanup error) {
 	t.Helper()
 	if outcome == "publication failure" {
