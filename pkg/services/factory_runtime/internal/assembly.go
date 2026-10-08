@@ -262,10 +262,11 @@ func (a *Assembly) configureRestoredWorldState(
 		spec.SkipRestoredDispatchReconciliation = true
 		return nil
 	}
-	// Live daemon openings supply detached current-board state explicitly.
-	if restoredWorldState != nil {
+	// Live openings with recorded history use the same generation-aware
+	// reconstruction as resume. The historical tick-ordered view can otherwise
+	// select predecessor state after the successor's logical clock restarts.
+	if restoredWorldState != nil && len(restoredEventHistory) == 0 {
 		spec.RestoredWorldState = restoredWorldState
-		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEventHistory)
 		return nil
 	}
 	// Resume is a live continuation: reconstruct the successor's starting
@@ -275,7 +276,10 @@ func (a *Assembly) configureRestoredWorldState(
 	if err != nil {
 		return err
 	}
-	if resumeInput != nil {
+	if resumeInput == nil && len(restoredEventHistory) > 0 {
+		restoredEvents = restoredEventHistory
+	}
+	if resumeInput != nil || len(restoredEventHistory) > 0 {
 		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
 	}
 	restored, err := reconstructRestoredWorldStateForResume(recordingsRuntime, restoredEvents)
@@ -427,9 +431,19 @@ func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryE
 		return false
 	}
 	restartBoundarySeen := false
+	sessionStartSeen := false
 	previousTick := events[0].Context.Tick
 	for _, event := range events {
-		if isRestoredLogicalClockBoundary(event) {
+		if event.Type == factorydefinitions.FactoryEventTypeSessionStarted {
+			// A graceful live reopen starts a new execution without a resume or
+			// interruption marker. Two canonical starts prove that generation
+			// boundary; one initial start must not classify async tick regression
+			// within a single execution as a restart.
+			if sessionStartSeen {
+				return true
+			}
+			sessionStartSeen = true
+		} else if isRestoredLogicalClockBoundary(event) {
 			restartBoundarySeen = true
 		}
 		if restartBoundarySeen && event.Context.Tick < previousTick {
@@ -446,7 +460,8 @@ func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
 }
 
 func isRestoredLogicalClockBoundary(event factorydefinitions.FactoryEvent) bool {
-	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed
+	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed ||
+		event.Type == factorydefinitions.FactoryEventTypeSessionStarted
 }
 
 // initialRuntimeOpening declares publication and retains partial ownership
