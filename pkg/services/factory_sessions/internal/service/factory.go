@@ -57,11 +57,11 @@ type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
+	resourceAcquisition            *RuntimeResourceAcquisition
 	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	workerService                  workers.Service
 	modelService                   models.Service
-	automationService              automations.Service
 	recordingsService              recordings.Service
 	recordingsRuntime              recordings.RuntimeScopeService
 	recordingProjections           recordings.ProjectionService
@@ -109,6 +109,7 @@ func NewRoot(
 	preparation *RuntimePreparation,
 	assembly roles.RuntimeAssembly,
 	durableOpening *DurableOpening,
+	resourceAcquisition *RuntimeResourceAcquisition,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
@@ -139,9 +140,9 @@ func NewRoot(
 		initialActivation:              initialActivation,
 		modelInvocation:                modelInvocation,
 		durableOpening:                 durableOpening,
+		resourceAcquisition:            resourceAcquisition,
 		workerService:                  workerService,
 		modelService:                   modelService,
-		automationService:              automationService,
 		factorySessionsRuntimeAssembly: assembly,
 		recordingsService:              recordingsService,
 		recordingsRuntime:              recordingsRuntime,

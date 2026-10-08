@@ -381,6 +381,7 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRoot,
+	factorysessionwire.NewRuntimeResourceAcquisition,
 	factorysessionwire.NewRuntimeInputLoading,
 	factorysessionwire.NewRuntimePreparation,
 	factorysessionwire.NewRuntimeSnapshotSelection,

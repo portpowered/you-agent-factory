@@ -135,30 +135,23 @@ func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() e
 	return pending, closeErr
 }
 
-func bindModelsRuntimeScope(
+func (acquisition *RuntimeResourceAcquisition) bindModelsRuntimeScope(
 	ctx context.Context,
-	modelService models.Service,
 	cacheDirectory string,
-	runtimeConfigLoader models.RuntimeConfigLoader,
+	runtimeConfig *models.RuntimeConfig,
 	operatorModels map[string]models.ModelOverlay,
 ) (modelsRuntimeBind, error) {
-	if modelService == nil {
-		return modelsRuntimeBind{}, fmt.Errorf("construct runtime scope: Models service is required")
-	}
-	if runtimeConfigLoader == nil {
-		return modelsRuntimeBind{}, fmt.Errorf("construct runtime scope: Models runtime configuration lookup is required")
-	}
 	scopeConfig := models.RuntimeScopeConfig{
 		CacheDirectory: cacheDirectory,
 		OperatorModels: cloneOperatorModelOverlays(operatorModels),
 	}
-	if runtimeConfig := runtimeConfigLoader(); runtimeConfig != nil {
+	if runtimeConfig != nil {
 		scopeConfig.Runtime = *runtimeConfig
 	}
-	opened, err := modelService.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
-		Config: scopeConfig,
+	opened, err := acquisition.modelService.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
+		Config: scopeConfig.Clone(),
 	})
-	bind := modelsRuntimeBind{Root: modelService, Scope: opened.Scope}
+	bind := modelsRuntimeBind{Root: acquisition.modelService, Scope: opened.Scope}
 	if err != nil {
 		// Preserve a partial scope so the opening owner can release it before
 		// returning the failure, or retain cleanup when release also fails.

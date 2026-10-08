@@ -94,7 +94,7 @@ func TestBindModelsRuntimeScopeRetainsFailedOpeningForCleanupRetry(t *testing.T)
 				openingErr:             openingErr, closingErr: closingErr, noScope: noScope,
 			}
 			ctx, cancel := context.WithCancel(t.Context())
-			bind, err := bindModelsRuntimeScope(ctx, fake, "", func() *models.RuntimeConfig { return nil }, nil)
+			bind, err := (&RuntimeResourceAcquisition{modelService: fake}).bindModelsRuntimeScope(ctx, "", nil, nil)
 			if !errors.Is(err, openingErr) || bind.Root != fake || bind.Scope.IsZero() != noScope {
 				t.Fatalf("failed opening = (%+v, %v), want issued scope and original failure", bind, err)
 			}
@@ -170,28 +170,28 @@ func TestRuntimeOpeningRetainsEarlyScopeCleanupBeforeReturningFailure(t *testing
 			modelService := &failedOpeningModelsService{
 				recordingModelsService: &recordingModelsService{events: &events}, openingErr: openingErr,
 			}
-			root := earlyScopeOpeningRoot(execution, modelService, openingErr, durableFailure)
-			session := factorysessions.SessionStartRequest{
-				SessionID: "early-opening", RuntimeSelection: &factorysessions.SessionRuntimeSelection{
-					BackendScopeID: "scope", SystemConfigPath: "/operator.json",
-				},
-			}
-			opened, err := root.openRuntimeWithOptions(t.Context(),
-				factorydefinitions.RuntimeSelection{Directory: "/factory", SourcePath: "/factory/factory.json"},
-				factoryruntime.RuntimeSelection{RuntimeInstanceID: "early-runtime"}, &session, false,
-				workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorconfig.ResolvedDefaults{},
-				zap.NewNop(), nil, nil)
+			cleanup := &runtimeOpeningCleanup{}
+			acquisition := NewRuntimeResourceAcquisition(resourceOpeningStub(execution, func(ctx context.Context) error {
+				if ctx.Err() != nil {
+					t.Fatal("cleanup retained cancellation")
+				}
+				return execution.Close()
+			}, openingErr, durableFailure), modelService, nil)
+			ctx, cancel := context.WithCancel(t.Context())
+			_, err := acquisition.Acquire(ctx, resourceRequest("early-opening"), openingCoordinatorClock{}, zap.NewNop(), cleanup)
+			cancel()
+			err = errors.Join(err, cleanup.Close())
 			if !errors.Is(err, openingErr) || !errors.Is(err, closeErr) {
 				t.Fatalf("opening failure = %v, want opening and cleanup causes", err)
 			}
-			if opened.engine != nil || opened.closeArtifacts == nil || execution.closes != 1 {
-				t.Fatalf("failed opening did not retain cleanup without a live engine: %+v, closes=%d", opened, execution.closes)
+			if execution.closes != 1 {
+				t.Fatalf("durable closes = %d", execution.closes)
 			}
 			if len(modelService.closeRequests) != 0 {
 				t.Fatal("failed durable consumer lost its Models dependency before cleanup retry")
 			}
 			for range 2 {
-				if err := opened.closeArtifacts(); err != nil {
+				if err := cleanup.Close(); err != nil {
 					t.Fatalf("explicit cleanup retry: %v", err)
 				}
 			}
@@ -223,25 +223,23 @@ func TestRuntimeOpeningRejectsMissingObservationsBeforeModelsAndRetainsCleanup(t
 	closer := &earlyOpeningDurableExecution{closeErr: closeErr, events: &events}
 	execution := &mutationOnlyClosableOpeningOwner{closer: closer}
 	modelsService := &recordingModelsService{events: &events}
-	root := earlyScopeOpeningRoot(execution, modelsService, nil, false)
-	session := factorysessions.SessionStartRequest{
-		SessionID: "invalid-observations", RuntimeSelection: &factorysessions.SessionRuntimeSelection{
-			BackendScopeID: "scope", SystemConfigPath: "/operator.json",
-		},
-	}
-	opened, err := root.openRuntimeWithOptions(t.Context(),
-		factorydefinitions.RuntimeSelection{Directory: "/factory", SourcePath: "/factory/factory.json"},
-		factoryruntime.RuntimeSelection{RuntimeInstanceID: "invalid-runtime"}, &session, false,
-		workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorconfig.ResolvedDefaults{},
-		zap.NewNop(), nil, nil)
+	cleanup := &runtimeOpeningCleanup{}
+	acquisition := NewRuntimeResourceAcquisition(resourceOpeningStub(execution, func(ctx context.Context) error {
+		if ctx.Err() != nil {
+			t.Fatal("cleanup retained cancellation")
+		}
+		return execution.Close()
+	}, nil, false), modelsService, nil)
+	_, err := acquisition.Acquire(t.Context(), resourceRequest("invalid-observations"), openingCoordinatorClock{}, zap.NewNop(), cleanup)
+	err = errors.Join(err, cleanup.Close())
 	if err == nil || !strings.Contains(err.Error(), "must record mutations and publish worker progress") || !errors.Is(err, closeErr) {
 		t.Fatalf("invalid observation opening = %v, want capability and release failures", err)
 	}
-	if opened.engine != nil || opened.closeArtifacts == nil || len(modelsService.openRequests) != 0 {
-		t.Fatalf("invalid owner opened downstream resources or lost cleanup: %+v, Models=%d", opened, len(modelsService.openRequests))
+	if len(modelsService.openRequests) != 0 {
+		t.Fatalf("invalid owner opened Models=%d", len(modelsService.openRequests))
 	}
 	for range 2 {
-		if err := opened.closeArtifacts(); err != nil {
+		if err := cleanup.Close(); err != nil {
 			t.Fatalf("retry owned durable cleanup: %v", err)
 		}
 	}
@@ -256,42 +254,6 @@ type mutationOnlyClosableOpeningOwner struct {
 }
 
 func (owner *mutationOnlyClosableOpeningOwner) Close() error { return owner.closer.Close() }
-
-func earlyScopeOpeningRoot(execution durableexecution.Service, modelService models.Service, openingErr error, durableFailure bool) *Root {
-	recordingRoot := &recordingsRootConstructionStub{}
-	opening := NewDurableOpening(
-		func(string) (operatorconfig.Config, error) { return operatorconfig.Config{}, nil },
-		func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
-			release := func(context.Context) error { return execution.(interface{ Close() error }).Close() }
-			if durableFailure {
-				return nil, release, openingErr
-			}
-			return execution, release, nil
-		},
-		func(identity string) (string, error) { return identity, nil }, false,
-	)
-	return &Root{
-		resolveHome: func() (string, error) { return "/controlled-home", nil },
-		clock:       openingCoordinatorClock{},
-		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
-			panic("live opening must consume the selected clock directly")
-		},
-		preparation: NewRuntimePreparation(NewRuntimeInputLoading(
-			func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-				return nil, nil
-			},
-			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()).Load,
-			nil, nil, func() (string, error) { return "/controlled-home", nil }, nil,
-			func(identity string) (string, error) { return identity, nil }, validatorConstructionStub{},
-			func(*factorydefinitions.ReplayArtifact) recordings.Clock {
-				panic("live opening must not request a replay clock")
-			},
-			func(factoryruntime.Clock) factoryruntime.Clock { panic("unexpected fallback clock") }),
-		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
-		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
-		durableOpening: opening,
-	}
-}
 
 func (fake *recordingModelsService) OpenRuntimeScope(
 	_ context.Context,
@@ -483,11 +445,10 @@ func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 		FactoryDirectory: "/factory",
 		BaseDirectory:    "/runtime",
 	}
-	bind, err := bindModelsRuntimeScope(
+	bind, err := (&RuntimeResourceAcquisition{modelService: fake}).bindModelsRuntimeScope(
 		context.Background(),
-		fake,
 		"/cache/models",
-		func() *models.RuntimeConfig { return runtimeConfig },
+		runtimeConfig,
 		nil,
 	)
 	if err != nil {
@@ -648,11 +609,10 @@ func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *te
 
 	var events []string
 	root := &recordingModelsService{events: &events}
-	bind, err := bindModelsRuntimeScope(
+	bind, err := (&RuntimeResourceAcquisition{modelService: root}).bindModelsRuntimeScope(
 		context.Background(),
-		root,
 		"/cache/models",
-		func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		&models.RuntimeConfig{},
 		nil,
 	)
 	if err != nil {
@@ -765,7 +725,7 @@ func TestRuntimeOpeningCleanupRetainsOwnershipAddedDuringClose(t *testing.T) {
 	cleanup := &runtimeOpeningCleanup{}
 	var events []string
 	modelService := &recordingModelsService{events: &events}
-	bind, err := bindModelsRuntimeScope(t.Context(), modelService, "", func() *models.RuntimeConfig { return nil }, nil)
+	bind, err := (&RuntimeResourceAcquisition{modelService: modelService}).bindModelsRuntimeScope(t.Context(), "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,7 +764,7 @@ func TestRuntimeOpeningCleanupReportsModelsOwnershipAddedDuringRelease(t *testin
 	cleanup := &runtimeOpeningCleanup{}
 	var events []string
 	modelService := &recordingModelsService{events: &events}
-	bind, err := bindModelsRuntimeScope(t.Context(), modelService, "", func() *models.RuntimeConfig { return nil }, nil)
+	bind, err := (&RuntimeResourceAcquisition{modelService: modelService}).bindModelsRuntimeScope(t.Context(), "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -910,7 +870,7 @@ func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t
 	modelService := &failedOpeningModelsService{
 		recordingModelsService: &recordingModelsService{events: &events}, closingErr: modelsErr,
 	}
-	bind, err := bindModelsRuntimeScope(t.Context(), modelService, "", func() *models.RuntimeConfig { return nil }, nil)
+	bind, err := (&RuntimeResourceAcquisition{modelService: modelService}).bindModelsRuntimeScope(t.Context(), "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
