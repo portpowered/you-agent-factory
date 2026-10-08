@@ -44,21 +44,7 @@ func TestPrebuiltCLIStreamsCompleteMissionPayload(t *testing.T) {
 	if len(payloads["large"]) <= 40*1024 {
 		t.Fatal("fixture does not cross Windows argv limit")
 	}
-	works := []map[string]any{}
-	for name, payload := range payloads {
-		works = append(works, map[string]any{"name": name, "workTypeName": "thoughts", "payload": json.RawMessage(payload)})
-	}
-	batch, err := json.Marshal(map[string]any{"type": "FACTORY_REQUEST_BATCH", "works": works})
-	if err != nil {
-		t.Fatal(err)
-	}
-	input := filepath.Join(factory, "inputs", "BATCH", "default")
-	if err := os.MkdirAll(input, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(input, "batch.json"), batch, 0600); err != nil {
-		t.Fatal(err)
-	}
+	admitPayloadBatch(t, factory, payloads)
 	recording := filepath.Join(project, "recording.json")
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
@@ -81,6 +67,31 @@ func TestPrebuiltCLIStreamsCompleteMissionPayload(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("CLI exit: %v; stderr=%s stdout=%s", err, stderr.String(), stdout.String())
 	}
+	assertCompletePayloadIngress(t, project, payloads)
+	assertPayloadRecordingRoutes(t, recording)
+}
+
+func admitPayloadBatch(t *testing.T, factory string, payloads map[string]string) {
+	t.Helper()
+	works := []map[string]any{}
+	for name, payload := range payloads {
+		works = append(works, map[string]any{"name": name, "workTypeName": "thoughts", "payload": json.RawMessage(payload)})
+	}
+	batch, err := json.Marshal(map[string]any{"type": "FACTORY_REQUEST_BATCH", "works": works})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(factory, "inputs", "BATCH", "default")
+	if err := os.MkdirAll(input, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(input, "batch.json"), batch, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertCompletePayloadIngress(t *testing.T, project string, payloads map[string]string) {
+	t.Helper()
 	for name, payload := range payloads {
 		data, err := os.ReadFile(filepath.Join(project, name+".json"))
 		if err != nil {
@@ -98,7 +109,6 @@ func TestPrebuiltCLIStreamsCompleteMissionPayload(t *testing.T) {
 		}
 		t.Logf("%s ingress bytes=%d sha256=%s", name, ingress.Bytes, ingress.Sha256)
 	}
-	assertPayloadRecordingRoutes(t, recording)
 }
 
 func preparePayloadFactory(t *testing.T, python string) (string, string, string) {
