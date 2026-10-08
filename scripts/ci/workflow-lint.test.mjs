@@ -51,6 +51,7 @@ test("real workflow lint CLI compares isolated Git history and reports added job
 	// Include the checker's transitive lint dependencies in the isolated CLI fixture.
 	for (const file of [
 		"scripts/ci/workflow-lint.mjs",
+		"scripts/ci/queue-dispatch.mjs",
 		"scripts/ci/verification-plans.mjs",
 		"scripts/ci/backend-lint-workflow.mjs",
 		"scripts/ci/backend-lint-report.mjs",

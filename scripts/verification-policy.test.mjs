@@ -13,6 +13,7 @@ const laneNames = [
 	"README",
 	"Frontend",
 	"Backend",
+	"Backend Models Wire and Race",
 	"Backend Conformance",
 	"Backend Lint",
 	"Workflow Lint",
@@ -92,7 +93,7 @@ test("API-only PR requires both independent proofs and permits skipped reusable 
 		base[`${prefix}_RESULT`] = "skipped";
 	}
 	for (const suffix of ["COMPONENT", "COVERAGE", "BROWSER", "STORYBOOK"]) base[`FRONTEND_${suffix}_RESULT`] = "skipped";
-	Object.assign(base, { API_CANDIDATE_RESULT: "success",
+	Object.assign(base, { BACKEND_MODELS_RESULT: "skipped", API_CANDIDATE_RESULT: "success",
 		RUN_API: "true", API_RESULT: "success", PACKAGED_CANDIDATE_RESULT: "skipped" });
 	const invoke = (env) => spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], { encoding: "utf8", env });
 	assert.equal(invoke(base).status, 0);
@@ -174,7 +175,7 @@ test("policy CLI consumes the hosted Models result independently of backend cove
 
 test("policy CLI fails closed for shared Frontend proof and independent frontend jobs", () => {
 	const env = { ...process.env, GITHUB_STEP_SUMMARY: "", BACKEND_COVERAGE_RESULT: "success", RUN_BACKEND_COVERAGE: "true", BACKEND_TTS_RESULT: "skipped",
-		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend",
+		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend", BACKEND_MODELS_RESULT: "skipped",
 		PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "false" };
 	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE",
 		"BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {

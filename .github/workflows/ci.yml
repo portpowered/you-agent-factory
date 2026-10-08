@@ -368,7 +368,35 @@ jobs:
         timeout-minutes: 5
         run: |
           make generate-wire
+          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-first.sha256"
+          make generate-wire
+          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-second.sha256"
+          diff -u "$RUNNER_TEMP/models-wire-first.sha256" "$RUNNER_TEMP/models-wire-second.sha256"
           git diff --exit-code -- pkg/wire/wire_gen.go
+      - name: Race-check scoped Models components
+        if: matrix.suite == 'unit' && needs.classify.outputs.run_backend != 'false'
+        env:
+          GOMAXPROCS: '2'
+          GOFLAGS: '-p=1'
+        timeout-minutes: 10
+        run: |
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./pkg/services/models/internal/service \
+            ./pkg/services/models/internal/local \
+            ./pkg/services/models/internal/services/inference/internal/service \
+            ./pkg/services/models/internal/services/runtime_host/internal/service \
+            ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service \
+            -run 'Test.*(Root|Scoped|Scope|ResourceLimiter|Invoke|Invocation|Cancel|Release|Lease|Deadline|Idle|Timer|Capacity)'
+      - name: Race-check composed scoped Models scenarios
+        if: matrix.suite == 'unit' && needs.classify.outputs.run_backend != 'false'
+        env:
+          GOMAXPROCS: '2'
+          GOFLAGS: '-p=1'
+        timeout-minutes: 8
+        run: |
+          go test -race -v -p 1 -count=1 -timeout 3m \
+            ./tests/functional/models/inference \
+            -run 'TestModelsFixedLeaves|TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess'
       - name: Prune unit Go build cache to entries touched by this job
         if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || !contains(steps.unit-go-build-cache.outputs.cache-matched-key, 'unit-coverage-build-v2-'))
         shell: bash
@@ -1166,6 +1194,7 @@ jobs:
           RUN_BACKEND_COVERAGE: "true"
           BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}
           BACKEND_RESULT: ${{ needs.backend-integration.result }}
+          BACKEND_MODELS_RESULT: ${{ needs.classify.outputs.run_backend != 'false' && needs.backend-coverage.result || 'skipped' }}
           BACKEND_TTS_RESULT: ${{ needs.tts-clean-install-windows.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"
@@ -1184,76 +1213,6 @@ jobs:
           PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
         shell: bash
         run: node scripts/verification-policy.mjs
-
-  main-evidence:
-    name: Forward Delivered Queue Evidence
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Resolve exact-tree queue artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/ci/merge-queue-evidence.mjs --repository "$GITHUB_REPOSITORY" --main-sha "$GITHUB_SHA" --output-directory .artifacts/delivered-queue
-      - uses: actions/upload-artifact@v4
-        with:
-          name: unit-coverage-diagnostics
-          path: .artifacts/delivered-queue/unit-coverage-diagnostics/
-          if-no-files-found: error
-          retention-days: 14
-      - uses: actions/upload-artifact@v4
-        with:
-          name: functional-test-diagnostics
-          path: .artifacts/delivered-queue/functional-test-diagnostics/
-          if-no-files-found: error
-          retention-days: 14
-      - uses: actions/upload-artifact@v4
-        with:
-          name: backend-deadcode-evidence
-          path: .artifacts/delivered-queue/backend-deadcode-evidence/
-          if-no-files-found: error
-          retention-days: 14
-
-  main-dependency-cache:
-    name: Maintain Main Dependency Caches
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/cache@v4
-        id: deps
-        with:
-          path: ~/.cache/go-build
-          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - uses: actions/cache@v4
-        id: unit
-        with:
-          path: ~/.cache/go-build
-          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - name: Warm missing dependency-only keys
-        if: steps.deps.outputs.cache-hit != 'true' || steps.unit.outputs.cache-hit != 'true'
-        env:
-          FUNCTIONAL_CACHE_HIT: ${{ steps.deps.outputs.cache-hit }}
-          UNIT_CACHE_HIT: ${{ steps.unit.outputs.cache-hit }}
-        run: node scripts/ci/main-dependency-cache.mjs
 
   backend-visualizations-preview:
     name: Backend Architecture Preview
@@ -1294,17 +1253,64 @@ jobs:
 
   backend-visualizations-publish:
     name: Propose Backend Architecture Visualizations
-    needs: main-evidence
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.main-evidence.result == 'success'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 2
           persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache@v4
+        id: deps
+        with:
+          path: ~/.cache/go-build
+          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - uses: actions/cache@v4
+        id: unit
+        with:
+          path: ~/.cache/go-build
+          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Warm missing dependency-only keys
+        if: steps.deps.outputs.cache-hit != 'true' || steps.unit.outputs.cache-hit != 'true'
+        env:
+          FUNCTIONAL_CACHE_HIT: ${{ steps.deps.outputs.cache-hit }}
+          UNIT_CACHE_HIT: ${{ steps.unit.outputs.cache-hit }}
+        run: node scripts/ci/main-dependency-cache.mjs
+
+      - name: Resolve exact-tree queue artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/ci/merge-queue-evidence.mjs --repository "$GITHUB_REPOSITORY" --main-sha "$GITHUB_SHA" --output-directory .artifacts/delivered-queue
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage-diagnostics
+          path: .artifacts/delivered-queue/unit-coverage-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-diagnostics
+          path: .artifacts/delivered-queue/functional-test-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-deadcode-evidence
+          path: .artifacts/delivered-queue/backend-deadcode-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Skip generated-page-only main changes
         id: source-change
         shell: bash
