@@ -57,9 +57,8 @@ type workerSessionsCLISharedFixture struct {
 	api     *workerSessionsCLIAPIServer
 	runner  *providerCommandRouteRunner
 
-	fleetGate     *providerCommandRouteGate
-	providerFiles *workerSessionProviderFiles
-	captureReads  *workerSessionCaptureReads
+	fleetGate    *providerCommandRouteGate
+	captureReads *workerSessionCaptureReads
 
 	sessionMu        sync.Mutex
 	openedSessionIDs map[string]struct{}
@@ -216,15 +215,12 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
-	providerFiles := &workerSessionProviderFiles{delegate: providerSessionReadFiles{}}
 	captureReads := &workerSessionCaptureReads{faults: make(map[string]workerSessionCaptureFault)}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		WorkerRecordingWriter:               captureReads,
-		WorkerRecordingStoreObserver:        func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
-		APIServerStarter:                    api.start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
-		ProviderSessionFileSystem:           providerFiles,
+		WorkerRecordingWriter:        captureReads,
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
+		APIServerStarter:             api.start,
+		ProviderCommandRunner:        runner,
 	})
 	if err != nil {
 		t.Fatalf("build Provider Sessions CLI shared process: %v", err)
@@ -248,7 +244,6 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		api:              api,
 		runner:           runner,
 		fleetGate:        fleetGate,
-		providerFiles:    providerFiles,
 		captureReads:     captureReads,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),

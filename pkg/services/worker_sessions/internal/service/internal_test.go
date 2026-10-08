@@ -9649,6 +9649,11 @@ func assertCleanupSiblingAndEffects(t *testing.T, fixture *cleanupCharacterizati
 
 func assertRecordingCleanup(t *testing.T, recording *interruptRecording, label string) {
 	t.Helper()
+	// Terminal publication precedes recording finalization for the asynchronous
+	// successor. Observe the owned recording boundary before counting its effects.
+	if err := waitControlledSignal(recording.closed, controlledBoundaryWaitTimeout); err != nil {
+		t.Fatalf("%s recording cleanup: %v", label, err)
+	}
 	closeCalls, terminalCalls := recording.counts()
 	if closeCalls != 1 {
 		t.Fatalf("%s recording close calls = %d, want 1", label, closeCalls)
@@ -9844,6 +9849,8 @@ type interruptRecordingService struct {
 }
 
 type interruptRecording struct {
+	closed        chan struct{}
+	closeOnce     sync.Once
 	mu            sync.Mutex
 	closeCalls    int
 	terminalCalls int
@@ -9859,7 +9866,7 @@ func (service *interruptRecordingService) StartWorkerSessionRecording(
 	_ context.Context,
 	request recordings.WorkerSessionRecordingRequest,
 ) (recordings.WorkerSessionRecording, error) {
-	handle := &interruptRecording{}
+	handle := &interruptRecording{closed: make(chan struct{})}
 	service.mu.Lock()
 	service.handles[request.WorkerSessionID] = handle
 	service.mu.Unlock()
@@ -9890,6 +9897,7 @@ func (recording *interruptRecording) Close(context.Context) error {
 	recording.mu.Lock()
 	recording.closeCalls++
 	recording.mu.Unlock()
+	recording.closeOnce.Do(func() { close(recording.closed) })
 	return nil
 }
 
@@ -9902,6 +9910,7 @@ func (recording *interruptRecording) CloseWithTerminal(
 	recording.terminalCalls++
 	recording.terminals = append(recording.terminals, terminal)
 	recording.mu.Unlock()
+	recording.closeOnce.Do(func() { close(recording.closed) })
 	return nil
 }
 
