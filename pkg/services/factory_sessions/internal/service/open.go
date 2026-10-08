@@ -437,7 +437,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 
 func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
 	if opening.configured.DefinitionSnapshot == nil {
-		resolved, err := r.resolveActivationSnapshot(ctx, opening.configured.Definition,
+		resolved, err := r.snapshotSelection.Resolve(ctx, opening.configured.Definition,
 			opening.configured.Recordings, nil, opening.resumeInput, opening.sessionID)
 		if err != nil {
 			return nil, err

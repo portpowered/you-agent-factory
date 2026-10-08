@@ -385,7 +385,7 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 			return canonicalID
 		},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 	activation, err := factory.activationRequest(context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/factory",
@@ -543,7 +543,7 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 	factory := &Root{
 		runtimeRoot:               root,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 
 	products, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{

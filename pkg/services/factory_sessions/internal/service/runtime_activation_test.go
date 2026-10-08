@@ -668,7 +668,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	}
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 	activation, err := factory.activationRequest(context.Background(), request.startRequest())
 	if err != nil {
@@ -767,7 +767,7 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	}
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 	activation, err := factory.activationRequest(context.Background(), request.startRequest())
 	if err != nil {
@@ -795,7 +795,7 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
@@ -817,10 +817,10 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 	sourcePath := filepath.Join(t.TempDir(), factorydefinitions.FactoryConfigFile)
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions: activationDefinitionsStub{snapshot: factorydefinitions.RuntimeSnapshot{
+		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: factorydefinitions.RuntimeSnapshot{
 			EffectiveFactory:  factorydefinitions.FactoryConfig{Name: "source-only"},
 			DefinitionVersion: &factorydefinitions.FactoryVersion{Logical: 1},
-		}},
+		}}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{SourcePath: sourcePath},
@@ -845,7 +845,7 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 	}
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{err: want},
+		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{err: want}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 		generateSessionID:         func() string { return "" },
 	}
 	_, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
@@ -904,10 +904,9 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 		runtimeRoot:               root,
 		replayInputs:              replayInputs,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
-		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
 			return replayRuntimeConfigStub{}, nil
-		},
+		}, nil, nil, nil),
 	}
 	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
