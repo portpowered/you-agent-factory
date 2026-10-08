@@ -83,6 +83,12 @@ Matching histories with equally newest or unknown modification times stop startu
 Zero readable matches or a recording inventory failure also stop startup without activating workers or replacing retained files.
 A missing or damaged recording selected by an existing reference or explicit path remains fatal.
 
+Local startup and recording-load failures print safe cause lines to stderr without `--debug`.
+The coded error stays first, followed by bounded `cause[0]=...` lines.
+Cause lines redact credentials, prompt and body values, URL queries, and private filesystem paths.
+`--debug` does not repeat these cause lines.
+Preserve the selected recording before correcting a load failure.
+
 Explicit `--record`, `--resume`, `--replay`, and `--no-record` selections take precedence during startup.
 A continuous server run with explicit `--record` initializes an absent reference after restoring this repository's `~default` board.
 It publishes the absolute recording path after reconstruction and initial opening, before readiness.

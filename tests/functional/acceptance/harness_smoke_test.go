@@ -79,7 +79,7 @@ func initializeConfig(
 	if err == nil {
 		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
 	}
-	support.RequireSafeCLIDiagnostic(t, result.Stderr)
+	support.RequireSafeCLIDiagnostic(t, result.Stderr, true)
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}
@@ -110,7 +110,7 @@ func initializeConfigWithProcess(
 	if err == nil {
 		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout(), result.Stderr())
 	}
-	support.RequireSafeCLIDiagnostic(t, result.Stderr())
+	support.RequireSafeCLIDiagnostic(t, result.Stderr(), true)
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}

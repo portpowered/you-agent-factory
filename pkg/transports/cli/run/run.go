@@ -360,12 +360,12 @@ func RunSelected(
 	logger := cfg.Logger
 	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg, prepareWorkTarget)
 	if err != nil {
-		return err
+		return clidiag.WithStartupCause(err)
 	}
 
 	mockWorkersConfig, ignoredJSONPaths, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, loadMockWorkersWithDiagnostics)
 	if err != nil {
-		return err
+		return clidiag.WithStartupCause(err)
 	}
 	if len(ignoredJSONPaths) > 0 {
 		logger.Warn(
@@ -384,7 +384,7 @@ func RunSelected(
 			return err
 		}
 		if err := prepareRunStartup(ctx, cfg, false); err != nil {
-			return err
+			return clidiag.WithStartupCause(err)
 		}
 		return runInvocation(ctx, cfg, logger, invocationRequest, invocationTarget(cfg, mockWorkersConfig),
 			invocation, presentation, presentations, nil)

@@ -251,9 +251,10 @@ func WriteUsageError(output io.Writer, err error) bool {
 // structured failure. The writer remains transparent to command handlers, so
 // existing command-specific sanitization and response formats are preserved.
 type DiagnosticWriter struct {
-	output   io.Writer
-	rendered bool
-	debug    bool
+	output         io.Writer
+	rendered       bool
+	debug          bool
+	causesRendered bool
 }
 
 type centralDiagnosticsContextKey struct{}
@@ -437,13 +438,14 @@ func WriteDebugFailure(output io.Writer, err error) bool {
 	if output == nil || err == nil {
 		return false
 	}
-	causes := debugCauseChain(err)
-	for index, cause := range causes {
-		_, _ = fmt.Fprintf(output, "debug: cause[%d]=%s\n", index, cause)
+	var causes []string
+	if !causesRendered(output) {
+		causes = debugCauseChain(err)
+		writeCauses(output, causes, "debug: ")
 	}
 
-	var httpFailure HTTPDiagnostic
-	if !errors.As(err, &httpFailure) {
+	httpFailure, ok := findCause[HTTPDiagnostic](err)
+	if !ok {
 		return len(causes) > 0
 	}
 	method := strings.TrimSpace(httpFailure.CLIHTTPMethod())
@@ -464,39 +466,22 @@ func WriteDebugFailure(output io.Writer, err error) bool {
 	return true
 }
 
-const maxDebugCauseDepth = 16
-
-func debugCauseChain(err error) []string {
-	causes := make([]string, 0, 2)
-	previous := ""
-	for depth := 0; err != nil && depth < maxDebugCauseDepth; depth++ {
-		message := sanitizeDebugMessage(err.Error())
-		if message != previous {
-			causes = append(causes, message)
-			previous = message
-		}
-		err = errors.Unwrap(err)
-	}
-	if err != nil {
-		causes = append(causes, "<cause chain truncated>")
-	}
-	return causes
-}
-
 var (
 	debugURLPattern                 = regexp.MustCompile(`(?i)https?://[^\s]+`)
+	debugQuotedPathPattern          = regexp.MustCompile(`(?i)["'](?:[A-Za-z]:[\\/]|\\\\|/|\.\.?[\\/]|~[\\/])[^"'\r\n]*["']`)
 	debugSensitiveAssignmentPattern = regexp.MustCompile(
 		`(?i)(\b(?:authorization|cookie|set-cookie|password|passwd|secret|token|credential|api[-_]?key|access[-_]?token|refresh[-_]?token|payload|body|request[-_]?body|response[-_]?body|query|prompt|input|content|path|file|filename|filepath|directory|dir|cache|cachepath|environment|env|home|userprofile|homedrive|homepath)\b\s*[:=]\s*)(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;]+(?:\s+[^\s,;]+)?)`,
 	)
-	debugWindowsPathPattern  = regexp.MustCompile(`(?i)(?:[A-Za-z]:[\\/]|\\\\)[^\s"',;)\]}]+`)
-	debugUnixPathPattern     = regexp.MustCompile(`(^|[\s=(])/(?:[^/\s"',;)\]}]+/)*[^/\s"',;)\]}]+`)
-	debugRelativePathPattern = regexp.MustCompile(`(^|[\s=(])(?:\.\.?[\\/]|~[\\/])[^\s"',;)\]}]+`)
+	debugWindowsPathPattern  = regexp.MustCompile(`(?i)(^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\)[^\s"',;)\]}]+`)
+	debugUnixPathPattern     = regexp.MustCompile(`(^|[\s=("'])/(?:[^/\s"',;)\]}]+/)*[^/\s"',;)\]}]+`)
+	debugRelativePathPattern = regexp.MustCompile(`(^|[\s=("'])(?:\.\.?[\\/]|~[\\/])[^\s"',;)\]}]+`)
 )
 
 func sanitizeDebugMessage(message string) string {
 	message = debugURLPattern.ReplaceAllStringFunc(message, sanitizeDebugURLMatch)
 	message = debugSensitiveAssignmentPattern.ReplaceAllString(message, `${1}<redacted>`)
-	message = debugWindowsPathPattern.ReplaceAllString(message, `<redacted>`)
+	message = debugQuotedPathPattern.ReplaceAllString(message, `<redacted>`)
+	message = debugWindowsPathPattern.ReplaceAllString(message, `${1}<redacted>`)
 	message = debugUnixPathPattern.ReplaceAllString(message, `${1}<redacted>`)
 	message = debugRelativePathPattern.ReplaceAllString(message, `${1}<redacted>`)
 	message = strings.NewReplacer("\r", `\r`, "\n", `\n`).Replace(message)
@@ -518,6 +503,7 @@ func WriteTerminalFailure(output io.Writer, err error) {
 		return
 	}
 	_, _ = fmt.Fprintf(output, "Error: %s\n", sanitizeDebugMessage(err.Error()))
+	writeCauses(output, debugCauseChain(errors.Unwrap(err)), "")
 	MarkDiagnosticRendered(output)
 }
 
