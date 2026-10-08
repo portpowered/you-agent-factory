@@ -45,6 +45,9 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	support.WriteWorkstationConfig(t, boardDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 	api := support.NewProcessAPIServer()
 	boardAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	for range 4 {
+		boardAPIs = append(boardAPIs, support.NewProcessAPIServer())
+	}
 	failureAPIs := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
@@ -184,6 +187,23 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	}) {
 		return
 	}
+	if !t.Run("F03 explicit JSON repeated waiting board", func(t *testing.T) {
+		// ~default, its durable board and its writer must be stopped and joined
+		// before reopening. Independent fixtures elsewhere remain parallel.
+		runner.calls.Store(0)
+		dir := support.ScaffoldFactory(t, config)
+		support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+		home := t.TempDir()
+		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[11:15], runner, func(t *testing.T, dir string) *support.CapturedInputs {
+			inputs := restartProbeInputs(t, dir)
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.Args = append(inputs.Input.Args, "--listen", "127.0.0.1:23401")
+			return inputs
+		}, 0)
+	}) {
+		return
+	}
 	t.Run("PlainBoard F8 recovered prerequisite failure", func(t *testing.T) {
 		runner.calls.Store(0)
 		t.Cleanup(func() { runner.fail.Store(false) })
@@ -224,8 +244,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		testRestartProbeCorruptBoard(t, process, corruptDir, files, runner)
 	})
 	t.Cleanup(func() {
-		if starts.Load() != 14 || files.corruptReads.Load() != 1 {
-			t.Errorf("startup attempts=%d corrupt probe reads=%d; want fourteen and one", starts.Load(), files.corruptReads.Load())
+		if starts.Load() != 18 || files.corruptReads.Load() != 1 {
+			t.Errorf("startup attempts=%d corrupt probe reads=%d; want eighteen and one", starts.Load(), files.corruptReads.Load())
 		}
 	})
 }

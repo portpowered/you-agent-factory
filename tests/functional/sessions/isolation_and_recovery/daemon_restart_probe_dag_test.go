@@ -60,8 +60,28 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	assertRestartProbeRecoveredWork(t, before, after)
 	recoveredEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeEventFacts(t, events, recoveredEvents)
+	if len(apis) > 3 {
+		assertRestartProbeHistoryPrefix(t, events, recoveredEvents)
+	}
 	if runner.calls.Load() != 1 {
 		t.Fatal("restart dispatched terminal A or blocked descendants")
+	}
+	if len(apis) > 3 {
+		// F03 keeps the same durable board and waiting descendants through a
+		// second explicit --record restart before allowing new work to run.
+		restartProbeShutdown(t, url, reopened)
+		third := inputs(t, dir)
+		reopened = support.StartProcessCommand(t, process, third.Input)
+		url = restartProbeReadyURL(t, apis[2], reopened)
+		after = restartProbeBoardReads(t, url)
+		assertRestartProbeStates(t, after)
+		assertRestartProbeRecoveredWork(t, before, after)
+		repeatedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		assertRestartProbeEventFacts(t, recoveredEvents, repeatedEvents)
+		assertRestartProbeHistoryPrefix(t, recoveredEvents, repeatedEvents)
+		if runner.calls.Load() != 1 {
+			t.Fatal("second restart dispatched terminal A or blocked descendants")
+		}
 	}
 	request, _ := json.Marshal(factoryapi.MoveWorkRequest{StateName: "init"})
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/restart-B/move"), request)
@@ -78,7 +98,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	completedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	restartProbeShutdown(t, url, reopened)
 	if len(apis) > 2 {
-		assertRestartProbeTerminalRestart(t, process, dir, apis[2], runner, inputs, completed, completedEvents)
+		assertRestartProbeTerminalRestart(t, process, dir, apis[len(apis)-1], runner, inputs, completed, completedEvents)
 	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
@@ -199,6 +219,53 @@ func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.Facto
 	}
 	if proved < 2 {
 		t.Fatal("prior dispatch/state facts missing")
+	}
+}
+
+func assertRestartProbeHistoryPrefix(t *testing.T, before, after []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(after) < len(before) {
+		t.Fatalf("restored history has %d events, want retained prefix of %d", len(after), len(before))
+	}
+	// Normalize the public JSON union payloads so object-key ordering cannot
+	// hide a changed event or falsely report a changed canonical fact.
+	values := make([]any, 2)
+	for index, events := range [][]factoryapi.FactoryEvent{before, after[:len(before)]} {
+		payload, err := json.Marshal(events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(payload, &values[index]); err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range values[index].([]any) {
+			event := value.(map[string]any)
+			// Startup precedes SESSION_STARTED. Existing replay serialization
+			// enriches this frame with its default scope and empty diagnostics;
+			// assert those exact defaults without changing Event semantics.
+			context := event["context"].(map[string]any)
+			if _, exists := context["sessionId"]; !exists {
+				context["sessionId"] = "~default"
+			}
+			if event["type"] != string(factoryapi.FactoryEventTypeRunRequest) {
+				continue
+			}
+			body := event["payload"].(map[string]any)
+			if _, exists := body["diagnostics"]; !exists {
+				body["diagnostics"] = map[string]any{}
+			}
+			if _, exists := body["wallClock"]; !exists {
+				body["wallClock"] = map[string]any{"startedAt": body["recordedAt"]}
+			}
+		}
+	}
+	if !reflect.DeepEqual(values[0], values[1]) {
+		oldEvents, newEvents := values[0].([]any), values[1].([]any)
+		for index := range oldEvents {
+			if !reflect.DeepEqual(oldEvents[index], newEvents[index]) {
+				t.Fatalf("explicit --record restart changed public prefix event %d (%s)", index, before[index].Id)
+			}
+		}
 	}
 }
 
