@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { timePackagePhase } from "./package-phase-timing.mjs";
+import { assertSourceCommit } from "./package-release-candidate.mjs";
 import {
   assertCandidateSetEvidence,
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -62,7 +63,9 @@ export function runSmokeCommand(
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill();
     }, timeoutMs);
     child.stdout.on("data", (chunk) => {
@@ -77,7 +80,9 @@ export function runSmokeCommand(
     });
     child.once("close", (code, signal) => {
       clearTimeout(timer);
-      if (code === 0) resolve({ stdout, stderr });
+      if (timedOut)
+        reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+      else if (code === 0) resolve({ stdout, stderr });
       else
         reject(new Error(`${command} failed (${signal ?? code}): ${stderr}`));
     });
@@ -102,9 +107,29 @@ for (const spec of specs) {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(manifest.name, spec.name);
   assert.equal(manifest.version, spec.version);
-  assert.ok(realpathSync(fileURLToPath(import.meta.resolve(spec.name))).startsWith(root + path.sep));
-  const api = await import(spec.name);
+  const dataPackage = ["@you-agent-factory/api", "@you-agent-factory/packaged-factories"].includes(spec.name);
+  const entry = dataPackage ? spec.name + "/manifest" : spec.name;
+  assert.ok(realpathSync(fileURLToPath(import.meta.resolve(entry))).startsWith(root + path.sep));
+  const api = dataPackage ? null : await import(spec.name);
   switch (spec.name) {
+    case "@you-agent-factory/api": {
+      const manifest = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve(entry)), "utf8"));
+      assert.equal(manifest.sourceCommit, spec.sourceCommit);
+      const schema = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve(spec.name + "/schemas/factory")), "utf8"));
+      assert.ok(schema.properties);
+      const openapi = readFileSync(fileURLToPath(import.meta.resolve(spec.name + "/openapi")), "utf8");
+      assert.match(openapi, /openapi: 3\\./); break;
+    }
+    case "@you-agent-factory/packaged-factories": {
+      const manifest = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve(entry)), "utf8"));
+      assert.equal(manifest.sourceCommit, spec.sourceCommit);
+      assert.ok(manifest.factories.length > 0);
+      const factory = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve(
+        spec.name + "/factories/" + manifest.factories[0].slug + ".json")), "utf8"));
+      assert.ok(factory.name);
+      const schema = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve(spec.name + "/schemas/factory.json")), "utf8"));
+      assert.ok(schema.properties); break;
+    }
     case "@you-agent-factory/client": {
       const recording = api.parseFactoryRecording(sample);
       assert.deepEqual(api.orderFactoryEvents([...recording.events].reverse()).map(({ id }) => id),
@@ -156,17 +181,37 @@ export async function smokeFrontendPackages({
   evidence,
   runCommand = runSmokeCommand,
   log = (message) => console.error(message),
+  expectedSourceCommit,
 }) {
-  evidence ??= JSON.parse(
-    await readFile(
-      path.join(candidateDirectory, "public-package-candidates.json"),
-      "utf8",
-    ),
-  );
-  const candidates = await validateFrontendTarballs(
-    evidence,
-    candidateDirectory,
-  );
+  let candidates;
+  if (expectedSourceCommit !== undefined) {
+    assertSourceCommit(expectedSourceCommit);
+    const { validateTaggedReleaseCandidate } = await import(
+      "./public-release-package-publish.mjs"
+    );
+    const validated = await validateTaggedReleaseCandidate({
+      candidateDirectory,
+      expectedSourceCommit,
+    });
+    evidence = validated.evidence;
+    const root = await realpath(validated.root);
+    candidates = await Promise.all(
+      evidence.packages.map(async (candidate) => {
+        const tarball = await realpath(path.join(root, candidate.tarball));
+        if (!tarball.startsWith(root + path.sep))
+          throw new Error(`Candidate escapes directory: ${candidate.name}`);
+        return { ...candidate, tarball };
+      }),
+    );
+  } else {
+    evidence ??= JSON.parse(
+      await readFile(
+        path.join(candidateDirectory, "public-package-candidates.json"),
+        "utf8",
+      ),
+    );
+    candidates = await validateFrontendTarballs(evidence, candidateDirectory);
+  }
   const root = await mkdtemp(path.join(tmpdir(), "you-frontend-install-"));
   try {
     const consumer = path.join(root, "consumer");
@@ -194,19 +239,32 @@ export async function smokeFrontendPackages({
     await writeFile(
       path.join(consumer, "expected.json"),
       JSON.stringify(
-        candidates.map(({ name, version }) => ({ name, version })),
+        candidates.map(({ name, version }) => ({
+          name,
+          version,
+          sourceCommit: expectedSourceCommit,
+        })),
       ),
     );
     await writeFile(path.join(consumer, "smoke.mjs"), frontendConsumerSource);
     // No inherited NODE_PATH, Bun preload or user registry configuration in the consumer.
     const env = {
-      ...process.env,
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(([key]) =>
+          /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|COMSPEC|TEMP|TMP)$/i.test(key),
+        ),
+      ),
+      HOME: path.join(root, "home"),
+      USERPROFILE: path.join(root, "home"),
+      XDG_CONFIG_HOME: path.join(root, "config"),
       NODE_PATH: "",
       NODE_OPTIONS: "",
       BUN_OPTIONS: "",
       BUN_INSTALL_CACHE_DIR: path.join(root, "cache"),
       npm_config_userconfig: path.join(root, "npmrc"),
     };
+    await mkdir(env.HOME);
+    await mkdir(env.XDG_CONFIG_HOME);
     await writeFile(
       env.npm_config_userconfig,
       "registry=https://registry.npmjs.org/\n",
@@ -237,11 +295,15 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const { values } = parseArgs({
-    options: { "candidate-directory": { type: "string" } },
+    options: {
+      "candidate-directory": { type: "string" },
+      "expected-source-commit": { type: "string" },
+    },
     strict: true,
   });
   smokeFrontendPackages({
     candidateDirectory: values["candidate-directory"],
+    expectedSourceCommit: values["expected-source-commit"],
   }).then(
     (evidence) => console.log(JSON.stringify(evidence)),
     (error) => {

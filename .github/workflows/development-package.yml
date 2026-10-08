@@ -201,10 +201,15 @@ jobs:
           release_version="${release_tag#v}"
           printf 'release_version=%s\n' "$release_version" >> "$GITHUB_OUTPUT"
 
-  prepare-public-package-candidate:
-    name: Prepare Complete Public Package Candidate
+  publish-tagged-release:
+    name: Prepare, Smoke and Publish Tagged Release Candidate
     needs: resolve-release-tag
+    environment: development-publishing
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Check out release commit
         uses: actions/checkout@v4
@@ -232,61 +237,20 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
+      # npm is retained for the trusted-publisher provenance operation.
+      - run: bun install --global npm@${{ env.NPM_VERSION }}
+
       - name: Prepare the complete public package candidate from the release commit
         run: >-
-          node scripts/public-release-package-candidate.mjs
+          bun run --bun scripts/public-release-package-candidate.mjs
           --output-directory .artifacts/public-release-candidate
           --run-id "${{ github.run_id }}"
           --source-commit "${{ github.event.workflow_run.head_sha }}"
           --version "${{ needs.resolve-release-tag.outputs.release_version }}"
 
-      - name: Upload the complete public package candidate and evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-release-candidate-${{ github.run_id }}
-          path: .artifacts/public-release-candidate/
-          if-no-files-found: error
-
-  publish-tagged-release:
-    name: Publish Tagged Release Candidate
-    needs:
-      - resolve-release-tag
-      - prepare-public-package-candidate
-    environment: development-publishing
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - run: npm install --global npm@${{ env.NPM_VERSION }}
-
-      - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
-
-      - name: Download the preserved complete public package candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: public-release-candidate-${{ github.run_id }}
-          path: .artifacts/public-release-candidate
-
       - name: Reconcile, publish, and verify the complete reviewed public package set
         run: >-
-          node scripts/public-release-package-publish.mjs
+          bun run --bun scripts/public-release-package-publish.mjs
           --candidate-directory .artifacts/public-release-candidate
           --expected-source-commit "${{ github.event.workflow_run.head_sha }}"
           --workspace-directory .

@@ -19,6 +19,7 @@ import {
 	TAGGED_RELEASE_PUBLIC_PACKAGE_NAMES,
 } from "./public-package-set.mjs";
 import { publishTaggedReleaseCandidate } from "./public-release-package-publish.mjs";
+import { smokeFrontendPackages } from "./public-package-install-smoke.mjs";
 
 const sourceCommit = "0123456789abcdef0123456789abcdef01234567";
 const version = "1.2.3";
@@ -113,6 +114,9 @@ async function candidateFixture(t) {
 
 function recordingPublishers(calls) {
 	return {
+		async smoke(input) {
+			calls.push(["smoke", input]);
+		},
 		async publishApiCandidate(input) {
 			calls.push(["api", input]);
 			return "api-published";
@@ -143,14 +147,104 @@ test("validates the complete reviewed set before publishing each represented chi
 	assert.deepEqual(result.evidence, evidence);
 	assert.deepEqual(
 		calls.map(([name]) => name),
-		["api", "packaged-factories", "frontend"],
+		["smoke", "api", "packaged-factories", "frontend"],
 	);
 	assert.equal(calls[0][1].expectedSourceCommit, sourceCommit);
-	assert.equal(calls[0][1].expectedDistTag, "latest");
 	assert.equal(calls[1][1].expectedDistTag, "latest");
-	assert.equal(calls[2][1].tag, "latest");
-	assert.equal(calls[2][1].provenance, true);
+	assert.equal(calls[2][1].expectedDistTag, "latest");
+	assert.equal(calls[3][1].tag, "latest");
+	assert.equal(calls[3][1].provenance, true);
 });
+
+test("an installed operation failure prevents every publication", async (t) => {
+	const { root } = await candidateFixture(t);
+	const calls = [];
+	await assert.rejects(
+		publishTaggedReleaseCandidate(
+			{
+				candidateDirectory: root,
+				expectedSourceCommit: sourceCommit,
+			},
+			{
+				...recordingPublishers(calls),
+				smoke: async () => {
+					throw new Error("installed factory operation failed");
+				},
+			},
+		),
+		/installed factory operation failed/,
+	);
+	assert.deepEqual(calls, []);
+});
+
+test("source mismatch prevents installed preflight and publication", async (t) => {
+	const { root } = await candidateFixture(t);
+	const calls = [];
+	await assert.rejects(
+		publishTaggedReleaseCandidate(
+			{
+				candidateDirectory: root,
+				expectedSourceCommit: "f".repeat(40),
+			},
+			recordingPublishers(calls),
+		),
+		/source commit does not match/,
+	);
+	assert.deepEqual(calls, []);
+});
+
+for (const failure of [null, "install", "operation"]) {
+	test(`tagged consumer installs all eight together and cleans up after ${failure ?? "success"}`, async (t) => {
+		const { root, evidence } = await candidateFixture(t);
+		const calls = [];
+		let consumerDirectory;
+		const operation = smokeFrontendPackages({
+			candidateDirectory: root,
+			expectedSourceCommit: sourceCommit,
+			log: () => {},
+			runCommand: async (command, args, options) => {
+				consumerDirectory = options.cwd;
+				calls.push(command);
+				const manifest = JSON.parse(
+					await readFile(join(options.cwd, "package.json"), "utf8"),
+				);
+				for (const { name } of evidence.packages) {
+					assert.ok(manifest.dependencies[name].endsWith(".tgz"));
+					assert.equal(manifest.overrides[name], manifest.dependencies[name]);
+				}
+				const expected = JSON.parse(
+					await readFile(join(options.cwd, "expected.json"), "utf8"),
+				);
+				assert.equal(expected.length, 8);
+				assert.ok(
+					expected.every(
+						(entry) =>
+							entry.sourceCommit === sourceCommit && entry.version === version,
+					),
+				);
+				assert.equal(options.env.NODE_PATH, "");
+				assert.equal(options.env.NODE_OPTIONS, "");
+				if (
+					(failure === "install" && command === "bun") ||
+					(failure === "operation" && command === "node")
+				) {
+					throw new Error(`controlled ${failure} failure`);
+				}
+				return { stdout: "passed", stderr: "" };
+			},
+		});
+		if (failure)
+			await assert.rejects(
+				operation,
+				new RegExp(`controlled ${failure} failure`),
+			);
+		else assert.deepEqual(await operation, evidence);
+		assert.deepEqual(calls, failure === "install" ? ["bun"] : ["bun", "node"]);
+		await assert.rejects(readFile(join(consumerDirectory, "package.json")), {
+			code: "ENOENT",
+		});
+	});
+}
 
 for (const testCase of [
 	{
@@ -244,8 +338,16 @@ for (const field of ["shasum", "integrity"]) {
 }
 
 for (const testCase of [
-	{ child: "api", action: "corrupt", tarball: "you-agent-factory-api-1.2.3.tgz" },
-	{ child: "api", action: "remove", tarball: "you-agent-factory-api-1.2.3.tgz" },
+	{
+		child: "api",
+		action: "corrupt",
+		tarball: "you-agent-factory-api-1.2.3.tgz",
+	},
+	{
+		child: "api",
+		action: "remove",
+		tarball: "you-agent-factory-api-1.2.3.tgz",
+	},
 	{
 		child: "packaged-factories",
 		action: "corrupt",

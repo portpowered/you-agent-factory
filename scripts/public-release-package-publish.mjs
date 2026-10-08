@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { readdir, readFile, realpath } from "node:fs/promises";
+import { basename, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
+import { timePackagePhase } from "./package-phase-timing.mjs";
+import { smokeFrontendPackages } from "./public-package-install-smoke.mjs";
+import { assertSourceCommit } from "./package-release-candidate.mjs";
 import { publishPublicPackageCandidates } from "../ui/scripts/public-package-publish.mjs";
 import { API_PACKAGE_NAME } from "./api-package-candidate.mjs";
 import { publishCandidateDirectory as publishApiCandidate } from "./api-package-publish.mjs";
@@ -93,6 +96,7 @@ async function assertSinglePackageEvidence({
 		join(candidateDirectory, "candidate-evidence.json"),
 	);
 	const tarballName = await singleTarballName(candidateDirectory);
+	await assertContainedTarball(root, join(candidateDirectory, tarballName));
 	if (
 		child.packageName !== expectedName ||
 		child.candidateVersion !== evidence.version ||
@@ -147,6 +151,10 @@ async function assertFrontendEvidence(root, evidence) {
 			candidate.version,
 			`frontend/${candidate.filename}`,
 		);
+		await assertContainedTarball(
+			root,
+			join(root, "frontend", candidate.filename),
+		);
 		await assertTarballDigests({
 			name: candidate.name,
 			tarballPath: join(root, "frontend", candidate.filename),
@@ -156,10 +164,28 @@ async function assertFrontendEvidence(root, evidence) {
 	}
 }
 
+async function assertContainedTarball(root, tarballPath) {
+	let resolvedTarball;
+	try {
+		resolvedTarball = await realpath(tarballPath);
+	} catch (error) {
+		throw new Error(
+			"[public-release-package-publish] represented tarball is not readable",
+			{ cause: error },
+		);
+	}
+	if (!resolvedTarball.startsWith((await realpath(root)) + sep)) {
+		throw new Error(
+			"[public-release-package-publish] candidate escapes directory",
+		);
+	}
+}
+
 export async function validateTaggedReleaseCandidate({
 	candidateDirectory,
 	expectedSourceCommit,
 }) {
+	assertSourceCommit(expectedSourceCommit);
 	const root = resolve(candidateDirectory);
 	const evidence = await readJson(
 		join(root, "release-candidate-evidence.json"),
@@ -202,6 +228,12 @@ export async function publishTaggedReleaseCandidate(
 		candidateDirectory,
 		expectedSourceCommit,
 	});
+	await timePackagePhase("tagged installed family preflight", () =>
+		(dependencies.smoke ?? smokeFrontendPackages)({
+			candidateDirectory: root,
+			expectedSourceCommit,
+		}),
+	);
 	const api = await publishApi({
 		candidateDirectory: join(root, "api"),
 		expectedDistTag: "latest",
@@ -218,6 +250,8 @@ export async function publishTaggedReleaseCandidate(
 		candidateDirectory: join(root, "frontend"),
 		tag: "latest",
 		provenance: true,
+		// The exact frontend tarballs have already passed the full eight-package preflight.
+		smoke: async () => evidence,
 	});
 	return { evidence, publications: { api, packagedFactories, frontend } };
 }

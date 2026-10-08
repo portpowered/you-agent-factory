@@ -1,16 +1,53 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { preparePublicPackageCandidates } from "../ui/scripts/public-package-publish.mjs";
-import { prepareCandidate as prepareApiCandidate } from "./api-package-candidate.mjs";
-import { prepareCandidate as preparePackagedFactoriesCandidate } from "./packaged-factories-package-candidate.mjs";
+import { timePackagePhase } from "./package-phase-timing.mjs";
+import {
+	packCandidate,
+	preparePublicPackageCandidates,
+} from "../ui/scripts/public-package-publish.mjs";
+import { packAndVerify as packApi } from "./api-package-pack.mjs";
+import { packAndVerify as packFactories } from "./packaged-factories-package-pack.mjs";
+import {
+	normalizeStagedMtimes,
+	prepareReleaseCandidate,
+} from "./package-release-candidate.mjs";
 import {
 	assertCandidateSetEvidence,
 	TAGGED_RELEASE_CANDIDATE_SCOPE,
 } from "./public-package-set.mjs";
 
 export { TAGGED_RELEASE_CANDIDATE_SCOPE };
+
+// Keep the reviewed export/inventory checks while packing the staged artifact with Bun.
+async function bunPack(packageDirectory, packDestination) {
+	const manifestPath = join(packageDirectory, "package.json");
+	const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+	if (manifest.name === "@you-agent-factory/packaged-factories") {
+		// npm implicitly includes nested README files; Bun requires explicit inclusion.
+		await writeFile(
+			manifestPath,
+			`${JSON.stringify({ ...manifest, files: [...new Set([...manifest.files, "generated/README.md"])] }, null, 2)}\n`,
+		);
+		await normalizeStagedMtimes(packageDirectory);
+	}
+	return (
+		await packCandidate({
+			stagedDirectory: packageDirectory,
+			outputDirectory: packDestination,
+		})
+	).stdout;
+}
+
+export function prepareDataPackageCandidate(input) {
+	const pack =
+		input.packageName === "@you-agent-factory/api" ? packApi : packFactories;
+	return prepareReleaseCandidate({
+		...input,
+		pack: (options) => pack({ ...options, npmPack: bunPack }),
+	});
+}
 
 async function requireEmptyOutputDirectory(outputDirectory) {
 	await mkdir(outputDirectory, { recursive: true });
@@ -30,40 +67,51 @@ function candidateRecord({ name, version, tarballPath, outputDirectory }) {
 	};
 }
 
-export async function prepareTaggedReleaseCandidate({
-	outputDirectory,
-	runId,
-	sourceCommit,
-	version,
-	apiPackageDirectory = "packages/api",
-	packagedFactoriesPackageDirectory = "packages/packaged-factories",
-}) {
+export async function prepareTaggedReleaseCandidate(
+	{
+		outputDirectory,
+		runId,
+		sourceCommit,
+		version,
+		apiPackageDirectory = "packages/api",
+		packagedFactoriesPackageDirectory = "packages/packaged-factories",
+	},
+	dependencies = {},
+) {
 	const root = resolve(outputDirectory);
 	await requireEmptyOutputDirectory(root);
 	const apiOutput = join(root, "api");
 	const packagedFactoriesOutput = join(root, "packaged-factories");
 	const frontendOutput = join(root, "frontend");
 	const [api, packagedFactories, frontend] = await Promise.all([
-		prepareApiCandidate({
-			packageDirectory: apiPackageDirectory,
-			outputDirectory: apiOutput,
-			runId,
-			sourceCommit,
-			version,
-			distTag: "latest",
-		}),
-		preparePackagedFactoriesCandidate({
-			packageDirectory: packagedFactoriesPackageDirectory,
-			outputDirectory: packagedFactoriesOutput,
-			runId,
-			sourceCommit,
-			version,
-			distTag: "latest",
-		}),
-		preparePublicPackageCandidates({
-			version,
-			outputDirectory: frontendOutput,
-		}),
+		timePackagePhase("tagged api stage/pack", () =>
+			(dependencies.prepareData ?? prepareDataPackageCandidate)({
+				packageName: "@you-agent-factory/api",
+				packageDirectory: apiPackageDirectory,
+				outputDirectory: apiOutput,
+				runId,
+				sourceCommit,
+				version,
+				distTag: "latest",
+			}),
+		),
+		timePackagePhase("tagged factories stage/pack", () =>
+			(dependencies.prepareData ?? prepareDataPackageCandidate)({
+				packageName: "@you-agent-factory/packaged-factories",
+				packageDirectory: packagedFactoriesPackageDirectory,
+				outputDirectory: packagedFactoriesOutput,
+				runId,
+				sourceCommit,
+				version,
+				distTag: "latest",
+			}),
+		),
+		timePackagePhase("tagged frontend build/stage/pack", () =>
+			(dependencies.prepareFrontend ?? preparePublicPackageCandidates)({
+				version,
+				outputDirectory: frontendOutput,
+			}),
+		),
 	]);
 	const packages = [
 		candidateRecord({
