@@ -129,15 +129,26 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - run: make typecheck ui-lint
+      - name: Restore Bun download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+      - name: Install locked frontend dependencies
+        run: cd ui && bun install --frozen-lockfile
+      - name: Typecheck frontend
+        run: make typecheck
+      - name: Lint frontend
+        if: success() || failure()
+        run: make ui-lint
+      - name: Run frontend unit and replay coverage
+        if: success() || failure()
+        env:
+          UI_COVERAGE_MAIN_MAX_WORKERS: "4"
+        run: make test-ui-coverage
 
   frontend-component:
     name: Frontend Component
@@ -156,23 +167,6 @@ jobs:
           UI_COMPONENT_MAX_DURATION_MS: "300000"
           UI_COMPONENT_TEST_MAX_WORKERS: "4"
         run: make ui-component-test
-
-  ui-coverage:
-    name: Frontend Coverage
-    needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - name: Run frontend unit coverage
-        env:
-          UI_COVERAGE_MAIN_MAX_WORKERS: "4"
-        run: make test-ui-coverage
 
   frontend-browser:
     name: Frontend Browser
@@ -1112,7 +1106,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, frontend-browser, frontend-storybook, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1152,7 +1146,7 @@ jobs:
           README_RESULT: ${{ needs.readme.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}
-          FRONTEND_COVERAGE_RESULT: ${{ needs.ui-coverage.result }}
+          FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}

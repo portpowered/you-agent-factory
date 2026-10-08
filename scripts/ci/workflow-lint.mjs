@@ -49,6 +49,40 @@ function requireWorkflowOrder(value, first, second, description) {
 	}
 }
 
+// CI topology belongs in Workflow Lint, rather than a product runtime test.
+export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
+	const frontend = workflowJobSection(workflow, "frontend");
+	const policy = workflowJobSection(workflow, "verification-policy");
+	requireWorkflowText(workflow, "BUN_VERSION: 1.3.12", "frontend Bun must remain pinned");
+	requireWorkflowText(frontend, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
+	requireWorkflowText(frontend, "path: ~/.bun/install/cache", "cache Bun downloads only");
+	requireWorkflowText(frontend,
+		"key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}",
+		"cache identity must include platform, Bun and frozen lock");
+	requireWorkflowText(frontend, "run: cd ui && bun install --frozen-lockfile", "install frozen dependencies");
+	requireWorkflowText(frontend, "run: make typecheck", "retain typecheck");
+	for (const [name, command] of [["Lint frontend", "make ui-lint"],
+		["Run frontend unit and replay coverage", "make test-ui-coverage"]]) {
+		const step = workflowStepSection(frontend, name);
+		requireWorkflowText(step, "if: success() || failure()", "attempt later proof after failures, but not cancellation");
+		requireWorkflowText(step, `run: ${command}`, "retain the complete proof command");
+	}
+	requireWorkflowText(frontend, 'UI_COVERAGE_MAIN_MAX_WORKERS: "4"', "retain coverage worker budget");
+	requireWorkflowOrder(frontend, "bun install --frozen-lockfile", "make typecheck", "install before static proof");
+	requireWorkflowOrder(frontend, "make typecheck", "make ui-lint", "retain static order");
+	requireWorkflowOrder(frontend, "make ui-lint", "make test-ui-coverage", "coverage shares static setup");
+	if (/setup-go|continue-on-error/.test(frontend) || /\n  ui-coverage:/.test(workflow)) {
+		throw new Error("frontend shared setup must not duplicate setup or mask failures");
+	}
+	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend\b[^\]]*\]/, "policy needs shared Frontend");
+	for (const result of ["FRONTEND_RESULT", "FRONTEND_COVERAGE_RESULT"]) {
+		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "static and coverage share the aggregate result");
+	}
+	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}", "Component remains independent");
+	if (policy.includes("ui-coverage")) throw new Error("policy must not depend on removed coverage job");
+	return { name: "frontend-shared-setup-workflow", status: "pass" };
+}
+
 /**
  * Enforce the TTS integration wiring as a static workflow contract.
  *
@@ -323,6 +357,9 @@ export function runWorkflowLint({
 		throw new Error(`Workflow schema lint failed with exit code ${result.status}${termination}.`);
 	}
 	if (validateRepositoryContracts) {
+		validateFrontendSharedSetupWorkflowContract({
+			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
+		});
 		validateRepositoryWorkflowContracts();
 		log("WORKFLOW_LINT_STATIC_CONTRACTS_OK");
 	}

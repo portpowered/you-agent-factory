@@ -123,6 +123,47 @@ test("policy CLI consumes the hosted Models result independently of backend cove
 	}
 });
 
+test("policy CLI fails closed for shared Frontend proof and independent frontend jobs", () => {
+	const env = { ...process.env, GITHUB_STEP_SUMMARY: "",
+		CLASSIFICATION_RESULT: "success", CLASSIFICATION: "frontend",
+		PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "false" };
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE",
+		"BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+		env[`RUN_${prefix}`] = "false";
+		env[`${prefix}_RESULT`] = "skipped";
+	}
+	env.BACKEND_MODELS_RESULT = "skipped";
+	const results = ["success", "failure", "cancelled", "timed_out", "skipped", ""];
+	for (const selected of ["true", "false"]) {
+		for (const result of results) {
+			const childEnv = { ...env, RUN_FRONTEND: selected,
+				FRONTEND_RESULT: result, FRONTEND_COVERAGE_RESULT: result };
+			for (const suffix of ["COMPONENT", "BROWSER", "STORYBOOK"]) {
+				childEnv[`FRONTEND_${suffix}_RESULT`] = selected === "true" ? "success" : "skipped";
+			}
+			const child = spawnSync(process.execPath,
+				[fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))],
+				{ encoding: "utf8", env: childEnv });
+			const passes = selected === "true" ? result === "success" : result === "skipped";
+			assert.equal(child.status, passes ? 0 : 1, child.stderr);
+			if (!passes) assert.match(child.stderr, /Frontend/);
+		}
+	}
+	for (const suffix of ["COMPONENT", "BROWSER", "STORYBOOK"]) {
+		for (const result of results.filter((value) => value !== "success")) {
+			const childEnv = { ...env, RUN_FRONTEND: "true", FRONTEND_RESULT: "success",
+				FRONTEND_COVERAGE_RESULT: "success", FRONTEND_COMPONENT_RESULT: "success",
+				FRONTEND_BROWSER_RESULT: "success", FRONTEND_STORYBOOK_RESULT: "success",
+				[`FRONTEND_${suffix}_RESULT`]: result };
+			const child = spawnSync(process.execPath,
+				[fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))],
+				{ encoding: "utf8", env: childEnv });
+			assert.equal(child.status, 1, child.stderr);
+			assert.match(child.stderr, new RegExp(`Frontend ${suffix[0]}${suffix.slice(1).toLowerCase()} was selected`));
+		}
+	}
+});
+
 test("required Backend Lint fails the policy when its hosted job is skipped", () => {
 	for (const result of ["skipped", "cancelled", "timed_out", "failure"]) {
 		const evaluation = evaluateVerificationPolicy(
