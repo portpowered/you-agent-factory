@@ -73,17 +73,20 @@ jobs:
 
       - name: Install dashboard dependencies
         working-directory: ui
-        run: bun install --frozen-lockfile
+        run: bun run --bun ../scripts/release/run-phase.mjs dashboard-dependencies -- bun install --frozen-lockfile
+
+      - name: Test candidate phase diagnostics
+        run: bun test scripts/release/run-phase.test.mjs
 
       - name: Install Playwright browser
         working-directory: ui
-        run: bunx playwright install chromium
+        run: bun run --bun ../scripts/release/run-phase.mjs browser-install -- bunx playwright install chromium
 
       - name: Verify the canonical frontend package release family
-        run: make ui-public-package-release
+        run: bun run --bun scripts/release/run-phase.mjs frontend-verification -- make ui-public-package-release
 
       - name: Build snapshot candidate artifacts without publishing
-        run: go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --snapshot --clean -f .goreleaser.yml
+        run: bun run --bun scripts/release/run-phase.mjs snapshot -- go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --snapshot --clean -f .goreleaser.yml
 
       - name: Upload candidate dist
         uses: actions/upload-artifact@v4
