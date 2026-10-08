@@ -231,7 +231,7 @@ LINT_RUN_DEADCODE ?= 1
 LINT_SELECTION_FILE ?=
 $(foreach flag,LINT_BACKEND_ONLY LINT_RUN_DOCS LINT_RUN_DEADCODE,$(if $(and $(filter 1,$(words $($(flag)))),$(filter 0 1,$($(flag)))),,$(error $(flag) must be 0 or 1)))
 LINT_TARGETS_DOCS := $(if $(filter 1,$(LINT_RUN_DOCS)),docs-reference-check)
-LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check
+LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check test-backend-conformance
 LINT_TARGETS_UI := $(if $(filter 1,$(LINT_BACKEND_ONLY)),,ui-lint ui-deadcode)
 LINT_TARGETS_CI_ONLY := $(if $(filter 1,$(LINT_RUN_DEADCODE)),deadcode)
 LINT_FULL ?=

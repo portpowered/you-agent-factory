@@ -310,6 +310,7 @@ func TestDecodeRejectsMalformedManifestFacts(t *testing.T) {
 		kind   artifacts.FailureKind
 	}{
 		{name: "invalid json", mutate: nil, want: artifacts.ErrManifestMalformed, kind: artifacts.FailureMalformedManifest},
+		{name: "missing digest", mutate: mutateArtifact(func(archive map[string]any) { delete(archive, "sha256") }), want: artifacts.ErrInvalidDigest, kind: artifacts.FailureInvalidDigest},
 		{name: "invalid digest", mutate: mutateArtifact(func(archive map[string]any) { archive["sha256"] = "ABC" }), want: artifacts.ErrInvalidDigest, kind: artifacts.FailureInvalidDigest},
 		{name: "invalid size", mutate: mutateArtifact(func(archive map[string]any) { archive["sizeBytes"] = 0 }), want: artifacts.ErrInvalidSize, kind: artifacts.FailureInvalidSize},
 		{name: "unsafe location", mutate: mutateArtifact(func(archive map[string]any) { archive["location"] = "file:///tmp/backend.tar.gz" }), want: artifacts.ErrUnsafeLocation, kind: artifacts.FailureUnsafeLocation},
