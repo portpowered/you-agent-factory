@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -16,6 +17,11 @@ import (
 )
 
 type directoryReader func(string) ([]fs.DirEntry, error)
+
+type recordingFile struct {
+	path       string
+	modifiedAt time.Time
+}
 
 // Service implements the private Recordings history-inventory capability.
 type Service struct {
@@ -66,7 +72,8 @@ func (inventory *Service) ListRecordedSessions(
 
 	summaries := make([]recordings.RecordedSessionSummary, 0, len(paths))
 	warnings := make([]recordings.RecordedSessionDiagnostic, 0)
-	for _, path := range paths {
+	for _, file := range paths {
+		path := file.path
 		summary, err := inventory.summaryForPath(root, path)
 		if err != nil {
 			// One unreadable or corrupt recording must never make the whole
@@ -86,6 +93,7 @@ func (inventory *Service) ListRecordedSessions(
 			)
 			continue
 		}
+		summary.ModifiedAt = file.modifiedAt
 		summaries = append(summaries, summary)
 	}
 	if len(warnings) > 0 {
@@ -105,12 +113,12 @@ func (inventory *Service) ListRecordedSessions(
 	return recordings.RecordedSessionInventoryResult{Sessions: summaries, Warnings: warnings}, nil
 }
 
-func (inventory *Service) recordingPaths(root string) ([]string, error) {
-	paths := make([]string, 0)
+func (inventory *Service) recordingPaths(root string) ([]recordingFile, error) {
+	paths := make([]recordingFile, 0)
 	if err := inventory.walkRecordingRoot(root, root, true, &paths); err != nil {
 		return nil, err
 	}
-	sort.Strings(paths)
+	sort.Slice(paths, func(i, j int) bool { return paths[i].path < paths[j].path })
 	return paths, nil
 }
 
@@ -118,7 +126,7 @@ func (inventory *Service) walkRecordingRoot(
 	root string,
 	directory string,
 	topLevel bool,
-	paths *[]string,
+	paths *[]recordingFile,
 ) error {
 	entries, err := inventory.readDir(directory)
 	if err != nil {
@@ -144,7 +152,11 @@ func (inventory *Service) walkRecordingRoot(
 		if entry.Type()&fs.ModeSymlink != 0 || !isRecordingArtifact(root, path) {
 			continue
 		}
-		*paths = append(*paths, path)
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("read recording file metadata: %w", err)
+		}
+		*paths = append(*paths, recordingFile{path: path, modifiedAt: info.ModTime()})
 	}
 	return nil
 }

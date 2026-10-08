@@ -116,6 +116,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 		invocations := 0
 		var adoptedInputs *support.CapturedInputs
+		var latestPath string
 		junk := filepath.Join(home, ".you-agent-factory", "recordings", "2020", "01", "01", "old.json")
 		junkBytes := []byte(`{"private":"` + restartProbeSecret + `"`)
 		testRestartProbeDAGWithInputs(t, process, dir, boardAPIs[5:8], runner, func(t *testing.T, dir string) *support.CapturedInputs {
@@ -133,6 +134,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 				}
 				writeRestartProbeFile(t, junk, junkBytes)
 				testLegacyBoardRejections(t, process, repo, home, selected.ArtifactReference, &starts, runner, files)
+				latestPath = selected.ArtifactReference
+				addOlderLegacyBoardCandidates(t, home, latestPath)
 			}
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
@@ -143,12 +146,16 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			invocations++
 			return inputs
 		}, 0)
-		want := `Skipped 1 unreadable recordings during legacy board adoption: ["2020/01/01/old.json"]`
+		want := "Skipped 2 unreadable recordings during legacy board adoption:"
 		if adoptedInputs == nil || strings.Count(adoptedInputs.Stderr(), want) != 1 || strings.Contains(adoptedInputs.Stderr(), restartProbeSecret) {
 			t.Fatalf("missing paths-only skip warning: %s", adoptedInputs.Stderr())
 		}
 		if !bytes.Equal(mustReadSeededReplayArtifact(t, junk), junkBytes) {
 			t.Fatal("adoption changed unreadable history")
+		}
+		var selected struct{ ArtifactReference string }
+		if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &selected); err != nil || selected.ArtifactReference != latestPath {
+			t.Fatalf("legacy adoption selected %q instead of newest %q: %v", selected.ArtifactReference, latestPath, err)
 		}
 	}) {
 		return
@@ -656,6 +663,14 @@ func testLegacyBoardRejections(t *testing.T, process support.Process, repo, home
 				selected = corruptIdentifiedBoardHistory(t, original)
 			}
 			writeRestartProbeFile(t, artifact, selected)
+			if name == "two readable matches" {
+				stamp := time.Date(2026, time.October, 6, 0, 0, 0, 0, time.UTC)
+				for _, path := range []string{artifact, duplicate} {
+					if err := os.Chtimes(path, stamp, stamp); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			beforeStarts, beforeCalls := starts.Load(), runner.calls.Load()
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 			inputs.Input.WorkingDirectory = repo
@@ -690,8 +705,8 @@ func assertLegacyBoardRejection(t *testing.T, name string, err error, inputs *su
 	}
 	if name == "identified corrupt history" {
 		var diagnostic interface{ CLIErrorCode() string }
-		if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CURRENT_BOARD_RECORDING_CORRUPT" {
-			t.Fatalf("identified history did not reach fatal reconstruction: %v", err)
+		if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "CURRENT_BOARD_RECORDING_MISSING" {
+			t.Fatalf("no readable history did not fail safely: %v", err)
 		}
 	}
 	if strings.Contains(inputs.Stdout()+inputs.Stderr()+err.Error(), restartProbeSecret) {
@@ -703,6 +718,31 @@ func assertLegacyBoardRejection(t *testing.T, name string, err error, inputs *su
 	if _, err := os.Stat(refPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("failed startup published reference")
 	}
+}
+
+func addOlderLegacyBoardCandidates(t *testing.T, home, latest string) {
+	t.Helper()
+	original := mustReadSeededReplayArtifact(t, latest)
+	root := filepath.Join(home, ".you-agent-factory", "recordings", "2026-07", "2026-07-29")
+	old := filepath.Join(root, "factory-session-old.json")
+	corrupt := filepath.Join(root, "identified-corrupt.json")
+	corruptBytes := corruptIdentifiedBoardHistory(t, original)
+	writeRestartProbeFile(t, old, original)
+	writeRestartProbeFile(t, corrupt, corruptBytes)
+	stamp := time.Date(2026, time.July, 29, 0, 0, 0, 0, time.UTC)
+	for _, path := range []string{old, corrupt} {
+		if err := os.Chtimes(path, stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		if !bytes.Equal(mustReadSeededReplayArtifact(t, old), original) {
+			t.Error("adoption changed the older readable recording")
+		}
+		if !bytes.Equal(mustReadSeededReplayArtifact(t, corrupt), corruptBytes) {
+			t.Error("adoption changed the identified corrupt recording")
+		}
+	})
 }
 
 func corruptIdentifiedBoardHistory(t *testing.T, original []byte) []byte {
