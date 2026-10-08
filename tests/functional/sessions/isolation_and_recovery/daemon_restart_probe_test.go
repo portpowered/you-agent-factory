@@ -78,8 +78,10 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 	t.Helper()
 	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
 	previous := mustReadSeededReplayArtifact(t, refPath)
-	for _, name := range []string{"missing source", "corrupt source", "flush failure", "publication failure", "cancellation"} {
+	for _, name := range []string{"missing source", "corrupt source", "flush failure", "publication failure", "cancellation", "plain flush failure", "plain publication failure", "plain cancellation"} {
 		t.Run(name, func(t *testing.T) {
+			plain := strings.HasPrefix(name, "plain ")
+			name = strings.TrimPrefix(name, "plain ")
 			selected := source
 			if name == "missing source" || name == "corrupt source" {
 				selected = filepath.Join(repo, name+".json")
@@ -88,6 +90,10 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 				}
 			}
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:24101", "--resume", selected, "--record", filepath.Join(repo, name+"-successor.json")})
+			if plain {
+				inputs.Input.Args = inputs.Input.Args[:len(inputs.Input.Args)-4]
+			}
+			sourceBytes := mustReadSeededReplayArtifact(t, source)
 			inputs.Input.WorkingDirectory = repo
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			ctx, cancel := context.WithCancel(inputs.Input.Context)
@@ -103,7 +109,7 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 			files.cancelReference.Store(nil)
 			files.failReference.Store(false)
 			files.failRecording.Store(false)
-			if err == nil || runner.calls.Load() != before || !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) {
+			if err == nil || runner.calls.Load() != before || !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) || !bytes.Equal(sourceBytes, mustReadSeededReplayArtifact(t, source)) {
 				t.Fatalf("resume failure did not preserve reference before activation: %v", err)
 			}
 			if strings.Contains(inputs.Stdout()+inputs.Stderr()+err.Error(), restartProbeSecret) {
@@ -184,7 +190,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		runner.calls.Store(0)
 		home := t.TempDir()
 		invocations := 0
-		var retainedReference []byte
+		var retainedPath string
+		var retainedBytes []byte
 		explicitPath := filepath.Join(implicitRepo, "fresh-explicit.json")
 		testRestartProbeDAGWithInputs(t, process, implicitDir, boardAPIs[2:5], runner, func(t *testing.T, dir string) *support.CapturedInputs {
 			if invocations > 0 {
@@ -192,17 +199,20 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 				if err != nil {
 					t.Fatalf("implicit opening did not publish its repository reference: %v", err)
 				}
-				if retainedReference != nil && !bytes.Equal(retainedReference, reference) {
-					t.Fatal("graceful restart replaced the selected recording reference")
-				}
-				retainedReference = reference
 				var selected struct{ ArtifactReference string }
 				if err := json.Unmarshal(reference, &selected); err != nil {
 					t.Fatal(err)
 				}
-				if selected.ArtifactReference != explicitPath {
-					t.Fatal("shutdown reference does not name the explicit writer")
+				if invocations == 1 && selected.ArtifactReference != explicitPath {
+					t.Fatal("first shutdown reference does not name the explicit writer")
 				}
+				if retainedPath != "" {
+					if selected.ArtifactReference == retainedPath || !bytes.Equal(retainedBytes, mustReadSeededReplayArtifact(t, retainedPath)) {
+						t.Fatal("plain restart reused or changed its predecessor recording")
+					}
+				}
+				retainedPath = selected.ArtifactReference
+				retainedBytes = mustReadSeededReplayArtifact(t, retainedPath)
 			}
 			invocations++
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
@@ -263,8 +273,8 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 			t.Fatal("adoption changed unreadable history")
 		}
 		var selected struct{ ArtifactReference string }
-		if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &selected); err != nil || selected.ArtifactReference != latestPath {
-			t.Fatalf("legacy adoption selected %q instead of newest %q: %v", selected.ArtifactReference, latestPath, err)
+		if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &selected); err != nil || selected.ArtifactReference == latestPath {
+			t.Fatalf("legacy adoption reused predecessor %q instead of a successor to %q: %v", selected.ArtifactReference, latestPath, err)
 		}
 	}) {
 		return
@@ -948,8 +958,8 @@ func assertPlainBoardSiblingRecovery(t *testing.T, process support.Process, home
 			t.Fatalf("repository recovered the wrong board: before=%#v after=%#v", before[i], after)
 		}
 		restartProbeShutdown(t, url, command)
-		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")); !bytes.Equal(got, references[i]) {
-			t.Fatal("repository selected a different recording")
+		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")); bytes.Equal(got, references[i]) {
+			t.Fatal("repository failed to publish its successor recording")
 		}
 		if got := mustReadSeededReplayArtifact(t, filepath.Join(repo, "worktrees", "sentinel.txt")); !bytes.Equal(got, []byte("untouched § —")) {
 			t.Fatal("restart mutated a worktree sentinel")
