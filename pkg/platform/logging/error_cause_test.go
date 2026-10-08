@@ -25,6 +25,10 @@ func TestSafeErrorCauseRetainsJoinedFileFailuresWithoutPayloadText(t *testing.T)
 	if strings.Contains(got, "PRIVATE") {
 		t.Fatalf("safe cause exposed arbitrary error text: %q", got)
 	}
+	want := `read recording "current-board.json": permission denied; close recording "successor.json": file already closed`
+	if got != want {
+		t.Fatalf("safe cause = %q, want each immediate-node diagnostic once: %q", got, want)
+	}
 	if !errors.Is(err, primary) || !errors.Is(err, cleanup) {
 		t.Fatal("diagnostic changed cause identity")
 	}
