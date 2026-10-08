@@ -961,6 +961,12 @@ jobs:
           LINT_SELECTION_FILE: .artifacts/backend-lint/selection.json
           GOLANGCI_PREBUILT: "1"
           GOLANGCI_PROFILE_DIR: .artifacts/backend-lint/profiles
+          # Reduce the measured heap-scanning cost without unbounded heap growth.
+          # Limits are soft Go-runtime budgets, not RSS caps; three scopes share
+          # 7 GiB of budgets and leave room for the other canonical targets.
+          GOLANGCI_GOGC: "200"
+          GOLANGCI_BUILTIN_GOMEMLIMIT: "3GiB"
+          GOLANGCI_REPOSITORY_GOMEMLIMIT: "2GiB"
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-

@@ -1085,6 +1085,13 @@ GOLANGCI_DIR ?= .artifacts/golangci
 # Verbose logs include package loading and go/analysis pass timings.
 GOLANGCI_PROFILE_DIR ?=
 golangci_profile_flags = $(if $(strip $(GOLANGCI_PROFILE_DIR)),--verbose --cpu-profile-path "$(GOLANGCI_PROFILE_DIR)/$(1).cpu.pprof",)
+# Hosted profiles show substantial GC scanning across overlapping scopes. Tune
+# only the linter processes; keep compiler/docs/deadcode runtimes independent.
+# Local callers retain their runtime defaults unless these knobs are supplied.
+GOLANGCI_GOGC ?= $(GOGC)
+GOLANGCI_BUILTIN_GOMEMLIMIT ?= $(GOMEMLIMIT)
+GOLANGCI_REPOSITORY_GOMEMLIMIT ?= $(GOMEMLIMIT)
+golangci_runtime_env = $(if $(strip $(GOLANGCI_GOGC)),GOGC="$(GOLANGCI_GOGC)",) $(if $(strip $(1)),GOMEMLIMIT="$(1)",)
 ifeq ($(OS),Windows_NT)
 GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository.exe
 else
@@ -1108,12 +1115,12 @@ repository-lint-run: repository-lint-default repository-lint-tagged
 repository-lint-default: golangci-build
 	@git merge-base HEAD origin/main
 	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
-	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-default) --config .golangci-repository-default.yml ./...
+	$(call golangci_runtime_env,$(GOLANGCI_REPOSITORY_GOMEMLIMIT)) $(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-default) --config .golangci-repository-default.yml ./...
 
 repository-lint-tagged: golangci-build
 	@git merge-base HEAD origin/main
 	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
-	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-tagged) --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
+	$(call golangci_runtime_env,$(GOLANGCI_REPOSITORY_GOMEMLIMIT)) $(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-tagged) --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
 # Compiler tag union shared with the compiler-owner analyzer.
 REPOSITORY_LINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 
@@ -1132,7 +1139,7 @@ lint-migration-smoke: $(if $(filter markdown,$(LINT_MIGRATION_COHORT)),$(DOCS_MA
 golangci-lint-run: golangci-build
 	@git merge-base HEAD origin/main
 	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
-	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,builtin) --config .golangci.yml ./...
+	$(call golangci_runtime_env,$(GOLANGCI_BUILTIN_GOMEMLIMIT)) $(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,builtin) --config .golangci.yml ./...
 
 deadcode: golangci-build
 	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1

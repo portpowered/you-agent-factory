@@ -787,7 +787,7 @@ test("golangci joins every independent scope and propagates each failure", { tim
 import { connect } from 'node:net';
 const args = process.argv.slice(2);
 const config = args[args.indexOf('--config') + 1];
-const socket = connect(Number(process.env.LINT_TEST_PORT), '127.0.0.1', () => socket.write(JSON.stringify({config, args}) + '\\n'));
+const socket = connect(Number(process.env.LINT_TEST_PORT), '127.0.0.1', () => socket.write(JSON.stringify({config, args, gogc: process.env.GOGC, memoryLimit: process.env.GOMEMLIMIT}) + '\\n'));
 socket.on('data', () => { console.log(config + ' completed'); socket.end(); });
 socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7 : 0));
 `, { mode: 0o755 });
@@ -839,6 +839,7 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 		const child = spawn(platform === "win32" ? "make.exe" : "make", [
 			"--no-print-directory", "golangci", "GOLANGCI_PREBUILT=1",
 			`LINT_JOBS=${jobs}`, `GOLANGCI_REPOSITORY=${script}`, `GOLANGCI_DIR=${root.replaceAll("\\", "/")}`,
+			"GOLANGCI_GOGC=200", "GOLANGCI_BUILTIN_GOMEMLIMIT=3GiB", "GOLANGCI_REPOSITORY_GOMEMLIMIT=2GiB",
 			...(platform === "win32" ? ["SHELL=C:/Program Files/Git/bin/sh.exe"] : []),
 		], { detached: platform !== "win32", cwd: root, env: { ...fixtureEnv, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
 		children.push(child);
@@ -866,7 +867,9 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 		assert.equal(status === 0, !failed, diagnostic);
 		assert.deepEqual(current.signals.map((signal) => signal.config).sort(), [...configs].sort(), diagnostic);
 		assert.deepEqual([...phase.releases].sort(), [...configs].sort(), diagnostic);
-		for (const { config, args } of current.signals) {
+		for (const { config, args, gogc, memoryLimit } of current.signals) {
+			assert.equal(gogc, "200", diagnostic);
+			assert.equal(memoryLimit, config === ".golangci.yml" ? "3GiB" : "2GiB", diagnostic);
 			assert.ok(args.includes("--allow-parallel-runners"));
 			assert.ok(args.includes("./..."));
 			assert.ok(output.includes(`${config} completed`), output);
