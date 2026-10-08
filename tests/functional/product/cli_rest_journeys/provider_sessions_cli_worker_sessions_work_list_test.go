@@ -125,7 +125,7 @@ func observeWorkScopedRead(t *testing.T, ctx context.Context, c *workerSessionsC
 		proxy.ServeHTTP(w, r)
 	}))
 	t.Cleanup(observer.Close)
-	args := []string{"--server", observer.URL, "--debug", "worker-sessions", "list", "--work-id", workID, "--output", "json"}
+	args := []string{"--server", observer.URL, "--json", "--debug", "worker-sessions", "list", "--work-id", workID, "--output", "json"}
 	if !omitSession {
 		args = append(args, "--session", sessionID)
 	}
