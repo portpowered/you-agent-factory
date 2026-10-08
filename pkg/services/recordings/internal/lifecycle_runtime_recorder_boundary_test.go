@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,13 +27,17 @@ type runtimeRoot interface {
 
 type openingCleanupRecorder struct {
 	recordings.RuntimeRecorder
-	starts, stops, finishes int
-	err                     error
+	starts, stops, finishes, flushes int
+	err                              error
 }
 
 func (recorder *openingCleanupRecorder) Start(context.Context) { recorder.starts++ }
 func (recorder *openingCleanupRecorder) Stop()                 { recorder.stops++ }
 func (recorder *openingCleanupRecorder) Err() error            { return recorder.err }
+func (recorder *openingCleanupRecorder) Flush() error {
+	recorder.flushes++
+	return recorder.err
+}
 func (recorder *openingCleanupRecorder) Finalize(time.Time) error {
 	recorder.finishes++
 	return recorder.err
@@ -49,6 +54,9 @@ func TestRuntimeScopeRecorderCleanupBeforeStartAbortsWithoutPublication(t *testi
 		}
 	}
 	recorder.Start(context.Background())
+	if err := recorder.Flush(); !errors.Is(err, cleanupErr) || inner.flushes != 0 {
+		t.Fatalf("aborted flush = %v, publications = %d, want cleanup cause without publication", err, inner.flushes)
+	}
 	if inner.stops != 1 || inner.finishes != 0 || inner.starts != 0 {
 		t.Fatalf("abort stop/finalize/start = %d/%d/%d, want 1/0/0", inner.stops, inner.finishes, inner.starts)
 	}
@@ -65,8 +73,44 @@ func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := recorder.Flush(); err != nil || inner.flushes != 0 {
+		t.Fatalf("terminal flush = %v, publications = %d, want no publication after finalization", err, inner.flushes)
+	}
 	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 0 {
 		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/0", inner.starts, inner.finishes, inner.stops)
+	}
+}
+
+func TestRuntimeScopeRecorderFlushRequiresStartedRun(t *testing.T) {
+	t.Parallel()
+	for _, aborted := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aborted=%t", aborted), func(t *testing.T) {
+			t.Parallel()
+			inner := &openingCleanupRecorder{}
+			recorder := &runtimeScopeRecorder{inner: inner}
+			cancelled, cancel := context.WithCancel(context.Background())
+			cancel()
+			recorder.Start(cancelled)
+			if err := recorder.Flush(); err != nil || inner.flushes != 0 {
+				t.Fatalf("unstarted flush = %v, publications = %d", err, inner.flushes)
+			}
+			if aborted {
+				if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			recorder.Start(context.Background())
+			if err := recorder.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if aborted {
+				want = 0
+			}
+			if inner.flushes != want {
+				t.Fatalf("publications = %d, want %d", inner.flushes, want)
+			}
+		})
 	}
 }
 

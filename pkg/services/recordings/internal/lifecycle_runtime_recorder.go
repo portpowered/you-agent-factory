@@ -797,7 +797,17 @@ func (recorder *runtimeScopeRecorder) RecordError(err error) {
 }
 
 func (recorder *runtimeScopeRecorder) Flush() error {
-	if recorder == nil || recorder.inner == nil {
+	if recorder == nil {
+		return nil
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.finalized {
+		return recorder.finalizeErr
+	}
+	// Opening owns a prepared history, not permission to publish it. Explicit
+	// flushes during opening or after an aborted opening must remain inert.
+	if !recorder.started || recorder.inner == nil {
 		return nil
 	}
 	return recorder.inner.Flush()
