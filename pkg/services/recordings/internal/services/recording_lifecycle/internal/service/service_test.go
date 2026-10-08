@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,124 @@ type unusedLedger struct {
 type namedTargetReserver struct {
 	path  string
 	calls int
+}
+
+func TestRecordingTargetHasOneOwnerAndAbortReleasesWithoutPublication(t *testing.T) {
+	t.Parallel()
+	var writes int
+	owner := lifecycleservice.New(nil, func(string, recordings.RecordingSnapshot) error {
+		writes++
+		return nil
+	}, nil, fixedRecordingClock{})
+	request := recordings.BindRecordingRequest{
+		RecordingID: "prepared", Artifact: "retained.json",
+		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+	}
+	if _, err := owner.BindRecording(request); err != nil {
+		t.Fatal(err)
+	}
+	recordEvent(t, owner, request.RecordingID, activeFlushEvent(1))
+	competitor := request
+	competitor.RecordingID = "successor"
+	if _, err := owner.BindRecording(competitor); !errors.Is(err, recordings.ErrRecordingBindingConflict) || !strings.Contains(err.Error(), "retained.json") {
+		t.Fatalf("competing bind = %v, want path-specific binding conflict", err)
+	}
+	if _, err := owner.StopRecording(recordings.StopRecordingRequest{RecordingID: request.RecordingID, Abort: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.BindRecording(competitor); err != nil {
+		t.Fatalf("bind after abort: %v", err)
+	}
+	if _, err := owner.FlushRecording(recordings.FlushRecordingRequest{RecordingID: request.RecordingID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.FinishRecording(recordings.FinishRecordingRequest{RecordingID: request.RecordingID, FinishedAt: time.Unix(1, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.RecordRecordingEvent(recordings.RecordRecordingEventRequest{RecordingID: request.RecordingID, Event: activeFlushEvent(2)}); !errors.Is(err, recordings.ErrRecordingWriteRejected) {
+		t.Fatalf("append after abort = %v, want rejected write", err)
+	}
+	if writes != 0 {
+		t.Fatalf("abort/old-owner cleanup published %d times", writes)
+	}
+	recordEvent(t, owner, competitor.RecordingID, activeFlushEvent(1))
+	if _, err := owner.FlushRecording(recordings.FlushRecordingRequest{RecordingID: competitor.RecordingID}); err != nil || writes != 1 {
+		t.Fatalf("successor flush = %v, writes=%d", err, writes)
+	}
+}
+
+func TestConcurrentRecordingTargetBindingAcceptsOnlyOneWriter(t *testing.T) {
+	t.Parallel()
+	owner := lifecycleservice.New(nil, nil, nil, fixedRecordingClock{})
+	ready := make(chan struct{})
+	results := make(chan error, 2)
+	var workers sync.WaitGroup
+	for _, id := range []recordings.RecordingID{"first", "second"} {
+		workers.Go(func() {
+			<-ready
+			_, err := owner.BindRecording(recordings.BindRecordingRequest{RecordingID: id, Artifact: "shared.json"})
+			results <- err
+		})
+	}
+	close(ready)
+	workers.Wait()
+	first, second := <-results, <-results
+	firstWon := first == nil && errors.Is(second, recordings.ErrRecordingBindingConflict)
+	secondWon := second == nil && errors.Is(first, recordings.ErrRecordingBindingConflict)
+	if !firstWon && !secondWon {
+		t.Fatalf("concurrent binds = %v, %v; want one owner and one conflict", first, second)
+	}
+}
+
+func TestAbortJoinsPublicationBeforeSuccessorBinding(t *testing.T) {
+	t.Parallel()
+	writeStarted := make(chan struct{})
+	releaseWrite := make(chan struct{})
+	var release sync.Once
+	var workers sync.WaitGroup
+	t.Cleanup(func() {
+		release.Do(func() { close(releaseWrite) })
+		workers.Wait()
+	})
+	owner := lifecycleservice.New(nil, func(string, recordings.RecordingSnapshot) error {
+		close(writeStarted)
+		<-releaseWrite
+		return nil
+	}, nil, fixedRecordingClock{})
+	request := recordings.BindRecordingRequest{
+		RecordingID: "old", Artifact: "shared.json",
+		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+	}
+	if _, err := owner.BindRecording(request); err != nil {
+		t.Fatal(err)
+	}
+	recordEvent(t, owner, request.RecordingID, activeFlushEvent(1))
+	flushed := make(chan error, 1)
+	workers.Go(func() {
+		_, err := owner.FlushRecording(recordings.FlushRecordingRequest{RecordingID: request.RecordingID})
+		flushed <- err
+	})
+	<-writeStarted
+	aborted := make(chan error, 1)
+	workers.Go(func() {
+		_, err := owner.StopRecording(recordings.StopRecordingRequest{RecordingID: request.RecordingID, Abort: true})
+		aborted <- err
+	})
+	competitor := request
+	competitor.RecordingID = "successor"
+	if _, err := owner.BindRecording(competitor); !errors.Is(err, recordings.ErrRecordingBindingConflict) {
+		t.Fatalf("bind during publication = %v, want binding conflict", err)
+	}
+	release.Do(func() { close(releaseWrite) })
+	if err := <-flushed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-aborted; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.BindRecording(competitor); err != nil {
+		t.Fatalf("bind after joined abort: %v", err)
+	}
 }
 
 func TestFinalizedRecordingCannotOverwriteSuccessorAfterFailedFinalWrite(t *testing.T) {

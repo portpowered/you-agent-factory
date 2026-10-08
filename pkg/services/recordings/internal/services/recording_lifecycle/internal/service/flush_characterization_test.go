@@ -63,7 +63,7 @@ func TestActiveFlushCharacterizesDefaultCadenceAndCompleteV1Rewrites(t *testing.
 	recordEvent(t, root, recordingID, events[0])
 	ticker.ticks <- time.Date(2026, 2, 3, 18, 45, 12, 0, time.UTC)
 	first := requireCharacterizedFlushWrite(t, writes)
-	assertCharacterizedReplayWrite(t, first, []recordings.CanonicalEvent{events[0]})
+	assertCharacterizedReplayWrite(t, first, recordingID, []recordings.CanonicalEvent{events[0]})
 
 	if _, err := root.FlushRecording(recordings.FlushRecordingRequest{
 		RecordingID: recordingID,
@@ -77,7 +77,7 @@ func TestActiveFlushCharacterizesDefaultCadenceAndCompleteV1Rewrites(t *testing.
 	recordEvent(t, root, recordingID, events[1])
 	ticker.ticks <- time.Date(2026, 2, 3, 18, 45, 13, 0, time.UTC)
 	second := requireCharacterizedFlushWrite(t, writes)
-	assertCharacterizedReplayWrite(t, second, events[:2])
+	assertCharacterizedReplayWrite(t, second, recordingID, events[:2])
 	if _, err := root.FlushRecording(recordings.FlushRecordingRequest{
 		RecordingID: recordingID,
 	}); err != nil {
@@ -154,9 +154,9 @@ func TestFinishRecordingCharacterizesJoinedFinalPersistenceAndNoPostStopWrite(t 
 	}
 
 	first := requireCharacterizedFlushWrite(t, writes)
-	assertCharacterizedReplayWrite(t, first, []recordings.CanonicalEvent{events[0]})
+	assertCharacterizedReplayWrite(t, first, recordingID, []recordings.CanonicalEvent{events[0]})
 	second := requireCharacterizedFlushWrite(t, writes)
-	assertCharacterizedReplayWrite(t, second, events[:2])
+	assertCharacterizedReplayWrite(t, second, recordingID, events[:2])
 	if len(writes) != 0 {
 		t.Fatalf("finalization queued %d unexpected writes", len(writes))
 	}
@@ -211,11 +211,13 @@ func requireCharacterizedFlushWrite(
 func assertCharacterizedReplayWrite(
 	t *testing.T,
 	write characterizedFlushWrite,
+	id recordings.RecordingID,
 	wantEvents []recordings.CanonicalEvent,
 ) {
 	t.Helper()
-	if write.target != "artifact:active" {
-		t.Fatalf("flush target = %q, want artifact:active", write.target)
+	wantTarget := "artifact:active:" + string(id)
+	if write.target != wantTarget {
+		t.Fatalf("flush target = %q, want %q", write.target, wantTarget)
 	}
 	var envelope characterizedReplayEnvelope
 	if err := json.Unmarshal(write.payload, &envelope); err != nil {

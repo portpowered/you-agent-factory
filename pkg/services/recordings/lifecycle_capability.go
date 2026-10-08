@@ -186,6 +186,9 @@ type FlushLifecycleRequest struct {
 // and join. It does not finalize the recording or perform a final flush.
 type StopLifecycleRequest struct {
 	RecordingID LifecycleRecordingID
+	// Abort permanently rejects further writes and releases the prepared target
+	// after joining outstanding writes, without publishing terminal metadata.
+	Abort bool
 }
 
 // FinishLifecycleRequest is the plain finish request for one bound

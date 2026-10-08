@@ -127,7 +127,7 @@ func TestActiveFlushWritesOnlyDirtyConsistentSnapshots(t *testing.T) {
 	var snapshots []recordings.RecordingSnapshot
 	root := newActiveFlushRoot(
 		func(target string, snapshot recordings.RecordingSnapshot) error {
-			if target != "artifact:active" {
+			if target != "artifact:active:recording-active" {
 				t.Errorf("write target = %q", target)
 			}
 			mu.Lock()
@@ -503,7 +503,7 @@ func startActiveRecording(
 		Enabled:       true,
 		RecordingID:   recordingID,
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: "session-active"},
-		Target:        recordings.RecordingTargetRequest{Artifact: "artifact:active"},
+		Target:        recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("artifact:active:" + string(recordingID))},
 		FlushInterval: interval,
 	})
 	if err != nil {

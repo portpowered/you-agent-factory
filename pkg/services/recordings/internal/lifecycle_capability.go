@@ -206,6 +206,7 @@ func (service *combinedService) Flush(
 func (service *combinedService) Stop(request recordings.StopLifecycleRequest) error {
 	_, err := service.StopRecording(recordings.StopRecordingRequest{
 		RecordingID: recordings.RecordingID(request.RecordingID),
+		Abort:       request.Abort,
 	})
 	return translateLifecycleError(err)
 }

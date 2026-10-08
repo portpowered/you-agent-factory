@@ -209,6 +209,7 @@ type stubRecordingLifecycle struct {
 	appendErrorAt   int
 	appendCalls     int
 	stopCalls       int
+	stopRequest     recordings.StopLifecycleRequest
 	stopErr         error
 	appendRequests  []recordings.AppendLifecycleEventRequest
 	failureRequests []recordings.RecordLifecycleFailureRequest
@@ -274,7 +275,7 @@ func TestLifecycleRuntimeRecorderActivationFailureAbortsWithoutFinalFlush(t *tes
 	if err := recorder.Flush(); !errors.Is(err, activationErr) {
 		t.Fatalf("aborted flush = %v, want activation cause", err)
 	}
-	if lifecycle.stopCalls != 1 || lifecycle.finishCalls != 0 || lifecycle.flushCalls != 0 {
+	if lifecycle.stopCalls != 1 || !lifecycle.stopRequest.Abort || lifecycle.finishCalls != 0 || lifecycle.flushCalls != 0 {
 		t.Fatalf("stop/finish/flush = %d/%d/%d, want 1/0/0", lifecycle.stopCalls, lifecycle.finishCalls, lifecycle.flushCalls)
 	}
 }
@@ -433,8 +434,9 @@ func TestRuntimeScopeRecorderForwardsStartupPublicationGate(t *testing.T) {
 	}
 }
 
-func (s *stubRecordingLifecycle) Stop(recordings.StopLifecycleRequest) error {
+func (s *stubRecordingLifecycle) Stop(request recordings.StopLifecycleRequest) error {
 	s.stopCalls++
+	s.stopRequest = request
 	return s.stopErr
 }
 

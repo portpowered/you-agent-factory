@@ -267,6 +267,7 @@ func (recorder *lifecycleRuntimeRecorder) stopLocked() {
 	}
 	recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 		RecordingID: recorder.recordingID,
+		Abort:       !recorder.started,
 	})
 }
 

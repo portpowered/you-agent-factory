@@ -1070,6 +1070,9 @@ type FlushRecordingResult struct {
 // join. It does not finalize the recording or perform a final flush.
 type StopRecordingRequest struct {
 	RecordingID RecordingID
+	// Abort releases the target after joining writes and permanently rejects
+	// further mutation, without a final flush or terminal metadata.
+	Abort bool
 }
 
 // StopRecordingResult reports status after periodic lifecycle work has stopped.

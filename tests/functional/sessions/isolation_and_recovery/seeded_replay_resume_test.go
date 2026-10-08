@@ -547,6 +547,17 @@ func testRecordStartupSafetyHostFailure(t *testing.T, reusable *seededReplayResu
 		t.Fatal("failed host startup published readiness")
 	}
 	assertRecordStartupSafetyLog(t, logRoot)
+	// Same-board retry is deliberately serial: the failed invocation must
+	// release its prepared writer before this invocation opens that target.
+	retry := support.FakeInputs(t.Context(), inputs.Input.Args)
+	retry.Input.Env = inputs.Input.Env
+	retry.Input.WorkingDirectory = dir
+	if retryErr := reusable.process.Execute(retry.Input); !errors.Is(retryErr, cause) {
+		t.Fatalf("retry after failed opening = %v; stderr=%s", retryErr, retry.Stderr())
+	}
+	if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+		t.Fatal("retry cleanup changed retained history")
+	}
 }
 
 func assertRecordStartupSafetyLog(t *testing.T, logRoot string) {

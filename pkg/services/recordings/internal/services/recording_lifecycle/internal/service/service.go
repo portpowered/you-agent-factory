@@ -47,6 +47,7 @@ type Service struct {
 	tickers         recordings.RecordingFlushTickerFactory
 	clock           recordings.RecordingClock
 	byID            map[string]*recordingSession
+	targetOwners    map[string]string
 	durableThrough  map[string]recordings.CanonicalEventCursor
 	nextRecordingID int
 }
@@ -76,6 +77,7 @@ func New(
 		tickers:        tickers,
 		clock:          clock,
 		byID:           make(map[string]*recordingSession),
+		targetOwners:   make(map[string]string),
 		durableThrough: make(map[string]recordings.CanonicalEventCursor),
 	}
 }
@@ -219,6 +221,11 @@ func (service *Service) bind(
 			Status: recordingStatus(recordings.RecordingID(id), existing),
 		}, nil
 	}
+	if _, owned := service.targetOwners[serviceTarget]; owned {
+		return recordings.BindRecordingResult{}, fmt.Errorf(
+			"%w: recording target %q already has a writer", recordings.ErrRecordingBindingConflict, serviceTarget,
+		)
+	}
 	session := &recordingSession{
 		artifact:      request.Artifact,
 		serviceTarget: serviceTarget,
@@ -226,6 +233,7 @@ func (service *Service) bind(
 		scope:         request.Scope,
 	}
 	service.byID[id] = session
+	service.targetOwners[serviceTarget] = id
 	return recordings.BindRecordingResult{
 		Status: recordingStatus(recordings.RecordingID(id), session),
 	}, nil
@@ -337,6 +345,17 @@ func (service *Service) StopRecording(
 	session.stopped = true
 	service.mu.Unlock()
 	stopPeriodic(session)
+	if request.Abort {
+		// Wait for any in-flight publication before handing the target to a
+		// successor. The terminal guard makes queued and future writes inert.
+		session.flushMu.Lock()
+		service.mu.Lock()
+		session.terminal = true
+		session.finalizeErr = errors.Join(session.failureCauses...)
+		service.releaseTargetLocked(request.RecordingID, session)
+		service.mu.Unlock()
+		session.flushMu.Unlock()
+	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	return recordings.StopRecordingResult{
@@ -361,6 +380,12 @@ func (service *Service) FinishRecording(
 		return recordings.FinishRecordingResult{
 			Status: recordingStatus(request.RecordingID, session),
 		}, session.finalizeErr
+	}
+	if session.terminal {
+		status := recordingStatus(request.RecordingID, session)
+		err := session.finalizeErr
+		service.mu.Unlock()
+		return recordings.FinishRecordingResult{Status: status}, err
 	}
 	session.finalizing = true
 	session.finalizeDone = make(chan struct{})
@@ -393,6 +418,7 @@ func (service *Service) FinishRecording(
 	service.mu.Lock()
 	session.terminal = true
 	session.finalizeErr = errors.Join(session.failureCauses...)
+	service.releaseTargetLocked(request.RecordingID, session)
 	close(session.finalizeDone)
 	status := recordingStatus(request.RecordingID, session)
 	finalizeErr := session.finalizeErr
@@ -401,6 +427,12 @@ func (service *Service) FinishRecording(
 	return recordings.FinishRecordingResult{
 		Status: status,
 	}, finalizeErr
+}
+
+func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *recordingSession) {
+	if service.targetOwners[session.serviceTarget] == string(id) {
+		delete(service.targetOwners, session.serviceTarget)
+	}
 }
 
 func stopPeriodic(session *recordingSession) {
