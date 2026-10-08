@@ -285,6 +285,45 @@ def check_loopback_policy(prompts):
     return diagnostics
 
 
+MISSION_RULES = (
+    ('first', 'execute the mission FIRST and completely, including cron-origin missions'),
+    ('commands', 'Run its commands before portfolio inspection'),
+    ('values', 'Put every named measurement, unit and evidence reference in `output`'),
+    ('failure', 'Missing evidence or failed required commands return FAILED with the exact blocker and available values'),
+    ('correction', 'For untagged mission gaps, submit a narrow corrective batch with its own dependent loopback'),
+    ('receipt', 'using the dry-run, verified receipt and idempotency procedure below'),
+    ('tagged', 'Tagged mission gaps use Loopback gap handoff; the lead owns admission and follow-up validation'),
+    ('no-join', 'Do not create a new thoughts join or bypass that ownership'),
+    ('hold', 'A mission may hold only on its own unmet precondition; name it and available values in output'),
+    ('bare-hold', 'A bare hold without those values or the precondition is invalid'),
+    ('routine', 'Without a mission, run the portfolio-supervisor routine'),
+    ('after', 'After mission commands and gap handling are complete, allow at most one optional portfolio line'),
+    ('reference', 'request ID or saved proposal path; a receipt/path alone is insufficient'),
+    ('generic-hold', 'Generic accepted holds are only for mission-less portfolio supervision'),
+)
+MISSION_CONFLICTS = (
+    ('routine-first', r'(?:run|perform|execute) (?:the )?portfolio(?:-supervisor)? routine (?:first|before (?:the )?mission)'),
+    ('unscoped-inspection', r'On every scheduled pass and significant exception, inspect every active Project'),
+    ('unscoped-stop', r'(?:^|[.!?]\s*)After reconciliation, if all active Projects'),
+    ('unscoped-hold', r'(?:^|[.!?]\s*)When no safe action remains, record the hold and return an accepted hold'),
+    ('bare-output', r'"output"\s*:\s*"<request ID or hold>"|For the tagged loopback exception above, output is the saved proposal path\.'),
+    ('cron-override', r'(?:cron(?:-origin)? missions? (?:run|use) (?:the )?portfolio(?:-supervisor)? routine|missions? (?:may|can) skip (?:their )?(?:commands|measurements))'),
+)
+
+
+def check_mission_policy(source):
+    """Bounded supplied-text diagnostics; does not prove worker obedience."""
+    normalized = ' '.join(source.split())
+    diagnostics = []
+    for name, clause in MISSION_RULES:
+        if clause not in normalized:
+            diagnostics.append(f'ideafy:mission-{name}: missing policy clause: {clause}')
+    for name, pattern in MISSION_CONFLICTS:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            diagnostics.append(f'ideafy:mission-{name}: conflicting mission instruction; remove or reconcile it')
+    return diagnostics
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', nargs='?', type=Path, default=Path('.'))
@@ -308,7 +347,11 @@ def main(argv=None):
     diagnostics = (check_policy(*texts[:2]) + check_mailbox_policy(*texts)
                    + check_recovery_policy(recovery)
                    + check_ownership_policy(texts[0], texts[1], recovery['review'])
-                   + check_loopback_policy(loopback))
+                   + check_loopback_policy(loopback)
+                   + check_mission_policy(loopback['ideafy']))
+    prompt_bytes = len(loopback['ideafy'].encode('utf-8'))
+    if prompt_bytes > 13_665:
+        diagnostics.append(f'ideafy:mission-budget: {prompt_bytes} UTF-8 bytes exceeds 13665')
     if diagnostics:
         print('\n'.join(diagnostics), file=sys.stderr)
         return 1
