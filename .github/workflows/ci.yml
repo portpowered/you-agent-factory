@@ -982,6 +982,7 @@ jobs:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
           LINT_FULL: "1"
           GOLANGCI_PREBUILT: "1"
+          GOLANGCI_PROFILE_DIR: .artifacts/backend-lint/profiles
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
@@ -999,6 +1000,7 @@ jobs:
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
+            .artifacts/backend-lint/profiles/
             .artifacts/lint-migration-smoke/ci-smoke-*/
             bin/deadcode-current.txt
           if-no-files-found: warn

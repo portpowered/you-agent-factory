@@ -63,6 +63,21 @@ class CacheTests(unittest.TestCase):
     def test_exact_inputs_are_stable(self):
         self.assertEqual(self.key(), self.key())
 
+    def test_host_copy_retains_sources_and_omits_upstream_loop_fixture(self):
+        source = self.root / "generated-host"
+        for name in ("go.mod", "cmd/golangci-lint/main.go", "test/testdata/ordinary.go",
+                     "test/testdata/symlink_loop/fixture", ".git/config"):
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(name, encoding="utf-8")
+        destination = self.root / "retained-host"
+        builder.copy_host(source, destination)
+        for name in ("go.mod", "cmd/golangci-lint/main.go", "test/testdata/ordinary.go"):
+            self.assertEqual((destination / name).read_text(), name)
+        self.assertFalse((destination / "test/testdata/symlink_loop").exists())
+        self.assertFalse((destination / ".git").exists())
+        self.assertTrue(builder.host_digest(destination))
+
     def test_source_embed_and_dependency_inputs_invalidate(self):
         for name in ("source.go", "asset.txt", "go.mod", "go.sum", ".custom-gcl.yml", "scripts/build-golangci.py"):
             with self.subTest(name=name):
@@ -134,8 +149,12 @@ class CacheTests(unittest.TestCase):
         process.wait.return_value = 7
         with patch("sys.argv", ["builder", "--destination", str(destination), "--", "fake-build"]), \
              patch.object(builder, "cache_key", return_value="key"), \
+             patch.object(builder, "run", return_value="go1.25.0\n"), \
              patch.object(builder.subprocess, "Popen", return_value=process):
             self.assertEqual(builder.main(), 7)
+            environment = builder.subprocess.Popen.call_args.kwargs["env"]
+            self.assertEqual(environment["GOTOOLCHAIN"], "go1.25.0")
+            self.assertEqual(environment["CUSTOM_GCL_KEEP_TEMP_FILES"], "1")
         self.assertFalse((destination / "host-path.txt").exists())
 
     def test_wrong_binary_or_host_identity_fails_closed(self):

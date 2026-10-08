@@ -67,6 +67,18 @@ def host_digest(host):
     return digest.hexdigest()
 
 
+def copy_host(source, destination):
+    def ignored(directory, names):
+        excluded = {".git"}
+        if Path(directory) == source / "test" / "testdata":
+            # The upstream linter's symlink-loop fixture is not a host input.
+            excluded.add("symlink_loop")
+        return excluded.intersection(names)
+
+    # Preserve unexpected links so validation rejects them without following.
+    shutil.copytree(source, destination, symlinks=True, ignore=ignored)
+
+
 def activate_host(destination, root=ROOT, runner=run):
     # Keep the cached host pristine so repeated relocations validate identically.
     with tempfile.TemporaryDirectory(prefix="golangci-host-") as temporary:
@@ -135,7 +147,10 @@ def main():
     pointer = destination / "host-path.txt"
     pointer.unlink(missing_ok=True)
     build_key = cache_key()
-    environment = dict(os.environ, CUSTOM_GCL_KEEP_TEMP_FILES="1")
+    # Versioned go run can select a newer toolchain than this module selected.
+    # Compile the host with the same exact compiler identified by cache_key.
+    compiler = run(["go", "env", "GOVERSION"], ROOT).strip()
+    environment = dict(os.environ, CUSTOM_GCL_KEEP_TEMP_FILES="1", GOTOOLCHAIN=compiler)
     marker = "the temporary directory is preserved: "
     host = None
     with subprocess.Popen(
@@ -156,7 +171,7 @@ def main():
         if cached_host.is_symlink() or cached_host.resolve().parent != destination.resolve():
             raise ValueError("cached host escapes the artifact directory")
         shutil.rmtree(cached_host)
-    shutil.copytree(host, cached_host, ignore=shutil.ignore_patterns(".git"))
+    copy_host(host, cached_host)
     binary = destination / ("golangci-repository.exe" if os.name == "nt" else "golangci-repository")
     if cache_key() != build_key:
         raise ValueError("plugin compiler inputs changed during the custom build")

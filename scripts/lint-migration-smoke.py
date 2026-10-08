@@ -723,7 +723,8 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         ])
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
-            assert any(issue["Pos"]["Filename"].replace("\\", "/").endswith("/" + name)
+            assert any((issue["Pos"]["Filename"].replace("\\", "/") == name
+                        or issue["Pos"]["Filename"].replace("\\", "/").endswith("/" + name))
                        and issue["Pos"]["Line"] == 2 and diagnostic in issue["Text"] for issue in issues), issues
         write(root, manifest, clean_manifest)
         write(root, consumer, clean_consumer)
