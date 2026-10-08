@@ -82,6 +82,24 @@ function requireWorkflowMatch(value, pattern, description) {
 	if (!pattern.test(value)) throw new Error(`workflow contract failed: ${description}`);
 }
 
+export function validateReusablePackageWorkflowContract({ workflow } = {}) {
+	const job = workflowJobSection(workflow, "verify_api_package");
+	const results = ["api_package_result", "api_candidate_result", "packaged_factories_package_result", "packaged_factories_candidate_result", "model_providers_package_result"];
+	for (const name of results) {
+		requireWorkflowText(workflow, `value: \${{ jobs.verify_api_package.outputs.${name} }}`, "retain all five reusable outputs");
+		requireWorkflowText(job, `steps.record_result.outputs.${name}`, "retain independent results");
+	}
+	requireWorkflowText(job, "inputs.is_ci_call && (inputs.run_api_package || inputs.run_packaged_factories_package || inputs.run_model_providers_package)", "retain selection");
+	requireWorkflowText(job, "ref: ${{ inputs.source_commit }}", "check out requested source");
+	requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "pin shared Bun setup");
+	requireWorkflowText(job, "PACKAGE_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}", "preserve typed inputs/defaults");
+	requireWorkflowText(job, "bun run --bun scripts/public-package-workflow.mjs", "single read-only artifact runner");
+	if (/\n  (?:build_api_candidate|build_packaged_factories_candidate|verify_packaged_factories_package|verify_model_providers_package):/.test(workflow) || /id-token:|contents: write|npm |actions\/(?:upload|download)-artifact|continue-on-error/.test(job)) {
+		throw new Error("reusable package verification must remain one read-only job without artifact hops");
+	}
+	return { name: "reusable-package-workflow", status: "pass" };
+}
+
 function requireWorkflowText(value, text, description) {
 	if (!value.includes(text)) throw new Error(`workflow contract failed: ${description}`);
 }
@@ -285,6 +303,9 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	return {
 		contracts: [
+			validateReusablePackageWorkflowContract({
+				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
+			}),
 			validateTaggedPackageWorkflowContract({
 				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
 			}),

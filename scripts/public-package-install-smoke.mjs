@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import {
   mkdir,
@@ -48,19 +49,52 @@ export async function validateFrontendTarballs(evidence, candidateDirectory) {
   return candidates;
 }
 
+let nodeExecutable;
+export function consumerNodeExecutable() {
+  if (nodeExecutable) return nodeExecutable;
+  // `bun run --bun` prepends a Node shim. Consumer proof must use real Node.
+  const pathValue =
+    Object.entries(process.env).find(
+      ([key]) => key.toUpperCase() === "PATH",
+    )?.[1] ?? "";
+  for (const directory of pathValue.split(path.delimiter)) {
+    const candidate = path.join(
+      directory,
+      process.platform === "win32" ? "node.exe" : "node",
+    );
+    if (!existsSync(candidate)) continue;
+    const result = spawnSync(
+      candidate,
+      ["-p", "process.versions.bun ? '' : process.execPath"],
+      { encoding: "utf8", windowsHide: true, timeout: 10_000 },
+    );
+    if (result.status === 0 && result.stdout.trim()) {
+      nodeExecutable = result.stdout.trim();
+      return nodeExecutable;
+    }
+  }
+  throw new Error(
+    "A real Node executable is required for installed consumer verification",
+  );
+}
+
 export function runSmokeCommand(
   command,
   args,
   { cwd, env = process.env, timeoutMs = 120_000 } = {},
 ) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn(
+      command === "node" ? consumerNodeExecutable() : command,
+      args,
+      {
+        cwd,
+        env,
+        shell: false,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -176,6 +210,32 @@ for (const spec of specs) {
 }
 `;
 
+export async function isolatedConsumerEnvironment(root) {
+  // No inherited NODE_PATH, Bun preload or user registry configuration in the consumer.
+  const env = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) =>
+        /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|COMSPEC|TEMP|TMP)$/i.test(key),
+      ),
+    ),
+    HOME: path.join(root, "home"),
+    USERPROFILE: path.join(root, "home"),
+    XDG_CONFIG_HOME: path.join(root, "config"),
+    NODE_PATH: "",
+    NODE_OPTIONS: "",
+    BUN_OPTIONS: "",
+    BUN_INSTALL_CACHE_DIR: path.join(root, "cache"),
+    npm_config_userconfig: path.join(root, "npmrc"),
+  };
+  await mkdir(env.HOME);
+  await mkdir(env.XDG_CONFIG_HOME);
+  await writeFile(
+    env.npm_config_userconfig,
+    "registry=https://registry.npmjs.org/\n",
+  );
+  return env;
+}
+
 export async function smokeFrontendPackages({
   candidateDirectory,
   evidence,
@@ -247,28 +307,7 @@ export async function smokeFrontendPackages({
       ),
     );
     await writeFile(path.join(consumer, "smoke.mjs"), frontendConsumerSource);
-    // No inherited NODE_PATH, Bun preload or user registry configuration in the consumer.
-    const env = {
-      ...Object.fromEntries(
-        Object.entries(process.env).filter(([key]) =>
-          /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|COMSPEC|TEMP|TMP)$/i.test(key),
-        ),
-      ),
-      HOME: path.join(root, "home"),
-      USERPROFILE: path.join(root, "home"),
-      XDG_CONFIG_HOME: path.join(root, "config"),
-      NODE_PATH: "",
-      NODE_OPTIONS: "",
-      BUN_OPTIONS: "",
-      BUN_INSTALL_CACHE_DIR: path.join(root, "cache"),
-      npm_config_userconfig: path.join(root, "npmrc"),
-    };
-    await mkdir(env.HOME);
-    await mkdir(env.XDG_CONFIG_HOME);
-    await writeFile(
-      env.npm_config_userconfig,
-      "registry=https://registry.npmjs.org/\n",
-    );
+    const env = await isolatedConsumerEnvironment(root);
     await timePackagePhase(
       "consumer install",
       () =>
