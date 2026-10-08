@@ -27,7 +27,6 @@ import (
 // public Work recovery are separate assertions, not interchangeable evidence.
 func TestDurableSnapshotCustomerBehavior(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	t.Run("saved process feedback reaches the resumed review provider", testDurableCustomerFeedbackRecovery)
 	t.Run("ordinary writer failure preserves the last durable result", func(t *testing.T) {
 		t.Parallel()

@@ -25,7 +25,6 @@ import (
 // independent test journeys use separate process fixtures and run in parallel.
 func TestBoardRestoreReproducesFailedAndEscalatedStates(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	dir := support.ScaffoldFactory(t, boardRestoreFailedConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 	for _, name := range []string{"review", "plan"} {
@@ -83,7 +82,6 @@ func TestBoardRestoreReproducesFailedAndEscalatedStates(t *testing.T) {
 // The same board's stop/reopen steps serialize ~default ownership.
 func TestBoardRestoreReproducesFailedAndEscalatedStatesAfterIdeaToComplete(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	dir := filepath.Join(repo, "factory")
 	if err := os.Rename(support.ScaffoldFactory(t, boardRestorePlanThenFailConfig()), dir); err != nil {
@@ -305,7 +303,6 @@ func boardRestoreFailedConfig() map[string]any {
 // board, so shutdown/reopen is ordered; independent boards remain parallel.
 func TestBoardRestoreReproducesFailedAndEscalatedStatesGeneratedChild(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	dir := filepath.Join(repo, "factory")
 	prepareGeneratedFailureFactory(t, dir)

@@ -123,7 +123,6 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 
 func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	emptyDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 	corruptDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 	permissionDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
@@ -622,7 +621,6 @@ const restartProbeSecret = "private-snapshot-secret-marker"
 
 func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	home := t.TempDir()
 	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
@@ -680,7 +678,6 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 
 func TestUnreadableMissingSnapshotStartsQuietEmpty(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	config := seededReplayResumeFactoryConfig()
 	types := config["workTypes"].([]map[string]any)

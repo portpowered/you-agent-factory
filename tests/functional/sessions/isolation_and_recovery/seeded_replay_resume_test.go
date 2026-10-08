@@ -35,9 +35,11 @@ import (
 // exercises the assembled replay/resume path through the customer process. The
 // in-flight artifact is intentionally unfinalized, while the finished artifact
 // retains its terminal Work state.
+// Go's -parallel budget admits fixture setup and the independent session cells.
+// A parent-held fixture permit would outlive the parent's parallel slot: other
+// parents waiting for permits could occupy every slot its children need.
 func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
 
 	for _, test := range []struct {
@@ -278,7 +280,6 @@ type seededReplayResumeProcess struct {
 
 func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
 	for _, name := range []string{"same path", "normalized path", "relative path", "hard link", "symbolic link"} {
 		t.Run(name, func(t *testing.T) {
@@ -321,7 +322,6 @@ func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 
 func TestRecordStartupSafetyRefusesAliasedDestination(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
 	for _, kind := range []string{"hard link", "symbolic link"} {
 		t.Run(kind, func(t *testing.T) {
@@ -431,7 +431,6 @@ func (release recordingTargetRelease) Close() error { return release() }
 
 func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
 	for _, name := range []string{"first board", "second board", "unchanged metadata"} {
 		t.Run(name, func(t *testing.T) {
@@ -488,7 +487,6 @@ func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
 
 func TestRecordStartupSafetyDestinationChangesBeforePublication(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	replacement := []byte("external history changed after restoration")
 	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, target, _ string) (io.Closer, error) {
 		return &startupPublicationTarget{target: target, replacement: replacement}, nil
@@ -572,7 +570,6 @@ func (lease *startupPublicationTarget) Validate() error {
 
 func TestRecordStartupSafetyDestinationReplacement(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t, func(ctx context.Context, target, marker string) (io.Closer, error) {
 		files := &startupReplacementFiles{target: target, marker: marker}
 		coordination, err := platformlocking.New(files)
@@ -635,7 +632,6 @@ func (files *startupReplacementFiles) OpenFile(path string, flags int, mode fs.F
 
 func TestRecordStartupSafetyDestinationOwnership(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	var mu sync.Mutex
 	denied := make(map[string]bool)
 	released := make(map[string]int)
