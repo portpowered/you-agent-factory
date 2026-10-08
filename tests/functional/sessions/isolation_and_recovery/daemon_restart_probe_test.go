@@ -669,9 +669,7 @@ func testLegacyBoardRejections(t *testing.T, process support.Process, repo, home
 			err := process.Execute(inputs.Input)
 			files.failReference.Store(false)
 			assertLegacyBoardRejection(t, name, err, inputs, starts.Load()-beforeStarts, runner.calls.Load()-beforeCalls, artifact, refPath, selected)
-			// Publication follows initial recording opening, so that failure may
-			// append startup events. Do not repair that valid retained ledger;
-			// the subsequent adoption must restore its unchanged public Work.
+			// Every rejected opening preserves the retained ledger through cleanup.
 			if name != "explicit publication failure" {
 				writeRestartProbeFile(t, artifact, original)
 			}
@@ -698,7 +696,7 @@ func assertLegacyBoardRejection(t *testing.T, name string, err error, inputs *su
 	if strings.Contains(inputs.Stdout()+inputs.Stderr()+err.Error(), restartProbeSecret) {
 		t.Fatal("rejection leaked recording contents")
 	}
-	if name != "explicit publication failure" && !bytes.Equal(mustReadSeededReplayArtifact(t, artifact), selected) {
+	if !bytes.Equal(mustReadSeededReplayArtifact(t, artifact), selected) {
 		t.Fatal("failed startup repaired history")
 	}
 	if _, err := os.Stat(refPath); !errors.Is(err, fs.ErrNotExist) {

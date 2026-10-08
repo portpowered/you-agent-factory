@@ -24,6 +24,52 @@ type runtimeRoot interface {
 	recordings.RuntimeScopeService
 }
 
+type openingCleanupRecorder struct {
+	recordings.RuntimeRecorder
+	starts, stops, finishes int
+	err                     error
+}
+
+func (recorder *openingCleanupRecorder) Start(context.Context) { recorder.starts++ }
+func (recorder *openingCleanupRecorder) Stop()                 { recorder.stops++ }
+func (recorder *openingCleanupRecorder) Err() error            { return recorder.err }
+func (recorder *openingCleanupRecorder) Finalize(time.Time) error {
+	recorder.finishes++
+	return recorder.err
+}
+
+func TestRuntimeScopeRecorderCleanupBeforeStartAbortsWithoutPublication(t *testing.T) {
+	t.Parallel()
+	cleanupErr := errors.New("controlled stop failure")
+	inner := &openingCleanupRecorder{err: cleanupErr}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, cleanupErr) {
+			t.Fatalf("abort error = %v, want preserved cleanup cause", err)
+		}
+	}
+	recorder.Start(context.Background())
+	if inner.stops != 1 || inner.finishes != 0 || inner.starts != 0 {
+		t.Fatalf("abort stop/finalize/start = %d/%d/%d, want 1/0/0", inner.stops, inner.finishes, inner.starts)
+	}
+}
+
+func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
+	t.Parallel()
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	recorder.Start(context.Background())
+	recorder.Start(context.Background())
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 0 {
+		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/0", inner.starts, inner.finishes, inner.stops)
+	}
+}
+
 // Live scope units supply detached lifecycle facts and completed subscription
 // outcomes; the canonical owner tests retain ordering and reconnect policy.
 type liveSubscriptionOwner struct {
@@ -207,6 +253,7 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 			t.Errorf("Finalize cleanup: %v", err)
 		}
 	})
+	opened.Recorder.Start(context.Background())
 	if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
@@ -676,6 +723,7 @@ func appendActiveScopeEvent(
 
 func finalizeActiveRuntime(t *testing.T, recorder recordings.RuntimeRecorder, now func() time.Time) {
 	t.Helper()
+	recorder.Start(context.Background())
 	finishedAt := now().Add(time.Second)
 	if err := recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize(active): %v", err)

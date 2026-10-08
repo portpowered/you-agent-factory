@@ -741,12 +741,25 @@ type runtimeScopeRecorder struct {
 	scope       recordings.RecordingScopeRef
 	routeKey    string
 	ledger      recordings.RuntimeEventLedger
+	started     bool
 	finalized   bool
 	finalizeErr error
 }
 
 func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
-	if recorder != nil && recorder.inner != nil {
+	if recorder == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.finalized || recorder.started || ctx.Err() != nil {
+		return
+	}
+	recorder.started = true
+	if recorder.inner != nil {
 		recorder.inner.Start(ctx)
 	}
 }
@@ -821,7 +834,14 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 
 	var finalizeErr error
 	if recorder.inner != nil {
-		finalizeErr = recorder.inner.Finalize(finishedAt)
+		if recorder.started {
+			finalizeErr = recorder.inner.Finalize(finishedAt)
+		} else {
+			// Opening cleanup is an abort, not a completed run. Join the
+			// writer without publishing terminal metadata over retained history.
+			recorder.inner.Stop()
+			finalizeErr = recorder.inner.Err()
+		}
 	}
 	var closeErr error
 	if !recorder.scope.IsZero() && recorder.owner != nil {
