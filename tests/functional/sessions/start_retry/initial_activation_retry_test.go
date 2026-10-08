@@ -28,7 +28,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -1020,54 +1019,6 @@ func testSelectedInputDetachment(t *testing.T, sessions factorysessions.Service,
 	}
 	initialOpeningHistory(t, sessions, scenario.candidateID)
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-}
-
-func testSelectedReplayFailureRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario) {
-	t.Helper()
-	peerHistory := scenario.startPeer(t, sessions)
-	request := scenario.request()
-	recordPath := filepath.Join(t.TempDir(), "selected.jsonl")
-	request.RuntimeSelection.Recording.RecordPath = recordPath
-	startInitialOpeningSession(t, sessions, request)
-	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
-	history := initialOpeningHistory(t, sessions, scenario.candidateID)
-	closeInitialOpeningSession(t, sessions, scenario.candidateID)
-	valid, err := os.ReadFile(recordPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	selectedPath := filepath.Join(t.TempDir(), "retry.jsonl")
-	inputs := selectedReplayRetryInputs(t, scenario, selectedPath)
-	err = process.Execute(inputs.Input)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("missing selected replay lost its cause: %v", err)
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	// Recognizable portable input with an unsupported field must preserve the
-	// typed diagnostic and redact its payload before returning to the customer.
-	private := "selected-private-replay-payload"
-	invalid := fmt.Sprintf(`{"recordingKind":%q,"unknown":%q}`, recordings.KindJavaScriptFactorySession, private)
-	if err := os.WriteFile(selectedPath, []byte(invalid), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	inputs = selectedReplayRetryInputs(t, scenario, selectedPath)
-	err = process.Execute(inputs.Input)
-	var inputErr *recordings.ReplayInputError
-	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticMalformed {
-		t.Fatalf("invalid selected replay lost typed classification: %v", err)
-	}
-	if strings.Contains(inputs.Stdout()+inputs.Stderr(), private) || strings.Contains(fmt.Sprint(inputErr.Diagnostic), private) {
-		t.Fatal("replay diagnostic exposed private payload")
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-	peerAfterFailure := initialOpeningHistory(t, sessions, scenario.peerID)
-	if err := os.WriteFile(selectedPath, valid, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	assertInitialOpeningReplay(t, process, selectedPath, scenario.candidateID, history)
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerAfterFailure)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 }
 

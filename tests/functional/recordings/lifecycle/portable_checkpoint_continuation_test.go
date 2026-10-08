@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,6 +57,10 @@ func TestPortableCheckpointScenarios(t *testing.T) {
 		t.Parallel()
 		testT17HDurableStarts(t, process, sessions)
 	})
+	t.Run("portable inspection retains selection beside live peer", func(t *testing.T) {
+		t.Parallel()
+		testT17IPortableLivePeer(t, process, sessions)
+	})
 	t.Run("inspection preserves persisted interrupted child", func(t *testing.T) {
 		t.Parallel()
 		testPortableCheckpointInspection(t, process, sessions, scenarios[0])
@@ -64,6 +69,60 @@ func TestPortableCheckpointScenarios(t *testing.T) {
 		t.Parallel()
 		testPortableCheckpointContinuation(t, process, sessions, scenarios[1])
 	})
+}
+
+func testT17IPortableLivePeer(t *testing.T, process support.Process, sessions factorysessions.Service) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "selected-portable-live-peer")
+	restart := startT17HLivePeer(t, sessions, dir)
+	live, err := sessions.StartSync(t.Context(), factorysessions.StartRequest{RequestID: uuid.NewString(), ProjectRoot: dir,
+		Source: factorysessions.Source{Kind: "INLINE_WORKFLOW", InlineWorkflow: &factorysessions.InlineWorkflowSource{
+			Dialect: "you-workflow-v1", InlineSource: `return {selected: "live-peer"};`,
+		}}})
+	if err != nil || !strings.Contains(string(live.Result), "live-peer") {
+		t.Fatalf("live peer execution: %+v %v", live, err)
+	}
+	liveHistory, err := sessions.ReadEvents(t.Context(), live.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || len(liveHistory.Events) == 0 {
+		t.Fatalf("live peer history: %+v %v", liveHistory, err)
+	}
+	id := "session-js-portable-selected-" + uuid.NewString()
+	selected := startSelectedReplayPeer(t, process, id, "workflow/selected-"+id+".js")
+	read, err := sessions.GetSession(t.Context(), id)
+	if err != nil || read.ResolvedSource.SourceRef != "workflow/selected-"+id+".js" || read.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("portable selected source: %+v %v", read, err)
+	}
+	assertSelectedReplayResults(t, sessions, id)
+	assertSelectedReplayReconnect(t, sessions, id)
+	// Reopening a live peer selects a new request without changing the acquired
+	// historical route, result or recorded identity.
+	restart()
+	retained, err := sessions.ReadEvents(t.Context(), live.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || !reflect.DeepEqual(liveHistory, retained) {
+		t.Fatalf("portable replay changed live peer history: %+v %v", retained, err)
+	}
+	assertT17HDurableResult(t, sessions, live.SessionID, "live-peer")
+	after, err := sessions.GetSession(t.Context(), id)
+	if err != nil || !reflect.DeepEqual(read, after) {
+		t.Fatalf("live peer changed portable metadata: before=%+v after=%+v %v", read, after, err)
+	}
+	assertT17IPortableInspection(t, sessions, selected)
+}
+
+func assertT17IPortableInspection(t *testing.T, sessions factorysessions.Service, selected selectedReplayPeer) {
+	t.Helper()
+	if cursor, err := sessions.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: selected.id}); err == nil {
+		if cursor.Cursor != nil {
+			cursor.Cursor.Detach()
+		}
+		t.Fatal("portable inspection exposed live responses")
+	}
+	selected.release()
+	assertSelectedReplayCommandJoined(t, selected.done)
+	afterBytes, err := os.ReadFile(selected.path)
+	if err != nil || !bytes.Equal(selected.payload, afterBytes) {
+		t.Fatalf("portable inspection changed selected recording: %v", err)
+	}
 }
 
 // H2 uses the Sessions contract because sync/async durable start selection is
@@ -202,6 +261,12 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 		t.Fatalf("older cleanup removed replacement replay: %#v %v", readSurvivor, err)
 	}
 	restartLivePeer := startT17HLivePeer(t, sessions, dir)
+	// T17I: resume must retain the captured workflow rather than the later
+	// authored source. The live peer was opened from the original definition.
+	workflowPath := filepath.Join(dir, ".claude", "workflows", "resumable-two-step-fake-children.js")
+	if err := os.WriteFile(workflowPath, []byte(`throw new Error("later authored workflow must not execute");`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	peerID := "session-js-checkpoint-peer-" + uuid.NewString()
 	peer := startSelectedReplayPeer(t, process, peerID, "workflow/"+peerID+".js")
 	// F17F-6: cancellation at the public resume boundary reaches the eligibility
@@ -235,6 +300,10 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	}
 	assertSelectedReplayRead(t, sessions, peerID)
 	assertCheckpointResponseAttribution(t, sessions, started.SessionID, peerID)
+	result, err := sessions.GetResult(t.Context(), started.SessionID, factorysessions.ResultRequest{Mode: "final"})
+	if err != nil || !strings.Contains(string(result.PrimaryResult), "portable checkpoint") || !strings.Contains(string(result.PrimaryResult), "step-two") {
+		t.Fatalf("captured continuation result: %+v %v", result, err)
+	}
 	survivorRelease()
 	joinCheckpointInspection(t, survivorDone, dir, started.SessionID)
 	assertSelectedReplayRead(t, sessions, peerID)
@@ -251,6 +320,7 @@ func startT17HLivePeer(t *testing.T, sessions factorysessions.Service, dir strin
 		SessionID: id, Mode: factorysessions.SessionOperationModeLive, FolderPath: dir, ActivationOnly: true,
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
 			Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: t.TempDir(),
+			RuntimeInstanceID:    uuid.NewString(),
 			DefinitionSourcePath: filepath.Join(dir, "factory.json"), ExecutionBaseDir: dir,
 		},
 	}
