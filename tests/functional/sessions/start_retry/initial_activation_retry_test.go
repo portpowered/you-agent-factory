@@ -679,22 +679,7 @@ func testFixedOpeningReads(t *testing.T, sessions factorysessions.Service, baseU
 		}
 	}
 	for _, id := range []string{scenario.candidateID, scenario.peerID} {
-		assertInitialOpeningInvocation(t, sessions, id)
-		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
-		if len(listed.Results) != 1 || listed.Results[0].WorkId == nil || fmt.Sprint(listed.Results[0].Payload) != id+" prove this session remains usable" {
-			t.Fatalf("selected Work %s = %#v", id, listed)
-		}
-		detail := support.GetJSON[factoryapi.WorkRead](t, support.SessionWorkURL(baseURL, id, "/work/"+url.PathEscape(*listed.Results[0].WorkId)))
-		if detail.WorkId == nil || *detail.WorkId != *listed.Results[0].WorkId || fmt.Sprint(detail.Payload) != id+" prove this session remains usable" || detail.State == nil || detail.State.Name != "complete" {
-			t.Fatalf("selected detail = %#v", detail)
-		}
-		for i := 0; i < 2; i++ {
-			_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive})
-			if !errors.Is(err, factorysessions.ErrResultUnavailable) {
-				t.Fatalf("completed Petri result %s = %v", id, err)
-			}
-		}
-		initialOpeningHistory(t, sessions, id)
+		assertFixedCompletedWorkReads(t, sessions, baseURL, id)
 	}
 	for _, suffix := range []string{"/state", "/work", "/work/unknown-work"} {
 		assertFixedMissingRead(t, support.SessionWorkURL(baseURL, "unknown-fixed-observation", suffix), suffix)
@@ -703,6 +688,26 @@ func testFixedOpeningReads(t *testing.T, sessions factorysessions.Service, baseU
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing selected result = %v", err)
 	}
+}
+
+func assertFixedCompletedWorkReads(t *testing.T, sessions factorysessions.Service, baseURL, id string) {
+	t.Helper()
+	assertInitialOpeningInvocation(t, sessions, id)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+	if len(listed.Results) != 1 || listed.Results[0].WorkId == nil || fmt.Sprint(listed.Results[0].Payload) != id+" prove this session remains usable" {
+		t.Fatalf("selected Work %s = %#v", id, listed)
+	}
+	detail := support.GetJSON[factoryapi.WorkRead](t, support.SessionWorkURL(baseURL, id, "/work/"+url.PathEscape(*listed.Results[0].WorkId)))
+	if detail.WorkId == nil || *detail.WorkId != *listed.Results[0].WorkId || fmt.Sprint(detail.Payload) != id+" prove this session remains usable" || detail.State == nil || detail.State.Name != "complete" {
+		t.Fatalf("selected detail = %#v", detail)
+	}
+	for i := 0; i < 2; i++ {
+		_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive})
+		if !errors.Is(err, factorysessions.ErrResultUnavailable) {
+			t.Fatalf("completed Petri result %s = %v", id, err)
+		}
+	}
+	initialOpeningHistory(t, sessions, id)
 }
 
 // Only this scenario's recording destination faults; concurrent peers use the
