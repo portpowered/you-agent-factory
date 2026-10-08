@@ -70,8 +70,8 @@ Follow the lead prompt's control prohibition and mailbox-park interpretation on 
 Apply the lead's Corrected successor recovery procedure to escalated/failed
 reports before returning: diagnose exact child/plan/task IDs and retained PR,
 then admit a cause-corrected new-name same-Project successor or record a
-nonfatal hold. Reconstruct the original lineage and at most two accepted
-successors across wakes/check-ins/generations. Reconcile uncertain submission
+nonfatal hold. Reconstruct the original lineage and next positive integer
+attempt, with no ceiling, across wakes/check-ins/generations. Reconcile uncertain submission
 with the same request ID; never duplicate an owner or a parked lane. Recover
 only evidenced failed DEPENDS_ON descendants and an existing loopback, binding
 targetWorkId to verified current-Session successor receipts. Never add joins
