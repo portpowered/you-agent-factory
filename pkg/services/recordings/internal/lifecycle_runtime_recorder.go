@@ -39,6 +39,7 @@ type lifecycleRuntimeRecorder struct {
 	seen               map[string]struct{}
 	nextSequence       recordings.CanonicalEventSequence
 	finalizeErr        error
+	bindErr            error
 	stopErr            error
 	pending            []pendingRuntimeRecording
 }
@@ -123,6 +124,9 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
 	if recorder.lifecycle != nil {
+		if recorder.bindErr != nil {
+			return recorder.bindErr
+		}
 		if recorder.lifecycle == lifecycle && recorder.scope == scope {
 			return nil
 		}
@@ -151,7 +155,8 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 			RecordingID: recorder.recordingID,
 		})
-		return errors.Join(appendErr, recorder.stopErr)
+		recorder.bindErr = errors.Join(appendErr, recorder.stopErr)
+		return recorder.bindErr
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
@@ -297,6 +302,9 @@ func (recorder *lifecycleRuntimeRecorder) Flush() error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	if recorder.bindErr != nil {
+		return recorder.bindErr
+	}
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}
@@ -316,7 +324,7 @@ func (recorder *lifecycleRuntimeRecorder) Err() error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	return errors.Join(recorder.stopErr, recorder.finalizeErr)
+	return errors.Join(recorder.bindErr, recorder.stopErr, recorder.finalizeErr)
 }
 
 func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
@@ -325,6 +333,12 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	// Binding may have acquired a destination but failed to seed its initial
+	// history. Stop already joined its periodic work. Cleanup must never publish
+	// that incomplete prefix through Finish or retry the failed append.
+	if recorder.bindErr != nil {
+		return recorder.bindErr
+	}
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}

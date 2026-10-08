@@ -325,23 +325,32 @@ func (reusable *seededReplayResumeProcess) readReplayRecording(path string) ([]b
 // including writes from startup cleanup. Each session owns its fault and file.
 func testRecordStartupSafetyReadFailurePreservesTargetAndCause(t *testing.T, reusable *seededReplayResumeProcess) {
 	t.Parallel()
-	for _, format := range []string{"json", "jsonl"} {
-		t.Run(format, func(t *testing.T) {
+	for _, test := range []struct {
+		name, format, payload, code string
+		readFailure                 bool
+	}{
+		{"JSON read denied", "json", "retained recording bytes", "CURRENT_BOARD_RECORDING_UNREADABLE", true},
+		{"JSONL read denied", "jsonl", "retained recording bytes", "CURRENT_BOARD_RECORDING_UNREADABLE", true},
+		{"corrupt JSON", "json", `{"schemaVersion":"replay.v1","events":["PRIVATE_RECORDING_PAYLOAD"`, "CURRENT_BOARD_RECORDING_CORRUPT", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 			sessionID := uuid.NewString()
-			selectedPath := filepath.Join(dir, "retained.__factory_session_id__."+format)
+			selectedPath := filepath.Join(dir, "retained.__factory_session_id__."+test.format)
 			path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
 			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
-			before := []byte("retained recording bytes")
+			before := []byte(test.payload)
 			if err := os.WriteFile(path, before, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			cause := &fs.PathError{Op: "read recording", Path: path, Err: fs.ErrPermission}
-			reusable.mu.Lock()
-			reusable.readErrorsByPath[path] = cause
-			reusable.mu.Unlock()
+			if test.readFailure {
+				reusable.mu.Lock()
+				reusable.readErrorsByPath[path] = cause
+				reusable.mu.Unlock()
+			}
 			t.Cleanup(func() {
 				reusable.mu.Lock()
 				delete(reusable.readErrorsByPath, path)
@@ -354,16 +363,22 @@ func testRecordStartupSafetyReadFailurePreservesTargetAndCause(t *testing.T, reu
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = dir
 			err := reusable.process.Execute(inputs.Input)
-			if !errors.Is(err, cause) {
+			if test.readFailure && !errors.Is(err, cause) {
 				t.Fatalf("startup error = %v, want original read cause; stderr=%s", err, inputs.Stderr())
 			}
 			var response factoryapi.ErrorResponse
 			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); decodeErr != nil {
 				t.Fatalf("decode ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
 			}
-			if response.Code != "CURRENT_BOARD_RECORDING_UNREADABLE" || response.Family != factoryapi.ErrorFamilyInternalServerError ||
-				!strings.Contains(response.Message, fmt.Sprintf("%q", path)) || !strings.Contains(response.Message, "permission denied") {
+			if string(response.Code) != test.code || response.Family != factoryapi.ErrorFamilyInternalServerError ||
+				!strings.Contains(response.Message, fmt.Sprintf("%q", path)) {
 				t.Fatalf("startup response omits selected path or file cause: %#v", response)
+			}
+			if test.readFailure && !strings.Contains(response.Message, "permission denied") {
+				t.Fatalf("startup response omits read cause: %#v", response)
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "PRIVATE_RECORDING_PAYLOAD") {
+				t.Fatal("startup diagnostic exposed recording payload")
 			}
 			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "Factory initiated:") {
 				t.Fatal("failed startup published readiness")

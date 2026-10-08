@@ -297,6 +297,21 @@ func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *
 	if recorderErr := recorder.Err(); !errors.Is(recorderErr, stopErr) {
 		t.Fatalf("recorder.Err() = %v, want it to observe the preserved stop cleanup cause", recorderErr)
 	}
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("repeated bind = %v, want original primary and cleanup causes", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("flush after failed binding = %v, want original causes", err)
+	}
+	for range 2 {
+		if err := recorder.Finalize(startedAt.Add(time.Minute)); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+			t.Fatalf("finalize after failed binding = %v, want original causes", err)
+		}
+	}
+	if lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 || lifecycle.appendCalls != 1 {
+		t.Fatalf("failed binding published incomplete history: flush=%d finish=%d append=%d",
+			lifecycle.flushCalls, lifecycle.finishCalls, lifecycle.appendCalls)
+	}
 }
 
 func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
