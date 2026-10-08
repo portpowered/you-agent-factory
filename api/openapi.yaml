@@ -4979,6 +4979,30 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceUsage'
+        startupRecovery:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - file
+            - cause
+            - quarantinedFile
+          properties:
+            code:
+              type: string
+              enum:
+                - DURABLE_STATE_QUARANTINED
+            file:
+              type: string
+            cause:
+              type: string
+              enum:
+                - INVALID_JSON
+                - INVALID_SCHEMA
+                - SIZE_LIMIT
+                - READ_FAILED
+            quarantinedFile:
+              type: string
     ListModelsResponse:
       type: object
       required:

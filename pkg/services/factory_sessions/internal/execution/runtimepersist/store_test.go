@@ -18,6 +18,9 @@ import (
 )
 
 type boardReferenceFiles struct {
+	platformfilesystem.Local
+	boundedLimit          int64
+	boundedErr            error
 	data                  []byte
 	readErr, writeErr     error
 	afterRead             func()
@@ -40,6 +43,18 @@ func (files *boardReferenceFiles) ReadFile(path string) ([]byte, error) {
 	return append([]byte(nil), files.data...), files.readErr
 }
 
+func (files *boardReferenceFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	files.boundedLimit = limit
+	if files.boundedErr != nil {
+		return nil, files.boundedErr
+	}
+	return files.ReadFile(path)
+}
+
+func (files *boardReferenceFiles) RenameNoReplace(string, string) error {
+	return fs.ErrNotExist
+}
+
 func (files *boardReferenceFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	files.writes++
 	if files.writeErr != nil {
@@ -48,6 +63,28 @@ func (files *boardReferenceFiles) WriteFile(path string, data []byte, mode fs.Fi
 	files.path, files.mode = path, mode
 	files.data = append([]byte(nil), data...)
 	return nil
+}
+
+func TestSnapshotLoadUsesInclusiveBoundAndRetainsTypedFailure(t *testing.T) {
+	t.Parallel()
+	files := &boardReferenceFiles{data: []byte("snapshot")}
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load("~default")
+	if err != nil || !bytes.Equal(got, files.data) || files.boundedLimit != 67108864 {
+		t.Fatalf("load = %q, %v; bound = %d", got, err, files.boundedLimit)
+	}
+	files.boundedErr = &platformfilesystem.ReadSizeLimitError{Limit: files.boundedLimit}
+	got, err = store.Load("~default")
+	var sizeErr *platformfilesystem.ReadSizeLimitError
+	if got != nil || !errors.As(err, &sizeErr) || sizeErr.ReadSizeLimit() != 67108864 {
+		t.Fatalf("size failure lost its typed cause: %q, %v", got, err)
+	}
+	if files.writes != 0 || files.mkdirs != 0 {
+		t.Fatal("bounded load changed persisted evidence")
+	}
 }
 
 func newBoardReferenceStore(t *testing.T, files *boardReferenceFiles) (runtimepersist.CurrentBoardStore, string) {
@@ -190,15 +227,17 @@ func TestPersistenceFailurePreservesCauseAndPublishesSafeOperation(t *testing.T)
 	}
 }
 
-func (f failingFileSystem) MkdirAll(string, fs.FileMode) error { return f.mkdirErr }
-func (f failingFileSystem) ReadFile(string) ([]byte, error)    { return nil, f.readErr }
+func (f failingFileSystem) MkdirAll(string, fs.FileMode) error            { return f.mkdirErr }
+func (f failingFileSystem) ReadFile(string) ([]byte, error)               { return nil, f.readErr }
+func (f failingFileSystem) ReadFileBounded(string, int64) ([]byte, error) { return nil, f.readErr }
+func (f failingFileSystem) RenameNoReplace(string, string) error          { return f.writeErr }
 func (f failingFileSystem) WriteFile(string, []byte, fs.FileMode) error {
 	return f.writeErr
 }
 
 func TestNewLazyProjectStore_ConstructsSnapshotBoundaryAndRoundTrips(t *testing.T) {
 	projectRoot := t.TempDir()
-	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 	if err != nil {
 		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
@@ -220,14 +259,14 @@ func TestNewLazyProjectStore_ConstructsSnapshotBoundaryAndRoundTrips(t *testing.
 }
 
 func TestNewLazyProjectStore_SaveRejectsUnavailableRoot(t *testing.T) {
-	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.Local{}); err == nil {
+	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err == nil {
 		t.Fatal("NewLazyProjectStore(blank) error = nil")
 	}
 	blockedRoot := filepath.Join(t.TempDir(), "blocked")
 	if err := os.WriteFile(blockedRoot, []byte("not a directory"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	store, err := runtimepersist.NewLazyProjectStore(blockedRoot, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(blockedRoot, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 	if err != nil {
 		t.Fatalf("lazy construction: %v", err)
 	}
@@ -238,7 +277,7 @@ func TestNewLazyProjectStore_SaveRejectsUnavailableRoot(t *testing.T) {
 
 func TestNewLazyProjectStore_DefersInitializationAndReportsSnapshotPath(t *testing.T) {
 	projectRoot := t.TempDir()
-	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 	if err != nil {
 		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
@@ -268,7 +307,7 @@ func TestNewLazyProjectStore_DefersInitializationAndReportsSnapshotPath(t *testi
 }
 
 func TestNewLazyProjectStore_RejectsMissingDependencies(t *testing.T) {
-	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.Local{}); err == nil || !strings.Contains(err.Error(), "project root is required") {
+	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err == nil || !strings.Contains(err.Error(), "project root is required") {
 		t.Fatalf("NewLazyProjectStore(blank root) error = %v", err)
 	}
 	if _, err := runtimepersist.NewLazyProjectStore(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
@@ -277,7 +316,7 @@ func TestNewLazyProjectStore_RejectsMissingDependencies(t *testing.T) {
 }
 
 func TestDirectoryPersistence_RejectsBlankDirectory(t *testing.T) {
-	files := platformfilesystem.Local{}
+	files := platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := runtimepersist.SaveBytes("   ", sessionID, []byte(`{}`), files); err == nil || !strings.Contains(err.Error(), "directory is required") {
 		t.Fatalf("SaveBytes(blank directory) error = %v", err)
@@ -296,10 +335,10 @@ func TestSaveLoadBytes_RoundTripsSnapshotPayload(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 
-	if err := runtimepersist.SaveBytes(dir, sessionID, encoded, platformfilesystem.Local{}); err != nil {
+	if err := runtimepersist.SaveBytes(dir, sessionID, encoded, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err != nil {
 		t.Fatalf("SaveBytes: %v", err)
 	}
-	loaded, err := runtimepersist.LoadBytes(dir, sessionID, platformfilesystem.Local{})
+	loaded, err := runtimepersist.LoadBytes(dir, sessionID, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}))
 	if err != nil {
 		t.Fatalf("LoadBytes: %v", err)
 	}
@@ -318,10 +357,10 @@ func TestSaveLoadBytes_AcceptsCanonicalFactorySessionIdentifiers(t *testing.T) {
 	} {
 		t.Run(sessionID, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := runtimepersist.SaveBytes(dir, sessionID, []byte(`{"status":"RUNNING"}`), platformfilesystem.Local{}); err != nil {
+			if err := runtimepersist.SaveBytes(dir, sessionID, []byte(`{"status":"RUNNING"}`), platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err != nil {
 				t.Fatalf("SaveBytes: %v", err)
 			}
-			if _, err := runtimepersist.LoadBytes(dir, sessionID, platformfilesystem.Local{}); err != nil {
+			if _, err := runtimepersist.LoadBytes(dir, sessionID, platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err != nil {
 				t.Fatalf("LoadBytes: %v", err)
 			}
 		})
@@ -330,7 +369,7 @@ func TestSaveLoadBytes_AcceptsCanonicalFactorySessionIdentifiers(t *testing.T) {
 
 func TestSaveBytes_RejectsUnsafeSessionIdentifiers(t *testing.T) {
 	for _, sessionID := range []string{"../escape", "session/child", "arbitrary"} {
-		if err := runtimepersist.SaveBytes(t.TempDir(), sessionID, []byte(`{}`), platformfilesystem.Local{}); err == nil {
+		if err := runtimepersist.SaveBytes(t.TempDir(), sessionID, []byte(`{}`), platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})); err == nil {
 			t.Fatalf("SaveBytes(%q) succeeded", sessionID)
 		}
 	}
@@ -386,6 +425,14 @@ func (s *interruptingStorage) MkdirAll(path string, mode fs.FileMode) error {
 
 func (s *interruptingStorage) ReadFile(path string) ([]byte, error) {
 	return s.delegate.ReadFile(path)
+}
+
+func (s *interruptingStorage) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return platformfilesystem.NewRecovery(s.directories, s.directories).ReadFileBounded(path, limit)
+}
+
+func (s *interruptingStorage) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(s.directories, s.directories).RenameNoReplace(source, destination)
 }
 
 func (s *interruptingStorage) WriteFile(path string, data []byte, _ fs.FileMode) error {
@@ -473,6 +520,39 @@ func invalidBoardReferenceData(t *testing.T, name, data string) string {
 		data = `{"secret":`
 	}
 	return data
+}
+
+func TestCurrentBoardReferenceClassifiesLocalDamageButRejectsForeignSelection(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"malformed", "unknown", "session", "relative", "limit", "read"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := &boardReferenceFiles{}
+			store, root := newBoardReferenceStore(t, files)
+			factory := filepath.Join(root, "factory")
+			if err := store.SaveCurrentBoard(t.Context(), factory, filepath.Join(root, "history.json")); err != nil {
+				t.Fatal(err)
+			}
+			switch name {
+			case "limit":
+				files.boundedErr = &platformfilesystem.ReadSizeLimitError{Limit: 64 << 20}
+			case "read":
+				files.readErr = fs.ErrPermission
+			default:
+				files.data = []byte(invalidBoardReferenceData(t, name, string(files.data)))
+			}
+			_, err := store.LoadCurrentBoard(t.Context(), factory)
+			var classified interface {
+				SnapshotFailureCause() string
+				CurrentBoardReferenceFailure()
+			}
+			local := errors.As(err, &classified)
+			expected := map[string]string{"malformed": "INVALID_JSON", "unknown": "INVALID_SCHEMA", "limit": "SIZE_LIMIT", "read": "READ_FAILED"}[name]
+			if err == nil || local != (expected != "") || (local && classified.SnapshotFailureCause() != expected) || files.boundedLimit != 64<<20 || files.writes != 1 {
+				t.Fatalf("reference classification %v, local=%v, bound=%d, writes=%d", err, local, files.boundedLimit, files.writes)
+			}
+		})
+	}
 }
 
 func TestCurrentBoardReferenceAbsentOnlyPublication(t *testing.T) {

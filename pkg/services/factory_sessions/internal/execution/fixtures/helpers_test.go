@@ -369,7 +369,7 @@ func assertPersistedPetriMutationAndCanonicalProjection(t *testing.T, store runt
 func runtimePersistence(projectRoot string) runtimepersist.Store {
 	store, err := runtimepersist.NewLazyProjectStore(
 		projectRoot,
-		platformfilesystem.Local{},
+		platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}),
 	)
 	if err != nil {
 		panic(err)

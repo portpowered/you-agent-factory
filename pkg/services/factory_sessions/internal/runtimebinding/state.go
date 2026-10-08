@@ -172,6 +172,7 @@ type SessionState struct {
 	// ProjectionBackendScope retains the opening override as a keyed fact.
 	ProjectionBackendScope string
 	CurrentBoardRecordPath string
+	StartupRecovery        *factorysessions.StartupRecovery
 	OperatorSettingsPath   string
 	SkippedBoardRecordings []string
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning

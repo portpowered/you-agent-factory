@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -208,7 +210,7 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Run("PlainBoard invalid selection rejects without activation", func(t *testing.T) {
 		// These exact commands share Current Factory/~default ownership with
 		// the graceful journeys. Keep this cohort ordered on the same graph.
-		for _, name := range []string{"malformed reference", "foreign session reference", "foreign repository reference", "missing recording", "corrupt recording"} {
+		for _, name := range []string{"foreign session reference", "foreign repository reference", "missing recording", "corrupt recording"} {
 			t.Run(name, func(t *testing.T) {
 				testPlainBoardRejectedSelection(t, process, name, &starts, runner)
 			})
@@ -261,6 +263,9 @@ func testPlainBoardRejectedSelection(t *testing.T, process support.Process, name
 	sentinel := filepath.Join(repo, "worktrees", "sentinel.txt")
 	request := filepath.Join(repo, "request.json")
 	writeRestartProbeFile(t, refPath, reference)
+	// Selection failures concern a retained durable board. Without its
+	// snapshot, a valid old reference intentionally starts a fresh board.
+	writeRestartProbeFile(t, filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json"), []byte(`{"Session":{"SessionID":"~default"}}`))
 	writeRestartProbeFile(t, sentinel, []byte("worktree § —"))
 	writeRestartProbeFile(t, request, []byte("request § —"))
 	beforeStarts, beforeCalls := starts.Load(), runner.calls.Load()
@@ -387,6 +392,82 @@ func TestPlainBoardSiblingRepositoriesShareProfile(t *testing.T) {
 	})
 }
 
+func TestUnreadableMissingSnapshotStartsQuietEmpty(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	repo, home := t.TempDir(), t.TempDir()
+	config := seededReplayResumeFactoryConfig()
+	types := config["workTypes"].([]map[string]any)
+	types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+	station := config["workstations"].([]map[string]any)[0]
+	station["type"] = "LOGICAL_MOVE"
+	delete(station, "worker")
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: LOGICAL_MOVE\n---\n")
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 1)}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	// Relaunches of the same repository/default board intentionally run in
+	// order. This journey owns its profile, files, streams and reusable graph.
+	command, url := startPlainBoardInRepository(t, process, repo, home, apis[0])
+	seedPlainBoardSiblingWork(t, url, repo)
+	waitForPlainBoardWorkConfirmed(t, url)
+	restartProbeShutdown(t, url, command)
+	oldPath := plainBoardSelectedRecording(t, repo)
+	oldHistory := mustReadSeededReplayArtifact(t, oldPath)
+	snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+	if err := os.Remove(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	command, url, inputs := startQuietEmptyPlainBoard(t, process, repo, home, apis[1])
+	seedPlainBoardSiblingWork(t, url, repo+" fresh § —")
+	want := waitForPlainBoardWorkConfirmed(t, url)
+	restartProbeShutdown(t, url, command)
+	assertQuietMissingSnapshot(t, repo, inputs)
+	if freshPath := plainBoardSelectedRecording(t, repo); freshPath == oldPath {
+		t.Fatal("missing snapshot reused its stale recording")
+	}
+	command, url = startPlainBoardInRepository(t, process, repo, home, apis[2])
+	got := waitForPlainBoardWorkConfirmed(t, url)
+	assertRestartProbeRecoveredWork(t, []factoryapi.Work{want}, []factoryapi.Work{got})
+	restartProbeShutdown(t, url, command)
+	if !bytes.Equal(oldHistory, mustReadSeededReplayArtifact(t, oldPath)) {
+		t.Fatal("fresh startup or clean restart changed old history")
+	}
+	// F11: a valid stale reference whose recording is also absent is quiet.
+	if err := os.Remove(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(plainBoardSelectedRecording(t, repo)); err != nil {
+		t.Fatal(err)
+	}
+	command, url, inputs = startQuietEmptyPlainBoard(t, process, repo, home, apis[3])
+	restartProbeShutdown(t, url, command)
+	assertQuietMissingSnapshot(t, repo, inputs)
+	if runner.calls.Load() != 0 {
+		t.Fatal("missing snapshot dispatched stale Work")
+	}
+}
+
+func plainBoardSelectedRecording(t *testing.T, repo string) string {
+	t.Helper()
+	var reference struct{ ArtifactReference string }
+	if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(repo, ".you-agent-factory", "current-board.json")), &reference); err != nil {
+		t.Fatal(err)
+	}
+	return reference.ArtifactReference
+}
+
 func testPlainBoardRetainedVisitThreshold(t *testing.T, process support.Process, home string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
 	repo := t.TempDir()
@@ -498,6 +579,7 @@ func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {
 }
 
 type restartProbeFiles struct {
+	platformfilesystem.Local
 	corruptRoot   string
 	corruptReads  atomic.Int32
 	corruptWrites atomic.Int32
@@ -508,19 +590,27 @@ func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
 
+func (files *restartProbeFiles) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).RenameNoReplace(source, destination)
+}
+
 func (files *restartProbeFiles) ReadFile(path string) ([]byte, error) {
-	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
+	return files.ReadFileBounded(path, 64<<20)
+}
+
+func (files *restartProbeFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	if files.corruptRoot != "" && strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptReads.Add(1)
 		return []byte(`{"Session":` + restartProbeSecret), nil
 	}
-	return os.ReadFile(path)
+	return platformfilesystem.NewRecovery(files.Local, files.Local).ReadFileBounded(path, limit)
 }
 
 func (files *restartProbeFiles) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	if files.failReference.Load() && filepath.Base(path) == "current-board.json" && filepath.Base(filepath.Dir(path)) == ".you-agent-factory" {
 		return errors.New("controlled reference publication failure")
 	}
-	if strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
+	if files.corruptRoot != "" && strings.HasPrefix(filepath.Clean(path), files.corruptRoot+string(filepath.Separator)) {
 		files.corruptWrites.Add(1)
 		return errors.New("unexpected write during rejected opening")
 	}
@@ -637,6 +727,63 @@ func assertPlainBoardGuardDispatches(t *testing.T, runner *restartProbeUnexpecte
 		if !strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "guard § —") {
 			t.Fatalf("watched dispatch lost UTF-8 payload: args=%q stdin=%q", request.Args, request.Stdin)
 		}
+	}
+}
+
+func testUnreadableLocalArtifacts(t *testing.T, process support.Process, repo, home string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
+	t.Helper()
+	// F9 cells reopen the same default board in order after joined shutdown.
+	for index, cell := range []string{"local reference", "scoped recording"} {
+		t.Run("F9 "+cell, func(t *testing.T) {
+			snapshot := filepath.Join(repo, ".you-agent-factory", "durable-sessions", "~default.json")
+			reference := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+			history := plainBoardSelectedRecording(t, repo)
+			prior := map[string][]byte{snapshot: mustReadSeededReplayArtifact(t, snapshot), reference: mustReadSeededReplayArtifact(t, reference), history: mustReadSeededReplayArtifact(t, history)}
+			source, cause := reference, "INVALID_JSON"
+			if cell == "scoped recording" {
+				source, cause = history, "INVALID_SCHEMA"
+			}
+			damaged := []byte(`{"private":"fixture-private-prompt",`)
+			writeRestartProbeFile(t, source, damaged)
+			prior[source] = damaged
+			beforeCalls := runner.calls.Load()
+			command, url, inputs := startEmptyPlainBoard(t, process, repo, home, apis[index])
+			assertUnreadableStatus(t, url, source, cause)
+			if runner.calls.Load() != beforeCalls {
+				t.Fatal("artifact fallback dispatched prior Work")
+			}
+			seedPlainBoardSiblingWork(t, url, repo+" F9 § —")
+			waitForPlainBoardWorkConfirmed(t, url)
+			restartProbeShutdown(t, url, command)
+			assertUnreadableStderr(t, source, damaged, cause, inputs)
+			for path, data := range prior {
+				if path == history && source != history {
+					if !bytes.Equal(data, mustReadSeededReplayArtifact(t, path)) {
+						t.Fatal("reference fallback changed prior recording")
+					}
+					continue
+				}
+				archives, err := filepath.Glob(path + ".unreadable.*")
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, archive := range archives {
+					if bytes.Equal(data, mustReadSeededReplayArtifact(t, archive)) {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("fallback lost retained evidence for %s", path)
+				}
+			}
+			if history == plainBoardSelectedRecording(t, repo) {
+				t.Fatal("fallback reused selected history")
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "fixture-private-prompt") {
+				t.Fatal("artifact fallback disclosed content")
+			}
+		})
 	}
 }
 

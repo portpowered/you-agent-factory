@@ -68,10 +68,10 @@ type strictInvocationAPIFake struct {
 }
 
 type strictFactoryStatusAPIFake struct {
-	project func(context.Context, string) (factoryruntime.FactoryStatus, error)
+	project func(context.Context, string) (apisurface.FactorySessionStatus, error)
 }
 
-func (fake strictFactoryStatusAPIFake) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+func (fake strictFactoryStatusAPIFake) ProjectFactoryStatus(ctx context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
 	if fake.project == nil {
 		panic("unexpected FactoryStatusAPI.ProjectFactoryStatus call")
 	}
@@ -708,12 +708,12 @@ func newSessionScopedRolesTestServer(sessions map[string]*sessionScopedHTTPObser
 		}
 		return session.currentFactory, nil
 	}}
-	status := strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+	status := strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
 		_, err := lookup(sessionID)
 		if err != nil {
-			return factoryruntime.FactoryStatus{}, err
+			return apisurface.FactorySessionStatus{}, err
 		}
-		return factoryruntime.FactoryStatus{TotalTokens: 1}, nil
+		return apisurface.FactorySessionStatus{FactoryStatus: factoryruntime.FactoryStatus{TotalTokens: 1}}, nil
 	}}
 	return newFactorySessionRolesTestServer(liveRole, workRole, definitions, nil, status)
 }
@@ -883,8 +883,8 @@ func requireHTTPSuccess(
 
 func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newFactorySessionRolesTestServer(nil, nil, nil, nil, strictFactoryStatusAPIFake{
-		project: func(context.Context, string) (factoryruntime.FactoryStatus, error) {
-			return factoryruntime.FactoryStatus{}, apisurface.ErrFactorySessionNotFound
+		project: func(context.Context, string) (apisurface.FactorySessionStatus, error) {
+			return apisurface.FactorySessionStatus{}, apisurface.ErrFactorySessionNotFound
 		},
 	})
 

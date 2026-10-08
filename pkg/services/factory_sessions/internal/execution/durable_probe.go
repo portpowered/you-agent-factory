@@ -10,6 +10,26 @@ import (
 	"strings"
 )
 
+// durableSnapshotFailure retains the existing typed resume outcome and exposes
+// only an application-authored classification to implicit startup. Decoder
+// errors may contain schema keys or prompt fragments and must not cross this
+// boundary, including through Unwrap.
+type durableSnapshotFailure struct {
+	resume *ResumeError
+	cause  string
+}
+
+func (e *durableSnapshotFailure) Error() string                { return e.resume.Error() }
+func (e *durableSnapshotFailure) Unwrap() error                { return e.resume }
+func (e *durableSnapshotFailure) SnapshotFailureCause() string { return e.cause }
+
+func snapshotProbeFailure(sessionID, cause, message string) error {
+	return &durableSnapshotFailure{
+		resume: &ResumeError{Outcome: ResumeOutcomeCorruptedPersistence, SessionID: sessionID, Message: message},
+		cause:  cause,
+	}
+}
+
 // inspectDurableSnapshot uses the canonical persistence field types and their
 // JSON validators, but discards collection members after validation. Startup
 // needs identity, not a second decoded history alongside recording recovery.

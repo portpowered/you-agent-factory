@@ -493,20 +493,21 @@ func runHostedRuntime(
 	runtimeCfg := hostedRuntimeConfig(cfg, invocationMode)
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig)
 	var factorySvc initializer.LocalRuntimeRunner
+	var recoveryRunner initializer.LocalRuntimeRunner
 	var recoveryMetadata *recordings.ResumeRecoveryMetadata
-	onBound := newRuntimeHostObserver(
+	hostObserver := newRuntimeHostObserver(
 		ctx, cfg, recordPath, requestedPort,
 		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
 		startupDisclosure,
 		func() *recordings.ResumeRecoveryMetadata { return recoveryMetadata },
 	)
 	var skippedRecordings func() []string
-	boundObserver := onBound
-	onBound = func(binding factorysessions.RuntimeHostBinding) {
+	onBound := func(binding factorysessions.RuntimeHostBinding) {
+		emitStartupRecovery(cfg.StartupRecoveryOutput, recoveryRunner)
 		if skippedRecordings != nil {
 			emitBoardAdoptionWarning(cfg.BoardAdoptionOutput, skippedRecordings())
 		}
-		boundObserver(binding)
+		hostObserver(binding)
 	}
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
@@ -533,6 +534,7 @@ func runHostedRuntime(
 	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
 	batchProvider := batchReportProviderFromRunner(factorySvc)
+	recoveryRunner = factorySvc
 	factorySvc = observeHostedRuntimeBinding(cfg, factorySvc, onBound)
 	started = true
 	if historicalReplay != nil {

@@ -157,6 +157,10 @@ type durableOpeningFiles struct {
 }
 
 func (files *durableOpeningFiles) ReadFile(path string) ([]byte, error) {
+	return files.ReadFileBounded(path, 64<<20)
+}
+
+func (files *durableOpeningFiles) ReadFileBounded(path string, limit int64) ([]byte, error) {
 	if filepath.Clean(path) == filepath.Clean(files.peerPath) {
 		files.peerReads.Add(1)
 	}
@@ -164,7 +168,11 @@ func (files *durableOpeningFiles) ReadFile(path string) ([]byte, error) {
 		files.failures.Add(1)
 		return nil, errDurableOpeningRead
 	}
-	return files.Local.ReadFile(path)
+	return platformfilesystem.NewRecovery(files.Local, files.Local).ReadFileBounded(path, limit)
+}
+
+func (files *durableOpeningFiles) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).RenameNoReplace(source, destination)
 }
 
 type durableOpeningScenario struct {

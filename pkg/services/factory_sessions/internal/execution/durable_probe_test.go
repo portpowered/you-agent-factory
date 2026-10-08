@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"io/fs"
 	"strings"
 	"testing"
@@ -12,6 +13,43 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestDurableSnapshotFailureClassificationDoesNotExposePayload(t *testing.T) {
+	t.Parallel()
+	const secret = "fixture-secret-prompt"
+	for _, test := range []struct {
+		name, snapshot, cause string
+		readErr               error
+	}{
+		{name: "truncated", snapshot: `{"Session":` + secret, cause: "INVALID_JSON"},
+		{name: "schema", snapshot: `{"Session":{"SessionID":"~default"},"SourceContent":123,"secret":"` + secret + `"}`, cause: "INVALID_SCHEMA"},
+		{name: "identity", snapshot: `{"Session":{"SessionID":"` + secret + `"}}`, cause: "INVALID_SCHEMA"},
+		{name: "missing identity", snapshot: `{}`, cause: "INVALID_SCHEMA"},
+		{name: "read", readErr: errors.New(secret), cause: "READ_FAILED"},
+		{name: "size", readErr: &platformfilesystem.ReadSizeLimitError{Limit: 64 << 20}, cause: "SIZE_LIMIT"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			store := &durableProbeStore{snapshot: []byte(test.snapshot), failure: test.readErr}
+			service := &JavaScriptRuntimeService{persistence: store, durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
+			got, err := service.HasDurableState(t.Context(), "~default")
+			var classified interface{ SnapshotFailureCause() string }
+			var resume *ResumeError
+			if got || !errors.As(err, &classified) || classified.SnapshotFailureCause() != test.cause ||
+				!errors.As(err, &resume) || resume.Outcome != ResumeOutcomeCorruptedPersistence {
+				t.Fatalf("failure classification = %v, %v", got, err)
+			}
+			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+				if strings.Contains(cause.Error(), secret) {
+					t.Fatal("diagnostic unwrap chain disclosed payload")
+				}
+			}
+			if store.writes != 0 || len(service.sessions) != 0 {
+				t.Fatal("failure probe changed persisted or live state")
+			}
+		})
+	}
+}
 
 func TestDurableProbeCanonicalValidation(t *testing.T) {
 	t.Parallel()

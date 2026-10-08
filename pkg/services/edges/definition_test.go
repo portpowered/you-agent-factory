@@ -209,7 +209,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			return nil, fs.ErrNotExist
 		},
 		FactorySessionCursorPersistenceFileSystem:  platformfilesystem.Local{},
-		FactorySessionRuntimePersistenceFileSystem: platformfilesystem.Local{},
+		FactorySessionRuntimePersistenceFileSystem: platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{}),
 		FactorySessionDirectoryInspection:          platformfilesystem.Local{},
 		FactorySessionContractFixtureReader: func(string) ([]byte, error) {
 			contractFixtureRead = true
@@ -377,7 +377,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if _, err := merged.FactorySessionCursorCreateTemporaryFile("ignored", "ignored"); !errors.Is(err, cursorTemporaryFileError) || !cursorTemporaryFileRequested {
 		t.Fatalf("FactorySessionCursorCreateTemporaryFile replacement = (%v, %v), want injected call", err, cursorTemporaryFileRequested)
 	}
-	if _, ok := merged.FactorySessionRuntimePersistenceFileSystem.(platformfilesystem.Local); !ok {
+	if _, ok := merged.FactorySessionRuntimePersistenceFileSystem.(platformfilesystem.Recovery); !ok {
 		t.Fatalf("FactorySessionRuntimePersistenceFileSystem = %T, want explicit replacement", merged.FactorySessionRuntimePersistenceFileSystem)
 	}
 	if _, ok := merged.FactoryDefinitionLoadingFileSystem.(platformfilesystem.Local); !ok {

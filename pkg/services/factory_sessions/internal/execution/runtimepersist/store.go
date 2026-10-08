@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	// SnapshotMaxBytes is the inclusive encoded snapshot read/write bound.
+	SnapshotMaxBytes       = 64 << 20
 	durableSessionsHomeDir = ".you-agent-factory"
 	durableSessionsSubdir  = "durable-sessions"
 )
@@ -34,6 +36,8 @@ type FileSystem interface {
 	MkdirAll(string, fs.FileMode) error
 	ReadFile(string) ([]byte, error)
 	WriteFile(string, []byte, fs.FileMode) error
+	ReadFileBounded(string, int64) ([]byte, error)
+	RenameNoReplace(string, string) error
 }
 
 // DirectoryStore persists snapshots beneath one explicit directory.
@@ -146,7 +150,7 @@ func LoadBytes(
 		return nil, errors.New("durable session persistence filesystem is required")
 	}
 	path := SnapshotPath(trimmedDir, sessionID)
-	encoded, err := files.ReadFile(path)
+	encoded, err := files.ReadFileBounded(path, SnapshotMaxBytes)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, err

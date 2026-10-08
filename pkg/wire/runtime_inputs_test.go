@@ -582,6 +582,13 @@ func TestFactorySessionHomeDirectoryUsesExplicitEdgeOrProcessDefault(t *testing.
 	}
 }
 
+func (files *cursorPersistenceTestFileSystem) ReadFileBounded(path string, limit int64) ([]byte, error) {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).ReadFileBounded(path, limit)
+}
+func (files *cursorPersistenceTestFileSystem) RenameNoReplace(source, destination string) error {
+	return platformfilesystem.NewRecovery(files.Local, files.Local).RenameNoReplace(source, destination)
+}
+
 func TestFactorySessionRuntimePersistenceUsesExplicitEdgeOrPlatformDefault(t *testing.T) {
 	t.Parallel()
 
