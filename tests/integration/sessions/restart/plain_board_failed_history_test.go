@@ -82,10 +82,7 @@ func TestPlainBoardGracefulRestartPreservesFailureAfterToComplete(t *testing.T) 
 		if plainRestartSelectedRecording(t, repo) == source {
 			t.Fatal("relaunch did not publish a successor recording")
 		}
-		afterSource, err := os.ReadFile(source)
-		if err != nil || !bytes.Equal(contents, afterSource) {
-			t.Fatal("relaunch changed the predecessor recording")
-		}
+		assertPlainRestartFileUnchanged(t, source, contents)
 	}
 }
 
@@ -161,27 +158,35 @@ func TestPlainBoardRestoreFailurePreservesRecording(t *testing.T) {
 		command.Dir, command.Env = repo, builtcliacceptance.ProcessEnvForIsolatedHome(home)
 		output, err := command.CombinedOutput()
 		cancel()
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() == 0 {
-			t.Fatalf("conflict start did not fail: %v", err)
-		}
-		for _, want := range []string{"synthetic-conflict", "task:failed", "event sequence:", "WORK_REQUEST"} {
-			if !strings.Contains(string(output), want) {
-				t.Fatalf("conflict diagnostic lacks %q: %s", want, output)
-			}
-		}
-		if bytes.Contains(output, []byte("private-synthetic-sentinel")) {
-			t.Fatal("diagnostic exposed private payload")
-		}
-		after, readErr := os.ReadFile(source)
-		if readErr != nil || !bytes.Equal(before, after) {
-			t.Fatal("failed restore changed recording")
-		}
-		afterRef, readErr := os.ReadFile(refPath)
-		if readErr != nil || !bytes.Equal(reference, afterRef) {
-			t.Fatal("failed restore changed reference")
-		}
+		exit := assertPlainRestartConflictOutput(t, output, err)
+		assertPlainRestartFileUnchanged(t, source, before)
+		assertPlainRestartFileUnchanged(t, refPath, reference)
 		assertUnreadableBoardLogsPrivate(t, filepath.Join(home, ".you-agent-factory", "logs"), "private-synthetic-sentinel")
 		t.Logf("I-RESTART SHA256=%s head=%s debug=%t exit=%d: source/reference byte-identical, structural provenance present", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead, debug, exit.ExitCode())
 	}
+}
+
+func assertPlainRestartFileUnchanged(t *testing.T, path string, before []byte) {
+	t.Helper()
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("restore changed protected recording or reference")
+	}
+}
+
+func assertPlainRestartConflictOutput(t *testing.T, output []byte, err error) *exec.ExitError {
+	t.Helper()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() == 0 {
+		t.Fatalf("conflict start did not fail: %v", err)
+	}
+	for _, want := range []string{"synthetic-conflict", "task:failed", "event sequence:", "WORK_REQUEST"} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("conflict diagnostic lacks %q: %s", want, output)
+		}
+	}
+	if bytes.Contains(output, []byte("private-synthetic-sentinel")) {
+		t.Fatal("diagnostic exposed private payload")
+	}
+	return exit
 }

@@ -96,35 +96,44 @@ func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 		support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 			return status.TotalTokens == 3 && status.Categories.Terminal == 2 && status.Categories.Failed == 1
 		})
-		board := readBoardRestoreStates(t, url)
-		if board["idea-1"] != (boardRestoreWorkState{"idea", "failed", "FAILED"}) {
-			t.Fatalf("generation %d lost latest failure: %v", generation, board)
-		}
-		events := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		board, events := assertPlainPlanningFailureGeneration(t, url, generation, before, beforeEvents)
 		if generation == 1 {
 			before, beforeEvents = board, events
-		} else {
-			if !reflect.DeepEqual(board, before) {
-				t.Fatalf("generation %d changed Work IDs or states: before=%v after=%v", generation, before, board)
-			}
-			assertRestartProbeEventFacts(t, beforeEvents, events)
 		}
 		restartProbeShutdown(t, url, command)
 		if generation == 1 {
-			if err := os.WriteFile(sourceCopy, mustReadSeededReplayArtifact(t, plainBoardSelectedRecording(t, repo)), 0o600); err != nil {
-				t.Fatal(err)
-			}
+			writeRestartProbeFile(t, sourceCopy, mustReadSeededReplayArtifact(t, plainBoardSelectedRecording(t, repo)))
 		}
-		if protectedWrites.Load() != 0 || !bytes.Equal(sourceBytes, mustReadSeededReplayArtifact(t, protectedPath.Load().(string))) {
-			t.Fatal("restore wrote its protected source")
-		}
+		assertPlanningSourceProtected(t, sourceBytes, &protectedPath, &protectedWrites)
 		assertBoardRestorePlanningCalls(t, 3, planner, script)
 	}
 	protectedPath.Store(plainBoardSelectedRecording(t, repo))
+	protectedBytes := mustReadSeededReplayArtifact(t, protectedPath.Load().(string))
 	assertPlainPlanningRestoreRejection(t, process, repo, home, dir)
-	if protectedWrites.Load() != 0 {
-		t.Fatal("rejected restore opened its source writer")
+	assertPlanningSourceProtected(t, protectedBytes, &protectedPath, &protectedWrites)
+}
+
+func assertPlanningSourceProtected(t *testing.T, sourceBytes []byte, source *atomic.Value, writes *atomic.Int32) {
+	t.Helper()
+	if writes.Load() != 0 || !bytes.Equal(sourceBytes, mustReadSeededReplayArtifact(t, source.Load().(string))) {
+		t.Fatal("restore wrote its protected source")
 	}
+}
+
+func assertPlainPlanningFailureGeneration(t *testing.T, url string, generation int, before map[string]boardRestoreWorkState, beforeEvents []factoryapi.FactoryEvent) (map[string]boardRestoreWorkState, []factoryapi.FactoryEvent) {
+	t.Helper()
+	board := readBoardRestoreStates(t, url)
+	if board["idea-1"] != (boardRestoreWorkState{"idea", "failed", "FAILED"}) {
+		t.Fatalf("generation %d lost latest failure: %v", generation, board)
+	}
+	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
+	if generation > 1 {
+		if !reflect.DeepEqual(board, before) {
+			t.Fatalf("generation %d changed Work IDs or states: before=%v after=%v", generation, before, board)
+		}
+		assertRestartProbeEventFacts(t, beforeEvents, events)
+	}
+	return board, events
 }
 
 func assertPlainPlanningRestoreRejection(t *testing.T, process support.Process, repo, home, dir string) {

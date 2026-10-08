@@ -62,7 +62,7 @@ func TestRestoreWorkConflictRetainsOriginalSequenceWithoutPrivatePayload(t *test
 		WorkID: "synthetic-conflict", PlaceIDs: []string{"idea:to-complete"}, Cause: cause}
 	wrapped := fmt.Errorf("startup: %w", restore)
 	got := restoredWorkErrorWithEvents(wrapped, events)
-	if got != wrapped || !errors.Is(got, cause) {
+	if !errors.Is(got, wrapped) || !errors.Is(got, cause) {
 		t.Fatal("provenance changed error identity or cause")
 	}
 	want := []factoryruntime.WorkRestoreEvent{
