@@ -29,10 +29,11 @@ env:
 
 jobs:
   classify:
-    name: Classify Verification
+    name: Verification Setup
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
+      docs_result: ${{ steps.docs-reference.outcome }}
       classification: ${{ steps.classify.outputs.classification || 'full' }}
       areas: ${{ steps.classify.outputs.areas || 'ci-tooling' }}
       reason: ${{ steps.classify.outputs.reason || 'Conservative full verification.' }}
@@ -74,40 +75,18 @@ jobs:
           echo "classification=full" >> "$GITHUB_OUTPUT"
           echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
 
-  workflow-lint:
-    name: Workflow Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
       - name: Install pinned actionlint
+        if: success() || failure()
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Test workflow lint failure behavior
-        run: node --test scripts/ci/workflow-lint.test.mjs
-      - name: Test bounded compiler cache and source invalidation
-        run: python3 scripts/ci/functional-compile-cache.test.py
-      - name: Run schema-aware lint across all workflows
-        run: node scripts/ci/workflow-lint.mjs
-
-  docs-reference:
-    name: Docs Reference
-    needs: classify
-    if: always() && needs.classify.outputs.run_docs_reference != 'false'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - run: make docs-reference-smoke
+      - name: Workflow proof
+        if: success() || failure()
+        run: bash scripts/ci/run-workflow-verification.sh
+      - name: Docs proof
+        id: docs-reference
+        if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+        run: make docs-reference-smoke
 
   readme:
     name: README
@@ -150,50 +129,19 @@ jobs:
           UI_COVERAGE_MAIN_MAX_WORKERS: "4"
         run: make test-ui-coverage
 
-  frontend-component:
-    name: Frontend Component
-    needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - name: Restore Playwright Chromium
+        id: playwright-browser
+        if: success() || failure()
+        uses: actions/cache@v4
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - name: Run browserless component tests
-        env:
-          UI_COMPONENT_MAX_DURATION_MS: "300000"
-          UI_COMPONENT_TEST_MAX_WORKERS: "4"
-        run: make ui-component-test
-
-  frontend-browser:
-    name: Frontend Browser
-    needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-ui-browser
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-integration-test
-
-  frontend-storybook:
-    name: Frontend Storybook
-    needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-ui-browser
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - name: Run Storybook integration and browser checks
-        run: make ui-storybook-integration-test
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}
+      - name: Install Playwright Chromium
+        if: (success() || failure()) && steps.playwright-browser.outputs.cache-hit != 'true'
+        run: make ui-install-playwright
+      - name: Frontend proof
+        if: success() || failure()
+        run: bash scripts/ci/run-frontend-verification.sh
         env:
           AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/factory-graph-visual-group
       - name: Upload visual group browser evidence
@@ -1085,13 +1033,41 @@ jobs:
     with:
       is_ci_call: true
       run_candidates: ${{ github.event_name == 'pull_request' }}
-      run_api_package: ${{ needs.classify.outputs.run_api_package != 'false' }}
+      run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}
       run_packaged_factories_package: ${{ needs.classify.outputs.run_packaged_factories_package != 'false' }}
       run_model_providers_package: ${{ needs.classify.outputs.run_model_providers_package != 'false' }}
       source_commit: ${{ github.event.pull_request.head.sha || github.sha }}
       pull_request_head_sha: ${{ github.event.pull_request.head.sha || '' }}
       source_ref: ${{ github.ref }}
       repository: ${{ github.repository }}
+
+  api-pr-verification:
+    name: API Contract And Candidate
+    needs: classify
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: API proof and candidate dry run
+        run: bash scripts/ci/run-api-pr-verification.sh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_SOURCE_REF: ${{ github.ref }}
+          PR_REPOSITORY: ${{ github.repository }}
 
   # Maintainers can add the ci-workflow-behavior label to request one
   # controlled hosted evaluation of the reusable workflow contract. The job is
@@ -1115,7 +1091,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, frontend-browser, frontend-storybook, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, readme, frontend, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1151,13 +1127,13 @@ jobs:
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           RUN_CANDIDATES: ${{ github.event_name == 'pull_request' }}
-          DOCS_RESULT: ${{ needs.docs-reference.result }}
+          DOCS_RESULT: ${{ needs.classify.outputs.docs_result }}
           README_RESULT: ${{ needs.readme.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}
+          FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
-          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
+          FRONTEND_BROWSER_RESULT: ${{ needs.frontend.result }}
+          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           BACKEND_MODELS_RESULT: ${{ needs.backend-models-verification.result }}
@@ -1166,11 +1142,12 @@ jobs:
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
           RUN_WORKFLOW_LINT: "true"
           WORKFLOW_LINT_REASON: "Every repository workflow must pass pinned schema-aware lint on every pull request and push to main."
-          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
+          WORKFLOW_LINT_RESULT: ${{ needs.classify.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
+          API_INDEPENDENT: ${{ github.event_name == 'pull_request' }}
           PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
-          API_RESULT: ${{ needs.development-package.outputs.api_package_result }}
-          API_CANDIDATE_RESULT: ${{ needs.development-package.outputs.api_candidate_result }}
+          API_RESULT: ${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result }}
+          API_CANDIDATE_RESULT: ${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_candidate_result }}
           PACKAGED_RESULT: ${{ needs.development-package.outputs.packaged_factories_package_result }}
           PACKAGED_CANDIDATE_RESULT: ${{ needs.development-package.outputs.packaged_factories_candidate_result }}
           PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}

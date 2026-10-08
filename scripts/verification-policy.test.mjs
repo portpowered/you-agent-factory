@@ -60,6 +60,30 @@ test("minimal selected verification passes and unselected lanes may be skipped",
 	assert.deepEqual(result, { ok: true, failures: [] });
 });
 
+test("API-only PR requires both independent proofs and permits skipped reusable children", () => {
+	const base = { ...process.env, GITHUB_STEP_SUMMARY: "", CLASSIFICATION_RESULT: "success",
+		CLASSIFICATION: "api-package", PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "true", API_INDEPENDENT: "true" };
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+		base[`RUN_${prefix}`] = "false";
+		base[`${prefix}_RESULT`] = "skipped";
+	}
+	for (const suffix of ["COMPONENT", "COVERAGE", "BROWSER", "STORYBOOK"]) base[`FRONTEND_${suffix}_RESULT`] = "skipped";
+	Object.assign(base, { BACKEND_MODELS_RESULT: "skipped", API_CANDIDATE_RESULT: "success",
+		RUN_API: "true", API_RESULT: "success", PACKAGED_CANDIDATE_RESULT: "skipped" });
+	const invoke = (env) => spawnSync(process.execPath, [fileURLToPath(new URL("./verification-policy.mjs", import.meta.url))], { encoding: "utf8", env });
+	assert.equal(invoke(base).status, 0);
+	for (const key of ["API_RESULT", "API_CANDIDATE_RESULT"]) {
+		for (const result of ["failure", "cancelled", "timed_out", "skipped", ""]) {
+			const child = invoke({ ...base, [key]: result });
+			assert.equal(child.status, 1);
+			assert.match(child.stderr, /API Package/);
+		}
+	}
+	for (const result of ["failure", "cancelled", "timed_out", ""]) assert.equal(invoke({ ...base, PACKAGE_WORKFLOW_RESULT: result }).status, 1);
+	assert.equal(invoke({ ...base, API_INDEPENDENT: "false" }).status, 1);
+	assert.equal(invoke({ ...base, RUN_PACKAGED: "true", PACKAGED_RESULT: "success", PACKAGED_CANDIDATE_RESULT: "success" }).status, 1);
+});
+
 test("a selected lane that is skipped, missing, or failed fails closed", () => {
 	for (const result of ["skipped", "", "failure"]) {
 		const evaluation = evaluateVerificationPolicy(

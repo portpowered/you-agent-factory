@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
@@ -147,9 +148,46 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	for (const result of ["FRONTEND_RESULT", "FRONTEND_COVERAGE_RESULT"]) {
 		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "static and coverage share the aggregate result");
 	}
-	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}", "Component remains independent");
+	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}", "Component shares aggregate result");
+	for (const result of ["FRONTEND_BROWSER_RESULT", "FRONTEND_STORYBOOK_RESULT"]) {
+		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "browser proofs share aggregate result");
+	}
+	requireWorkflowText(frontend, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
+	requireWorkflowText(frontend, "path: ~/.cache/ms-playwright", "retain browser cache");
+	requireWorkflowText(frontend, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
+	requireWorkflowText(frontend, "run: make ui-install-playwright", "install browsers on cache miss");
+	if (/\n  frontend-(component|browser|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
 	if (policy.includes("ui-coverage")) throw new Error("policy must not depend on removed coverage job");
 	return { name: "frontend-shared-setup-workflow", status: "pass" };
+}
+
+export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
+	const setup = workflowJobSection(workflow, "classify");
+	const api = workflowJobSection(workflow, "api-pr-verification");
+	const packages = workflowJobSection(workflow, "development-package");
+	const policy = workflowJobSection(workflow, "verification-policy");
+	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
+		"docs_result: ${{ steps.docs-reference.outcome }}", "if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'", "run: make docs-reference-smoke"]) {
+		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
+	}
+	requireWorkflowText(packages, "run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}", "retain non-PR API selection");
+	requireWorkflowText(api, "if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'", "independent selected PR API proof");
+	requireWorkflowText(api, "run: bash scripts/ci/run-api-pr-verification.sh", "retain API proofs");
+	for (const [result, expression] of [["DOCS_RESULT", "needs.classify.outputs.docs_result"], ["WORKFLOW_LINT_RESULT", "needs.classify.result"],
+		["API_RESULT", "github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result"],
+		["API_CANDIDATE_RESULT", "github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_candidate_result"]]) {
+		requireWorkflowText(policy, `${result}: \${{ ${expression} }}`, "map merged required proof");
+	}
+	requireWorkflowText(policy, "API_INDEPENDENT: ${{ github.event_name == 'pull_request' }}", "API-only PR does not require reusable children");
+	if (/\n  (workflow-lint|docs-reference):/.test(workflow)) throw new Error("workflow contract duplicates cheap jobs");
+	const targets = frontendPlan().map((step) => step.args[0]);
+	if (JSON.stringify(targets) !== JSON.stringify(["ui-component-test", "ui-integration-test", "ui-storybook-integration-test"])) {
+		throw new Error("workflow contract must retain every frontend suite and build once");
+	}
+	const apiTargets = apiPlan({}).slice(0, 4).map((step) => step.args[0]);
+	if (JSON.stringify(apiTargets) !== JSON.stringify(["ui-deps", "contracts-smoke", "api-smoke", "api-package-verify"])) throw new Error("workflow contract must retain API proof commands");
+	if (!workflowPlan().some((step) => step.args.includes("scripts/ci/functional-compile-cache.test.py"))) throw new Error("workflow contract must retain compiler-cache proof");
+	return { name: "consolidated-ci-workflow", status: "pass" };
 }
 
 /**
@@ -347,6 +385,9 @@ export function runWorkflowLint({
 		throw new Error(`Workflow schema lint failed with exit code ${result.status}${termination}.`);
 	}
 	if (validateRepositoryContracts) {
+		validateConsolidatedCIWorkflowContract({
+			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
+		});
 		validateFrontendSharedSetupWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});
