@@ -52,6 +52,10 @@ func TestPortableCheckpointScenarios(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	t.Run("sync and async retain selected durable results", func(t *testing.T) {
+		t.Parallel()
+		testT17HDurableStarts(t, process, sessions)
+	})
 	t.Run("inspection preserves persisted interrupted child", func(t *testing.T) {
 		t.Parallel()
 		testPortableCheckpointInspection(t, process, sessions, scenarios[0])
@@ -60,6 +64,55 @@ func TestPortableCheckpointScenarios(t *testing.T) {
 		t.Parallel()
 		testPortableCheckpointContinuation(t, process, sessions, scenarios[1])
 	})
+}
+
+// H2 uses the Sessions contract because sync/async durable start selection is
+// owned here; CLI activation supplies the same canonical process beforehand.
+func testT17HDurableStarts(t *testing.T, process support.Process, sessions factorysessions.Service) {
+	t.Helper()
+	dir, home := t.TempDir(), t.TempDir()
+	inputs := recordingContinuationInputs(t, dir, home, nil, false)
+	inputs.Input.Args = []string{"you", "--help"}
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatal(err)
+	}
+	request := func(marker string) factorysessions.StartRequest {
+		return factorysessions.StartRequest{RequestID: uuid.NewString(), ProjectRoot: dir,
+			PersistencePolicy: factorysessions.PersistencePolicyEnabled,
+			Source: factorysessions.Source{Kind: "INLINE_WORKFLOW", InlineWorkflow: &factorysessions.InlineWorkflowSource{
+				Dialect: "you-workflow-v1", InlineSource: `return {selected: args.selected};`,
+			}}, Args: map[string]any{"selected": marker}}
+	}
+	async, err := sessions.StartAsync(t.Context(), request("async"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncResult, err := sessions.StartSync(t.Context(), request("sync"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if syncResult.SessionID == async.SessionID || syncResult.TimedOut || !strings.Contains(string(syncResult.Result), `"sync"`) {
+		t.Fatalf("sync result mixed targets: %+v async=%+v", syncResult, async)
+	}
+	waitCheckpointContinuationStatus(t, sessions, async.SessionID, factorysessions.LifecycleStatusSucceeded)
+	assertT17HDurableResult(t, sessions, async.SessionID, "async")
+	assertT17HDurableResult(t, sessions, syncResult.SessionID, "sync")
+}
+
+func assertT17HDurableResult(t *testing.T, sessions factorysessions.Service, id, marker string) {
+	t.Helper()
+	result, err := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: "final", IncludeArtifacts: true})
+	if err != nil || result.SessionID != id || !strings.Contains(string(result.PrimaryResult), `"`+marker+`"`) {
+		t.Fatalf("selected result %s: %+v %v", marker, result, err)
+	}
+	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{})
+	if err != nil || events.SessionID != id || len(events.Events) == 0 {
+		t.Fatalf("selected history: %+v %v", events, err)
+	}
+	artifacts, err := sessions.ListArtifacts(t.Context(), id)
+	if err != nil || artifacts.SessionID != id {
+		t.Fatalf("selected artifacts: %+v %v", artifacts, err)
+	}
 }
 
 type checkpointScenario struct {
@@ -139,6 +192,16 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	if runner.calls.Load() != 2 {
 		t.Fatalf("inspection executed children: calls=%d", runner.calls.Load())
 	}
+	// H9: the newer equal-ID inspection must retain its route when the older
+	// command closes. Both enter via the public CLI and use the same recording.
+	survivorRelease, survivorDone := startCheckpointInspection(t, process, dir, home, path)
+	release()
+	joinCheckpointInspection(t, done, dir, started.SessionID)
+	readSurvivor, err := sessions.GetSession(t.Context(), started.SessionID)
+	if err != nil || readSurvivor.Status != factorysessions.LifecycleStatusInterrupted {
+		t.Fatalf("older cleanup removed replacement replay: %#v %v", readSurvivor, err)
+	}
+	restartLivePeer := startT17HLivePeer(t, sessions, dir)
 	peerID := "session-js-checkpoint-peer-" + uuid.NewString()
 	peer := startSelectedReplayPeer(t, process, peerID, "workflow/"+peerID+".js")
 	// F17F-6: cancellation at the public resume boundary reaches the eligibility
@@ -153,6 +216,7 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 		t.Fatalf("canceled probe changed historical facts: %#v %v calls=%d", read, err, runner.calls.Load())
 	}
 	assertSelectedReplayRead(t, sessions, peerID)
+	restartLivePeer()
 	if _, err := sessions.ResumeInterruptedSession(t.Context(), started.SessionID, factorysessions.ResumeSessionRequest{RequestID: uuid.NewString()}); err != nil {
 		t.Fatalf("checkpoint handoff: %v", err)
 	}
@@ -171,11 +235,59 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	}
 	assertSelectedReplayRead(t, sessions, peerID)
 	assertCheckpointResponseAttribution(t, sessions, started.SessionID, peerID)
-	release()
-	joinCheckpointInspection(t, done, dir, started.SessionID)
+	survivorRelease()
+	joinCheckpointInspection(t, survivorDone, dir, started.SessionID)
 	assertSelectedReplayRead(t, sessions, peerID)
 	peer.release()
 	assertSelectedReplayCommandJoined(t, peer.done)
+}
+
+// H7/H9 retain an acquired replay beside a live peer and reopen that peer
+// before handoff. The replay must keep the recorded identity and captured owner.
+func startT17HLivePeer(t *testing.T, sessions factorysessions.Service, dir string) func() {
+	t.Helper()
+	id := uuid.NewString()
+	request := factorysessions.SessionStartRequest{
+		SessionID: id, Mode: factorysessions.SessionOperationModeLive, FolderPath: dir, ActivationOnly: true,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: t.TempDir(),
+			DefinitionSourcePath: filepath.Join(dir, "factory.json"), ExecutionBaseDir: dir,
+		},
+	}
+	open := func() {
+		if _, err := sessions.Start(t.Context(), request); err != nil {
+			t.Fatal(err)
+		}
+		read, err := sessions.GetFactorySession(t.Context(), id)
+		if err != nil || read.Context.FactorySessionID != id {
+			t.Fatalf("live peer: %+v %v", read, err)
+		}
+	}
+	open()
+	t.Cleanup(func() {
+		_, _ = sessions.Control(context.WithoutCancel(t.Context()), factorysessions.SessionControlRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose})
+	})
+	return func() {
+		if _, err := sessions.Control(t.Context(), factorysessions.SessionControlRequest{SessionID: id, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose}); err != nil {
+			t.Fatal(err)
+		}
+		open()
+	}
+}
+
+func startCheckpointInspection(t *testing.T, process support.Process, dir, home, path string) (func(), <-chan error) {
+	t.Helper()
+	writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	var once sync.Once
+	release := func() { once.Do(func() { close(writer.release) }) }
+	t.Cleanup(release)
+	replay := recordingContinuationInputs(t, dir, home, []string{"--replay", path, "--no-record"}, false)
+	replay.Input.WorkingDirectory = dir
+	replay.Input.Args = []string{"you", "run", "--dir", dir, "--replay", path, "--no-record"}
+	replay.Input.Stdout = writer
+	done := executeGatedRecordingCommand(t, process, replay, release)
+	waitRecordingPeerSignal(t, writer.entered, "replacement checkpoint inspection")
+	return release, done
 }
 
 func assertCheckpointResponseAttribution(t *testing.T, sessions factorysessions.Service, id, peerID string) {

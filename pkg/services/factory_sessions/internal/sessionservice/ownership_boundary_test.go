@@ -167,6 +167,7 @@ func TestHistoricalExecutionRoutePreservesPeerAndReplacementOwnership(t *testing
 	}
 	releaseReplacement := gateway.BindHistoricalExecution("recorded", replacement)
 	releaseFirst()
+	releaseFirst()
 	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
 		t.Fatal(err)
 	}
