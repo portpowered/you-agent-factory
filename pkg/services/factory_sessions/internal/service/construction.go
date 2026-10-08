@@ -101,24 +101,13 @@ func (r *Root) prepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	load, err = loadRuntime(
-		selectedDefinitionPath,
-		prepared.Definition.ExecutionBaseDir,
-		prepared.Recordings.ReplayPath,
-		prepared.OperatorDefaults,
-		nil,
-		root,
-		r.loadFactory,
-		r.newLoadedFactory,
-		r.decodeReplayConfig,
-		r.recordingsRuntime,
-		r.captureLoadedFactorySnapshot,
-		r.newSessionLogger,
-		prepared.DefinitionSnapshot,
-		replayInput,
-		prepared.Session.SessionID,
-		sessionRuntimeSelection(&prepared.Session).Host.Port <= 0,
-	)
+	load, err = r.runtimeInputLoading.Load(RuntimeInputLoadRequest{
+		Dir: selectedDefinitionPath, ExecutionBaseDir: prepared.Definition.ExecutionBaseDir,
+		ReplayPath: prepared.Recordings.ReplayPath, OperatorDefaults: prepared.OperatorDefaults,
+		FactoryRootDir: root.FactoryRootDir, ResolvedSnapshot: prepared.DefinitionSnapshot,
+		PreloadedReplayInput: replayInput, SessionID: prepared.Session.SessionID,
+		HistoricalInspection: sessionRuntimeSelection(&prepared.Session).Host.Port <= 0,
+	})
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}

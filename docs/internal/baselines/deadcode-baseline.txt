@@ -1069,7 +1069,6 @@ pkg/services/factory_sessions/internal/runtime/service.go: unreachable func: New
 pkg/services/factory_sessions/internal/runtimebinding/binding.go: unreachable func: LegacyInvocationSourcesForService
 pkg/services/factory_sessions/internal/scopedlisting/listing.go: unreachable func: ProjectLiveSessions
 pkg/services/factory_sessions/internal/service/runtime_activation.go: unreachable func: Root.activationRequest
-pkg/services/factory_sessions/internal/service/runtime_load.go: unreachable func: LoadRuntime
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: New
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithReconnectValidation
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithResponseStreams

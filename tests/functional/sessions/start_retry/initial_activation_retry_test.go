@@ -73,10 +73,22 @@ func initialOpeningFactoryConfig() map[string]any {
 func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T) {
 	t.Parallel()
 
+	detached := newInitialOpeningScenario(t)
+	inputFailure := newInitialOpeningScenario(t)
+	replayFailure := newInitialOpeningScenario(t)
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	overlap := newInitialOpeningProviderScenario(t)
+	providerGate := &selectedProviderGate{paths: map[string]string{
+		overlap.candidateDir: overlap.candidateID, overlap.peerDir: overlap.peerID,
+	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	t.Cleanup(providerGate.unblock)
+	for dir, id := range providerGate.paths {
+		support.WriteAgentConfig(t, dir, "worker-a", strings.ReplaceAll(support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"), "Process the input task.", "Selected source "+id))
+		support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nSelected request {{ (index .Inputs 0).Payload }}\n")
+	}
 	defaulted := newInitialOpeningDefaultProviderScenario(t, "", "")
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	durable := newInitialOpeningScenario(t)
@@ -84,7 +96,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
-	for _, dir := range []string{reused.candidateDir, reused.peerDir} {
+	for _, dir := range []string{reused.candidateDir, reused.peerDir, overlap.candidateDir, overlap.peerDir} {
 		if err := os.MkdirAll(filepath.Join(dir, factorydefinitions.InputsDir), 0o755); err != nil {
 			t.Fatalf("prepare authored inputs: %v", err)
 		}
@@ -96,15 +108,20 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		gatedPath: filepath.Join(canceled.candidateDir, factorydefinitions.InputsDir),
 		gate:      gate, effects: effects,
 	}
+	definitionFiles := &selectedInputFiles{gatedPath: filepath.Join(detached.candidateDir, "factory.json"),
+		failedPath: filepath.Join(inputFailure.candidateDir, "factory.json"),
+		entered:    make(chan struct{}), release: make(chan struct{}), failure: errors.New("selected definition reader unavailable")}
+	t.Cleanup(definitionFiles.unblock)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
+		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter:                           api.Start,
 	})
@@ -137,6 +154,18 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		testInitialOpeningChildInvocation(t, sessions, process, child, effects, api.WaitForURL(t))
 	})
 
+	t.Run("selected bytes survive authored changes and peer opening", func(t *testing.T) {
+		t.Parallel()
+		testSelectedInputDetachment(t, sessions, detached, definitionFiles, effects)
+	})
+	t.Run("definition failures preserve peer and allow corrected retry", func(t *testing.T) {
+		t.Parallel()
+		testSelectedInputFailureRetry(t, sessions, inputFailure, definitionFiles)
+	})
+	t.Run("selected replay failures preserve live peer and allow corrected retry", func(t *testing.T) {
+		t.Parallel()
+		testSelectedReplayFailureRetry(t, sessions, process, replayFailure)
+	})
 	runInitialOpeningCompatibilityScenarios(t, sessions, process, api.WaitForURL(t), home)
 	for _, recovery := range []string{"retained", "corrupt", "missing"} {
 		t.Run("current board recovery "+recovery, func(t *testing.T) {
@@ -164,6 +193,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("selected Codex provider executes independently attributed sessions", func(t *testing.T) {
 		t.Parallel()
 		testInitialOpeningProviderSelection(t, sessions, selected, effects)
+	})
+	t.Run("selected prompts and results survive overlapping live Work", func(t *testing.T) {
+		t.Parallel()
+		testSelectedProviderOverlap(t, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
 	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
 		t.Parallel()
@@ -427,13 +460,19 @@ func initialOpeningScenarioWithConfig(t *testing.T, config map[string]any) initi
 	}
 }
 
-type initialOpeningProviderRunner struct{ effects *initialOpeningEffects }
+type initialOpeningProviderRunner struct {
+	effects  *initialOpeningEffects
+	selected *selectedProviderGate
+}
 
-func (runner initialOpeningProviderRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	if request.Command != string(modelprovider.ProviderCodex) || !strings.Contains(strings.Join(request.Args, " "), "gpt-5-codex") {
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.selected != nil && runner.selected.paths[request.WorkDir] != "" {
+		return runner.selected.run(ctx, request)
+	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
 }
 
@@ -444,6 +483,95 @@ func assertInitialOpeningProviderSelection(t *testing.T, effects *initialOpening
 	if calls[filepath.Clean(dir)+"|worker.codex"] != 1 || calls[filepath.Clean(dir)+"|worker.run"] != 0 {
 		t.Fatalf("selected provider effects for %s = %v, want one Codex execution", dir, calls)
 	}
+}
+
+// Immutable path registration attributes the external command; both commands
+// must enter before either is released, proving overlapping customer Work.
+type selectedProviderGate struct {
+	paths   map[string]string
+	entered chan platformprocess.CommandRequest
+	release chan struct{}
+	once    sync.Once
+}
+
+func (gate *selectedProviderGate) unblock() { gate.once.Do(func() { close(gate.release) }) }
+
+func (gate *selectedProviderGate) run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case gate.entered <- request:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case <-gate.release:
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(gate.paths[request.WorkDir] + " COMPLETE")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
+	t.Helper()
+	defer gate.unblock()
+	startInitialOpeningSession(t, sessions, scenario.request())
+	peer := scenario.request()
+	peer.SessionID, peer.FolderPath = scenario.peerID, scenario.peerDir
+	peer.RuntimeSelection.DefinitionSourcePath = filepath.Join(scenario.peerDir, "factory.json")
+	peer.RuntimeSelection.ExecutionBaseDir, peer.RuntimeSelection.RuntimeInstanceID = scenario.peerDir, uuid.NewString()
+	startInitialOpeningSession(t, sessions, peer)
+	assertInitialOpeningDiagnostics(t, logs, scenario.candidateID, scenario.candidateDir)
+	assertInitialOpeningDiagnostics(t, logs, scenario.peerID, scenario.peerDir)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	done := make(chan error, 2)
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		go func() { done <- selectedProviderInvoke(ctx, sessions, id) }()
+	}
+	seen := make(map[string]bool)
+	for range 2 {
+		select {
+		case request := <-gate.entered:
+			id := gate.paths[request.WorkDir]
+			prompt := string(request.Stdin) + strings.Join(request.Args, " ")
+			if seen[id] || !strings.Contains(prompt, "Selected source "+id) || !strings.Contains(prompt, id+" selected Work") {
+				t.Fatalf("selected expanded prompt/path mixed sessions: %s %q", request.WorkDir, prompt)
+			}
+			seen[id] = true
+		case <-ctx.Done():
+			t.Fatal("both selected providers did not enter before release")
+		}
+	}
+	gate.unblock()
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{scenario.candidateID, scenario.peerID} {
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+		if len(listed.Results) != 1 || fmt.Sprint(listed.Results[0].Payload) != id+" selected Work" {
+			t.Fatalf("selected Work route %s = %#v", id, listed)
+		}
+		initialOpeningHistory(t, sessions, id)
+	}
+	peerHistory := initialOpeningHistory(t, sessions, scenario.peerID)
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	if err := selectedProviderInvoke(ctx, sessions, scenario.peerID); err != nil {
+		t.Fatal(err)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+}
+
+func selectedProviderInvoke(ctx context.Context, sessions factorysessions.Service, id string) error {
+	result, err := sessions.Invoke(ctx, factorysessions.SessionInvokeRequest{SessionID: id, ContentProvided: true,
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: id + " selected Work"}}})
+	if err != nil {
+		return err
+	}
+	if result.Status != factorysessions.InvocationTerminalStatusCompleted || len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != id+" COMPLETE" {
+		return fmt.Errorf("selected result %s = %#v", id, result)
+	}
+	return nil
 }
 
 func (scenario initialOpeningScenario) request() factorysessions.SessionStartRequest {
@@ -823,4 +951,111 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	testFixedRecordingFault(t, sessions, process, fault)
 	// Execute may also surface the already asserted terminal resource error.
 	command.AcceptError()
+}
+
+// Capture selected bytes at the public loading effect. Only the owned source
+// is gated; independent peers and all production resolution remain concurrent.
+type selectedInputFiles struct {
+	platformfilesystem.Local
+	gatedPath, failedPath string
+	entered, release      chan struct{}
+	failure               error
+	gated, failed         atomic.Bool
+	once                  sync.Once
+}
+
+func (files *selectedInputFiles) unblock() { files.once.Do(func() { close(files.release) }) }
+func (files *selectedInputFiles) ReadFile(path string) ([]byte, error) {
+	if filepath.Clean(path) == files.failedPath && files.failed.CompareAndSwap(false, true) {
+		return nil, files.failure
+	}
+	data, err := os.ReadFile(path)
+	if err == nil && filepath.Clean(path) == files.gatedPath && files.gated.CompareAndSwap(false, true) {
+		close(files.entered)
+		<-files.release
+	}
+	return data, err
+}
+
+func testSelectedInputDetachment(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, files *selectedInputFiles, effects *initialOpeningEffects) {
+	t.Helper()
+	request := scenario.request()
+	base := t.TempDir()
+	request.RuntimeSelection.ExecutionBaseDir = base
+	type outcome struct {
+		result factorysessions.SessionStartResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() { result, err := sessions.Start(t.Context(), request); done <- outcome{result, err} }()
+	select {
+	case <-files.entered:
+	case opened := <-done:
+		t.Fatalf("opening ended before selected read: %#v, %v", opened.result, opened.err)
+	case <-t.Context().Done():
+		t.Fatal("selected source was never read")
+	}
+	t.Cleanup(files.unblock)
+	if err := os.WriteFile(files.gatedPath, []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	peerHistory := scenario.startPeer(t, sessions)
+	files.unblock()
+	opened := <-done
+	if opened.err != nil || opened.result.SessionID != scenario.candidateID {
+		t.Fatalf("selected opening = %#v, %v", opened.result, opened.err)
+	}
+	t.Cleanup(func() {
+		_, err := sessions.Control(context.Background(), factorysessions.SessionControlRequest{SessionID: scenario.candidateID,
+			Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose})
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	observations := effects.forScenario(initialOpeningScenario{candidateDir: base})
+	if observations[filepath.Clean(base)+"|worker.run"] != 1 {
+		t.Fatalf("selected execution base observations = %v", observations)
+	}
+	initialOpeningHistory(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func selectedReplayRetryInputs(t *testing.T, scenario initialOpeningScenario, path string) *support.CapturedInputs {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", scenario.candidateDir, "--replay", path, "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	return inputs
+}
+
+func testSelectedInputFailureRetry(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, files *selectedInputFiles) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	_, err := sessions.Start(t.Context(), request)
+	if !errors.Is(err, files.failure) {
+		t.Fatalf("definition loading lost injected cause: %v", err)
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	selected, err := os.ReadFile(files.failedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(files.failedPath, []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions.Start(t.Context(), request); err == nil {
+		t.Fatal("invalid definition opened successfully")
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	if err := os.WriteFile(files.failedPath, selected, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 }

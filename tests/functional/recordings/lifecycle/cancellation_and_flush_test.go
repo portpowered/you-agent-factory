@@ -19,6 +19,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -745,11 +746,41 @@ func TestExecuteResumesUnfinalizedPrefixWithoutRepeatingCompletedWork(t *testing
 		t.Fatal("replacement graph changed selected source recovery identity")
 	}
 	resumed := recordingContinuationInputs(t, dir, home, []string{"--resume", prefixPath, "--record", successorPath}, false)
+	// T17I: activation and peer execution share the replacement's canonical
+	// graph. Resume must use captured config despite a changed authored source.
+	boot := recordingContinuationInputs(t, dir, t.TempDir(), nil, false)
+	boot.Args = []string{"you", "--help"}
+	if err := replacement.Execute(boot.Input); err != nil {
+		t.Fatal(err)
+	}
+	sessions := replacement.FactorySessions().(factorysessions.Service)
+	peerDir := scaffoldRecordingContinuation(t)
+	restartPeer := startT17HLivePeer(t, sessions, peerDir)
+	peer, err := sessions.StartSync(t.Context(), factorysessions.StartRequest{RequestID: "selected-resume-peer", ProjectRoot: peerDir,
+		Source: factorysessions.Source{Kind: "INLINE_WORKFLOW", InlineWorkflow: &factorysessions.InlineWorkflowSource{
+			Dialect: "you-workflow-v1", InlineSource: `return {selected: "resume-live-peer"};`,
+		}}})
+	if err != nil || !strings.Contains(string(peer.Result), "resume-live-peer") {
+		t.Fatalf("resume peer: %+v %v", peer, err)
+	}
+	peerHistory, err := sessions.ReadEvents(t.Context(), peer.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || len(peerHistory.Events) == 0 {
+		t.Fatalf("resume peer history: %+v %v", peerHistory, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := replacement.Execute(resumed.Input); err != nil {
 		t.Fatalf("Execute resume: %v\n%s", err, resumed.Stderr())
 	}
 	after := queryContinuationHistory(t, successor, successorPath, successorID)
 	assertContinuationFacts(t, before, after)
+	retained, err := sessions.ReadEvents(t.Context(), peer.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || !reflect.DeepEqual(peerHistory, retained) {
+		t.Fatalf("resume changed live peer history: %+v %v", retained, err)
+	}
+	assertT17HDurableResult(t, sessions, peer.SessionID, "resume-live-peer")
+	restartPeer()
 	if got := len(successorRunner.Requests()); got != 1 {
 		t.Fatalf("successor provider calls = %d, want only unfinished step", got)
 	}

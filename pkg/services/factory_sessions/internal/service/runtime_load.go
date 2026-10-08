@@ -155,132 +155,78 @@ type runtimeReplayLoad struct {
 	historicalReplay  *recordingreplay.RecordingReplayProjection
 }
 
-func LoadRuntime(
-	dir string,
-	executionBaseDir string,
-	replayPath string,
-	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	root RuntimeRoot,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recording.ReplayInputLoader,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
-) (RuntimeLoad, error) {
-	return loadRuntime(
-		dir,
-		executionBaseDir,
-		replayPath,
-		operatorDefaults,
-		workstationLoader,
-		root,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
-		replayInputs,
-		captureLoadedFactorySnapshot,
-		newSessionLogger,
-		nil,
-		nil,
-		factorysessions.DefaultSessionID,
-		true,
-	)
+// RuntimeInputLoadRequest carries only selected invocation facts and detached artifacts.
+type RuntimeInputLoadRequest struct {
+	Dir, ExecutionBaseDir, ReplayPath, FactoryRootDir, SessionID string
+	OperatorDefaults                                             operatorconfig.ResolvedDefaults
+	ResolvedSnapshot                                             *factorydefinitions.RuntimeSnapshot
+	PreloadedReplayInput                                         *recording.LoadReplayInputResult
+	HistoricalInspection                                         bool
 }
 
-func loadRuntime(
-	dir string,
-	executionBaseDir string,
-	replayPath string,
-	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	root RuntimeRoot,
+// RuntimeInputLoading owns the fixed loading behavior shared by session openings.
+// Selected inputs and mutable configuration remain local to each Load call.
+type RuntimeInputLoading struct {
+	loadFactory                  factorydefinitions.LoadedFactoryLoader
+	newLoadedFactory             factorydefinitions.LoadedFactorySourceFactory
+	decodeReplayConfig           factorydefinitions.ReplayRuntimeConfigDecoder
+	replayInputs                 recording.ReplayInputLoader
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
+	newSessionLogger             factoryruntime.SessionLoggerFactory
+	baseLogger                   *zap.Logger
+}
+
+func NewRuntimeInputLoading(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recording.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
-	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
-	preloadedReplayInput *recording.LoadReplayInputResult,
-	sessionID string,
-	historicalInspection bool,
-) (RuntimeLoad, error) {
-	if newSessionLogger == nil {
-		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory is required")
+	baseLogger *zap.Logger,
+) *RuntimeInputLoading {
+	return &RuntimeInputLoading{
+		loadFactory: loadFactory, newLoadedFactory: newLoadedFactory,
+		decodeReplayConfig: decodeReplayConfig, replayInputs: replayInputs,
+		captureLoadedFactorySnapshot: captureLoadedFactorySnapshot,
+		newSessionLogger:             newSessionLogger, baseLogger: baseLogger,
 	}
-	sessionID = strings.TrimSpace(sessionID)
+}
+
+func (loader *RuntimeInputLoading) Load(request RuntimeInputLoadRequest) (RuntimeLoad, error) {
+	sessionID := strings.TrimSpace(request.SessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
-	logger := newSessionLogger(
-		root.BaseLogger,
-		sessionID,
-		root.FactoryRootDir,
-		dir,
-	)
+	logger := loader.newSessionLogger(loader.baseLogger, sessionID, request.FactoryRootDir, request.Dir)
 	if logger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory returned nil")
 	}
-	replayLoad, err := loadRuntimeReplay(
-		replayPath,
-		replayInputs,
-		preloadedReplayInput,
-		sessionID,
-		historicalInspection,
-	)
+	replayLoad, err := loader.loadRuntimeReplay(request.ReplayPath, request.PreloadedReplayInput, sessionID, request.HistoricalInspection)
 	if err != nil {
 		return RuntimeLoad{}, err
 	}
 	if replayLoad.historicalReplay != nil {
-		return loadHistoricalRuntime(
-			dir,
-			replayPath,
-			workstationLoader,
-			operatorDefaults,
-			loadFactory,
-			captureLoadedFactorySnapshot,
-			replayLoad,
-			logger,
-		)
+		return loader.loadHistoricalRuntime(request.Dir, request.ReplayPath, request.OperatorDefaults, replayLoad, logger)
 	}
-	return loadConfiguredRuntime(
-		dir,
-		executionBaseDir,
-		replayPath,
-		operatorDefaults,
-		workstationLoader,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
-		captureLoadedFactorySnapshot,
-		resolvedSnapshot,
-		replayLoad,
-		logger,
-	)
+	return loader.loadConfiguredRuntime(request.Dir, request.ExecutionBaseDir, request.ReplayPath,
+		request.OperatorDefaults, request.ResolvedSnapshot, replayLoad, logger)
 }
 
-func loadHistoricalRuntime(
+func (loader *RuntimeInputLoading) loadHistoricalRuntime(
 	dir string,
 	replayPath string,
-	workstationLoader factorydefinitions.WorkstationLoader,
 	operatorDefaults operatorconfig.ResolvedDefaults,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	replayLoad runtimeReplayLoad,
 	logger *zap.Logger,
 ) (RuntimeLoad, error) {
 	replayMetadataWarnings := []recording.MetadataMismatchWarning(nil)
 	if replayLoad.legacyArtifact != nil {
-		replayMetadataWarnings = reportRuntimeReplayMetadata(
+		replayMetadataWarnings = loader.warnReplayMetadataMismatches(
 			dir,
 			replayPath,
-			workstationLoader,
 			replayLoad.legacyArtifact,
 			logger,
-			loadFactory,
-			captureLoadedFactorySnapshot,
 			operatorDefaults,
 		)
 	}
@@ -293,30 +239,21 @@ func loadHistoricalRuntime(
 	}, nil
 }
 
-func loadConfiguredRuntime(
+func (loader *RuntimeInputLoading) loadConfiguredRuntime(
 	dir string,
 	executionBaseDir string,
 	replayPath string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayLoad runtimeReplayLoad,
 	logger *zap.Logger,
 ) (RuntimeLoad, error) {
 	logger.Info("loading factory config", zap.String("dir", dir))
-	loaded, artifact, err := loadRuntimeConfig(
+	loaded, artifact, err := loader.loadRuntimeConfig(
 		dir,
 		executionBaseDir,
 		replayPath,
 		operatorDefaults,
-		workstationLoader,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
 		replayLoad.legacyArtifact,
 		resolvedSnapshot,
 	)
@@ -340,14 +277,11 @@ func loadConfiguredRuntime(
 			}
 		}
 	}
-	replayMetadataWarnings := reportRuntimeReplayMetadata(
+	replayMetadataWarnings := loader.warnReplayMetadataMismatches(
 		dir,
 		replayPath,
-		workstationLoader,
 		artifact,
 		logger,
-		loadFactory,
-		captureLoadedFactorySnapshot,
 		operatorDefaults,
 	)
 	return RuntimeLoad{
@@ -358,9 +292,8 @@ func loadConfiguredRuntime(
 	}, nil
 }
 
-func loadRuntimeReplay(
+func (loader *RuntimeInputLoading) loadRuntimeReplay(
 	replayPath string,
-	replayInputs recording.ReplayInputLoader,
 	preloadedReplayInput *recording.LoadReplayInputResult,
 	sessionID string,
 	historicalInspection bool,
@@ -368,15 +301,12 @@ func loadRuntimeReplay(
 	if replayPath == "" {
 		return runtimeReplayLoad{}, nil
 	}
-	if replayInputs == nil {
-		return runtimeReplayLoad{}, fmt.Errorf("Factory Session replay input capability is required")
-	}
 	var result recording.LoadReplayInputResult
 	var err error
 	if preloadedReplayInput != nil {
 		result = *preloadedReplayInput
 	} else {
-		result, err = replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
+		result, err = loader.replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
 	}
 	if err != nil {
 		var inputErr *recording.ReplayInputError
@@ -395,7 +325,7 @@ func loadRuntimeReplay(
 		if !selectsHistoricalReplayInspection(result) {
 			return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
 		}
-		return loadHistoricalLegacyReplay(replayInputs, result.Legacy, sessionID)
+		return loader.loadHistoricalLegacyReplay(result.Legacy, sessionID)
 	}
 	projection, err := recordingreplay.ReplayRecording(*result.Portable)
 	if err != nil {
@@ -407,23 +337,14 @@ func loadRuntimeReplay(
 	}, nil
 }
 
-func loadHistoricalLegacyReplay(
-	replayInputs recording.ReplayInputLoader,
+func (loader *RuntimeInputLoading) loadHistoricalLegacyReplay(
 	artifact *recording.ReplayArtifact,
 	sessionID string,
 ) (runtimeReplayLoad, error) {
-	reconstructor, ok := replayInputs.(interface {
+	reconstructor, ok := loader.replayInputs.(interface {
 		ReconstructCanonicalFactoryWorldState([]recording.FactoryEvent, int) (recording.FactoryWorldState, error)
 	})
 	if !ok {
-		// A few narrow compatibility tests pass an intentionally incomplete
-		// synthetic artifact through the old loader-only capability. Keep that
-		// fixture path available, while a structurally valid artifact must not
-		// silently fall back to live activation when its canonical projection
-		// capability is missing.
-		if !legacyReplayArtifactHasCanonicalEventShape(*artifact) {
-			return runtimeReplayLoad{legacyArtifact: artifact}, nil
-		}
 		return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: canonical Factory projection capability is required")
 	}
 	selectedTick := legacyReplaySelectedTick(artifact.Events)
@@ -451,67 +372,24 @@ func legacyReplaySelectedTick(events []recording.FactoryEvent) int {
 	return selected
 }
 
-func legacyReplayArtifactHasCanonicalEventShape(artifact recording.ReplayArtifact) bool {
-	if len(artifact.Events) == 0 {
-		return false
-	}
-	for _, event := range artifact.Events {
-		if event.SchemaVersion == "" || strings.TrimSpace(event.Id) == "" ||
-			event.Type == "" || event.Context.EventTime.IsZero() {
-			return false
-		}
-	}
-	return true
-}
-
-func reportRuntimeReplayMetadata(
-	dir string,
-	replayPath string,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	artifact *factorydefinitions.ReplayArtifact,
-	logger *zap.Logger,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	operatorDefaults operatorconfig.ResolvedDefaults,
-) []recording.MetadataMismatchWarning {
-	return warnReplayMetadataMismatches(
-		dir,
-		replayPath,
-		workstationLoader,
-		artifact,
-		logger,
-		loadFactory,
-		captureLoadedFactorySnapshot,
-		operatorDefaults,
-	)
-}
-
-func loadRuntimeConfig(
+func (loader *RuntimeInputLoading) loadRuntimeConfig(
 	dir string,
 	executionBaseDir string,
 	replayPath string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	artifact *factorydefinitions.ReplayArtifact,
 	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
 ) (factorydefinitions.MutableLoadedFactorySource, *factorydefinitions.ReplayArtifact, error) {
 	if replayPath == "" {
 		if resolvedSnapshot != nil {
-			loaded, err := loadRuntimeSnapshot(
+			loaded, err := loader.loadRuntimeSnapshot(
 				resolvedSnapshot,
 				executionBaseDir,
 				operatorDefaults,
-				newLoadedFactory,
 			)
 			return loaded, nil, err
 		}
-		if loadFactory == nil {
-			return nil, nil, fmt.Errorf("Factory Definitions loader is required")
-		}
-		loaded, err := loadFactory(dir, workstationLoader)
+		loaded, err := loader.loadFactory(dir, nil)
 		if loaded != nil {
 			loaded.SetRuntimeBaseDir(executionBaseDir)
 		}
@@ -526,17 +404,11 @@ func loadRuntimeConfig(
 	if artifact == nil {
 		return nil, nil, fmt.Errorf("replay artifact is required")
 	}
-	if decodeReplayConfig == nil {
-		return nil, nil, fmt.Errorf("replay Factory Definition decoder is required")
-	}
-	if newLoadedFactory == nil {
-		return nil, nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
-	}
-	runtimeConfig, err := decodeReplayConfig(artifact.Factory)
+	runtimeConfig, err := loader.decodeReplayConfig(artifact.Factory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load embedded replay config: %w", err)
 	}
-	loaded, err := newLoadedFactory(
+	loaded, err := loader.newLoadedFactory(
 		runtimeConfig.FactoryDir(),
 		runtimeConfig.FactoryConfig(),
 		runtimeConfig,
@@ -549,17 +421,13 @@ func loadRuntimeConfig(
 	return loaded, artifact, nil
 }
 
-func loadRuntimeSnapshot(
+func (loader *RuntimeInputLoading) loadRuntimeSnapshot(
 	resolved *factorydefinitions.RuntimeSnapshot,
 	executionBaseDir string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 ) (factorydefinitions.MutableLoadedFactorySource, error) {
 	if resolved == nil {
 		return nil, fmt.Errorf("resolved Factory Definition snapshot is required")
-	}
-	if newLoadedFactory == nil {
-		return nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
 	}
 	snapshot, err := resolved.Clone()
 	if err != nil {
@@ -574,7 +442,7 @@ func loadRuntimeSnapshot(
 	lookup := newRuntimeSnapshotLookup(&snapshot)
 	config := snapshot.EffectiveFactory
 	attachRuntimeSnapshotPromptSources(&config, snapshot.PromptSources)
-	loaded, err := newLoadedFactory(
+	loaded, err := loader.newLoadedFactory(
 		snapshot.FactoryDir,
 		&config,
 		lookup,
@@ -697,31 +565,26 @@ func applyOperatorDefaults(
 	return nil
 }
 
-func warnReplayMetadataMismatches(
+func (loader *RuntimeInputLoading) warnReplayMetadataMismatches(
 	dir string,
 	replayPath string,
-	workstationLoader factorydefinitions.WorkstationLoader,
 	artifact *factorydefinitions.ReplayArtifact,
 	logger *zap.Logger,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	operatorDefaults operatorconfig.ResolvedDefaults,
 ) []recording.MetadataMismatchWarning {
 	if artifact == nil ||
 		dir == "" ||
-		replayPath == "" ||
-		loadFactory == nil ||
-		captureLoadedFactorySnapshot == nil {
+		replayPath == "" {
 		return nil
 	}
-	current, err := loadFactory(dir, workstationLoader)
+	current, err := loader.loadFactory(dir, nil)
 	if err != nil || current == nil {
 		return nil
 	}
 	if err := applyOperatorDefaults(current, operatorDefaults); err != nil {
 		return nil
 	}
-	currentSnapshot, err := captureLoadedFactorySnapshot(
+	currentSnapshot, err := loader.captureLoadedFactorySnapshot(
 		current,
 		current.FactoryDir(),
 		nil,
@@ -742,4 +605,17 @@ func warnReplayMetadataMismatches(
 		}
 	}
 	return warnings
+}
+
+func legacyReplayArtifactHasCanonicalEventShape(artifact recording.ReplayArtifact) bool {
+	if len(artifact.Events) == 0 {
+		return false
+	}
+	for _, event := range artifact.Events {
+		if event.SchemaVersion == "" || strings.TrimSpace(event.Id) == "" ||
+			event.Type == "" || event.Context.EventTime.IsZero() {
+			return false
+		}
+	}
+	return true
 }

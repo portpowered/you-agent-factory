@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -17,6 +18,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -463,4 +465,118 @@ func waitInitialRecoveryAdmission(t *testing.T, stream *factorydefinitions.Facto
 			t.Fatalf("pending Work admission: %v", ctx.Err())
 		}
 	}
+}
+
+func testSelectedReplayFailureRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	recordPath := filepath.Join(t.TempDir(), "selected.jsonl")
+	request.RuntimeSelection.Recording.RecordPath = recordPath
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	history := initialOpeningHistory(t, sessions, scenario.candidateID)
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	valid, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectedPath := filepath.Join(t.TempDir(), "retry.jsonl")
+	inputs := selectedReplayRetryInputs(t, scenario, selectedPath)
+	err = process.Execute(inputs.Input)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing selected replay lost its cause: %v", err)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	// Recognizable portable input with an unsupported field must preserve the
+	// typed diagnostic and redact its payload before returning to the customer.
+	private := "selected-private-replay-payload"
+	invalid := fmt.Sprintf(`{"recordingKind":%q,"unknown":%q}`, recordings.KindJavaScriptFactorySession, private)
+	if err := os.WriteFile(selectedPath, []byte(invalid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs = selectedReplayRetryInputs(t, scenario, selectedPath)
+	err = process.Execute(inputs.Input)
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticMalformed {
+		t.Fatalf("invalid selected replay lost typed classification: %v", err)
+	}
+	if strings.Contains(inputs.Stdout()+inputs.Stderr(), private) || strings.Contains(fmt.Sprint(inputErr.Diagnostic), private) {
+		t.Fatal("replay diagnostic exposed private payload")
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	if err := os.WriteFile(selectedPath, selectedForeignReplay(t, valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = process.Execute(selectedReplayRetryInputs(t, scenario, selectedPath).Input)
+	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticForeignReference {
+		t.Fatalf("foreign selected replay lost typed classification: %v", err)
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	peerAfterFailure := initialOpeningHistory(t, sessions, scenario.peerID)
+	if err := os.WriteFile(selectedPath, valid, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertInitialOpeningReplay(t, process, selectedPath, scenario.candidateID, history)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerAfterFailure)
+	assertSelectedHostedLegacyReplay(t, sessions, scenario, selectedPath, history)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func selectedForeignReplay(t *testing.T, valid []byte) []byte {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(string(valid)), "\n")
+	for i, line := range lines {
+		var row map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			t.Fatal(err)
+		}
+		var event factorydefinitions.FactoryEvent
+		if json.Unmarshal(row["event"], &event) != nil || string(event.Type) != "DISPATCH_REQUEST" {
+			continue
+		}
+		var payload factorydefinitions.DispatchRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatal(err)
+		}
+		payload.Inputs = []factorydefinitions.DispatchConsumedWorkRef{{WorkID: "foreign-work"}}
+		event.Payload, _ = json.Marshal(payload)
+		row["event"], _ = json.Marshal(event)
+		encoded, err := json.Marshal(row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines[i] = string(encoded)
+		return []byte(strings.Join(lines, "\n") + "\n")
+	}
+	t.Fatal("selected recording has no dispatch to corrupt")
+	return nil
+}
+
+func assertSelectedHostedLegacyReplay(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, path string, history *factorydefinitions.FactoryEventStream) {
+	t.Helper()
+	peerBefore := initialOpeningHistory(t, sessions, scenario.peerID)
+	request := scenario.request()
+	request.SessionID = uuid.NewString()
+	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	request.RuntimeSelection.Recording.ReplayPath = path
+	request.RuntimeSelection.Host = factorysessions.RuntimeHostRequest{Host: "127.0.0.1", Port: 24117}
+	// The selected legacy config must load even when the current authored
+	// definition is no longer valid. A hosted replay retains its runtime mode.
+	if err := os.WriteFile(request.RuntimeSelection.DefinitionSourcePath, []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startInitialOpeningSession(t, sessions, request)
+	replayed := initialOpeningHistory(t, sessions, request.SessionID)
+	if len(replayed.History) < len(history.History) {
+		t.Fatalf("hosted replay lost selected history: got=%d want>=%d", len(replayed.History), len(history.History))
+	}
+	for i, event := range history.History {
+		if replayed.History[i].Id != event.Id || replayed.History[i].Type != event.Type {
+			t.Fatalf("hosted replay changed selected event %d: %#v", i, replayed.History[i])
+		}
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerBefore)
 }
