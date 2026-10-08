@@ -75,6 +75,10 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	assertBoardList(t, secondWorks, restoredReviewExpectedWorks())
 	resumedObservation := evidence.capturePublicObservation(t, "successor-after-resume-before-migration", second.baseURL)
 	assertRestartPublicCounts(t, resumedObservation, 1, 4, 0, 0)
+	// Readiness can expose the opening's provisional live identity before
+	// resume publishes its successor. Target the session observed with the
+	// verified restored board rather than the identity cached at readiness.
+	second.sessionID = resumedObservation.FactorySessionIDs[0]
 	runRestoredReviewLifecycleCLI(t, second, binaryPath, factoryDir, homeDir, "pause")
 	for _, migration := range []struct{ workID, state string }{
 		{restoredReviewTaskA, "in-review"},
@@ -199,6 +203,9 @@ func runRestoredReviewLifecycleCLI(
 	var response factoryapi.FactorySessionLifecycleControlResponse
 	if err := json.Unmarshal(bytes.TrimSpace(output), &response); err != nil {
 		t.Fatalf("decode session %s: %v\noutput:\n%s", operation, err, output)
+	}
+	if response.SessionId != daemon.sessionID {
+		t.Fatalf("session %s addressed %q, want restored session %q", operation, response.SessionId, daemon.sessionID)
 	}
 	wantAccepted := response.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted
 	resumeAlreadyRunning := operation == "resume" &&
