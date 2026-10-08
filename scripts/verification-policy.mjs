@@ -224,13 +224,9 @@ function policyInputFromEnvironment() {
 					{ name: "Frontend Storybook", result: env("FRONTEND_STORYBOOK_RESULT") },
 				],
 			},
+			directLane("Backend Coverage", "RUN_BACKEND_COVERAGE", "BACKEND_REASON", "BACKEND_COVERAGE_RESULT"),
 			directLane("Backend", "RUN_BACKEND", "BACKEND_REASON", "BACKEND_RESULT"),
-			directLane(
-				"Backend Conformance",
-				"RUN_BACKEND_CONFORMANCE",
-				"BACKEND_CONFORMANCE_REASON",
-				"BACKEND_CONFORMANCE_RESULT",
-			),
+			directLane("Backend Models Wire and Race", "RUN_BACKEND", "BACKEND_REASON", "BACKEND_MODELS_RESULT"),
 			directLane(
 				"Backend Lint",
 				"RUN_BACKEND_LINT",

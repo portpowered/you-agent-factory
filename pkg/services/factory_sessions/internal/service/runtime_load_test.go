@@ -633,14 +633,13 @@ func TestClockForReplayRetainsSelectedIdentityWithoutFallback(t *testing.T) {
 func TestLiveOpeningRetainsInjectedClockWithoutReplayCollaborators(t *testing.T) {
 	t.Parallel()
 	selected := clockwork.NewFakeClock()
-	root := &Root{
-		clock: selected,
+	preparation := &RuntimePreparation{
 		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
 			t.Fatal("live opening attempted fallback clock selection")
 			return nil
 		},
 	}
-	got, err := root.clockForOpening(nil)
+	got, err := preparation.clockForOpening(selected, nil)
 	if err != nil || got != selected {
 		t.Fatalf("live clock = (%v, %v), want injected identity %v", got, err, selected)
 	}

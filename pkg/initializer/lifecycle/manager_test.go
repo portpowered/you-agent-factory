@@ -46,8 +46,8 @@ func TestManagerRunsAndClosesInReverseOrder(t *testing.T) {
 // once in reverse declaration order, and the primary start failure is retained
 // alongside each cleanup failure it did not mask.
 func TestManagerUnwindsStartFailureAndJoinsCleanupErrors(t *testing.T) {
-	startErr := errors.New("start failed")
-	stopErr := errors.New("stop failed")
+	startErr := errors.Join(errors.New("start failed"), context.Canceled)
+	stopErr := errors.Join(errors.New("stop failed"), context.Canceled)
 	closeErr := errors.New("close failed")
 	var order []string
 	record := func(step string) { order = append(order, step) }

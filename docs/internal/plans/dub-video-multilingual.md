@@ -846,7 +846,7 @@ downstream Verification Policy. Unit and functional coverage floors were not
 evaluated: their `go list -deps -test -mod=readonly ./...` preflight rejected the
 new C++ sampler regression in the existing Go `scripts` package. The same
 source-discovery error prevented vet and deadcode measurement. Other lanes,
-including Backend Integration and TTS Clean-Install Windows, passed.
+including Backend Integration and the since-retired Windows preparation probe, passed.
 
 Commit `dea7691547a1763721b3fd7ffffe9582d1b27c62` renames the sampler template
 from `.cpp` to `.cpp.in` and updates the native recipe's copy path; its contents

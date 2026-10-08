@@ -60,7 +60,6 @@ var resumedResponseScopeWorkIDPattern = regexp.MustCompile(
 // they are unavailable rather than treating an unexecuted proof as success.
 func TestResumedSuccessorResponseScopeAndWorkAdmission(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	artifacts := stageResumedResponseScopeArtifacts(t)
 	gate := make(chan struct{})

@@ -265,6 +265,21 @@ func (r *Bundle) RecordingLedger() recordings.Ledger {
 	return r.EventHistory
 }
 
+// DeferRecordingPublication retains history in memory through session startup.
+func (r *Bundle) DeferRecordingPublication() {
+	if startup, ok := r.Recording.(recordings.RuntimeRecordingStartup); ok {
+		startup.DeferRecordingPublication()
+	}
+}
+
+// ActivateRecordingPublication publishes only after the owning session is ready.
+func (r *Bundle) ActivateRecordingPublication(ctx context.Context) error {
+	if startup, ok := r.Recording.(recordings.RuntimeRecordingStartup); ok {
+		return startup.ActivateRecordingPublication(ctx)
+	}
+	return nil
+}
+
 // FinalizeRecording closes the runtime-owned Recordings scope during partial
 // Factory Session unwind. Normal runtime shutdown reaches the same idempotent
 // recorder through host.FinalizeArtifacts.

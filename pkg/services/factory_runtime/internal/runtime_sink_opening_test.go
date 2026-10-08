@@ -334,7 +334,7 @@ func TestAssemblyInitialRecordingPathsRetainInvocationSelection(t *testing.T) {
 		{"empty", "", ""},
 		{"default", "recording.json", "recording.json"},
 		{"explicit", "/recordings/chosen.json", "/recordings/chosen.json"},
-		{"placeholder", "/recordings/__factory_session_id__.json", "/recordings/~default.json"},
+		{"placeholder", "/recordings/__factory_session_id__.json", "/recordings/selected.json"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

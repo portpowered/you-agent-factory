@@ -151,6 +151,9 @@ func resolveRestartCLIArtifactForTarget(
 	if err != nil {
 		return nil, fmt.Errorf("invalid prebuilt CLI artifact %q: %w", path, err)
 	}
+	if sourceHead != "" && identity.EmbeddedVCSRevision != sourceHead {
+		return nil, fmt.Errorf("invalid prebuilt CLI artifact %q: embedded vcs.revision %q does not match requested source head %q; rebuild from the selected worktree", path, identity.EmbeddedVCSRevision, sourceHead)
+	}
 	if err := validateRestartCLIArtifactPlatform(identity.BuildGOOS, identity.BuildGOARCH, testGOOS, testGOARCH); err != nil {
 		return nil, fmt.Errorf("invalid prebuilt CLI artifact %q: %w", path, err)
 	}

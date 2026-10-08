@@ -128,6 +128,10 @@ export function selectLintInputs({ event = "", baseSha = "", testedSha = "", pat
 	selection.deadcode = Number(paths.some((path) => isGo(path) || path.startsWith("docs/reference/")));
 	selection.directBoundary = Number(paths.some((path) => /^(internal\/lint\/|tools\/golangcilintplugin\/)/.test(path)));
 	for (const key of ["docs", "deadcode", "directBoundary"]) selection.reasons[key] = selection[key] ? "input" : "unaffected inputs";
+	if (event === "merge_group") {
+		selection.deadcode = 1;
+		selection.reasons.deadcode = "required queue artifact";
+	}
 	return selection;
 }
 
@@ -139,6 +143,7 @@ export function validateLintSelection(selection, identity = {}) {
 			|| typeof selection.reasons?.[key] !== "string" || !selection.reasons[key].trim())
 		|| (identity.testedSha && selection.testedSha !== identity.testedSha)
 		|| (identity.event && selection.event !== identity.event)
+		|| (selection.event === "merge_group" && selection.deadcode !== 1)
 		|| (selection.event === "push" && [selection.docs, selection.deadcode, selection.directBoundary].includes(0))) {
 		throw new Error("invalid or mismatched lint input selection");
 	}

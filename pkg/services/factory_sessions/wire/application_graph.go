@@ -115,6 +115,7 @@ var (
 func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
@@ -124,23 +125,18 @@ func NewRoot(
 	providerOverride ProviderOverrideService,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
-	validator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
 	definitions factorydefinitions.Service,
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
 
-	runtimeInputLoading *RuntimeInputLoading,
 	snapshotSelection *RuntimeSnapshotSelection,
+	preparation *RuntimePreparation,
 
 	assembly RuntimeAssembly,
 	durableOpening *DurableOpening,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	processRuntimeFactory ProcessRuntimeFactory,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 	workService work.Service,
 	automationService automations.Service,
 	webhooksService webhooks.Service,
@@ -150,7 +146,6 @@ func NewRoot(
 	workerService workers.Service,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
-	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation RuntimeModelInvocationOperation,
 	replayBehavior *HistoricalReplayBehavior,
@@ -160,6 +155,7 @@ func NewRoot(
 	return service.NewRoot(
 		providerSessions,
 		logger,
+		runtimeLogs,
 		factoryWorkflows,
 		workflowPreview,
 		runtimeRoot,
@@ -169,23 +165,18 @@ func NewRoot(
 		providerOverride,
 		submissionRecorder,
 		dispatchRecorder,
-		validator,
-		namedPaths,
 		definitions,
 		runtimeRouter,
 
-		runtimeInputLoading,
 		snapshotSelection,
+		preparation,
 
 		assembly,
 		durableOpening,
-		factoryScaffoldInitializer,
-		editableFactoryValidator,
 		processRuntimeFactory,
 		generateSessionID,
 		generateRuntimeInstanceID,
 		resolveHome,
-		providerIdentities,
 		workService,
 		automationService,
 		webhooksService,
@@ -195,7 +186,6 @@ func NewRoot(
 		workerService,
 		providerCommandRunner,
 		scriptCommandRunner,
-		ensureBackendScope,
 		initialActivation,
 		modelInvocation,
 		replayBehavior,
@@ -269,4 +259,23 @@ func NewRuntimeSnapshotSelection(
 ) *RuntimeSnapshotSelection {
 	return service.NewRuntimeSnapshotSelection(definitions.ResolveRuntimeSnapshot, decode, replayInputs,
 		paths.ResolveCurrentDir, resolveHome)
+}
+
+// RuntimePreparation is the fixed preparation owner exposed for composition.
+type RuntimePreparation = service.RuntimePreparation
+
+func NewRuntimePreparation(
+	loading *RuntimeInputLoading,
+	paths factorydefinitions.NamedPathResolver,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	ensureBackendScope operatorsettings.BackendScopeEnsurer,
+	providerIdentities factorysessions.ProviderIdentityResolver,
+	validator factorydefinitions.Validator,
+	replay recordings.RuntimeScopeService,
+	resolveClock factoryruntime.ClockResolver,
+) *RuntimePreparation {
+	return service.NewRuntimePreparation(loading.Load, paths.ResolveCurrentDir,
+		generateRuntimeInstanceID, resolveHome, ensureBackendScope,
+		providerIdentities, validator, replay.ReplayClock, resolveClock)
 }

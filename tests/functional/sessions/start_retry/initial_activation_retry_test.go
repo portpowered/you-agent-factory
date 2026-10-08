@@ -196,7 +196,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("selected prompts and results survive overlapping live Work", func(t *testing.T) {
 		t.Parallel()
-		testSelectedProviderOverlap(t, sessions, overlap, providerGate, api.WaitForURL(t), logs)
+		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
 	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
 		t.Parallel()
@@ -510,7 +510,7 @@ func (gate *selectedProviderGate) run(ctx context.Context, request platformproce
 	}
 }
 
-func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
+func testSelectedProviderOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
 	t.Helper()
 	defer gate.unblock()
 	startInitialOpeningSession(t, sessions, scenario.request())
@@ -541,6 +541,7 @@ func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service,
 			t.Fatal("both selected providers did not enter before release")
 		}
 	}
+	assertPreparationReplayBesideLiveWork(t, process, sessions, scenario)
 	gate.unblock()
 	for range 2 {
 		if err := <-done; err != nil {

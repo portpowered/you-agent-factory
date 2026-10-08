@@ -35,7 +35,6 @@ const (
 // and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 
 	fixture := newRootProcessReuseFixture(t)
 

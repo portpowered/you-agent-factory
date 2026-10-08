@@ -5,18 +5,64 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/root"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+type restartProbeCommand struct {
+	*support.ProcessCommand
+	ready <-chan struct{}
+}
+
+type restartProbeStartupOutput struct {
+	mu    sync.Mutex
+	text  string
+	ready chan struct{}
+	once  sync.Once
+}
+
+type restartProbeWriter struct {
+	output  io.Writer
+	startup *restartProbeStartupOutput
+}
+
+func (writer restartProbeWriter) Write(data []byte) (int, error) {
+	writer.startup.mu.Lock()
+	defer writer.startup.mu.Unlock()
+	n, err := writer.output.Write(data)
+	writer.startup.text += string(data[:n])
+	if strings.Contains(writer.startup.text, "Dashboard URL: ") {
+		writer.startup.once.Do(func() { close(writer.startup.ready) })
+	}
+	return n, err
+}
+
+func startRestartProbeCommand(t *testing.T, process support.Process, input root.Input) *restartProbeCommand {
+	t.Helper()
+	startup := &restartProbeStartupOutput{ready: make(chan struct{})}
+	for _, arg := range input.Args {
+		if arg == "--quiet" {
+			startup.once.Do(func() { close(startup.ready) })
+		}
+	}
+	input.Stdout = restartProbeWriter{output: input.Stdout, startup: startup}
+	input.Stderr = restartProbeWriter{output: input.Stderr, startup: startup}
+	return &restartProbeCommand{ProcessCommand: support.StartProcessCommand(t, process, input), ready: startup.ready}
+}
 
 func testRestartProbeDAG(t *testing.T, process support.Process, dir string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
@@ -35,7 +81,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	if port != 0 {
 		first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
 	}
-	command := support.StartProcessCommand(t, process, first.Input)
+	command := startRestartProbeCommand(t, process, first.Input)
 	url := restartProbeReadyURL(t, apis[0], command)
 	if port == 0 {
 		admitRestartProbeDAG(t, url, batch)
@@ -50,12 +96,17 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
+	var recordedEvents []factoryapi.FactoryEvent
+	if len(apis) > 3 {
+		recordedEvents = restartProbeRecordedHistory(t, dir)
+		assertRestartProbeEventFacts(t, events, recordedEvents)
+	}
 	second := inputs(t, dir)
 	second.Input.Context = context.WithValue(second.Input.Context, restartProbeServerKey{}, apis[1])
 	if port != 0 {
 		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
 	}
-	reopened := support.StartProcessCommand(t, process, second.Input)
+	reopened := startRestartProbeCommand(t, process, second.Input)
 	url = restartProbeReadyURL(t, apis[1], reopened)
 	for i, arg := range second.Input.Args {
 		if arg == "--resume" {
@@ -74,8 +125,29 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	assertRestartProbeRecoveredWork(t, before, after)
 	recoveredEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeEventFacts(t, events, recoveredEvents)
+	if len(apis) > 3 {
+		assertRestartProbeHistoryPrefix(t, recordedEvents, recoveredEvents)
+	}
 	if runner.calls.Load() != 1 {
 		t.Fatal("restart dispatched terminal A or blocked descendants")
+	}
+	if len(apis) > 3 {
+		// F03 keeps the same durable board and waiting descendants through a
+		// second explicit --record restart before allowing new work to run.
+		restartProbeShutdown(t, url, reopened)
+		third := inputs(t, dir)
+		third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, apis[2])
+		reopened = startRestartProbeCommand(t, process, third.Input)
+		url = restartProbeReadyURL(t, apis[2], reopened)
+		after = restartProbeBoardReads(t, url)
+		assertRestartProbeStates(t, after)
+		assertRestartProbeRecoveredWork(t, before, after)
+		repeatedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		assertRestartProbeEventFacts(t, recoveredEvents, repeatedEvents)
+		assertRestartProbeHistoryPrefix(t, recoveredEvents, repeatedEvents)
+		if runner.calls.Load() != 1 {
+			t.Fatal("second restart dispatched terminal A or blocked descendants")
+		}
 	}
 	request, _ := json.Marshal(factoryapi.MoveWorkRequest{StateName: "init"})
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/restart-B/move"), request)
@@ -92,11 +164,32 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	completedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	restartProbeShutdown(t, url, reopened)
 	if len(apis) > 2 {
-		assertRestartProbeTerminalRestart(t, process, dir, apis[2], runner, inputs, completed, completedEvents)
+		assertRestartProbeTerminalRestart(t, process, dir, apis[len(apis)-1], runner, inputs, completed, completedEvents)
 	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
 	}
+}
+
+func restartProbeRecordedHistory(t *testing.T, dir string) []factoryapi.FactoryEvent {
+	t.Helper()
+	// The emitted recording is the customer recovery artifact. Its startup
+	// header has its own timestamps; compare that retained header in full,
+	// rather than the independently timestamped live startup observation.
+	var recording factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(dir, "current-board.json")), &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording.Events) == 0 {
+		t.Fatal("shutdown emitted no recovery history")
+	}
+	// Use the public representation contract: association model metadata is
+	// recording-only and is deliberately absent from the HTTP event payload.
+	events, err := apisurface.FactoryEventsToAPI(recording.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events
 }
 
 func assertRestartProbeFailedPrerequisite(t *testing.T, url string, runner *restartProbeUnexpectedRunner, recovered []factoryapi.Work) {
@@ -150,7 +243,10 @@ func waitForRestartProbeConfirmed(t *testing.T, url string) {
 	t.Fatal("DAG Work did not reach CONFIRMED before shutdown")
 }
 
-func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *support.ProcessCommand) string {
+func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command interface {
+	Done() <-chan struct{}
+	Err() error
+}) string {
 	t.Helper()
 	ready := make(chan string, 1)
 	go func() {
@@ -161,7 +257,20 @@ func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *
 	}()
 	select {
 	case url := <-ready:
-		return url
+		probe, ok := command.(*restartProbeCommand)
+		if !ok {
+			return url
+		}
+		// A bound listener precedes recording activation and reference publication.
+		// The CLI's endpoint disclosure observes completed startup.
+		select {
+		case <-probe.ready:
+			return url
+		case <-command.Done():
+			t.Fatalf("restart command ended before completed startup: %s", restartProbeFailureCauses(command.Err()))
+		case <-time.After(support.ScaledTimeout(60 * time.Second)):
+			t.Fatal("restart command did not disclose completed startup")
+		}
 	case <-command.Done():
 		var causes []string
 		for err := command.Err(); err != nil; err = errors.Unwrap(err) {
@@ -172,6 +281,21 @@ func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *
 		t.Fatal("restart command did not publish API readiness")
 	}
 	return ""
+}
+
+func restartProbeFailureCauses(err error) string {
+	if err == nil {
+		return ""
+	}
+	result := err.Error()
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, cause := range joined.Unwrap() {
+			result += "; " + restartProbeFailureCauses(cause)
+		}
+	} else if cause := errors.Unwrap(err); cause != nil {
+		result += "; " + restartProbeFailureCauses(cause)
+	}
+	return result
 }
 
 func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.FactoryEvent) {
@@ -213,6 +337,41 @@ func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.Facto
 	}
 	if proved < 2 {
 		t.Fatal("prior dispatch/state facts missing")
+	}
+}
+
+func assertRestartProbeHistoryPrefix(t *testing.T, before, after []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(after) < len(before) {
+		t.Fatalf("restored history has %d events, want retained prefix of %d", len(after), len(before))
+	}
+	// Normalize the public JSON union payloads so object-key ordering cannot
+	// hide a changed event or falsely report a changed canonical fact.
+	values := make([]any, 2)
+	for index, events := range [][]factoryapi.FactoryEvent{before, after[:len(before)]} {
+		payload, err := json.Marshal(events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(payload, &values[index]); err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range values[index].([]any) {
+			context := value.(map[string]any)["context"].(map[string]any)
+			// Legacy startup frames precede session assignment. Public restored
+			// history attaches the selected scope; preserve every recorded field.
+			if _, exists := context["sessionId"]; !exists {
+				context["sessionId"] = "~default"
+			}
+		}
+	}
+	if !reflect.DeepEqual(values[0], values[1]) {
+		oldEvents, newEvents := values[0].([]any), values[1].([]any)
+		for index := range oldEvents {
+			if !reflect.DeepEqual(oldEvents[index], newEvents[index]) {
+				t.Fatalf("explicit --record restart changed public prefix event %d (%s)", index, before[index].Id)
+			}
+		}
 	}
 }
 
@@ -275,7 +434,10 @@ func restartProbePost(t *testing.T, endpoint string, body []byte) {
 	}
 }
 
-func restartProbeShutdown(t *testing.T, url string, command *support.ProcessCommand) {
+func restartProbeShutdown(t *testing.T, url string, command interface {
+	Done() <-chan struct{}
+	Err() error
+}) {
 	t.Helper()
 	restartProbePost(t, url+"/shutdown", []byte(`{}`))
 	select {
@@ -336,7 +498,7 @@ func assertRestartProbeTerminalRestart(t *testing.T, process support.Process, di
 	// Work is terminal. Reuse is the invariant, so this journey is ordered.
 	third := inputs(t, dir)
 	third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, api)
-	repeated := support.StartProcessCommand(t, process, third.Input)
+	repeated := startRestartProbeCommand(t, process, third.Input)
 	url := restartProbeReadyURL(t, api, repeated)
 	for i, work := range restartProbeBoardReads(t, url) {
 		if work.State == nil || work.State.Name != "complete" || !reflect.DeepEqual(work.Content, completed[i].Content) || !reflect.DeepEqual(work.WorkId, completed[i].WorkId) || !reflect.DeepEqual(work.Relations, completed[i].Relations) {

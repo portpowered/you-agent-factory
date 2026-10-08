@@ -24,6 +24,7 @@ func NewService(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
+	caseInsensitive ...bool,
 ) recordinglifecycle.Service {
-	return lifecycleservice.New(targets, writer, tickers, clock)
+	return lifecycleservice.New(targets, writer, tickers, clock, caseInsensitive...)
 }

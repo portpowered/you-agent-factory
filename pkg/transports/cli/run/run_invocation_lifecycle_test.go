@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.T) {
@@ -290,6 +292,86 @@ func TestRunFactoryServiceAndEmitResultLeavesEngineErrorsUnclassified(t *testing
 	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want original engine error", err)
+	}
+}
+
+func TestMapServerFailureRetainsSafePrimaryAndCleanupFileCauses(t *testing.T) {
+	t.Parallel()
+	primary := &fs.PathError{Op: "read recording", Path: "current-board.json", Err: fs.ErrPermission}
+	cleanup := &fs.PathError{Op: "close recording", Path: "successor.json", Err: fs.ErrClosed}
+	startup := &initializer.RuntimeHostStartupError{Cause: errors.Join(
+		fmt.Errorf("restore PRIVATE payload: %w", primary), cleanup, context.Canceled, errors.New("PRIVATE token"))}
+	mapped := MapServerFailure(startup)
+	var stderr bytes.Buffer
+	if !WriteInvocationError(&stderr, mapped, false) {
+		t.Fatal("startup failure did not render an ErrorResponse")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(stderr.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != ServerStartFailedCode || response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unexpected startup code/family: %#v", response)
+	}
+	core, logs := observer.New(zap.ErrorLevel)
+	logRunServiceOutcome(context.Background(), RunConfig{Logger: zap.New(core), WithServer: true}, startup)
+	if logs.Len() != 1 {
+		t.Fatalf("failure log count = %d", logs.Len())
+	}
+	loggedCause, _ := logs.All()[0].ContextMap()["cause"].(string)
+	for _, diagnostic := range []string{response.Message, loggedCause} {
+		for _, want := range []string{`read recording "current-board.json": permission denied`,
+			`close recording "successor.json": file already closed`} {
+			if !strings.Contains(diagnostic, want) {
+				t.Fatalf("diagnostic %q omits %q", diagnostic, want)
+			}
+		}
+		if strings.Contains(diagnostic, "PRIVATE") {
+			t.Fatalf("diagnostic leaks payload: %q", diagnostic)
+		}
+	}
+	if !errors.Is(mapped, primary) || !errors.Is(mapped, cleanup) || !errors.Is(mapped, context.Canceled) {
+		t.Fatal("startup mapping lost original cause identities")
+	}
+}
+
+func TestRunServiceOutcomeKeepsStartupFailureAlongsideCleanupCancellation(t *testing.T) {
+	t.Parallel()
+	primary := &fs.PathError{Op: "read recording", Path: "saved-board.json", Err: fs.ErrPermission}
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantFailure bool
+	}{
+		{"startup and cancellation", &initializer.RuntimeHostStartupError{Cause: errors.Join(primary, context.Canceled)}, true},
+		{"cancelled", context.Canceled, false},
+		{"wrapped cancellation", fmt.Errorf("stopped: %w", context.Canceled), false},
+		{"joined cancellations", errors.Join(context.Canceled, fmt.Errorf("cleanup: %w", context.Canceled)), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			core, logs := observer.New(zap.InfoLevel)
+			logRunServiceOutcome(ctx, RunConfig{Logger: zap.New(core), WithServer: true, ResumePath: "saved-board.json"}, tc.err)
+			if !tc.wantFailure {
+				if logs.Len() != 1 || logs.All()[0].ContextMap()["outcome"] != runServiceOutcomeCancelled {
+					t.Fatalf("ordinary cancellation logs = %#v", logs.All())
+				}
+				return
+			}
+			failure := logs.FilterMessage("run service failed").All()
+			recovery := logs.FilterMessage("run recovery outcome").All()
+			if len(failure) != 1 || len(recovery) != 1 {
+				t.Fatalf("startup/recovery failure logs = %#v", logs.All())
+			}
+			fields := failure[0].ContextMap()
+			if fields["outcome"] != runServiceOutcomeFailure || fields["failure_class"] != runServiceFailureStartup ||
+				!strings.Contains(fmt.Sprint(fields["cause"]), `read recording "saved-board.json": permission denied`) ||
+				recovery[0].ContextMap()["outcome"] != runRecoveryOutcomeFailed {
+				t.Fatalf("startup cause or recovery failure missing: %#v", logs.All())
+			}
+		})
 	}
 }
 

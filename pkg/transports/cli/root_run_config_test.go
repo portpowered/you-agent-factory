@@ -318,7 +318,7 @@ func TestRunCommand_ResumeConflictsBeforeRunService(t *testing.T) {
 	root.SetArgs([]string{"run", "--resume", "source.recording.json", "--replay", "history.replay.json"})
 
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+		_, err := recordingscli.New(nil).ResolveRecordPath(recordingscli.InvocationRequest{
 			RecordPath:              cfg.RecordPath,
 			ReplayPath:              cfg.ReplayPath,
 			ResumePath:              cfg.ResumePath,

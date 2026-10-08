@@ -22,6 +22,61 @@ import (
 	"go.uber.org/zap"
 )
 
+type recordingLeaseCloser func() error
+
+func (close recordingLeaseCloser) Close() error { return close() }
+
+func TestRuntimeOpeningCleanupReleasesLeaseAfterTerminalPublicationFailure(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	cause := errors.New("terminal publication failed")
+	var closes, releases int
+	cleanup.OwnRecordingTarget(recordingLeaseCloser(func() error { releases++; return nil }))
+	cleanup.Add(func() error {
+		closes++
+		return &recordings.RecordingCleanupError{Cause: cause, Complete: true}
+	})
+	err := cleanup.Close()
+	var terminal *recordings.RecordingCleanupError
+	if !errors.Is(err, cause) || !errors.As(err, &terminal) || !terminal.Complete || releases != 1 {
+		t.Fatalf("terminal cleanup = %v; releases=%d", err, releases)
+	}
+	if err := cleanup.Close(); err != nil || closes != 1 || releases != 1 {
+		t.Fatalf("completed cleanup retried: err=%v closes=%d releases=%d", err, closes, releases)
+	}
+}
+
+func TestRuntimeOpeningCleanupRetainsRecordingLeaseUntilConsumerJoins(t *testing.T) {
+	t.Parallel()
+	cleanup := &runtimeOpeningCleanup{}
+	consumerErr := errors.New("writer has not joined")
+	joined := false
+	releases := 0
+	cleanup.OwnRecordingTarget(recordingLeaseCloser(func() error {
+		releases++
+		if !joined {
+			t.Error("recording ownership released before writer joined")
+		}
+		return nil
+	}))
+	cleanup.Add(func() error {
+		if !joined {
+			return consumerErr
+		}
+		return nil
+	})
+	if err := cleanup.Close(); !errors.Is(err, consumerErr) || releases != 0 {
+		t.Fatalf("failed join: err=%v releases=%d", err, releases)
+	}
+	joined = true
+	if err := cleanup.Close(); err != nil || releases != 1 {
+		t.Fatalf("successful retry: err=%v releases=%d", err, releases)
+	}
+	if err := cleanup.Close(); err != nil || releases != 1 {
+		t.Fatalf("repeat close: err=%v releases=%d", err, releases)
+	}
+}
+
 func TestProjectOperatorModelOverlaysDetachesSourceSettings(t *testing.T) {
 	if got := projectOperatorModelOverlays(nil); got != nil {
 		t.Fatalf("empty model overlays = %+v", got)
@@ -276,16 +331,17 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
 			panic("live opening must consume the selected clock directly")
 		},
-		factoryScaffoldInitializer: func(string) error { return nil },
-		editableFactoryValidator: func(context.Context, *factorydefinitions.FactorySnapshot, factorydefinitions.WorkstationLoader) error {
-			return nil
-		},
-		factoryDefinitionValidator: validatorConstructionStub{},
-		runtimeInputLoading: NewRuntimeInputLoading(
+		preparation: NewRuntimePreparation(NewRuntimeInputLoading(
 			func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, nil
 			},
-			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()),
+			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()).Load,
+			nil, nil, func() (string, error) { return "/controlled-home", nil }, nil,
+			func(identity string) (string, error) { return identity, nil }, validatorConstructionStub{},
+			func(*factorydefinitions.ReplayArtifact) recordings.Clock {
+				panic("live opening must not request a replay clock")
+			},
+			func(factoryruntime.Clock) factoryruntime.Clock { panic("unexpected fallback clock") }),
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
 		durableOpening: opening,

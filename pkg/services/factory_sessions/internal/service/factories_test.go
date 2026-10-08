@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -64,8 +67,6 @@ type runtimeOpeningFixture struct {
 	CaptureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer
 	Assembly                     roles.RuntimeAssembly
 	DurableOpening               *DurableOpening
-	FactoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator     factorysessions.EditableFactoryValidator
 	ProcessRuntimeFactory        roles.ProcessRuntimeFactory
 	GenerateSessionID            factorysessions.SessionIDGenerator
 	GenerateRuntimeInstanceID    factorysessions.RuntimeInstanceIDGenerator
@@ -88,6 +89,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 	return NewRoot(
 		fixture.ProviderSessions,
 		fixture.Logger,
+		nil,
 		fixture.FactoryWorkflows,
 		fixture.WorkflowPreview,
 		fixture.RuntimeRoot,
@@ -96,21 +98,16 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.ProviderOverride,
 		fixture.SubmissionRecorder,
 		fixture.DispatchRecorder,
-		fixture.Validator,
-		fixture.NamedPaths,
 		fixture.Definitions,
 		fixture.RuntimeRouter,
-		NewRuntimeInputLoading(fixture.LoadFactory, fixture.NewLoadedFactory, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, fixture.CaptureLoadedFactorySnapshot, fixture.NewSessionLogger, fixture.Logger),
 		fixture.snapshotSelection(),
+		fixture.preparation(),
 		fixture.Assembly,
 		fixture.DurableOpening,
-		fixture.FactoryScaffoldInitializer,
-		fixture.EditableFactoryValidator,
 		fixture.ProcessRuntimeFactory,
 		fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,
-		fixture.ProviderIdentities,
 		fixture.WorkService,
 		fixture.AutomationService,
 		fixture.WebhooksService,
@@ -120,7 +117,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.WorkerService,
 		fixture.ProviderCommandRunner,
 		fixture.ScriptCommandRunner,
-		fixture.EnsureBackendScope,
 		fixture.InitialActivation,
 		nil,
 		recordingreplay.NewBehavior(),
@@ -221,8 +217,6 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		CaptureLoadedFactorySnapshot: inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		Assembly:                     factorySessionsRoot,
 		DurableOpening:               durableOpeningFixture(nil, inertRuntimeOpeningFunction[durableexecution.ScopeAcquisition](calls)),
-		FactoryScaffoldInitializer:   inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
-		EditableFactoryValidator:     inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
 		ProcessRuntimeFactory:        processRuntimeFactoryConstructionStub{},
 		GenerateSessionID:            inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
 		GenerateRuntimeInstanceID:    inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
@@ -362,4 +356,261 @@ func (fixture runtimeOpeningFixture) snapshotSelection() *RuntimeSnapshotSelecti
 		paths = fixture.NamedPaths.ResolveCurrentDir
 	}
 	return NewRuntimeSnapshotSelection(resolve, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, paths, fixture.ResolveHome)
+}
+
+func (fixture runtimeOpeningFixture) preparation() *RuntimePreparation {
+	var resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
+	if fixture.NamedPaths != nil {
+		resolveCurrentDir = fixture.NamedPaths.ResolveCurrentDir
+	}
+	var replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock
+	if fixture.RecordingsRuntime != nil {
+		replayClock = fixture.RecordingsRuntime.ReplayClock
+	}
+	loading := NewRuntimeInputLoading(fixture.LoadFactory, fixture.NewLoadedFactory, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, fixture.CaptureLoadedFactorySnapshot, fixture.NewSessionLogger, fixture.Logger)
+	return NewRuntimePreparation(loading.Load, resolveCurrentDir, fixture.GenerateRuntimeInstanceID,
+		fixture.ResolveHome, fixture.EnsureBackendScope, fixture.ProviderIdentities, fixture.Validator,
+		replayClock, fixture.ResolveClock)
+}
+
+// Preparation tests control every independently owned collaborator. No real
+// definition loader, validator, recording, filesystem or application participates.
+type preparationSource struct {
+	factorydefinitions.MutableLoadedFactorySource
+	config *factorydefinitions.FactoryConfig
+}
+
+func (source preparationSource) FactoryConfig() *factorydefinitions.FactoryConfig {
+	return source.config
+}
+func (source preparationSource) MutateWorkers(mutate func(*factorydefinitions.FactoryWorkerConfig) error) error {
+	for i := range source.config.Workers {
+		if err := mutate(&source.config.Workers[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type preparationValidator struct {
+	factorydefinitions.Validator
+	validate func(*factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult
+}
+
+func (validator preparationValidator) ValidateBlockingLoad(_ context.Context, config *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+	return validator.validate(config)
+}
+
+func TestRuntimePreparationRetainsSelectedFactsAndOrder(t *testing.T) {
+	t.Parallel()
+	var order []string
+	var inputs []RuntimeInputLoadRequest
+	logger := zap.NewNop()
+	selectedClock := clockwork.NewFakeClock()
+	preparation := NewRuntimePreparation(func(request RuntimeInputLoadRequest) (RuntimeLoad, error) {
+		order = append(order, "load")
+		inputs = append(inputs, request)
+		return RuntimeLoad{LoadedFactoryCfg: preparationSource{config: &factorydefinitions.FactoryConfig{
+			Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "selected", Type: "MODEL_WORKER", ModelProvider: "alias"}},
+		}}}, nil
+	}, func(string) (string, error) { t.Fatal("explicit source consulted Current Factory"); return "", nil },
+		func() string { t.Fatal("explicit runtime identity was replaced"); return "" },
+		func() (string, error) { t.Fatal("absolute selection consulted home"); return "", nil },
+		func(path string) (operatorsettings.ResolvedBackendScope, error) {
+			order = append(order, "scope")
+			return operatorsettings.ResolvedBackendScope{BackendScopeID: path}, nil
+		}, func(string) (string, error) { order = append(order, "provider"); return "codex", nil },
+		preparationValidator{validate: func(config *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+			order = append(order, "validate")
+			if config.Workers[0].ModelProvider != "codex" {
+				t.Fatal("definition validated before concrete provider resolution")
+			}
+			return factorydefinitions.ValidationResult{}
+		}}, func(*factorydefinitions.ReplayArtifact) recordings.Clock {
+			t.Fatal("live selection consulted replay clock")
+			return nil
+		},
+		func(factoryruntime.Clock) factoryruntime.Clock {
+			t.Fatal("live selection consulted fallback clock")
+			return nil
+		})
+	for _, id := range []string{"first", "peer"} {
+		order = nil
+		definition := factorydefinitions.RuntimeSelection{Directory: preparationPath(id, "root"), SourcePath: preparationPath(id, "source"), ExecutionBaseDir: preparationPath(id, "base")}
+		snapshot := &factorydefinitions.RuntimeSnapshot{FactoryDir: definition.SourcePath}
+		replay := &recordings.LoadReplayInputResult{}
+		session := factorysessions.SessionStartRequest{SessionID: id, RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigPath: id}}
+		worker := workers.RuntimeSelection{WorkerReasoningEffort: id}
+		defaults := operatorsettings.ResolvedDefaults{WorkerModel: id}
+		prepared, root, load, clock, gotLogger, err := preparation.Prepare(context.Background(), definition,
+			factoryruntime.RuntimeSelection{RuntimeInstanceID: id}, session, false, worker, recordings.RuntimeSelection{}, id, defaults, logger, selectedClock, snapshot, replay)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		wantPrepared := preparedRuntime{Definition: definition, Runtime: factoryruntime.RuntimeSelection{RuntimeInstanceID: id},
+			Session: session, Workers: worker, Recordings: recordings.RuntimeSelection{}, ModelCacheDirectory: id,
+			OperatorDefaults: defaults, DefinitionSnapshot: snapshot}
+		wantRoot := RuntimeRoot{FactoryRootDir: filepath.Clean(definition.Directory), RuntimeInstanceID: id, BaseLogger: logger}
+		if !reflect.DeepEqual(prepared, wantPrepared) || root != wantRoot || clock != selectedClock || gotLogger != logger || load.LoadedFactoryCfg == nil {
+			t.Fatalf("selected facts/effects changed: %#v %#v", prepared, root)
+		}
+		wantInput := RuntimeInputLoadRequest{Dir: filepath.Clean(definition.SourcePath), ExecutionBaseDir: definition.ExecutionBaseDir,
+			FactoryRootDir: definition.Directory, SessionID: id, OperatorDefaults: defaults,
+			ResolvedSnapshot: snapshot, PreloadedReplayInput: replay, HistoricalInspection: true}
+		input := inputs[len(inputs)-1]
+		if !reflect.DeepEqual(input, wantInput) || snapshot.FactoryDir != definition.SourcePath {
+			t.Fatalf("selected loader input changed: %#v", input)
+		}
+
+		if !reflect.DeepEqual(order, []string{"load", "scope", "provider", "provider", "validate"}) {
+			t.Fatalf("preparation order = %v", order)
+		}
+	}
+	if inputs[0].ResolvedSnapshot.FactoryDir == inputs[1].ResolvedSnapshot.FactoryDir || inputs[0].SessionID != "first" {
+		t.Fatal("peer preparation replaced selected facts")
+	}
+}
+
+func TestRuntimePreparationFailureRetainsCauseAndZeroResults(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"path", "load", "scope", "provider", "validation"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("controlled preparation failure")
+			preparation := NewRuntimePreparation(func(RuntimeInputLoadRequest) (RuntimeLoad, error) {
+				if stage == "load" {
+					return RuntimeLoad{SessionLogger: zap.NewNop()}, cause
+				}
+				return RuntimeLoad{LoadedFactoryCfg: preparationSource{config: &factorydefinitions.FactoryConfig{
+					Workers: []factorydefinitions.FactoryWorkerConfig{{Type: "MODEL_WORKER", ModelProvider: "alias"}},
+				}}}, nil
+			}, func(dir string) (string, error) {
+				if stage == "path" {
+					return "", cause
+				}
+				return dir, nil
+			},
+				func() string { return "selected-runtime" }, func() (string, error) { return preparationPath("home"), nil },
+				func(string) (operatorsettings.ResolvedBackendScope, error) {
+					if stage == "scope" {
+						return operatorsettings.ResolvedBackendScope{}, cause
+					}
+					return operatorsettings.ResolvedBackendScope{BackendScopeID: "selected"}, nil
+				},
+				func(string) (string, error) {
+					if stage == "provider" {
+						return "", cause
+					}
+					return "codex", nil
+				},
+				preparationValidator{validate: func(*factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+					if stage == "validation" {
+						return factorydefinitions.ValidationResult{Targets: []factorydefinitions.ValidationTarget{{Code: "factory.invalid", Severity: factorydefinitions.ValidationSeverityError}}}
+					}
+					t.Fatal("failure reached definition validation")
+					return factorydefinitions.ValidationResult{}
+				}}, nil, nil)
+			session := factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{SystemConfigPath: "selected"}}
+			prepared, root, load, clock, logger, err := preparation.Prepare(context.Background(), factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
+				factoryruntime.RuntimeSelection{}, session, false, workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), clockwork.NewFakeClock(), nil, nil)
+			if stage == "validation" {
+				var blocking *factorydefinitions.BlockingFactoryLoadError
+				if !errors.As(err, &blocking) {
+					t.Fatalf("validation lost typed failure: %v", err)
+				}
+			} else if !errors.Is(err, cause) {
+				t.Fatalf("%s lost cause: %v", stage, err)
+			}
+			if !reflect.DeepEqual(prepared, preparedRuntime{}) || root != (RuntimeRoot{}) || !reflect.DeepEqual(load, RuntimeLoad{}) || clock != nil || logger != nil {
+				t.Fatal("failed preparation exposed partially successful facts")
+			}
+		})
+	}
+}
+
+func TestRuntimePreparationHistoricalInspectionSkipsLiveEffects(t *testing.T) {
+	t.Parallel()
+	logger := zap.NewNop()
+	historical := &recordingreplay.RecordingReplayProjection{}
+	preparation := NewRuntimePreparation(func(request RuntimeInputLoadRequest) (RuntimeLoad, error) {
+		if request.Dir != preparationPath("root") || !request.HistoricalInspection {
+			t.Fatalf("historical request = %#v", request)
+		}
+		return RuntimeLoad{HistoricalReplay: historical, SessionLogger: logger}, nil
+	}, func(string) (string, error) { t.Fatal("replay consulted Current Factory"); return "", nil }, nil, func() (string, error) { return preparationPath("home"), nil },
+		func(string) (operatorsettings.ResolvedBackendScope, error) {
+			t.Fatal("historical inspection resolved live backend scope")
+			return operatorsettings.ResolvedBackendScope{}, nil
+		},
+		func(string) (string, error) { t.Fatal("historical inspection resolved live provider"); return "", nil },
+		preparationValidator{validate: func(*factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+			t.Fatal("historical inspection validated live definition")
+			return factorydefinitions.ValidationResult{}
+		}},
+		func(*factorydefinitions.ReplayArtifact) recordings.Clock {
+			t.Fatal("historical inspection selected live clock")
+			return nil
+		}, nil)
+	_, _, load, clock, gotLogger, err := preparation.Prepare(context.Background(), factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
+		factoryruntime.RuntimeSelection{RuntimeInstanceID: "historical"}, factorysessions.SessionStartRequest{}, false, workers.RuntimeSelection{}, recordings.RuntimeSelection{ReplayPath: "selected.json"}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil, nil)
+	if err != nil || load.HistoricalReplay != historical || clock != nil || gotLogger != logger {
+		t.Fatalf("historical effects = %#v %v %v", load, clock, err)
+	}
+}
+
+func preparationPath(parts ...string) string {
+	root := string(filepath.Separator)
+	if filepath.Separator == '\\' {
+		root = "C:\\"
+	}
+	return filepath.Join(append([]string{root}, parts...)...)
+}
+
+func TestRuntimePreparationFailureDoesNotAllocateCanonicalMetricsIdentity(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("controlled input loading failure")
+	identityRequests := 0
+	preparation := NewRuntimePreparation(func(RuntimeInputLoadRequest) (RuntimeLoad, error) { return RuntimeLoad{}, cause },
+		func(dir string) (string, error) { return dir, nil }, nil, func() (string, error) { return preparationPath("home"), nil },
+		nil, nil, nil, nil, nil)
+	root := &Root{preparation: preparation, recordingsService: &recordingsRootConstructionStub{}, recordingsRuntime: &recordingsRootConstructionStub{},
+		generateRuntimeInstanceID: func() string { identityRequests++; return "metrics-identity" }}
+	session := &factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{}}
+	opening, err := root.prepareRuntimeOpening(context.Background(), factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
+		factoryruntime.RuntimeSelection{RuntimeInstanceID: "already-selected"}, session, false, workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil)
+	if !errors.Is(err, cause) || opening != nil || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
+		t.Fatalf("failed definition preparation allocated metrics identity: opening=%#v error=%v allocations=%d", opening, err, identityRequests)
+	}
+}
+
+func TestRuntimePreparationRejectsInvalidSelectionsBeforeLoading(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"home", "empty runtime identity", "conflicting recording"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("controlled home failure")
+			definition := factorydefinitions.RuntimeSelection{Directory: preparationPath("root")}
+			recording := recordings.RuntimeSelection{}
+			if stage == "home" {
+				definition.Directory = "~/root"
+			}
+			if stage == "conflicting recording" {
+				recording.RecordPath, recording.ReplayPath = "selected.json", "selected.json"
+			}
+			preparation := NewRuntimePreparation(func(RuntimeInputLoadRequest) (RuntimeLoad, error) {
+				t.Fatal("invalid selection reached loader")
+				return RuntimeLoad{}, nil
+			},
+				nil, func() string { return "" }, func() (string, error) { return "", cause }, nil, nil, nil, nil, nil)
+			_, _, _, _, _, err := preparation.Prepare(context.Background(), definition, factoryruntime.RuntimeSelection{},
+				factorysessions.SessionStartRequest{}, false, workers.RuntimeSelection{}, recording, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil, nil)
+			if err == nil {
+				t.Fatal("invalid selection succeeded")
+			}
+			if stage == "home" && !errors.Is(err, cause) {
+				t.Fatalf("home failure lost cause: %v", err)
+			}
+		})
+	}
 }

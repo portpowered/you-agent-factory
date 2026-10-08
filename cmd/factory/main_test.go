@@ -87,6 +87,13 @@ var processExitCodeTests = []struct {
 	{name: "success", want: exitSuccess},
 	{name: "failure", err: errors.New("failed"), want: exitFailure},
 	{
+		name:       "startup failure joined with cleanup cancellation",
+		err:        errors.Join(errors.New("recording restore failed"), context.Canceled),
+		contextErr: context.Canceled,
+		args:       []string{"you", "run", "--continuously", "--with-server"},
+		want:       exitFailure,
+	},
+	{
 		name: "incomplete finite drain",
 		err:  &factoryruntime.IncompleteDrainError{NonTerminalWorkCount: 1},
 		want: exitFailure,

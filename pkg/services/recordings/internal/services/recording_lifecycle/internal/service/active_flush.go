@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ func (service *Service) startPeriodic(
 	}
 	service.mu.Lock()
 	session, err := service.sessionLocked(id)
-	if err != nil || session.periodicDone != nil {
+	if err != nil || session.periodicDone != nil || session.stopped || session.finalizing || session.terminal {
 		service.mu.Unlock()
 		return
 	}
@@ -91,6 +92,19 @@ func (service *Service) flush(
 	defer session.flushMu.Unlock()
 
 	service.mu.Lock()
+	// A successor can own this target after finalization. Never let an old
+	// identity retry a failed final write over that successor's history.
+	if session.terminal {
+		err := session.finalizeErr
+		// Finalization retains producer diagnostics. A later orderly flush is
+		// inert, and ordinary producer cancellation alone is not a write failure.
+		// Keep the complete original chain whenever another failure is present.
+		if onlyProducerCancellation(session) {
+			err = nil
+		}
+		service.mu.Unlock()
+		return err
+	}
 	if session.flushedVersion == session.version {
 		service.mu.Unlock()
 		return nil
@@ -133,6 +147,41 @@ func (service *Service) flush(
 	}
 	service.mu.Unlock()
 	return nil
+}
+
+func onlyProducerCancellation(session *recordingSession) bool {
+	if !onlyCancellation(session.finalizeErr) {
+		return false
+	}
+	for _, failure := range session.failures {
+		if failure.Code != "producer_boundary_failed" {
+			return false
+		}
+	}
+	return true
+}
+
+func onlyCancellation(err error) bool {
+	if err == context.Canceled { //nolint:errorlint // Only the exact cancellation leaf is benign; errors.Is can also match mixed failures.
+		return true
+	}
+	switch wrapped := err.(type) { //nolint:errorlint // Walk each direct child; errors.As would skip wrappers and joined siblings.
+	case interface{ Unwrap() []error }:
+		causes := wrapped.Unwrap()
+		if len(causes) == 0 {
+			return false
+		}
+		for _, cause := range causes {
+			if !onlyCancellation(cause) {
+				return false
+			}
+		}
+		return true
+	case interface{ Unwrap() error }:
+		return onlyCancellation(wrapped.Unwrap())
+	default:
+		return false
+	}
 }
 
 func (service *Service) advanceDurableThroughLocked(

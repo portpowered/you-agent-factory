@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -479,7 +480,7 @@ func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) erro
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, context.Canceled) {
+	if lifecycle.CancellationOnly(err) {
 		return executeCommandFailure(diagnostics, err)
 	}
 	if diagnostics != nil && diagnostics.DiagnosticRendered() {
@@ -496,7 +497,7 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 	// Cancellation is a process-control sentinel, not a command failure. Keep
 	// its identity independent of whether a command already rendered a
 	// diagnostic before returning it.
-	if errors.Is(err, context.Canceled) {
+	if lifecycle.CancellationOnly(err) {
 		if !clidiag.DiagnosticRendered(diagnostics) {
 			_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
 			clidiag.MarkDiagnosticRendered(diagnostics)

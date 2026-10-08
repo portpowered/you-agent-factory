@@ -5,16 +5,61 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { validateQueueDispatch } from "./queue-dispatch.mjs";
+import { REQUIRED_ARTIFACTS } from "./merge-queue-evidence.mjs";
 
 import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
 	validateCIJobGrowth,
+	validateBackendConformanceWorkflowContract,
 	validateCIJobGrowthFromHistory,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
 	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("queue dispatch rejects omissions of every main-required artifact producer", () => {
+	const workflow = readFileSync(".github/workflows/ci.yml", "utf8").replaceAll("\r\n", "\n");
+	assert.equal(validateQueueDispatch(workflow).status, "pass");
+	const owners = {
+		"unit-coverage-diagnostics": ["backend-coverage", "Run backend coverage", "make test-unit-coverage", "unit"],
+		"functional-test-diagnostics": ["backend-coverage", "Run Linux functional coverage with concurrent quarantine verification", "run: bash scripts/ci/run-functional-coverage-with-quarantine.sh", "functional"],
+		"backend-deadcode-evidence": ["backend-lint", "Run complete canonical Backend Lint inventory", 'make LINT_REPORT_FILE="$LINT_REPORT_FILE" lint'],
+	};
+	for (const artifact of REQUIRED_ARTIFACTS) {
+		const [owner, producingName, command, suite] = owners[artifact];
+		const jobPattern = new RegExp(`\\n  ${owner}:\\n[\\s\\S]*?(?=\\n  [a-z0-9_-]+:\\n|$)`);
+		const job = workflow.match(jobPattern)[0];
+		const steps = job.split(/\n      - /).slice(1);
+		const upload = steps.find((step) => step.includes(`          name: ${artifact}\n`));
+		const producing = steps.find((step) => step.startsWith(`name: ${producingName}\n`));
+		const mutations = [
+			"",
+			job.replace(upload, "name: Removed upload\n"),
+			job.replace(producing, "name: Removed producer\n"),
+			job.replace(command, "run: true"),
+			job.replace(/^    if: .+$/m, "    if: github.event_name == 'pull_request'"),
+			job.replace(upload, upload.replace(/^        if: .+$/m, "        if: github.event_name == 'pull_request'")),
+			job.replace(producing, producing.replace(/^        if: .+$/m, "        if: github.event_name == 'pull_request'")),
+			job.replace(upload, upload.replace("uses: actions/upload-artifact@v4", "uses: actions/download-artifact@v4")),
+			job.replace(upload, upload.replace("coverage.out", "absent.out").replace("bin/deadcode-current.txt", "bin/absent.txt")),
+		];
+		if (suite) mutations.push(job.replace(`{\"suite\":\"${suite}\",\"label\":\"${suite === "unit" ? "Unit" : "Functional"}\"}`, "{}"));
+		for (const mutation of mutations) {
+			// Limit requirements to this artifact so a shared-job failure names
+			// the exact consumer requirement under mutation.
+			assert.throws(() => validateQueueDispatch(workflow.replace(jobPattern, () => mutation), { requiredArtifacts: [artifact] }),
+				(error) => error.message.includes(artifact));
+		}
+	}
+	for (const artifact of REQUIRED_ARTIFACTS.filter((name) => name !== "backend-deadcode-evidence")) {
+		assert.throws(() => validateQueueDispatch(workflow.replace("run_backend: \${{ steps.classify.outputs.run_backend != 'false' }}", 'run_backend: "false"'), { requiredArtifacts: [artifact] }),
+			(error) => error.message.includes(artifact));
+	}
+	assert.throws(() => validateQueueDispatch(workflow, { requiredArtifacts: [...REQUIRED_ARTIFACTS, "new-main-requirement"] }), /new-main-requirement.*no mapped producer/);
+	assert.throws(() => validateQueueDispatch(workflow, { selectInputs: () => ({ deadcode: 0 }) }), /backend-deadcode-evidence.*selector omits/);
+});
 
 test("CI job guard accepts legacy jobs, deletion and formatting, but rejects added IDs", () => {
 	const baselineWorkflow = "name: CI\njobs:\n  unit:\n    steps:\n      - run: go test -race ./pkg/example\n  legacy:\n    steps: []\n";
@@ -51,6 +96,8 @@ test("real workflow lint CLI compares isolated Git history and reports added job
 	// Include the checker's transitive lint dependencies in the isolated CLI fixture.
 	for (const file of [
 		"scripts/ci/workflow-lint.mjs",
+		"scripts/ci/queue-dispatch.mjs",
+		"scripts/ci/merge-queue-evidence.mjs",
 		"scripts/ci/verification-plans.mjs",
 		"scripts/ci/backend-lint-workflow.mjs",
 		"scripts/ci/backend-lint-report.mjs",
@@ -100,7 +147,7 @@ jobs:
     steps:
       - run: go install example/actionlint@v1.7.12
       - run: bash scripts/ci/run-workflow-verification.sh
-      - if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+      - if: success() || failure()
         run: make docs-reference-smoke
   api-pr-verification:
     if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'
@@ -111,6 +158,9 @@ jobs:
       run_api_package: \${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}
   verification-policy:
     env:
+      RUN_BACKEND_COVERAGE: "true"
+      BACKEND_COVERAGE_RESULT: \${{ needs.backend-coverage.result }}
+      BACKEND_RESULT: \${{ needs.backend-integration.result }}
       DOCS_RESULT: \${{ needs.classify.outputs.docs_result }}
       WORKFLOW_LINT_RESULT: \${{ needs.classify.result }}
       API_RESULT: \${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result }}
@@ -122,6 +172,9 @@ jobs:
 		[workflow.replace("actionlint@v1.7.12", "actionlint@latest"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
 		[workflow.replace("run: make docs-reference-smoke", "run: true"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
 		[workflow.replace("run: bash scripts/ci/run-api-pr-verification.sh", "run: true"), "workflow contract failed: retain API proofs"],
+		[workflow.replace('RUN_BACKEND_COVERAGE: "true"', 'RUN_BACKEND_COVERAGE: "false"'), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
+		[workflow.replace("BACKEND_COVERAGE_RESULT:", "OTHER_COVERAGE:"), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
+		[workflow.replace("BACKEND_RESULT:", "OTHER_BACKEND:"), "workflow contract failed: mandatory Backend Coverage and selected Integration retain independent proof"],
 		[workflow.replace("DOCS_RESULT:", "OTHER_RESULT:"), "workflow contract failed: map merged required proof"],
 		[workflow.replace("API_INDEPENDENT:", "OTHER_FLAG:"), "workflow contract failed: API-only PR does not require reusable children"],
 	]) {
@@ -136,7 +189,7 @@ env:
 jobs:
   frontend:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     env:
       UI_COVERAGE_MAIN_MAX_WORKERS: "4"
     steps:
@@ -162,7 +215,7 @@ jobs:
           FRONTEND_SUITE: component
   frontend-browser:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     steps:
       - uses: oven-sh/setup-bun@v2
         with:
@@ -348,4 +401,45 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 		"WORKFLOW_LINT_STATIC_CONTRACTS_OK",
 		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
 	]);
+});
+
+const conformanceContract = {
+	workflow: "jobs:\n  backend-lint:\n    steps:\n      - run: make lint\n",
+	makefile: "LINT_TARGETS_BASE := golangci test-backend-conformance\ntest-backend-conformance:\n\t$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance -count=1\n\ntest-backend-conformance-live:\n\t$(GO) test -tags=functionallong ./pkg/services/models/internal/backendconformance\n",
+	publishedWorkflow: `on:
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # github.event.repository.default_branch
+    steps:
+      - run: node scripts/ci/published-backend-conformance-workflow.mjs
+      - run: make test-backend-conformance-live
+`,
+};
+
+test("conformance checker accepts one canonical offline target and monthly live owner", () => {
+	assert.equal(validateBackendConformanceWorkflowContract(conformanceContract).status, "pass");
+});
+
+test("conformance checker rejects retired outputs and policy or job references", () => {
+	for (const reference of ["backend-conformance:", "needs.backend-conformance.result", "needs: [classify, backend-conformance, backend-lint]", "run_backend_conformance", "backend_conformance_reason", "backend_conformance_command", "BACKEND_CONFORMANCE_RESULT", "RUN_BACKEND_CONFORMANCE"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + reference }), /retired Backend Conformance/);
+	}
+});
+
+test("conformance checker rejects missing offline validation and PR or duplicate live execution", () => {
+	for (const makefile of [conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci"), conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci test-backend-conformance test-backend-conformance")]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile }), /exactly once/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-tags=backendconformance", "-tags=functionallong") }), /offline decoder/);
+	for (const command of ["make test-backend-conformance-live", "go test -run TestPublishedBackendArtifactLocations"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + command }), /monthly\/manual/);
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, otherWorkflows: [command] }), /monthly\/manual/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, publishedWorkflow: conformanceContract.publishedWorkflow.replace("  workflow_dispatch:", "  pull_request:") }), /monthly\/manual/);
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-count=1", "-count=1\n\t$(MAKE) test-backend-conformance-live") }), /must not invoke live/);
 });

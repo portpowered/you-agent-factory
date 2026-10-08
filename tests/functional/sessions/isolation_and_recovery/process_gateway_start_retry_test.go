@@ -21,7 +21,6 @@ import (
 // session inventory and controls rather than private runtime state.
 func TestProcessGatewayStartFailureLeavesNoLiveSessionAndRetrySucceeds(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	failure := errors.New("injected gateway transport startup failure")
 	router := &reusableRootAPIServerStarter{}
 	listenerContexts := make(chan context.Context, 2)

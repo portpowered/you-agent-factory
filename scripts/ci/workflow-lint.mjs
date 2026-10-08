@@ -4,6 +4,7 @@ import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKEND_LINT_FALLBACK_JOBS } from "./backend-lint-workflow.mjs";
 import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
+import { validateQueueDispatch } from "./queue-dispatch.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
@@ -204,7 +205,7 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
 	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
 		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
-		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
 		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
 		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
 		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");
@@ -225,8 +226,13 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	const api = workflowJobSection(workflow, "api-pr-verification");
 	const packages = workflowJobSection(workflow, "development-package");
 	const policy = workflowJobSection(workflow, "verification-policy");
+	for (const text of ['RUN_BACKEND_COVERAGE: "true"',
+		"BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}",
+		"BACKEND_RESULT: ${{ needs.backend-integration.result }}"]) {
+		requireWorkflowText(policy, text, "mandatory Backend Coverage and selected Integration retain independent proof");
+	}
 	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
-		"docs_result: ${{ steps.docs-reference.outcome }}", "if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'", "run: make docs-reference-smoke"]) {
+		"docs_result: ${{ steps.docs-reference.outcome }}", "if: success() || failure()", "run: make docs-reference-smoke"]) {
 		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
 	}
 	requireWorkflowText(packages, "run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}", "retain non-PR API selection");
@@ -247,71 +253,6 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	if (JSON.stringify(apiTargets) !== JSON.stringify(["ui-deps", "contracts-smoke", "api-smoke", "api-package-verify"])) throw new Error("workflow contract must retain API proof commands");
 	if (!workflowPlan().some((step) => step.args.includes("scripts/ci/functional-compile-cache.test.py"))) throw new Error("workflow contract must retain compiler-cache proof");
 	return { name: "consolidated-ci-workflow", status: "pass" };
-}
-
-/**
- * Enforce the TTS integration wiring as a static workflow contract.
- *
- * This is intentionally part of the executable Workflow Lint gate. The
- * contract protects CI composition (helper handoff, platform execution, and
- * verification-policy aggregation), not product runtime behavior.
- */
-export function validateTtsCleanInstallWorkflowContract({ workflow, makefile } = {}) {
-	if (typeof workflow !== "string" || typeof makefile !== "string") {
-		throw new Error("workflow contract requires workflow and Makefile text");
-	}
-
-	const integrationJob = workflowJobSection(workflow, "backend-integration");
-	const windowsJob = workflowJobSection(workflow, "tts-clean-install-windows");
-	const policyJob = workflowJobSection(workflow, "verification-policy");
-
-	requireWorkflowMatch(
-		makefile,
-		/test-integration:[\s\S]*\.\/tests\/integration\/models\/tts_clean_install/,
-		"test-integration must execute the TTS clean-install package",
-	);
-	requireWorkflowMatch(
-		integrationJob,
-		/name: Build TTS clean-install helper artifact/,
-		"Backend Integration must build the TTS helper artifact",
-	);
-	requireWorkflowMatch(
-		integrationJob,
-		/INFINITE_YOU_TTS_PREBUILT_HELPER_PATH/,
-		"Backend Integration must export the prebuilt TTS helper path",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/runs-on: windows-latest/,
-		"TTS clean-install execution must use the Windows boundary",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/go test -c -o \$helperPath \.\/tests\/integration\/models\/tts_clean_install/,
-		"the Windows job must compile the TTS helper once",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/go test \.\/tests\/integration\/models\/tts_clean_install -count=1 -v -timeout=20m/,
-		"the Windows job must execute the TTS package",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256/,
-		"the Windows job must pass the helper identity",
-	);
-	requireWorkflowMatch(
-		policyJob,
-		/needs: \[[^\]]*\btts-clean-install-windows\b[^\]]*\]/s,
-		"Verification Policy must depend on the Windows TTS job",
-	);
-	requireWorkflowMatch(
-		policyJob,
-		/needs\.tts-clean-install-windows\.result/,
-		"Verification Policy must aggregate the Windows TTS result",
-	);
-
-	return { name: "tts-clean-install-workflow", status: "pass" };
 }
 
 /**
@@ -388,11 +329,7 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 		`LINT_JOBS: \${{ steps.backend-lint-parallelism.outputs.jobs || '${BACKEND_LINT_FALLBACK_JOBS}' }}`,
 		"canonical inventory must retain positive fallback concurrency");
 	requireWorkflowMatch(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/, "required checks run on merge groups");
-	requireWorkflowMatch(workflow,
-		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
-		"classification uses merge group base and head identities");
-	requireWorkflowMatch(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/, "classify both PR and merge group inputs");
-	requireWorkflowMatch(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/, "retain fallback classification for other events");
+	requireWorkflowText(workflowJobSection(workflow, "classify"), "if: github.event_name == 'pull_request'\n        run: go run ./cmd/ciclassify", "only PR paths select lanes; queue defaults full");
 	requireWorkflowText(job, "github.event_name == 'merge_group'", "Backend Lint reports for merge groups");
 	const developmentPackage = workflowJobSection(workflow, "development-package");
 	requireWorkflowText(developmentPackage, "github.event_name == 'merge_group'", "development package reports for merge groups");
@@ -419,11 +356,48 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	return { name: "backend-lint-workflow", status: "pass" };
 }
 
+export function validateBackendConformanceWorkflowContract({ workflow, makefile, publishedWorkflow, otherWorkflows = [] }) {
+	if (/backend-conformance:|needs\.backend-conformance\.|(?:\[|,)\s*backend-conformance(?=\s*[,\]])|run_backend_conformance|backend_conformance_(?:reason|command)|BACKEND_CONFORMANCE_(?:RESULT|REASON)|RUN_BACKEND_CONFORMANCE/.test(workflow)) {
+		throw new Error("Remove retired Backend Conformance job, classifier outputs and policy references.");
+	}
+	for (const text of [workflow, ...otherWorkflows]) {
+		if (/test-backend-conformance-live|TestPublishedBackendArtifactLocations/.test(text)) {
+			throw new Error("Live backend release requests belong only to the monthly/manual published-backend-conformance workflow.");
+		}
+	}
+	const inventory = makefile.match(/^LINT_TARGETS_BASE\s*:?=\s*(.*)$/m)?.[1].split(/\s+/) ?? [];
+	if (inventory.filter((target) => target === "test-backend-conformance").length !== 1) {
+		throw new Error("Canonical Backend Lint must include test-backend-conformance exactly once.");
+	}
+	requireWorkflowText(makefile, "test-backend-conformance:\n\t$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance", "offline decoder/validator target");
+	const offlineRecipe = makefile.match(/^test-backend-conformance:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/m)?.[1] ?? "";
+	if (/functionallong|test-backend-conformance-live|curl|wget|TestPublishedBackendArtifactLocations/.test(offlineRecipe)) {
+		throw new Error("Offline backend conformance target must not invoke live release validation.");
+	}
+	const triggers = publishedWorkflow.match(/^on:\n([\s\S]*?)(?=^\S)/m)?.[1] ?? "";
+	if (!/^  schedule:\n    - cron: "17 4 1 \* \*"\n  workflow_dispatch:\s*$/.test(triggers)) {
+		throw new Error("Published backend conformance must remain monthly/manual only.");
+	}
+	requireWorkflowText(publishedWorkflow, "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", "live event restriction");
+	requireWorkflowText(publishedWorkflow, "github.event.repository.default_branch", "live default-branch restriction");
+	requireWorkflowText(publishedWorkflow, "run: node scripts/ci/published-backend-conformance-workflow.mjs", "live selector");
+	requireWorkflowText(publishedWorkflow, "run: make test-backend-conformance-live", "sole live release owner");
+	return { name: "backend-conformance-workflow", status: "pass" };
+}
+
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	return {
 		contracts: [
+			validateBackendConformanceWorkflowContract({
+				workflow,
+				makefile: readFileSync(join(root, "Makefile"), "utf8"),
+				publishedWorkflow: readFileSync(join(root, ".github/workflows/published-backend-conformance.yml"), "utf8"),
+				otherWorkflows: discoverWorkflowFiles(join(root, ".github/workflows"))
+					.filter((file) => !file.endsWith("published-backend-conformance.yml") && !file.endsWith("ci.yml"))
+					.map((file) => readFileSync(file, "utf8")),
+			}),
 			validateReusablePackageWorkflowContract({
 				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
 			}),
@@ -431,10 +405,6 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
 			}),
 			validateBackendLintWorkflowContract({
-				workflow,
-				makefile: readFileSync(join(root, "Makefile"), "utf8"),
-			}),
-			validateTtsCleanInstallWorkflowContract({
 				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
 			}),
@@ -469,6 +439,7 @@ export function runWorkflowLint({
 	}
 	if (validateRepositoryContracts) {
 		validateCIJobGrowthFromHistory();
+		validateQueueDispatch(readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"));
 		validateConsolidatedCIWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});
