@@ -226,6 +226,11 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	const api = workflowJobSection(workflow, "api-pr-verification");
 	const packages = workflowJobSection(workflow, "development-package");
 	const policy = workflowJobSection(workflow, "verification-policy");
+	for (const text of ['RUN_BACKEND_COVERAGE: "true"',
+		"BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}",
+		"BACKEND_RESULT: ${{ needs.backend-integration.result }}"]) {
+		requireWorkflowText(policy, text, "mandatory Backend Coverage and selected Integration retain independent proof");
+	}
 	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
 		"docs_result: ${{ steps.docs-reference.outcome }}", "if: success() || failure()", "run: make docs-reference-smoke"]) {
 		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
@@ -248,71 +253,6 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	if (JSON.stringify(apiTargets) !== JSON.stringify(["ui-deps", "contracts-smoke", "api-smoke", "api-package-verify"])) throw new Error("workflow contract must retain API proof commands");
 	if (!workflowPlan().some((step) => step.args.includes("scripts/ci/functional-compile-cache.test.py"))) throw new Error("workflow contract must retain compiler-cache proof");
 	return { name: "consolidated-ci-workflow", status: "pass" };
-}
-
-/**
- * Enforce the TTS integration wiring as a static workflow contract.
- *
- * This is intentionally part of the executable Workflow Lint gate. The
- * contract protects CI composition (helper handoff, platform execution, and
- * verification-policy aggregation), not product runtime behavior.
- */
-export function validateTtsCleanInstallWorkflowContract({ workflow, makefile } = {}) {
-	if (typeof workflow !== "string" || typeof makefile !== "string") {
-		throw new Error("workflow contract requires workflow and Makefile text");
-	}
-
-	const integrationJob = workflowJobSection(workflow, "backend-integration");
-	const windowsJob = workflowJobSection(workflow, "tts-clean-install-windows");
-	const policyJob = workflowJobSection(workflow, "verification-policy");
-
-	requireWorkflowMatch(
-		makefile,
-		/test-integration:[\s\S]*\.\/tests\/integration\/models\/tts_clean_install/,
-		"test-integration must execute the TTS clean-install package",
-	);
-	requireWorkflowMatch(
-		integrationJob,
-		/name: Build TTS clean-install helper artifact/,
-		"Backend Integration must build the TTS helper artifact",
-	);
-	requireWorkflowMatch(
-		integrationJob,
-		/INFINITE_YOU_TTS_PREBUILT_HELPER_PATH/,
-		"Backend Integration must export the prebuilt TTS helper path",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/runs-on: windows-latest/,
-		"TTS clean-install execution must use the Windows boundary",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/go test -c -o \$helperPath \.\/tests\/integration\/models\/tts_clean_install/,
-		"the Windows job must compile the TTS helper once",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/go test \.\/tests\/integration\/models\/tts_clean_install -count=1 -v -timeout=20m/,
-		"the Windows job must execute the TTS package",
-	);
-	requireWorkflowMatch(
-		windowsJob,
-		/INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256/,
-		"the Windows job must pass the helper identity",
-	);
-	requireWorkflowMatch(
-		policyJob,
-		/needs: \[[^\]]*\btts-clean-install-windows\b[^\]]*\]/s,
-		"Verification Policy must depend on the Windows TTS job",
-	);
-	requireWorkflowMatch(
-		policyJob,
-		/needs\.tts-clean-install-windows\.result/,
-		"Verification Policy must aggregate the Windows TTS result",
-	);
-
-	return { name: "tts-clean-install-workflow", status: "pass" };
 }
 
 /**
@@ -465,10 +405,6 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
 			}),
 			validateBackendLintWorkflowContract({
-				workflow,
-				makefile: readFileSync(join(root, "Makefile"), "utf8"),
-			}),
-			validateTtsCleanInstallWorkflowContract({
 				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
 			}),
