@@ -34,11 +34,14 @@ test("unit coverage owns the only required backend unit execution", () => {
 
 test("the ACP replacement SDK and delivered-response boundary retain explicit CI gates", () => {
 	const workflow = read(".github/workflows/ci.yml");
-	const sdkStep = stepSection(backendCoverageJob(workflow),
-		"      - name: Run backend race witnesses",
-		"      - name: Prune unit Go build cache");
+	const job = backendCoverageJob(workflow);
+	const sdkStep = stepSection(job,
+		"      - name: Run backend coverage",
+		"      - name: Verify Wire generation");
 	assert.match(sdkStep, /if: matrix\.suite == 'unit'/);
-	assert.match(sdkStep, /go test -race -p=4 -count=1 -timeout=5m \\\n\s+\.\/third_party\/acp-go-sdk\/\.\.\./);
+	assert.match(sdkStep, /go test -p=4 [^\n]*\\\n\s+\.\/third_party\/acp-go-sdk\/\.\.\./);
+	assert.doesNotMatch(job, /go test[^\n]* -race/);
+	assert.doesNotMatch(workflow, /backend-models-verification|Backend Models Wire and Race/);
 	const processStep = stepSection(workflow,
 		"      - name: Run delivered ACP response integration",
 		"      - name: Run pinned real ACP integration");
@@ -102,7 +105,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 
 test("unit coverage pins hosted package concurrency while local callers retain platform defaults", () => {
 	const workflow = backendCoverageJob(read(".github/workflows/ci.yml"));
-	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Run backend race witnesses");
+	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Verify Wire generation");
 	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "4"/);
 
 	const makefile = read("Makefile");

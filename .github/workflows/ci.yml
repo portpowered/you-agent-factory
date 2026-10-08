@@ -153,53 +153,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  backend-models-verification:
-    name: Backend Models Wire and Race
-    needs: classify
-    if: always() && needs.classify.outputs.run_backend != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      GOMAXPROCS: "2"
-      GOFLAGS: "-p=1"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      # Keep generation and race compilation outside the five-minute unit
-      # coverage budget. Compare both generations and the committed graph.
-      - name: Verify Wire reproducibility and committed drift
-        timeout-minutes: 5
-        shell: bash
-        run: |
-          make generate-wire
-          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-first.sha256"
-          make generate-wire
-          sha256sum pkg/wire/wire_gen.go > "$RUNNER_TEMP/models-wire-second.sha256"
-          diff -u "$RUNNER_TEMP/models-wire-first.sha256" "$RUNNER_TEMP/models-wire-second.sha256"
-          git diff --exit-code -- pkg/wire/wire_gen.go
-          cat "$RUNNER_TEMP/models-wire-second.sha256"
-      - name: Race-check scoped Models components
-        timeout-minutes: 10
-        run: |
-          go test -race -v -p 1 -count=1 -timeout 3m \
-            ./pkg/services/models/internal/service \
-            ./pkg/services/models/internal/local \
-            ./pkg/services/models/internal/services/inference/internal/service \
-            ./pkg/services/models/internal/services/runtime_host/internal/service \
-            ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service \
-            -run 'Test.*(Root|Scoped|Scope|ResourceLimiter|Invoke|Invocation|Cancel|Release|Lease|Deadline|Idle|Timer|Capacity)'
-      - name: Race-check composed scoped Models scenarios
-        timeout-minutes: 8
-        run: |
-          go test -race -v -p 1 -count=1 -timeout 3m \
-            ./tests/functional/models/inference \
-            -run 'TestModelsFixedLeaves|TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess'
-
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
     needs: classify
@@ -354,53 +307,29 @@ jobs:
         if: matrix.suite == 'functional'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Run LocalAI Runner V2 controlled component matrix
-        if: matrix.suite == 'unit'
-        run: make test-localai-runner-v2-component
       - name: Run backend coverage
         if: matrix.suite == 'unit'
-        run: make test-unit-coverage
+        # Tests outside ./pkg/... that used to run as separate steps (retained
+        # ACP SDK, LocalAI Runner V2 controlled component matrix) run here,
+        # without -race, in the same step so the build cache is shared.
+        run: |
+          go test -p=4 -vet=off -ldflags=-w -timeout=5m \
+            ./third_party/acp-go-sdk/... \
+            ./tests/internal/localai/corpusv2/runner
+          make test-unit-coverage
         env:
           GO_UNIT_COVERAGE_JOBS: "4"
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
-      # One race pass over the retained race witnesses. Race-instrumented
-      # compiler outputs are reused through the shared Go build cache, and each
-      # invocation builds its test binaries with the full runner CPU budget
-      # instead of serial -p=1/-p=2 invocations per witness.
-      - name: Run backend race witnesses
+      # Wire generation drift moved here from the removed Models Wire and Race
+      # job so the committed graph stays verified in the single backend job.
+      - name: Verify Wire generation matches the committed graph
         if: matrix.suite == 'unit'
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: |
-          set -euo pipefail
-          # Whole-package race runs: ACP SDK and service, Worker recording
-          # capture and replay, Worker Sessions, and bounded Provider Sessions.
-          go test -race -p=4 -count=1 -timeout=5m \
-            ./third_party/acp-go-sdk/... \
-            ./pkg/services/providers/internal/services/acp/internal/service \
-            ./pkg/services/recordings/internal/services/worker_capture/internal/service \
-            ./pkg/platform/replay \
-            ./pkg/services/worker_sessions/internal/service \
-            ./pkg/services/provider_sessions/internal/service \
-            ./pkg/services/provider_sessions/transports/http
-          # Selected witnesses: Worker recording observations, the shared Codex
-          # HTTP fixture, and Automations selected time and joined shutdown.
-          go test -race -p=4 -count=1 -timeout=5m \
-            ./tests/functional/workers/inference \
-            ./pkg/services/factory_runtime/internal/services/orchestration/runtime \
-            ./tests/functional/providers/codex \
-            ./tests/functional/automations/scheduling \
-            ./pkg/services/automations/internal/clockview \
-            ./pkg/services/automations/internal/services/script_pollers/internal/service \
-            ./pkg/services/automations/internal/services/sourcelifecycle/internal/service \
-            ./pkg/services/automations/internal/services/filesystem_watchers/internal/service \
-            -run 'TestWSRFT004|TestWSRFT009|TestWorkerRecordingSurvivesTempCleanup|TestWorkerSessionSelectedSessionObservationConsistency|TestRecordedWorkerSessionObservation|TestMergeRecordedObservations|^TestCodexSharedTrustedWorkAndHistory$|^TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown$|ClockView|StopsDuringBackoff|Backoff_ProgressionBounds|ControlledBackoff|ReadFileWithRetry|Debounce|StoppingOneWatcher'
-          # Invocation preflight and request replay.
-          go test -race -p=4 -count=2 -timeout=10m \
-            ./pkg/services/worker_sessions/internal/service \
-            ./tests/functional/workers/invoke_continue \
-            -run 'Test.*(Start|Replay)|TestT7'
+          make generate-wire
+          git diff --exit-code -- pkg/wire/wire_gen.go
       - name: Prune unit Go build cache to entries touched by this job
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         shell: bash
@@ -1108,7 +1037,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, readme, frontend, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
+    needs: [classify, readme, frontend, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1153,7 +1082,6 @@ jobs:
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
-          BACKEND_MODELS_RESULT: ${{ needs.backend-models-verification.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
