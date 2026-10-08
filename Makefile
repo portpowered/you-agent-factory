@@ -225,7 +225,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -1108,9 +1108,9 @@ LINT_MIGRATION_COHORT ?= all
 lint-migration-smoke: $(if $(filter markdown,$(LINT_MIGRATION_COHORT)),$(DOCS_MARKDOWN_CACHE)/ready,golangci-build)
 	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(abspath $(GOLANGCI_REPOSITORY))"
 
-golangci-lint-run:
+golangci-lint-run: golangci-build
 	@git merge-base HEAD origin/main
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_REPOSITORY) run --config .golangci.yml ./...
 
 deadcode: golangci-build
 	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
