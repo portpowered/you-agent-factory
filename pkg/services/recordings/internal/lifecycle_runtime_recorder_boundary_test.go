@@ -29,11 +29,23 @@ type openingCleanupRecorder struct {
 	recordings.RuntimeRecorder
 	starts, stops, finishes, flushes int
 	err                              error
+	startErr                         error
+	stopErr                          error
 }
 
-func (recorder *openingCleanupRecorder) Start(context.Context) { recorder.starts++ }
-func (recorder *openingCleanupRecorder) Stop()                 { recorder.stops++ }
-func (recorder *openingCleanupRecorder) Err() error            { return recorder.err }
+func (recorder *openingCleanupRecorder) Start(context.Context) {
+	recorder.starts++
+	if recorder.startErr != nil {
+		recorder.err = recorder.startErr
+	}
+}
+func (recorder *openingCleanupRecorder) Stop() {
+	recorder.stops++
+	if recorder.stopErr != nil {
+		recorder.err = recorder.stopErr
+	}
+}
+func (recorder *openingCleanupRecorder) Err() error { return recorder.err }
 func (recorder *openingCleanupRecorder) Flush() error {
 	recorder.flushes++
 	return recorder.err
@@ -78,6 +90,35 @@ func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
 	}
 	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 0 {
 		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/0", inner.starts, inner.finishes, inner.stops)
+	}
+}
+
+func TestRuntimeScopeRecorderFailedActivationAbortsWithoutPublication(t *testing.T) {
+	t.Parallel()
+	activationErr := errors.New("controlled activation failure")
+	cleanupErr := errors.New("controlled activation cleanup failure")
+	inner := &openingCleanupRecorder{startErr: activationErr, stopErr: cleanupErr}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		recorder.Start(context.Background())
+		if err := recorder.Flush(); !errors.Is(err, activationErr) {
+			t.Fatalf("failed activation flush = %v, want preserved cause", err)
+		}
+	}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+			t.Fatalf("failed activation cleanup = %v, want primary and cleanup causes", err)
+		}
+	}
+	if err := recorder.Err(); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("recorder error = %v, want primary and cleanup causes", err)
+	}
+	if err := recorder.Flush(); !errors.Is(err, activationErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("aborted flush = %v, want primary and cleanup causes", err)
+	}
+	if inner.starts != 1 || inner.stops != 1 || inner.flushes != 0 || inner.finishes != 0 {
+		t.Fatalf("failed activation start/stop/flush/finalize = %d/%d/%d/%d, want 1/1/0/0",
+			inner.starts, inner.stops, inner.flushes, inner.finishes)
 	}
 }
 

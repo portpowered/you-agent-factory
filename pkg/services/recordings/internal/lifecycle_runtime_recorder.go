@@ -766,6 +766,7 @@ type runtimeScopeRecorder struct {
 	routeKey    string
 	ledger      recordings.RuntimeEventLedger
 	started     bool
+	startErr    error
 	finalized   bool
 	finalizeErr error
 }
@@ -779,13 +780,19 @@ func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.finalized || recorder.started || ctx.Err() != nil {
+	if recorder.finalized || recorder.started || recorder.startErr != nil || ctx.Err() != nil {
 		return
 	}
-	recorder.started = true
 	if recorder.inner != nil {
 		recorder.inner.Start(ctx)
+		recorder.startErr = recorder.inner.Err()
+		if recorder.startErr != nil {
+			return
+		}
 	}
+	// A failed activation still owns a prepared history. Cleanup must abort it,
+	// rather than interpreting the Start attempt as permission to finalize.
+	recorder.started = true
 }
 
 func (recorder *runtimeScopeRecorder) Stop() {
@@ -829,6 +836,9 @@ func (recorder *runtimeScopeRecorder) Flush() error {
 	if recorder.finalized {
 		return recorder.finalizeErr
 	}
+	if recorder.startErr != nil {
+		return recorder.startErr
+	}
 	// Opening owns a prepared history, not permission to publish it. Explicit
 	// flushes during opening or after an aborted opening must remain inert.
 	if !recorder.started || recorder.inner == nil {
@@ -847,7 +857,7 @@ func (recorder *runtimeScopeRecorder) Err() error {
 	if recorder.inner != nil {
 		recorderErr = recorder.inner.Err()
 	}
-	return errors.Join(recorder.finalizeErr, recorderErr)
+	return errors.Join(recorder.startErr, recorder.finalizeErr, recorderErr)
 }
 
 func (recorder *runtimeScopeRecorder) Finish(finishedAt time.Time) {
@@ -874,7 +884,7 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 			// Opening cleanup is an abort, not a completed run. Join the
 			// writer without publishing terminal metadata over retained history.
 			recorder.inner.Stop()
-			finalizeErr = recorder.inner.Err()
+			finalizeErr = errors.Join(recorder.startErr, recorder.inner.Err())
 		}
 	}
 	var closeErr error
