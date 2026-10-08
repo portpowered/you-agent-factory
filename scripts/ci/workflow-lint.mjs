@@ -316,12 +316,32 @@ export function validateControlledRawFailureWorkflowContract({ workflow, fixture
 	return { name: "controlled-raw-failure-workflow", status: "pass" };
 }
 
+export function validateBackendLintWorkflowContract({ workflow, makefile }) {
+	const job = workflowJobSection(workflow, "backend-lint");
+	if (/go test[^\n]*-race/.test(job)) throw new Error("Backend Lint must not run a race step");
+	for (const duplicate of ["Exercise packaged Markdown enforcement", "Check Go formatting", "Build and smoke-test shared lint plugin"]) {
+		if (job.includes(`- name: ${duplicate}`)) throw new Error(`Backend Lint repeats enforcement: ${duplicate}`);
+	}
+	const runs = job.match(/make LINT_REPORT_FILE="\$LINT_REPORT_FILE" lint/g) ?? [];
+	if (runs.length !== 1) throw new Error("Backend Lint requires one complete canonical inventory run");
+	requireWorkflowText(job, "scripts/lint-migration-smoke.py ci-smoke", "real plugin diagnostic smoke");
+	requireWorkflowText(job, "scripts/build-golangci.py --restore", "validated artifact restore");
+	requireWorkflowText(job, 'GOLANGCI_PREBUILT: "1"', "canonical prebuilt plugin reuse");
+	requireWorkflowText(makefile, "LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check", "complete base enforcement inventory");
+	requireWorkflowText(makefile, "golangci-lint-run: golangci-build", "built-in checks use the prepared custom binary");
+	return { name: "backend-lint-workflow", status: "pass" };
+}
+
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	const fixtureWorkflow = readFileSync(join(root, ".github", "workflows", "controlled-raw-failure-witness.yml"), "utf8");
 	return {
 		contracts: [
+			validateBackendLintWorkflowContract({
+				workflow,
+				makefile: readFileSync(join(root, "Makefile"), "utf8"),
+			}),
 			validateTtsCleanInstallWorkflowContract({
 				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),

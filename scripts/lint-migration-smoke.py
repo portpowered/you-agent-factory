@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -697,11 +698,56 @@ class MarkdownFixtures:
         self.unavailable()
 
 
+def ci_smoke(tool: list[str], artifacts: Path) -> None:
+    """Three real prebuilt invocations share one module and warm analysis cache."""
+    started = time.monotonic()
+    config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
+    fixtures = SizeFixtures(tool, artifacts, config)
+    root = fixtures.module("ci-smoke")
+    write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+    manifest = "pkg/transports/cli/root_work.go"
+    consumer = "internal/consumer/source.go"
+    clean_manifest = "package cli\nfunc executeWork(inputID string) string { return inputID }\n"
+    clean_consumer = "package consumer\n"
+    write(root, "pkg/wire/wire.go", "package wire\n")
+    write(root, manifest, clean_manifest)
+    write(root, consumer, clean_consumer)
+    write(root, "packages/packaged-factories/publication.go", "package packagedfactories\nconst Bytes = 1\n")
+    try:
+        fixtures.lint(root, "clean", [])
+        write(root, manifest, "package cli\nfunc newRunCommand() {}\n")
+        write(root, consumer, 'package consumer\nimport _ "github.com/portpowered/infinite-you/packages/packaged-factories"\n')
+        issues = fixtures.lint(root, "seeded", [
+            ("repolint", "cli-manifest-authority:"),
+            ("repolint", "packaged-factory-direct-publication:"),
+        ])
+        expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
+        for name, diagnostic in expected.items():
+            assert any((issue["Pos"]["Filename"].replace("\\", "/") == name
+                        or issue["Pos"]["Filename"].replace("\\", "/").endswith("/" + name))
+                       and issue["Pos"]["Line"] == 2 and diagnostic in issue["Text"] for issue in issues), issues
+        write(root, manifest, clean_manifest)
+        write(root, consumer, clean_consumer)
+        fixtures.lint(root, "recovered", [])
+    finally:
+        write(artifacts, "results.json", json.dumps(fixtures.results, indent=2) + "\n")
+        print(f"ci-smoke elapsed: {time.monotonic() - started:.3f}s; artifacts: {artifacts}", flush=True)
+    print("PASS ci-smoke: clean/seeded/recovered real plugin diagnostics", flush=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cohort", choices=("size", "pkg-rules", "manifest", "baseline", "owners", "service-cycle", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "markdown", "all"))
+    parser.add_argument("cohort", choices=("ci-smoke", "size", "pkg-rules", "manifest", "baseline", "owners", "service-cycle", "provider-catalog", "catalog", "consumption", "package-boundary", "packaged-source", "markdown", "all"))
     parser.add_argument("--golangci")
     args = parser.parse_args()
+    if args.cohort == "ci-smoke":
+        if not args.golangci or not Path(args.golangci).is_file():
+            parser.error("ci-smoke requires a real prebuilt --golangci binary")
+        parent = ROOT / ".artifacts/lint-migration-smoke"
+        parent.mkdir(parents=True, exist_ok=True)
+        artifacts = Path(tempfile.mkdtemp(prefix="ci-smoke-", dir=parent))
+        ci_smoke([str(Path(args.golangci).resolve())], artifacts)
+        return
     if args.cohort != "markdown" and not args.golangci:
         parser.error("--golangci is required except for markdown")
     if args.cohort in ("markdown", "all"):

@@ -883,26 +883,33 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-          # Give the complete lint inventory a lane-specific key so its module
-          # and build data are saved and reused by later measurements.
-          cache-dependency-path: |
-            go.mod
-            go.sum
-            .github/workflows/ci.yml
-      - name: Exercise packaged Markdown enforcement
-        run: python3 scripts/lint-migration-smoke.py markdown
-      - name: Check Go formatting
-        run: make fmt-check
-      - name: Race-check shared lint components
-        if: always()
-        run: go test -race ./internal/lint/analyzers ./tools/golangcilintplugin -run 'CompilerMetadata|WireSelection|Plugin|ServiceCycle|ProviderCatalog|PackagedFactoryCatalog|PackagedFactoryConsumption' -count=1 -timeout 15m
-      - name: Build and smoke-test shared lint plugin
+          cache-dependency-path: go.sum
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: lint-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+      - name: Identify plugin compiler inputs
+        id: plugin-inputs
+        run: echo "key=$(python3 scripts/build-golangci.py --cache-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: lint-plugin-cache
+        with:
+          path: .artifacts/golangci
+          key: lint-plugin-${{ runner.os }}-${{ runner.arch }}-${{ steps.plugin-inputs.outputs.key }}
+      - name: Prepare shared lint plugin
+        id: prepare-lint-plugin
         run: |
-          make golangci-build
-          python3 scripts/lint-migration-smoke.py manifest --golangci "$PWD/.artifacts/golangci/golangci-repository"
-          python3 scripts/lint-migration-smoke.py consumption --golangci "$PWD/.artifacts/golangci/golangci-repository"
+          if [ "${{ steps.lint-plugin-cache.outputs.cache-hit }}" = "true" ]; then
+            python3 scripts/build-golangci.py --restore --destination .artifacts/golangci || make golangci-build
+          else
+            make golangci-build
+          fi
+      - name: Smoke-test shared lint plugin
+        run: python3 scripts/lint-migration-smoke.py ci-smoke --golangci "$PWD/.artifacts/golangci/golangci-repository"
       - name: Verify direct upstream deadcode boundary
         run: |
+          python3 -m unittest discover -s scripts -p "build_golangci_test.py"
           python3 -m unittest discover -s scripts -p "deadcode_report_test.py"
           python3 scripts/deadcode-host-smoke.py --reporter "$PWD/scripts/deadcode-report.py" -- go run golang.org/x/tools/cmd/deadcode@v0.25.1
       - uses: oven-sh/setup-bun@v2
@@ -969,6 +976,7 @@ jobs:
           LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
           LINT_FULL: "1"
           GOLANGCI_PREBUILT: "1"
+          GOLANGCI_PROFILE_DIR: .artifacts/backend-lint/profiles
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
@@ -986,7 +994,8 @@ jobs:
             .artifacts/backend-lint/report.json
             .artifacts/backend-lint/lint.log
             .artifacts/backend-lint/comment.md
-            .artifacts/lint-migration-smoke/markdown-*/
+            .artifacts/backend-lint/profiles/
+            .artifacts/lint-migration-smoke/ci-smoke-*/
             bin/deadcode-current.txt
           if-no-files-found: warn
           retention-days: 14
