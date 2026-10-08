@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -523,7 +524,7 @@ func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T
 			var diagnostics bytes.Buffer
 			err = NewList(protocol)(ListConfig{
 				Context: context.Background(), Server: "http://factory.test", WorkID: "work-1",
-				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true,
+				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true, Debug: true,
 			})
 			var typed *CLIError
 			wantCode := "WORKER_SESSION_LIST_FAILED"
@@ -535,6 +536,9 @@ func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T
 			}
 			if !strings.Contains(diagnostics.String(), "errorStage="+testCase.wantStage) {
 				t.Fatalf("diagnostics = %q, want errorStage=%s", diagnostics.String(), testCase.wantStage)
+			}
+			if !strings.Contains(diagnostics.String(), "bodyDecodeMicros=") || !strings.Contains(diagnostics.String(), "list command durationMicros=") || strings.Contains(diagnostics.String(), "list render durationMicros=") {
+				t.Fatalf("failure diagnostics lost request timing or claimed rendering: %s", diagnostics.String())
 			}
 			if strings.Contains(diagnostics.String(), secret) || strings.Contains(output.String(), secret) {
 				t.Fatalf("failure exposed response payload: diagnostics=%q output=%q", diagnostics.String(), output.String())
@@ -571,6 +575,49 @@ func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_OUTPUT_FAILED" {
 		t.Fatalf("error = %v, want WORKER_SESSION_OUTPUT_FAILED", err)
 	}
+}
+
+func TestListDebugReportsConsumedRequestAndOutputPhases(t *testing.T) {
+	for _, debug := range []bool{false, true} {
+		t.Run(strconv.FormatBool(debug), func(t *testing.T) {
+			var output, diagnostics bytes.Buffer
+			calls := 0
+			protocol := listTimingProtocol{get: func(_ context.Context, endpoint string, dst any) (clihttp.Response, error) {
+				calls++
+				if !strings.Contains(endpoint, "/factory-sessions/session-1/worker-sessions?workId=work-1") {
+					t.Fatalf("unexpected endpoint: %s", endpoint)
+				}
+				*dst.(*factoryapi.ListWorkerSessionsResponse) = factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}}
+				return clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}}, nil
+			}}
+			err := NewList(protocol)(ListConfig{
+				Context: t.Context(), Server: "http://factory.test", SessionID: "session-1", WorkID: "work-1",
+				OutputFormat: "json", Debug: debug, Output: &output, Diagnostics: &diagnostics,
+			})
+			if err != nil || calls != 1 || output.String() != "{\"sessions\":[]}\n" {
+				t.Fatalf("err=%v calls=%d output=%q", err, calls, output.String())
+			}
+			for _, phase := range []string{"headerWaitMicros=", "bodyDecodeMicros=", "totalMicros=", "list render durationMicros=", "list write durationMicros=", "list command durationMicros="} {
+				if strings.Contains(diagnostics.String(), phase) != debug {
+					t.Fatalf("debug=%t phase=%q diagnostics=%q", debug, phase, diagnostics.String())
+				}
+			}
+			if debug && !strings.Contains(diagnostics.String(), "bytes=16") {
+				t.Fatalf("missing consumed output size: %s", diagnostics.String())
+			}
+		})
+	}
+}
+
+// The list component owns its diagnostics; HTTP decoding is a controlled
+// collaborator here, rather than a second real component under test.
+type listTimingProtocol struct {
+	clihttp.Protocol
+	get func(context.Context, string, any) (clihttp.Response, error)
+}
+
+func (protocol listTimingProtocol) GetJSON(ctx context.Context, endpoint string, dst any) (clihttp.Response, error) {
+	return protocol.get(ctx, endpoint, dst)
 }
 
 func TestListCanceledContextIsTypedAndDoesNotReturnCollection(t *testing.T) {

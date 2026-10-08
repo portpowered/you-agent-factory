@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,9 +173,28 @@ func (f selectedArtifactScenario) waitProvider(t *testing.T, ctx context.Context
 
 func (f selectedArtifactScenario) list(t *testing.T, ctx context.Context, args ...string) factoryapi.ListWorkerSessionsResponse {
 	t.Helper()
-	output := runPrebuiltWorkscopeCLI(t, ctx, f.binary, f.factoryDir, f.environment,
-		append([]string{"--server", f.serverURL, "--json", "worker-sessions", "list"}, args...)...)
-	t.Logf("CLI --server %s --json worker-sessions list %v exit=0 output=%s", f.serverURL, args, output)
+	command := exec.CommandContext(ctx, f.binary,
+		append([]string{"--server", f.serverURL, "--json", "--debug", "worker-sessions", "list"}, args...)...)
+	command.Dir, command.Env = f.factoryDir, append([]string(nil), f.environment...)
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	started := time.Now()
+	if err := command.Run(); err != nil {
+		t.Fatalf("compiled list: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	// Includes executable launch, application construction and consumed output.
+	// Timing is diagnostic here; the hard 200-row budget belongs to load tests.
+	elapsed := time.Since(started)
+	for _, phase := range []string{"headerWaitMicros=", "bodyDecodeMicros=", "list render durationMicros=", "list write durationMicros=", "list command durationMicros="} {
+		if !strings.Contains(stderr.String(), phase) {
+			t.Fatalf("compiled list omitted phase %q: %s", phase, stderr.String())
+		}
+	}
+	if count := strings.Count(stderr.String(), "worker sessions list request endpointPath="); count != 1 {
+		t.Fatalf("compiled list request diagnostics=%d, want 1: %s", count, stderr.String())
+	}
+	output := stdout.Bytes()
+	t.Logf("CLI list args=%v exit=0 launchThroughConsumedOutputMicros=%d bytes=%d diagnostics=%s", args, elapsed.Microseconds(), len(output), stderr.String())
 	var list factoryapi.ListWorkerSessionsResponse
 	if err := json.Unmarshal(output, &list); err != nil {
 		t.Fatalf("decode list: %v %s", err, output)
@@ -198,6 +219,9 @@ func (f selectedArtifactScenario) assertParity(t *testing.T, ctx context.Context
 		}
 	}
 	work := f.list(t, ctx, "--session", f.sessionID, "--work-id", f.workID)
+	if !active {
+		f.assertScopedHTTPParity(t, ctx, work)
+	}
 	if len(matching) != 1 || len(work.Sessions) != 1 {
 		t.Fatalf("fleet=%#v Work=%#v", matching, work)
 	}
@@ -223,6 +247,22 @@ func (f selectedArtifactScenario) assertParity(t *testing.T, ctx context.Context
 			t.Fatalf("compiled observation health/confirmation disagree: fleet=%#v scoped=%#v", matching[0], row)
 		}
 	}
+}
+
+func (f selectedArtifactScenario) assertScopedHTTPParity(t *testing.T, ctx context.Context, cliList factoryapi.ListWorkerSessionsResponse) {
+	t.Helper()
+	endpoint := f.serverURL + "/factory-sessions/" + f.sessionID + "/worker-sessions?workId=" + f.workID
+	started := time.Now()
+	response := doPrebuiltWorkscopeGET(t, ctx, &http.Client{Timeout: 5 * time.Second}, endpoint)
+	headerWait := time.Since(started)
+	raw, status := readPrebuiltWorkscopeResponse(t, response)
+	var httpList factoryapi.ListWorkerSessionsResponse
+	if status != http.StatusOK || json.Unmarshal(raw, &httpList) != nil || !reflect.DeepEqual(cliList, httpList) {
+		t.Fatalf("compiled scoped CLI/HTTP parity: status=%d CLI=%#v HTTP=%s", status, cliList, raw)
+	}
+	elapsed := time.Since(started)
+	t.Logf("equivalent HTTP endpoint=%s status=%d rows=%d headerWaitMicros=%d bodyThroughDecodeMicros=%d totalMicros=%d bytes=%d",
+		endpoint, status, len(httpList.Sessions), headerWait.Microseconds(), (elapsed - headerWait).Microseconds(), elapsed.Microseconds(), len(raw))
 }
 
 func (f selectedArtifactScenario) assertExpectedFacts(t *testing.T, row factoryapi.WorkerSessionObservation, workerID string, wantState factoryapi.WorkerSessionObservationState, wantTranscript factoryapi.WorkerSessionObservationTranscript) {

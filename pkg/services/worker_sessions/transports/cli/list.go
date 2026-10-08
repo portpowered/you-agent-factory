@@ -57,6 +57,11 @@ func NewList(transport clihttp.Protocol) func(ListConfig) error {
 }
 
 func list(config ListConfig) error {
+	started := time.Now()
+	defer func() {
+		clidiag.Printf(config.Diagnostics, config.Debug,
+			"worker sessions list command durationMicros=%d", time.Since(started).Microseconds())
+	}()
 	config.WorkID = strings.TrimSpace(config.WorkID)
 	config.Scope = strings.TrimSpace(config.Scope)
 	config.History = strings.TrimSpace(config.History)
@@ -78,21 +83,8 @@ func list(config ListConfig) error {
 	if err != nil {
 		return err
 	}
-	clidiag.Printf(
-		config.Diagnostics,
-		config.Verbose || config.Debug,
-		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
-		endpoint.Path,
-		endpoint.String(),
-		config.Server,
-		clidiag.SessionLabel(config.SessionID),
-		config.WorkID,
-		config.Scope,
-		len(config.States),
-	)
-
 	var result factoryapi.ListWorkerSessionsResponse
-	response, requestErr := config.HTTP.GetJSON(config.Context, endpoint.String(), &result)
+	response, requestErr := requestWorkerSessionList(config, endpoint, &result)
 	if requestErr != nil {
 		clidiag.Printf(
 			config.Diagnostics,
@@ -123,10 +115,24 @@ func list(config ListConfig) error {
 		response.Duration.Milliseconds(),
 		len(result.Sessions),
 	)
-	if jsonOutput {
-		return writeListOutput(config.Output, result, true)
-	}
-	return writeListOutput(config.Output, result, false)
+	return writeListOutput(config, result, jsonOutput)
+}
+
+func requestWorkerSessionList(config ListConfig, endpoint url.URL, result *factoryapi.ListWorkerSessionsResponse) (clihttp.Response, error) {
+	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
+		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
+		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkID, config.Scope, len(config.States))
+	started := time.Now()
+	response, err := config.HTTP.GetJSON(config.Context, endpoint.String(), result)
+	// The protocol duration ends at headers. The enclosing duration includes
+	// request construction, response consumption and JSON decoding, including a
+	// failed body read. This residual is attribution, not a latency assertion.
+	duration := time.Since(started)
+	bodyDecodeDuration := max(time.Duration(0), duration-response.Duration)
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list request timing endpointPath=%s headerWaitMicros=%d bodyDecodeMicros=%d totalMicros=%d",
+		endpoint.Path, response.Duration.Microseconds(), bodyDecodeDuration.Microseconds(), duration.Microseconds())
+	return response, err
 }
 
 func validateListConfig(config ListConfig) error {
@@ -259,7 +265,8 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions, PaginationContext: result.PaginationContext})
 }
 
-func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
+func writeListOutput(config ListConfig, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
+	started := time.Now()
 	var rendered bytes.Buffer
 	var err error
 	if jsonOutput {
@@ -267,11 +274,17 @@ func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsRespo
 	} else {
 		err = renderList(&rendered, result)
 	}
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list render durationMicros=%d bytes=%d", time.Since(started).Microseconds(), rendered.Len())
 	if err != nil {
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to render Worker Session list", err)
 	}
-	if _, err := io.Copy(output, &rendered); err != nil {
-		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", err)
+	started = time.Now()
+	written, writeErr := io.Copy(config.Output, &rendered)
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list write durationMicros=%d bytes=%d", time.Since(started).Microseconds(), written)
+	if writeErr != nil {
+		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", writeErr)
 	}
 	return nil
 }
