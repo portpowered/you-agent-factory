@@ -122,6 +122,7 @@ function requireWorkflowOrder(value, first, second, description) {
 // CI topology belongs in Workflow Lint, rather than a product runtime test.
 export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	const frontend = workflowJobSection(workflow, "frontend");
+	const browser = workflowJobSection(workflow, "frontend-browser");
 	const policy = workflowJobSection(workflow, "verification-policy");
 	requireWorkflowText(workflow, "BUN_VERSION: 1.3.12", "frontend Bun must remain pinned");
 	requireWorkflowText(frontend, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
@@ -150,13 +151,23 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	}
 	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}", "Component shares aggregate result");
 	for (const result of ["FRONTEND_BROWSER_RESULT", "FRONTEND_STORYBOOK_RESULT"]) {
-		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "browser proofs share aggregate result");
+		requireWorkflowText(policy, `${result}: \${{ needs.frontend-browser.result }}`, "browser proofs share their own aggregate result");
 	}
-	requireWorkflowText(frontend, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
-	requireWorkflowText(frontend, "path: ~/.cache/ms-playwright", "retain browser cache");
-	requireWorkflowText(frontend, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
-	requireWorkflowText(frontend, "run: make ui-install-playwright", "install browsers on cache miss");
-	if (/\n  frontend-(component|browser|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
+	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
+	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
+		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
+		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
+		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");
+		if (job.split("bun install --frozen-lockfile").length !== 2) throw new Error("workflow contract requires one frozen install per frontend job");
+		requireWorkflowText(job, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
+		requireWorkflowText(job, `FRONTEND_SUITE: ${suite}`, "complete suites use separate runners");
+	}
+	requireWorkflowText(browser, "path: ~/.cache/ms-playwright", "retain browser cache");
+	requireWorkflowText(browser, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
+	requireWorkflowText(browser, "run: make ui-install-playwright", "install browsers on cache miss");
+	if (/\n  frontend-(component|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
 	if (policy.includes("ui-coverage")) throw new Error("policy must not depend on removed coverage job");
 	return { name: "frontend-shared-setup-workflow", status: "pass" };
 }

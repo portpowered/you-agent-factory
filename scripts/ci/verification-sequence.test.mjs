@@ -11,6 +11,35 @@ function deferred() {
   return { promise, resolve };
 }
 
+test("split frontend plans preserve all commands and budgets without duplicate suites", () => {
+  const component = frontendPlan("component");
+  const browser = frontendPlan("browser");
+  assert.deepEqual([...component, ...browser], frontendPlan());
+  assert.deepEqual(component.map((step) => step.name), ["component"]);
+  assert.deepEqual(browser.map((step) => step.name), ["dashboard-browser", "storybook"]);
+  assert.throws(() => frontendPlan("typo"), /Unknown frontend suite/);
+});
+
+for (const suite of ["component", "browser"]) {
+  test(`${suite} job rejects each failed suite and joins its complete peers`, async () => {
+    const plan = frontendPlan(suite);
+    for (const failed of plan) {
+      const attempted = [];
+      const messages = [];
+      const ok = await runConcurrent(plan, {
+        log: (message) => messages.push(message),
+        run: async (step) => {
+          attempted.push(step.name);
+          return step.name !== failed.name;
+        },
+      });
+      assert.equal(ok, false);
+      assert.deepEqual(attempted, plan.map((step) => step.name));
+      assert.ok(messages.some((message) => message.startsWith(`FAIL ${failed.name}`)));
+    }
+  });
+}
+
 test("concurrent suites all start before completion and success waits for the last peer", async () => {
   const plan = frontendPlan();
   const gates = plan.map(() => deferred());

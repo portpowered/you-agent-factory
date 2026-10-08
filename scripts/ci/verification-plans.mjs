@@ -3,12 +3,14 @@ const make = (name, target, budget, options = {}) => ({
   name, command: "make", args: [target], timeoutMs: minutes(budget), ...options,
 });
 
-export function frontendPlan() {
-  return [
+export function frontendPlan(suite = "all") {
+  const component = [
     make("component", "ui-component-test", 8, { env: {
-      // Leave room for Chromium and Storybook on the shared hosted runner.
+      // Two isolated workers; browser builds run on their own hosted runner.
       UI_COMPONENT_MAX_DURATION_MS: "300000", UI_COMPONENT_TEST_MAX_WORKERS: "2",
     } }),
+  ];
+  const browser = [
     // test:integration builds the dashboard once before the retained runner.
     make("dashboard-browser", "ui-integration-test", 30, { env: {
       UI_BROWSER_INTEGRATION_MAX_WORKERS: "1", GOMAXPROCS: "2", GOFLAGS: "-p=2",
@@ -16,6 +18,10 @@ export function frontendPlan() {
     // The canonical target builds Storybook once and runs the prebuilt checks.
     make("storybook", "ui-storybook-integration-test", 30),
   ];
+  if (suite === "component") return component;
+  if (suite === "browser") return browser;
+  if (suite === "all") return [...component, ...browser];
+  throw new Error(`Unknown frontend suite: ${suite}`);
 }
 
 export function workflowPlan() {
