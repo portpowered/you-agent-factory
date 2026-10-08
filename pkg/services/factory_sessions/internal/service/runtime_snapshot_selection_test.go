@@ -44,18 +44,23 @@ func TestRuntimeSnapshotSelectionLiveDetachesSelectedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.factoryDir != selectedDir || first.sourcePath != filepath.Join(selectedDir, "factory.json") || first.runtimeBaseDir != "/selected-base" {
-		t.Fatalf("selected paths = %#v", first)
-	}
 	request := requests[0]
-	if request.FactoryDir != "" || request.SourcePath != first.sourcePath || request.ExecutionBaseDir != first.runtimeBaseDir || request.Invocation.FactorySessionID != "session-a" || request.Invocation.WorkflowID != "workflow-a" {
-		t.Fatalf("selection request = %#v", request)
-	}
+	assertLiveSnapshotSelectionRequest(t, first, request, selectedDir)
 	if request.Invocation.Arguments.Arguments["model"].Values[0] != "selected" || first.snapshot.Invocation.Arguments.Arguments["model"].Values[0] != "selected" {
 		t.Fatal("arguments aliased caller")
 	}
 	if first.snapshot.PromptSources[0].Name != "selected" || first.snapshot.InvocationSensitiveJSONPointers[0] != "/selected" || first.snapshot.DefinitionVersion.Logical != 1 || first.snapshot.Invocation.FactorySessionID != "session-a" || second.snapshot.Invocation.FactorySessionID != "session-b" {
 		t.Fatalf("selected snapshot mutated: %#v", first.snapshot)
+	}
+}
+
+func assertLiveSnapshotSelectionRequest(t *testing.T, result activationSnapshotResolution, request factorydefinitions.ResolveRuntimeSnapshotRequest, selectedDir string) {
+	t.Helper()
+	if result.factoryDir != selectedDir || result.sourcePath != filepath.Join(selectedDir, "factory.json") || result.runtimeBaseDir != "/selected-base" {
+		t.Fatalf("selected paths = %#v", result)
+	}
+	if request.FactoryDir != "" || request.SourcePath != result.sourcePath || request.ExecutionBaseDir != result.runtimeBaseDir || request.Invocation.FactorySessionID != "session-a" || request.Invocation.WorkflowID != "workflow-a" {
+		t.Fatalf("selection request = %#v", request)
 	}
 }
 
@@ -93,15 +98,20 @@ func TestRuntimeSnapshotSelectionRecordedInputsAreNotReread(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if loads.calls != 0 || string(request.Canonical) != string(canonical) || request.SourcePath != "" || request.ExecutionBaseDir != "/override" || request.Invocation.FactorySessionID != "recorded-session" || request.Invocation.WorkflowID != "recorded-workflow" {
-				t.Fatalf("recorded request = %#v; loads=%d", request, loads.calls)
-			}
+			assertRecordedSnapshotSelectionRequest(t, request, canonical, loads.calls)
 			canonical = factorydefinitions.FactorySnapshot("changed")
 			original.DefinitionVersion.Logical = 10
 			if string(request.Canonical) != `{"name":"recorded"}` || result.snapshot.DefinitionVersion.Logical != 1 || result.factoryDir != "/recorded" || result.runtimeBaseDir != "/override" || result.snapshot.RuntimeBaseDir != "/override" {
 				t.Fatalf("recorded facts mutated: %#v", result)
 			}
 		})
+	}
+}
+
+func assertRecordedSnapshotSelectionRequest(t *testing.T, request factorydefinitions.ResolveRuntimeSnapshotRequest, canonical factorydefinitions.FactorySnapshot, loads int) {
+	t.Helper()
+	if loads != 0 || string(request.Canonical) != string(canonical) || request.SourcePath != "" || request.ExecutionBaseDir != "/override" || request.Invocation.FactorySessionID != "recorded-session" || request.Invocation.WorkflowID != "recorded-workflow" {
+		t.Fatalf("recorded request = %#v; loads=%d", request, loads)
 	}
 }
 
