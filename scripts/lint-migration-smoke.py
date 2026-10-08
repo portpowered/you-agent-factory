@@ -801,9 +801,21 @@ def lint_r2_seed(seed: str, binary: Path, artifacts: Path) -> None:
         results.append({"case": label, "head": head, "command": command,
                         "exit": result.returncode, "seconds": time.monotonic() - started})
         assert (result.returncode == 0) == (expected == 0), f"{label}: unexpected exit; see {artifacts / (label + '.log')}"
+        diagnostic_output = output
+        if seed == "deadcode":
+            # The canonical checker publishes named findings in its report;
+            # stdout/stderr contains only the verdict and aggregate counts.
+            diagnostic_output = (root / "bin/deadcode-current.txt").read_text(encoding="utf-8")
+            write(artifacts, label + ".txt", diagnostic_output)
+            baseline = baselines["docs/internal/baselines/deadcode-baseline.txt"].decode("utf-8")
+            expected_report = baseline.splitlines()
+            if expected:
+                expected_report.append(f"{name}: unreachable func: {diagnostic}")
+                assert "deadcode baseline drift detected" in output, f"{label}: missing drift verdict"
+            assert sorted(diagnostic_output.splitlines()) == sorted(expected_report), f"{label}: unexpected finding delta"
         if expected:
-            assert diagnostic in output, f"{label}: missing {diagnostic} diagnostic"
-            assert name in output.replace("\\", "/"), f"{label}: missing seeded filename"
+            assert diagnostic in diagnostic_output, f"{label}: missing {diagnostic} diagnostic"
+            assert name in diagnostic_output.replace("\\", "/"), f"{label}: missing seeded filename"
         for baseline, content in baselines.items():
             assert (root / baseline).read_bytes() == content, f"{label}: changed baseline"
         print(f"PASS {label}: exit={result.returncode}", flush=True)
