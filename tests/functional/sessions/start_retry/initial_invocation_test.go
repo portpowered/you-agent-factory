@@ -590,6 +590,34 @@ func assertPreparationReplayBesideLiveWork(t *testing.T, process support.Process
 	t.Helper()
 	id := uuid.NewString()
 	recordedAt := time.Date(2026, 7, 12, 12, 0, 2, 0, time.UTC)
+	path, payload := writePreparationRecording(t, id, recordedAt)
+	writer := &preparationInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	unblock := func() { writer.once.Do(func() { close(writer.release) }) }
+	t.Cleanup(unblock)
+	inputs := selectedReplayRetryInputs(t, scenario, path)
+	inputs.Input.Args = []string{"you", "run", "--dir", scenario.candidateDir, "--session", uuid.NewString(), "--replay", path, "--no-record"}
+	inputs.Input.Stdout = writer
+	done := make(chan error, 1)
+	go func() { done <- process.Execute(inputs.Input); close(done) }()
+	t.Cleanup(func() {
+		unblock()
+		if err := <-done; err != nil {
+			t.Errorf("historical CLI inspection: %v", err)
+		}
+	})
+	select {
+	case <-writer.entered:
+	case err := <-done:
+		t.Fatalf("inspection ended before readiness: %v; %s", err, inputs.Stderr())
+	case <-t.Context().Done():
+		t.Fatal("inspection never reached CLI output")
+	}
+	assertPreparationHistoricalFacts(t, sessions, scenario, id, recordedAt, path, payload)
+	unblock()
+}
+
+func writePreparationRecording(t *testing.T, id string, recordedAt time.Time) (string, []byte) {
+	t.Helper()
 	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
 		SessionID: id, Status: "SUCCEEDED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/selected.js",
 		SourceHash: "sha256:" + strings.Repeat("1", 64), PolicyHash: "sha256:" + strings.Repeat("3", 64),
@@ -613,27 +641,11 @@ func assertPreparationReplayBesideLiveWork(t *testing.T, process support.Process
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	writer := &preparationInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
-	unblock := func() { writer.once.Do(func() { close(writer.release) }) }
-	t.Cleanup(unblock)
-	inputs := selectedReplayRetryInputs(t, scenario, path)
-	inputs.Input.Args = []string{"you", "run", "--dir", scenario.candidateDir, "--session", uuid.NewString(), "--replay", path, "--no-record"}
-	inputs.Input.Stdout = writer
-	done := make(chan error, 1)
-	go func() { done <- process.Execute(inputs.Input); close(done) }()
-	t.Cleanup(func() {
-		unblock()
-		if err := <-done; err != nil {
-			t.Errorf("historical CLI inspection: %v", err)
-		}
-	})
-	select {
-	case <-writer.entered:
-	case err := <-done:
-		t.Fatalf("inspection ended before readiness: %v; %s", err, inputs.Stderr())
-	case <-t.Context().Done():
-		t.Fatal("inspection never reached CLI output")
-	}
+	return path, payload
+}
+
+func assertPreparationHistoricalFacts(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, id string, recordedAt time.Time, path string, payload []byte) {
+	t.Helper()
 	read, err := sessions.GetSession(t.Context(), id)
 	if err != nil || read.ResolvedSource.SourceRef != "workflow/selected.js" || read.Status != factorysessions.LifecycleStatusSucceeded {
 		t.Fatalf("selected historical facts = %#v, %v", read, err)
@@ -663,7 +675,6 @@ func assertPreparationReplayBesideLiveWork(t *testing.T, process support.Process
 	if err != nil || string(afterPayload) != string(payload) {
 		t.Fatalf("inspection modified recording: %v", err)
 	}
-	unblock()
 }
 
 type preparationInspectionWriter struct {
