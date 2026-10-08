@@ -30,6 +30,7 @@ type ArtifactHistoryReader struct {
 	names        map[historyIdentity]cachedNames
 	decodes      map[nameDecodeKey]*nameDecode
 	reads        map[historyIdentity]*artifactRead
+	nameUse      uint64
 }
 
 func NewArtifactHistoryReader(query CanonicalHistoryQuery, currentBoard CurrentBoardArtifact, readFile recordings.RecordingReadFile) *ArtifactHistoryReader {
@@ -70,6 +71,7 @@ const maxNameArtifacts = 64
 type cachedNames struct {
 	digest     [sha256.Size]byte
 	projection nameProjection
+	lastUse    uint64
 }
 
 type nameDecodeKey struct {
@@ -176,9 +178,9 @@ func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeK
 			return nameProjection{}, err
 		}
 		r.mu.Lock()
-		if cached, ok := r.names[key.identity]; ok && cached.digest == key.digest {
+		if projection, ok := r.cachedProjection(key); ok {
 			r.mu.Unlock()
-			return cached.projection, ctx.Err()
+			return projection, ctx.Err()
 		}
 		if pending, ok := r.decodes[key]; ok {
 			r.mu.Unlock()
@@ -202,10 +204,7 @@ func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeK
 		projection, err := r.decodeNames(ctx, identity, payload)
 		r.mu.Lock()
 		if err == nil {
-			if len(r.names) >= maxNameArtifacts {
-				clear(r.names)
-			}
-			r.names[key.identity] = cachedNames{digest: key.digest, projection: projection}
+			r.retainProjection(key, projection)
 		}
 		pending.projection, pending.err = projection, err
 		delete(r.decodes, key)
@@ -213,6 +212,44 @@ func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeK
 		r.mu.Unlock()
 		return projection, err
 	}
+}
+
+// Caller holds mu. The decoder consumes Factory scope, recording, artifact and
+// bytes, not the capture generation. Reuse only after a fresh source read with
+// the full capture key and an equal digest. Each caller still validates its own
+// opening and association in attributionQuery; no capture facts are borrowed.
+// Keeping one entry per source avoids eviction churn from many Worker attempts.
+func (r *ArtifactHistoryReader) cachedProjection(key nameDecodeKey) (nameProjection, bool) {
+	for identity, cached := range r.names {
+		if identity.factory != key.identity.factory || identity.recording != key.identity.recording ||
+			identity.artifact != key.identity.artifact || cached.digest != key.digest {
+			continue
+		}
+		r.nameUse++
+		cached.lastUse = r.nameUse
+		r.names[identity] = cached
+		return cached.projection, true
+	}
+	return nameProjection{}, false
+}
+
+// Caller holds mu. Replace revisions of the same exact source, and evict only
+// the least recently used source when full, preserving other warm histories.
+func (r *ArtifactHistoryReader) retainProjection(key nameDecodeKey, projection nameProjection) {
+	var oldest historyIdentity
+	var oldestUse uint64
+	for identity, cached := range r.names {
+		if identity.factory == key.identity.factory && identity.recording == key.identity.recording && identity.artifact == key.identity.artifact {
+			delete(r.names, identity)
+		} else if oldestUse == 0 || cached.lastUse < oldestUse {
+			oldest, oldestUse = identity, cached.lastUse
+		}
+	}
+	if len(r.names) >= maxNameArtifacts {
+		delete(r.names, oldest)
+	}
+	r.nameUse++
+	r.names[key.identity] = cachedNames{digest: key.digest, projection: projection, lastUse: r.nameUse}
 }
 
 func (r *ArtifactHistoryReader) decodeNames(ctx context.Context, identity recordings.HistoricalRecordingIdentity, payload []byte) (nameProjection, error) {

@@ -245,6 +245,75 @@ func TestRetainedNamesLegacySelectionAndScope(t *testing.T) {
 	}
 }
 
+func TestRetainedNamesFreshGenerationsReuseValidatedSource(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	payload := []byte("first")
+	var reads int
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		reads++
+		return payload, nil
+	})
+	for _, generation := range []string{"first", "second", "third"} {
+		page.Catalog.RecordingGenerationID = generation
+		got, err := reader.readWorkerFactoryNames(t.Context(), page)
+		if err != nil || got.names["work"] != "Alpha" {
+			t.Fatalf("generation %s = %+v, %v", generation, got, err)
+		}
+	}
+	if reads != 3 || len(query.requests) != 1 {
+		t.Fatalf("fresh generations: reads=%d decodes=%d", reads, len(query.requests))
+	}
+	// Equal-length replacements still invalidate the shared compact projection.
+	payload = []byte("other")
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Beta")
+	got, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || got.names["work"] != "Beta" || len(query.requests) != 2 {
+		t.Fatalf("replacement = %+v, %v; decodes=%d", got, err, len(query.requests))
+	}
+	// Identical bytes in another recording still require independent validation.
+	page.Catalog.RecordingID = "another-recording"
+	query.err = recordings.ErrInvalidProjectionInput
+	if _, err := reader.readWorkerFactoryNames(t.Context(), page); !errors.Is(err, query.err) || len(query.requests) != 3 {
+		t.Fatalf("foreign recording = %v; decodes=%d", err, len(query.requests))
+	}
+}
+
+func TestRetainedNamesEvictionPreservesRecentlyUsedSource(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "frequent.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	read := func(candidate recordings.WorkerCapturedActivityPage) {
+		t.Helper()
+		got, err := reader.readWorkerFactoryNames(t.Context(), candidate)
+		if err != nil || got.names["work"] != "Alpha" {
+			t.Fatalf("names = %+v, %v", got, err)
+		}
+	}
+	read(page)
+	for index := range maxNameArtifacts + 1 {
+		candidate := page
+		candidate.Catalog.OriginatingArtifact = fmt.Sprintf("infrequent-%d.json", index)
+		read(candidate)
+		// Distinct attempts at the hot source do not consume cache capacity.
+		page.Catalog.RecordingGenerationID = fmt.Sprintf("generation-%d", index)
+		read(page)
+	}
+	if len(query.requests) != maxNameArtifacts+2 {
+		t.Fatalf("hot source repeatedly decoded: %d calls", len(query.requests))
+	}
+	cold := page
+	cold.Catalog.OriginatingArtifact = "infrequent-0.json"
+	read(cold)
+	if len(query.requests) != maxNameArtifacts+3 {
+		t.Fatal("oldest cold source was not evicted")
+	}
+}
+
 func TestRetainedNamesCanceledDecodeIsRetryable(t *testing.T) {
 	t.Parallel()
 	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
