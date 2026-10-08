@@ -18,7 +18,7 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Check design fit, readability, and test coverage on every non-trivial change.
 - Make review comments specific, actionable, and classified as blocking or non-blocking.
 - Judge the diff against the acceptance criteria plus hosted CI. Tests ship in the same PR as the product change they cover; do not demand characterization PRs, evidence documents, per-head checklist files, pre-change witnesses, or "baseline proof" as merge conditions.
-- Hosted CI is the evidence for lint, test, and race results. Reviewers do not run full local suites or a local `-race` run (native `-race` does not work on the Windows factory host). A race in code the PR does not change is a separate fix and does not block the PR.
+- Hosted CI is the evidence for lint and test results. Reviewers do not run full local suites. Apply the [CI pipeline policy](./general-backend-standards.md#ci-pipeline-policy): no CI `-race` runs, one primary job per suite, no shards or separate component/witness steps, static checks in lint, and no network-dependent product checks in PR CI. Review direct and indirect race invocations because automated race detection is explicitly skipped.
 - A PR with passing required checks, no content blocker, and GitHub mergeable state `MERGEABLE` is merged even when it is behind main; rebase only on a real conflict.
 - Approve when the change is correct and within standards, even if you would have written it differently.
 - Request changes for correctness bugs, security issues, missing required tests, or standards violations.

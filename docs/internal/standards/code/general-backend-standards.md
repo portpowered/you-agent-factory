@@ -276,7 +276,7 @@ The expected testing layers are:
   boundaries with controlled external effects
 - integration tests for a small number of real-boundary properties exercised
   through an already compiled deliverable
-- dedicated load, stress, or race-oriented tests for concurrency, throughput,
+- dedicated load or stress tests for concurrency, throughput,
   resource exhaustion, and long-running behavior
 - contract tests for schema alignment, generated artifacts, and public surface guarantees
 - asset conformance tests for declared external artifacts, pinned dependencies, and published locations
@@ -426,7 +426,7 @@ Minimum expectations for non-trivial backend changes:
 - Pure logic has direct unit coverage where applicable.
 - Customer behavior crossing packages has functional coverage; real compiled
   artifact boundaries have limited integration coverage.
-- Concurrency-sensitive behavior has race, stress, or repeat-run coverage where relevant.
+- Concurrency-sensitive behavior has stress or repeat-run coverage where relevant.
 - Public contract changes have contract or smoke coverage.
 
 ### Timing in tests
@@ -460,6 +460,24 @@ Recommended CI shape:
 - unit and integration tests next
 - functional and stress coverage in the appropriate lanes
 
+#### CI pipeline policy
+
+- CI **MUST NOT** run tests with `-race`.
+- Each test suite **MUST** run in one primary job: backend unit plus coverage,
+  backend functional, backend integration, and frontend. Suites **MUST NOT**
+  be sharded or split into component, witness, or race steps or jobs.
+- New checks **MUST** join their suite's primary job or become a
+  golangci-lint/go-analysis rule; they **MUST NOT** introduce a new job.
+  Static checks **MUST** belong in lint.
+- Network-dependent product checks **MUST NOT** run in PR CI.
+- Existing Workflow Lint **MUST** reject added `ci.yml` job IDs against the
+  `origin/main` merge base and fail closed when comparison history is absent.
+  Unchanged legacy jobs remain accepted during migration; deletions are allowed.
+  Automatic executable `-race` detection is skipped: the current Node harness
+  has no YAML/shell parser, and text matching cannot reliably distinguish
+  executable flags from comments and strings. Review **MUST** enforce the
+  no-race rule, including indirect Make/shell invocations.
+
 ### 9. Concurrency, Runtime Safety, and Resource Use
 
 Backend runtime behavior **MUST** remain safe under concurrent and adverse conditions.
@@ -477,7 +495,7 @@ Rules:
 
 Verification:
 
-- Race or stress coverage **SHOULD** exist where concurrency is core to the feature.
+- Stress or repeat-run coverage **SHOULD** exist where concurrency is core to the feature.
 - High-risk runtime behavior **SHOULD** include repeated-run or soak-style verification when appropriate.
 
 ### 10. Network Traffic and Dependency Behavior

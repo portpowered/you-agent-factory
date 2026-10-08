@@ -7,6 +7,53 @@ import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
+// Deliberately accept only a block mapping, not YAML aliases or flow mappings.
+// actionlint checks the full schema; unsupported inventory syntax fails closed.
+function ciJobIds(workflow) {
+	const lines = workflow.replace(/\r\n/g, "\n").split("\n");
+	const roots = lines.flatMap((line, index) => /^jobs:\s*(?:#.*)?$/.test(line) ? [index] : []);
+	if (roots.length !== 1) throw new Error("CI job guard requires one top-level jobs block mapping");
+	const ids = [];
+	let indentation;
+	for (const line of lines.slice(roots[0] + 1)) {
+		if (/^\s*(?:#.*)?$/.test(line)) continue;
+		const width = line.match(/^ */)[0].length;
+		if (width === 0) break;
+		indentation ??= width;
+		if (width < indentation) throw new Error("CI job guard found inconsistent jobs indentation");
+		if (width > indentation) continue;
+		const key = line.trim().match(/^(?:([A-Za-z_][A-Za-z0-9_-]*)|'([A-Za-z_][A-Za-z0-9_-]*)'|"([A-Za-z_][A-Za-z0-9_-]*)"):\s*(?:#.*)?$/);
+		if (!key) throw new Error("CI job guard requires plain job block mappings (no aliases or flow mappings)");
+		ids.push(key[1] ?? key[2] ?? key[3]);
+	}
+	if (!ids.length || new Set(ids).size !== ids.length) throw new Error("CI job guard requires nonempty, unique job IDs");
+	return ids;
+}
+
+export function validateCIJobGrowth({ workflow, baselineWorkflow }) {
+	const baseline = new Set(ciJobIds(baselineWorkflow));
+	const added = ciJobIds(workflow).filter((id) => !baseline.has(id));
+	if (added.length) {
+		throw new Error(`CI job guard: added job IDs ${added.join(", ")}; put checks in their primary suite job or lint instead`);
+	}
+	return { name: "ci-job-growth", status: "pass" };
+}
+
+export function validateCIJobGrowthFromHistory({ repositoryRoot = process.cwd(), spawn = spawnSync } = {}) {
+	const git = (args) => {
+		const result = spawn("git", args, { cwd: repositoryRoot, encoding: "utf8", windowsHide: true });
+		if (result.error || result.status !== 0 || !result.stdout?.trim()) {
+			throw new Error(`CI job guard: comparison history unavailable; fetch full origin/main history (${args[0]})`);
+		}
+		return result.stdout.trim();
+	};
+	const base = git(["merge-base", "HEAD", "origin/main"]);
+	return validateCIJobGrowth({
+		workflow: readFileSync(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"),
+		baselineWorkflow: git(["show", `${base}:.github/workflows/ci.yml`]),
+	});
+}
+
 function comparePaths(left, right) {
 	if (left < right) return -1;
 	if (left > right) return 1;
@@ -421,6 +468,7 @@ export function runWorkflowLint({
 		throw new Error(`Workflow schema lint failed with exit code ${result.status}${termination}.`);
 	}
 	if (validateRepositoryContracts) {
+		validateCIJobGrowthFromHistory();
 		validateConsolidatedCIWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});
