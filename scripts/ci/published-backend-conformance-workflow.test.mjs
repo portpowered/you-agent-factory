@@ -12,7 +12,9 @@ test("scheduled and manual events select the live published-backend cell", () =>
 });
 
 test("pull requests do not select live published-backend requests", () => {
-	const selection = selectPublishedBackendConformance({ eventName: "pull_request" });
-	assert.equal(selection.selected, false);
-	assert.match(selection.reason, /do not run live/);
+	for (const eventName of ["pull_request", "merge_group", "push", "release", "workflow_call", undefined]) {
+		const selection = selectPublishedBackendConformance({ eventName });
+		assert.equal(selection.selected, false, eventName);
+		assert.match(selection.reason, /do not run live/);
+	}
 });

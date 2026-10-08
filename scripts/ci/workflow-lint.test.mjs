@@ -10,6 +10,7 @@ import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
 	validateCIJobGrowth,
+	validateBackendConformanceWorkflowContract,
 	validateCIJobGrowthFromHistory,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
@@ -349,4 +350,45 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 		"WORKFLOW_LINT_STATIC_CONTRACTS_OK",
 		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
 	]);
+});
+
+const conformanceContract = {
+	workflow: "jobs:\n  backend-lint:\n    steps:\n      - run: make lint\n",
+	makefile: "LINT_TARGETS_BASE := golangci test-backend-conformance\ntest-backend-conformance:\n\t$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance -count=1\n\ntest-backend-conformance-live:\n\t$(GO) test -tags=functionallong ./pkg/services/models/internal/backendconformance\n",
+	publishedWorkflow: `on:
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # github.event.repository.default_branch
+    steps:
+      - run: node scripts/ci/published-backend-conformance-workflow.mjs
+      - run: make test-backend-conformance-live
+`,
+};
+
+test("conformance checker accepts one canonical offline target and monthly live owner", () => {
+	assert.equal(validateBackendConformanceWorkflowContract(conformanceContract).status, "pass");
+});
+
+test("conformance checker rejects retired outputs and policy or job references", () => {
+	for (const reference of ["backend-conformance:", "needs.backend-conformance.result", "needs: [classify, backend-conformance, backend-lint]", "run_backend_conformance", "backend_conformance_reason", "backend_conformance_command", "BACKEND_CONFORMANCE_RESULT", "RUN_BACKEND_CONFORMANCE"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + reference }), /retired Backend Conformance/);
+	}
+});
+
+test("conformance checker rejects missing offline validation and PR or duplicate live execution", () => {
+	for (const makefile of [conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci"), conformanceContract.makefile.replace("golangci test-backend-conformance", "golangci test-backend-conformance test-backend-conformance")]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile }), /exactly once/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-tags=backendconformance", "-tags=functionallong") }), /offline decoder/);
+	for (const command of ["make test-backend-conformance-live", "go test -run TestPublishedBackendArtifactLocations"]) {
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, workflow: conformanceContract.workflow + command }), /monthly\/manual/);
+		assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, otherWorkflows: [command] }), /monthly\/manual/);
+	}
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, publishedWorkflow: conformanceContract.publishedWorkflow.replace("  workflow_dispatch:", "  pull_request:") }), /monthly\/manual/);
+	assert.throws(() => validateBackendConformanceWorkflowContract({ ...conformanceContract, makefile: conformanceContract.makefile.replace("-count=1", "-count=1\n\t$(MAKE) test-backend-conformance-live") }), /must not invoke live/);
 });

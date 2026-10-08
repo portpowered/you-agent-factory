@@ -11,7 +11,7 @@ function read(path) {
 }
 
 function backendCoverageJob(workflow) {
-	const match = workflow.match(/\n  backend-coverage:\n([\s\S]*?)\n  backend-conformance:/);
+	const match = workflow.match(/\n  backend-coverage:\n([\s\S]*?)\n  backend-integration:/);
 	assert.ok(match, "backend-coverage job is missing");
 	return match[1];
 }

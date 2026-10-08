@@ -14,7 +14,6 @@ const laneNames = [
 	"Frontend",
 	"Backend",
 	"Backend Models Wire and Race",
-	"Backend Conformance",
 	"Backend Lint",
 	"Workflow Lint",
 	"UI Backend Integration",
@@ -63,7 +62,7 @@ test("minimal selected verification passes and unselected lanes may be skipped",
 test("unit-only PR accepts unselected skips and fails every mandatory or selected result independently", () => {
 	const env = { ...process.env, GITHUB_STEP_SUMMARY: "", CLASSIFICATION_RESULT: "success",
 		CLASSIFICATION: "documentation", PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "true", API_INDEPENDENT: "true" };
-	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
 		env[`RUN_${prefix}`] = "false";
 		env[`${prefix}_RESULT`] = "skipped";
 	}
@@ -88,7 +87,7 @@ test("unit-only PR accepts unselected skips and fails every mandatory or selecte
 test("API-only PR requires both independent proofs and permits skipped reusable children", () => {
 	const base = { ...process.env, GITHUB_STEP_SUMMARY: "", BACKEND_COVERAGE_RESULT: "success", RUN_BACKEND_COVERAGE: "true", BACKEND_TTS_RESULT: "skipped", CLASSIFICATION_RESULT: "success",
 		CLASSIFICATION: "api-package", PACKAGE_WORKFLOW_RESULT: "skipped", RUN_CANDIDATES: "true", API_INDEPENDENT: "true" };
-	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
 		base[`RUN_${prefix}`] = "false";
 		base[`${prefix}_RESULT`] = "skipped";
 	}
@@ -151,7 +150,7 @@ test("policy CLI consumes the hosted Models result independently of backend cove
 		PACKAGE_WORKFLOW_RESULT: "skipped",
 		RUN_CANDIDATES: "false",
 	};
-	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_CONFORMANCE", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
+	for (const prefix of ["DOCS", "README", "FRONTEND", "BACKEND", "BACKEND_LINT", "WORKFLOW_LINT", "UI_BACKEND", "API", "PACKAGED", "PROVIDERS"]) {
 		env[`RUN_${prefix}`] = "false";
 		env[`${prefix}_RESULT`] = "skipped";
 	}
@@ -249,25 +248,6 @@ test("required Workflow Lint fails the policy when its hosted job is skipped or 
 	}
 });
 
-test("selected Backend Conformance fails the policy when the offline guard fails", () => {
-	const evaluation = evaluateVerificationPolicy(
-		policy({
-			lanes: [
-				...laneNames
-					.filter((name) => name !== "Backend Conformance")
-					.map((name) => lane(name)),
-				lane("Backend Conformance", true, "failure", {
-					reason: "The affected backend surface requires the offline guard.",
-				}),
-			],
-		}),
-	);
-
-	assert.equal(evaluation.ok, false);
-	assert.ok(
-		evaluation.failures.some((failure) => /Backend Conformance was selected/.test(failure)),
-	);
-});
 
 test("classifier failure fails policy even when every product lane succeeds", () => {
 	const evaluation = evaluateVerificationPolicy(

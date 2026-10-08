@@ -9,7 +9,7 @@ import { once } from "node:events";
 import { execPath, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS } from "./backend-lint-policy.mjs";
+import { BACKEND_LINT_ALLOWANCES, BACKEND_LINT_REQUIRED_TARGETS, evaluateBackendLintPolicy } from "./backend-lint-policy.mjs";
 import { selectLintInputs } from "./backend-lint-workflow.mjs";
 import {
 	beginLintRun, startLintTarget, recordLintTarget, collectLintRun, removeLintRun,
@@ -724,7 +724,7 @@ const passingTarget = (name) => ({ name, status: "pass", durationMillis: 1, outp
 
 test("validated optional skips are visible and selected omissions fail closed", () => {
     const selection = selectedInputs(["ui/src/App.tsx"]);
-    const input = report({ selection, targets: [passingTarget("golangci")] });
+    const input = report({ selection, targets: [passingTarget("golangci"), passingTarget("test-backend-conformance")] });
     const summary = summarizeBackendLintReport(input, { selection });
     assert.equal(summary.ok, true);
     assert.match(renderBackendLintSummary(summary), /deadcode: skipped/);
@@ -732,9 +732,9 @@ test("validated optional skips are visible and selected omissions fail closed", 
     assert.equal(summarizeBackendLintReport({ ...input, selection: undefined }).ok, false);
     const docs = selectedInputs(["docs/reference/run.md"]);
     assert.equal(summarizeBackendLintReport({ ...input, selection: docs }).ok, false);
-    const complete = { ...input, selection: docs, targets: [passingTarget("golangci"), passingTarget("deadcode"), passingTarget("docs-reference-check")] };
+    const complete = { ...input, selection: docs, targets: [passingTarget("golangci"), passingTarget("test-backend-conformance"), passingTarget("deadcode"), passingTarget("docs-reference-check")] };
     assert.equal(summarizeBackendLintReport(complete).ok, true);
-    for (const name of ["golangci", "deadcode", "docs-reference-check"]) {
+    for (const name of ["golangci", "test-backend-conformance", "deadcode", "docs-reference-check"]) {
         const failed = complete.targets.map((target) => target.name === name ? { ...target, status: "fail", output: "tool unavailable" } : target);
         assert.equal(summarizeBackendLintReport({ ...complete, targets: failed }).ok, false);
     }
@@ -742,7 +742,7 @@ test("validated optional skips are visible and selected omissions fail closed", 
 
 test("mismatched, null, corrupt and duplicate selection reports fail closed", () => {
     const selection = selectedInputs(["README.md"]);
-    const input = report({ selection, targets: [passingTarget("golangci")] });
+    const input = report({ selection, targets: [passingTarget("golangci"), passingTarget("test-backend-conformance")] });
     for (const options of [{ selection: null }, { selectionError: "unreadable selection" }, { selection: selectedInputs(["docs/reference/run.md"]) }, { testedSha: "c".repeat(40) }, { event: "push" }]) {
         assert.equal(summarizeBackendLintReport(input, options).harnessFailure, true);
     }
@@ -752,14 +752,16 @@ test("mismatched, null, corrupt and duplicate selection reports fail closed", ()
 
 test("collector preserves selection identity and rejects changes during execution", (t) => {
     const selection = selectedInputs(["README.md"]);
-    const directory = beginLintRun("1", ["golangci"], "", selection);
+    const directory = beginLintRun("1", ["golangci", "test-backend-conformance"], "", selection);
     t.after(() => removeLintRun(directory));
-    startLintTarget(directory, "golangci");
-    writeFileSync(join(directory, "golangci.log"), "clean");
-    recordLintTarget(directory, "golangci", "0");
-    assert.throws(() => collectLintRun(directory, ["golangci"]), /selection changed/);
-    assert.throws(() => collectLintRun(directory, ["golangci"], "", selectedInputs(["docs/reference/run.md"])), /selection changed/);
-    const collected = collectLintRun(directory, ["golangci"], "", selection);
+    for (const name of ["golangci", "test-backend-conformance"]) {
+        startLintTarget(directory, name);
+        writeFileSync(join(directory, `${name}.log`), "clean");
+        recordLintTarget(directory, name, "0");
+    }
+    assert.throws(() => collectLintRun(directory, ["golangci", "test-backend-conformance"]), /selection changed/);
+    assert.throws(() => collectLintRun(directory, ["golangci", "test-backend-conformance"], "", selectedInputs(["docs/reference/run.md"])), /selection changed/);
+    const collected = collectLintRun(directory, ["golangci", "test-backend-conformance"], "", selection);
     assert.deepEqual(collected.selection, selection);
     assert.equal(summarizeBackendLintReport(collected, { selection }).ok, true);
 });
@@ -877,5 +879,21 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 				assert.ok(args.includes("--build-tags=integration,functionallong,backendconformance,factoryartifact,managed_process_integration"));
 			}
 		}
+	}
+});
+
+
+test("offline backend conformance remains required when optional lint inputs are skipped", () => {
+	const selection = { docs: 0, deadcode: 0 };
+	const targets = baselineTargets().filter((target) => target.name !== "deadcode");
+	assert.equal(evaluateBackendLintPolicy(targets, selection).ok, true);
+	const missing = evaluateBackendLintPolicy(targets.filter((target) => target.name !== "test-backend-conformance"), selection);
+	assert.equal(missing.ok, false);
+	assert.match(missing.failures.join("\n"), /test-backend-conformance .*not observed/);
+	assert.equal(BACKEND_LINT_ALLOWANCES["test-backend-conformance"], undefined);
+	for (const output of ["artifacts[0].artifact.sha256 must be a lowercase 64-character SHA-256", "LINT_VIOLATION_COUNT: 1"]) {
+		const failed = summarizeBackendLintReport(report({ targets: baselineTargets({ "test-backend-conformance": unallowlistedTarget("test-backend-conformance", output) }) }));
+		assert.equal(failed.ok, false);
+		assert.match(renderBackendLintVerdict(failed), /test-backend-conformance/);
 	}
 });

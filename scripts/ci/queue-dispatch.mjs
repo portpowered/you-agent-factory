@@ -16,10 +16,10 @@ export function validateQueueDispatch(workflow) {
 	require(setup, "if: github.event_name == 'pull_request'\n        run: go run ./cmd/ciclassify", "PR-only classification");
 	if (setup.includes("merge_group.base_sha")) throw new Error("Queue must not classify paths.");
 	for (const lane of ["docs_reference", "readme"]) require(setup, `run_${lane}: "true"`, `mandatory ${lane}`);
-	for (const lane of ["frontend", "backend", "backend_conformance", "ui_backend_integration", "api_package", "packaged_factories_package", "model_providers_package"]) {
+	for (const lane of ["frontend", "backend", "ui_backend_integration", "api_package", "packaged_factories_package", "model_providers_package"]) {
 		require(setup, `run_${lane}: \${{ steps.classify.outputs.run_${lane} != 'false' }}`, `full queue ${lane} fallback`);
 	}
-	for (const name of ["readme", "frontend", "frontend-browser", "backend-conformance", "backend-integration", "tts-clean-install-windows", "ui-backend-integration", "backend-coverage", "verification-policy"]) {
+	for (const name of ["readme", "frontend", "frontend-browser", "backend-integration", "tts-clean-install-windows", "ui-backend-integration", "backend-coverage", "verification-policy"]) {
 		require(job(name), "if: always() && github.event_name != 'push'", `no main ${name} run`);
 	}
 	require(job("backend-lint"), "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'\n", "PR/queue Backend Lint");
@@ -44,25 +44,6 @@ export function validateQueueDispatch(workflow) {
 	require(job("development-package"), "(github.event_name == 'merge_group' || (github.event_name == 'pull_request' &&", "queue/full and PR/selected packages");
 	require(job("backend-visualizations-publish"), "if: github.event_name == 'push' && github.ref == 'refs/heads/main'", "main-only maintenance");
 	require(workflow, "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "PR-only cancellation");
-	const conformanceJob = job("backend-conformance");
-	const policyJob = job("verification-policy");
-	const offlineStep = conformanceJob.indexOf("run: make test-backend-conformance");
-	const liveStep = conformanceJob.indexOf("run: make test-backend-conformance-live");
-
-	assert.match(
-		conformanceJob,
-		/if: always\(\) && github\.event_name != 'push' && needs\.classify\.outputs\.run_backend_conformance != 'false'/,
-	);
-	assert.match(conformanceJob, /timeout-minutes: 10/);
-	assert.ok(offlineStep >= 0, "offline backend conformance step is missing");
-	assert.ok(liveStep > offlineStep, "live validation must follow offline conformance");
-	assert.doesNotMatch(conformanceJob, /continue-on-error:\s*true/);
-
-	assert.match(policyJob, /needs: \[[^\]]*\bbackend-conformance\b[^\]]*\]/s);
-	assert.match(
-		policyJob,
-		/BACKEND_CONFORMANCE_RESULT: \$\{\{ needs\.backend-conformance\.result \}\}/,
-	);
 	const preview = job("backend-visualizations-preview");
 	assert.match(preview, /github\.event_name == 'pull_request'/);
 	assert.match(preview, /needs\.backend-coverage\.result == 'success'/);

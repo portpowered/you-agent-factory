@@ -416,11 +416,48 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	return { name: "backend-lint-workflow", status: "pass" };
 }
 
+export function validateBackendConformanceWorkflowContract({ workflow, makefile, publishedWorkflow, otherWorkflows = [] }) {
+	if (/backend-conformance:|needs\.backend-conformance\.|(?:\[|,)\s*backend-conformance(?=\s*[,\]])|run_backend_conformance|backend_conformance_(?:reason|command)|BACKEND_CONFORMANCE_(?:RESULT|REASON)|RUN_BACKEND_CONFORMANCE/.test(workflow)) {
+		throw new Error("Remove retired Backend Conformance job, classifier outputs and policy references.");
+	}
+	for (const text of [workflow, ...otherWorkflows]) {
+		if (/test-backend-conformance-live|TestPublishedBackendArtifactLocations/.test(text)) {
+			throw new Error("Live backend release requests belong only to the monthly/manual published-backend-conformance workflow.");
+		}
+	}
+	const inventory = makefile.match(/^LINT_TARGETS_BASE\s*:?=\s*(.*)$/m)?.[1].split(/\s+/) ?? [];
+	if (inventory.filter((target) => target === "test-backend-conformance").length !== 1) {
+		throw new Error("Canonical Backend Lint must include test-backend-conformance exactly once.");
+	}
+	requireWorkflowText(makefile, "test-backend-conformance:\n\t$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance", "offline decoder/validator target");
+	const offlineRecipe = makefile.match(/^test-backend-conformance:\n([\s\S]*?)(?=^\S|$(?![\s\S]))/m)?.[1] ?? "";
+	if (/functionallong|test-backend-conformance-live|curl|wget|TestPublishedBackendArtifactLocations/.test(offlineRecipe)) {
+		throw new Error("Offline backend conformance target must not invoke live release validation.");
+	}
+	const triggers = publishedWorkflow.match(/^on:\n([\s\S]*?)(?=^\S)/m)?.[1] ?? "";
+	if (!/^  schedule:\n    - cron: "17 4 1 \* \*"\n  workflow_dispatch:\s*$/.test(triggers)) {
+		throw new Error("Published backend conformance must remain monthly/manual only.");
+	}
+	requireWorkflowText(publishedWorkflow, "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", "live event restriction");
+	requireWorkflowText(publishedWorkflow, "github.event.repository.default_branch", "live default-branch restriction");
+	requireWorkflowText(publishedWorkflow, "run: node scripts/ci/published-backend-conformance-workflow.mjs", "live selector");
+	requireWorkflowText(publishedWorkflow, "run: make test-backend-conformance-live", "sole live release owner");
+	return { name: "backend-conformance-workflow", status: "pass" };
+}
+
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	return {
 		contracts: [
+			validateBackendConformanceWorkflowContract({
+				workflow,
+				makefile: readFileSync(join(root, "Makefile"), "utf8"),
+				publishedWorkflow: readFileSync(join(root, ".github/workflows/published-backend-conformance.yml"), "utf8"),
+				otherWorkflows: discoverWorkflowFiles(join(root, ".github/workflows"))
+					.filter((file) => !file.endsWith("published-backend-conformance.yml") && !file.endsWith("ci.yml"))
+					.map((file) => readFileSync(file, "utf8")),
+			}),
 			validateReusablePackageWorkflowContract({
 				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
 			}),
