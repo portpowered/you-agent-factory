@@ -1,6 +1,7 @@
 package isolation_and_recovery_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -303,9 +304,13 @@ func TestBoardRestoreReproducesFailedAndEscalatedStatesGeneratedChild(t *testing
 	prepareGeneratedFailureFactory(t, dir)
 	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
 	var starts atomic.Int32
+	var failStartup atomic.Bool
 	runner := &boardRestoreGeneratedChildRunner{}
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if failStartup.Load() {
+				return errors.New("controlled listener startup failure")
+			}
 			return apis[starts.Add(1)-1].Start(ctx, request)
 		}})
 	support.CleanupProcess(t, process)
@@ -334,10 +339,11 @@ func TestBoardRestoreReproducesFailedAndEscalatedStatesGeneratedChild(t *testing
 				restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/"+taskID+"/move"), []byte(`{"stateName":"init"}`))
 			}
 			support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
-				return status.TotalTokens == 4 && status.Categories.Failed == 3
+				return status.TotalTokens == 4 && status.Categories.Failed >= 3
 			})
 			assertBoardRestoreIdeaCascade(t, support.GetFactoryEventsForSessionAt(t, url, "~default"), ideaID, taskID)
 			if generation == 1 {
+				failOriginalPlanningIdea(t, url)
 				before, events = readBoardRestoreStates(t, url), support.GetFactoryEventsForSessionAt(t, url, "~default")
 				assertGracefulFailureTickReset(t, events, ideaID)
 			} else {
@@ -353,9 +359,46 @@ func TestBoardRestoreReproducesFailedAndEscalatedStatesGeneratedChild(t *testing
 			t.Fatal(err)
 		}
 		recordingPath = reference.ArtifactReference
+		if generation == 1 {
+			assertGeneratedBoardFailedPlainStartup(t, recordingPath, func() string {
+				failed := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server", "--quiet"})
+				failed.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+				failed.Input.WorkingDirectory = repo
+				failStartup.Store(true)
+				err := process.Execute(failed.Input)
+				failStartup.Store(false)
+				if err == nil {
+					t.Fatal("plain listener failure unexpectedly started")
+				}
+				return failed.Stderr()
+			})
+		}
 	}
 	if runner.calls.Load() != 2 {
 		t.Fatalf("provider calls=%d, want planning plus failure without redispatch", runner.calls.Load())
+	}
+}
+
+func failOriginalPlanningIdea(t *testing.T, url string) {
+	t.Helper()
+	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/idea-1/move"), []byte(`{"stateName":"failed"}`))
+	support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.TotalTokens == 4 && status.Categories.Failed == 4
+	})
+}
+
+// Plain startup selects the retained board without --record. The callback
+// joins Execute's cleanup before the observer compares the complete file.
+func assertGeneratedBoardFailedPlainStartup(t *testing.T, recordingPath string, run func() string) {
+	t.Helper()
+	before := mustReadSeededReplayArtifact(t, recordingPath)
+	stderr := run()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(stderr), &response); err != nil || response.Code != "SERVER_START_FAILED" {
+		t.Fatalf("plain failed startup response: %s", stderr)
+	}
+	if !bytes.Equal(before, mustReadSeededReplayArtifact(t, recordingPath)) {
+		t.Fatal("plain failed startup changed retained board history after cleanup")
 	}
 }
 
