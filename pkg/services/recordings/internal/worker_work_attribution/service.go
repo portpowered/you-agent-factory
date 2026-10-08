@@ -174,6 +174,15 @@ func (q *attributionQuery) capture(ctx context.Context, workerID string) (record
 
 func (q *attributionQuery) projection(ctx context.Context, page recordings.WorkerCapturedActivityPage, factory string) (nameProjection, error) {
 	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, page.Catalog.OriginatingArtifact}
+	// Capture generations identify individual Worker attempts, not revisions of
+	// their shared Factory artifact. Each opening is validated before reaching
+	// here; within this request the exact scoped artifact supplies one snapshot
+	// of names and associations for all those attempts. Keep legacy candidates
+	// separate so their configured artifact selection is resolved independently.
+	// The reader's cross-request cache still uses the complete capture identity.
+	if key.artifact != "" {
+		key.generation = ""
+	}
 	projection, loaded := q.projections[key]
 	if !loaded {
 		if reader, ok := q.service.history.(interface {

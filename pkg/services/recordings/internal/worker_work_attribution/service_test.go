@@ -81,6 +81,12 @@ func TestWorkerWorkAttributionSharesRecordingProjection(t *testing.T) {
 		"worker-a": capturePage(t, "worker-a", "scope", "recording", "dispatch-a", "work"),
 		"worker-b": capturePage(t, "worker-b", "scope", "recording", "dispatch-b", "work"),
 	}}
+	// Production generations include the Worker identity even when both
+	// attempts share the same originating Factory recording.
+	for id, page := range captures.pages {
+		page.Catalog.RecordingGenerationID = "generation-" + id
+		captures.pages[id] = page
+	}
 	history := &historyFake{histories: map[string]recordings.HistoricalRecordingQueryResult{"recording": h}}
 	got, err := New(captures, history).ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{
 		{WorkerSessionID: "worker-a", FactorySessionID: "scope", WorkID: "work"}, {WorkerSessionID: "worker-b", FactorySessionID: "scope", WorkID: "work"},

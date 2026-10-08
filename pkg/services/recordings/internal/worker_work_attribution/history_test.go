@@ -157,6 +157,71 @@ func TestRetainedNamesFreshnessAndRetry(t *testing.T) {
 	}
 }
 
+func TestRetainedNamesBatchSharesArtifactAcrossAttemptGenerations(t *testing.T) {
+	t.Parallel()
+	captures := &captureFake{pages: make(map[string]recordings.WorkerCapturedActivityPage)}
+	var requests []recordings.WorkerWorkAttributionRequest
+	for _, id := range []string{"worker-a", "worker-b"} {
+		page := capturePage(t, id, "scope", "recording", "dispatch-"+id, "work")
+		page.Catalog.RecordingGenerationID = "generation-" + id
+		page.Catalog.OriginatingArtifact = "exact.json"
+		captures.pages[id] = page
+		requests = append(requests, recordings.WorkerWorkAttributionRequest{WorkerSessionID: id, FactorySessionID: "scope", WorkID: "work"})
+	}
+	history := namedHistory(t, "scope", "worker-a", "dispatch-worker-a", "work", "Alpha")
+	other := namedHistory(t, "scope", "worker-b", "dispatch-worker-b", "work", "Alpha")
+	history.Events = append(history.Events, other.Events[1:]...)
+	query := &canonicalQueryFake{result: history}
+	reads := 0
+	payload := []byte("first")
+	var readErr error
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		reads++
+		return payload, readErr
+	})
+	service := New(captures, reader)
+	check := func(name string, unavailable bool) {
+		t.Helper()
+		got, err := service.ResolveWorkerWorkAttribution(t.Context(), requests)
+		if err != nil || len(got) != len(requests) {
+			t.Fatalf("batch = %+v, %v", got, err)
+		}
+		for i, row := range got {
+			if row.WorkerSessionID != requests[i].WorkerSessionID || row.WorkName != name || row.HistoryUnavailable != unavailable {
+				t.Fatalf("row %d = %+v", i, row)
+			}
+		}
+	}
+	check("Alpha", false)
+	if reads != 1 || len(query.requests) != 1 {
+		t.Fatalf("shared artifact read/decode counts = %d/%d", reads, len(query.requests))
+	}
+	payload = []byte("other") // Equal-length replacement must be seen on a fresh query.
+	query.result.Events[0] = namedHistory(t, "scope", "worker-a", "dispatch-worker-a", "work", "Beta").Events[0]
+	check("Beta", false)
+	if reads != 2 || len(query.requests) != 2 {
+		t.Fatalf("fresh artifact read/decode counts = %d/%d", reads, len(query.requests))
+	}
+	readErr = os.ErrNotExist
+	check("", true)
+	readErr = nil
+	check("Beta", false)
+	// Sharing the projection must never skip validation of the second opening.
+	page := captures.pages["worker-b"]
+	page.Opening.Payload = []byte("broken")
+	captures.pages["worker-b"] = page
+	if _, err := service.ResolveWorkerWorkAttribution(t.Context(), requests); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("invalid sibling capture = %v", err)
+	}
+	page = capturePage(t, "worker-b", "scope", "recording", "conflicting-dispatch", "work")
+	page.Catalog.RecordingGenerationID = "generation-worker-b"
+	page.Catalog.OriginatingArtifact = "exact.json"
+	captures.pages["worker-b"] = page
+	if _, err := service.ResolveWorkerWorkAttribution(t.Context(), requests); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+		t.Fatalf("conflicting sibling association = %v", err)
+	}
+}
+
 func TestRetainedNamesLegacySelectionAndScope(t *testing.T) {
 	t.Parallel()
 	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
