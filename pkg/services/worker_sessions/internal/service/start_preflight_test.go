@@ -42,7 +42,7 @@ func (e *preflightExecution) Execute(_ context.Context, request workers.ExecuteR
 
 func newPreflightRegistry(t *testing.T, executor workers.Service) (*registry, workersessions.StartRequest) {
 	t.Helper()
-	service, err := New(executor, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(executor, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}

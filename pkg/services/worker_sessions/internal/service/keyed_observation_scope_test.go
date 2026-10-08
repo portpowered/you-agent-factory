@@ -88,9 +88,9 @@ func TestKeyedRuntimeObservationReadsRejectForeignFactoryScopeBeforeEffects(t *t
 	for _, scope := range []string{"replay-session", "   "} {
 		t.Run(scope, func(t *testing.T) {
 			t.Parallel()
-			projector := &trackingObservationProjector{}
+
 			reader := &observationEventReaderFake{}
-			registry := newObservationRegistry(projector, reader)
+			registry := newObservationRegistry(reader)
 			registry.sessions["recorded-worker"] = observationSession("recorded-worker", workersessions.StateCompleted)
 			metadata := observationMetadata()
 			metadata.factorySessionID = "recording-session"
@@ -102,14 +102,14 @@ func TestKeyedRuntimeObservationReadsRejectForeignFactoryScopeBeforeEffects(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
-			ownProjectionCalls := projector.calls
+
 			wantErr := workersessions.ErrObservationSessionNotFound
 			if scope == "   " {
 				wantErr = workersessions.ErrInvalidObservationFactorySessionID
 			}
 			assertForeignObservationReads(t, registry, scope, wantErr)
-			if projector.calls != ownProjectionCalls || reader.readCalls != 0 || reader.subscribeCalls != 0 {
-				t.Fatalf("foreign reads reached provider/events: %d/%d/%d", projector.calls, reader.readCalls, reader.subscribeCalls)
+			if reader.readCalls != 0 || reader.subscribeCalls != 0 {
+				t.Fatalf("foreign reads reached events: %d/%d", reader.readCalls, reader.subscribeCalls)
 			}
 			after, err := registry.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 				WorkerSessionID: "recorded-worker", FactorySessionID: "recording-session",
@@ -154,8 +154,8 @@ func TestKeyedRuntimeObservationReadsRetainSelectedScopeAndDirectCompatibility(t
 	for _, scope := range []string{"", "recording-session", " recording-session "} {
 		t.Run(scope, func(t *testing.T) {
 			t.Parallel()
-			projector := &trackingObservationProjector{}
-			registry := newObservationRegistry(projector, nil)
+
+			registry := newObservationRegistry(nil)
 			registry.sessions["recorded-worker"] = observationSession("recorded-worker", workersessions.StateCompleted)
 			metadata := observationMetadata()
 			metadata.factorySessionID = "recording-session"
@@ -164,8 +164,8 @@ func TestKeyedRuntimeObservationReadsRetainSelectedScopeAndDirectCompatibility(t
 			result, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{
 				WorkerSessionID: "recorded-worker", FactorySessionID: scope,
 			})
-			if err != nil || result.WorkerSessionID != "recorded-worker" || projector.calls != 0 {
-				t.Fatalf("selected transcript = %+v, %v; provider calls=%d request=%+v", result, err, projector.calls, projector.request)
+			if err != nil || result.WorkerSessionID != "recorded-worker" {
+				t.Fatalf("selected transcript = %+v, %v", result, err)
 			}
 		})
 	}
@@ -191,7 +191,7 @@ func TestKeyedRuntimeScopedTopicReplayPreservesWorkerIdentity(t *testing.T) {
 				Next:     events.Cursor{Topic: topic, Position: 1},
 				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 1},
 			}}}
-			registry := newObservationRegistry(nil, reader)
+			registry := newObservationRegistry(reader)
 			registry.sessions[workerID] = observationSession(workerID, workersessions.StateRunning)
 			metadata := observationMetadata()
 			metadata.factorySessionID = owner
@@ -219,7 +219,7 @@ func TestKeyedRuntimeScopedTopicReplayPreservesWorkerIdentity(t *testing.T) {
 
 func TestKeyedRuntimeDirectTopicKeepsCompatibility(t *testing.T) {
 	t.Parallel()
-	registry := newObservationRegistry(nil, nil)
+	registry := newObservationRegistry(nil)
 	registry.observations["direct-worker"] = &observation{direct: true, factorySessionID: "direct-context"}
 	if got := registry.observationTopic("direct-worker"); got != workersessions.Topic("direct-worker") {
 		t.Fatalf("direct topic = %s", got)
@@ -231,7 +231,7 @@ func TestKeyedRuntimeDirectReadAcceptsOnlyDefaultCompatibilityScope(t *testing.T
 	for _, state := range []workersessions.State{workersessions.StateRunning, workersessions.StateCompleted} {
 		t.Run(string(state), func(t *testing.T) {
 			t.Parallel()
-			registry := newObservationRegistry(nil, nil)
+			registry := newObservationRegistry(nil)
 			registry.sessions["direct-worker"] = observationSession("direct-worker", state)
 			registry.observations["direct-worker"] = &observation{direct: true, attemptID: "direct-attempt"}
 			for _, scope := range []string{"", "~default", "foreign-session"} {
@@ -256,7 +256,7 @@ func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testin
 	for _, owner := range []string{"factory-a", "factory-b"} {
 		t.Run(owner, func(t *testing.T) {
 			t.Parallel()
-			projector := &trackingObservationProjector{}
+
 			topic := workersessions.Topic("worker-"+owner, owner)
 			reader := &observationEventReaderFake{readResults: []events.ReadResult{{
 				Outcome:  events.ReadOutcomeProgress,
@@ -264,7 +264,7 @@ func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testin
 				Next:     events.Cursor{Topic: topic, Position: 1},
 				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 1},
 			}}}
-			registry := newObservationRegistry(projector, reader)
+			registry := newObservationRegistry(reader)
 			for _, scope := range []string{"factory-a", "factory-b"} {
 				id := "worker-" + scope
 				registry.sessions[id] = observationSession(id, workersessions.StateCompleted)
@@ -291,8 +291,7 @@ func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testin
 			if delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.Cursor.WorkerSessionID != got.WorkerSessionID || reader.readRequests[0].Topic != topic {
 				t.Fatalf("scoped provider history = %+v; reads=%+v", delivery, reader.readRequests)
 			}
-			assertForeignProviderReadsHaveNoEffects(t, registry, projector, reader)
-			registry.providerSessions = nil
+			assertForeignProviderReadsHaveNoEffects(t, registry, reader)
 			got, err = registry.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: observationProviderRef(), FactorySessionID: owner})
 			if err != nil || got.WorkerSessionID != "worker-"+owner || got.State != workersessions.StateCompleted {
 				t.Fatalf("optional transcript loss hid scoped identity = %+v, %v", got, err)
@@ -301,10 +300,10 @@ func TestKeyedRuntimeProviderReferenceReadsSelectScopeBeforeEnrichment(t *testin
 	}
 }
 
-func assertForeignProviderReadsHaveNoEffects(t *testing.T, registry *registry, projector *trackingObservationProjector, reader *observationEventReaderFake) {
+func assertForeignProviderReadsHaveNoEffects(t *testing.T, registry *registry, reader *observationEventReaderFake) {
 	t.Helper()
 	ctx := context.Background()
-	calls := projector.calls
+
 	for _, foreign := range []string{"foreign", "   "} {
 		wantErr := workersessions.ErrObservationSessionNotFound
 		if foreign == "   " {
@@ -319,7 +318,7 @@ func assertForeignProviderReadsHaveNoEffects(t *testing.T, registry *registry, p
 			t.Fatalf("foreign provider history = %v", err)
 		}
 	}
-	if projector.calls != calls || reader.readCalls != 1 {
+	if reader.readCalls != 1 {
 		t.Fatal("foreign lookup reached enrichment/history")
 	}
 }

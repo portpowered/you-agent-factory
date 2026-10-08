@@ -25,7 +25,6 @@ import (
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -396,7 +395,7 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	routes := make(chan string, 1)
 	publishers := make(chan workers.ProgressPublisher, 1)
 	workerService := localBoundaryWorkersService{routes: routes, publishers: publishers}
-	service, err := provideWorkerSessionsService(workerService, eventsService, localBoundaryProviderSessions{},
+	service, err := provideWorkerSessionsService(workerService, eventsService,
 		logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -516,14 +515,6 @@ func (e localBoundaryWorkersService) Execute(
 		Correlation: request.Correlation,
 		Outcome:     workers.ExecutionOutcomeAccepted,
 	}, nil
-}
-
-type localBoundaryProviderSessions struct {
-	providersessions.Service
-}
-
-func (localBoundaryProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {

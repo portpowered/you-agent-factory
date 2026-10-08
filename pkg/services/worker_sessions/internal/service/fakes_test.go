@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -38,15 +37,7 @@ func newServiceWithClock(
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
-}
-
-type unavailableProviderSessions struct {
-	providersessions.Service
-}
-
-func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 }
 
 // fakeExecution is a controlled legacy-shaped test double. The

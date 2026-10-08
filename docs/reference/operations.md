@@ -849,33 +849,22 @@ provider identity has no observation or transcript. A completed provider
 session is covered end to end by the repository's functional CLI check,
 including list, show, live and terminal stream frames, and read.
 
-### Turn context usage
+### Captured usage
 
 Archived Worker Session timing uses the recorded start and the host's terminal
 capture time. The duration includes capture completion and has basis
 `RECORDED_TIMESTAMPS`. Captures without both timestamps leave end and duration
 unavailable. Restart does not create missing timestamps.
 
-When supported provider usage evidence exists, `show --output json` and the
-Worker Session API return `turnUsage` beside `tokenUsage`:
+Worker Session observations use facts captured by `you`. Captured `tokenUsage`
+remains available after reload when retained usage records are readable. Missing
+counters stay omitted; an explicit zero remains zero.
 
-```json
-{
-  "tokenUsage": {"inputTokens": 700, "outputTokens": 12},
-  "turnUsage": {
-    "turnCount": 3,
-    "finalContextTokens": 450,
-    "peakContextTokens": 450
-  }
-}
-```
-
-`turnCount` counts supported provider usage turns. `finalContextTokens` is the
-final turn's derived input. `peakContextTokens` is the largest derived input.
-Provider counters are cumulative. Worker Sessions subtracts each counter from
-the previous value, starting from zero. These fields describe context shape,
-not pricing or cost. The optional `turnUsage` block is omitted when the
-transcript has no supported usage evidence.
+Worker Sessions no longer reads provider files to derive `turnUsage` or native
+parse diagnostics. `turnUsage` is omitted and `parse` has no native diagnostics.
+Legacy sessions without captured content retain their identity and lifecycle;
+their transcript and uncaptured usage remain unavailable. Provider Session
+associations and continuation still use the recorded third-party session ID.
 
 ## Reload prompts at dispatch time
 

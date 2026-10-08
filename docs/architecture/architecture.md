@@ -35,7 +35,9 @@ The primary abstractions the backend works off of are:
   carries source-native session observations, while Recordings owns canonical
   Factory history.
 - Worker Sessions supervise Worker attempts and publish their observations to
-  Events. Workers consume Providers and Models through their public contracts.
+  Events. Worker observation reads use captured facts from Recordings; Provider
+  Sessions does not enrich these reads. Workers consume Providers and Models
+  through their public contracts.
 - Automations observe hosted sources and admit scheduled Work through Work.
 
 ## package-structured

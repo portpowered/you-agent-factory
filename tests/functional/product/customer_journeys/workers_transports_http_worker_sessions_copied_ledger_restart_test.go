@@ -170,10 +170,7 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	copiedFactoryDir := filepath.Join(copyDirectory, "factory")
 	copyCopiedLedgerDirectory(t, fixture.factoryDir, copiedFactoryDir)
 	replayHome := filepath.Join(copyDirectory, "home")
-	copyCopiedLedgerDirectory(t,
-		filepath.Join(fixture.homeDir, ".codex", "sessions"),
-		filepath.Join(replayHome, ".codex", "sessions"),
-	)
+	// Only Portos recordings move to the fresh profile; native logs stay behind.
 	copiedWorkerRecordingPath := filepath.Join(copyDirectory, ".you-agent-factory", "worker-recordings")
 	copyCopiedLedgerDirectory(t, fixture.workerRecordingPath, copiedWorkerRecordingPath)
 	resumedServer := startCopiedLedgerResumeProcess(t, copiedFactoryDir, fixture.factoryID, copiedRecording, replayHome, copiedWorkerRecordingPath, fixture.runtimeInstanceID)
@@ -693,9 +690,11 @@ func assertCopiedLedgerWorkRows(
 		seen[observation.WorkerSessionId] = struct{}{}
 		if (observation.ConfirmationState != factoryapi.CONFIRMED && observation.ConfirmationState != factoryapi.UNCONFIRMED) ||
 			observation.DurationMillis == nil || observation.DurationBasis == "" ||
-			observation.StartedAt == nil || observation.EndedAt == nil || observation.Parse.EventCount == 0 ||
+			observation.StartedAt == nil || observation.EndedAt == nil || observation.Parse.MalformedLineCount != 0 || observation.Parse.UnknownEventCount != 0 || observation.TurnUsage != nil ||
+			(wantState == factoryapi.WorkerSessionObservationStateCompleted && (observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 8 ||
+				observation.TokenUsage.OutputTokens == nil || *observation.TokenUsage.OutputTokens != 12)) ||
 			observation.RecordingHealth == nil || *observation.RecordingHealth != factoryapi.WorkerSessionObservationRecordingHealthComplete {
-			t.Fatalf("Work %q attempt %q lacks confirmation/parse/timing/recording evidence: %#v", workID, observation.WorkerSessionId, observation)
+			t.Fatalf("Work %q attempt %q lacks captured confirmation/timing/recording evidence: %#v", workID, observation.WorkerSessionId, observation)
 		}
 		if !observation.ProviderSessionAvailable || observation.ProviderSession == nil || strings.TrimSpace(observation.ProviderSession.Id) == "" {
 			t.Fatalf("Work %q attempt %q lacks exact Provider Session identity: %#v", workID, observation.WorkerSessionId, observation)

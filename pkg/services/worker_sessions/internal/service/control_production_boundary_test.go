@@ -12,27 +12,11 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-type observationProjectionStub struct {
-	providersessions.Service
-	results    map[providers.SessionRef]providersessions.ProjectResult
-	projectErr error
-	requested  []providers.SessionRef
-}
-
-func (s *observationProjectionStub) Project(req providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	s.requested = append(s.requested, req.Session)
-	if s.projectErr != nil {
-		return providersessions.ProjectResult{}, s.projectErr
-	}
-	return s.results[req.Session], nil
-}
 
 func sessionRef(id string) providers.SessionRef {
 	return providers.SessionRef{
@@ -50,54 +34,14 @@ func providerMetadata(ref providers.SessionRef) *providers.SessionMetadata {
 	}
 }
 
-func projectedDetail(ref providers.SessionRef) providersessions.ProjectResult {
-	inputTokens := 11
-	outputTokens := 7
-	totalTokens := 18
-	text := "normalized assistant response"
-	return providersessions.ProjectResult{
-		Session: ref,
-		Detail: providersessions.Detail{
-			ProviderSession: providersessions.Ref{
-				Provider: providersessions.ProviderCodex,
-				Kind:     ref.Kind,
-				ID:       ref.ID,
-			},
-			Parse: providersessions.ParseSummary{
-				EventCount:         4,
-				MalformedLineCount: 1,
-				UnknownEventCount:  2,
-				ParseErrors: []providersessions.LineError{{
-					LineNumber: 9,
-					Message:    "malformed provider event",
-				}},
-				TokenUsage: &providersessions.TokenUsage{
-					InputTokens:  &inputTokens,
-					OutputTokens: &outputTokens,
-					TotalTokens:  &totalTokens,
-				},
-			},
-			Transcript: []providersessions.TranscriptEntry{{
-				Order: 0,
-				Text:  &text,
-				Type:  providersessions.TranscriptAssistantMessage,
-			}},
-		},
-	}
-}
-
 func newObservationService(
 	t *testing.T,
 	execution any,
 	eventsAppender workersessionservice.EventsAppender,
 	clock platformclock.Source,
-	projection providersessions.Service,
 ) workersessions.Service {
 	t.Helper()
-	if projection == nil {
-		projection = unavailableProviderSessions{}
-	}
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), projection, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -151,10 +95,6 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 	eventsAppender := newEventsAppender()
 	firstRef := sessionRef("provider-session-a")
 	secondRef := sessionRef("provider-session-b")
-	projection := &observationProjectionStub{results: map[providers.SessionRef]providersessions.ProjectResult{
-		firstRef:  projectedDetail(firstRef),
-		secondRef: projectedDetail(secondRef),
-	}}
 	failureMetadata := &workers.WorkFailureMetadata{
 		Family: workers.WorkFailureFamilyTerminal,
 		Type:   workers.WorkFailureTypeAuthFailure,
@@ -192,7 +132,7 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 			},
 		}, nil
 	}
-	registry := newObservationService(t, executionBoundary{execution: execution}, eventsAppender, clock, projection)
+	registry := newObservationService(t, executionBoundary{execution: execution}, eventsAppender, clock)
 
 	clock.SetTick(1)
 	mustInvokeObservationSession(t, registry, startRequest("worker-b", "dispatch-a", "work-1"))
@@ -201,7 +141,7 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 	clock.SetTick(20)
 
 	result := mustListObservations(t, registry, "work-1")
-	assertCorrelatedObservationProjection(t, result, projection, firstRef, secondRef)
+	assertCorrelatedObservationProjection(t, result, firstRef)
 }
 
 func mustInvokeObservationSession(t *testing.T, registry workersessions.Service, request workersessions.InvokeSessionRequest) {
@@ -220,7 +160,7 @@ func mustListObservations(t *testing.T, registry workersessions.Service, workID 
 	return result
 }
 
-func assertCorrelatedObservationProjection(t *testing.T, result workersessions.ListObservationsResult, projection *observationProjectionStub, firstRef, secondRef providers.SessionRef) {
+func assertCorrelatedObservationProjection(t *testing.T, result workersessions.ListObservationsResult, firstRef providers.SessionRef) {
 	t.Helper()
 	if len(result.Observations) != 2 {
 		t.Fatalf("ListObservations() returned %d observations, want 2", len(result.Observations))
@@ -230,9 +170,7 @@ func assertCorrelatedObservationProjection(t *testing.T, result workersessions.L
 	}
 	assertFirstObservationProjection(t, result.Observations[0], firstRef)
 	assertSecondObservationProjection(t, result.Observations[1])
-	if len(projection.requested) != 2 || projection.requested[0] != firstRef || projection.requested[1] != secondRef {
-		t.Fatalf("Provider Sessions projection requests = %#v, want chronological attempts", projection.requested)
-	}
+
 }
 
 func assertFirstObservationProjection(t *testing.T, observation workersessions.Observation, ref providers.SessionRef) {
@@ -259,14 +197,14 @@ func assertFirstObservationTiming(t *testing.T, observation workersessions.Obser
 
 func assertFirstObservationUsage(t *testing.T, observation workersessions.Observation) {
 	t.Helper()
-	if observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 11 || observation.Parse.EventCount != 4 || observation.Parse.MalformedLineCount != 1 || len(observation.Parse.Errors) != 1 {
-		t.Fatalf("first normalized projection = %#v", observation)
+	if observation.TokenUsage != nil || observation.TurnUsage != nil || observation.Parse.EventCount != 0 || len(observation.Parse.Errors) != 0 {
+		t.Fatalf("uncaptured attempt invented usage or parse facts: %#v", observation)
 	}
 }
 
 func assertFirstObservationTranscript(t *testing.T, observation workersessions.Observation) {
 	t.Helper()
-	if observation.Transcript != workersessions.TranscriptAvailabilityAvailable || observation.Failure != nil {
+	if observation.Transcript != workersessions.TranscriptAvailabilityUnavailable || observation.Failure != nil {
 		t.Fatalf("first transcript/failure projection = %#v", observation)
 	}
 }
@@ -298,8 +236,8 @@ func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *test
 			Result:          workers.WorkResult{DispatchID: request.Execution.Dispatch.DispatchID, Outcome: workers.OutcomeAccepted, Continuation: continuationFromProviderMetadata(providerMetadata(ref))},
 		}, nil
 	}}
-	projection := &observationProjectionStub{projectErr: providersessions.ErrSessionStorageUnavailable}
-	registry = newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{}, projection)
+
+	registry = newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{})
 	done := make(chan error, 1)
 	go func() {
 		_, err := registry.InvokeSession(context.Background(), startRequest("worker-active", "dispatch-active", "work-active"))
@@ -325,7 +263,6 @@ func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *test
 	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
 		t.Fatalf("ReadTranscript(unavailable) error = %v, want ErrObservationTranscriptUnavailable", err)
 	}
-	projection.projectErr = errors.New("normalized transcript parser failed")
 	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
 		t.Fatalf("ReadTranscript(projection failure) error = %v, want ErrObservationTranscriptProjectionUnavailable", err)
 	}
@@ -343,7 +280,7 @@ func TestObservationProjection_UsesInjectedClockForActiveDurationAndFreezesTermi
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	clock := platformclock.NewDeterministic(base, time.Second)
 	boundary := newControlledBoundary()
-	registry := newObservationService(t, boundary, newEventsAppender(), clock, nil)
+	registry := newObservationService(t, boundary, newEventsAppender(), clock)
 	started := make(chan workersessions.InvokeSessionResult, 1)
 	go func() {
 		result, err := registry.InvokeSession(context.Background(), startRequest("active-session", "active-dispatch", "active-work"))
@@ -382,7 +319,7 @@ func TestObservationProjection_UsesInjectedClockForActiveDurationAndFreezesTermi
 
 func TestObservationStream_ReplaysRetainedEventsThenCompletesAndReplaysTerminalSessions(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{}, nil)
+	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{})
 	started := startControlledSession(t, registry, boundary, "stream-session", "stream-dispatch")
 	ref := sessionRef("stream-provider-session")
 	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
@@ -431,7 +368,7 @@ func TestObservationStream_ReplaysRetainedEventsThenCompletesAndReplaysTerminalS
 
 func TestObservationStream_ReplayOnlyTerminalSessionEmitsCompleteRetainedHistory(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{}, nil)
+	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{})
 	started := startControlledSession(t, registry, boundary, "replay-terminal-session", "replay-terminal-dispatch")
 	ref := sessionRef("replay-terminal-provider-session")
 	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
@@ -480,7 +417,7 @@ func TestObservationStream_ReplayOnlyTerminalSessionEmitsCompleteRetainedHistory
 
 func TestObservationStream_CancellationUnregistersSubscription(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{}, nil)
+	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{})
 	started := startControlledSession(t, registry, boundary, "cancel-session", "cancel-dispatch")
 	ref := sessionRef("cancel-provider-session")
 	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
@@ -517,7 +454,7 @@ func TestObservationStream_MapsRetainedSourceFailureToTypedOutcome(t *testing.T)
 	appender := &observationEventsAppender{subscription: source}
 	ref := sessionRef("source-failure-session")
 	execution := executionFor(&ref, workers.OutcomeAccepted, nil, nil)
-	registry := newObservationService(t, executionBoundary{execution: execution}, appender, platformclock.Real{}, nil)
+	registry := newObservationService(t, executionBoundary{execution: execution}, appender, platformclock.Real{})
 	if _, err := registry.InvokeSession(context.Background(), startRequest("source-failure-worker", "source-failure-dispatch", "source-failure-work")); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -532,7 +469,7 @@ func TestObservationStream_MapsRetainedSourceFailureToTypedOutcome(t *testing.T)
 }
 
 func TestObservationContract_MissingAndUnavailableIdentitiesAreTyped(t *testing.T) {
-	registry := newObservationService(t, newControlledBoundary(), newEventsAppender(), platformclock.Real{}, nil)
+	registry := newObservationService(t, newControlledBoundary(), newEventsAppender(), platformclock.Real{})
 	ctx := context.Background()
 	if _, err := registry.ListObservations(ctx, workersessions.ListObservationsRequest{}); !errors.Is(err, workersessions.ErrInvalidObservationWorkID) {
 		t.Fatalf("ListObservations(blank) error = %v, want ErrInvalidObservationWorkID", err)
@@ -552,7 +489,7 @@ func TestObservationContract_MissingAndUnavailableIdentitiesAreTyped(t *testing.
 	}
 
 	execution := executionFor(&ref, workers.OutcomeAccepted, nil, nil)
-	projectedRegistry := newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{}, nil)
+	projectedRegistry := newObservationService(t, executionBoundary{execution: execution}, newEventsAppender(), platformclock.Real{})
 	if _, err := projectedRegistry.InvokeSession(ctx, startRequest("unavailable-worker", "unavailable-dispatch", "unavailable-work")); err != nil {
 		t.Fatalf("Start(unavailable projection) error = %v", err)
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -42,7 +41,7 @@ func TestConstructionRejectsMissingWorkerRestartStore(t *testing.T) {
 	}{{name: "nil"}, {name: "typed nil", store: (*nilWorkerControlStore)(nil)}} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, cell.store)
+			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, cell.store)
 			if service != nil || !errors.Is(err, recordings.ErrMissingWorkerRestartInputStore) {
 				t.Fatalf("construction = (%v, %v), want missing restart store refusal", service, err)
 			}
@@ -61,7 +60,7 @@ func TestConstructionRejectsMissingWorkerControlStore(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, cell.store, unavailableWorkerControlStore{})
+			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, cell.store, unavailableWorkerControlStore{})
 			if service != nil || !errors.Is(err, recordings.ErrMissingWorkerControlOperationStore) {
 				t.Fatalf("construction = (%v, %v), want missing control store refusal", service, err)
 			}
@@ -85,14 +84,6 @@ func (u unusedExecution) Execute(context.Context, workers.ExecuteRequest) (worke
 func (u unusedExecution) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
 	u.t.Fatal("unexpected InvokeModel call")
 	return modelinference.Result{}, workers.ErrExecuteUnavailable
-}
-
-type unavailableProviderSessions struct {
-	providersessions.Service
-}
-
-func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 type failingPublishBoundary struct {
@@ -133,7 +124,7 @@ func (l *controlClaimLogger) Info(message string, _ ...any) {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -468,7 +459,7 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 	} else {
 		var err error
 		service, err = New(unusedExecution{t: t}, sink, logging.NoopLogger{},
-			coverageClock{now: now}, platformclock.Real{}, unavailableProviderSessions{}, capture, unavailableWorkerControlStore{},
+			coverageClock{now: now}, platformclock.Real{}, capture, unavailableWorkerControlStore{},
 			unavailableWorkerControlStore{})
 		if err != nil {
 			t.Fatalf("New(%s): %v", suffix, err)
@@ -1668,7 +1659,7 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed
 		})
 		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 	}}
-	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1945,7 +1936,7 @@ func assertRuntimeProviderBindingBeforeOutput(t *testing.T, fixture *perRuntimeA
 func newRuntimeIdentityRegistry(t *testing.T) *registry {
 	t.Helper()
 	service, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{},
-		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{},
+		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, platformclock.Real{}, nil, unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
@@ -5118,22 +5109,8 @@ func assertWorkerObservationLookups(t *testing.T, registry *registry, got worker
 
 func assertObservationTurnUsage(t *testing.T, observation workersessions.Observation) {
 	t.Helper()
-	if observation.TurnUsage == nil || observation.TurnUsage.TurnCount != 3 ||
-		observation.TurnUsage.FinalContextTokens != 450 || observation.TurnUsage.PeakContextTokens != 450 {
-		t.Fatalf("observation turn usage = %#v, want derived cumulative deltas", observation.TurnUsage)
-	}
-}
-
-func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
-	got := observationTurnUsage([]int{100, 250, 700})
-	if got == nil || got.TurnCount != 3 || got.FinalContextTokens != 450 || got.PeakContextTokens != 450 {
-		t.Fatalf("observationTurnUsage() = %#v, want three turns with final/peak 450", got)
-	}
-	if observationTurnUsage(nil) != nil {
-		t.Fatal("observationTurnUsage(nil) returned a value")
-	}
-	if observationTurnUsage([]int{100, 90}) != nil {
-		t.Fatal("observationTurnUsage(decreasing counters) returned a value")
+	if observation.TurnUsage != nil {
+		t.Fatalf("uncaptured turn usage: %+v", observation)
 	}
 }
 
@@ -5232,25 +5209,8 @@ func usageProjectionTestDraft(t *testing.T) workers.Draft {
 	return workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: payload}
 }
 
-func TestInvokeSafeDiagnosticMessages(t *testing.T) {
-	for _, test := range []struct {
-		input string
-		want  string
-	}{
-		{"", "provider session parse error"},
-		{"password=secret", "provider session parse error"},
-		{"a/b", "provider session parse error"},
-		{strings.Repeat("x", 300), strings.Repeat("x", 256)},
-		{"  ordinary   message ", "ordinary message"},
-	} {
-		if got := safeDiagnosticMessage(test.input); got != test.want {
-			t.Fatalf("safeDiagnosticMessage(%q) = %q, want %q", test.input, got, test.want)
-		}
-	}
-}
-
 func TestStreamObservationsByWorkerSessionIDRejectsInvalidContextAndMissing(t *testing.T) {
-	registry := newObservationRegistry(nil, nil)
+	registry := newObservationRegistry(nil)
 	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("invalid Worker Session stream error = %v, want %v", err, workersessions.ErrInvalidSessionID)
 	}
@@ -5277,10 +5237,10 @@ func assertObservationProjectionEdges(t *testing.T, registry *registry, canceled
 
 func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	ref := observationProviderRef()
-	registry := newObservationRegistry(observationProjectorFake{}, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	registry.observations["worker-1"] = observationMetadata()
-	noProvider := newObservationRegistry(nil, nil)
+	noProvider := newObservationRegistry(nil)
 	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	noProvider.observations["worker-1"] = observationMetadata()
 	gotProvider, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
@@ -5288,7 +5248,7 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 		!gotProvider.ProviderSessionAvailable || gotProvider.ProviderSession != ref || gotProvider.Transcript != workersessions.TranscriptAvailabilityUnavailable {
 		t.Fatalf("GetObservation(without provider service) = %#v, %v, want retained running identity", gotProvider, err)
 	}
-	noReference := newObservationRegistry(nil, nil)
+	noReference := newObservationRegistry(nil)
 	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
 	noReference.observations["worker-no-reference"] = observationMetadata()
 	gotNoReference, err := noReference.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-no-reference"})
@@ -5300,7 +5260,7 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
 	}
 	assertListPreservesBaseFactsWithoutProviderProjection(t, noProvider)
-	failed := newObservationRegistry(nil, nil)
+	failed := newObservationRegistry(nil)
 	failed.sessions["failed-worker"] = workersessions.Session{
 		ID:    "failed-worker",
 		State: workersessions.StateFailed,
@@ -5314,17 +5274,11 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	if err != nil || failedObservation.Failure == nil || failedObservation.Failure.Detail != "provider failed" {
 		t.Fatalf("failed Worker Session observation = %#v, %v, want copied failure cause", failedObservation, err)
 	}
-	canceledProvider := newObservationRegistry(observationProjectorFake{err: context.Canceled}, nil)
-	canceledProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	canceledProvider.observations["worker-1"] = observationMetadata()
-	if _, err := canceledProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
-		t.Fatalf("GetObservation(provider canceled) error = %v", err)
-	}
-	projectionFailure := newObservationRegistry(observationProjectorFake{err: errors.New("projection failed")}, nil)
-	projectionFailure.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	projectionFailure.observations["worker-1"] = observationMetadata()
-	if got, err := projectionFailure.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); err != nil || len(got.Observations) != 1 || !got.Observations[0].ProviderSessionAvailable || got.Observations[0].Transcript != workersessions.TranscriptAvailabilityUnavailable {
-		t.Fatalf("ListObservations(optional projection failure) = %#v, %v; want retained live facts", got, err)
+	uncaptured := newObservationRegistry(nil)
+	uncaptured.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	uncaptured.observations["worker-1"] = observationMetadata()
+	if got, err := uncaptured.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); err != nil || len(got.Observations) != 1 || !got.Observations[0].ProviderSessionAvailable || got.Observations[0].Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("ListObservations(uncaptured identity) = %#v, %v; want retained live facts", got, err)
 	}
 	if _, _, ok := registry.loadObservationState("missing"); ok {
 		t.Fatal("loadObservationState(missing) = ok, want false")
@@ -5606,7 +5560,7 @@ func (r coverageEventsReader) Subscribe(context.Context, events.SubscribeRequest
 
 func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
 	ref := observationProviderRef()
-	withoutReader := newObservationRegistry(observationProjectorFake{}, nil)
+	withoutReader := newObservationRegistry(nil)
 	if _, err := withoutReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: providers.SessionRef{}}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
 		t.Fatalf("StreamObservations(invalid request) error = %v", err)
 	}
@@ -5614,7 +5568,7 @@ func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
 	if _, err := withoutReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
 		t.Fatalf("StreamObservations(without reader) error = %v", err)
 	}
-	missing := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
+	missing := newObservationRegistry(&observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
 	if _, err := missing.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		t.Fatalf("StreamObservations(missing session) error = %v", err)
 	}
@@ -5624,17 +5578,17 @@ func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
 		t.Fatalf("StreamObservations(canceled) error = %v", err)
 	}
 
-	active := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{err: errors.New("subscribe failed")})
+	active := newObservationRegistry(&observationEventReaderFake{err: errors.New("subscribe failed")})
 	active.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	if _, err := active.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
 		t.Fatalf("StreamObservations(subscribe failure) error = %v", err)
 	}
-	canceledReader := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{err: context.Canceled})
+	canceledReader := newObservationRegistry(&observationEventReaderFake{err: context.Canceled})
 	canceledReader.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	if _, err := canceledReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("StreamObservations(canceled subscribe) error = %v", err)
 	}
-	terminal := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
+	terminal := newObservationRegistry(&observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
 	terminal.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	subscription, err := terminal.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref, Limit: 2})
 	if err != nil {
@@ -5657,7 +5611,7 @@ func TestReadTranscriptMapsCapturedReadErrors(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			registry := newObservationRegistry(observationProjectorFake{err: test.err}, nil)
+			registry := newObservationRegistry(nil)
 			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 			registry.observations["worker-1"] = observationMetadata()
 			registry.logs = &LogReader{reader: &capturedActivityFake{err: test.err}}
@@ -5671,7 +5625,7 @@ func TestReadTranscriptMapsCapturedReadErrors(t *testing.T) {
 
 func TestReadTranscriptRejectsInvalidRequestAndProjection(t *testing.T) {
 	ref := observationProviderRef()
-	registry := newObservationRegistry(observationProjectorFake{result: providersessions.ProjectResult{Detail: providersessions.Detail{Transcript: []providersessions.TranscriptEntry{{Order: 0}}}}}, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	registry.observations["worker-1"] = observationMetadata()
 	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
@@ -6542,7 +6496,7 @@ func TestPauseAndCancelIterationRejectMissingControlTargets(t *testing.T) {
 }
 
 func TestObservationListRejectsMalformedPaginationCursor(t *testing.T) {
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	if _, err := r.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "%%%"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("ListWorkerSessionObservations(malformed cursor) = %v, want invalid pagination", err)
 	}
@@ -6669,7 +6623,7 @@ func newContinuationSource(t *testing.T, request workersessions.ContinueRequest)
 }
 
 func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *testing.T) {
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := r.ListWorkerSessionObservations(canceled, workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, workersessions.ErrObservationCanceled) {
@@ -6688,14 +6642,14 @@ func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *t
 		t.Fatal("ListWorkerSessionObservations(invalid projection) = nil, want projection validation error")
 	}
 
-	withoutAssociation := newObservationRegistry(observationProjectorFake{}, nil)
+	withoutAssociation := newObservationRegistry(nil)
 	withoutAssociation.sessions["terminal-no-association"] = workersessions.Session{ID: "terminal-no-association", State: workersessions.StateCompleted}
 	withoutAssociation.observations["terminal-no-association"] = observationMetadata()
 	if _, err := withoutAssociation.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-no-association"}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
 		t.Fatalf("ReadTranscriptByWorkerSessionID(no association) = %v, want transcript unavailable", err)
 	}
 
-	withoutProjector := newObservationRegistry(nil, nil)
+	withoutProjector := newObservationRegistry(nil)
 	withoutProjector.sessions["terminal-with-association"] = observationSession("terminal-with-association", workersessions.StateCompleted)
 	withoutProjector.observations["terminal-with-association"] = observationMetadata()
 	if _, err := withoutProjector.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-with-association"}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
@@ -6854,7 +6808,7 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 			return events.Delivery{Kind: events.DeliveryClosed}
 		}),
 	}
-	registry := newObservationRegistry(nil, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: "worker-1",
@@ -6876,7 +6830,7 @@ func TestKeyedRuntimeInvocationRetainsSelectedEffects(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			t.Parallel()
 			defaults := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -6970,7 +6924,7 @@ func TestKeyedRuntimeCompatibilityRejectionPreservesLivePeer(t *testing.T) {
 			t.Parallel()
 			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -7146,7 +7100,7 @@ func assertSelectedEffectsResult(t *testing.T, outcome string, result workersess
 func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
-	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7211,7 +7165,7 @@ func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
 				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 			}}
 			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -7271,7 +7225,7 @@ func TestKeyedRuntimeDirectRetryRejectsEarlierAttemptProgress(t *testing.T) {
 		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 	}}
 	facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7434,7 +7388,7 @@ func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
 		<-ctx.Done()
 		return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
 	}}
-	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -8710,7 +8664,7 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
 	// Fixtures explicitly supply disabled logging when no observer is selected.
-	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		return nil, err
 	}
@@ -8728,7 +8682,7 @@ func newServiceWithRecording(
 	recording recordings.WorkerSessionRecordingService,
 ) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, unavailableProviderSessions{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
 	if err != nil {
 		return nil, err
 	}
@@ -9950,22 +9904,9 @@ func (recording *interruptRecording) counts() (closeCalls, terminalCalls int) {
 var _ recordings.WorkerSessionRecordingService = (*interruptRecordingService)(nil)
 var _ recordings.WorkerSessionRecordingFinalizer = (*interruptRecording)(nil)
 
-type trackingObservationProjector struct {
-	providersessions.Service
-	result  providersessions.ProjectResult
-	request providersessions.ProjectRequest
-	calls   int
-}
-
-func (f *trackingObservationProjector) Project(request providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	f.calls++
-	f.request = request
-	return f.result, nil
-}
-
 func TestListObservationsUsesFactorySessionAndWorkAssociations(t *testing.T) {
-	projector := &trackingObservationProjector{}
-	registry := newObservationRegistry(projector, nil)
+
+	registry := newObservationRegistry(nil)
 	addAttempt := func(id, factorySessionID, workID, attemptID string, state workersessions.State, startedAt time.Time) {
 		session := observationSession(id, state)
 		session.ProviderSessionAssociation.DispatchID = attemptID
@@ -10003,9 +9944,7 @@ func TestListObservationsUsesFactorySessionAndWorkAssociations(t *testing.T) {
 			t.Fatalf("scoped observation attribution = %#v, want exact Factory Session and Work", observation)
 		}
 	}
-	if projector.calls != 2 {
-		t.Fatalf("Provider Sessions projections for scoped Work = %d, want only its two attempts", projector.calls)
-	}
+
 }
 
 func TestStreamObservationsByWorkerSessionIDCloseCancelsBlockedNext(t *testing.T) {
@@ -10017,7 +9956,7 @@ func TestStreamObservationsByWorkerSessionIDCloseCancelsBlockedNext(t *testing.T
 		<-ctx.Done()
 		return events.Delivery{Kind: events.DeliveryCanceled}
 	})}
-	registry := newObservationRegistry(nil, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 
 	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{

@@ -87,8 +87,8 @@ func TestCapturedUsageModelPreservesZeroAndAbsentCounters(t *testing.T) {
 
 func TestCapturedUsageSummaryNeverReadsProviderFiles(t *testing.T) {
 	t.Parallel()
-	projector := &trackingObservationProjector{}
-	r := newObservationRegistry(projector, nil)
+
+	r := newObservationRegistry(nil)
 	r.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	r.observations["worker-1"] = observationMetadata()
 	liveTokens := 999
@@ -109,15 +109,19 @@ func TestCapturedUsageSummaryNeverReadsProviderFiles(t *testing.T) {
 	if err != nil || got.TokenUsage == nil || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != 12 || got.TokenUsage.InputTokens == nil || *got.TokenUsage.InputTokens != 0 {
 		t.Fatalf("summary lost committed usage or explicit zero: %+v, %v", got.TokenUsage, err)
 	}
+	listed, err := r.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: "work-1"})
+	if err != nil || len(listed.Observations) != 1 || listed.Observations[0].TokenUsage == nil || *listed.Observations[0].TokenUsage.TotalTokens != 12 {
+		t.Fatalf("Work-scoped list lost captured usage: %+v, %v", listed, err)
+	}
 	*got.TokenUsage.TotalTokens = 321
 	again, err := r.GetObservationByWorkerSessionID(t.Context(), req)
-	if err != nil || *again.TokenUsage.TotalTokens != 12 || projector.calls != 0 {
-		t.Fatalf("summary aliases usage or reads native provider: %+v calls=%d err=%v", again.TokenUsage, projector.calls, err)
+	if err != nil || *again.TokenUsage.TotalTokens != 12 {
+		t.Fatalf("summary aliases usage or reads native provider: %+v err=%v", again.TokenUsage, err)
 	}
 	r.recording = replayCaptureReader{}
 	unknown, err := r.GetObservationByWorkerSessionID(t.Context(), req)
-	if err != nil || unknown.WorkerSessionID != "worker-1" || unknown.TokenUsage != nil || projector.calls != 0 {
-		t.Fatalf("missing capture invented usage or hid identity: %+v calls=%d err=%v", unknown, projector.calls, err)
+	if err != nil || unknown.WorkerSessionID != "worker-1" || unknown.TokenUsage != nil {
+		t.Fatalf("missing capture invented usage or hid identity: %+v err=%v", unknown, err)
 	}
 }
 

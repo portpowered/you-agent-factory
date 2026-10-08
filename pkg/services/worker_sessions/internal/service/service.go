@@ -18,7 +18,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -103,14 +102,13 @@ type registry struct {
 	continuationSupport      interface {
 		SupportsContinuation(context.Context, providers.SessionRef) (bool, error)
 	}
-	providerSessions providersessions.Service
-	recording        recordings.WorkerSessionRecordingService
-	operations       recordings.WorkerControlOperationStore
-	restart          recordings.WorkerRestartInputStore
-	stopOperations   sync.Map // request key -> *sync.Mutex; no registry lock spans a join
-	clock            platformclock.Source
-	scheduler        platformclock.TimerSource
-	logger           logging.Logger
+	recording      recordings.WorkerSessionRecordingService
+	operations     recordings.WorkerControlOperationStore
+	restart        recordings.WorkerRestartInputStore
+	stopOperations sync.Map // request key -> *sync.Mutex; no registry lock spans a join
+	clock          platformclock.Source
+	scheduler      platformclock.TimerSource
+	logger         logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
 	// contexts are never used as the lifetime of an admitted Start. Stop
@@ -174,7 +172,6 @@ func New(
 	logger logging.Logger,
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
-	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
@@ -207,7 +204,6 @@ func New(
 		events:                      eventsAppender,
 		clock:                       clock,
 		scheduler:                   scheduler,
-		providerSessions:            providerSessions,
 		recording:                   recording,
 		operations:                  operations,
 		restart:                     restart,
