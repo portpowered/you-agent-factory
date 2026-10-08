@@ -331,7 +331,7 @@ jobs:
           make generate-wire
           git diff --exit-code -- pkg/wire/wire_gen.go
       - name: Prune unit Go build cache to entries touched by this job
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || !contains(steps.unit-go-build-cache.outputs.cache-matched-key, 'unit-coverage-build-v2-'))
         shell: bash
         # Go refreshes an entry's mtime when it is used more than an hour after
         # its last use, so entries used in this job but written minutes before
@@ -341,7 +341,7 @@ jobs:
           find ~/.cache/go-build -type f -mtime +3 -delete
           du -sh ~/.cache/go-build
       - name: Save unit coverage Go build and test cache
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || !contains(steps.unit-go-build-cache.outputs.cache-matched-key, 'unit-coverage-build-v2-'))
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/go-build

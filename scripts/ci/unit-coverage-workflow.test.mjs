@@ -97,7 +97,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 	assert.doesNotMatch(buildCache, /functional-coverage-build-/);
 
 	const save = stepSection(job, "      - name: Save unit coverage Go build and test cache", "      # This existing coverage tier");
-	assert.match(save, /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true'/);
+	assert.match(save, /if: always\(\) && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true' && \(\(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\) \|\| !contains\(steps\.unit-go-build-cache\.outputs\.cache-matched-key, 'unit-coverage-build-v2-'\)\)/);
 	assert.match(job, /find ~\/\.cache\/go-build -type f -mtime \+3 -delete/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);
 	assert.match(save, /key: \$\{\{ steps\.unit-go-build-cache\.outputs\.cache-primary-key \}\}/);
