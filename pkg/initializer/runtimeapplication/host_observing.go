@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
 
@@ -82,7 +83,7 @@ func (runner hostObservingRunner) finishAfterReadinessResult(
 		return <-runResult
 	}
 	err := <-runResult
-	if !errors.Is(result.err, context.Canceled) {
+	if !lifecycle.CancellationOnly(result.err) {
 		err = errors.Join(result.err, err)
 	}
 	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
@@ -123,7 +124,7 @@ func (runner hostObservingRunner) finishAfterRunResult(
 		}
 	}
 	cancelReady()
-	if readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
+	if readinessErr != nil && !lifecycle.CancellationOnly(readinessErr) {
 		err = errors.Join(readinessErr, err)
 	}
 	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
@@ -157,30 +158,10 @@ func (runner hostObservingRunner) runtimeHostReadinessConfigured() bool {
 }
 
 func runtimeHostStartupResult(ctx context.Context, configured bool, err error) error {
-	if err == nil || runtimeHostCancellationOnly(err) || !configured || (ctx != nil && ctx.Err() != nil) {
+	if err == nil || lifecycle.CancellationOnly(err) || !configured || (ctx != nil && ctx.Err() != nil) {
 		return err
 	}
 	return &initializer.RuntimeHostStartupError{Cause: err}
-}
-
-// Cleanup cancellation must not hide a separate primary startup failure.
-func runtimeHostCancellationOnly(err error) bool {
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		causes := joined.Unwrap()
-		if len(causes) == 0 {
-			return false
-		}
-		for _, cause := range causes {
-			if !runtimeHostCancellationOnly(cause) {
-				return false
-			}
-		}
-		return true
-	}
-	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
-		return runtimeHostCancellationOnly(wrapped.Unwrap())
-	}
-	return errors.Is(err, context.Canceled)
 }
 
 func (runner hostObservingRunner) RunWithCompletion(

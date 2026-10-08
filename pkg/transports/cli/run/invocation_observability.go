@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -94,7 +95,7 @@ func logRunServiceOutcome(
 }
 
 func classifyRunServiceOutcome(ctx context.Context, err error) string {
-	if errors.Is(err, context.Canceled) || (err == nil && ctx != nil && ctx.Err() != nil) {
+	if lifecycle.CancellationOnly(err) || (err == nil && ctx != nil && ctx.Err() != nil) {
 		return runServiceOutcomeCancelled
 	}
 	if err != nil {
@@ -156,7 +157,7 @@ func logRunRecoveryOutcome(
 	if cfg.Logger == nil || strings.TrimSpace(cfg.ResumePath) == "" {
 		return
 	}
-	if outcome == runRecoveryOutcomeFailed && errors.Is(err, context.Canceled) {
+	if outcome == runRecoveryOutcomeFailed && lifecycle.CancellationOnly(err) {
 		return
 	}
 	fields := []zap.Field{

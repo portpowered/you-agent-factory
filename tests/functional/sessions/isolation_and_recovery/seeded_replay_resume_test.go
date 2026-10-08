@@ -513,7 +513,9 @@ func testRecordStartupSafetyHostFailure(t *testing.T, reusable *seededReplayResu
 	cause := &fs.PathError{Op: "open listener configuration", Path: filepath.Join(dir, "listener"), Err: fs.ErrPermission}
 	reusable.mu.Lock()
 	reusable.payloadsByPath[path] = before
-	reusable.serverErrorsByPort[port] = cause
+	// The external listener can fail while its cleanup reports cancellation.
+	// Both identities must survive without classifying the primary as a stop.
+	reusable.serverErrorsByPort[port] = errors.Join(cause, context.Canceled)
 	reusable.mu.Unlock()
 	t.Cleanup(func() {
 		reusable.mu.Lock()
@@ -530,7 +532,7 @@ func testRecordStartupSafetyHostFailure(t *testing.T, reusable *seededReplayResu
 	inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
 	inputs.Input.WorkingDirectory = dir
 	err = reusable.process.Execute(inputs.Input)
-	if !errors.Is(err, cause) {
+	if !errors.Is(err, cause) || !errors.Is(err, context.Canceled) {
 		t.Fatalf("startup lost listener cause: %v; stderr=%s", err, inputs.Stderr())
 	}
 	var response factoryapi.ErrorResponse

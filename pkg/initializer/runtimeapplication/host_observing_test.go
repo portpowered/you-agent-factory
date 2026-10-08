@@ -112,7 +112,7 @@ func TestHostObserverClassifiesPrimaryFailureDespiteCleanupCancellation(t *testi
 	runner := hostObservingRunner{runner: &hostReadinessRunner{readinessConfigured: true}}
 	runResult := make(chan error, 1)
 	runResult <- context.Canceled
-	err := runner.finishAfterReadinessResult(t.Context(), runtimeHostResult{err: primary}, runResult)
+	err := runner.finishAfterReadinessResult(t.Context(), runtimeHostResult{err: errors.Join(primary, context.Canceled)}, runResult)
 	var startupErr *initializer.RuntimeHostStartupError
 	if !errors.As(err, &startupErr) || !errors.Is(err, primary) || !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want classified primary with cleanup cancellation identity", err)
