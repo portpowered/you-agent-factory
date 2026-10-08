@@ -162,10 +162,9 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 	if err := os.WriteFile(release, []byte("released"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	writer := filepath.Join(repo, "explicit-board.json")
-	first := startBoardPersistenceDaemon(t, binary, factory, home, writer, release)
+	first := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
 	if works := waitForBoardStates(t, first.baseURL, map[string]string{}, time.Minute); len(works.Results) != 0 {
-		t.Fatal("fresh explicit launch was not empty")
+		t.Fatal("first plain launch was not empty")
 	}
 	batch := `{"requestId":"plain-dag","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"plain-A","name":"A","workTypeName":"task","state":"init","payload":"A"},{"workId":"plain-B","name":"B","workTypeName":"task","state":"waiting","tags":{"witness":"§ —"},"payload":"B § —"},{"workId":"plain-C","name":"C","workTypeName":"task","state":"init","payload":"C § —"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"B","targetWorkName":"A","requiredState":"complete"},{"type":"DEPENDS_ON","sourceWorkName":"C","targetWorkName":"B","requiredState":"complete"}]}`
 	submitBoardPersistenceBatchThroughCLI(t, first, binary, factory, home, batch, "plain-dag", 3)
@@ -174,9 +173,23 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 	before = waitPlainBoardConfirmed(t, first.baseURL, states)
 	ids := map[string]struct{}{"plain-A": {}, "plain-B": {}, "plain-C": {}}
 	history := restartWorkHistoryFingerprint(t, first.baseURL, ids)
-	shutdownPlainBoard(t, first)
 	var selected struct{ ArtifactReference string }
-	reference, err := os.ReadFile(filepath.Join(repo, ".you-agent-factory", "current-board.json"))
+	referencePath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	reference, err := os.ReadFile(referencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(reference, &selected); err != nil {
+		t.Fatal(err)
+	}
+	writer := selected.ArtifactReference
+	// Remove only the reference while its writer still owns the board. The
+	// graceful stop must publish it again from the successful flush boundary.
+	if err := os.Remove(referencePath); err != nil {
+		t.Fatal(err)
+	}
+	shutdownPlainBoard(t, first)
+	reference, err = os.ReadFile(referencePath)
 	if err != nil {
 		t.Fatalf("graceful shutdown did not publish the board reference: %v", err)
 	}
@@ -209,7 +222,7 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 		assertSingleTerminalCompletion(t, events, id, "complete")
 	}
 	shutdownPlainBoard(t, second)
-	t.Logf("INT-BOARD artifact SHA256=%s source=%s: explicit shutdown published writer, plain cold restart preserved confirmed UTF-8 board/history, dependency released/completed once", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead)
+	t.Logf("INT-BOARD artifact SHA256=%s source=%s: graceful shutdown republished writer, plain cold restart preserved confirmed UTF-8 board/history, dependency released/completed once", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead)
 }
 
 func assertPlainBoardPreserved(t *testing.T, before, after factoryapi.ListWorkResponse) {
