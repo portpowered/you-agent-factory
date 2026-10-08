@@ -30,6 +30,7 @@ env:
 jobs:
   classify:
     name: Verification Setup
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -37,8 +38,8 @@ jobs:
       classification: ${{ steps.classify.outputs.classification || 'full' }}
       areas: ${{ steps.classify.outputs.areas || 'ci-tooling' }}
       reason: ${{ steps.classify.outputs.reason || 'Conservative full verification.' }}
-      run_docs_reference: ${{ steps.classify.outputs.run_docs_reference != 'false' }}
-      run_readme: ${{ steps.classify.outputs.run_readme != 'false' }}
+      run_docs_reference: "true"
+      run_readme: "true"
       run_frontend: ${{ steps.classify.outputs.run_frontend != 'false' }}
       run_backend: ${{ steps.classify.outputs.run_backend != 'false' }}
       run_backend_conformance: ${{ steps.classify.outputs.run_backend_conformance != 'false' }}
@@ -65,16 +66,8 @@ jobs:
           go-version-file: go.mod
           cache: true
       - id: classify
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" -head "${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}"
-      - if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
-        run: |
-          for lane in docs_reference readme frontend backend backend_conformance ui_backend_integration api_package packaged_factories_package model_providers_package; do
-            echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
-          done
-          echo "classification=full" >> "$GITHUB_OUTPUT"
-          echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
-
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
       - name: Install pinned actionlint
         if: success() || failure()
         run: |
@@ -85,13 +78,13 @@ jobs:
         run: bash scripts/ci/run-workflow-verification.sh
       - name: Docs proof
         id: docs-reference
-        if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+        if: success() || failure()
         run: make docs-reference-smoke
 
   readme:
     name: README
     needs: classify
-    if: always() && needs.classify.outputs.run_readme != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_readme != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +96,7 @@ jobs:
   frontend:
     name: Frontend
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -140,7 +133,7 @@ jobs:
   frontend-browser:
     name: Frontend Browser
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -206,7 +199,7 @@ jobs:
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
     needs: classify
-    if: always() && needs.classify.outputs.run_backend != 'false'
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     # The functional runner enforces the 75m merge-full budget. The unit lane
     # has a fifteen-minute ceiling so a cache regression cannot quietly turn the
@@ -234,11 +227,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - suite: unit
-            label: Unit
-          - suite: functional
-            label: Functional
+        include: ${{ fromJSON(needs.classify.outputs.run_backend != 'false' && '[{"suite":"unit","label":"Unit"},{"suite":"functional","label":"Functional"}]' || '[{"suite":"unit","label":"Unit"}]') }}
     steps:
       - name: Record job start time
         shell: bash
@@ -653,7 +642,7 @@ jobs:
   backend-conformance:
     name: Backend Conformance
     needs: classify
-    if: always() && needs.classify.outputs.run_backend_conformance != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend_conformance != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -672,7 +661,7 @@ jobs:
   backend-integration:
     name: Backend Integration
     needs: classify
-    if: always() && needs.classify.outputs.run_backend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -759,7 +748,7 @@ jobs:
   tts-clean-install-windows:
     name: TTS Clean-Install Windows
     needs: classify
-    if: always() && needs.classify.outputs.run_backend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend != 'false'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -807,7 +796,7 @@ jobs:
 
   backend-lint:
     name: Backend Lint
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -1041,7 +1030,7 @@ jobs:
   ui-backend-integration:
     name: UI Backend Integration
     needs: classify
-    if: always() && needs.classify.outputs.run_ui_backend_integration != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_ui_backend_integration != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -1061,7 +1050,7 @@ jobs:
     if: >-
       ${{
         always() &&
-        (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')
+        (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && (needs.classify.outputs.run_packaged_factories_package != 'false' || needs.classify.outputs.run_model_providers_package != 'false')))
       }}
     uses: ./.github/workflows/development-package.yml
     permissions:
@@ -1132,7 +1121,7 @@ jobs:
   verification-policy:
     name: Verification Policy
     needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
-    if: always()
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1174,13 +1163,16 @@ jobs:
           FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-browser.result }}
-          BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
+          RUN_BACKEND_COVERAGE: "true"
+          BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}
+          BACKEND_RESULT: ${{ needs.backend-integration.result }}
+          BACKEND_TTS_RESULT: ${{ needs.tts-clean-install-windows.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"
-          BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
+          BACKEND_LINT_REASON: "Mandatory PR/queue lint."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
           RUN_WORKFLOW_LINT: "true"
-          WORKFLOW_LINT_REASON: "Every repository workflow must pass pinned schema-aware lint on every pull request and push to main."
+          WORKFLOW_LINT_REASON: "Mandatory PR/queue workflow lint."
           WORKFLOW_LINT_RESULT: ${{ needs.classify.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
           API_INDEPENDENT: ${{ github.event_name == 'pull_request' }}
@@ -1193,10 +1185,80 @@ jobs:
         shell: bash
         run: node scripts/verification-policy.mjs
 
+  main-evidence:
+    name: Forward Delivered Queue Evidence
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Resolve exact-tree queue artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/ci/merge-queue-evidence.mjs --repository "$GITHUB_REPOSITORY" --main-sha "$GITHUB_SHA" --output-directory .artifacts/delivered-queue
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage-diagnostics
+          path: .artifacts/delivered-queue/unit-coverage-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-diagnostics
+          path: .artifacts/delivered-queue/functional-test-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-deadcode-evidence
+          path: .artifacts/delivered-queue/backend-deadcode-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  main-dependency-cache:
+    name: Maintain Main Dependency Caches
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache@v4
+        id: deps
+        with:
+          path: ~/.cache/go-build
+          key: functional-deps-build-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - uses: actions/cache@v4
+        id: unit
+        with:
+          path: ~/.cache/go-build
+          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Warm missing dependency-only keys
+        if: steps.deps.outputs.cache-hit != 'true' || steps.unit.outputs.cache-hit != 'true'
+        env:
+          FUNCTIONAL_CACHE_HIT: ${{ steps.deps.outputs.cache-hit }}
+          UNIT_CACHE_HIT: ${{ steps.unit.outputs.cache-hit }}
+        run: node scripts/ci/main-dependency-cache.mjs
+
   backend-visualizations-preview:
     name: Backend Architecture Preview
-    needs: [backend-coverage, verification-policy]
-    if: github.event_name == 'pull_request' && needs.backend-coverage.result == 'success' && needs.verification-policy.result == 'success'
+    needs: [classify, backend-coverage, verification-policy]
+    if: needs.classify.outputs.run_backend != 'false' && github.event_name == 'pull_request' && needs.backend-coverage.result == 'success' && needs.verification-policy.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1232,8 +1294,8 @@ jobs:
 
   backend-visualizations-publish:
     name: Propose Backend Architecture Visualizations
-    needs: [backend-coverage, verification-policy]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend-coverage.result == 'success' && needs.verification-policy.result == 'success'
+    needs: main-evidence
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.main-evidence.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

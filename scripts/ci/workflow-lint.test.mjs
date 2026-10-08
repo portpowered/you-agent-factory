@@ -100,7 +100,7 @@ jobs:
     steps:
       - run: go install example/actionlint@v1.7.12
       - run: bash scripts/ci/run-workflow-verification.sh
-      - if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+      - if: success() || failure()
         run: make docs-reference-smoke
   api-pr-verification:
     if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'

@@ -22,7 +22,7 @@ test("selected Backend Conformance runs offline then live and fails closed throu
 
 	assert.match(
 		conformanceJob,
-		/if: always\(\) && needs\.classify\.outputs\.run_backend_conformance != 'false'/,
+		/if: always\(\) && github\.event_name != 'push' && needs\.classify\.outputs\.run_backend_conformance != 'false'/,
 	);
 	assert.match(conformanceJob, /timeout-minutes: 10/);
 	assert.ok(offlineStep >= 0, "offline backend conformance step is missing");

@@ -181,8 +181,8 @@ describe("executed architecture publication scripts", { concurrency: true }, () 
 test("successful main CI proposes measured pages through a bot pull request", () => {
 	const publish = job("backend-visualizations-publish");
 	assert.match(publish, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
-	assert.match(publish, /needs\.backend-coverage\.result == 'success'/);
-	assert.match(publish, /needs\.verification-policy\.result == 'success'/);
+	assert.match(publish, /needs\.main-evidence\.result == 'success'/);
+	assert.match(publish, /needs: main-evidence/);
 	assert.match(publish, /permissions:\n      contents: read/);
 	assert.match(publish, /fetch-depth: 2/);
 	assert.match(publish, /persist-credentials: false/);
