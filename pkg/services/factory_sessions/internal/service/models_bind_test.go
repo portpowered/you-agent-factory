@@ -276,16 +276,14 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 		resolveClock: func(factoryruntime.Clock) factoryruntime.Clock {
 			panic("live opening must consume the selected clock directly")
 		},
-		factoryScaffoldInitializer: func(string) error { return nil },
-		editableFactoryValidator: func(context.Context, *factorydefinitions.FactorySnapshot, factorydefinitions.WorkstationLoader) error {
-			return nil
-		},
-		factoryDefinitionValidator: validatorConstructionStub{},
-		runtimeInputLoading: NewRuntimeInputLoading(
+		preparation: NewRuntimePreparation(NewRuntimeInputLoading(
 			func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, nil
 			},
-			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()),
+			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()).Load,
+			nil, nil, func() (string, error) { return "/controlled-home", nil }, nil,
+			func(identity string) (string, error) { return identity, nil }, validatorConstructionStub{},
+			recordingRoot.ReplayClock, func(factoryruntime.Clock) factoryruntime.Clock { panic("unexpected fallback clock") }),
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
 		durableOpening: opening,

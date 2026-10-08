@@ -130,7 +130,7 @@ func (r *Root) prepareRuntimeOpening(
 		sessionID = factorysessions.DefaultSessionID
 	}
 	session.SessionID = sessionID
-	configured, root, load, clock, logger, err := r.prepareRuntime(
+	configured, root, load, clock, logger, err := r.preparation.Prepare(
 		ctx,
 		definition,
 		runtime,
@@ -141,6 +141,7 @@ func (r *Root) prepareRuntimeOpening(
 		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
+		r.clock,
 		definitionSnapshot,
 		replayInput,
 	)
