@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { evaluateVerificationPolicy } from "../verification-policy.mjs";
@@ -21,15 +20,6 @@ import {
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
 const SHA = (character) => character.repeat(40);
-
-test("complete lint inventory keeps positive concurrency after an earlier step fails", () => {
-	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
-	const selector = workflow.split("      - name: Select Backend Lint runner parallelism")[1]?.split("      - name:")[0];
-	assert.match(selector ?? "", /\n\s+if: always\(\)/);
-	const inventory = workflow.split("      - name: Run complete canonical Backend Lint inventory")[1]?.split("      - name:")[0];
-	assert.match(inventory ?? "", /\n\s+if: always\(\)/);
-	assert.match(inventory ?? "", new RegExp(`LINT_JOBS: \\$\\{\\{ steps\\.backend-lint-parallelism\\.outputs\\.jobs \\|\\| '${BACKEND_LINT_FALLBACK_JOBS}' \\}\\}`));
-});
 
 test("selects pull requests at the merge result and pushes to main at the tested commit", () => {
 	assert.deepEqual(
@@ -244,20 +234,4 @@ test("selects merge queue groups at the tested merge group commit", () => {
 		selectBackendLint({ eventName: "merge_group", ref: "", sha: "" }).error,
 		/requires github\.sha/,
 	);
-});
-
-test("required checks report on merge_group using merge group base and head SHAs", () => {
-	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
-	assert.match(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/);
-	assert.match(
-		workflow,
-		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
-	);
-	assert.match(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/);
-	assert.match(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/);
-	const lint = workflow.split("\n  backend-lint:")[1]?.split("\n  ui-backend-integration:")[0] ?? "";
-	assert.match(lint, /github\.event_name == 'merge_group'/);
-	const pkg = workflow.split("\n  development-package:")[1]?.split("\n  development-package-behavior:")[0] ?? "";
-	assert.match(pkg, /github\.event_name == 'merge_group'/);
-	assert.match(pkg, /run_candidates: \$\{\{ github\.event_name == 'pull_request' \}\}/);
 });

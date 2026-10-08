@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BACKEND_LINT_FALLBACK_JOBS } from "./backend-lint-workflow.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
@@ -318,6 +319,22 @@ export function validateControlledRawFailureWorkflowContract({ workflow, fixture
 
 export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	const job = workflowJobSection(workflow, "backend-lint");
+	for (const name of ["Select Backend Lint runner parallelism", "Run complete canonical Backend Lint inventory"]) {
+		requireWorkflowMatch(workflowStepSection(job, name), /\n\s+if: always\(\)/, `${name} must run after an earlier failure`);
+	}
+	requireWorkflowText(workflowStepSection(job, "Run complete canonical Backend Lint inventory"),
+		`LINT_JOBS: \${{ steps.backend-lint-parallelism.outputs.jobs || '${BACKEND_LINT_FALLBACK_JOBS}' }}`,
+		"canonical inventory must retain positive fallback concurrency");
+	requireWorkflowMatch(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/, "required checks run on merge groups");
+	requireWorkflowMatch(workflow,
+		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
+		"classification uses merge group base and head identities");
+	requireWorkflowMatch(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/, "classify both PR and merge group inputs");
+	requireWorkflowMatch(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/, "retain fallback classification for other events");
+	requireWorkflowText(job, "github.event_name == 'merge_group'", "Backend Lint reports for merge groups");
+	const developmentPackage = workflowJobSection(workflow, "development-package");
+	requireWorkflowText(developmentPackage, "github.event_name == 'merge_group'", "development package reports for merge groups");
+	requireWorkflowText(developmentPackage, "run_candidates: ${{ github.event_name == 'pull_request' }}", "development candidates remain PR-only");
 	if (/go test[^\n]*-race/.test(job)) throw new Error("Backend Lint must not run a race step");
 	for (const duplicate of ["Exercise packaged Markdown enforcement", "Check Go formatting", "Build and smoke-test shared lint plugin"]) {
 		if (job.includes(`- name: ${duplicate}`)) throw new Error(`Backend Lint repeats enforcement: ${duplicate}`);

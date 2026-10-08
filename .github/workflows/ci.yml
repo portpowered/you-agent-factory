@@ -880,10 +880,21 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        id: backend-lint-go
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
+      # Analysis-cache hits still need compiler export data for every tag scope.
+      # Keep lint's warmed non-race build outputs separate from coverage writers;
+      # setup-go remains the bootstrap on the first run. Go validates each entry
+      # against compiler inputs, so the prefix safely reuses unchanged packages.
+      - name: Restore Backend Lint Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: backend-lint-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('**/*.go', '**/go.mod', '**/go.sum', 'Makefile', '.golangci*.yml', '.custom-gcl.yml', 'docs/reference/**', 'packages/**', 'ui/fallback_dist/**') }}
+          restore-keys: backend-lint-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - uses: actions/cache@v4
         with:
           path: ~/.cache/golangci-lint
@@ -896,6 +907,25 @@ jobs:
           LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           LINT_HEAD: ${{ github.sha }}
         run: node scripts/ci/backend-lint-workflow.mjs --select-inputs --event "$LINT_EVENT" --base "$LINT_BASE" --head "$LINT_HEAD" --output .artifacts/backend-lint/selection.json
+      - name: Identify Markdown tool runtime
+        id: markdown-runtime
+        if: steps.lint-inputs.outputs.docs != '0'
+        run: echo "python=$(python -c 'import platform; print(platform.python_version())')" >> "$GITHUB_OUTPUT"
+      - name: Restore pinned Markdown tools
+        id: markdown-tools
+        if: steps.lint-inputs.outputs.docs != '0'
+        uses: actions/cache@v4
+        with:
+          path: .cache/docs-markdown-lint
+          key: backend-lint-markdown-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.backend-lint-go.outputs.go-version }}-${{ steps.markdown-runtime.outputs.python }}-${{ hashFiles('Makefile', 'scripts/docs-markdown-lint-requirements.txt') }}
+      - name: Activate exact Markdown tool cache
+        if: steps.markdown-tools.outputs.cache-hit == 'true'
+        run: |
+          # The exact key covers both prerequisite contents. Checkout mtimes
+          # must not reinstall the same tools; actual checks still run below.
+          test -x .cache/docs-markdown-lint/bin/gomarklint
+          python -c 'import sys; sys.path.insert(0, ".cache/docs-markdown-lint/python"); import pymarkdown, check_jsonschema'
+          touch .cache/docs-markdown-lint/ready
       - name: Identify plugin compiler inputs
         id: plugin-inputs
         run: echo "key=$(python3 scripts/build-golangci.py --cache-key)" >> "$GITHUB_OUTPUT"
