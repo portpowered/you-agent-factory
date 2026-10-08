@@ -35,10 +35,10 @@ test("unit coverage owns the only required backend unit execution", () => {
 test("the ACP replacement SDK and delivered-response boundary retain explicit CI gates", () => {
 	const workflow = read(".github/workflows/ci.yml");
 	const sdkStep = stepSection(backendCoverageJob(workflow),
-		"      - name: Run retained ACP SDK regression tests",
-		"      - name: Save unit coverage Go build and test cache");
+		"      - name: Run backend race witnesses",
+		"      - name: Prune unit Go build cache");
 	assert.match(sdkStep, /if: matrix\.suite == 'unit'/);
-	assert.match(sdkStep, /run: make test-acp-sdk/);
+	assert.match(sdkStep, /go test -race -p=4 -count=1 -timeout=5m \\\n\s+\.\/third_party\/acp-go-sdk\/\.\.\./);
 	const processStep = stepSection(workflow,
 		"      - name: Run delivered ACP response integration",
 		"      - name: Run pinned real ACP integration");
@@ -95,14 +95,14 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 
 	const save = stepSection(job, "      - name: Save unit coverage Go build and test cache", "      # This existing coverage tier");
 	assert.match(save, /if: always\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main' && matrix\.suite == 'unit' && steps\.unit-go-build-cache\.outputs\.cache-hit != 'true'/);
-	assert.match(job, /find ~\/\.cache\/go-build -type f ! -newermt "\$JOB_START" -delete/);
+	assert.match(job, /find ~\/\.cache\/go-build -type f -mtime \+3 -delete/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);
 	assert.match(save, /key: \$\{\{ steps\.unit-go-build-cache\.outputs\.cache-primary-key \}\}/);
 });
 
 test("unit coverage pins hosted package concurrency while local callers retain platform defaults", () => {
 	const workflow = backendCoverageJob(read(".github/workflows/ci.yml"));
-	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Save unit coverage Go build and test cache");
+	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Run backend race witnesses");
 	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "4"/);
 
 	const makefile = read("Makefile");
