@@ -42,6 +42,9 @@ type FileWriter struct {
 	ownerDeaths        map[string]bool
 	catalogMu          sync.Mutex
 	catalog            map[string]recordings.WorkerSessionCatalogEntry
+	catalogOrder       []recordings.WorkerSessionCatalogEntry
+	catalogOrderID     string
+	catalogOrderOwner  string
 	unavailable        map[string]struct{}
 	ambiguous          map[string]struct{}
 	catalogDamaged     bool

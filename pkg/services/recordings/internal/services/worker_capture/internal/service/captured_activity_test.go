@@ -832,6 +832,55 @@ func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
 	}
 }
 
+func TestFileWriterCatalogPagesObserveCommitsWithoutChangingMembership(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	for _, id := range []string{"a", "b"} {
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1})
+	if err != nil || first.NextToken == "" {
+		t.Fatalf("first page = %+v, %v", first, err)
+	}
+	terminal := recordings.WorkerRecordingRecord{
+		RecordingID: "b", WorkerSessionID: "b",
+		Record: mustRecord(t, terminalAppend(events.Topic("worker-session/b/events"), "b"), 2),
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+		t.Fatal(err)
+	}
+	var readers sync.WaitGroup
+	for range 16 {
+		readers.Go(func() {
+			assertCatalogCommittedContinuation(t, writer, first)
+		})
+	}
+	readers.Wait()
+	if first.Items[0].Catalog.CommittedPosition != 1 || first.Items[0].Terminal != nil {
+		t.Fatalf("first page mutated: %+v", first)
+	}
+}
+
+func assertCatalogCommittedContinuation(t *testing.T, writer *FileWriter, first recordings.WorkerCapturedCatalogPage) {
+	t.Helper()
+	page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1, NextToken: first.NextToken})
+	if err != nil || len(page.Items) != 1 {
+		t.Errorf("continued page = %+v, %v", page, err)
+		return
+	}
+	item := page.Items[0]
+	if page.GenerationID != first.GenerationID || page.NextToken != "" || item.Catalog.WorkerSessionID != "b" ||
+		item.Catalog.CommittedPosition != 2 || item.Terminal == nil || item.Terminal.Status != "COMPLETED" {
+		t.Errorf("continued page lost committed terminal: %+v", page)
+	}
+	// Returned facts belong to this reader; mutating them cannot affect peers.
+	if item.Terminal != nil {
+		item.Terminal.Status = "changed by caller"
+	}
+}
+
 func TestFileWriterCatalogEnumerationFencesMembershipAndProfile(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
@@ -879,6 +928,12 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 	for _, id := range []string{"first", "second"} {
 		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, "collision")); err != nil {
 			t.Fatal(err)
+		}
+		if id == "first" {
+			page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+			if err != nil || len(page.Items) != 1 {
+				t.Fatalf("initial catalog = %+v, %v", page, err)
+			}
 		}
 	}
 	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "healthy", "healthy")); err != nil {

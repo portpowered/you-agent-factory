@@ -38,7 +38,11 @@ func (writer *FileWriter) acceptCatalogEntry(entry recordings.WorkerSessionCatal
 		}
 		writer.ambiguous[entry.WorkerSessionID] = struct{}{}
 		delete(writer.catalog, entry.WorkerSessionID)
+		writer.catalogOrderID = ""
 		return
+	}
+	if !exists {
+		writer.catalogOrderID = ""
 	}
 	if !exists || current.CommittedPosition <= entry.CommittedPosition {
 		writer.catalog[entry.WorkerSessionID] = entry
@@ -70,8 +74,7 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if request.RequireCompleteMembership && unproven {
 		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingReplay
 	}
-	entries := writer.catalogEntries()
-	generation := writer.catalogGeneration(entries)
+	entries, generation := writer.catalogMembership()
 	after, err := decodeCatalogCursor(request.NextToken, generation)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
@@ -103,15 +106,26 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	return page, ctx.Err()
 }
 
-func (writer *FileWriter) catalogEntries() []recordings.WorkerSessionCatalogEntry {
+// catalogMembership returns an immutable identity snapshot. Existing-session
+// commits do not change membership: capturedCatalogItem reads their current
+// synced facts separately. Reuse sorting and hashing across pages and requests
+// until an addition, collision or owner epoch changes the identity set.
+// Only CPU work occurs under catalogMu; journal reads use the append barrier.
+func (writer *FileWriter) catalogMembership() ([]recordings.WorkerSessionCatalogEntry, string) {
 	writer.catalogMu.Lock()
+	defer writer.catalogMu.Unlock()
+	if writer.catalogOrderID != "" && writer.catalogOrderOwner == writer.ownerEpoch {
+		return writer.catalogOrder, writer.catalogOrderID
+	}
 	entries := make([]recordings.WorkerSessionCatalogEntry, 0, len(writer.catalog))
 	for _, entry := range writer.catalog {
 		entries = append(entries, entry)
 	}
-	writer.catalogMu.Unlock()
 	sort.Slice(entries, func(i, j int) bool { return entries[i].WorkerSessionID < entries[j].WorkerSessionID })
-	return entries
+	writer.catalogOrder = entries
+	writer.catalogOrderID = writer.catalogGeneration(entries)
+	writer.catalogOrderOwner = writer.ownerEpoch
+	return entries, writer.catalogOrderID
 }
 
 func (writer *FileWriter) catalogGeneration(entries []recordings.WorkerSessionCatalogEntry) string {

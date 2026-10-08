@@ -104,7 +104,7 @@ func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []re
 		}
 		items = append(items, item)
 	}
-	if writer.catalogGeneration(writer.catalogEntries()) != generation {
+	if _, current := writer.catalogMembership(); current != generation {
 		return nil, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return items, nil
