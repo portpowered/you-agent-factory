@@ -48,25 +48,35 @@ func TestColdAllListingWithinFiveSeconds(t *testing.T) {
 	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatal(err)
 	}
+	assertColdListingContents(t, result)
+	t.Logf("cold complete ALL: candidates=500 rows=490 warnings=10 bytes=%d elapsed=%s", len(body), elapsed)
+	if elapsed >= 5*time.Second {
+		t.Fatalf("cold ALL took %s; bound is strictly under 5s", elapsed)
+	}
+}
+
+func assertColdListingContents(t *testing.T, result factoryapi.ListFactorySessionsResponse) {
+	t.Helper()
 	if result.RecordedSessions == nil || len(*result.RecordedSessions) != 490 || result.Warnings == nil || len(*result.Warnings) != 10 {
 		t.Fatal("ALL did not return exactly 490 recorded rows and 10 warnings")
 	}
-	seen := map[string]bool{}
-	for i, row := range *result.RecordedSessions {
-		wantID := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
-		if row.SessionId != wantID || seen[row.ArtifactReference] {
-			t.Fatalf("row %d identity/order/duplicate: %#v", i, row)
-		}
-		seen[row.ArtifactReference] = true
-	}
+	assertColdListingRows(t, *result.RecordedSessions)
 	for i, warning := range *result.Warnings {
 		if warning.ArtifactReference != fmt.Sprintf("2026/10/08/bad-%03d.json", i) || warning.Code != "UNREADABLE_RECORDING" || strings.Contains(warning.Reason, "planted-secret") {
 			t.Fatalf("warning %d: %#v", i, warning)
 		}
 	}
-	t.Logf("cold complete ALL: candidates=500 rows=490 warnings=10 bytes=%d elapsed=%s", len(body), elapsed)
-	if elapsed >= 5*time.Second {
-		t.Fatalf("cold ALL took %s; bound is strictly under 5s", elapsed)
+}
+
+func assertColdListingRows(t *testing.T, rows []factoryapi.FactorySessionRecordedSummary) {
+	t.Helper()
+	seen := map[string]bool{}
+	for i, row := range rows {
+		wantID := fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
+		if row.SessionId != wantID || seen[row.ArtifactReference] {
+			t.Fatalf("row %d identity/order/duplicate: %#v", i, row)
+		}
+		seen[row.ArtifactReference] = true
 	}
 }
 
