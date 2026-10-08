@@ -110,6 +110,61 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	t.Run("F02 host startup failure", func(t *testing.T) {
 		testRecordStartupSafetyHostFailure(t, reusable)
 	})
+	t.Run("F05 fresh recording boundaries", func(t *testing.T) {
+		testRecordStartupSafetyFreshTargets(t, reusable)
+	})
+}
+
+func testRecordStartupSafetyFreshTargets(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	t.Run("no recording", func(t *testing.T) {
+		t.Parallel()
+		dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+		running := reusable.runForSession(t, dir, "", uuid.NewString(), "--no-record")
+		assertFreshRecordingBoard(t, running)
+		restartProbeShutdown(t, running.url, running.daemon)
+		if _, err := os.Stat(filepath.Join(running.home, ".you-agent-factory", "recordings")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("--no-record created a recording destination: %v", err)
+		}
+	})
+	for _, empty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("empty=%t", empty), func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "fresh.__factory_session_id__.json")
+			path := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			if empty {
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			running := reusable.runForSession(t, dir, "", sessionID, "--record", selected)
+			assertFreshRecordingBoard(t, running)
+			restartProbeShutdown(t, running.url, running.daemon)
+			payload := mustReadSeededReplayArtifact(t, path)
+			if len(payload) == 0 {
+				t.Fatal("successful shutdown left an empty recording")
+			}
+			replayed := reusable.runForSession(t, dir, path, sessionID, "--replay", path, "--no-record")
+			assertFreshRecordingBoard(t, replayed)
+			restartProbeShutdown(t, replayed.url, replayed.daemon)
+			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("read-only replay changed the fresh recording")
+			}
+		})
+	}
+}
+
+func assertFreshRecordingBoard(t *testing.T, running seededReplayResumeRun) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(running.url, running.sessionID))
+	waitForSeededReplayRuntimeStart(t, stream)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(running.url, running.sessionID, "/work"))
+	if len(listed.Results) != 0 {
+		t.Fatalf("fresh board contains unexpected Work: %#v", listed.Results)
+	}
 }
 
 // An explicitly selected UUID does not make a retained JSON board a fresh
@@ -285,6 +340,7 @@ func seededResumeSourceAlias(t *testing.T, kind, source string) string {
 type seededReplayResumeRun struct {
 	url       string
 	sessionID string
+	home      string
 	daemon    *support.ProcessCommand
 }
 
@@ -338,7 +394,9 @@ func (reusable *seededReplayResumeProcess) runForSession(
 	port := 22000 + int(reusable.nextPort.Add(1))
 	reusable.mu.Lock()
 	reusable.serversByPort[port] = api
-	reusable.payloadsByPath[filepath.Clean(artifactPath)] = append([]byte(nil), mustReadSeededReplayArtifact(t, artifactPath)...)
+	if artifactPath != "" {
+		reusable.payloadsByPath[filepath.Clean(artifactPath)] = append([]byte(nil), mustReadSeededReplayArtifact(t, artifactPath)...)
+	}
 	reusable.mu.Unlock()
 	t.Cleanup(func() {
 		reusable.mu.Lock()
@@ -367,7 +425,7 @@ func (reusable *seededReplayResumeProcess) runForSession(
 		}
 	})
 	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, daemon: daemon}
+	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, home: home, daemon: daemon}
 }
 
 func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {

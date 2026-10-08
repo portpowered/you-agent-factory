@@ -60,6 +60,14 @@ func (service *Service) QueryHistoricalRecording(
 		}
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(kind, identity, "", err)
 	}
+	// Automatic target reservation creates an empty file before the first
+	// recording starts. It contains no history to reconstruct; non-empty
+	// malformed documents must still be classified as corrupt below.
+	if len(payload) == 0 {
+		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(
+			recordings.HistoricalRecordingQueryErrorMissingHistory, identity, "", io.EOF,
+		)
+	}
 	if request.InferFactorySessionScope {
 		identity, err = inferRecordedScope(payload, identity)
 		if err != nil {
