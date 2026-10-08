@@ -129,6 +129,33 @@ jobs:
           UI_COVERAGE_MAIN_MAX_WORKERS: "4"
         run: make test-ui-coverage
 
+      - name: Frontend component proof
+        if: success() || failure()
+        run: bash scripts/ci/run-frontend-verification.sh
+        env:
+          FRONTEND_SUITE: component
+
+  # Keep complete component and browser suites on separate runners: jsdom
+  # imports must not compete with two bundlers, Chromium and the Go compiler.
+  frontend-browser:
+    name: Frontend Browser
+    needs: classify
+    if: always() && needs.classify.outputs.run_frontend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Restore Bun download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+      - name: Install locked frontend dependencies
+        run: cd ui && bun install --frozen-lockfile
+
       - name: Restore Playwright Chromium
         id: playwright-browser
         if: success() || failure()
@@ -139,11 +166,34 @@ jobs:
       - name: Install Playwright Chromium
         if: (success() || failure()) && steps.playwright-browser.outputs.cache-hit != 'true'
         run: make ui-install-playwright
+      # The retained hosted-route browser check uses a real Go backend. Cache
+      # compiler inputs, never executables or test results; build once per run.
+      - name: Restore frontend backend harness compiler cache
+        id: frontend-harness-cache
+        if: success() || failure()
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: frontend-harness-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ hashFiles('pkg/**/*.go', 'tests/functional/internal/support/**/*.go') }}
+          restore-keys: |
+            frontend-harness-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Frontend proof
+        id: frontend-proof
         if: success() || failure()
         run: bash scripts/ci/run-frontend-verification.sh
         env:
+          FRONTEND_SUITE: browser
           AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/factory-graph-visual-group
+      - name: Save successfully populated frontend harness compiler inputs
+        if: always() && !cancelled() && steps.frontend-proof.outputs.harness-compiled == 'true' && steps.frontend-harness-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ steps.frontend-harness-cache.outputs.cache-primary-key }}
       - name: Upload visual group browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -1135,7 +1185,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, readme, frontend, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
+    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-models-verification, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -1176,8 +1226,8 @@ jobs:
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}
           FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_BROWSER_RESULT: ${{ needs.frontend.result }}
-          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend.result }}
+          FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
+          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-browser.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result == 'success' && needs.tts-clean-install-windows.result || needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           BACKEND_MODELS_RESULT: ${{ needs.backend-models-verification.result }}
