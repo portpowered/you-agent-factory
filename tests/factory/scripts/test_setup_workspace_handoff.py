@@ -744,11 +744,13 @@ class RecoveryOwnershipValidationTest(unittest.TestCase):
         self.module = load_setup_workspace_module()
         self.workspace = recovery_packet()["context"]["recovery"]["workspace"]
         self.session = "11111111-1111-4111-8111-111111111111"
-        self.successor = {"name": "lane-r2", "workId": "new", "state": {"type": "INITIAL"}}
+        self.successor = {"name": "lane-r2", "workId": "new", "workTypeName": "task",
+                          "state": {"type": "INITIAL"}}
 
     def test_paged_inventory_refuses_active_or_parked_owner(self):
-        for state in ("init", "awaiting-answer", "awaiting-ci"):
-            owner = {"name": "lane", "workId": "old", "state": {"type": "PROCESSING", "name": state}}
+        for state in ("init", "awaiting-answer", "awaiting-ci", "in-review"):
+            owner = {"name": "lane", "workId": "old", "workTypeName": "task",
+                     "state": {"type": "PROCESSING", "name": state}}
             pages = [{"sessions": [{"id": self.session}]},
                      {"results": [self.successor], "paginationContext": {"nextToken": "page2"}},
                      {"results": [owner], "paginationContext": {}}]
@@ -758,14 +760,109 @@ class RecoveryOwnershipValidationTest(unittest.TestCase):
                 self.assertIn("page2", command.call_args.args[0])
 
     def test_terminal_predecessor_and_same_successor_allow_repeat(self):
-        works = [self.successor, {"name": "lane", "state": {"type": "FAILED"}},
-                 {"name": "healthy", "state": {"type": "PROCESSING"}},
-                 {"name": "older-r2", "tags": {"recovery-worktree": self.workspace["worktree"]},
+        works = [dict(self.successor, tags={"recovery-worktree": self.workspace["worktree"]}),
+                 {"name": "lane", "workTypeName": "idea", "state": {"type": "FAILED"}},
+                 {"name": "healthy", "workTypeName": "task", "state": {"type": "PROCESSING"}},
+                 {"name": "older-r2", "workTypeName": "plan", "tags": {"recovery-worktree": self.workspace["worktree"]},
                   "state": {"type": "TERMINAL"}}]
         with mock.patch.object(self.module, "recovery_command_json", side_effect=[
             {"sessions": [{"id": self.session}]}, {"results": works, "paginationContext": {}},
         ]):
             self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_known_non_delivery_roles_never_claim_retained_identity(self):
+        for role in ("project", "project-cycle", "project-report", "thoughts", "review", "validation"):
+            for state in ("INITIAL", "PROCESSING", "TERMINAL", "FAILED"):
+                for identity in ({"name": "lane"}, {"name": "administrative",
+                                  "tags": {"recovery-worktree": self.workspace["worktree"]}}):
+                    work = dict(identity, workTypeName=role, state={"type": state})
+                    with self.subTest(role=role, state=state, identity=identity):
+                        self.assertFalse(self.module.recovery_owner(work, "lane-r2", self.workspace))
+                        with mock.patch.object(self.module, "recovery_command_json", side_effect=[
+                            {"sessions": [{"id": self.session}]},
+                            {"results": [self.successor, work], "paginationContext": {}},
+                        ]):
+                            self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_delivery_roles_claim_branch_or_normalized_tag_only_while_active(self):
+        for role in ("idea", "plan", "task"):
+            for state in ("INITIAL", "PROCESSING", "TERMINAL", "FAILED"):
+                for identity in ({"name": "lane"}, {"name": "another-successor",
+                                  "tags": {"recovery-worktree": ".claude/worktrees/./lane"}}):
+                    work = dict(identity, workTypeName=role, state={"type": state})
+                    with self.subTest(role=role, state=state, identity=identity):
+                        self.assertEqual(self.module.recovery_owner(work, "lane-r2", self.workspace),
+                                         state in ("INITIAL", "PROCESSING"))
+                        work["name"] = "unrelated"
+                        work["tags"] = {"recovery-worktree": ".claude/worktrees/unrelated"}
+                        self.assertFalse(self.module.recovery_owner(work, "lane-r2", self.workspace))
+
+    def test_another_adopted_delivery_owner_refuses_inventory(self):
+        owner = {"name": "another-successor", "workTypeName": "task", "state": {"type": "INITIAL"},
+                 "tags": {"recovery-worktree": self.workspace["worktree"]}}
+        with mock.patch.object(self.module, "recovery_command_json", side_effect=[
+            {"sessions": [{"id": self.session}]},
+            {"results": [self.successor, owner], "paginationContext": {}},
+        ]), self.assertRaisesRegex(ValueError, "active owner"):
+            self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_relevant_unknown_state_or_role_refuses_classification(self):
+        invalid = []
+        for role in ("task", "project-report"):
+            for state in (None, {}, {"type": "UNKNOWN"}, "PROCESSING"):
+                invalid.append({"workTypeName": role, "state": state})
+            invalid.append({"workTypeName": role})
+        for role in (None, 1, [], {}, "unrecognized"):
+            invalid.append({"workTypeName": role, "state": {"type": "PROCESSING"}})
+        invalid.append({"state": {"type": "PROCESSING"}})
+        for metadata in invalid:
+            for identity in ({"name": "lane"}, {"name": "tagged",
+                              "tags": {"recovery-worktree": self.workspace["worktree"]}},
+                             {"name": "lane-r2"}):
+                work = dict(metadata, **identity)
+                with self.subTest(work=work), mock.patch.object(self.module, "recovery_command_json", side_effect=[
+                    {"sessions": [{"id": self.session}]},
+                    {"results": [self.successor, work], "paginationContext": {}},
+                ]), self.assertRaisesRegex(ValueError, "^recovery ownership cannot classify"):
+                    self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_successor_session_count_uses_delivery_role(self):
+        other_session = "22222222-2222-4222-8222-222222222222"
+        report = dict(self.successor, workTypeName="project-report", state={"type": "PROCESSING"})
+        with mock.patch.object(self.module, "recovery_command_json", side_effect=[
+            {"sessions": [{"id": self.session}, {"id": other_session}]},
+            {"results": [self.successor], "paginationContext": {}},
+            {"results": [report], "paginationContext": {}},
+        ]):
+            self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+        with mock.patch.object(self.module, "recovery_command_json", side_effect=[
+            {"sessions": [{"id": self.session}]},
+            {"results": [report], "paginationContext": {}},
+        ]), self.assertRaisesRegex(ValueError, "one live Session owner"):
+            self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
+
+    def test_incomplete_inventory_and_pagination_guards_refuse(self):
+        cases = [
+            ([{"sessions": None}], "bounded live Session inventory"),
+            ([{"sessions": {}}], "bounded live Session inventory"),
+            ([{"sessions": [{"id": self.session}]}, {"paginationContext": {}}], "complete Work inventory"),
+            ([{"sessions": [{"id": self.session}]}, {"results": None}], "complete Work inventory"),
+            ([{"sessions": [{"id": self.session}]}, {"results": [], "paginationContext": None}], "pagination context"),
+            ([{"sessions": [{"id": self.session}]},
+              {"results": [], "paginationContext": {"nextToken": 1}}], "pagination did not advance"),
+            ([{"sessions": [{"id": self.session}]},
+              {"results": [self.successor], "paginationContext": {"nextToken": "repeat"}},
+              {"results": [], "paginationContext": {"nextToken": "repeat"}}], "pagination did not advance"),
+            ([{"sessions": [{"id": self.session}]},
+              {"results": [self.successor], "paginationContext": {"nextToken": "page2"}},
+              {"results": [], "paginationContext": {"nextToken": "page3"}}], "bounded page budget"),
+            ([{"sessions": [{"id": self.session}] * 3}], "bounded live Session inventory"),
+        ]
+        for pages, diagnostic in cases:
+            with self.subTest(pages=pages), mock.patch.object(self.module, "MAX_RECOVERY_PAGES", 2), \
+                 mock.patch.object(self.module, "recovery_command_json", side_effect=pages), \
+                 self.assertRaisesRegex(ValueError, diagnostic):
+                self.module.validate_recovery_ownership(Path.cwd(), "lane-r2", self.workspace)
 
     def test_unverifiable_or_duplicate_session_ownership_refuses(self):
         cases = [
@@ -822,8 +919,10 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
             git(["commit", "-m", "useful unpublished work"], retained)
             head = git(["rev-parse", "HEAD"], retained).stdout.strip()
             saved = {"change.txt": b"dirty improvement\n", "untracked.txt": b"untracked\x00bytes",
-                     "prd.json": b'{"project":"old"}', "progress.txt": b"old progress\r\n"}
+                     "prd.json": b'{"project":"old"}', "progress.txt": b"old progress\r\n",
+                     module.STANDING_RULES_RELPATH.as_posix(): b"retained standing rules\r\n"}
             for name, data in saved.items():
+                (retained / name).parent.mkdir(parents=True, exist_ok=True)
                 (retained / name).write_bytes(data)
             git(["add", "change.txt"], retained)
             (retained / "change.txt").write_bytes(b"unstaged improvement\n")
@@ -849,8 +948,31 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
                             "headRefName": "lane", "headRefOid": remote_head, "isCrossRepository": False}
                 if "session" in command:
                     return {"sessions": [{"id": "11111111-1111-4111-8111-111111111111"}]}
-                return {"results": [{"name": "lane", "state": {"type": "FAILED"}},
-                                    {"name": "lane-r2", "state": {"type": "INITIAL"}}], "paginationContext": {}}
+                return {"results": [{"name": "lane", "workTypeName": "task", "state": {"type": "FAILED"}},
+                                    {"name": "lane", "workTypeName": "project-report", "state": {"type": "PROCESSING"}},
+                                    {"name": "lane-r2", "workTypeName": "task", "state": {"type": "INITIAL"}}],
+                        "paginationContext": {}}
+            # An active original task refuses before either successor packet is installed.
+            def active_owner(command, cwd):
+                data = external(command, cwd)
+                if "results" in data:
+                    data["results"][0]["state"] = {"type": "PROCESSING"}
+                return data
+            with mock.patch.object(module, "get_repo_root", return_value=repo), \
+                 mock.patch.object(module, "recovery_command_json", side_effect=active_owner), \
+                 mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as refusal:
+                    module.main()
+                self.assertEqual(refusal.exception.code, 1)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("active owner", stderr.getvalue())
+            self.assertEqual(repository_snapshot(repo, (retained,)), snapshot)
+            self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
+            for name, data in saved.items():
+                self.assertEqual((retained / name).read_bytes(), data)
+            self.assertFalse((retained / "tasks/todo/lane-r2.json").exists())
+            self.assertFalse((retained / "tasks/todo/lane-r2.md").exists())
             for visit in range(2):
                 with self.subTest(visit=visit), mock.patch.object(module, "get_repo_root", return_value=repo), \
                      mock.patch.object(module, "recovery_command_json", side_effect=external), \
@@ -864,6 +986,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
                     self.assertEqual(Path(result["worktree"]), retained)
                     self.assertEqual(Path(result["prd_path"]), retained / "tasks/todo/lane-r2.json")
                     self.assertTrue(result["reused"])
+                    self.assertEqual(result["status"], "ready")
                     sync.assert_not_called()
                     prune.assert_not_called()
                 for name, data in saved.items():
@@ -872,6 +995,7 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
                 self.assertEqual(git(["status", "--porcelain=v1", "-z"], retained).stdout, before)
                 self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
                 self.assertEqual(Path(result["prd_path"]).read_bytes(), source.read_bytes())
+                self.assertEqual(Path(result["prd_md_path"]).read_bytes(), source.with_suffix(".md").read_bytes())
             # A closed retained PR must refuse with no receipt or file/ref effects.
             def closed_pr(command, cwd):
                 data = external(command, cwd)
