@@ -1,5 +1,15 @@
 package recordings
 
+import "context"
+
+// RuntimeRecordingStartup keeps a prepared recording read-only until the
+// owning Factory Session has completed its startup transaction. Aborting
+// before activation must stop without publishing terminal metadata.
+type RuntimeRecordingStartup interface {
+	DeferRecordingPublication()
+	ActivateRecordingPublication(context.Context) error
+}
+
 // RuntimeRecordingBinder is implemented by RuntimeRecorder producers that
 // bind to an already-constructed RecordingLifecycle capability once a caller
 // makes one available, instead of receiving the broad Service for

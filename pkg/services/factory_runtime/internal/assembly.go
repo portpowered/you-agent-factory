@@ -175,8 +175,13 @@ func (a *Assembly) prepareInitialOpening(ctx context.Context, request factoryrun
 	if err != nil {
 		return factoryruntime.SessionBuildSpec{}, err
 	}
-	// Initial recording paths retain the invocation selection; replacements are session-scoped.
+	// Restore and output must address the same session-resolved destination.
+	// Resolving an explicit session's placeholder as ~default writes a different
+	// board from the one validated during opening.
 	spec.RecordPath = runtimebuild.SessionScopedRecordPath(request.Inputs.Recordings.RecordPath, "~default")
+	if strings.Contains(request.Inputs.Recordings.RecordPath, "__factory_session_id__") {
+		spec.RecordPath = runtimebuild.SessionScopedRecordPath(request.Inputs.Recordings.RecordPath, request.FactorySessionID)
+	}
 	spec.MetricsSessionID = firstNonEmptySessionID(metricsID, request.FactorySessionID)
 	if resumeInput != nil {
 		spec.ResumeSourceCanonicalSessionID = strings.TrimSpace(resumeInput.SourceCanonicalSessionID)

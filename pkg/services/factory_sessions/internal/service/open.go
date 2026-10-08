@@ -568,6 +568,9 @@ func (r *Root) bindSessionOpeningProducts(
 	sessionRuntime roles.ApplicationRuntime,
 	processRuntime roles.ProcessRuntime,
 ) (runtimeProducts, error) {
+	if recording, ok := opening.startupRuntime.(recordings.RuntimeRecordingStartup); ok {
+		recording.DeferRecordingPublication()
+	}
 	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")

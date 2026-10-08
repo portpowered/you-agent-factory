@@ -107,6 +107,9 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	t.Run("JSON direct restore", func(t *testing.T) {
 		testRecordStartupSafetyDirectRestore(t, reusable)
 	})
+	t.Run("F02 host startup failure", func(t *testing.T) {
+		testRecordStartupSafetyHostFailure(t, reusable)
+	})
 }
 
 // An explicitly selected UUID does not make a retained JSON board a fresh
@@ -205,11 +208,12 @@ func assertSeededSuccessorWorkAndHistory(t *testing.T, running seededReplayResum
 type seededReplayResumeProcess struct {
 	process support.Process
 
-	mu               sync.RWMutex
-	serversByPort    map[int]*support.ProcessAPIServer
-	payloadsByPath   map[string][]byte
-	readErrorsByPath map[string]error
-	nextPort         atomic.Int32
+	mu                 sync.RWMutex
+	serversByPort      map[int]*support.ProcessAPIServer
+	payloadsByPath     map[string][]byte
+	readErrorsByPath   map[string]error
+	serverErrorsByPort map[int]error
+	nextPort           atomic.Int32
 }
 
 func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
@@ -264,9 +268,10 @@ type seededReplayResumeRun struct {
 func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 	t.Helper()
 	reusable := &seededReplayResumeProcess{
-		serversByPort:    make(map[int]*support.ProcessAPIServer),
-		payloadsByPath:   make(map[string][]byte),
-		readErrorsByPath: make(map[string]error),
+		serversByPort:      make(map[int]*support.ProcessAPIServer),
+		payloadsByPath:     make(map[string][]byte),
+		readErrorsByPath:   make(map[string]error),
+		serverErrorsByPort: make(map[int]error),
 	}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    reusable.startAPIServer,
@@ -450,11 +455,96 @@ func (reusable *seededReplayResumeProcess) startAPIServer(
 ) error {
 	reusable.mu.RLock()
 	server := reusable.serversByPort[request.Port]
+	err := reusable.serverErrorsByPort[request.Port]
 	reusable.mu.RUnlock()
+	if err != nil {
+		return err
+	}
 	if server == nil {
 		return fmt.Errorf("seeded replay API server is not registered for requested port %d", request.Port)
 	}
 	return server.Start(ctx, request)
+}
+
+func testRecordStartupSafetyHostFailure(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	sessionID := uuid.NewString()
+	selectedPath := filepath.Join(dir, "protected.__factory_session_id__.json")
+	path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
+	var artifact factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	for index := range artifact.Events {
+		artifact.Events[index].Context.SessionID = &sessionID
+	}
+	before, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	port := 22000 + int(reusable.nextPort.Add(1))
+	cause := &fs.PathError{Op: "open listener configuration", Path: filepath.Join(dir, "listener"), Err: fs.ErrPermission}
+	reusable.mu.Lock()
+	reusable.payloadsByPath[path] = before
+	reusable.serverErrorsByPort[port] = cause
+	reusable.mu.Unlock()
+	t.Cleanup(func() {
+		reusable.mu.Lock()
+		delete(reusable.payloadsByPath, path)
+		delete(reusable.serverErrorsByPort, port)
+		reusable.mu.Unlock()
+	})
+	logRoot := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+		"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selectedPath,
+		"--runtime-log-dir", logRoot,
+		"--listen", fmt.Sprintf("127.0.0.1:%d", port), "--provider", "CODEX", "--model", "gpt-5-codex"})
+	profile := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+	inputs.Input.WorkingDirectory = dir
+	err = reusable.process.Execute(inputs.Input)
+	if !errors.Is(err, cause) {
+		t.Fatalf("startup lost listener cause: %v; stderr=%s", err, inputs.Stderr())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+		t.Fatalf("decode startup ErrorResponse: %v; stderr=%s", err, inputs.Stderr())
+	}
+	if response.Code != "SERVER_START_FAILED" || !strings.Contains(response.Message, "permission denied") {
+		t.Fatalf("startup cause missing: %+v", response)
+	}
+	if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+		t.Fatal("failed host startup replaced validated retained history")
+	}
+	if strings.Contains(inputs.Stdout(), "Factory initiated:") {
+		t.Fatal("failed host startup published readiness")
+	}
+	assertRecordStartupSafetyLog(t, logRoot)
+}
+
+func assertRecordStartupSafetyLog(t *testing.T, logRoot string) {
+	t.Helper()
+	var logs strings.Builder
+	if err := filepath.WalkDir(logRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		payload, err := os.ReadFile(path)
+		logs.Write(payload)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "permission denied") || !strings.Contains(logs.String(), "open listener configuration") {
+		t.Fatalf("runtime log lost startup cause: %s", logs.String())
+	}
 }
 
 func waitForSeededReplayRuntimeStart(t *testing.T, stream *support.FactoryEventStream) {

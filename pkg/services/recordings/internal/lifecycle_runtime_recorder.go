@@ -23,28 +23,29 @@ import (
 // the session's Recordings-owned RecordingLifecycle capability without
 // becoming a second lifecycle owner.
 type lifecycleRuntimeRecorder struct {
-	mu                 sync.Mutex
-	lifecycle          recordings.RecordingLifecycle
-	requestedID        recordings.LifecycleRecordingID
-	recordingID        recordings.LifecycleRecordingID
-	scope              recordings.CanonicalEventScope
-	target             recordings.LifecycleArtifactReference
-	canonicalSessionID string
-	flushInterval      time.Duration
-	now                func() time.Time
-	startedAt          time.Time
-	streamGenerationID string
-	initialEvent       recordings.FactoryEvent
-	initialProvenance  []recordings.RecordingSecret
-	seen               map[string]struct{}
-	nextSequence       recordings.CanonicalEventSequence
-	finalizeErr        error
-	bindErr            error
-	stopErr            error
-	started            bool
-	stopped            bool
-	finalized          bool
-	pending            []pendingRuntimeRecording
+	mu                  sync.Mutex
+	lifecycle           recordings.RecordingLifecycle
+	requestedID         recordings.LifecycleRecordingID
+	recordingID         recordings.LifecycleRecordingID
+	scope               recordings.CanonicalEventScope
+	target              recordings.LifecycleArtifactReference
+	canonicalSessionID  string
+	flushInterval       time.Duration
+	now                 func() time.Time
+	startedAt           time.Time
+	streamGenerationID  string
+	initialEvent        recordings.FactoryEvent
+	initialProvenance   []recordings.RecordingSecret
+	seen                map[string]struct{}
+	nextSequence        recordings.CanonicalEventSequence
+	finalizeErr         error
+	bindErr             error
+	stopErr             error
+	started             bool
+	publicationDeferred bool
+	stopped             bool
+	finalized           bool
+	pending             []pendingRuntimeRecording
 }
 
 type pendingRuntimeRecording struct {
@@ -189,6 +190,13 @@ func (recorder *lifecycleRuntimeRecorder) Start(ctx context.Context) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	if recorder.publicationDeferred {
+		return
+	}
+	recorder.startLocked(ctx)
+}
+
+func (recorder *lifecycleRuntimeRecorder) startLocked(ctx context.Context) {
 	if recorder.started || recorder.stopped || recorder.finalized || recorder.bindErr != nil || recorder.lifecycle == nil || (ctx != nil && ctx.Err() != nil) {
 		return
 	}
@@ -203,6 +211,41 @@ func (recorder *lifecycleRuntimeRecorder) Start(ctx context.Context) {
 		return
 	}
 	recorder.started = true
+}
+
+func (recorder *lifecycleRuntimeRecorder) DeferRecordingPublication() {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if !recorder.started {
+		recorder.publicationDeferred = true
+	}
+}
+
+func (recorder *lifecycleRuntimeRecorder) ActivateRecordingPublication(ctx context.Context) error {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.bindErr != nil {
+		return recorder.bindErr
+	}
+	if recorder.started {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if recorder.stopped || recorder.finalized || recorder.lifecycle == nil {
+		return fmt.Errorf("activate Factory recording %q: recording is not prepared", recorder.target)
+	}
+	// Publish the fully seeded prefix before scheduling periodic writes. A
+	// failed first publication aborts; cleanup cannot retry it through Finish.
+	if _, err := recorder.lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: recorder.recordingID}); err != nil {
+		return recorder.abortBindingLocked(fmt.Errorf("publish Factory recording %q: %w", recorder.target, err))
+	}
+	recorder.publicationDeferred = false
+	// A successful initial publication commits startup. Caller cancellation
+	// after that write is orderly stop, not an unactivated opening abort.
+	recorder.startLocked(context.WithoutCancel(ctx))
+	return recorder.bindErr
 }
 
 func (recorder *lifecycleRuntimeRecorder) Stop() {
@@ -779,17 +822,18 @@ func (service *combinedService) closeRuntimeRecordingScope(
 }
 
 type runtimeScopeRecorder struct {
-	mu          sync.Mutex
-	inner       recordings.RuntimeRecorder
-	owner       *combinedService
-	scope       recordings.RecordingScopeRef
-	routeKey    string
-	ledger      recordings.RuntimeEventLedger
-	started     bool
-	stopped     bool
-	startErr    error
-	finalized   bool
-	finalizeErr error
+	mu                  sync.Mutex
+	inner               recordings.RuntimeRecorder
+	owner               *combinedService
+	scope               recordings.RecordingScopeRef
+	routeKey            string
+	ledger              recordings.RuntimeEventLedger
+	started             bool
+	publicationDeferred bool
+	stopped             bool
+	startErr            error
+	finalized           bool
+	finalizeErr         error
 }
 
 func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
@@ -801,7 +845,7 @@ func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.finalized || recorder.started || recorder.stopped || recorder.startErr != nil || ctx.Err() != nil {
+	if recorder.publicationDeferred || recorder.finalized || recorder.started || recorder.stopped || recorder.startErr != nil || ctx.Err() != nil {
 		return
 	}
 	if recorder.inner != nil {
@@ -814,6 +858,46 @@ func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
 	// A failed activation still owns a prepared history. Cleanup must abort it,
 	// rather than interpreting the Start attempt as permission to finalize.
 	recorder.started = true
+}
+
+func (recorder *runtimeScopeRecorder) DeferRecordingPublication() {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.started {
+		return
+	}
+	recorder.publicationDeferred = true
+	if startup, ok := recorder.inner.(recordings.RuntimeRecordingStartup); ok {
+		startup.DeferRecordingPublication()
+	}
+}
+
+func (recorder *runtimeScopeRecorder) ActivateRecordingPublication(ctx context.Context) error {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.started {
+		return nil
+	}
+	if recorder.startErr != nil {
+		return recorder.startErr
+	}
+	if recorder.stopped || recorder.finalized {
+		return fmt.Errorf("activate Factory recording: recording scope is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if startup, ok := recorder.inner.(recordings.RuntimeRecordingStartup); ok {
+		recorder.startErr = startup.ActivateRecordingPublication(ctx)
+	} else if recorder.inner != nil {
+		recorder.inner.Start(ctx)
+		recorder.startErr = recorder.inner.Err()
+	}
+	if recorder.startErr == nil {
+		recorder.publicationDeferred = false
+		recorder.started = true
+	}
+	return recorder.startErr
 }
 
 func (recorder *runtimeScopeRecorder) Stop() {

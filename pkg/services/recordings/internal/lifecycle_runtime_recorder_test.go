@@ -214,6 +214,7 @@ type stubRecordingLifecycle struct {
 	failureRequests []recordings.RecordLifecycleFailureRequest
 	flushRequest    recordings.FlushLifecycleRequest
 	flushCalls      int
+	flushErr        error
 	finishRequest   recordings.FinishLifecycleRequest
 	finishCalls     int
 	finishErr       error
@@ -338,7 +339,98 @@ func (s *stubRecordingLifecycle) RecordFailure(request recordings.RecordLifecycl
 func (s *stubRecordingLifecycle) Flush(request recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
 	s.flushRequest = request
 	s.flushCalls++
-	return recordings.RecordingLifecycleResult{}, nil
+	return recordings.RecordingLifecycleResult{}, s.flushErr
+}
+
+func TestLifecycleRuntimeRecorderProtectsPublicationUntilStartupCompletes(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []string{"abort", "activate", "publication failure"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			primary, cleanup := errors.New("write denied"), errors.New("stop failed")
+			owner := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "protected"},
+			}}
+			recorder := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := recorder.BindRecordingLifecycle(owner, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			recorder.DeferRecordingPublication()
+			recorder.Start(t.Context())
+			if err := recorder.Flush(); err != nil || owner.flushCalls != 0 || !owner.beginRequest.DeferPeriodic {
+				t.Fatalf("pre-readiness publication: flush=%d err=%v begin=%+v", owner.flushCalls, err, owner.beginRequest)
+			}
+			if outcome == "abort" {
+				recorder.Stop()
+			} else {
+				assertRecorderPublicationActivation(t, recorder, owner, outcome, primary, cleanup)
+			}
+			assertRecorderPublicationCleanup(t, recorder, owner, outcome)
+		})
+	}
+}
+
+func assertRecorderPublicationActivation(t *testing.T, recorder *lifecycleRuntimeRecorder, owner *stubRecordingLifecycle, outcome string, primary, cleanup error) {
+	t.Helper()
+	if outcome == "publication failure" {
+		owner.flushErr, owner.stopErr = primary, cleanup
+	}
+	err := recorder.ActivateRecordingPublication(t.Context())
+	if outcome == "publication failure" {
+		if !errors.Is(err, primary) || !errors.Is(err, cleanup) {
+			t.Fatalf("activation lost cause identity: %v", err)
+		}
+	} else if err != nil || owner.beginRequest.DeferPeriodic {
+		t.Fatalf("successful activation: %v, begin=%+v", err, owner.beginRequest)
+	}
+}
+
+func assertRecorderPublicationCleanup(t *testing.T, recorder *lifecycleRuntimeRecorder, owner *stubRecordingLifecycle, outcome string) {
+	t.Helper()
+	err := recorder.Finalize(time.Unix(2, 0))
+	if outcome == "activate" {
+		if err != nil || owner.finishCalls != 1 || owner.flushCalls != 1 {
+			t.Fatalf("successful cleanup: %v flush=%d finish=%d", err, owner.flushCalls, owner.finishCalls)
+		}
+	} else if owner.finishCalls != 0 || owner.flushCalls > 1 || (outcome == "abort" && owner.flushCalls != 0) {
+		t.Fatalf("aborted cleanup published: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+	}
+}
+
+func TestRuntimeScopeRecorderForwardsStartupPublicationGate(t *testing.T) {
+	t.Parallel()
+	for _, abort := range []bool{true, false} {
+		t.Run(fmt.Sprintf("abort=%t", abort), func(t *testing.T) {
+			t.Parallel()
+			owner := &stubRecordingLifecycle{beginResult: recordings.RecordingLifecycleResult{
+				Status: recordings.LifecycleStatus{RecordingID: "protected"},
+			}}
+			inner := newLifecycleRecorderForTest(t, time.Unix(1, 0), "retained.json")
+			if err := inner.BindRecordingLifecycle(owner, recordings.CanonicalEventScope{FactorySessionID: "session"}); err != nil {
+				t.Fatal(err)
+			}
+			recorder := &runtimeScopeRecorder{inner: inner}
+			recorder.DeferRecordingPublication()
+			recorder.Start(t.Context())
+			if err := recorder.Flush(); err != nil || owner.flushCalls != 0 {
+				t.Fatalf("prepared scope wrote history: %v flush=%d", err, owner.flushCalls)
+			}
+			if abort {
+				recorder.Stop()
+			} else if err := recorder.ActivateRecordingPublication(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if err := recorder.Finalize(time.Unix(2, 0)); err != nil {
+				t.Fatal(err)
+			}
+			if abort && (owner.flushCalls != 0 || owner.finishCalls != 0) {
+				t.Fatalf("aborted scope wrote history: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+			}
+			if !abort && (owner.flushCalls != 1 || owner.finishCalls != 1) {
+				t.Fatalf("activated scope failed to publish/finalize: flush=%d finish=%d", owner.flushCalls, owner.finishCalls)
+			}
+		})
+	}
 }
 
 func (s *stubRecordingLifecycle) Stop(recordings.StopLifecycleRequest) error {

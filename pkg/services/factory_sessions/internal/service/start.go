@@ -195,7 +195,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
-	activation, err := startSessionLifecycle(ctx, products)
+	activation, err := startSessionLifecycle(ctx, products, sessionRuntimeSelection(&selected).Host.Port > 0)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -368,7 +368,7 @@ func selectStartTarget(request factorysessions.SessionStartRequest, selected *fa
 	return nil
 }
 
-func startSessionLifecycle(ctx context.Context, products runtimeProducts) (*sessionActivation, error) {
+func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferCompletion bool) (*sessionActivation, error) {
 	if products.lifecycle == nil {
 		if products.closeArtifacts != nil {
 			_ = products.closeArtifacts()
@@ -384,7 +384,9 @@ func startSessionLifecycle(ctx context.Context, products runtimeProducts) (*sess
 	err := activation.lifecycle.StartLifecycle(ctx, runContext)
 	if err == nil {
 		activation.stopWorker, err = activation.lifecycle.StartWorkerLifecycle(runContext)
-		if err == nil {
+		if err == nil && !deferCompletion {
+			// Hosted invocations complete startup after listener readability.
+			// Direct starts have no later transport phase.
 			err = activation.lifecycle.CompleteStartup(ctx)
 		}
 	}

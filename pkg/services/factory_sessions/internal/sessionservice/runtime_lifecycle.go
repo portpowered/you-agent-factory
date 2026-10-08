@@ -10,6 +10,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type RuntimeStop = factorysessions.RuntimeStop
@@ -127,7 +128,15 @@ func (a *Assembly) scopedCompleteStartup(runtime *SessionRuntime, ctx context.Co
 				a.releaseWorkAdmissionProjection(sessionID)
 			}
 		})
-		return runtime.startupWorkErr
+		if runtime.startupWorkErr != nil {
+			return runtime.startupWorkErr
+		}
+	}
+	if recording, ok := runtime.CurrentRuntimeBundle().(recordings.RuntimeRecordingStartup); ok {
+		if err := recording.ActivateRecordingPublication(ctx); err != nil {
+			//nolint:contextcheck // Startup unwind must join the failed runtime even when the caller is canceled; FailStartup owns that uncanceled cleanup.
+			return a.scopedFailStartup(runtime, err)
+		}
 	}
 	return nil
 }
