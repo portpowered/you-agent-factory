@@ -101,60 +101,47 @@ Post-merge or integrated Project validation stays with its named later gate.
 '''
 
 
-MISSION = '''
-When thoughts contain a mission, execute the mission FIRST and completely,
-including cron-origin missions. Run its commands before portfolio inspection.
-Put every named measurement, unit and evidence reference in `output`.
-Missing evidence or failed required commands return FAILED with the exact blocker
-and available values.
-For untagged mission gaps, submit a narrow corrective batch with its own dependent
-loopback using the dry-run, verified receipt and idempotency procedure below.
-Tagged mission gaps use Loopback gap handoff; the lead owns admission and follow-up
-validation. Do not create a new thoughts join or bypass that ownership.
-A mission may hold only on its own unmet precondition; name it and available values
-in output. A bare hold without those values or the precondition is invalid.
-Without a mission, run the portfolio-supervisor routine.
-After mission commands and gap handling are complete, allow at most one optional portfolio line.
-Include request ID or saved proposal path; a receipt/path alone is insufficient.
-Generic accepted holds are only for mission-less portfolio supervision.
-'''
+MISSION = """
+Run every named command/read and report every named value, unit and source.
+Each failed read retries once; retain both attempts and available output.
+Optional exhaustion is a recorded gap, not alone FAILED.
+Required read/command failures return FAILED with the exact reason and available values.
+For gaps, prepare a narrow corrective batch plus its own dependent loopback.
+For untagged Work, use a stable request ID, dry-run, idempotent submission and verified receipt.
+Dry-run only in the bound Factory Session; submit no Project children.
+The existing project-report route informs the owning lead, who owns admission and follow-up validation.
+output is a native JSON object containing non-empty measurements
+or a non-empty precondition naming the unmet requirement with available values.
+do not reset the rejection marker.
+"""
 
 
-class LanePromptPolicyTest(unittest.TestCase):
+class LanePromptPolicyTests(unittest.TestCase):
     def test_mission_compliant_and_wrapped_policy(self):
         self.assertEqual(policy.check_mission_policy(MISSION), [])
-        self.assertEqual(policy.check_mission_policy(MISSION.replace(' ', '\n')), [])
+        self.assertEqual(policy.check_mission_policy(MISSION.replace(' ', '\n')), [
+            'verify-mission:mission-lines: prompt must be under 60 lines'])
 
     def test_each_missing_mission_clause_is_diagnosed(self):
-        source = ' '.join(MISSION.split())
         for name, clause in policy.MISSION_RULES:
             with self.subTest(name=name):
-                self.assertIn(clause, source)
-                self.assertEqual(policy.check_mission_policy(source.replace(clause, '')),
-                                 [f'ideafy:mission-{name}: missing policy clause: {clause}'])
+                self.assertEqual(policy.check_mission_policy(MISSION.replace(clause, '')),
+                                 [f'verify-mission:mission-{name}: missing policy clause: {clause}'])
 
-    def test_mission_conflicts_even_beside_valid_policy(self):
-        cases = (
-            ('Run the portfolio-supervisor routine first.', 'routine-first'),
-            ('Perform the portfolio routine before the mission.', 'routine-first'),
-            ('On every scheduled pass and significant exception, inspect every active Project.', 'unscoped-inspection'),
-            ('After reconciliation, if all active Projects are healthy, hold.', 'unscoped-stop'),
-            ('When no safe action remains, record the hold and return an accepted hold.', 'unscoped-hold'),
-            ('Return {"output":"<request ID or hold>"}.', 'bare-output'),
-            ('For the tagged loopback exception above, output is the saved proposal path.', 'bare-output'),
-            ('Cron-origin missions use the portfolio-supervisor routine.', 'cron-override'),
-            ('Missions may skip their measurements.', 'cron-override'),
-        )
-        for instruction, name in cases:
-            with self.subTest(instruction=instruction):
-                for text in (instruction, instruction.replace(' ', '\n')):
-                    self.assertEqual(policy.check_mission_policy(MISSION + text),
-                                     [f'ideafy:mission-{name}: conflicting mission instruction; remove or reconcile it'])
+    def test_dedicated_prompt_isolation_and_budgets(self):
+        self.assertEqual(policy.check_mission_isolation('Portfolio supervision', MISSION), [])
+        for extra in ('Run the portfolio routine.', 'Acquire supervisor-slot.'):
+            self.assertIn('verify-mission:mission-isolation: remove portfolio/supervisor instructions',
+                          policy.check_mission_policy(MISSION + extra))
+        self.assertIn('ideafy:mission-isolation: remove mission execution instructions',
+                      policy.check_mission_isolation('Execute the mission', MISSION))
+        self.assertIn('ideafy:mission-budget: prompt must shrink below 13665 UTF-8 bytes',
+                      policy.check_mission_isolation('x' * 13665, MISSION))
+        self.assertIn('verify-mission:mission-lines: prompt must be under 60 lines',
+                      policy.check_mission_policy(MISSION + '\n' * 60))
 
     def test_empty_mission_policy_reports_required_rules(self):
-        results = policy.check_mission_policy('')
-        self.assertEqual(len(results), len(policy.MISSION_RULES))
-        self.assertTrue(all('missing policy clause:' in result for result in results))
+        self.assertEqual(len(policy.check_mission_policy('')), len(policy.MISSION_RULES))
 
     def test_optional_inventory_fatal_instructions_conflict_with_mission(self):
         prompts = {owner: '\n'.join(clause for _, clause in rules)

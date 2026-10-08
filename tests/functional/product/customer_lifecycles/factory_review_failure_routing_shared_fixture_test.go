@@ -2,6 +2,7 @@ package customer_lifecycles_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,13 +25,18 @@ import (
 var reviewFailureFixtureShutdownTimeout = support.ScaledTimeout(60 * time.Second)
 
 var (
-	reviewFailureFixtureOnce sync.Once
-	reviewFailureFixture     *reviewFailureProcessFixture
-	reviewFailureFixtureErr  error
+	reviewFailureFixtureOnce  sync.Once
+	reviewFailureFixture      *reviewFailureProcessFixture
+	reviewFailureFixtureErr   error
+	reviewFailureFixtureUsers atomic.Int32
 )
 
 func initializeFactoryreviewfailureroutingFixture(t *testing.T) {
+	reviewFailureFixtureUsers.Add(1)
 	t.Cleanup(func() {
+		if reviewFailureFixtureUsers.Add(-1) != 0 {
+			return
+		}
 		code := 0
 		if reviewFailureFixture != nil {
 			if err := reviewFailureFixture.close(); err != nil {
@@ -361,6 +367,14 @@ func (router *reviewFailureCommandRouter) Run(
 		return reviewFailureAccepted("fixture accepted"), nil
 	}
 	for _, arg := range request.Args {
+		if strings.HasSuffix(arg, "route-thoughts.py") {
+			var payload map[string]any
+			_ = json.Unmarshal([]byte(request.Args[len(request.Args)-1]), &payload)
+			if mission, ok := payload["mission"].(string); ok && strings.TrimSpace(mission) != "" {
+				return platformprocess.CommandResult{Stdout: []byte("mission\n")}, nil
+			}
+			return platformprocess.CommandResult{Stdout: []byte("supervision\n")}, nil
+		}
 		if arg == "--classification" {
 			return platformprocess.CommandResult{Stdout: []byte("review\n"), ExitCode: 0}, nil
 		}

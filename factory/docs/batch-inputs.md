@@ -1,5 +1,36 @@
 # Batch Inputs
 
+## Mission loopbacks
+
+A thoughts payload with a non-blank string `mission` runs `verify-mission`
+and its output checker. Blank, absent, or whitespace missions retain `ideafy`
+supervision, including ordinary cron thoughts. A non-string mission fails.
+Mission output contains native measurements with name, value, and source, or
+a named unmet precondition with any available values. The checker requests
+one correction for malformed output, then fails if it remains invalid.
+
+For an untagged mission gap, dry-run and submit a narrow corrective batch
+using a stable request ID. Verify its receipt and admitted Work. Include a
+new thoughts loopback whose mission checks the fixes and whose `DEPENDS_ON`
+relations wait for those fixes. Inspect by request ID before repeating an
+uncertain submission; retain values and receipt in the original output.
+
+For a tagged mission gap, save the raw corrective proposal at
+`docs/temp/projects/<project>/proposals/<loopback-name>.json` in the main
+checkout and dry-run it in the bound Factory Session. Include stable request
+ID, origin Work ID, findings, and dependent loopback. Submit no Project
+children. Existing reporting wakes the owning lead, who owns admission and
+follow-up validation. Retain measurements and the saved path; filing alone
+does not prove a correction. Write or required dry-run failures report FAILED.
+
+Use `python factory/scripts/mission-read.py [--required] -- <read-command> [args...]`
+only for authorized reads. Each attempt has a 30-second timeout and failures
+retry once. Optional exhaustion exits zero with attempt records; a read marked
+required by the mission exits one on exhaustion. Keep available output and
+gaps. Never use this helper to retry mutations or add another read retry loop.
+
+## Ordinary batches
+
 This directory records a human-readable example for ideafy/meta-planner batch
 submission. These files are documentation, not live factory inputs.
 
