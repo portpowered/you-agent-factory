@@ -75,6 +75,14 @@ matching worker taxonomy and compatibility rules.
 
 ## Current Contract
 
+Set `outcomeFormat: "decision-envelope"` on an `AGENT_RUN` or `SCRIPT_RUN`
+workstation to parse its result as a decision envelope. For scripts, parsing
+applies only after a successful process exit. `ACCEPTED` uses `outputs`,
+`REJECTED` uses `onRejection` with feedback, and `FAILED` uses the failure
+route with its reason and output. Malformed envelopes fail with diagnostics.
+Scripts without this setting retain raw stdout behavior. Process failures,
+timeouts, and cancellation retain their existing failure policy.
+
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or
   `POLLER`.
 - Use `type` for the runtime implementation: `AGENT_RUN`, `INFERENCE_RUN`,
