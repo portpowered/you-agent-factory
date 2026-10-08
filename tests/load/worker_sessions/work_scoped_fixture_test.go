@@ -44,8 +44,7 @@ func newScopedLatencyFixture(t *testing.T, ctx context.Context) scopedLatencyFix
 	scopedLatencyFactory(t, dir)
 	ready := make(chan *httptest.Server, 1)
 	process, err := root.BuildProcess(ctx, edges.Edges{
-		ProviderCommandRunner:               &scopedLatencyRunner{},
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		ProviderCommandRunner: &scopedLatencyRunner{},
 		APIServerStarter: func(ctx context.Context, request platformhttp.StartRequest) error {
 			server := httptest.NewServer(request.Handler)
 			defer server.Close()
