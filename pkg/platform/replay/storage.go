@@ -47,12 +47,13 @@ type replayAppendFile interface {
 // operating system.
 type Local struct {
 	operatingSystem string
+	rename          func(string, string) error
 }
 
 // NewLocal binds replacement mechanics to the host operating system selected
 // by Wire.
 func NewLocal(operatingSystem string) Local {
-	return Local{operatingSystem: operatingSystem}
+	return Local{operatingSystem: operatingSystem, rename: os.Rename}
 }
 
 func (local Local) ScanDirectory(path string, batchSize int, visit func([]os.DirEntry) error) error {
@@ -109,18 +110,19 @@ func (local Local) WriteFile(path string, data []byte) error {
 		return fmt.Errorf("close replay artifact temp file: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, path); err == nil {
+	if err := local.renameArtifact(tmpPath, path); err == nil {
 		cleanupTemp = false
 		return nil
 	} else if local.operatingSystem != "windows" {
-		return fmt.Errorf("replace replay artifact with temp file: %w; temp artifact left at %s", err, tmpPath)
+		return fmt.Errorf("replace replay artifact with temp file: %w", err)
 	}
 
 	var replaceErr error
 	for range artifactReplaceAttempts {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			replaceErr = fmt.Errorf("remove previous replay artifact before replace: %w", err)
-		} else if err := os.Rename(tmpPath, path); err != nil {
+		// Rename already requests replacement on Windows. A sharing violation
+		// may be transient, but deleting the destination first destroys the
+		// previous snapshot if this or any later replacement attempt fails.
+		if err := local.renameArtifact(tmpPath, path); err != nil {
 			replaceErr = fmt.Errorf("replace replay artifact from temp file: %w", err)
 		} else {
 			cleanupTemp = false
@@ -128,7 +130,14 @@ func (local Local) WriteFile(path string, data []byte) error {
 		}
 		time.Sleep(artifactReplaceDelay)
 	}
-	return fmt.Errorf("%w; temp artifact left at %s", replaceErr, tmpPath)
+	return replaceErr
+}
+
+func (local Local) renameArtifact(source, target string) error {
+	if local.rename != nil {
+		return local.rename(source, target)
+	}
+	return os.Rename(source, target)
 }
 
 // AppendFile appends one complete replay-framing suffix and synchronizes it
