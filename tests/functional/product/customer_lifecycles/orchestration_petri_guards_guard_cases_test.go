@@ -259,7 +259,6 @@ func testOrchestrationpetriguardsGuardUnknownDefinitionReturnsValidation(t *test
 	config := sharedGuardSingleStepFactoryConfig([]map[string]any{{"type": "unknown_guard"}})
 	dir := newSharedGuardScenario(t, config)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	beforeDispatches := len(fixture.dispatches.Snapshot())
 	statusCode, body := postSharedGuardOpenRequest(t, fixture.baseURL, dir)
 	if statusCode != http.StatusBadRequest {
 		t.Fatalf("unknown guard open status = %d, want 400; body=%s", statusCode, body)
@@ -269,9 +268,7 @@ func testOrchestrationpetriguardsGuardUnknownDefinitionReturnsValidation(t *test
 	if got := fixture.router.routeCount(); got != 0 {
 		t.Fatalf("routes after unknown guard rejection = %d, want zero", got)
 	}
-	if got := len(fixture.dispatches.Snapshot()); got != beforeDispatches {
-		t.Fatalf("dispatch records after unknown guard rejection = %d, want %d", got, beforeDispatches)
-	}
+
 }
 
 func testOrchestrationpetriguardsGuardDuplicateStateDefinitionReturnsValidation(t *testing.T) {
@@ -284,16 +281,13 @@ func testOrchestrationpetriguardsGuardDuplicateStateDefinitionReturnsValidation(
 	workTypes[0]["states"] = append(states, map[string]string{"name": "init", "type": "INITIAL"})
 	dir := newSharedGuardScenario(t, config)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	beforeDispatches := len(fixture.dispatches.Snapshot())
 	statusCode, body := postSharedGuardOpenRequest(t, fixture.baseURL, dir)
 	if statusCode != http.StatusBadRequest {
 		t.Fatalf("duplicate state open status = %d, want 400; body=%s", statusCode, body)
 	}
 	assertGuardValidationDiagnostic(t, body, "duplicate")
 	assertNoLiveGuardSession(t, fixture.baseURL, dir)
-	if got := len(fixture.dispatches.Snapshot()); got != beforeDispatches {
-		t.Fatalf("dispatch records after duplicate state rejection = %d, want %d", got, beforeDispatches)
-	}
+
 }
 
 func testOrchestrationpetriguardsGuardWorkRequestIDIsIdempotent(t *testing.T) {

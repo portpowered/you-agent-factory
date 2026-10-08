@@ -381,6 +381,7 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRoot,
+	factorysessionwire.NewHistoricalReplayBehavior,
 	wire.Bind(new(factorysessions.Service), new(*factorysessionwire.Root)),
 )
 
@@ -522,6 +523,8 @@ var BundleSet = wire.NewSet(
 	workerServiceSet,
 	cliCommandOperationsSet,
 	providePackagedFactoryDefinitions,
+	provideSerializedFactoryConfigReader,
+	provideCanonicalFactoryConfigReader,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,

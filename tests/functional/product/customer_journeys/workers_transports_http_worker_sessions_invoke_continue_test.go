@@ -134,6 +134,11 @@ func assertRemoteSourceObservation(t *testing.T, ctx context.Context, client sup
 	if shown.WorkerSessionID != "remote-source-session" || shown.State != "COMPLETED" {
 		t.Fatalf("remote show = %#v, want completed source", shown)
 	}
+	// The live state commits before its durable capture. Observe the public
+	// terminal stream, which joins publication, before reading that transcript.
+	stream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
+		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-source-session", "--replay-only")
+	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, stream.Stdout()), "remote-source-session")
 
 	read := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "read", "--worker-session-id", "remote-source-session")
@@ -146,10 +151,6 @@ func assertRemoteSourceObservation(t *testing.T, ctx context.Context, client sup
 	if !strings.Contains(string(transcriptBytes), "Codex fixture answer COMPLETE") {
 		t.Fatalf("remote transcript omitted provider answer: %s", transcriptBytes)
 	}
-
-	stream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
-		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-source-session", "--replay-only")
-	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, stream.Stdout()), "remote-source-session")
 }
 
 func continueRemoteWorkerSession(

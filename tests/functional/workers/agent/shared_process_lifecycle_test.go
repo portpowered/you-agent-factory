@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,32 +17,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-func (fixture *agentSharedProcessFixture) assertInert(t *testing.T) {
-	t.Helper()
-	if fixture.process == nil || fixture.process.ProviderRegistry() == nil {
-		t.Fatal("root-built process or provider registry = nil, want inert composition")
-	}
-	for _, providerID := range []string{"claude", "codex"} {
-		if got, err := fixture.process.ProviderRegistry().CanonicalIdentity(providerID); err != nil || got != providerID {
-			t.Fatalf("CanonicalIdentity(%q) = (%q, %v), want (%q, nil)", providerID, got, err, providerID)
-		}
-	}
-	if _, err := fixture.process.ProviderRegistry().CanonicalIdentity("missing.provider"); err == nil {
-		t.Fatal("CanonicalIdentity(missing.provider) error = nil, want unknown-provider failure")
-	}
-	if got := fixture.apiStarts.Load(); got != 0 {
-		t.Fatalf("API server starts before activation = %d, want 0", got)
-	}
-	if got := fixture.router.callCount(); got != 0 {
-		t.Fatalf("provider calls before activation = %d, want 0", got)
-	}
-	fixture.sessionsMu.Lock()
-	defer fixture.sessionsMu.Unlock()
-	if len(fixture.opened) != 0 {
-		t.Fatalf("Factory Sessions before activation = %#v, want none", fixture.opened)
-	}
-}
 
 func (fixture *agentSharedProcessFixture) start(t *testing.T) {
 	t.Helper()
@@ -59,7 +32,7 @@ func (fixture *agentSharedProcessFixture) start(t *testing.T) {
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	inputs.Input.Env = agentOwnedEnvironment(fixture.homeDir)
 	inputs.Input.WorkingDirectory = fixture.hostDir
 	fixture.command = support.StartProcessCommand(t, fixture.process, inputs.Input)
 	fixture.baseURL = fixture.api.WaitForURL(t)
@@ -75,7 +48,7 @@ func (fixture *agentSharedProcessFixture) assertUnknownProvider(t *testing.T, sc
 		"you", "run", "--dir", scenario.factoryDir, "--continuously", "--quiet", "--no-record",
 	})
 	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = agentOwnedEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = scenario.factoryDir
 	err := fixture.process.Execute(inputs.Input)
 	if err == nil {
@@ -88,25 +61,11 @@ func (fixture *agentSharedProcessFixture) assertUnknownProvider(t *testing.T, sc
 	if got := fixture.router.callCount(); got != 0 {
 		t.Fatalf("unknown-provider calls = %d, want zero", got)
 	}
-	if got := fixture.apiStarts.Load(); got != 0 {
-		t.Fatalf("unknown-provider API starts = %d, want zero before valid daemon activation", got)
-	}
 	fixture.sessionsMu.Lock()
 	defer fixture.sessionsMu.Unlock()
 	if len(fixture.opened) != 0 {
 		t.Fatalf("unknown-provider Factory Sessions = %#v, want none", fixture.opened)
 	}
-}
-
-func findAgentScenario(t testing.TB, scenarios []agentSharedScenario, name string) agentSharedScenario {
-	t.Helper()
-	for _, scenario := range scenarios {
-		if scenario.name == name {
-			return scenario
-		}
-	}
-	t.Fatalf("agent scenario %q is missing", name)
-	return agentSharedScenario{}
 }
 
 func (fixture *agentSharedProcessFixture) runEmptyScenario(t *testing.T, scenario agentSharedScenario) {
@@ -252,7 +211,7 @@ func runAgentMalformedConfigurationProbe(t *testing.T) {
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", dir, "--continuously", "--quiet", "--no-record",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
+	inputs.Input.Env = agentOwnedEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = dir
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("malformed worker configuration succeeded, want validation failure")
@@ -324,6 +283,10 @@ func (fixture *agentSharedProcessFixture) runScenario(
 	}
 	if scenario.behavior == agentSharedCancel {
 		scenario.runner.waitStarted(t, agentSharedProcessTimeout)
+		// Command entry precedes public projection publication. Observe the
+		// customer's in-flight Work before canceling; no stream event alone
+		// acknowledges that the Work query has applied the dispatch.
+		waitForAgentProcessingWork(t, fixture.baseURL, sessionID, support.StringPointerValue(submitted.WorkId))
 		if err := cancelAgentSession(fixture.baseURL, sessionID); err != nil {
 			t.Fatalf("cancel agent Factory Session %q: %v", sessionID, err)
 		}

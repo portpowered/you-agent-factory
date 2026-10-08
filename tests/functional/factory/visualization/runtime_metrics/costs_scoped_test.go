@@ -38,6 +38,7 @@ func TestCostsScopedReportsAndQueryRecovery(t *testing.T) {
 	group := &costsProcessGroup{listeners: make(map[int]net.Listener), ready: make(map[int]chan struct{}), files: support.NewCostsSettingsFiles(platformfilesystem.Local{})}
 	group.process = support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter: group.serve, ProviderCommandRunner: costsProviderRunner{}, OperatorSettingsFileSystem: group.files,
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
 	})
 	support.CleanupProcess(t, group.process)
 	for _, tc := range []struct{ name, model, status, amount string }{
@@ -230,7 +231,6 @@ func (group *costsProcessGroup) start(t *testing.T, home, model, metricsRoot str
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--session", id, "--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port), "--quiet", "--no-record", "--runtime-metrics-dir", metricsRoot})
 	inputs.Env = env
 	inputs.WorkingDirectory = dir
-	support.InitializeCustomerHomeWithProcess(t, group.process, env, dir)
 	support.StartProcessCommand(t, group.process, inputs.Input)
 	select {
 	case <-ready:
@@ -238,7 +238,6 @@ func (group *costsProcessGroup) start(t *testing.T, home, model, metricsRoot str
 		t.Fatalf("host did not bind: %s", inputs.Stderr())
 	}
 	fixture := costsSessionFixture{group: group, id: id, home: home, dir: dir, url: fmt.Sprintf("http://127.0.0.1:%d", port), clientEnv: costsHomeEnvironment(t.TempDir())}
-	support.InitializeCustomerHomeWithProcess(t, runtimeMetricsProcess(t), fixture.clientEnv, dir)
 	// A successful scoped status read establishes the public runtime boundary.
 	support.GetJSON[factoryapi.StatusResponse](t, fixture.url+"/factory-sessions/"+id+"/status")
 	return fixture

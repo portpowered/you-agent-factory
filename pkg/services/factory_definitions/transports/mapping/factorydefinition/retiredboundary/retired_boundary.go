@@ -1,8 +1,8 @@
 package retiredboundary
 
 import (
-	"encoding/json"
 	"fmt"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -11,14 +11,10 @@ var factoryFields = RetiredFactoryFieldAliases()
 var workerFields = RetiredWorkerFieldAliases()
 var workstationFields = RetiredWorkstationFieldAliases()
 
-func RejectFanInField(data []byte) error {
-	var payload struct {
-		Workstations []map[string]json.RawMessage `json:"workstations"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	for index, workstation := range payload.Workstations {
+func RejectFanInField(payload map[string]any) error {
+	workstations, _ := decodedObjectField(payload, "workstations").([]any)
+	for index, value := range workstations {
+		workstation, _ := value.(map[string]any)
 		if _, ok := workstation["join"]; ok {
 			return fmt.Errorf("workstations[%d].join is not supported; use per-input guards", index)
 		}
@@ -26,11 +22,7 @@ func RejectFanInField(data []byte) error {
 	return nil
 }
 
-func RejectExhaustionRulesField(data []byte) error {
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
+func RejectExhaustionRulesField(payload map[string]any) error {
 	if _, ok := payload["exhaustionRules"]; ok {
 		return fmt.Errorf("exhaustion_rules is retired; use a guarded LOGICAL_MOVE workstation with a visit_count guard instead")
 	}
@@ -40,28 +32,34 @@ func RejectExhaustionRulesField(data []byte) error {
 	return nil
 }
 
-func RejectCronIntervalField(data []byte) error {
-	var payload struct {
-		Workstations []struct {
-			Cron *interfaces.CronConfig `json:"cron"`
-		} `json:"workstations"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	for index, workstation := range payload.Workstations {
-		if workstation.Cron != nil && workstation.Cron.HasUnsupportedInterval() {
+func RejectCronIntervalField(payload map[string]any) error {
+	workstations, _ := decodedObjectField(payload, "workstations").([]any)
+	for index, value := range workstations {
+		workstation, _ := value.(map[string]any)
+		cron, _ := decodedObjectField(workstation, "cron").(map[string]any)
+		if _, supplied := cron["interval"]; supplied {
 			return fmt.Errorf("workstations[%d].cron.interval is not supported; use cron.schedule", index)
 		}
 	}
 	return nil
 }
 
-func RejectGeneratedBoundaryAliases(data []byte) error {
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
+// The generated-model decoder accepts case-insensitive field names. After
+// normalization marshals sorted keys, the last matching spelling wins.
+func decodedObjectField(object map[string]any, field string) any {
+	var selected string
+	for key := range object {
+		if strings.EqualFold(key, field) && key > selected {
+			selected = key
+		}
+	}
+	if selected == "" {
 		return nil
 	}
+	return object[selected]
+}
+
+func RejectGeneratedBoundaryAliases(payload map[string]any) error {
 	if err := RejectFields(payload, "factory", factoryFields); err != nil {
 		return err
 	}

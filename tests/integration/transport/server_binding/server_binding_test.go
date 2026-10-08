@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -241,14 +243,10 @@ func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *t
 	}
 	const legacyBindWarning = "warning: --server is deprecated for local listener binding; use --listen <host:port> instead"
 	stderrLines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-	if len(stderrLines) != 2 || strings.TrimSpace(stderrLines[0]) != legacyBindWarning {
+	if len(stderrLines) < 2 || strings.TrimSpace(stderrLines[0]) != legacyBindWarning {
 		t.Fatalf("server bind-failure stderr = %q, want the legacy migration warning followed by one diagnostic line", stderr.String())
 	}
-	diagnostic := strings.TrimSpace(stderrLines[1])
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(diagnostic), &response); err != nil {
-		t.Fatalf("server bind-failure stderr is not one ErrorResponse: %v\n%s", err, stderr.String())
-	}
+	response := requireStartupCLIDiagnostic(t, strings.Join(stderrLines[1:], "\n"))
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("server bind-failure response = %#v, want SERVER_BIND_FAILED", response)
 	}
@@ -361,3 +359,34 @@ const idleCurrentFactoryJSON = `{
     "worker": "processor"
   }]
 }`
+
+// requireStartupCLIDiagnostic accepts one envelope followed only by the bounded
+// local startup cause contract. Callers retain scenario-specific privacy checks.
+// Ordinary and remote diagnostics should continue using strict JSON decoding.
+func requireStartupCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(stderr), "\n")
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(lines[0]), &response); err != nil {
+		t.Fatalf("decode startup envelope: %v; stderr=%q", err, stderr)
+	}
+	if response.Code == "" || response.Family == "" || response.Message == "" {
+		t.Fatalf("incomplete startup envelope: %#v", response)
+	}
+	if len(lines) > 18 {
+		t.Fatalf("startup causes exceed 16 nodes plus truncation: %q", stderr)
+	}
+	for index, line := range lines[1:] {
+		prefix := fmt.Sprintf("cause[%d]=", index)
+		if !strings.HasPrefix(line, prefix) {
+			t.Fatalf("unexpected trailing startup diagnostic: %q", line)
+		}
+		cause := strings.TrimPrefix(line, prefix)
+		if cause == "" || len(cause) > 515 || unsafeStartupCause.MatchString(cause) {
+			t.Fatalf("unbounded or unsafe startup cause: %q", line)
+		}
+	}
+	return response
+}
+
+var unsafeStartupCause = regexp.MustCompile(`(?i)(?:^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\|\.\.?[\\/]|~/|/)[^\s]+|https?://[^\s]*[?@#]|\b(?:password|secret|token|prompt|payload|body|authorization)\s*[:=]\s*(?:[^<\s]|<(?:[^r]|r[^e]))`)

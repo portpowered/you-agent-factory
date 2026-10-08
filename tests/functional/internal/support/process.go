@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -62,13 +65,20 @@ type applicationProcess struct {
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
 	factorySessions  FactorySessionStarter
+	ownedDirectory   string
 }
 
 // FactorySessions exposes the session admission capability of the root process.
 func (p applicationProcess) FactorySessions() FactorySessionStarter { return p.factorySessions }
 
 func (p applicationProcess) Close(ctx context.Context) error {
-	return p.close(ctx)
+	if err := p.close(ctx); err != nil {
+		return err
+	}
+	if p.ownedDirectory != "" {
+		return os.RemoveAll(p.ownedDirectory)
+	}
+	return nil
 }
 
 func (p applicationProcess) ACPServer() ACPServer {
@@ -117,8 +127,23 @@ func buildProcessWithContext(
 	ctx context.Context,
 	edges serviceedges.Edges,
 ) (ApplicationProcess, recordings.WorkerRecordingReader, error) {
+	// Recording recovery resolves its project store during construction, before
+	// an invocation supplies Cwd or HOME. Keep that store process-owned unless
+	// a persistence/restart scenario explicitly supplies its project directory.
+	var ownedDirectory string
+	if edges.FactorySessionsWorkingDirectory == nil {
+		directory, err := os.MkdirTemp("", "functional-process-")
+		if err != nil {
+			return nil, nil, err
+		}
+		ownedDirectory = directory
+		edges.FactorySessionsWorkingDirectory = platformfilesystem.Local{WorkingDirectory: directory}
+	}
 	process, err := root.BuildProcess(ctx, serviceedges.Merge(functionalDefaultEdges(), edges))
 	if err != nil {
+		if ownedDirectory != "" {
+			err = errors.Join(err, os.RemoveAll(ownedDirectory))
+		}
 		return nil, nil, err
 	}
 	recordingReader := root.WorkerRecordingReaderFromProcess(process)
@@ -129,17 +154,40 @@ func buildProcessWithContext(
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
 		factorySessions:  process.FactorySessions().FactorySessions().(FactorySessionStarter),
+		ownedDirectory:   ownedDirectory,
 	}
 	return functionalProcess, recordingReader, nil
 }
 
 // RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a
 // command failure has no authored public diagnostic contract.
-func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+func RequireSafeCLIDiagnostic(t testing.TB, stderr string, startup ...bool) factoryapi.ErrorResponse {
 	t.Helper()
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
-		t.Fatalf("decode safe CLI diagnostic: %v\nstderr=%q", err, stderr)
+	if len(startup) > 0 && startup[0] {
+		lines := strings.Split(strings.TrimSpace(stderr), "\n")
+		if err := json.Unmarshal([]byte(lines[0]), &response); err != nil {
+			t.Fatalf("decode startup envelope: %v; stderr=%q", err, stderr)
+		}
+		// The common assertion below validates the startup code and message.
+		if response.Family == "" {
+			t.Fatalf("incomplete startup envelope: %#v", response)
+		}
+		if len(lines) > 18 {
+			t.Fatalf("startup causes exceed 16 nodes plus truncation: %q", stderr)
+		}
+		for index, line := range lines[1:] {
+			prefix := fmt.Sprintf("cause[%d]=", index)
+			if !strings.HasPrefix(line, prefix) {
+				t.Fatalf("unexpected trailing startup diagnostic: %q", line)
+			}
+			cause := strings.TrimPrefix(line, prefix)
+			if cause == "" || len(cause) > 515 || unsafeStartupCause.MatchString(cause) {
+				t.Fatalf("unbounded or unsafe startup cause: %q", line)
+			}
+		}
+	} else if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode safe CLI diagnostic: %v; stderr=%q", err, stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("CLI_COMMAND_FAILED") || response.Message != "command failed" {
 		t.Fatalf("safe CLI diagnostic = %#v, want CLI_COMMAND_FAILED/command failed", response)
@@ -624,3 +672,5 @@ func (command *ProcessCommand) Err() error {
 	defer command.mu.Unlock()
 	return command.err
 }
+
+var unsafeStartupCause = regexp.MustCompile(`(?i)(?:^|[\s=("'])(?:[A-Za-z]:[\\/]|\\\\|\.\.?[\\/]|~/|/)[^\s]+|https?://[^\s]*[?@#]|\b(?:password|secret|token|prompt|payload|body|authorization)\s*[:=]\s*(?:[^<\s]|<(?:[^r]|r[^e]))`)

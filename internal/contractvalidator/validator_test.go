@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
 )
 
@@ -650,6 +651,9 @@ func assertSingleDiagnostic(t *testing.T, diagnostics []contractvalidator.Diagno
 
 func repositoryRoot(t *testing.T) string {
 	t.Helper()
+	// Repository staging tests can regenerate canonical JSON in another process.
+	// Keep these contract reads within the same existing ownership boundary.
+	t.Cleanup(contractstaging.LockRepositoryStagingForTest())
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("repository root: %v", err)

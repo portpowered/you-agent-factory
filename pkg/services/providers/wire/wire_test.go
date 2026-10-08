@@ -482,7 +482,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
-		NewCodexEffect((workersRunner).commandEffect(), platformclock.Real{}),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.Real{}, nil, nil),
 		NewClaudeEffect((workersRunner).commandEffect(), platformclock.Real{}),
 		Configuration{})
 	if err != nil {
@@ -580,7 +580,7 @@ func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 	root, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy}),
-		NewCodexEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second), nil, nil),
 		NewClaudeEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
 		Configuration{})
 	if err != nil {

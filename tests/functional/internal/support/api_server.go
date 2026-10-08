@@ -384,26 +384,27 @@ type FactoryEventsInvalidCursorError struct {
 }
 
 // GetFactoryEventsInvalidCursorErrorAt requests retained Factory Event history
-// with an invalid reconnect cursor and returns the typed 400 error payload.
+// with an invalid reconnect cursor for an explicit Factory Session and returns
+// the typed 400 error payload.
 func GetFactoryEventsInvalidCursorErrorAt(
 	t testing.TB,
-	baseURL string,
+	baseURL, sessionID string,
 	cursor FactoryEventReadCursor,
 ) FactoryEventsInvalidCursorError {
 	t.Helper()
-	return readFactoryEventsInvalidCursorErrorFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
+	return readFactoryEventsInvalidCursorErrorFromURL(t, SessionEventsURLWithCursor(baseURL, sessionID, cursor))
 }
 
 // ProbeFactoryEventStreamRecoveryAt issues the JSON reconnect probe for an
 // invalid or valid Factory Event cursor through the public session events
-// endpoint.
+// endpoint of an explicit Factory Session.
 func ProbeFactoryEventStreamRecoveryAt(
 	t testing.TB,
-	baseURL string,
+	baseURL, sessionID string,
 	cursor FactoryEventReadCursor,
 ) factoryapi.FactorySessionEventStreamRecovery {
 	t.Helper()
-	return readFactoryEventStreamRecoveryFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
+	return readFactoryEventStreamRecoveryFromURL(t, SessionEventsURLWithCursor(baseURL, sessionID, cursor))
 }
 
 // GetFactoryEventsAt reads retained Factory Event history from a public

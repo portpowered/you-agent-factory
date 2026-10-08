@@ -651,9 +651,15 @@ func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkSt
 		sessionSequence := h.allocateSessionLifecycleSequence()
 		context.SessionSequence = &sessionSequence
 	}
+	eventID := fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick)
+	if context.SessionSequence != nil {
+		// Logical ticks restart on reopen. The retained session sequence keeps
+		// new moves distinct without rewriting any identity in the seeded prefix.
+		eventID = fmt.Sprintf("%s/%d", eventID, *context.SessionSequence)
+	}
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeWorkStateChange,
-		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
+		eventID,
 		context,
 		interfaces.WorkStateChangeEventPayload{
 			WorkID:        record.WorkID,

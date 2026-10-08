@@ -2,8 +2,9 @@
 
 The executable spine is `TestConcurrencySharedProcess` in
 `shared_process_test.go`. The normal cases share one root-built process and
-immutable directory-to-runner routes; the Scope-4 configuration probe and
-forced-cleanup probe retain separate process boundaries.
+immutable directory-to-runner routes. Fixture cleanup belongs to the owning
+test cleanup; the forced-failure test-executable probe has been removed because
+it observes the test framework rather than a customer operation.
 
 | Acceptance row | Executable witness | Observable property |
 | --- | --- | --- |
@@ -21,7 +22,6 @@ forced-cleanup probe retain separate process boundaries.
 | CC-11 | `TestConcurrencySharedProcess/Timeout/CC-11` | Deterministic timeout releases capacity, admits one successor exactly once, preserves successor output, and returns active calls to zero. |
 | CC-12 | `TestConcurrencySharedProcess/Concurrent/CC-12` | Each explicit session’s public request/dispatch/terminal event sequence and provider starts are monotonic and correlated; no global FIFO is asserted. |
 | CC-13 | `TestConcurrencySharedProcess/Cancel/CC-13` | Canceled/failed/saturated session state is closed and removed before a fresh explicit session runs with new session/runtime/dispatch/attempt/Work identities and no stale route state. |
-| CC-14 | `TestConcurrencySharedProcess/Cleanup/CC-14` | A forced-failure subprocess preserves the original failure while checking session/dispatch/route/stream/call/process/listener/port/root cleanup. |
 
 CC-07 remains operator-authorized characterization evidence. It records the
 current public behavior without changing the idempotency contract; whether

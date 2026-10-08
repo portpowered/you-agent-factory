@@ -300,7 +300,7 @@ func assertLegacyResultAbsence(t *testing.T, value recording.PortableRecording, 
 
 func assertInspectionWorkerHistory(t *testing.T, projection RecordingReplayProjection) {
 	t.Helper()
-	inspection := NewService(projection).Inspection()
+	inspection := NewBehavior().Acquire(projection, nil).Inspection()
 	if !reflect.DeepEqual(inspection.WorkerHistory, projection.WorkerHistory) {
 		t.Fatalf("inspection Worker history = %#v, want %#v", inspection.WorkerHistory, projection.WorkerHistory)
 	}

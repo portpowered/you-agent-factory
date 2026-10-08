@@ -89,7 +89,7 @@ func TestNativeEffectsUseSuppliedClockAndRunner(t *testing.T) {
 			var err error
 			switch provider {
 			case providers.IDCodex:
-				result, effectErr := NewCodexEffect((adapted).commandEffect(), clock).Execute(t.Context(), request, observe)
+				result, effectErr := NewCodexEffect((adapted).commandEffect(), clock, nil, nil).Execute(t.Context(), request, observe)
 				duration, err = result.DurationMillis, effectErr
 			case providers.IDClaude:
 				result, effectErr := NewClaudeEffect((adapted).commandEffect(), clock).Execute(t.Context(), request, observe)

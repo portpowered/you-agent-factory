@@ -338,6 +338,13 @@ func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factory
 		func(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
 			effectiveEventHistory.RecordWorkstationResponse(tick, result, completed)
 		},
+		func(tick int, change work.WorkStateChangeRecord) {
+			if cfg.skipRestoredDispatchReconciliation {
+				return
+			}
+			change.SessionID = sessionIDFromFactoryConfig(cfg)
+			effectiveEventHistory.RecordWorkStateChange(tick, change, cfg.clock.Now())
+		},
 		recordPetriMutations,
 		impl.automaticTicksPaused,
 		impl.observePostResumeBufferedDrain,

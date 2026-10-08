@@ -361,8 +361,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .artifacts/functional-compiler-cache/cache
-          key: functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.event.pull_request.head.sha || github.sha }}
+          key: functional-compiler-archives-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.event.pull_request.head.sha || github.sha }}
           restore-keys: |
+            functional-compiler-archives-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
             functional-compiler-archives-v1-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum') }}-
       - name: Restore functional dependency build cache
         if: matrix.suite == 'functional' && (steps.functional-compiler-cache.outputs.cache-matched-key == '' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
@@ -591,7 +592,7 @@ jobs:
         if: always() && !cancelled() && matrix.suite == 'functional' && steps.functional-compiler-cache.outputs.cache-hit != 'true'
         id: functional-compiler-capture
         run: |
-          python3 scripts/ci/functional-compile-cache.py capture "$(go env GOCACHE)" .artifacts/functional-compiler-cache/next --job-start "$JOB_START" --max-bytes 1073741824
+          python3 scripts/ci/functional-compile-cache.py capture "$(go env GOCACHE)" .artifacts/functional-compiler-cache/next --job-start "$JOB_START" --max-bytes 2147483648
           rm -rf -- .artifacts/functional-compiler-cache/cache
           mv -- .artifacts/functional-compiler-cache/next .artifacts/functional-compiler-cache/cache
       - name: Save bounded functional compiler archives

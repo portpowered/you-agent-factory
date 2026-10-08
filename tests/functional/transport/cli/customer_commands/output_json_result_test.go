@@ -2,6 +2,7 @@ package customer_commands_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ const (
 
 // TestCLIJSONFailureRemainsValidJSON proves CLI JSON failures stay
 // machine-parseable: pre-terminal errors emit exactly one stderr ErrorResponse
-// with empty stdout, terminal invocation failures end their stdout stream with
+// followed by safe startup causes with empty stdout; terminal invocation failures end their stdout stream with
 // a failed InvocationResponse plus one stderr ErrorResponse, and a later
 // successful invocation recovers on the same shared root.
 func testOutputCLIJSONFailureRemainsValidJSON(t *testing.T) {
@@ -252,7 +253,16 @@ func testOutputCLIJSONFailureRemainsValidJSONCase1(t *testing.T) {
 	if stdout != "" {
 		t.Fatalf("stdout = %q, want empty on pre-terminal failure", stdout)
 	}
-	response := decodeSingleJSONErrorResponse(t, stderr)
+	lines := strings.Split(strings.TrimSpace(stderr), "\n")
+	response := decodeSingleJSONErrorResponse(t, lines[0])
+	if len(lines) < 2 || !strings.Contains(stderr, "named factory not found") {
+		t.Fatalf("startup failure omitted its cause: %q", stderr)
+	}
+	for index, line := range lines[1:] {
+		if !strings.HasPrefix(line, fmt.Sprintf("cause[%d]=", index)) {
+			t.Fatalf("startup stderr contains unexpected framing: %q", stderr)
+		}
+	}
 	if response.Code != factoryapi.ErrorResponseCode(runcli.InvocationErrorCodeFailed) ||
 		response.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("ErrorResponse = %#v", response)

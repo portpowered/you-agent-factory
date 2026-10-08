@@ -89,7 +89,7 @@ func runFileInvocationCase(t *testing.T, process support.Process, scenario *flus
 func startFileInvocationHost(t *testing.T, process support.Process, scenario *flushCase) (string, []string) {
 	t.Helper()
 	env := recoveryActivationHomeEnvironment(scenario.home)
-	support.InitializeCustomerHomeWithProcess(t, process, env, scenario.dir)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	host := support.FakeInputs(ctx, []string{"you", "run", "--dir", scenario.dir, "--session", scenario.sessionID, "--continuously", "--with-server", "--server", "http://127.0.0.1:" + strconv.Itoa(scenario.port), "--no-record", "--quiet"})
 	host.Input.Env, host.Input.WorkingDirectory = env, scenario.dir

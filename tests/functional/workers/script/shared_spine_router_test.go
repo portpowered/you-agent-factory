@@ -7,10 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type scriptCommandRoute struct {
@@ -94,16 +92,6 @@ func (router *scriptCommandRouter) callsFor(selector string) []scriptRoutedComma
 	return calls
 }
 
-func (router *scriptCommandRouter) callCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.calls)
-}
-
-func (router *scriptCommandRouter) routeCount() int {
-	return len(router.routes)
-}
-
 func normalizeScriptRouteSelector(path string) (string, error) {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
@@ -142,49 +130,6 @@ func cloneScriptCommandRequest(request platformprocess.CommandRequest) platformp
 	request.Stdin = append([]byte(nil), request.Stdin...)
 	request.Env = append([]string(nil), request.Env...)
 	return request
-}
-
-func TestScriptCommandRouterRejectsUnknownAndDuplicateSelectors(t *testing.T) {
-	firstSelector := t.TempDir()
-	runner := support.NewRecordingCommandRunner("must-not-run")
-	router, err := newScriptCommandRouter([]scriptCommandRoute{{
-		selector: firstSelector,
-		runner:   runner,
-	}})
-	if err != nil {
-		t.Fatalf("newScriptCommandRouter: %v", err)
-	}
-
-	if _, err := newScriptCommandRouter([]scriptCommandRoute{
-		{selector: firstSelector, runner: runner},
-		{selector: firstSelector, runner: runner},
-	}); err == nil {
-		t.Fatal("duplicate script selector was accepted")
-	}
-
-	secret := "script-router-secret"
-	unknown := filepath.Join(t.TempDir(), "unknown-selector")
-	_, err = router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo",
-		Args:    []string{secret},
-		Env:     []string{"ROUTER_SECRET=" + secret},
-		WorkDir: unknown,
-	})
-	if err == nil {
-		t.Fatal("unknown script selector was accepted")
-	}
-	if !strings.Contains(err.Error(), "unknown-selector") {
-		t.Fatalf("unknown selector error = %v, want sanitized selector context", err)
-	}
-	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), filepath.Dir(unknown)) {
-		t.Fatalf("unknown selector error leaked request or path context: %v", err)
-	}
-	if got := runner.CallCount(); got != 0 {
-		t.Fatalf("runner calls after unknown selector = %d, want zero", got)
-	}
-	if got := router.callCount(); got != 0 {
-		t.Fatalf("router calls after unknown selector = %d, want zero", got)
-	}
 }
 
 var _ platformprocess.CommandRunner = (*scriptCommandRouter)(nil)

@@ -75,7 +75,7 @@ func TestWorkListConfirmsStateAfterRecordingFlush(t *testing.T) {
 func runFlushCase(t *testing.T, process support.Process, scenario *flushCase) {
 	t.Helper()
 	env := recoveryActivationHomeEnvironment(scenario.home)
-	support.InitializeCustomerHomeWithProcess(t, process, env, scenario.dir)
+
 	args := []string{"you", "run", "--dir", scenario.dir, "--session", scenario.sessionID,
 		"--continuously", "--with-server", "--server", "http://127.0.0.1:" + strconv.Itoa(scenario.port), "--quiet"}
 	if scenario.name == "disabled storage" {

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -611,9 +610,6 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: host, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
-			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
-		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	baseURL := server.URL()

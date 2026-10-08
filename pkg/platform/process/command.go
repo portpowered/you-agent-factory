@@ -315,6 +315,12 @@ func (r ExecCommandRunner) run(
 	if err := ctx.Err(); err != nil {
 		return CommandResult{CancellationReason: CancellationReasonFromContext(ctx)}, err
 	}
+	// Reject before constructing a command: even an injected factory must not
+	// observe an invocation the host cannot launch. Stdin is outside this bound.
+	if r.CommandLineLimit > 0 && ComposedCommandLineLength(req.Command, req.Args) >= r.CommandLineLimit {
+		return CommandResult{}, r.reportCommandStartFailure(logging.EnsureLogger(r.Logger), req,
+			errors.New("command-line preflight rejected launch"))
+	}
 	cmd, stdout, stderr, err := r.prepareCommand(req, observer, streaming)
 	if err != nil {
 		return CommandResult{}, err

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -138,6 +139,20 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	if runner.calls.Load() != 2 {
 		t.Fatalf("inspection executed children: calls=%d", runner.calls.Load())
 	}
+	peerID := "session-js-checkpoint-peer-" + uuid.NewString()
+	peer := startSelectedReplayPeer(t, process, peerID, "workflow/"+peerID+".js")
+	// F17F-6: cancellation at the public resume boundary reaches the eligibility
+	// probe before preparation. It cannot commit handoff or execute a child.
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := sessions.ResumeInterruptedSession(canceled, started.SessionID, factorysessions.ResumeSessionRequest{RequestID: uuid.NewString()}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled checkpoint probe: %v", err)
+	}
+	read, err := sessions.GetSession(t.Context(), started.SessionID)
+	if err != nil || read.Status != factorysessions.LifecycleStatusInterrupted || runner.calls.Load() != 2 {
+		t.Fatalf("canceled probe changed historical facts: %#v %v calls=%d", read, err, runner.calls.Load())
+	}
+	assertSelectedReplayRead(t, sessions, peerID)
 	if _, err := sessions.ResumeInterruptedSession(t.Context(), started.SessionID, factorysessions.ResumeSessionRequest{RequestID: uuid.NewString()}); err != nil {
 		t.Fatalf("checkpoint handoff: %v", err)
 	}
@@ -154,8 +169,44 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	if err != nil || len(dispatches.Dispatches) != 2 || runner.calls.Load() != 3 {
 		t.Fatalf("retained dispatches: %#v err=%v calls=%d", dispatches, err, runner.calls.Load())
 	}
+	assertSelectedReplayRead(t, sessions, peerID)
+	assertCheckpointResponseAttribution(t, sessions, started.SessionID, peerID)
 	release()
 	joinCheckpointInspection(t, done, dir, started.SessionID)
+	assertSelectedReplayRead(t, sessions, peerID)
+	peer.release()
+	assertSelectedReplayCommandJoined(t, peer.done)
+}
+
+func assertCheckpointResponseAttribution(t *testing.T, sessions factorysessions.Service, id, peerID string) {
+	t.Helper()
+	// A historical peer cannot expose a live response cursor after another
+	// opening resumes. The resumed route must return only its own retained facts.
+	if subscription, err := sessions.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: peerID}); err == nil {
+		if subscription.Cursor != nil {
+			subscription.Cursor.Detach()
+		}
+		t.Fatal("historical peer exposed live responses")
+	}
+	subscription, err := sessions.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
+	if err != nil || subscription.Cursor == nil {
+		t.Fatalf("resumed response subscription: %#v %v", subscription, err)
+	}
+	defer subscription.Cursor.Detach()
+	events, err := subscription.Cursor.Drain()
+	if err != nil || len(events) == 0 {
+		t.Fatalf("resumed retained responses: %#v %v", events, err)
+	}
+	var terminal bool
+	for _, event := range events {
+		if event.FactorySessionID != id {
+			t.Fatalf("resumed response attributed to peer: %#v", event)
+		}
+		terminal = terminal || (event.Kind == factorysessions.ResponseEventKindRun && event.Phase == factorysessions.ResponseEventPhaseCompleted)
+	}
+	if !terminal {
+		t.Fatal("resumed responses lost terminal completion")
+	}
 }
 
 func assertPortableCheckpointWithoutRestorableState(t *testing.T, process support.Process, sessions factorysessions.Service, dir, home, path, sessionID string, runner *checkpointContinuationRunner) {
@@ -290,6 +341,12 @@ func writeCheckpointContinuationRecording(t *testing.T, sessions factorysessions
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(encoded, after) {
+			t.Errorf("checkpoint inspection/continuation rewrote selected history: %v", err)
+		}
+	})
 	return path
 }
 

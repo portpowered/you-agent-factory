@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -213,15 +215,15 @@ func lifecycleSessionID(args []string) string {
 }
 
 func isolatedLifecycleEnvironment(environment []string, home string) []string {
-	filtered := make([]string, 0, len(environment)+2)
+	filtered := make([]string, 0, len(environment)+3)
 	for _, entry := range environment {
 		name, _, ok := strings.Cut(entry, "=")
-		if ok && (strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE")) {
+		if ok && (strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") || strings.EqualFold(name, runcli.ModelCacheDirEnvironment)) {
 			continue
 		}
 		filtered = append(filtered, entry)
 	}
-	filtered = append(filtered, "HOME="+home, "USERPROFILE="+home)
+	filtered = append(filtered, "HOME="+home, "USERPROFILE="+home, runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, "models"))
 	return filtered
 }
 

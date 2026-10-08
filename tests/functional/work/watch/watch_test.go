@@ -21,6 +21,7 @@ const (
 // finite CLI watch invocation observes canonical Work transitions through the
 // terminal transition and exits successfully.
 func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
+	ensureWatchFixture(t)
 	runWorkWatchSelectedProcessTime(t)
 	functionalevidence.Covers(t, "cli/you.work.watch")
 }

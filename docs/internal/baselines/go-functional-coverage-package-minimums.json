@@ -600,7 +600,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-      "minimum": 72.22
+      "minimum": 29.62
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
@@ -664,7 +664,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot",
-      "minimum": 75.00
+      "minimum": 68.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry",

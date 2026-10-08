@@ -890,7 +890,7 @@ func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) pr
 	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
-		providerswire.NewCodexEffect(runner, platformclock.Real{}),
+		providerswire.NewCodexEffect(runner, platformclock.Real{}, nil, nil),
 		providerswire.NewClaudeEffect(runner, platformclock.Real{}),
 		providerswire.Configuration{})
 	if err != nil {

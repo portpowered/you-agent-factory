@@ -80,6 +80,7 @@ func ReplayLegacyRecording(
 	sessionID string,
 	state recording.FactoryWorldState,
 ) (RecordingReplayProjection, error) {
+	state = *copyFactoryProjection(&state)
 	sessionID = legacySessionID(sessionID, state, value.Events)
 	enrichLegacyFailureDetails(&state)
 	artifacts := replayLegacyArtifactSummaries(state.Artifacts)

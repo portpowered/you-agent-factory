@@ -412,6 +412,8 @@ type FiringDecision struct {
 
 // TickResult is the output of a single subsystem execution.
 type TickResult struct {
+	// WorkStateChanges become canonical facts only after Mutations are applied.
+	WorkStateChanges       []work.WorkStateChangeRecord    `json:"-"`
 	Mutations              []MarkingMutation               `json:"mutations,omitempty"`
 	GeneratedBatches       []work.GeneratedSubmissionBatch `json:"generated_batches,omitempty"`
 	Dispatches             []DispatchRecord                `json:"dispatches,omitempty"`

@@ -70,18 +70,8 @@ func (service *Service) QueryHistoricalRecording(
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err
 	}
-	state, err := canonical.ReconstructWorldState(service.projection, recordings.ReconstructWorldStateRequest{
-		Scope:        identity.Scope,
-		Events:       events,
-		SelectedTick: selectedTick,
-	})
+	view, factoryState, err := service.reconstructHistoricalWorldState(identity.Scope, events, selectedTick)
 	if err != nil {
-		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(
-			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
-		)
-	}
-	var factoryState recordings.FactoryWorldState
-	if err := json.Unmarshal([]byte(state.WorldState.Payload), &factoryState); err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
@@ -96,10 +86,43 @@ func (service *Service) QueryHistoricalRecording(
 		Status:              status,
 		Events:              append([]recordings.CanonicalEvent(nil), events...),
 		IgnoredJSONPaths:    append([]string(nil), ignoredJSONPaths...),
-		WorldState:          state.WorldState,
+		WorldState:          view,
 		WorkstationRequests: workstationRequests,
 		Dispatches:          dispatches,
 	}, nil
+}
+
+func (service *Service) reconstructHistoricalWorldState(
+	scope recordings.CanonicalEventScope,
+	events []recordings.CanonicalEvent,
+	selectedTick int,
+) (recordings.WorldStateView, recordings.FactoryWorldState, error) {
+	// Each artifact decoder has validated the complete canonical event stream.
+	// Retain the owner-level state for derived read models rather than decode
+	// the JSON view we just serialized at the published response boundary.
+	legacyEvents := make([]factorydefinitions.FactoryEvent, len(events))
+	for index, event := range events {
+		legacyEvents[index] = canonical.FactoryEventFromCanonical(event)
+	}
+	state, err := service.projection.ReconstructFactoryWorldState(legacyEvents, selectedTick)
+	if err != nil {
+		return recordings.WorldStateView{}, recordings.FactoryWorldState{}, err
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return recordings.WorldStateView{}, recordings.FactoryWorldState{}, err
+	}
+	through := recordings.CanonicalEventCursor{}
+	if len(events) > 0 {
+		through = events[len(events)-1].Cursor
+	}
+	return recordings.WorldStateView{
+		SchemaVersion: recordings.WorldStateViewSchemaV1,
+		Scope:         scope,
+		Through:       through,
+		SelectedTick:  selectedTick,
+		Payload:       string(payload),
+	}, state, nil
 }
 
 func validHistoricalRecordingIdentity(
