@@ -763,3 +763,73 @@ test("collector preserves selection identity and rejects changes during executio
     assert.deepEqual(collected.selection, selection);
     assert.equal(summarizeBackendLintReport(collected, { selection }).ok, true);
 });
+
+// Maintenance integration: real Make joins controlled linter processes. IPC
+// proves scope overlap and draining; no repository-source inventory or timing gate.
+test("golangci joins every independent scope and propagates each failure", { timeout: 60000 }, async (t) => {
+	const repository = fileURLToPath(new URL("../../", import.meta.url));
+	const root = mkdtempSync(join(tmpdir(), "you-lint-scopes-"));
+	const script = join(root, "linter.mjs").replaceAll("\\", "/");
+	writeFileSync(join(root, "host-path.txt"), "controlled host");
+	writeFileSync(script, `#!/usr/bin/env node
+import { connect } from 'node:net';
+const args = process.argv.slice(2);
+const config = args[args.indexOf('--config') + 1];
+const socket = connect(Number(process.env.LINT_TEST_PORT), '127.0.0.1', () => socket.write(JSON.stringify({config, args}) + '\\n'));
+socket.on('data', () => { console.log(config + ' completed'); socket.end(); });
+socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7 : 0));
+`, { mode: 0o755 });
+	const sockets = new Set();
+	let current;
+	const server = createServer((socket) => {
+		sockets.add(socket);
+		socket.on("close", () => sockets.delete(socket));
+		let data = "";
+		socket.on("data", (chunk) => {
+			data += chunk;
+			if (!data.includes("\n")) return;
+			const signal = JSON.parse(data.trim());
+			current.signals.push(signal);
+			current.waiting.push(socket);
+			// Hold all concurrent scopes before releasing any. With one job,
+			// release each immediately so the next scope can start.
+			if (current.waiting.length === current.jobs) {
+				for (const peer of current.waiting) peer.write("release");
+				current.waiting = [];
+			}
+		});
+	});
+	const children = [];
+	t.after(() => {
+		for (const child of children) if (child.exitCode === null) child.kill();
+		for (const socket of sockets) socket.destroy();
+		server.close();
+		rmSync(root, { recursive: true, force: true });
+	});
+	server.listen(0, "127.0.0.1");
+	await once(server, "listening");
+	const configs = [".golangci.yml", ".golangci-repository-default.yml", ".golangci-repository.yml"];
+	for (const [jobs, failed] of [[1, ""], [3, ""], ...configs.map((config) => [3, config])]) {
+		current = { jobs, waiting: [], signals: [] };
+		const child = spawn(platform === "win32" ? "make.exe" : "make", [
+			"--no-print-directory", "golangci", "GOLANGCI_PREBUILT=1",
+			`LINT_JOBS=${jobs}`, `GOLANGCI_REPOSITORY=${script}`, `GOLANGCI_DIR=${root.replaceAll("\\", "/")}`,
+			...(platform === "win32" ? ["SHELL=C:/Program Files/Git/bin/sh.exe"] : []),
+		], { cwd: repository, env: { ...process.env, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
+		children.push(child);
+		let output = "";
+		child.stdout.on("data", (data) => { output += data; });
+		child.stderr.on("data", (data) => { output += data; });
+		const [status] = await once(child, "close");
+		assert.equal(status === 0, !failed, output);
+		assert.deepEqual(current.signals.map((signal) => signal.config).sort(), [...configs].sort(), output);
+		for (const { config, args } of current.signals) {
+			assert.ok(args.includes("--allow-parallel-runners"));
+			assert.ok(args.includes("./..."));
+			assert.ok(output.includes(`${config} completed`), output);
+			if (config === ".golangci-repository.yml") {
+				assert.ok(args.includes("--build-tags=integration,functionallong,backendconformance,factoryartifact,managed_process_integration"));
+			}
+		}
+	}
+});

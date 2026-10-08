@@ -1092,7 +1092,7 @@ GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository
 endif
 
 # Repository source diagnostics run through the supported module plugin.
-.PHONY: golangci-build repository-lint-run
+.PHONY: golangci-build repository-lint-run repository-lint-default repository-lint-tagged
 ifeq ($(GOLANGCI_PREBUILT),1)
 golangci-build:
 	@test -f "$(GOLANGCI_REPOSITORY)"
@@ -1103,16 +1103,26 @@ golangci-build:
 	$(PYTHON) scripts/build-golangci.py --destination "$(GOLANGCI_DIR)" -- $(GOLANGCI_LINT) custom --destination "$(GOLANGCI_DIR)"
 endif
 
-repository-lint-run: golangci-build
+repository-lint-run: repository-lint-default repository-lint-tagged
+
+repository-lint-default: golangci-build
 	@git merge-base HEAD origin/main
 	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
-	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,repository-default) --config .golangci-repository-default.yml ./...
-	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,repository-tagged) --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
+	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-default) --config .golangci-repository-default.yml ./...
+
+repository-lint-tagged: golangci-build
+	@git merge-base HEAD origin/main
+	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
+	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,repository-tagged) --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
 # Compiler tag union shared with the compiler-owner analyzer.
 REPOSITORY_LINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 
 # All shared diagnostics execute inside the supported golangci module plugin.
-golangci: golangci-lint-run repository-lint-run
+# Independent configurations keep their own ratchets and tag selections. Drain
+# every scope even after a failure; the enclosing collector receives the joined
+# exit status. Parallel runners share golangci's content-addressed analysis cache.
+golangci:
+	@"$(LINT_MAKE)" --no-print-directory --keep-going --jobs="$(LINT_JOBS)" --output-sync=target $(if $(filter Windows_NT,$(OS)),SHELL="$(LINT_SHELL)",) golangci-lint-run repository-lint-run
 
 LINT_MIGRATION_COHORT ?= all
 
@@ -1122,7 +1132,7 @@ lint-migration-smoke: $(if $(filter markdown,$(LINT_MIGRATION_COHORT)),$(DOCS_MA
 golangci-lint-run: golangci-build
 	@git merge-base HEAD origin/main
 	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
-	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,builtin) --config .golangci.yml ./...
+	$(GOLANGCI_REPOSITORY) run --allow-parallel-runners $(call golangci_profile_flags,builtin) --config .golangci.yml ./...
 
 deadcode: golangci-build
 	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1
