@@ -117,8 +117,10 @@ owns its independent checks, terminal CI, conflicts, merge and later validation.
   verdict; if it does not improve, continue with the next bounded optimization.
   Actual behavior regressions caused by the diff remain blocking.
 - Commit verified changes locally; the worktree persists between visits.
-  Push at most once per visit, at its end, after focused tests/lint; never during running previous-head CI, even final/blocker visits.
-  Retain local commits until eligible; no ACCEPTED with final push pending.
+  Push at most once per visit, at its end, after focused tests/lint, when the visit changed code.
+  If previous-head CI is still running, push anyway; the superseding push cancels it.
+  Never spend a visit only waiting for CI or return CONTINUE solely because CI is running.
+  No ACCEPTED with final push pending.
   Create/ready a non-draft PR via `gh pr create`/`gh pr ready <n>`; arm `gh pr merge <n> --auto --squash`.
   Stop with final head pushed, non-draft PR, CI started and blockers addressed; review owns terminal CI/conflicts/merge.
   Record unfinished independent stories as deferred to a successor.
@@ -133,10 +135,9 @@ owns its independent checks, terminal CI, conflicts, merge and later validation.
   does not change becomes a separate fix and never blocks the PR. Never run
   baselines or `go list ./...` in the repository ROOT checkout (untracked files
   there break package discovery); run them in your worktree. A lane that must
-  stop on a contract conflict retains verified local commits until an eligible
-  push and opens a non-draft PR naming the blocker; never claim an unresolved current-slice
-  blocker is ready for acceptance. If previous-head CI is running, retain local commits and return CONTINUE
-  with the push pending; never bypass the push gate to preserve work.
+  stop on a contract conflict commits and pushes verified unblocked changes at visit end
+  after focused tests/lint, within the one-push limit, and opens a non-draft PR naming
+  the blocker; never claim an unresolved current-slice blocker is ready for acceptance.
 - Keep CI green: fix failures your diff caused. Untouched-package required-CI
   failures are review-owned recovery: review reruns failed jobs once, merges
   current origin/main if still red, pushes, and re-arms squash merge.
@@ -153,10 +154,7 @@ owns its independent checks, terminal CI, conflicts, merge and later validation.
   describes, and restarts CI. Evidence about a CI run belongs in a PR comment.
   After your final validation push, the only permitted new commits are actual
   code or review fixes.
-- CI watching: at most ONE bounded watcher per head (`gh pr checks <n> --watch
-  --interval 180` or one `gh run watch`). Never poll `gh run view` in a tight
-  loop. One rerun of failed jobs per unchanged head, maximum. Never wait for
-  CI to FINISH before ending `ACCEPTED`: after your final push, the
+- Do not spend process visits watching CI. After the final push, the
   `ci-wait` gate between process and review owns waiting for terminal CI.
 - Sync with origin/main when GitHub reports a real conflict or when review
   requests conflict reconciliation. Review also owns the explicit
@@ -270,8 +268,8 @@ defects. A lane without a project tag keeps the current operator route.
    Take the time from `date -u`. The waiter notifies the tagged lead through
    the existing project-report path; do not create a second request or move Work.
 3. Temporary (AM-T0 stopgap, removed by AM-T11): do not poll in the visit.
-   Commit the unblocked work locally and push only if eligible under the push rule,
-   then end the visit with
+   Commit verified unblocked changes and push at visit end after focused tests/lint,
+   within the one-push limit, then end the visit with
    `CONTINUE` whose `feedback` STARTS with `AWAITING_OPERATOR_ANSWER`, followed
    by the request path and your stated no-answer path. That parks the task in
    `awaiting-answer`, where the `mailbox-wait` script waits up to 60 minutes

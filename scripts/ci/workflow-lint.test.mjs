@@ -9,58 +9,91 @@ import test from "node:test";
 import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
-	validateControlledRawFailureWorkflowContract,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
+	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
 
-test("Workflow Lint guards shared frontend proof, cache identity and policy wiring", () => {
-	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
-	assert.equal(validateFrontendSharedSetupWorkflowContract({ workflow }).status, "pass");
-	for (const [before, after] of [
-		["bun install --frozen-lockfile", "bun install"],
-		["frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}", "frontend-bun-v1"],
-		["if: success() || failure()", "if: success()"],
-		["run: make test-ui-coverage", "run: make ui-test"],
-		["FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}", "FRONTEND_COVERAGE_RESULT: ${{ needs.frontend-component.result }}"],
+test("consolidated workflow checker identifies the invalid proof or result mapping", () => {
+	const workflow = `name: fixture
+jobs:
+  classify:
+    name: Verification Setup
+    outputs:
+      docs_result: \${{ steps.docs-reference.outcome }}
+    steps:
+      - run: go install example/actionlint@v1.7.12
+      - run: bash scripts/ci/run-workflow-verification.sh
+      - if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+        run: make docs-reference-smoke
+  api-pr-verification:
+    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'
+    steps:
+      - run: bash scripts/ci/run-api-pr-verification.sh
+  development-package:
+    with:
+      run_api_package: \${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}
+  verification-policy:
+    env:
+      DOCS_RESULT: \${{ needs.classify.outputs.docs_result }}
+      WORKFLOW_LINT_RESULT: \${{ needs.classify.result }}
+      API_RESULT: \${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result }}
+      API_CANDIDATE_RESULT: \${{ github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_candidate_result }}
+      API_INDEPENDENT: \${{ github.event_name == 'pull_request' }}
+`;
+	for (const [input, diagnostic] of [
+		["jobs:\n", "workflow contract is missing job: classify"],
+		[workflow.replace("actionlint@v1.7.12", "actionlint@latest"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
+		[workflow.replace("run: make docs-reference-smoke", "run: true"), "workflow contract failed: retain shared setup proof and fail-closed selection"],
+		[workflow.replace("run: bash scripts/ci/run-api-pr-verification.sh", "run: true"), "workflow contract failed: retain API proofs"],
+		[workflow.replace("DOCS_RESULT:", "OTHER_RESULT:"), "workflow contract failed: map merged required proof"],
+		[workflow.replace("API_INDEPENDENT:", "OTHER_FLAG:"), "workflow contract failed: API-only PR does not require reusable children"],
 	]) {
-		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
-			workflow: workflow.replace(before, after),
-		}), /workflow contract/);
+		assert.throws(() => validateConsolidatedCIWorkflowContract({ workflow: input }), { message: diagnostic });
 	}
 });
 
-test("workflow lint isolates the guarded raw failure fixture from shared CI", () => {
-	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
-	const fixtureWorkflow = readFileSync(join(process.cwd(), ".github", "workflows", "controlled-raw-failure-witness.yml"), "utf8");
-	assert.deepEqual(validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow }), {
-		name: "controlled-raw-failure-workflow",
-		status: "pass",
-	});
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow: workflow.replace("types: [opened, synchronize, reopened]", "types: [opened, synchronize, reopened, labeled, unlabeled]"),
-				fixtureWorkflow,
-			}),
-		/workflow contract failed: shared CI must not start on pull request label events/,
-	);
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow,
-				fixtureWorkflow: fixtureWorkflow.replace("github.event.label.name == 'ci-controlled-raw-failure'", "github.event.label.name == 'other'"),
-			}),
-		/workflow contract failed: controlled raw failure job must include github\.event\.label\.name/,
-	);
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow,
-				fixtureWorkflow: fixtureWorkflow.replace("raw-failure-interleaving.jsonl\n", "other-evidence.jsonl\n"),
-			}),
-		/workflow contract failed: controlled raw failure artifact must include the interleaving witness/,
-	);
+test("frontend workflow checker explains invalid setup, proof and policy inputs", () => {
+	const workflow = `name: fixture
+env:
+  BUN_VERSION: 1.3.12
+jobs:
+  frontend:
+    env:
+      UI_COVERAGE_MAIN_MAX_WORKERS: "4"
+    steps:
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: \${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}-\${{ env.BUN_VERSION }}-\${{ hashFiles('ui/bun.lock') }}
+      - run: cd ui && bun install --frozen-lockfile
+      - run: make typecheck
+      - name: Lint frontend
+        if: success() || failure()
+        run: make ui-lint
+      - name: Run frontend unit and replay coverage
+        if: success() || failure()
+        run: make test-ui-coverage
+  verification-policy:
+    needs: [frontend]
+    env:
+      FRONTEND_RESULT: \${{ needs.frontend.result }}
+      FRONTEND_COVERAGE_RESULT: \${{ needs.frontend.result }}
+`;
+	for (const [before, after, diagnostic] of [
+		["bun install --frozen-lockfile", "bun install", "install frozen dependencies"],
+		["frontend-bun-v1-\${{ runner.os }}-\${{ runner.arch }}", "frontend-bun-v1", "cache identity must include platform, Bun and frozen lock"],
+		["if: success() || failure()", "if: success()", "attempt later proof after failures, but not cancellation"],
+		["run: make test-ui-coverage", "run: make ui-test", "retain the complete proof command"],
+		["FRONTEND_COVERAGE_RESULT:", "OTHER_RESULT:", "static and coverage share the aggregate result"],
+	]) {
+		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
+			workflow: workflow.replace(before, after),
+		}), { message: `workflow contract failed: ${diagnostic}` });
+	}
 });
 
 test("functional diagnostics artifact uploads bounded raw failure evidence after the verdict", () => {
@@ -192,6 +225,7 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 	const result = runWorkflowLint({
 		actionlint,
 		workflowDirectory: join(process.cwd(), ".github", "workflows"),
+		validateRepositoryContracts: true,
 		log(message) {
 			messages.push(message);
 		},
@@ -200,6 +234,7 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 	assert.ok(result.workflowFiles.length > 0);
 	assert.deepEqual(messages, [
 		`WORKFLOW_LINT_FILE_COUNT=${result.workflowFiles.length}`,
+		"WORKFLOW_LINT_STATIC_CONTRACTS_OK",
 		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
 	]);
 });

@@ -148,6 +148,9 @@ func runHistoryListingCLI(t *testing.T, binary, factory, home, endpoint string) 
 func TestPlainBoardGracefulRestart(t *testing.T) {
 	t.Parallel()
 	binary := requireRestartCLIArtifact(t)
+	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "I-BOARD", t.Name())
+	evidence.StoryID = "plain-relaunch-adopts-todays-board-not-an-old-history-001"
+	t.Cleanup(func() { evidence.publishRestartScenario(t) })
 	home, repo := t.TempDir(), t.TempDir()
 	config := boardPersistenceFactoryConfig()
 	config["workstations"].([]map[string]any)[0]["inputs"] = []map[string]string{{"workType": "task", "state": "init"}}
@@ -163,6 +166,7 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
+	evidence.trackDaemon(t, "before-shutdown", first)
 	if works := waitForBoardStates(t, first.baseURL, map[string]string{}, time.Minute); len(works.Results) != 0 {
 		t.Fatal("first plain launch was not empty")
 	}
@@ -171,11 +175,39 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 	states := map[string]string{"plain-A": "complete", "plain-B": "waiting", "plain-C": "init"}
 	before := waitForBoardStates(t, first.baseURL, states, time.Minute)
 	before = waitPlainBoardConfirmed(t, first.baseURL, states)
+	evidence.capturePublicObservation(t, "confirmed-before-shutdown", first.baseURL)
 	ids := map[string]struct{}{"plain-A": {}, "plain-B": {}, "plain-C": {}}
 	history := restartWorkHistoryFingerprint(t, first.baseURL, ids)
+	var selected struct{ ArtifactReference string }
+	referencePath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	reference, err := os.ReadFile(referencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(reference, &selected); err != nil {
+		t.Fatal(err)
+	}
+	writer := selected.ArtifactReference
+	// Remove only the reference while its writer still owns the board. The
+	// graceful stop must publish it again from the successful flush boundary.
+	if err := os.Remove(referencePath); err != nil {
+		t.Fatal(err)
+	}
 	shutdownPlainBoard(t, first)
+	reference, err = os.ReadFile(referencePath)
+	if err != nil {
+		t.Fatalf("graceful shutdown did not publish the board reference: %v", err)
+	}
+	if err := json.Unmarshal(reference, &selected); err != nil {
+		t.Fatal(err)
+	}
+	if selected.ArtifactReference != writer {
+		t.Fatalf("shutdown reference=%q, want actual writer %q", selected.ArtifactReference, writer)
+	}
 	second := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
+	evidence.trackDaemon(t, "plain-relaunch", second)
 	after := waitForBoardStates(t, second.baseURL, states, time.Minute)
+	evidence.capturePublicObservation(t, "recovered-after-relaunch", second.baseURL)
 	assertPlainBoardPreserved(t, before, after)
 	if got := restartWorkHistoryFingerprint(t, second.baseURL, ids); !reflect.DeepEqual(history, got) {
 		t.Fatalf("cold restart changed canonical Work history: before=%v after=%v", history, got)
@@ -197,7 +229,7 @@ func TestPlainBoardGracefulRestart(t *testing.T) {
 		assertSingleTerminalCompletion(t, events, id, "complete")
 	}
 	shutdownPlainBoard(t, second)
-	t.Logf("INT-BOARD artifact SHA256=%s source=%s: two plain launches, confirmed UTF-8 board/history preserved, dependency released/completed once", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead)
+	t.Logf("INT-BOARD artifact SHA256=%s source=%s: graceful shutdown republished writer, plain cold restart preserved confirmed UTF-8 board/history, dependency released/completed once", restartCLIArtifact.SHA256, restartCLIArtifact.SourceHead)
 }
 
 func assertPlainBoardPreserved(t *testing.T, before, after factoryapi.ListWorkResponse) {

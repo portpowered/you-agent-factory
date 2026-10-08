@@ -34,9 +34,7 @@ type runtimeProducts struct {
 	startupRecovery        *factorysessions.StartupRecovery
 	process                roles.ProcessRuntime
 	lifecycle              roles.LifecycleRuntime
-	sessions               roles.SessionGateway
-	liveControl            factorysessions.LiveControlService
-	execution              durableexecution.Service
+	replayExecution        *recordingreplay.Scope
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
 	modelInvocation        modelinvocation.RuntimeModelInvocation
 	factoryRuntime         factoryruntime.Service
@@ -85,7 +83,7 @@ func (r *Root) historicalReplayRuntimeProducts(
 		historicalReplay: &inspection,
 		logger:           logger,
 		closeArtifacts:   closeResources,
-		execution:        replay,
+		replayExecution:  replay,
 	}
 }
 
@@ -112,7 +110,6 @@ func assembleRuntimeProducts(
 	}
 	bindRuntime := runtimeBindingForSession(factoryRuntime, factorySessionID)
 	effectiveFactorySessionID := resolveOpenedFactorySessionID(ctx, factorySessionGateway, factorySessionID)
-	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	modelInvocation := modelinvocation.RuntimeModelInvocation{
 		FactorySessionID: effectiveFactorySessionID, Scope: modelsScope,
@@ -123,7 +120,6 @@ func assembleRuntimeProducts(
 	return runtimeProducts{
 		bindRuntime: bindRuntime,
 		process:     process, lifecycle: lifecycle,
-		sessions: factorySessionGateway, liveControl: liveControl, execution: factorySessionGateway,
 		modelInvocation: modelInvocation,
 		factoryRuntime:  factoryRuntime,
 		modelsScope:     modelsScope,

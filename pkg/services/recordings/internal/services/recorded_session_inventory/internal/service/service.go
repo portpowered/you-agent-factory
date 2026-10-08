@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -17,6 +18,11 @@ import (
 )
 
 type directoryReader func(string) ([]fs.DirEntry, error)
+
+type recordingFile struct {
+	path       string
+	modifiedAt time.Time
+}
 
 // Bound simultaneous filesystem reads, including transient decoder buffers.
 const metadataReaderCount = 4
@@ -76,7 +82,8 @@ func (inventory *Service) ListRecordedSessions(
 	summaries := make([]recordings.RecordedSessionSummary, 0, len(paths))
 	warnings := make([]recordings.RecordedSessionDiagnostic, 0)
 	results := inventory.readMetadata(root, paths)
-	for index, path := range paths {
+	for index, file := range paths {
+		path := file.path
 		if results[index].err != nil {
 			// One unreadable or corrupt recording must never make the whole
 			// history unlistable; it is skipped and reported for diagnosis.
@@ -114,7 +121,7 @@ func (inventory *Service) ListRecordedSessions(
 	return recordings.RecordedSessionInventoryResult{Sessions: summaries, Warnings: warnings}, nil
 }
 
-func (inventory *Service) readMetadata(root string, paths []string) []metadataResult {
+func (inventory *Service) readMetadata(root string, paths []recordingFile) []metadataResult {
 	results := make([]metadataResult, len(paths))
 	jobs := make(chan int)
 	var readers sync.WaitGroup
@@ -123,7 +130,8 @@ func (inventory *Service) readMetadata(root string, paths []string) []metadataRe
 		go func() {
 			defer readers.Done()
 			for index := range jobs {
-				results[index].summary, results[index].err = inventory.summaryForPath(root, paths[index])
+				results[index].summary, results[index].err = inventory.summaryForPath(root, paths[index].path)
+				results[index].summary.ModifiedAt = paths[index].modifiedAt
 			}
 		}()
 	}
@@ -135,12 +143,12 @@ func (inventory *Service) readMetadata(root string, paths []string) []metadataRe
 	return results
 }
 
-func (inventory *Service) recordingPaths(root string) ([]string, error) {
-	paths := make([]string, 0)
+func (inventory *Service) recordingPaths(root string) ([]recordingFile, error) {
+	paths := make([]recordingFile, 0)
 	if err := inventory.walkRecordingRoot(root, root, true, &paths); err != nil {
 		return nil, err
 	}
-	sort.Strings(paths)
+	sort.Slice(paths, func(i, j int) bool { return paths[i].path < paths[j].path })
 	return paths, nil
 }
 
@@ -148,7 +156,7 @@ func (inventory *Service) walkRecordingRoot(
 	root string,
 	directory string,
 	topLevel bool,
-	paths *[]string,
+	paths *[]recordingFile,
 ) error {
 	entries, err := inventory.readDir(directory)
 	if err != nil {
@@ -174,7 +182,11 @@ func (inventory *Service) walkRecordingRoot(
 		if entry.Type()&fs.ModeSymlink != 0 || !isRecordingArtifact(root, path) {
 			continue
 		}
-		*paths = append(*paths, path)
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("read recording file metadata: %w", err)
+		}
+		*paths = append(*paths, recordingFile{path: path, modifiedAt: info.ModTime()})
 	}
 	return nil
 }

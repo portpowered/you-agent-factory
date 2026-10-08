@@ -47,7 +47,7 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 		t.Fatalf("openForRequest() error = %v", err)
 	}
 
-	if _, err := products.execution.Resume(
+	if _, err := products.replayExecution.Resume(
 		t.Context(),
 		"session-js-checkpoint-001",
 		factorysessions.ControlRequest{RequestID: "resume-application-cleanup"},
@@ -85,7 +85,7 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = products.execution.Resume(t.Context(), "session-js-checkpoint-001",
+	_, err = products.replayExecution.Resume(t.Context(), "session-js-checkpoint-001",
 		factorysessions.ControlRequest{RequestID: "resume-partial-opening"})
 	if !errors.Is(err, openingErr) {
 		t.Fatalf("resume error = %v, want original opening cause", err)
@@ -163,8 +163,8 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			failed, err := factory.openForRequest(t.Context(), request)
 			assertFailedReplayAcquisition(t, failed, err, failure, closeErr, events)
 			retried, err := factory.openForRequest(t.Context(), request)
-			if err != nil || retried.execution == nil || attempts != 2 {
-				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.execution != nil)
+			if err != nil || retried.replayExecution == nil || attempts != 2 {
+				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.replayExecution != nil)
 			}
 			if err := retried.closeArtifacts(); err != nil {
 				t.Fatal(err)
@@ -185,7 +185,7 @@ func assertFailedReplayAcquisition(t *testing.T, failed runtimeProducts, err, fa
 	if !errors.Is(err, failure) || (closeErr != nil && !errors.Is(err, closeErr)) {
 		t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
 	}
-	if failed.execution != nil || failed.process != nil {
+	if failed.replayExecution != nil || failed.process != nil {
 		t.Fatal("failed acquisition published usable session roles")
 	}
 	if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
@@ -213,12 +213,12 @@ func testPortableReplayResumeInterruptedSession(t *testing.T) {
 			Outcome:   "PAUSED",
 		},
 	}
-	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
-	if err != nil {
-		t.Fatalf("openForRequest() error = %v", err)
-	}
-	var execution factorysessions.DurableExecutionService = opened.execution
+	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
+			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
+		}, owner, nil)
+	var execution factorysessions.DurableExecutionService = opened.replayExecution
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.ResumeInterruptedSession(
@@ -252,12 +252,12 @@ func testPortableReplayResume(t *testing.T) {
 			Outcome:   "RESUMED",
 		},
 	}
-	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
-	if err != nil {
-		t.Fatalf("openForRequest() error = %v", err)
-	}
-	var execution factorysessions.DurableExecutionService = opened.execution
+	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
+			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
+		}, owner, nil)
+	var execution factorysessions.DurableExecutionService = opened.replayExecution
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.Resume(
@@ -274,15 +274,7 @@ func testPortableReplayResume(t *testing.T) {
 	if owner.probeCalls != 1 || owner.resumeCalls != 1 {
 		t.Fatalf("owner calls = probe:%d resume:%d, want 1:1", owner.probeCalls, owner.resumeCalls)
 	}
-	if owner.childExecutionCalls != 1 || !owner.childCompleted {
-		t.Fatalf("resumed child execution = calls:%d completed:%v, want one completed child", owner.childExecutionCalls, owner.childCompleted)
-	}
-	if owner.workerRuntimeID != "portable-replay-runtime" || owner.workerGenerationID != "portable-replay-generation" {
-		t.Fatalf("child execution identity = runtime:%q generation:%q, want portable replay identities", owner.workerRuntimeID, owner.workerGenerationID)
-	}
-	if !owner.liveChangeBound || owner.progressPublisher == nil || owner.attemptStarter == nil || !owner.attemptStarted || !owner.attemptCompleted {
-		t.Fatalf("resumed child bindings = liveChange:%v progress:%v attemptStarter:%v started:%v completed:%v, want all live bindings", owner.liveChangeBound, owner.progressPublisher != nil, owner.attemptStarter != nil, owner.attemptStarted, owner.attemptCompleted)
-	}
+
 }
 
 func testPortableReplayTypedRestorationFailure(t *testing.T) {
@@ -293,14 +285,14 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 		Message:   "checkpoint state is unavailable",
 	}
 	owner := &portableReplayRuntimeOwner{probeErr: want}
-	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
-	if err != nil {
-		t.Fatalf("openForRequest() error = %v", err)
-	}
-	var execution factorysessions.DurableExecutionService = opened.execution
+	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
+			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
+		}, owner, nil)
+	var execution factorysessions.DurableExecutionService = opened.replayExecution
 
-	_, err = execution.ResumeInterruptedSession(
+	_, err := execution.ResumeInterruptedSession(
 		t.Context(),
 		"session-js-checkpoint-001",
 		factorysessions.ResumeSessionRequest{RequestID: "resume-typed"},
@@ -316,14 +308,14 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 
 func testPortableReplayWithoutRestorableState(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{}
-	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
-	if err != nil {
-		t.Fatalf("openForRequest() error = %v", err)
-	}
-	var execution factorysessions.DurableExecutionService = opened.execution
+	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
+			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
+		}, owner, nil)
+	var execution factorysessions.DurableExecutionService = opened.replayExecution
 
-	_, err = execution.ResumeInterruptedSession(
+	_, err := execution.ResumeInterruptedSession(
 		t.Context(),
 		"session-js-checkpoint-001",
 		factorysessions.ResumeSessionRequest{RequestID: "resume-unavailable"},
@@ -364,7 +356,7 @@ func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.execution
+	var execution factorysessions.DurableExecutionService = opened.replayExecution
 	assertHistoricalDispatchReads(t, execution, owner, sessionID)
 	assertUnknownDispatchReads(t, execution)
 

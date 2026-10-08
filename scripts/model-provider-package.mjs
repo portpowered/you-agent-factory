@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { consumerNodeExecutable, isolatedConsumerEnvironment } from "./public-package-install-smoke.mjs";
+import { packCandidate } from "../ui/scripts/public-package-publish.mjs";
 
 const packageDirectory = "packages/model-providers";
 const typeOutput = `${packageDirectory}/types/index.d.ts`;
@@ -314,43 +316,70 @@ export async function check(repositoryRoot) {
 	}
 }
 
-export async function packAndVerify(repositoryRoot, destination) {
-	const stdout = await runCommand("npm", [
-		"pack",
-		"--json",
-		"--ignore-scripts",
-		"--pack-destination",
-		destination,
-		join(repositoryRoot, packageDirectory),
-	]);
+export async function packAndVerify(
+	repositoryRoot,
+	destination,
+	{ packageManager = "npm" } = {},
+) {
+	const stdout =
+		packageManager === "bun"
+			? (
+					await packCandidate({
+						stagedDirectory: join(repositoryRoot, packageDirectory),
+						outputDirectory: destination,
+					})
+				).stdout
+			: await runCommand("npm", [
+					"pack",
+					"--json",
+					"--ignore-scripts",
+					"--pack-destination",
+					destination,
+					join(repositoryRoot, packageDirectory),
+				]);
 	const reports = JSON.parse(stdout);
 	if (!Array.isArray(reports) || reports.length !== 1) {
-		throw new Error("[model-provider-package] npm pack returned invalid output");
+		throw new Error(
+			"[model-provider-package] npm pack returned invalid output",
+		);
 	}
 	const report = reports[0];
 	assertReviewedInventory(report.files.map(({ path }) => path));
 	const tarballPath = join(destination, report.filename);
 	await access(tarballPath);
-	return { files: sortedUnique(report.files.map(({ path }) => path)), tarballPath };
+	return {
+		files: sortedUnique(report.files.map(({ path }) => path)),
+		tarballPath,
+	};
 }
 
-export async function verifyCleanConsumer(repositoryRoot, tarballPath) {
+export async function verifyCleanConsumer(
+	repositoryRoot,
+	tarballPath,
+	{ packageManager = "npm" } = {},
+) {
 	const consumerRoot = await mkdtemp(join(tmpdir(), "you-model-providers-"));
 	try {
+		const env =
+			packageManager === "bun"
+				? await isolatedConsumerEnvironment(consumerRoot)
+				: process.env;
 		await writeFile(
 			join(consumerRoot, "package.json"),
 			'{"private":true,"type":"module"}\n',
 		);
 		await runCommand(
-			"npm",
-			[
-				"install",
-				"--ignore-scripts",
-				"--no-audit",
-				"--no-fund",
-				tarballPath,
-			],
-			{ cwd: consumerRoot },
+			packageManager,
+			packageManager === "bun"
+				? ["add", "--ignore-scripts", tarballPath]
+				: [
+						"install",
+						"--ignore-scripts",
+						"--no-audit",
+						"--no-fund",
+						tarballPath,
+					],
+			{ cwd: consumerRoot, env },
 		);
 		const consumerSource = [
 			'import catalog from "@you-agent-factory/model-providers/catalog" with { type: "json" };',
@@ -377,14 +406,16 @@ export async function verifyCleanConsumer(repositoryRoot, tarballPath) {
 				files: ["consumer.ts"],
 			}),
 		);
-		const compiler = join(
-			repositoryRoot,
-			"ui/node_modules/typescript/bin/tsc",
-		);
+		const compiler = join(repositoryRoot, "ui/node_modules/typescript/bin/tsc");
 		await access(compiler);
-		await runCommand(process.execPath, [compiler, "-p", "tsconfig.json"], {
-			cwd: consumerRoot,
-		});
+		await runCommand(
+			consumerNodeExecutable(),
+			[compiler, "-p", "tsconfig.json"],
+			{
+				cwd: consumerRoot,
+				env,
+			},
+		);
 
 		const runtimeExports = [
 			{
@@ -442,15 +473,13 @@ export async function verifyCleanConsumer(repositoryRoot, tarballPath) {
 			"}",
 		].join("\n");
 		await writeFile(join(consumerRoot, "consumer.mjs"), runtimeSource);
-		await runCommand(process.execPath, ["consumer.mjs"], {
+		await runCommand(consumerNodeExecutable(), ["consumer.mjs"], {
 			cwd: consumerRoot,
+			env,
 		});
 
 		const installedRoot = await realpath(
-			join(
-				consumerRoot,
-				"node_modules/@you-agent-factory/model-providers",
-			),
+			join(consumerRoot, "node_modules/@you-agent-factory/model-providers"),
 		);
 		for (const { path } of artifacts) {
 			const canonical = await readFile(

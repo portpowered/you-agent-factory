@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -31,6 +32,13 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 				writeRecordingFile(t, root, filepath.Join("2026-08", "2026-08-22", "v1-first.json"), "v1-first"),
 				writeRecordingFile(t, root, filepath.Join("2026", "08", "21", "same-later.json"), "same-later"),
 				writeRecordingFile(t, root, filepath.Join("2026", "08", "20", "same-earlier.json"), "same-earlier"),
+			}
+			modified := time.Date(2026, time.October, 8, 0, 0, 0, 0, time.UTC)
+			for index, path := range paths {
+				stamp := modified.Add(time.Duration(index) * time.Hour)
+				if err := os.Chtimes(path, stamp, stamp); err != nil {
+					t.Fatal(err)
+				}
 			}
 			loader := &recordedInputLoader{inputs: map[string]recordings.LoadReplayInputResult{
 				paths[0]: {Legacy: &recordings.ReplayArtifact{}},
@@ -71,6 +79,13 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 					ArtifactReference: "2026/08/21/same-later.json",
 					Format:            recordings.RecordedSessionFormatV1JSON,
 				},
+			}
+			for index := range want {
+				info, err := os.Stat(filepath.Join(root, filepath.FromSlash(want[index].ArtifactReference)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				want[index].ModifiedAt = info.ModTime()
 			}
 			if !reflect.DeepEqual(result.Sessions, want) {
 				t.Fatalf("sessions = %#v, want %#v", result.Sessions, want)
@@ -390,6 +405,33 @@ func TestListRecordedSessionsPreservesDirectoryFailure(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+type failedMetadataEntry struct {
+	fs.DirEntry
+	failure error
+}
+
+func (entry failedMetadataEntry) Info() (fs.FileInfo, error) { return nil, entry.failure }
+
+func TestListRecordedSessionsPreservesMetadataFailure(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := writeRecordingFile(t, root, filepath.Join("2026", "10", "08", "board.json"), "recording")
+	want := errors.New("controlled metadata failure")
+	reader := func(directory string) ([]fs.DirEntry, error) {
+		entries, err := os.ReadDir(directory)
+		if directory == filepath.Dir(path) && err == nil {
+			entries[0] = failedMetadataEntry{DirEntry: entries[0], failure: want}
+		}
+		return entries, err
+	}
+	loader := &recordedInputLoader{}
+	inventory := inventoryservice.New(reader, loader, logging.NoopLogger{})
+	result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+	if !errors.Is(err, want) || len(result.Sessions) != 0 || len(result.Warnings) != 0 || len(loader.calls) != 0 {
+		t.Fatalf("metadata failure result=%#v error=%v calls=%v", result, err, loader.calls)
 	}
 }
 

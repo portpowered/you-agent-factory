@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -19,6 +21,52 @@ import (
 type currentBoardReferencePersistence interface {
 	LoadCurrentBoard(context.Context, string) (string, error)
 	SaveCurrentBoard(context.Context, string, string) error
+}
+
+// Only a live local default board may become the repository's next board.
+// The configured path is the writer selection, never the resume source.
+func (opening *sessionRuntimeOpening) publishesCurrentBoardWriter() bool {
+	selection := opening.sessionSelection
+	return selection != nil && opening.sessionID == factorysessions.DefaultSessionID &&
+		selection.Mode == factorysessions.SessionRuntimeModeService && selection.Host.Port > 0 &&
+		strings.TrimSpace(opening.configured.Recordings.RecordPath) != "" &&
+		strings.TrimSpace(opening.configured.Recordings.ReplayPath) == ""
+}
+
+func (opening *sessionRuntimeOpening) publishCurrentBoardWriter(ctx context.Context) error {
+	if !opening.publishesCurrentBoardWriter() {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store, err := opening.currentBoardReferenceStore()
+	if err != nil {
+		return err
+	}
+	directory := opening.load.LoadedFactoryCfg.FactoryDir()
+	// Validate before replacement. An explicit invocation may bypass pointer
+	// selection, but it must not overwrite an invalid or foreign reference.
+	if _, err := store.LoadCurrentBoard(ctx, directory); err != nil {
+		return err
+	}
+	path, err := filepath.Abs(factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID))
+	if err != nil {
+		return err
+	}
+	return store.SaveCurrentBoard(ctx, directory, path)
+}
+
+func (opening *sessionRuntimeOpening) orderlyCurrentBoardStop(flush func(context.Context) error) func(context.Context) error {
+	if flush == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		if err := flush(ctx); err != nil {
+			return err
+		}
+		return opening.publishCurrentBoardWriter(ctx)
+	}
 }
 
 // The reference scopes selection, but is not authority for the bytes at its
@@ -158,15 +206,28 @@ type currentBoardFactsReader interface {
 	MatchCurrentBoardWork(context.Context, string, *factorydefinitions.FactoryWorldState) (bool, error)
 }
 
-// selectUniqueCurrentBoard rejects every ambiguous match, including prefixes.
-func selectUniqueCurrentBoard(histories map[string][]factorydefinitions.FactoryEvent) (string, error) {
-	if len(histories) > 1 {
-		return "", fmt.Errorf("AMBIGUOUS_HISTORY: multiple retained recordings match durable facts")
+// Unknown write times cannot establish recency among multiple matches.
+func selectNewestCurrentBoard(histories map[string]time.Time) (string, error) {
+	if len(histories) == 0 {
+		return "", fmt.Errorf("MISSING_HISTORY: no retained recording matches durable board facts")
 	}
-	for path := range histories {
-		return path, nil
+	var newest time.Time
+	var selected string
+	tied := false
+	for path, modified := range histories {
+		if len(histories) > 1 && modified.IsZero() {
+			return "", fmt.Errorf("AMBIGUOUS_HISTORY: matching recordings have unknown write order")
+		}
+		if selected == "" || modified.After(newest) {
+			selected, newest, tied = path, modified, false
+		} else if modified.Equal(newest) {
+			tied = true
+		}
 	}
-	return "", fmt.Errorf("MISSING_HISTORY: no retained recording matches durable board facts")
+	if tied {
+		return "", fmt.Errorf("AMBIGUOUS_HISTORY: multiple newest recordings match durable facts")
+	}
+	return selected, nil
 }
 
 func currentBoardContainsFacts(events, facts []factorydefinitions.FactoryEvent) bool {
@@ -211,7 +272,7 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 	if err != nil {
 		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy recording inventory could not be read", err)
 	}
-	histories := make(map[string][]factorydefinitions.FactoryEvent)
+	histories := make(map[string]time.Time)
 	for _, candidate := range listed.Sessions {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -224,10 +285,10 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 			return "", err
 		}
 		if events != nil {
-			histories[path] = events
+			histories[path] = candidate.ModifiedAt
 		}
 	}
-	path, err := selectUniqueCurrentBoard(histories)
+	path, err := selectNewestCurrentBoard(histories)
 	if err != nil {
 		return "", currentBoardHistoryFailure("", opening.sessionID, err.Error(), nil)
 	}
@@ -238,6 +299,9 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 }
 
 func (opening *sessionRuntimeOpening) publishCurrentBoardReference(ctx context.Context) error {
+	if opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
+		return opening.publishCurrentBoardWriter(ctx)
+	}
 	if !opening.usesImplicitCurrentBoard() {
 		if !opening.restoresExplicitCurrentBoard() {
 			return nil
@@ -308,6 +372,13 @@ func (r *Root) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRunt
 	path := filepath.Join(root, relative)
 	history, err := restoreCurrentBoardHistory(r.recordingsService, path, opening.sessionID, false)
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", nil, ctx.Err()
+		}
+		if isUnreadableLegacyBoardArtifact(err) {
+			opening.skippedBoardRecordings = append(opening.skippedBoardRecordings, artifact)
+			return "", nil, nil
+		}
 		return "", nil, err
 	}
 	if !currentBoardHistoryBelongsToFactory(history.events, opening.load.LoadedFactoryCfg.FactoryDir()) {
@@ -324,6 +395,15 @@ func (r *Root) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRunt
 		return path, history.events, nil
 	}
 	return "", nil, nil
+}
+
+// Only artifact-specific failures are skippable. Missing service capabilities
+// and other systemic failures must not turn into an empty board or fallback.
+func isUnreadableLegacyBoardArtifact(err error) bool {
+	var diagnostic *currentBoardHistoryRestoreError
+	var fileError *fs.PathError
+	return errors.As(err, &diagnostic) &&
+		(diagnostic.code == currentBoardRecordingCorruptCode || diagnostic.code == currentBoardRecordingMissingCode || errors.As(err, &fileError))
 }
 
 func currentBoardHistoryBelongsToFactory(events []factorydefinitions.FactoryEvent, directory string) bool {

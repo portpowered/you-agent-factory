@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
@@ -21,14 +22,83 @@ export function discoverWorkflowFiles(workflowDirectory = ".github/workflows") {
 
 function workflowJobSection(workflow, jobName) {
 	const match = workflow.match(
-		new RegExp(`\\n  ${jobName}:\\n([\\s\\S]*?)(?=\\n  [a-z0-9-]+:\\n|\\s*$)`),
+		new RegExp(`\\n  ${jobName}:\\n([\\s\\S]*?)(?=\\n  [a-z0-9_-]+:\\n|\\s*$)`),
 	);
 	if (!match) throw new Error(`workflow contract is missing job: ${jobName}`);
 	return match[0];
 }
 
+export function validateTaggedPackageWorkflowContract({ workflow } = {}) {
+	const job = workflowJobSection(workflow, "publish-tagged-release");
+	requireWorkflowText(
+		workflow,
+		"BUN_VERSION: 1.3.12",
+		"tagged Bun must remain pinned",
+	);
+	requireWorkflowText(
+		job,
+		"needs: resolve-release-tag",
+		"tagged preparation and publication share one job",
+	);
+	requireWorkflowText(
+		job,
+		"environment: development-publishing",
+		"tagged publishing environment is unchanged",
+	);
+	requireWorkflowText(
+		job,
+		"id-token: write",
+		"tagged provenance retains OIDC permission",
+	);
+	requireWorkflowText(
+		job,
+		"ref: ${{ github.event.workflow_run.head_sha }}",
+		"tagged checkout retains verified source",
+	);
+	requireWorkflowText(
+		job,
+		'--expected-source-commit "${{ github.event.workflow_run.head_sha }}"',
+		"publisher validates source identity",
+	);
+	requireWorkflowOrder(
+		job,
+		"bun run --bun scripts/public-release-package-candidate.mjs",
+		"bun run --bun scripts/public-release-package-publish.mjs",
+		"tagged candidate is prepared before publication",
+	);
+	if (
+		/\n  prepare-public-package-candidate:|actions\/(?:upload|download)-artifact|npm install/.test(
+			job,
+		) ||
+		/\n  prepare-public-package-candidate:/.test(workflow)
+	) {
+		throw new Error(
+			"tagged preparation must not have an artifact hop or repeated setup",
+		);
+	}
+	return { name: "tagged-package-workflow", status: "pass" };
+}
+
 function requireWorkflowMatch(value, pattern, description) {
 	if (!pattern.test(value)) throw new Error(`workflow contract failed: ${description}`);
+}
+
+export function validateReusablePackageWorkflowContract({ workflow } = {}) {
+	const job = workflowJobSection(workflow, "verify_api_package");
+	const results = ["api_package_result", "api_candidate_result", "packaged_factories_package_result", "packaged_factories_candidate_result", "model_providers_package_result"];
+	for (const name of results) {
+		requireWorkflowText(workflow, `value: \${{ jobs.verify_api_package.outputs.${name} }}`, "retain all five reusable outputs");
+		requireWorkflowText(job, `steps.record_result.outputs.${name}`, "retain independent results");
+	}
+	requireWorkflowText(job, "inputs.is_ci_call && (inputs.run_api_package || inputs.run_packaged_factories_package || inputs.run_model_providers_package)", "retain selection");
+	requireWorkflowText(job, "ref: ${{ inputs.source_commit }}", "check out requested source");
+	requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "pin shared Bun setup");
+	requireWorkflowText(job, "PACKAGE_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}", "preserve typed inputs/defaults");
+	requireWorkflowText(job, "bun run --bun scripts/public-package-workflow.mjs", "single read-only artifact runner");
+	if (/\n  (?:build_api_candidate|build_packaged_factories_candidate|verify_packaged_factories_package|verify_model_providers_package):/.test(workflow) || /id-token:|contents: write|npm |actions\/(?:upload|download)-artifact|continue-on-error/.test(job)) {
+		throw new Error("reusable package verification must remain one read-only job without artifact hops");
+	}
+	return { name: "reusable-package-workflow", status: "pass" };
 }
 
 function requireWorkflowText(value, text, description) {
@@ -78,9 +148,46 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	for (const result of ["FRONTEND_RESULT", "FRONTEND_COVERAGE_RESULT"]) {
 		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "static and coverage share the aggregate result");
 	}
-	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}", "Component remains independent");
+	requireWorkflowText(policy, "FRONTEND_COMPONENT_RESULT: ${{ needs.frontend.result }}", "Component shares aggregate result");
+	for (const result of ["FRONTEND_BROWSER_RESULT", "FRONTEND_STORYBOOK_RESULT"]) {
+		requireWorkflowText(policy, `${result}: \${{ needs.frontend.result }}`, "browser proofs share aggregate result");
+	}
+	requireWorkflowText(frontend, "run: bash scripts/ci/run-frontend-verification.sh", "run retained frontend proofs");
+	requireWorkflowText(frontend, "path: ~/.cache/ms-playwright", "retain browser cache");
+	requireWorkflowText(frontend, "key: playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ui/bun.lock') }}", "browser cache follows platform and lock");
+	requireWorkflowText(frontend, "run: make ui-install-playwright", "install browsers on cache miss");
+	if (/\n  frontend-(component|browser|storybook):/.test(workflow)) throw new Error("workflow contract duplicates frontend jobs");
 	if (policy.includes("ui-coverage")) throw new Error("policy must not depend on removed coverage job");
 	return { name: "frontend-shared-setup-workflow", status: "pass" };
+}
+
+export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
+	const setup = workflowJobSection(workflow, "classify");
+	const api = workflowJobSection(workflow, "api-pr-verification");
+	const packages = workflowJobSection(workflow, "development-package");
+	const policy = workflowJobSection(workflow, "verification-policy");
+	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
+		"docs_result: ${{ steps.docs-reference.outcome }}", "if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'", "run: make docs-reference-smoke"]) {
+		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
+	}
+	requireWorkflowText(packages, "run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}", "retain non-PR API selection");
+	requireWorkflowText(api, "if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'", "independent selected PR API proof");
+	requireWorkflowText(api, "run: bash scripts/ci/run-api-pr-verification.sh", "retain API proofs");
+	for (const [result, expression] of [["DOCS_RESULT", "needs.classify.outputs.docs_result"], ["WORKFLOW_LINT_RESULT", "needs.classify.result"],
+		["API_RESULT", "github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_package_result"],
+		["API_CANDIDATE_RESULT", "github.event_name == 'pull_request' && needs.api-pr-verification.result || needs.development-package.outputs.api_candidate_result"]]) {
+		requireWorkflowText(policy, `${result}: \${{ ${expression} }}`, "map merged required proof");
+	}
+	requireWorkflowText(policy, "API_INDEPENDENT: ${{ github.event_name == 'pull_request' }}", "API-only PR does not require reusable children");
+	if (/\n  (workflow-lint|docs-reference):/.test(workflow)) throw new Error("workflow contract duplicates cheap jobs");
+	const targets = frontendPlan().map((step) => step.args[0]);
+	if (JSON.stringify(targets) !== JSON.stringify(["ui-component-test", "ui-integration-test", "ui-storybook-integration-test"])) {
+		throw new Error("workflow contract must retain every frontend suite and build once");
+	}
+	const apiTargets = apiPlan({}).slice(0, 4).map((step) => step.args[0]);
+	if (JSON.stringify(apiTargets) !== JSON.stringify(["ui-deps", "contracts-smoke", "api-smoke", "api-package-verify"])) throw new Error("workflow contract must retain API proof commands");
+	if (!workflowPlan().some((step) => step.args.includes("scripts/ci/functional-compile-cache.test.py"))) throw new Error("workflow contract must retain compiler-cache proof");
+	return { name: "consolidated-ci-workflow", status: "pass" };
 }
 
 /**
@@ -213,109 +320,6 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 	return { name: "functional-diagnostics-artifact-workflow", status: "pass" };
 }
 
-function validateControlledRawFailureSelector(workflow, fixtureWorkflow, fixtureJob) {
-	requireWorkflowMatch(
-		workflow,
-		/^  pull_request:\n    types: \[opened, synchronize, reopened\]$/m,
-		"shared CI must not start on pull request label events",
-	);
-	requireWorkflowMatch(
-		fixtureWorkflow,
-		/^  pull_request:\n    types: \[labeled\]$/m,
-		"controlled raw failure selection must use its dedicated labeled-event workflow",
-	);
-	requireWorkflowMatch(
-		fixtureWorkflow,
-		/^concurrency:\n  group: controlled-raw-failure-\$\{\{ github\.event\.pull_request\.number \}\}\n  cancel-in-progress: false$/m,
-		"controlled raw failure must use a distinct non-canceling concurrency group",
-	);
-
-	for (const condition of [
-		"github.event.pull_request.number == 2637",
-		"github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923'",
-		"github.event.pull_request.head.repo.full_name == github.repository",
-		"github.event.label.name == 'ci-controlled-raw-failure'",
-	]) {
-		requireWorkflowText(
-			fixtureJob.replace(/\s+/g, " "),
-			condition,
-			`controlled raw failure job must include ${condition}`,
-		);
-	}
-	const selector = workflowStepSection(fixtureJob, "Validate controlled fixture head and select rendezvous");
-	requireWorkflowMatch(selector, /eventHead !== liveHead/, "controlled selector must reject a stale pull request event");
-	requireWorkflowMatch(selector, /uses: actions\/github-script@v7/, "controlled selector must use github-script");
-	requireWorkflowMatch(selector, /github\.rest\.pulls\.get/, "controlled selector must read the live pull request head");
-	requireWorkflowMatch(
-		selector,
-		/RUNNER_TEMP.*pr2637-raw-failure-.*liveHead/s,
-		"controlled selector must scope its rendezvous to the live head",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_RAW_FAILURE_WITNESS: "1"\s*$/m,
-		"controlled selector must enable the raw failure witness",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT: 90s\s*$/m,
-		"controlled selector must use the bounded rendezvous timeout",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_TEST_VIZ_PACKAGES: github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailure github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailurepeer\s*$/m,
-		"controlled selector must run only the two witness packages",
-	);
-	if (/github\.event\.(?:inputs|client_payload)|workflow_dispatch/.test(selector)) {
-		throw new Error("workflow contract failed: controlled selector must not accept caller-supplied dispatch inputs");
-	}
-	requireWorkflowOrder(
-		fixtureJob,
-		"      - name: Validate controlled fixture head and select rendezvous",
-		"      - name: Run controlled raw failure fixture",
-		"controlled selector must set its environment before the functional runner starts",
-	);
-}
-
-function validateControlledRawFailurePublication(fixtureJob) {
-	const verification = workflowStepSection(fixtureJob, "Verify expected failure and publish witness");
-	const upload = workflowStepSection(fixtureJob, "Upload controlled raw failure diagnostics");
-	requireWorkflowMatch(verification, /^        if: always\(\)\s*$/m, "raw failure witness verification must run after the test step");
-	requireWorkflowMatch(verification, /CONTROLLED_RUN_OUTCOME.*success/, "raw failure witness must require a successful fixture runner");
-	requireWorkflowMatch(verification, /\.captureStatus == "complete"/, "raw failure witness must require complete raw capture");
-	requireWorkflowMatch(verification, /\.failures \| length == 2/, "raw failure witness must require both fixture failures");
-	requireWorkflowMatch(verification, /wc -l < "\$source"\).* -eq 6/, "raw failure witness must require all six interleaved events");
-	requireWorkflowMatch(verification, /cp "\$source" "\$target"/, "raw failure witness must publish the interleaving evidence");
-	requireWorkflowMatch(upload, /^        if: always\(\)\s*$/m, "diagnostics artifact must upload even after an unexpected test failure");
-	requireWorkflowMatch(upload, /^          name: controlled-raw-failure-witness\s*$/m, "controlled raw failure must use its own diagnostic artifact");
-	requireWorkflowMatch(
-		upload,
-		/^            \.artifacts\/functional-test-viz\/raw-failure-interleaving\.jsonl\s*$/m,
-		"controlled raw failure artifact must include the interleaving witness",
-	);
-	requireWorkflowMatch(upload, /^          retention-days: 14\s*$/m, "controlled raw failure artifact retention must remain 14 days");
-	requireWorkflowOrder(
-		fixtureJob,
-		"      - name: Verify expected failure and publish witness",
-		"      - name: Upload controlled raw failure diagnostics",
-		"the fixture artifact must be uploaded after witness validation",
-	);
-}
-
-/**
- * Keep the guarded expected-red capture isolated from shared required CI and
- * preserve its interleaving witness in a dedicated diagnostic artifact.
- */
-export function validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow } = {}) {
-	if (typeof workflow !== "string" || typeof fixtureWorkflow !== "string") {
-		throw new Error("controlled raw failure workflow contract requires shared and fixture workflow text");
-	}
-	const fixtureJob = workflowJobSection(fixtureWorkflow, "controlled-raw-failure");
-	validateControlledRawFailureSelector(workflow, fixtureWorkflow, fixtureJob);
-	validateControlledRawFailurePublication(fixtureJob);
-	return { name: "controlled-raw-failure-workflow", status: "pass" };
-}
-
 export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	const job = workflowJobSection(workflow, "backend-lint");
 	if (/go test[^\n]*-race/.test(job)) throw new Error("Backend Lint must not run a race step");
@@ -335,9 +339,14 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
-	const fixtureWorkflow = readFileSync(join(root, ".github", "workflows", "controlled-raw-failure-witness.yml"), "utf8");
 	return {
 		contracts: [
+			validateReusablePackageWorkflowContract({
+				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
+			}),
+			validateTaggedPackageWorkflowContract({
+				workflow: readFileSync(join(root, ".github", "workflows", "development-package.yml"), "utf8"),
+			}),
 			validateBackendLintWorkflowContract({
 				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
@@ -347,7 +356,6 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
 			}),
 			validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow }),
-			validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow }),
 		],
 	};
 }
@@ -377,6 +385,9 @@ export function runWorkflowLint({
 		throw new Error(`Workflow schema lint failed with exit code ${result.status}${termination}.`);
 	}
 	if (validateRepositoryContracts) {
+		validateConsolidatedCIWorkflowContract({
+			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
+		});
 		validateFrontendSharedSetupWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});

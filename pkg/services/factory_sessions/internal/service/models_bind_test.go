@@ -536,41 +536,67 @@ func TestAssembleRuntimeProductsCarriesModelsScopeIntoOpenedRuntime(t *testing.T
 	}
 }
 
-func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicationRoles(t *testing.T) {
+func TestAssembleRuntimeProductsRetainsEffectiveSessionFacts(t *testing.T) {
 	t.Parallel()
+	for _, test := range []struct {
+		name, requested, resolved, want string
+		err                             error
+	}{
+		{name: "resolved", requested: " selected ", resolved: " canonical ", want: "canonical"},
+		{name: "empty projection", requested: " selected ", want: "selected"},
+		{name: "missing", requested: " selected ", want: "selected", err: factorysessions.ErrDurableSessionNotFound},
+		{name: "default", resolved: "canonical"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			gateway := &runtimeProductsSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
+				calls++
+				if id != "selected" {
+					t.Fatalf("lookup ID = %q", id)
+				}
+				return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: test.resolved}}, test.err
+			}}
+			scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:assembled")
+			if err != nil {
+				t.Fatal(err)
+			}
+			opened := assembleRuntimeProducts(t.Context(), gateway, nil, scope, inertHostedInstance{}, nil, nil,
+				"/factory", "runtime-1", "backend-1", nil, test.requested)
+			facts := opened.modelInvocation
+			if facts.FactorySessionID != test.want || facts.Scope != scope || facts.RuntimeID != "runtime-1" ||
+				facts.FactoryDirectory != "/factory" || facts.WorkingDirectory != "/factory" || opened.backendScopeID != "backend-1" {
+				t.Fatalf("opened facts = %+v, backend = %q", facts, opened.backendScopeID)
+			}
+			if (test.requested == "" && calls != 0) || (test.requested != "" && calls != 1) {
+				t.Fatalf("ID lookup calls = %d", calls)
+			}
+			if opened.replayExecution != nil {
+				t.Fatal("live opening acquired historical execution")
+			}
+		})
+	}
+}
 
-	gateway := &runtimeProductsSessionsRole{readSession: func(string) factorysessions.SessionReadResult {
-		return factorysessions.SessionReadResult{SessionID: "host-bound-gateway"}
-	}, readLiveSession: func(string) factorysessions.LiveControlSnapshot {
-		return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: "host-bound-gateway"}}
-	}}
-	opened := assembleRuntimeProducts(
-		context.Background(),
-		gateway,
-		nil,
-		models.RuntimeScopeRef{},
-		inertHostedInstance{},
-		nil,
-		nil,
-		"/factory",
-		"runtime-1",
-		"backend-1",
-		func() error { return nil },
-	)
+type t17hRuntimeFacts struct {
+	inertHostedInstance
+	logger *zap.Logger
+}
 
-	got, err := opened.sessions.GetSession(context.Background(), "session-1")
-	if err != nil {
-		t.Fatalf("FactorySessions.GetSession() error = %v, want host-bound gateway read", err)
-	}
-	if got.SessionID != "host-bound-gateway" {
-		t.Fatalf("FactorySessions.GetSession() = %q, want host-bound gateway result", got.SessionID)
-	}
-	liveRead, err := opened.liveControl.GetFactorySession(context.Background(), "session-1")
-	if err != nil {
-		t.Fatalf("LiveControl.GetSession() error = %v, want host-bound gateway read", err)
-	}
-	if liveRead.Context.FactorySessionID != "host-bound-gateway" {
-		t.Fatalf("LiveControl.GetFactorySession() = %q, want host-bound gateway result", liveRead.Context.FactorySessionID)
+func (instance t17hRuntimeFacts) StreamGeneration() string   { return "generation-selected" }
+func (instance t17hRuntimeFacts) RuntimeLogger() *zap.Logger { return instance.logger }
+func (instance t17hRuntimeFacts) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics {
+	return factoryruntime.RuntimeLogDiagnostics{Path: "/selected/log", StartTimeUTC: time.Unix(17, 0)}
+}
+
+func TestT17HAssemblyKeepsGenerationAndDiagnostics(t *testing.T) {
+	t.Parallel()
+	logger := zap.NewNop()
+	opened := assembleRuntimeProducts(t.Context(), nil, nil, models.RuntimeScopeRef{}, t17hRuntimeFacts{logger: logger},
+		nil, nil, "/selected", "runtime-selected", "backend-selected", nil, "session-selected")
+	if opened.modelInvocation.GenerationID != "generation-selected" || opened.logger != logger ||
+		opened.diagnostics.Path != "/selected/log" || !opened.diagnostics.StartTimeUTC.Equal(time.Unix(17, 0)) {
+		t.Fatalf("runtime generation/diagnostics drifted: %+v %+v", opened.modelInvocation, opened.diagnostics)
 	}
 }
 
@@ -918,32 +944,11 @@ func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t
 
 type runtimeProductsSessionsRole struct {
 	roles.SessionGateway
-	readSession     func(string) factorysessions.SessionReadResult
-	readLiveSession func(string) factorysessions.LiveControlSnapshot
-}
-
-func (role *runtimeProductsSessionsRole) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
-	return role.readSession(sessionID), nil
+	readLiveSession func(string) (factorysessions.LiveControlSnapshot, error)
 }
 
 func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
-	return role.readLiveSession(sessionID), nil
-}
-
-func (role *runtimeProductsSessionsRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (role *runtimeProductsSessionsRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
-	return factorysessions.LiveControlResult{}, errors.New("not implemented")
-}
-
-func (role *runtimeProductsSessionsRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
-	return factorysessions.LiveControlResult{}, errors.New("not implemented")
-}
-
-func (role *runtimeProductsSessionsRole) CloseFactorySession(context.Context, string) error {
-	return errors.New("not implemented")
+	return role.readLiveSession(sessionID)
 }
 
 type openingCoordinatorProjection struct {
