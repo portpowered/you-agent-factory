@@ -100,9 +100,42 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	t.Run("successor history", func(t *testing.T) {
 		testSeededReplayResumePreservesSuccessorHistory(t, reusable)
 	})
-	t.Run("startup publication safety", func(t *testing.T) {
-		testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t, reusable)
+	t.Run("F01 read failure safety", func(t *testing.T) {
+		testRecordStartupSafetyReadFailurePreservesTargetAndCause(t, reusable)
 	})
+	t.Run("JSON direct restore", func(t *testing.T) {
+		testRecordStartupSafetyDirectRestore(t, reusable)
+	})
+}
+
+// An explicitly selected UUID does not make a retained JSON board a fresh
+// recording. Restore its Work and prefix before allowing any output flush.
+func testRecordStartupSafetyDirectRestore(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	sessionID := uuid.NewString()
+	selectedPath := filepath.Join(dir, "current-board.__factory_session_id__.json")
+	path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
+	var artifact factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	for index := range artifact.Events {
+		artifact.Events[index].Context.SessionID = &sessionID
+	}
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The same board is reopened only after its preceding host has joined.
+	for opening := 0; opening < 3; opening++ {
+		running := reusable.runForSession(t, dir, path, sessionID, "--record", selectedPath)
+		assertSeededSuccessorWorkAndHistory(t, running, true)
+		running.daemon.Stop(t)
+	}
 }
 
 // A successor must remain recoverable after the live ledger has been released.
@@ -288,15 +321,17 @@ func (reusable *seededReplayResumeProcess) readReplayRecording(path string) ([]b
 	return append([]byte(nil), payload...), nil
 }
 
-// Denied target preparation is a pre-readiness publication failure. It also
-// exercises repeated final-flush cleanup without permitting a write to history.
-func testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t *testing.T, reusable *seededReplayResumeProcess) {
+// A restore read failure must abort before any writes to the resolved target,
+// including writes from startup cleanup. Each session owns its fault and file.
+func testRecordStartupSafetyReadFailurePreservesTargetAndCause(t *testing.T, reusable *seededReplayResumeProcess) {
 	t.Parallel()
-	for _, name := range []string{"first board", "independent board"} {
-		t.Run(name, func(t *testing.T) {
+	for _, format := range []string{"json", "jsonl"} {
+		t.Run(format, func(t *testing.T) {
 			t.Parallel()
 			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
-			path := filepath.Join(dir, "retained.jsonl")
+			sessionID := uuid.NewString()
+			selectedPath := filepath.Join(dir, "retained.__factory_session_id__."+format)
+			path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
 			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 			before := []byte("retained recording bytes")
@@ -312,9 +347,8 @@ func testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t *testing
 				delete(reusable.readErrorsByPath, path)
 				reusable.mu.Unlock()
 			})
-			sessionID := uuid.NewString()
 			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
-				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", path,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selectedPath,
 				"--provider", "CODEX", "--model", "gpt-5-codex"})
 			home := t.TempDir()
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
@@ -327,7 +361,7 @@ func testRecordStartupSafetyPreparationFailurePreservesTargetAndCause(t *testing
 			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); decodeErr != nil {
 				t.Fatalf("decode ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
 			}
-			if response.Code != "SERVER_START_FAILED" || response.Family != factoryapi.ErrorFamilyInternalServerError ||
+			if response.Code != "CURRENT_BOARD_RECORDING_UNREADABLE" || response.Family != factoryapi.ErrorFamilyInternalServerError ||
 				!strings.Contains(response.Message, fmt.Sprintf("%q", path)) || !strings.Contains(response.Message, "permission denied") {
 				t.Fatalf("startup response omits selected path or file cause: %#v", response)
 			}
