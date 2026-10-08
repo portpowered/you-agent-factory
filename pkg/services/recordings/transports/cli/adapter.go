@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -134,6 +135,14 @@ func (defaultAdapter) RecordingDiagnosticsLabel(resolved ResolvedRecordPath, rep
 // ValidateInvocationFlags rejects incompatible Recordings CLI flag combinations
 // before runtime opening begins.
 func ValidateInvocationFlags(request InvocationRequest) error {
+	resumePath := strings.TrimSpace(request.ResumePath)
+	recordPath := strings.TrimSpace(request.RecordPath)
+	if resumePath != "" && recordPath != "" && filepath.Clean(resumePath) == filepath.Clean(recordPath) {
+		return &clidiag.LocalFailure{
+			Code:    "RECORDING_SOURCE_CONFLICT",
+			Message: fmt.Sprintf("--record target %q is the --resume source; choose a distinct successor recording", recordPath),
+		}
+	}
 	if strings.TrimSpace(request.ResumePath) != "" && strings.TrimSpace(request.ReplayPath) != "" {
 		return clidiag.NewFlagConflictFailure("--resume", "--replay", nil)
 	}

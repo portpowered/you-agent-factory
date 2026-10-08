@@ -106,6 +106,26 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 	}
 }
 
+func TestAdapterRefusesResumeSourceAsSuccessor(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"board.json", "./board.json", "unused/../board.json"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			_, err := New().ResolveRecordPath(InvocationRequest{ResumePath: "board.json", RecordPath: target})
+			var diagnostic interface {
+				CLIErrorCode() string
+				CLIErrorFamily() factoryapi.ErrorFamily
+			}
+			if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" || diagnostic.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("source reuse error = %v, want typed bad-request refusal", err)
+			}
+			if !strings.Contains(err.Error(), target) || !strings.Contains(err.Error(), "distinct successor") {
+				t.Fatalf("refusal lacks target and recovery direction: %v", err)
+			}
+		})
+	}
+}
+
 func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 	t.Parallel()
 

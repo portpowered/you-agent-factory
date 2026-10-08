@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -209,6 +210,49 @@ type seededReplayResumeProcess struct {
 	payloadsByPath   map[string][]byte
 	readErrorsByPath map[string]error
 	nextPort         atomic.Int32
+}
+
+func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, name := range []string{"same path", "normalized path"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			factoryDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(factoryDir, "board.json")
+			original := seededReplayResumeArtifactPayload(t, true)
+			if err := os.WriteFile(source, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := source
+			if name == "normalized path" {
+				target = factoryDir + string(filepath.Separator) + "." + string(filepath.Separator) + "board.json"
+			}
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--session", uuid.NewString(), "--dir", factoryDir,
+				"--continuously", "--with-server", "--quiet", "--resume", source, "--record", target,
+			})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = factoryDir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" {
+				t.Fatalf("source reuse result = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); decodeErr != nil {
+				t.Fatalf("decode source-conflict ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
+			}
+			if response.Code != "RECORDING_SOURCE_CONFLICT" || response.Family != factoryapi.ErrorFamilyBadRequest || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("source-conflict response = %#v", response)
+			}
+			if !bytes.Equal(mustReadSeededReplayArtifact(t, source), original) {
+				t.Fatal("refused successor changed resume source bytes")
+			}
+		})
+	}
 }
 
 type seededReplayResumeRun struct {
