@@ -100,9 +100,8 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 
 	api := newCodexSharedHTTPServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:                    api.start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		APIServerStarter:      api.start,
+		ProviderCommandRunner: runner,
 	})
 	fixture := &codexSharedProcessFixture{
 		rootDir: rootDir, homeDir: homeDir,

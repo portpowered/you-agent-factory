@@ -76,9 +76,6 @@ func startWorkerSessionTranscriptFixture(t *testing.T) workerSessionTranscriptFi
 		Env:                       env,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
-			ProviderSessionResolveHomeDirectory: func() (string, error) {
-				return filepath.Join(homeDir, "unavailable-native-root"), nil
-			},
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })

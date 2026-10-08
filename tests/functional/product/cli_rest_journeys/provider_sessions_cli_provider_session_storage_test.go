@@ -1,31 +1,11 @@
 package cli_rest_journeys_test
 
 import (
-	"errors"
-	"io"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
-
-// Route faults only by the selected immutable ID, so peer session reads use
-// the same real temporary storage without a process-global fault switch.
-type providerSessionReadFiles struct{}
-
-func (providerSessionReadFiles) Open(path string) (io.ReadCloser, error) {
-	if filepath.Base(path) == "rollout-session_fixture_codex_open_fault_read.jsonl" {
-		return nil, errors.New("private-storage-fault: /private/operator/session-store")
-	}
-	return os.Open(path)
-}
-
-func (providerSessionReadFiles) Stat(path string) (fs.FileInfo, error) {
-	return os.Stat(path)
-}
 
 func addProviderSessionReadRoutes(t *testing.T, home string, routes map[string]platformprocess.CommandResult, codexStdout []byte) {
 	t.Helper()

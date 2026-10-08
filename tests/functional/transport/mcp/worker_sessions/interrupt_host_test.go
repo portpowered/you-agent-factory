@@ -7,13 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -151,13 +149,9 @@ func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host
 	// Join the original writer before constructing a new host over the same
 	// isolated profile. Recovery must use captures with native reads denied.
 	host.Close(t)
-	home := t.TempDir()
-	native := &deniedMetadataProviderFiles{}
 	reopened := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
-			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }, ProviderSessionFileSystem: native,
-		},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
 	})
 	session, ctx := startMCP(t, process, reopened.URL())
 	page := historyParityPage(t, ctx, session, reopened, "archived", "direct", "")
@@ -183,20 +177,6 @@ func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host
 		assertTranscriptEqual(t, transcript, getHost(t, reopened.URL()+"/worker-sessions/"+id+"/transcript"))
 	}
 	assertProviderCallCount(t, runner, 2)
-	if native.calls.Load() != 0 {
-		t.Fatal("archived metadata recovery attempted a provider-native file read")
-	}
-}
-
-type deniedMetadataProviderFiles struct{ calls atomic.Int64 }
-
-func (f *deniedMetadataProviderFiles) Open(string) (io.ReadCloser, error) {
-	f.calls.Add(1)
-	return nil, os.ErrPermission
-}
-
-func (f *deniedMetadataProviderFiles) Stat(string) (fs.FileInfo, error) {
-	return nil, os.ErrPermission
 }
 
 func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string) {
@@ -250,18 +230,11 @@ func assertTerminalReplayParity(t *testing.T, ctx context.Context, session *mcp.
 
 func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter, denyNative ...bool) (*support.FunctionalAPIServer, *interruptHostRunner, string) {
 	t.Helper()
-	home := t.TempDir()
 	output := capturedProviderFixtureOutput(t)
 	runner := &interruptHostRunner{output: output, started: make(chan platformprocess.CommandRequest, 3), sourceStopped: make(chan struct{})}
 	dir := support.ScaffoldSingleStepFactory(t, "mcp-interrupt-host")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
-	var native interface {
-		Open(string) (io.ReadCloser, error)
-		Stat(string) (fs.FileInfo, error)
-	}
-	if len(denyNative) > 0 && denyNative[0] {
-		native = &deniedMetadataProviderFiles{}
-	}
+	home := t.TempDir()
 	var observe func(recordings.WorkerRecordingStore)
 	if failing, ok := writer.(*failingSuccessorStore); ok {
 		observe = func(store recordings.WorkerRecordingStore) { failing.WorkerRecordingStore = store }
@@ -269,7 +242,7 @@ func startInterruptHost(t *testing.T, writer recordings.WorkerRecordingWriter, d
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: writer, WorkerRecordingStoreObserver: observe, ProviderSessionFileSystem: native, ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: writer, WorkerRecordingStoreObserver: observe},
 	})
 	return host, runner, dir
 }

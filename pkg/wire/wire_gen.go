@@ -8,17 +8,18 @@ package wire
 
 import (
 	"context"
+
 	wire11 "github.com/google/wire"
 	"github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	wire8 "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	wire4 "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	wire3 "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	wire5 "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	wire10 "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	wire7 "github.com/portpowered/infinite-you/pkg/services/models/wire"
@@ -28,7 +29,7 @@ import (
 	wire9 "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/work/wire"
-	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -136,7 +137,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	providersessionsService, err := provideProviderSessions(edges2, v10)
+	providersessionsService, err := provideProviderSessions(v10)
 	if err != nil {
 		return nil, err
 	}

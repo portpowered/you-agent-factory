@@ -120,7 +120,6 @@ func invalidOverrides2() []invalidOverrideCase {
 		{"FactoryDefinitionAuthoredWriterFileSystem", serviceedges.Edges{FactoryDefinitionAuthoredWriterFileSystem: (*nilFactoryDefinitionAuthoredWriterFileSystem)(nil)}},
 		{"FactoryDefinitionScaffoldFileSystem", serviceedges.Edges{FactoryDefinitionScaffoldFileSystem: (*nilFactoryDefinitionScaffoldFileSystem)(nil)}},
 		{"FactoryDefinitionScaffoldOutput", serviceedges.Edges{FactoryDefinitionScaffoldOutput: (*nilFactoryDefinitionScaffoldOutput)(nil)}},
-		{"ProviderSessionFileSystem", serviceedges.Edges{ProviderSessionFileSystem: (*nilProviderSessionFileSystem)(nil)}},
 		{"OperatorSettingsFileSystem", serviceedges.Edges{OperatorSettingsFileSystem: (*nilOperatorSettingsFileSystem)(nil)}},
 		{"Clock", serviceedges.Edges{Clock: (*nilClock)(nil)}},
 		{"WorkerRecordingWriter", serviceedges.Edges{WorkerRecordingWriter: (*nilWorkerRecordingWriter)(nil)}},
@@ -396,14 +395,6 @@ type nilFactoryDefinitionScaffoldFileSystem struct {
 type nilFactoryDefinitionScaffoldOutputEffect factorydefinitions.ScaffoldOutput
 type nilFactoryDefinitionScaffoldOutput struct {
 	nilFactoryDefinitionScaffoldOutputEffect
-}
-
-type nilProviderSessionFileSystemEffect interface {
-	Open(string) (io.ReadCloser, error)
-	Stat(string) (fs.FileInfo, error)
-}
-type nilProviderSessionFileSystem struct {
-	nilProviderSessionFileSystemEffect
 }
 
 type nilOperatorSettingsFileSystemEffect operatorsettings.FileSystem

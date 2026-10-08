@@ -50,9 +50,6 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 			FactorySessionRuntimeInstanceIDGenerator: func() string {
 				return "wsr-006-runtime-instance"
 			},
-			ProviderSessionResolveHomeDirectory: func() (string, error) {
-				return homeDir, nil
-			},
 		},
 	})
 	recordingReader := server.WorkerRecordingReader()

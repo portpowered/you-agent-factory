@@ -17,14 +17,14 @@ properties:
   timestamp:
     type: string
     format: date-time
-    description: Capture time for Codex; provider time for Cursor.
+    description: Capture time when present in the recorded history.
   lineNumber:
     type: integer
     minimum: 1
     description: One-based source line; omitted when uncaptured.
   sourceType:
     type: string
-    description: Captured event type for Codex when available; raw event type for Cursor.
+    description: Captured event type when available. Otherwise omitted.
   callId:
     type: string
     description: Provider tool-call identifier when present.

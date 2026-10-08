@@ -1,433 +1,348 @@
 package details
 
 import (
-	"database/sql"
+	"bufio"
+	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
+	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	_ "modernc.org/sqlite"
+	acpfixture "github.com/portpowered/infinite-you/tests/functional/workers/invoke_continue/testdata/acpfixture"
 )
 
-const (
-	cursorGoldenSuccessWorkspaceHash              = "cursor-fixture-workspace"
-	cursorGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
-	cursorUnavailableContentSessionID             = "cursor-fixture-unavailable-content"
-	cursorMissingSessionID                        = "cursor-fixture-missing-session"
-)
-
-// TestCursorProviderSessionDetailsLoadFromGoldenMetadata proves Cursor Provider
-// Session detail activates through the public GET /provider-sessions/detail surface
-// after runtime lifecycle starts on a process composed only via
-// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
-// sanitized Cursor success store and proves identity/provider/kind plus readable
-// transcript structurally match checked-in expected Provider Session metadata.
-// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/success/manifest.json
-func TestCursorProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("cursor", "success")))
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
+// The API-owned Cursor journey crosses production capture/storage and a controlled
+// ACP peer through root.BuildProcess. No Cursor executable or native database runs.
+func TestCursorCapturedDetails(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "captured-cursor")
+	support.ClearSeedInputs(t, dir)
+	support.WriteAgentConfig(t, dir, "processor", "---\ntype: MODEL_WORKER\nmodel: functional-model\nmodelProvider: CURSOR\nexecutorProvider: CURSOR\nstopToken: COMPLETE\n---\nProcess public input.\n")
+	host := startCapturedCursorHost(t, home, dir, false, nil)
+	invokeCapturedCursor(t, host, home, dir, "direct")
+	direct := awaitCapturedCursorDetail(t, host, "cursor-1")
+	assertCapturedCursorDetail(t, direct, "cursor-1")
+	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	if opened.Session == nil || opened.Session.Id == "~default" {
+		t.Fatal("explicit Factory Session missing")
 	}
-	if loaded.Manifest.ID != "cursor-text-success" {
-		t.Fatalf("manifest.ID = %q, want cursor-text-success", loaded.Manifest.ID)
+	name := "cursor-work"
+	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": "public input"}})
+	support.WaitForSessionTerminalStatus(t, host.URL(), opened.Session.Id, 30*time.Second)
+	factory := awaitCapturedCursorDetail(t, host, "cursor-2")
+	assertCapturedCursorDetail(t, factory, "cursor-2")
+	support.CloseFactorySessionAt(t, host.URL(), opened.Session.Id)
+	for _, tuple := range [][2]string{{"cursor", "unknown"}, {"cursor", "native-only"}, {"codex", "cursor-1"}} {
+		assertCapturedCursorFailure(t, host, home, tuple[0], tuple[1], http.StatusNotFound)
 	}
-
-	var request struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.SessionID == "" {
-		t.Fatal("request.session_id must be non-empty")
-	}
-
-	homeDir := t.TempDir()
-	writeCursorGoldenSuccessStorageFixture(t, homeDir, request.SessionID)
-
-	server := startCursorProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
-		t,
-		cursorProviderSessionDetailURL(server.URL(), request.SessionID),
-	)
-	assertProviderSessionDetailIdentity(
-		t,
-		detail,
-		request.SessionID,
-		factoryapi.Cursor,
-		factoryapi.LoadableProviderSessionKindSessionID,
-	)
-	if len(detail.Transcript) == 0 {
-		t.Fatal("provider session detail transcript is empty, want readable success-session content")
-	}
-	hasReadableText := false
-	for _, entry := range detail.Transcript {
-		if entry.Text != nil && strings.TrimSpace(*entry.Text) != "" {
-			hasReadableText = true
-			break
+	body := getAPIProviderSessionDetailErrorBody(t, host.URL(), "cursor", "session_id", " cursor-1 ", http.StatusBadRequest)
+	assertCapturedCodexFailure(t, body, factoryapi.ErrorResponseCodeBADREQUEST, home)
+	members := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/worker-sessions?history=all&scope=all")
+	healthyID := ""
+	for _, row := range members.Sessions {
+		if row.WorkerSessionId != "direct" {
+			healthyID = row.WorkerSessionId
 		}
 	}
-	if !hasReadableText {
-		t.Fatalf("provider session detail transcript = %#v, want readable text", detail.Transcript)
+	if healthyID == "" {
+		t.Fatal("Factory Worker association missing")
 	}
-
-	observed := observeCursorProviderSessionDetailGolden(detail)
-	if err := compareOrUpdateCursorProviderSessionDetailGolden(loaded, observed); err != nil {
-		var updated *support.ProviderSessionGoldensUpdatedError
-		if errors.As(err, &updated) {
-			t.Fatalf("%v", err)
-		}
-		t.Fatalf("compareOrUpdateCursorProviderSessionDetailGolden: %v", err)
-	}
-}
-
-// TestCursorProviderSessionUnavailableContentRemainsInspectable proves that a
-// Cursor Provider Session whose store contains encrypted or otherwise unavailable
-// blob content still returns an inspectable public detail response with identity
-// and unavailable parse facts instead of fabricated plaintext transcript.
-func TestCursorProviderSessionUnavailableContentRemainsInspectable(t *testing.T) {
-	homeDir := t.TempDir()
-	writeCursorUnavailableContentStorageFixture(t, homeDir, cursorUnavailableContentSessionID)
-
-	server := startCursorProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
-		t,
-		cursorProviderSessionDetailURL(server.URL(), cursorUnavailableContentSessionID),
-	)
-	assertProviderSessionDetailIdentity(
-		t,
-		detail,
-		cursorUnavailableContentSessionID,
-		factoryapi.Cursor,
-		factoryapi.LoadableProviderSessionKindSessionID,
-	)
-	if detail.Parse.UnknownEventCount == 0 && len(detail.Parse.UnknownEvents) == 0 {
-		t.Fatalf("parse summary = %#v, want unavailable unknown-event diagnostics", detail.Parse)
-	}
-	for _, entry := range detail.Transcript {
-		if entry.Text != nil && strings.TrimSpace(*entry.Text) != "" {
-			t.Fatalf("transcript entry = %#v, want no fabricated plaintext from unavailable blobs", entry)
+	host.Close(t)
+	freshHome, freshDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-reload")
+	support.ClearSeedInputs(t, freshDir)
+	copyCapturedCodexStore(t, dir, freshDir)
+	fresh := startCapturedCursorHost(t, freshHome, freshDir, false, nil)
+	for id, original := range map[string]factoryapi.ProviderSessionDetailResponse{"cursor-1": direct, "cursor-2": factory} {
+		if got := awaitCapturedCursorDetail(t, fresh, id); !reflect.DeepEqual(got, original) {
+			t.Fatalf("stopped reload changed %s", id)
 		}
 	}
-
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatalf("marshal detail: %v", err)
-	}
-	assertCursorProviderSessionDetailBodySafe(t, "unavailable-content", string(encoded), homeDir)
+	otherHome, otherDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-other-profile")
+	support.ClearSeedInputs(t, otherDir)
+	other := startCapturedCursorHost(t, otherHome, otherDir, false, nil)
+	assertCapturedCursorFailure(t, other, otherHome, "cursor", "cursor-1", http.StatusNotFound)
+	assertCapturedCursorFaults(t, dir, healthyID)
 }
 
-// TestCursorProviderSessionMissingIDReturnsNotFound proves that requesting
-// Cursor Provider Session details for a session_id that does not exist returns
-// a distinguishable not-found outcome instead of fabricating session detail.
-func TestCursorProviderSessionMissingIDReturnsNotFound(t *testing.T) {
-	homeDir := t.TempDir()
-
-	server := startCursorProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCursorProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		cursorMissingSessionID,
-		http.StatusNotFound,
-	)
-	if !strings.Contains(body, "provider session not found") {
-		t.Fatalf("error body = %q, want not-found message", body)
-	}
-
-	var failure factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(body), &failure); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if failure.Code != factoryapi.ErrorResponseCodeNOTFOUND {
-		t.Fatalf("error code = %q, want NOT_FOUND", failure.Code)
-	}
-	if failure.Message == "" {
-		t.Fatal("error message is empty, want customer-readable not-found diagnostic")
-	}
-	if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
-		t.Fatalf("not-found response fabricated provider session detail: %s", body)
-	}
-
-	assertCursorProviderSessionDetailBodySafe(t, "missing-session", body, homeDir)
-}
-
-func startCursorProviderSessionDetailServer(
-	t *testing.T,
-	homeDir string,
-	edges serviceedges.Edges,
-) *support.FunctionalAPIServer {
+func assertCapturedCursorFaults(t *testing.T, dir, healthyID string) {
 	t.Helper()
-
-	if edges.ProviderSessionResolveHomeDirectory == nil {
-		edges.ProviderSessionResolveHomeDirectory = func() (string, error) { return homeDir, nil }
+	// Independent stopped-copy faults have separate selected profiles and real storage.
+	for name, damage := range map[string]func([]byte) []byte{
+		"missing terminal": func(data []byte) []byte {
+			return bytes.ReplaceAll(bytes.ReplaceAll(data, []byte(`"phase":"COMPLETED"`), []byte(`"phase":"UPDATED"`)), []byte(`"status":"COMPLETED"`), []byte(`"status":"RUNNING"`))
+		},
+		"corrupt":   func(data []byte) []byte { return append(data, []byte("{broken}\n")...) },
+		"torn":      func(data []byte) []byte { return append(data, []byte("{\"uncommitted\":")...) },
+		"truncated": func(data []byte) []byte { return data[:len(data)-10] },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			faultHome, faultDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, name)
+			support.ClearSeedInputs(t, faultDir)
+			copyCapturedCodexStore(t, dir, faultDir)
+			mutateCapturedCodexJournals(t, faultDir, damage)
+			fault := startCapturedCursorHost(t, faultHome, faultDir, false, nil)
+			assertCapturedCursorFailure(t, fault, faultHome, "cursor", "cursor-1", http.StatusInternalServerError)
+		})
 	}
-	dir := support.ScaffoldSingleStepFactory(t, "cursor-provider-session-detail")
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
+	t.Run("healthy sibling", func(t *testing.T) {
+		t.Parallel()
+		faultHome, faultDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-sibling")
+		support.ClearSeedInputs(t, faultDir)
+		copyCapturedCodexStore(t, dir, faultDir)
+		mutateCapturedCodexJournals(t, faultDir, func(data []byte) []byte {
+			if bytes.Contains(data, []byte(`"workerSessionId":"direct"`)) {
+				return append(data, []byte("{broken}\n")...)
+			}
+			return data
+		})
+		fault := startCapturedCursorHost(t, faultHome, faultDir, false, nil)
+		assertCapturedCursorFailure(t, fault, faultHome, "cursor", "cursor-2", http.StatusInternalServerError)
+		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, fault.URL()+"/worker-sessions/"+healthyID+"/logs")
+		if page.WorkerSessionId != healthyID || len(page.Events) == 0 {
+			t.Fatal("healthy sibling lost captured logs")
+		}
+		response, err := http.Get(fault.URL() + "/worker-sessions/direct/logs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		var failure factoryapi.ErrorResponse
+		if err := json.NewDecoder(response.Body).Decode(&failure); err != nil || response.StatusCode != http.StatusServiceUnavailable || failure.Code != factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE {
+			t.Fatalf("damaged ID outcome: %d %#v %v", response.StatusCode, failure, err)
+		}
+	})
+	t.Run("configured redaction", func(t *testing.T) { t.Parallel(); assertCapturedCursorRedaction(t, dir) })
+	t.Run("unavailable", func(t *testing.T) {
+		t.Parallel()
+		faultHome, faultDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-read-fault")
+		support.ClearSeedInputs(t, faultDir)
+		copyCapturedCodexStore(t, dir, faultDir)
+		fault := startCapturedCursorHost(t, faultHome, faultDir, false, func(string) ([]byte, error) { return nil, privateStorageFault() })
+		assertCapturedCursorFailure(t, fault, faultHome, "cursor", "cursor-1", http.StatusInternalServerError)
 	})
 }
 
-func getCursorProviderSessionDetailErrorBody(
-	t *testing.T,
-	baseURL, sessionID string,
-	wantStatus int,
-) string {
+func TestCursorCapturedDetailsAmbiguity(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-ambiguity")
+	support.ClearSeedInputs(t, dir)
+	host := startCapturedCursorHost(t, home, dir, true, nil)
+	invokeCapturedCursor(t, host, home, dir, "first")
+	awaitCapturedCursorDetail(t, host, "cursor-1")
+	invokeCapturedCursor(t, host, home, dir, "second")
+	host.Close(t)
+	freshHome, freshDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-ambiguous-reload")
+	support.ClearSeedInputs(t, freshDir)
+	copyCapturedCodexStore(t, dir, freshDir)
+	fresh := startCapturedCursorHost(t, freshHome, freshDir, false, nil)
+	assertCapturedCursorFailure(t, fresh, freshHome, "cursor", "cursor-1", http.StatusInternalServerError)
+}
+
+func startCapturedCursorHost(t *testing.T, home, dir string, shared bool, readFile func(string) ([]byte, error), empty ...bool) *support.FunctionalAPIServer {
 	t.Helper()
-
-	response, err := http.Get(cursorProviderSessionDetailURL(baseURL, sessionID))
-	if err != nil {
-		t.Fatalf("GET provider session detail: %v", err)
+	// A file blocks native root traversal. The planted marker must never be disclosed.
+	if err := os.WriteFile(filepath.Join(home, ".cursor"), []byte("native-private-history"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read provider session detail body: %v", err)
-	}
-	if response.StatusCode != wantStatus {
-		t.Fatalf(
-			"GET provider session detail status = %d, want %d: %s",
-			response.StatusCode,
-			wantStatus,
-			strings.TrimSpace(string(body)),
-		)
-	}
-	return string(body)
-}
-
-func cursorProviderSessionDetailURL(baseURL, sessionID string) string {
-	query := url.Values{}
-	query.Set("provider", string(factoryapi.Cursor))
-	query.Set("kind", string(factoryapi.LoadableProviderSessionKindSessionID))
-	query.Set("id", sessionID)
-	return strings.TrimSuffix(baseURL, "/") + "/provider-sessions/detail?" + query.Encode()
-}
-
-func writeCursorGoldenSuccessStorageFixture(t *testing.T, homeDir, sessionID string) {
-	t.Helper()
-
-	chatsRoot := filepath.Join(homeDir, ".cursor", "chats")
-	dbPath := filepath.Join(chatsRoot, cursorGoldenSuccessWorkspaceHash, sessionID, "store.db")
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		t.Fatalf("mkdir cursor storage: %v", err)
-	}
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open cursor storage sqlite: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	schema := `
-CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
-	if _, err := db.Exec(schema); err != nil {
-		t.Fatalf("create cursor storage tables: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
-		"bubble-success",
-		`{"bubbleId":"bubble-success","chatId":"chat-success","text":"Cursor fixture answer COMPLETE","timestamp":1000,"type":1}`,
-	); err != nil {
-		t.Fatalf("insert cursor storage bubble: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?)`,
-		"0",
-		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"Cursor golden success fixture session"}`,
-	); err != nil {
-		t.Fatalf("insert cursor storage meta: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?)`,
-		"1",
-		`{"usage":{"inputTokens":12,"outputTokens":34,"cacheReadTokens":5,"cacheWriteTokens":2}}`,
-	); err != nil {
-		t.Fatalf("insert cursor storage usage meta: %v", err)
-	}
-}
-
-func writeCursorUnavailableContentStorageFixture(t *testing.T, homeDir, sessionID string) {
-	t.Helper()
-
-	chatsRoot := filepath.Join(homeDir, ".cursor", "chats")
-	dbPath := filepath.Join(chatsRoot, cursorGoldenSuccessWorkspaceHash, sessionID, "store.db")
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		t.Fatalf("mkdir cursor storage: %v", err)
-	}
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open cursor storage sqlite: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	if _, err := db.Exec(`CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT)`); err != nil {
-		t.Fatalf("create cursor storage blobs table: %v", err)
-	}
-	if _, err := db.Exec(
-		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
-		"encrypted-blob",
-		string([]byte{0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa}),
-	); err != nil {
-		t.Fatalf("insert encrypted cursor storage blob: %v", err)
-	}
-}
-
-func assertCursorProviderSessionDetailBodySafe(t *testing.T, caseID, body, homeDir string) {
-	t.Helper()
-	if err := support.ValidateProviderSessionFixtureContent(caseID, "provider-session-detail", []byte(body)); err != nil {
-		t.Fatalf("provider session response leaked forbidden material: %v\nbody=%s", err, body)
-	}
-	cursorChatsRoot := filepath.Join(homeDir, ".cursor", "chats")
-	if strings.Contains(body, homeDir) || strings.Contains(body, cursorChatsRoot) {
-		t.Fatalf("provider session response leaked configured host path: %s", body)
-	}
-}
-
-func observeCursorProviderSessionDetailGolden(
-	detail factoryapi.ProviderSessionDetailResponse,
-) json.RawMessage {
-	transcript := make([]map[string]any, 0, len(detail.Transcript))
-	for _, entry := range detail.Transcript {
-		record := map[string]any{
-			"order": entry.Order,
-			"type":  string(entry.Type),
-		}
-		if entry.SourceType != nil {
-			record["sourceType"] = *entry.SourceType
-		}
-		if entry.Text != nil {
-			record["text"] = *entry.Text
-		}
-		if entry.Timestamp != nil {
-			record["timestamp"] = entry.Timestamp.UTC().Format(time.RFC3339Nano)
-		}
-		transcript = append(transcript, record)
-	}
-
-	var tokenUsage map[string]any
-	if detail.Parse.TokenUsage != nil {
-		tokenUsage = map[string]any{}
-		if detail.Parse.TokenUsage.InputTokens != nil {
-			tokenUsage["inputTokens"] = *detail.Parse.TokenUsage.InputTokens
-		}
-		if detail.Parse.TokenUsage.OutputTokens != nil {
-			tokenUsage["outputTokens"] = *detail.Parse.TokenUsage.OutputTokens
-		}
-		if detail.Parse.TokenUsage.CachedInputTokens != nil {
-			tokenUsage["cachedInputTokens"] = *detail.Parse.TokenUsage.CachedInputTokens
-		}
-		if detail.Parse.TokenUsage.CacheWriteTokens != nil {
-			tokenUsage["cacheWriteTokens"] = *detail.Parse.TokenUsage.CacheWriteTokens
-		}
-		if detail.Parse.TokenUsage.TotalTokens != nil {
-			tokenUsage["totalTokens"] = *detail.Parse.TokenUsage.TotalTokens
-		}
-	}
-
-	record := map[string]any{
-		"providerSession": map[string]any{
-			"provider": string(detail.ProviderSession.Provider),
-			"kind":     string(detail.ProviderSession.Kind),
-			"id":       detail.ProviderSession.Id,
+	var sequence atomic.Int32
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: testutil.NewProviderCommandRunner(), RecordingReadFile: readFile,
+			PlatformProcessCommandFactory: acpfixture.CommandFactory(), ProvidersExecutableLocator: cursorCapturedLocator{},
+			ProvidersStdioPipeFactory: acpfixture.StdioFactory(func(_ string, reader io.Reader, writer io.Writer) {
+				id := sequence.Add(1)
+				if shared {
+					id = 1
+				}
+				serveCapturedCursor(reader, writer, fmt.Sprintf("cursor-%d", id), len(empty) > 0 && empty[0])
+			}),
 		},
-		"source": map[string]any{
-			"relativePath": detail.Source.RelativePath,
-			"sizeBytes":    detail.Source.SizeBytes,
+		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
 		},
-		"parse": map[string]any{
-			"eventCount": detail.Parse.EventCount,
-			"lineCount":  detail.Parse.LineCount,
-		},
-		"transcript": transcript,
-	}
-	if detail.Source.ModifiedAt != nil {
-		record["source"].(map[string]any)["modifiedAt"] = detail.Source.ModifiedAt.UTC().Format(time.RFC3339Nano)
-	}
-	if tokenUsage != nil {
-		record["parse"].(map[string]any)["tokenUsage"] = tokenUsage
-	}
-	return mustMarshalJSON(record)
+	})
+	t.Cleanup(func() { host.Close(t) })
+	return host
 }
 
-func compareOrUpdateCursorProviderSessionDetailGolden(
-	loaded support.ProviderSessionCase,
-	observed json.RawMessage,
-) error {
-	expectedPath := filepath.Join(loaded.CaseDir, cursorGoldenExpectedProviderSessionDetailFile)
-	expected, err := os.ReadFile(expectedPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
+type cursorCapturedLocator struct{}
+
+func (cursorCapturedLocator) LookPath(file string) (string, error) { return file, nil }
+
+const cursorCapturedConfig = `[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"functional-model","options":[{"value":"functional-model","name":"Functional model"}]}]`
+
+func serveCapturedCursor(reader io.Reader, writer io.Writer, id string, empty bool) {
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		var call struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
 		}
-		if !support.ProviderSessionFunctionalGoldensUpdateEnabled() {
-			return &support.ProviderSessionLoadError{
-				CaseID: loaded.Manifest.ID,
-				Role:   "expected-provider-session-detail",
-				Path:   expectedPath,
-				Detail: "required expected-provider-session-detail fixture is missing",
+		if json.Unmarshal(scanner.Bytes(), &call) != nil {
+			return
+		}
+		result := json.RawMessage(`{}`)
+		switch call.Method {
+		case "initialize":
+			result = json.RawMessage(`{"protocolVersion":1,"agentCapabilities":{}}`)
+		case "session/new":
+			result = mustMarshalJSON(map[string]any{"sessionId": id, "configOptions": json.RawMessage(cursorCapturedConfig)})
+		case "session/set_config_option":
+			result = mustMarshalJSON(map[string]any{"configOptions": json.RawMessage(cursorCapturedConfig)})
+		case "session/prompt":
+			updates := []map[string]any{
+				{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "captured Cursor answer COMPLETE"}},
+				{"sessionUpdate": "tool_call", "toolCallId": "call", "title": "Read public fixture", "kind": "read", "status": "pending", "rawInput": map[string]string{"path": "public", "api_key": "cursor-secret-marker"}},
+				{"sessionUpdate": "tool_call_update", "toolCallId": "call", "status": "completed", "rawOutput": "public result"},
+				{"sessionUpdate": "usage_update", "used": 14, "size": 1000},
+			}
+			if empty {
+				updates = []map[string]any{{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "empty fixture COMPLETE"}}}
+			}
+			for _, update := range updates {
+				if json.NewEncoder(writer).Encode(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": id, "update": update}}) != nil {
+					return
+				}
+			}
+			result = json.RawMessage(`{"stopReason":"end_turn"}`)
+		}
+		if len(call.ID) > 0 && json.NewEncoder(writer).Encode(map[string]any{"jsonrpc": "2.0", "id": call.ID, "result": result}) != nil {
+			return
+		}
+	}
+}
+
+func invokeCapturedCursor(t *testing.T, host *support.FunctionalAPIServer, home, dir, id string) {
+	t.Helper()
+	document := map[string]any{"requestId": id + "-request", "workerSessionId": id, "execution": map[string]any{
+		"workstationName": "direct", "workingDirectory": dir, "workerType": "direct-worker", "runnerId": "cursor", "executorProvider": "cursor", "modelProvider": "cursor", "model": "functional-model", "userMessage": "public input",
+		"dispatch": map[string]any{"dispatchId": id + "-attempt", "workstationName": "direct", "workerType": "direct-worker"}}}
+	path := filepath.Join(dir, id+".json")
+	if err := os.WriteFile(path, mustMarshalJSON(document), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
+	input.Input.Env, input.Input.WorkingDirectory = []string{"HOME=" + home, "USERPROFILE=" + home}, dir
+	if err := host.Execute(t, input.Input); err != nil {
+		t.Fatalf("invoke: %v %s %s", err, input.Stdout(), input.Stderr())
+	}
+	var result struct {
+		Accepted bool   `json:"accepted"`
+		State    string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(input.Stdout()), &result); err != nil || !result.Accepted || result.State != "COMPLETED" {
+		t.Fatalf("invoke did not join: %s", input.Stdout())
+	}
+}
+
+func awaitCapturedCursorDetail(t *testing.T, host *support.FunctionalAPIServer, id string) factoryapi.ProviderSessionDetailResponse {
+	t.Helper()
+	// Capture commit follows joined execution asynchronously; observe only the public endpoint.
+	detail, err := support.WaitForObservation(30*time.Second, func() (factoryapi.ProviderSessionDetailResponse, error) {
+		response, err := http.Get(providerSessionDetailURL(host.URL(), "cursor", "session_id", id))
+		if err != nil {
+			return factoryapi.ProviderSessionDetailResponse{}, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return factoryapi.ProviderSessionDetailResponse{}, nil
+		}
+		var detail factoryapi.ProviderSessionDetailResponse
+		err = json.NewDecoder(response.Body).Decode(&detail)
+		return detail, err
+	}, func(detail factoryapi.ProviderSessionDetailResponse) bool { return detail.ProviderSession.Id == id })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return detail
+}
+
+func assertCapturedCursorDetail(t *testing.T, detail factoryapi.ProviderSessionDetailResponse, id string) {
+	t.Helper()
+	assertProviderSessionDetailIdentity(t, detail, id, factoryapi.Cursor, factoryapi.LoadableProviderSessionKindSessionID)
+	if len(detail.Transcript) != 3 || detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != "captured Cursor answer COMPLETE" || len(detail.Parse.FunctionCalls) != 2 {
+		t.Fatalf("captured facts lost: %#v", detail)
+	}
+	for i, entry := range detail.Transcript {
+		if entry.Order != i+1 || entry.Timestamp == nil || entry.LineNumber != nil {
+			t.Fatalf("invalid captured entry: %#v", entry)
+		}
+	}
+	if detail.Source.RelativePath != "" || detail.Source.SizeBytes != 0 || detail.Source.ModifiedAt != nil || detail.Parse.LineCount != 0 || detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.TotalTokens == nil || *detail.Parse.TokenUsage.TotalTokens != 14 {
+		t.Fatalf("usage/source facts: %#v", detail)
+	}
+}
+
+func assertCapturedCursorFailure(t *testing.T, host *support.FunctionalAPIServer, home, provider, id string, status int) {
+	t.Helper()
+	body := getAPIProviderSessionDetailErrorBody(t, host.URL(), provider, "session_id", id, status)
+	if status == http.StatusInternalServerError {
+		assertCapturedCodexFailure(t, body, factoryapi.ErrorResponseCodeINTERNALERROR, home)
+	} else {
+		assertCapturedCodexFailure(t, body, factoryapi.ErrorResponseCodeNOTFOUND, home)
+	}
+}
+
+// Like Codex, Cursor execution needs output. Clear message text only in a stopped
+// test-owned copy to exercise an honest complete-ended-empty historical capture.
+func TestCursorCapturedDetailsCompleteEmpty(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-empty")
+	support.ClearSeedInputs(t, dir)
+	host := startCapturedCursorHost(t, home, dir, false, nil, true)
+	invokeCapturedCursor(t, host, home, dir, "empty")
+	awaitCapturedCursorDetail(t, host, "cursor-1")
+	host.Close(t)
+	freshHome, freshDir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-empty-reload")
+	support.ClearSeedInputs(t, freshDir)
+	copyCapturedCodexStore(t, dir, freshDir)
+	mutateCapturedCodexJournals(t, freshDir, func(data []byte) []byte { return bytes.ReplaceAll(data, []byte("empty fixture COMPLETE"), nil) })
+	fresh := startCapturedCursorHost(t, freshHome, freshDir, false, nil)
+	detail := awaitCapturedCursorDetail(t, fresh, "cursor-1")
+	if len(detail.Transcript) != 0 || detail.Parse.TokenUsage != nil || detail.Parse.FunctionCalls == nil || detail.Parse.ParseErrors == nil || detail.Parse.Reasoning == nil || detail.Parse.Turns == nil || detail.Parse.UnknownEvents == nil {
+		t.Fatalf("complete empty capture: %#v", detail)
+	}
+}
+
+// The existing declared-field redactor prepares a stopped fixture. This protects
+// stored redaction through HTTP projection; provider classification is unchanged.
+func assertCapturedCursorRedaction(t *testing.T, dir string) {
+	t.Helper()
+
+	home, target := t.TempDir(), support.ScaffoldSingleStepFactory(t, "cursor-redacted")
+	support.ClearSeedInputs(t, target)
+	copyCapturedCodexStore(t, dir, target)
+	mutateCapturedCodexJournals(t, target, func(data []byte) []byte {
+		lines := bytes.Split(bytes.TrimSuffix(data, []byte{'\n'}), []byte{'\n'})
+		for i, line := range lines {
+			if bytes.Contains(line, []byte("cursor-secret-marker")) {
+				safe, err := recordings.RedactDeclaredSecretText(recordings.RecordingRedactionRequest{Payload: line, Secrets: []recordings.RecordingSecret{{JSONPointer: "/record/Payload/payload/argumentsSummary/api_key", Provenance: recordings.RecordingSecretProvenanceDeclared}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				lines[i] = safe.Payload
 			}
 		}
-		encoded, err := json.MarshalIndent(json.RawMessage(observed), "", "  ")
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(expectedPath, append(encoded, '\n'), 0o644); err != nil {
-			return err
-		}
-		return &support.ProviderSessionGoldensUpdatedError{
-			CaseID: loaded.Manifest.ID,
-			Paths:  []string{cursorGoldenExpectedProviderSessionDetailFile},
-		}
-	}
-
-	normalizedFields := append([]string(nil), loaded.Manifest.NormalizedFields...)
-	normalizedFields = append(normalizedFields, "modifiedAt", "sizeBytes")
-
-	err = support.CompareProviderSessionJSON(
-		loaded.Manifest.ID,
-		"expected-provider-session-detail",
-		normalizedFields,
-		expected,
-		observed,
-	)
-	if err == nil {
-		return nil
-	}
-	if !support.ProviderSessionFunctionalGoldensUpdateEnabled() {
-		return err
-	}
-	encoded, marshalErr := json.MarshalIndent(json.RawMessage(observed), "", "  ")
-	if marshalErr != nil {
-		return marshalErr
-	}
-	if writeErr := os.WriteFile(expectedPath, append(encoded, '\n'), 0o644); writeErr != nil {
-		return writeErr
-	}
-	return &support.ProviderSessionGoldensUpdatedError{
-		CaseID: loaded.Manifest.ID,
-		Paths:  []string{cursorGoldenExpectedProviderSessionDetailFile},
+		return append(bytes.Join(lines, []byte{'\n'}), '\n')
+	})
+	host := startCapturedCursorHost(t, home, target, false, nil)
+	detail := awaitCapturedCursorDetail(t, host, "cursor-1")
+	if bytes.Contains(mustMarshalJSON(detail), []byte("cursor-secret-marker")) || !bytes.Contains(mustMarshalJSON(detail), []byte("redacted")) {
+		t.Fatal("configured redaction lost in projection")
 	}
 }

@@ -7,104 +7,22 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
-	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
-	cursorreaderwire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type inspectionService struct {
-	codex        capturedCodex
-	cursorReader cursorreader.Service
+	captured capturedProvider
 }
 
-// Compile-time proof that production inspectionService seals the singular
-// peer root (Details + Inspect + Project) without exposing construction ports
-// or private Codex/Cursor reader types through Service method signatures.
 var _ providersessions.Service = (*inspectionService)(nil)
 
-// New constructs Provider Sessions from explicit process edges and the
-// provider-owned default storage-root policy.
-func New(
-	files providersessionsinternal.FileSystem,
-	resolveHome providersessionsinternal.ResolveHomeDirectory,
-	cursorWalkDirectory providersessionsinternal.CursorWalkDirectory,
-	cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks,
-	cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase,
-	cursorOperatingSystem providersessionsinternal.OperatingSystem,
-	captured recordings.WorkerCapturedActivityReader,
-) (providersessions.Service, error) {
-	if err := validateDependencies(files, resolveHome, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorOperatingSystem, captured); err != nil {
-		return nil, err
-	}
-	home, err := resolveHome()
-	if err != nil {
-		return nil, fmt.Errorf("home directory: %w", err)
-	}
-	if strings.TrimSpace(home) == "" {
-		return nil, fmt.Errorf("provider-session home directory is required")
-	}
-	cursorRoot, err := cursorreaderwire.DefaultStorageRoot(func() (string, error) { return home, nil }, files, cursorOperatingSystem)
-	if err != nil {
-		return nil, err
-	}
-	return newForRoots(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorRoot, captured)
-}
-
-// NewForRoots constructs Provider Sessions with explicit storage roots.
-func NewForRoots(
-	files providersessionsinternal.FileSystem,
-	cursorWalkDirectory providersessionsinternal.CursorWalkDirectory,
-	cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks,
-	cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase,
-	cursorRoot string,
-	captured recordings.WorkerCapturedActivityReader,
-) (providersessions.Service, error) {
-	if err := validateStorageDependencies(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, captured); err != nil {
-		return nil, err
-	}
-	return newForRoots(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorRoot, captured)
-}
-
-func newForRoots(files providersessionsinternal.FileSystem, cursorWalkDirectory providersessionsinternal.CursorWalkDirectory, cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks, cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase, cursorRoot string, captured recordings.WorkerCapturedActivityReader) (providersessions.Service, error) {
-	cursorReader, err := cursorreaderwire.NewService(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, cursorRoot)
-	if err != nil {
-		return nil, err
-	}
-	return &inspectionService{
-		codex:        capturedCodex{reader: captured},
-		cursorReader: cursorReader,
-	}, nil
-}
-
-func validateDependencies(files providersessionsinternal.FileSystem, resolveHome providersessionsinternal.ResolveHomeDirectory, cursorWalkDirectory providersessionsinternal.CursorWalkDirectory, cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks, cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase, cursorOperatingSystem providersessionsinternal.OperatingSystem, captured recordings.WorkerCapturedActivityReader) error {
-	if resolveHome == nil {
-		return fmt.Errorf("provider-session home resolver is required")
-	}
-	if strings.TrimSpace(string(cursorOperatingSystem)) == "" {
-		return fmt.Errorf("provider-session operating system is required")
-	}
-	return validateStorageDependencies(files, cursorWalkDirectory, cursorResolveSymlinks, cursorOpenDatabase, captured)
-}
-
-func validateStorageDependencies(files providersessionsinternal.FileSystem, cursorWalkDirectory providersessionsinternal.CursorWalkDirectory, cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks, cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase, captured recordings.WorkerCapturedActivityReader) error {
-	if files == nil {
-		return fmt.Errorf("provider-session filesystem is required")
-	}
+// New constructs an inert captured-only inspection service.
+func New(captured recordings.WorkerCapturedActivityReader) (providersessions.Service, error) {
 	if captured == nil {
-		return fmt.Errorf("provider-session captured activity reader is required")
+		return nil, fmt.Errorf("provider-session captured activity reader is required")
 	}
-	if cursorWalkDirectory == nil {
-		return fmt.Errorf("provider-session Cursor directory walker is required")
-	}
-	if cursorResolveSymlinks == nil {
-		return fmt.Errorf("provider-session Cursor symlink resolver is required")
-	}
-	if cursorOpenDatabase == nil {
-		return fmt.Errorf("provider-session Cursor database opener is required")
-	}
-	return nil
+	return &inspectionService{captured: capturedProvider{reader: captured}}, nil
 }
 
 // Details loads one provider session and returns provider-independent
@@ -150,26 +68,17 @@ func (s *inspectionService) detailsForRef(ctx context.Context, ref providers.Ses
 	if err := validateSessionRef(ref); err != nil {
 		return providersessions.Detail{}, err
 	}
-	switch ref.Provider {
-	case providers.IDCursor:
-		return s.cursorReader.Read(ctx, ref)
-	case providers.IDCodex:
-		detail, err := s.codex.Details(ctx, ref)
-		if err == nil {
-			return detail, nil
-		}
+	detail, err := s.captured.Details(ctx, ref)
+	if err != nil {
 		return providersessions.Detail{}, &providersessions.LookupError{
-			Provider:  providersessions.ProviderCodex,
-			SessionID: ref.ID,
-			Err:       err,
+			Provider: providersessions.Provider(ref.Provider), SessionID: ref.ID, Err: err,
 		}
-	default:
-		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
 	}
+	return detail, nil
 }
 
 func normalizeProvider(provider string) (providers.ID, error) {
-	switch strings.TrimSpace(provider) {
+	switch provider {
 	case string(providersessions.ProviderCodex):
 		return providers.IDCodex, nil
 	case string(providersessions.ProviderCursor):
@@ -188,7 +97,7 @@ func validateSessionRef(session providers.SessionRef) error {
 	default:
 		return providersessions.ErrUnsupportedProvider
 	}
-	if strings.TrimSpace(session.Kind) != providers.SessionIDKind {
+	if session.Kind != providers.SessionIDKind {
 		return providersessions.ErrUnsupportedKind
 	}
 	return nil

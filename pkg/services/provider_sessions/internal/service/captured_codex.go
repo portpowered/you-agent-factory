@@ -14,24 +14,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// capturedCodex projects one selected-profile association. It never owns a
+// capturedProvider projects one selected-profile association. It never owns a
 // provider filesystem or an execution handle.
-type capturedCodex struct {
+type capturedProvider struct {
 	reader recordings.WorkerCapturedActivityReader
 }
 
 const capturedPageLimit = 1000
 
-var capturedCodexIdentifier = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var capturedProviderIdentifier = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-func (s *capturedCodex) Details(ctx context.Context, ref providers.SessionRef) (providersessions.Detail, error) {
+func (s *capturedProvider) Details(ctx context.Context, ref providers.SessionRef) (providersessions.Detail, error) {
 	if err := validateSessionRef(ref); err != nil {
 		return providersessions.Detail{}, err
 	}
-	if ref.Provider != providers.IDCodex {
-		return providersessions.Detail{}, providersessions.ErrUnsupportedProvider
-	}
-	if !capturedCodexIdentifier.MatchString(ref.ID) {
+	if !capturedProviderIdentifier.MatchString(ref.ID) {
 		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
 	}
 	selected, err := s.selectCapture(ctx, ref)
@@ -47,10 +44,10 @@ func (s *capturedCodex) Details(ctx context.Context, ref providers.SessionRef) (
 	if !captureHasRef(recordings.WorkerCapturedCatalogItem{Opening: page.Opening, MetadataRecords: capturedRecords(page)}, ref) {
 		return providersessions.Detail{}, providersessions.ErrSessionStorageUnavailable
 	}
-	return capturedCodexDetail(page, ref)
+	return capturedProviderDetail(page, ref)
 }
 
-func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.SessionRef) (recordings.WorkerSessionCatalogEntry, error) {
+func (s *capturedProvider) selectCapture(ctx context.Context, ref providers.SessionRef) (recordings.WorkerSessionCatalogEntry, error) {
 	request := recordings.WorkerCapturedCatalogRequest{Limit: capturedPageLimit, RequireCompleteMembership: true}
 	var selected recordings.WorkerSessionCatalogEntry
 	generation := ""
@@ -72,7 +69,7 @@ func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.Session
 			if !captureHasRef(item, ref) {
 				continue
 			}
-			selected, err = selectCodexAssociation(selected, item.Catalog)
+			selected, err = selectCapturedAssociation(selected, item.Catalog)
 			if err != nil {
 				return selected, err
 			}
@@ -92,7 +89,7 @@ func (s *capturedCodex) selectCapture(ctx context.Context, ref providers.Session
 	return selected, nil
 }
 
-func selectCodexAssociation(current, candidate recordings.WorkerSessionCatalogEntry) (recordings.WorkerSessionCatalogEntry, error) {
+func selectCapturedAssociation(current, candidate recordings.WorkerSessionCatalogEntry) (recordings.WorkerSessionCatalogEntry, error) {
 	if candidate.WorkerSessionID == "" {
 		return current, providersessions.ErrSessionStorageUnavailable
 	}
@@ -133,7 +130,7 @@ func capturedRecords(page recordings.WorkerCapturedActivityPage) []events.Record
 	return records
 }
 
-func (s *capturedCodex) readCapture(ctx context.Context, selected recordings.WorkerSessionCatalogEntry) (recordings.WorkerCapturedActivityPage, error) {
+func (s *capturedProvider) readCapture(ctx context.Context, selected recordings.WorkerSessionCatalogEntry) (recordings.WorkerCapturedActivityPage, error) {
 	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: selected.WorkerSessionID, Limit: capturedPageLimit}
 	var first recordings.WorkerCapturedActivityPage
 	var records []recordings.WorkerCapturedRecord
@@ -147,15 +144,15 @@ func (s *capturedCodex) readCapture(ctx context.Context, selected recordings.Wor
 		if err != nil {
 			return first, captureReadError(err)
 		}
-		if !validCapturedCodexPage(page, selected) {
+		if !validCapturedProviderPage(page, selected) {
 			return first, providersessions.ErrSessionStorageUnavailable
 		}
 		if request.NextToken == "" {
 			first = page
-		} else if !sameCapturedCodexHead(page, first) {
+		} else if !sameCapturedProviderHead(page, first) {
 			return first, providersessions.ErrSessionStorageUnavailable
 		}
-		previous, err = validateCapturedCodexRecords(page, previous)
+		previous, err = validateCapturedProviderRecords(page, previous)
 		if err != nil {
 			return first, err
 		}
@@ -179,16 +176,16 @@ func (s *capturedCodex) readCapture(ctx context.Context, selected recordings.Wor
 	return first, nil
 }
 
-func validCapturedCodexPage(page recordings.WorkerCapturedActivityPage, selected recordings.WorkerSessionCatalogEntry) bool {
+func validCapturedProviderPage(page recordings.WorkerCapturedActivityPage, selected recordings.WorkerSessionCatalogEntry) bool {
 	return page.Catalog == selected && page.Health == recordings.WorkerRecordingStatusComplete && page.Terminal != nil &&
 		page.Terminal.Position >= 1 && uint64(page.Terminal.Position) <= selected.CommittedPosition
 }
 
-func sameCapturedCodexHead(page, first recordings.WorkerCapturedActivityPage) bool {
+func sameCapturedProviderHead(page, first recordings.WorkerCapturedActivityPage) bool {
 	return reflect.DeepEqual(page.Opening, first.Opening) && *page.Terminal == *first.Terminal && reflect.DeepEqual(page.TokenUsage, first.TokenUsage)
 }
 
-func validateCapturedCodexRecords(page recordings.WorkerCapturedActivityPage, previous uint64) (uint64, error) {
+func validateCapturedProviderRecords(page recordings.WorkerCapturedActivityPage, previous uint64) (uint64, error) {
 	for _, record := range page.Records {
 		position := uint64(record.Record.ID.Position)
 		if position != previous+1 || position > page.Catalog.CommittedPosition || record.Truncated || record.Record.ID.Topic != page.Opening.ID.Topic {
@@ -226,13 +223,13 @@ func captureReadError(err error) error {
 	return providersessions.ErrSessionStorageUnavailable
 }
 
-func capturedCodexDetail(page recordings.WorkerCapturedActivityPage, ref providers.SessionRef) (providersessions.Detail, error) {
+func capturedProviderDetail(page recordings.WorkerCapturedActivityPage, ref providers.SessionRef) (providersessions.Detail, error) {
 	entries, err := page.ProjectTranscript()
 	if err != nil {
 		return providersessions.Detail{}, providersessions.ErrSessionStorageUnavailable
 	}
 	detail := providersessions.Detail{
-		ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCodex, Kind: ref.Kind, ID: ref.ID},
+		ProviderSession: providersessions.Ref{Provider: providersessions.Provider(ref.Provider), Kind: ref.Kind, ID: ref.ID},
 		Transcript:      make([]providersessions.TranscriptEntry, 0, len(entries)),
 		Parse: providersessions.ParseSummary{
 			EventCount:    len(page.Records),

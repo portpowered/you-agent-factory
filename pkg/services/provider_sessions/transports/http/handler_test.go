@@ -126,7 +126,7 @@ func TestAdapterGetProviderSessionDetailsDecodesAndMapsSuccess(t *testing.T) {
 	}
 	if fake.lastProvider != string(factoryapi.Cursor) ||
 		fake.lastKind != string(factoryapi.LoadableProviderSessionKindSessionID) ||
-		fake.lastID != "cursor_sess_01" {
+		fake.lastID != "  cursor_sess_01  " {
 		t.Fatalf("fake recorded identity = (%q, %q, %q)", fake.lastProvider, fake.lastKind, fake.lastID)
 	}
 	if response.ProviderSession.Id != "cursor_sess_01" || len(response.Transcript) != 1 {

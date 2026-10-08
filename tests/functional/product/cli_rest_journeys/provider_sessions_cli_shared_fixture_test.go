@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -57,48 +56,11 @@ type workerSessionsCLISharedFixture struct {
 	api     *workerSessionsCLIAPIServer
 	runner  *providerCommandRouteRunner
 
-	fleetGate     *providerCommandRouteGate
-	providerFiles *workerSessionProviderFiles
+	fleetGate *providerCommandRouteGate
 
 	sessionMu        sync.Mutex
 	openedSessionIDs map[string]struct{}
 	closedSessionIDs map[string]struct{}
-}
-
-// Exact-path fault ownership prevents a scenario from changing peer reads.
-// The delegate retains the immutable Provider Session reader fault cases.
-type workerSessionProviderFiles struct {
-	delegate interface {
-		Open(string) (io.ReadCloser, error)
-		Stat(string) (fs.FileInfo, error)
-	}
-	mu           sync.RWMutex
-	blockedPath  string
-	blockedCalls int
-}
-
-func (files *workerSessionProviderFiles) blocked(path string) bool {
-	files.mu.Lock()
-	defer files.mu.Unlock()
-	if files.blockedPath != "" && filepath.Clean(path) == files.blockedPath {
-		files.blockedCalls++
-		return true
-	}
-	return false
-}
-
-func (files *workerSessionProviderFiles) Open(path string) (io.ReadCloser, error) {
-	if files.blocked(path) {
-		return nil, fs.ErrPermission
-	}
-	return files.delegate.Open(path)
-}
-
-func (files *workerSessionProviderFiles) Stat(path string) (fs.FileInfo, error) {
-	if files.blocked(path) {
-		return nil, fs.ErrPermission
-	}
-	return files.delegate.Stat(path)
 }
 
 type workerSessionsCLIAPIServer struct {
@@ -227,12 +189,9 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
-	providerFiles := &workerSessionProviderFiles{delegate: providerSessionReadFiles{}}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:                    api.start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
-		ProviderSessionFileSystem:           providerFiles,
+		APIServerStarter:      api.start,
+		ProviderCommandRunner: runner,
 	})
 	if err != nil {
 		t.Fatalf("build Provider Sessions CLI shared process: %v", err)
@@ -256,7 +215,6 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		api:              api,
 		runner:           runner,
 		fleetGate:        fleetGate,
-		providerFiles:    providerFiles,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}

@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,10 +26,9 @@ import (
 // controlled Codex command/files, no subprocesses or paid providers. Run with
 // -benchtime=1s -p 1 -timeout=2m. Includes real Work attribution and serialization.
 func BenchmarkFleetList(b *testing.B) {
-	handler, files := fleetFixture(b)
+	handler := fleetFixture(b)
 	for _, size := range []int{10, 50, 200} {
 		b.Run(fmt.Sprintf("rows-%d", size), func(b *testing.B) {
-			files.opens.Store(0)
 			request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/worker-sessions?maxResults=%d", size), nil)
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -43,22 +40,9 @@ func BenchmarkFleetList(b *testing.B) {
 				}
 			}
 			b.StopTimer()
-			b.ReportMetric(float64(files.opens.Load())/float64(b.N), "native-opens/op")
-			if files.opens.Load() != 0 {
-				b.Fatal("fleet opened native provider files")
-			}
 		})
 	}
 }
-
-type nativeFiles struct{ opens atomic.Int64 }
-
-func (f *nativeFiles) Open(path string) (io.ReadCloser, error) {
-	f.opens.Add(1)
-	return os.Open(path)
-}
-
-func (*nativeFiles) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
 type codexCommand struct{ stdout []byte }
 
@@ -66,18 +50,15 @@ func (c codexCommand) Run(context.Context, platformprocess.CommandRequest) (plat
 	return platformprocess.CommandResult{Stdout: append([]byte(nil), c.stdout...)}, nil
 }
 
-func fleetFixture(b *testing.B) (http.Handler, *nativeFiles) {
+func fleetFixture(b *testing.B) http.Handler {
 	b.Helper()
 	dir := b.TempDir()
 	home := filepath.Join(dir, "home")
 	writeFleetFactory(b, dir)
 	stdout := prepareNativeFixture(b, home)
 	ready := make(chan http.Handler, 1)
-	files := &nativeFiles{}
 	process, err := root.BuildProcess(b.Context(), edges.Edges{
-		ProviderCommandRunner:               codexCommand{stdout: stdout},
-		ProviderSessionFileSystem:           files,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		ProviderCommandRunner: codexCommand{stdout: stdout},
 		APIServerStarter: func(ctx context.Context, req platformhttp.StartRequest) error {
 			ready <- req.Handler
 			if req.OnBound != nil {
@@ -102,14 +83,13 @@ func fleetFixture(b *testing.B) (http.Handler, *nativeFiles) {
 		fleetPOST(b, handler, "/factory-sessions/"+opened.Session.Id+"/work", factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: map[string]string{"title": "fleet fixture"}}, http.StatusCreated, &submitted)
 	}
 	rows := waitFleet(b, handler)
-	// Positive control: the assembled selected detail still opens native files.
-	before := files.opens.Load()
+	// Positive control: a selected Worker remains readable from captured history.
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+opened.Session.Id+"/worker-sessions/"+rows[0].WorkerSessionId, nil))
-	if response.Code != http.StatusOK || files.opens.Load() <= before {
-		b.Fatalf("detail did not read native files: %d %s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		b.Fatalf("captured detail failed: %d %s", response.Code, response.Body.String())
 	}
-	return handler, files
+	return handler
 }
 
 func prepareNativeFixture(b *testing.B, home string) []byte {

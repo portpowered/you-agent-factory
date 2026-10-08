@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
@@ -123,12 +123,11 @@ export const CursorSessionSuccess = {
               parse: {
                 eventCount: 1,
                 functionCalls: [],
-                lineCount: 1,
+                lineCount: 0,
                 malformedLineCount: 0,
                 parseErrors: [],
                 reasoning: [],
                 tokenUsage: {
-                  cacheWriteTokens: 4,
                   cachedInputTokens: 8,
                   inputTokens: 12,
                   outputTokens: 6,
@@ -145,14 +144,26 @@ export const CursorSessionSuccess = {
                 provider: "cursor",
               },
               source: {
-                modifiedAt: "2026-05-20T17:35:24Z",
-                relativePath: "store.db",
-                sizeBytes: 4096,
+                relativePath: "",
+                sizeBytes: 0,
               },
               transcript: [
                 {
                   order: 1,
-                  text: "Hello from Cursor session storage.",
+                  type: "tool_call",
+                  name: "Read fixture",
+                  callId: "cursor-tool",
+                },
+                {
+                  order: 2,
+                  type: "tool_output",
+                  output: "public result",
+                  callId: "cursor-tool",
+                },
+                {
+                  order: 3,
+                  timestamp: "2026-05-20T17:35:24Z",
+                  text: "Hello from captured Cursor.",
                   type: "assistant_message",
                 },
               ],
@@ -166,12 +177,14 @@ export const CursorSessionSuccess = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole("heading", { name: "Transcript" });
-    expect(canvas.getByText("Hello from Cursor session storage.")).toBeTruthy();
+    expect(canvas.getByText("Hello from captured Cursor.")).toBeTruthy();
     expect(
-      canvas.getAllByText(
-        `cursor / Session ID / ${cursorProviderSessionVerificationSessionID}`,
-      ).length,
+      canvas.getAllByText(cursorProviderSessionVerificationSessionID).length,
     ).toBeGreaterThan(0);
+    const details = canvas.queryByRole("button", {
+      name: "Expand Selected Session Details",
+    });
+    if (details) await userEvent.click(details);
     expect(canvas.getByRole("heading", { name: "Token Usage" })).toBeTruthy();
   },
   render: () => {

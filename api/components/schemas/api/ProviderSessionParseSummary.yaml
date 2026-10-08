@@ -14,7 +14,7 @@ properties:
   eventCount:
     type: integer
     minimum: 0
-    description: Number of JSON event records parsed from the session stream.
+    description: Number of captured records inspected for this detail projection.
   lineCount:
     type: integer
     minimum: 0

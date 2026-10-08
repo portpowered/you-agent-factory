@@ -2,56 +2,33 @@ package service_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"path/filepath"
-	"runtime"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestCapturedReaderRequiredAtOwnerConstruction(t *testing.T) {
+func TestCapturedReaderRequiredAtConstruction(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	for _, missing := range []string{"filesystem", "captured activity reader"} {
-		t.Run(missing, func(t *testing.T) {
-			var files providersessionsinternal.FileSystem = platformfilesystem.Local{}
-			var captured recordings.WorkerCapturedActivityReader = emptyCapturedReader{}
-			switch missing {
-			case "filesystem":
-				files = nil
-			case "captured activity reader":
-				captured = nil
-			}
-			constructors := []func() (providersessions.Service, error){
-				func() (providersessions.Service, error) {
-					return internalservice.NewForRoots(files, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, root, captured)
-				},
-				func() (providersessions.Service, error) {
-					return internalservice.New(files, func() (string, error) { t.Fatal("home lookup before required-effect rejection"); return "", nil }, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS), captured)
-				},
-			}
-			for _, construct := range constructors {
-				service, err := construct()
-				if service != nil || err == nil || err.Error() != "provider-session "+missing+" is required" {
-					t.Fatalf("construction = %#v, %v; want nil service and exact missing-effect error", service, err)
-				}
-			}
-		})
+	service, err := internalservice.New(nil)
+	if service != nil || err == nil || err.Error() != "provider-session captured activity reader is required" {
+		t.Fatalf("construction = %v, %v", service, err)
 	}
 }
-
-func TestHomeFailurePreservesCauseAndNilOwnerService(t *testing.T) {
+func TestCapturedProviderNativeOnlyNotFound(t *testing.T) {
 	t.Parallel()
-	cause := errors.New("controlled home failure")
-	service, err := internalservice.New(platformfilesystem.Local{}, func() (string, error) { return "", cause }, filepath.WalkDir, filepath.EvalSymlinks, sql.Open, providersessionsinternal.OperatingSystem(runtime.GOOS), emptyCapturedReader{})
-	if service != nil || !errors.Is(err, cause) || err.Error() != "home directory: controlled home failure" {
-		t.Fatalf("New = %#v, %v; want nil service and wrapped home cause", service, err)
+	service, err := internalservice.New(emptyCapturedReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, provider := range []string{"codex", "cursor"} {
+		_, err := service.Details(provider, "session_id", "native-only")
+		var lookup *providersessions.LookupError
+		if !errors.Is(err, providersessions.ErrSessionNotFound) || !errors.As(err, &lookup) || lookup.Root != "" || string(lookup.Provider) != provider {
+			t.Fatalf("lookup = %v", err)
+		}
 	}
 }
 
@@ -65,4 +42,17 @@ func (emptyCapturedReader) ReadWorkerCapturedActivity(context.Context, recording
 }
 func (emptyCapturedReader) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
 	panic("unexpected lookup")
+}
+
+func TestCapturedProviderValidationBeforeLookup(t *testing.T) {
+	t.Parallel()
+	service, err := internalservice.New(emptyCapturedReader{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tuple := range [][3]string{{"unknown", "session_id", "valid"}, {" cursor ", "session_id", "valid"}, {"cursor", "wrong", "valid"}, {"cursor", "session_id", ""}, {"cursor", "session_id", "../private"}, {"cursor", "session_id", " valid "}} {
+		if _, err := service.Details(tuple[0], tuple[1], tuple[2]); err == nil {
+			t.Fatal("invalid tuple accepted")
+		}
+	}
 }

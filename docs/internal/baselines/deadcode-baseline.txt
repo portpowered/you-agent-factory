@@ -1446,10 +1446,6 @@ pkg/services/operator_settings/transports/mcp/schemas.go: unreachable func: tool
 pkg/services/operator_settings/transports/mcp/schemas.go: unreachable func: toolResponseSchema
 pkg/services/operator_settings/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
 pkg/services/operator_settings/wire/document_owner.go: unreachable func: NewConfigDocumentService
-pkg/services/provider_sessions/internal/service/service.go: unreachable func: NewForRoots
-pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/discovery.go: unreachable func: NormalizeAgentStorageRoot
-pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/token_usage.go: unreachable func: computeTotalTokens
-pkg/services/provider_sessions/wire/wire.go: unreachable func: NewForRoots
 pkg/services/providers/internal/service/attempt_registry.go: unreachable func: liveAttemptRegistry.contains
 pkg/services/providers/internal/services/acp/internal/service/progress.go: unreachable func: completedPromptProgress
 pkg/services/providers/internal/services/acp/internal/service/progress.go: unreachable func: failedPromptProgress

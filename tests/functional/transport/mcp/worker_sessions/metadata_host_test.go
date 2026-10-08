@@ -21,17 +21,13 @@ import (
 func runCapturedMetadataRecovery(t *testing.T, process support.Process) {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "captured-metadata-recovery")
-	native := &deniedMetadataProviderFiles{}
-	home := t.TempDir()
 	var store recordings.WorkerRecordingStore
 	config := support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
-			ProviderCommandRunner:               rejectLocalProvider{t: t},
-			FactorySessionsWorkingDirectory:     historyWorkingDirectory(dir),
-			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
-			ProviderSessionFileSystem:           native,
-			WorkerRecordingStoreObserver:        func(value recordings.WorkerRecordingStore) { store = value },
+			ProviderCommandRunner:           rejectLocalProvider{t: t},
+			FactorySessionsWorkingDirectory: historyWorkingDirectory(dir),
+			WorkerRecordingStoreObserver:    func(value recordings.WorkerRecordingStore) { store = value },
 		},
 	}
 	host := support.StartFunctionalAPIServer(t, config)
@@ -65,9 +61,6 @@ func runCapturedMetadataRecovery(t *testing.T, process support.Process) {
 		if id != "legacy" {
 			assertArchivedHostTiming(t, reopened, id)
 		}
-	}
-	if native.calls.Load() != 0 {
-		t.Fatal("captured metadata recovery attempted provider-native content reads")
 	}
 }
 

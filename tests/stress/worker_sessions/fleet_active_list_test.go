@@ -47,8 +47,7 @@ func TestFleetActiveListSeventyWorkProfile(t *testing.T) {
 	ready := make(chan *httptest.Server, 1)
 	runner := &heldFleetCommand{entered: make(chan struct{}), release: make(chan struct{})}
 	process, err := root.BuildProcess(ctx, edges.Edges{
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		ProviderCommandRunner: runner,
 		APIServerStarter: func(hostCtx context.Context, request platformhttpserver.StartRequest) error {
 			server := httptest.NewServer(request.Handler)
 			defer server.Close()

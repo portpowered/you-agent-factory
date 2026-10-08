@@ -253,7 +253,6 @@ func startCopiedLedgerReplayFixture(t *testing.T) copiedLedgerReplayFixture {
 		Args:                      []string{"--session", factoryID, "--record", recordPath},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner:                    runner,
-			ProviderSessionResolveHomeDirectory:      func() (string, error) { return homeDir, nil },
 			FactorySessionRuntimeInstanceIDGenerator: func() string { return runtimeInstanceID },
 			WorkerRecordingWriter:                    workerRecordingWriter,
 			FactorySessionsWorkingDirectory:          platformfilesystem.Local{WorkingDirectory: captureRoot},
@@ -739,7 +738,6 @@ func startCopiedLedgerResumeProcess(
 		Edges: serviceedges.Edges{
 			FactorySessionIDGenerator:                func() string { return factoryID },
 			FactorySessionRuntimeInstanceIDGenerator: func() string { return runtimeInstanceID },
-			ProviderSessionResolveHomeDirectory:      func() (string, error) { return homeDir, nil },
 			WorkerRecordingWriter:                    workerRecordingWriter,
 			FactorySessionsWorkingDirectory: platformfilesystem.Local{
 				WorkingDirectory: filepath.Dir(filepath.Dir(workerRecordingPath)),

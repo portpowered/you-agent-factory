@@ -389,10 +389,9 @@ func TestLargeRolloutStress(t *testing.T) {
 	runner := newLargeStressRolloutRunner(t, rolloutPath, expectedBytes)
 	server := newLargeStressAPIServer()
 	process := buildLargeStressProcess(t, serviceedges.Edges{
-		APIServerStarter:                    server.Start,
-		ProviderCommandRunner:               runner,
-		FactorySessionResolveHomeDirectory:  func() (string, error) { return homeDir, nil },
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		APIServerStarter:                   server.Start,
+		ProviderCommandRunner:              runner,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
 	})
 	inputs := newLargeStressInputs(t.Context(), []string{
 		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet", "--no-record",
