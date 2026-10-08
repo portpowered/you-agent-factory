@@ -669,12 +669,8 @@ func (service *combinedService) bindRuntimeRecorder(
 		recordings.RecordingLifecycle(service),
 		requestScope(request),
 	); err != nil {
-		if recorder.recordingID != "" {
-			_, _ = service.FinishRecording(recordings.FinishRecordingRequest{
-				RecordingID: recordings.RecordingID(recorder.recordingID),
-				FinishedAt:  request.Now().UTC(),
-			})
-		}
+		// Binding already stops and joins an acquired writer on failure. Finish
+		// would publish the incomplete initial history over a retained target.
 		return fmt.Errorf("bind Recordings runtime scope: %w", err)
 	}
 	return nil

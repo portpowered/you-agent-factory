@@ -528,6 +528,44 @@ type activeRuntimeLifecycle struct {
 	statusRequest recordings.RecordingStatusRequest
 }
 
+type failedBindingLifecycle struct {
+	activeRuntimeLifecycle
+	appendErr error
+	stopErr   error
+	stops     int
+}
+
+func (owner *failedBindingLifecycle) RecordRecordingEvent(recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error) {
+	return recordings.RecordRecordingEventResult{}, owner.appendErr
+}
+
+func (owner *failedBindingLifecycle) StopRecording(recordings.StopRecordingRequest) (recordings.StopRecordingResult, error) {
+	owner.stops++
+	return recordings.StopRecordingResult{}, owner.stopErr
+}
+
+func TestRuntimeRecorderBindingFailureNeverFinishesIncompleteHistory(t *testing.T) {
+	t.Parallel()
+	appendErr := errors.New("initial history rejected")
+	stopErr := errors.New("stop writer failed")
+	owner := &failedBindingLifecycle{
+		activeRuntimeLifecycle: activeRuntimeLifecycle{status: recordings.RecordingStatusFacts{RecordingID: "retained"}},
+		appendErr:              appendErr, stopErr: stopErr,
+	}
+	service := &combinedService{Service: owner}
+	startedAt := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
+	recorder := newLifecycleRecorderForTest(t, startedAt, "retained.json")
+	err := service.bindRuntimeRecorder(recorder, recordings.RuntimeScopeRequest{
+		FactorySessionID: "retained-session", Now: func() time.Time { return startedAt },
+	})
+	if !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("bind error = %v, want primary and cleanup identities", err)
+	}
+	if owner.stops != 1 || len(owner.finishes) != 0 {
+		t.Fatalf("failed bind cleanup: stops=%d finishes=%d, want one stop and no publication", owner.stops, len(owner.finishes))
+	}
+}
+
 func (owner *activeRuntimeLifecycle) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
 	owner.started = request
 	return recordings.StartRecordingResult{Enabled: true, Status: owner.status}, nil
