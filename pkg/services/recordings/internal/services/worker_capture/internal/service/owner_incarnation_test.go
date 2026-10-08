@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -13,6 +14,109 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestOwnerRecoveryCatalogReusesCommittedPrefixes(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"empty", "ended", "owner-lost", "alive"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			root := t.TempDir()
+			prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+			original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+			if state != "empty" {
+				opening := journalRecord(t, "recording", "worker")
+				if err := original.PersistWorkerRecord(t.Context(), opening); err != nil {
+					t.Fatal(err)
+				}
+				if state == "ended" {
+					opening.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "worker"), 2)
+					if err := original.PersistWorkerRecord(t.Context(), opening); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			storage := &catalogReadProbe{Local: local}
+			scan := &catalogScanProbe{local: local}
+			probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, live: prior}
+			if state == "owner-lost" {
+				probe.lookupErr = platformprocess.ErrProcessGone
+			}
+			reader, err := NewFileWriter(storage, local, scan, &captureTimeProbe{}, root, "new-runtime", probe)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := reader.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			// A history read after readiness must need neither another directory
+			// scan nor journal IO; failed edges make accidental rebuilds visible.
+			storage.fault, scan.fault = errors.New("unexpected journal read"), errors.New("unexpected scan")
+			want := 1
+			if state == "empty" {
+				want = 0
+			}
+			for range 2 {
+				page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+				if err != nil || scan.calls != 1 || len(page.Items) != want {
+					t.Fatalf("ready catalog: %+v err=%v scans=%d", page, err, scan.calls)
+				}
+				if state != "empty" {
+					assertRecoveredCatalogState(t, page.Items[0], state)
+					page.Items[0].Opening.Payload[0] = '!'
+				}
+			}
+		})
+	}
+}
+
+func assertRecoveredCatalogState(t *testing.T, item recordings.WorkerCapturedCatalogItem, state string) {
+	t.Helper()
+	if item.Catalog.WorkerSessionID != "worker" || item.Opening.Payload[0] != '{' {
+		t.Fatalf("identity or detached opening changed: %+v", item)
+	}
+	switch state {
+	case "ended":
+		if item.Terminal == nil || item.Terminal.Status != "COMPLETED" || item.Health != recordings.WorkerRecordingStatusComplete {
+			t.Fatalf("ended capture: %+v", item)
+		}
+	case "owner-lost":
+		if item.Terminal == nil || item.Terminal.Status != "FAILED" || item.Terminal.Position != 0 || item.HealthReason != "OWNER_LOST" {
+			t.Fatalf("fenced capture: %+v", item)
+		}
+	case "alive":
+		if item.Terminal != nil || item.HealthReason == "OWNER_LOST" {
+			t.Fatalf("live prior owner acquired fabricated terminal: %+v", item)
+		}
+	}
+}
+
+func TestOwnerRecoveryCanceledScanLeavesCatalogRetryable(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	original := journalWriter(t, local)
+	if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	scan := &catalogScanProbe{local: local, afterScan: cancel}
+	reader, err := NewFileWriter(local, local, scan, &captureTimeProbe{}, original.root, "reopened", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.(*FileWriter).RecoverWorkerOwners(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled activation: %v", err)
+	}
+	scan.afterScan = nil
+	if err := reader.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+	if err != nil || len(page.Items) != 1 || scan.calls != 2 {
+		t.Fatalf("fresh activation/list after cancellation: %+v err=%v scans=%d", page, err, scan.calls)
+	}
+}
 
 func TestOwnerRecoveryPersistsOneFencedLossWithoutWorkerCallback(t *testing.T) {
 	t.Parallel()
@@ -166,10 +270,17 @@ func TestOwnerRecoveryUnreadableJournalKeepsReadsRecoverableWithoutAuthority(t *
 	if err := recovered.RecoverWorkerOwners(t.Context()); err != nil || probe.lookups != 0 {
 		t.Fatalf("unavailable journal blocked activation or acquired authority: %v lookups=%d", err, probe.lookups)
 	}
+	if _, err := recovered.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true}); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unavailable recovery cached empty catalog: %v", err)
+	}
 	if _, err := recovered.LoadWorkerRecording(t.Context(), "recording"); !errors.Is(err, unavailable) {
 		t.Fatalf("unavailable read = %v", err)
 	}
 	storage.fault = nil
+	page, err := recovered.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+	if err != nil || len(page.Items) != 1 || page.Items[0].Terminal != nil {
+		t.Fatalf("restored catalog: %+v %v", page, err)
+	}
 	snapshot, err := recovered.LoadWorkerRecording(t.Context(), "recording")
 	if err != nil || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ExecutionTerminal != nil {
 		t.Fatalf("restored prefix = %+v, %v", snapshot, err)

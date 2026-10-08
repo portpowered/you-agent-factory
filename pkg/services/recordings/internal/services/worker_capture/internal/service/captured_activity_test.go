@@ -889,6 +889,9 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, store := range []recordings.WorkerCapturedActivityReader{writer, reopened} {
+		if err := store.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+			t.Fatal(err)
+		}
 		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(page.Items) != 0 {
 			t.Fatalf("ambiguous enumeration = %+v, %v", page, err)
@@ -955,6 +958,9 @@ func TestFileWriterTornCatalogCannotProveAssociations(t *testing.T) {
 
 func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecordingStore) {
 	t.Helper()
+	if err := reopened.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	page, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("default enumeration lost healthy histories beside damage: %+v, %v", page, err)
