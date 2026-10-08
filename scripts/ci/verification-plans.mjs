@@ -6,10 +6,13 @@ const make = (name, target, budget, options = {}) => ({
 export function frontendPlan() {
   return [
     make("component", "ui-component-test", 8, { env: {
-      UI_COMPONENT_MAX_DURATION_MS: "300000", UI_COMPONENT_TEST_MAX_WORKERS: "4",
+      // Leave room for Chromium and Storybook on the shared hosted runner.
+      UI_COMPONENT_MAX_DURATION_MS: "300000", UI_COMPONENT_TEST_MAX_WORKERS: "2",
     } }),
     // test:integration builds the dashboard once before the retained runner.
-    make("dashboard-browser", "ui-integration-test", 30),
+    make("dashboard-browser", "ui-integration-test", 30, { env: {
+      UI_BROWSER_INTEGRATION_MAX_WORKERS: "1", GOMAXPROCS: "2", GOFLAGS: "-p=2",
+    } }),
     // The canonical target builds Storybook once and runs the prebuilt checks.
     make("storybook", "ui-storybook-integration-test", 30),
   ];

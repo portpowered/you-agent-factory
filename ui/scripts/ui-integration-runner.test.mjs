@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-
+import { realBackendHarnessArtifactEnvironmentVariable } from "../integration/browser-test-harness.mjs";
 import {
   browserIntegrationMaxWorkers,
   browserIntegrationPhaseName,
@@ -18,12 +18,68 @@ import {
 
 test("built browser entry starts only after ready output and fails without launching on missing or invalid output", async () => {
   const run = vi.fn();
-  await runBuiltBrowserIntegration({ ready: async () => true, run });
-  expect(run).toHaveBeenCalledWith({ prebuilt: true });
+  const cleanup = vi.fn();
+  const buildHarness = vi.fn(async () => ({
+    artifactPath: "built-harness",
+    cleanup,
+  }));
+  const env = {};
+  await runBuiltBrowserIntegration({
+    ready: async () => true,
+    run,
+    buildHarness,
+    env,
+  });
+  expect(run).toHaveBeenCalledWith({ prebuilt: true, exitOnFailure: false });
+  expect(buildHarness).toHaveBeenCalledTimes(1);
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  expect(env).toEqual({});
   run.mockClear();
+  buildHarness.mockClear();
   await expect(
-    runBuiltBrowserIntegration({ ready: async () => false, run }),
+    runBuiltBrowserIntegration({
+      ready: async () => false,
+      run,
+      buildHarness,
+      env,
+    }),
   ).rejects.toThrow(/missing or invalid/);
+  expect(run).not.toHaveBeenCalled();
+  expect(buildHarness).not.toHaveBeenCalled();
+});
+
+test("built browser entry supplies one harness artifact and restores ownership after a failed suite", async () => {
+  const env = { [realBackendHarnessArtifactEnvironmentVariable]: "previous" };
+  const cleanup = vi.fn();
+  const run = vi.fn(() => {
+    expect(env[realBackendHarnessArtifactEnvironmentVariable]).toBe(
+      "built-harness",
+    );
+    throw new Error("browser assertion failed");
+  });
+  await expect(
+    runBuiltBrowserIntegration({
+      ready: async () => true,
+      env,
+      run,
+      buildHarness: async () => ({ artifactPath: "built-harness", cleanup }),
+    }),
+  ).rejects.toThrow("browser assertion failed");
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  expect(env[realBackendHarnessArtifactEnvironmentVariable]).toBe("previous");
+});
+
+test("harness build failure stays red without starting browser assertions", async () => {
+  const run = vi.fn();
+  await expect(
+    runBuiltBrowserIntegration({
+      ready: async () => true,
+      run,
+      buildHarness: async () => {
+        throw new Error("harness compile failed");
+      },
+    }),
+  ).rejects.toThrow("harness compile failed");
   expect(run).not.toHaveBeenCalled();
 });
 

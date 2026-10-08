@@ -3,6 +3,10 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { browserDistReady } from "../integration/browser-build-lock.mjs";
 import {
+  buildRealBackendBrowserHarness,
+  realBackendHarnessArtifactEnvironmentVariable,
+} from "../integration/browser-test-harness.mjs";
+import {
   mockedBackendBrowserIntegrationFiles,
   mockedBackendBrowserIntegrationPhaseName,
 } from "./ui-integration-targets.mjs";
@@ -118,10 +122,24 @@ export function runBrowserIntegration(options = {}) {
 export async function runBuiltBrowserIntegration({
   ready = () => browserDistReady(fileURLToPath(new URL("..", import.meta.url))),
   run = runBrowserIntegration,
+  buildHarness = buildRealBackendBrowserHarness,
+  env = process.env,
 } = {}) {
   if (!(await ready()))
     throw new Error("Prebuilt dashboard output is missing or invalid");
-  run({ prebuilt: true });
+  // Compilation is setup, not backend readiness. All browser sessions consume
+  // this one artifact rather than compiling inside their readiness deadline.
+  const artifact = await buildHarness();
+  const previous = env[realBackendHarnessArtifactEnvironmentVariable];
+  env[realBackendHarnessArtifactEnvironmentVariable] = artifact.artifactPath;
+  try {
+    await run({ prebuilt: true, exitOnFailure: false });
+  } finally {
+    if (previous === undefined)
+      delete env[realBackendHarnessArtifactEnvironmentVariable];
+    else env[realBackendHarnessArtifactEnvironmentVariable] = previous;
+    await artifact.cleanup();
+  }
 }
 
 export function runFocusedBrowserIntegration(files, options = {}) {
