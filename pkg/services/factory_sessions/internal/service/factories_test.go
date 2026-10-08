@@ -42,6 +42,7 @@ func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
 
 // runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
+	RecordingProjections         recordings.ProjectionService
 	LiveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	ProviderSessions             providersessions.Service
 	Logger                       *zap.Logger
@@ -128,6 +129,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		nil,
 		recordingreplay.NewBehavior(),
 		fixture.LiveChangeCoordinator,
+		fixture.RecordingProjections,
 	)
 }
 func TestNewFactoryRemainsInert(t *testing.T) {
@@ -238,6 +240,7 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		ModelService:                 &modelsConstructionStub{},
 		RecordingsService:            &recordingsRootConstructionStub{},
 		RecordingsRuntime:            &recordingsRootConstructionStub{},
+		RecordingProjections:         &openingCoordinatorProjection{},
 		WebhooksService:              webhooksConstructionStub{},
 		WorkerService:                &workersConstructionStub{},
 		ProviderCommandRunner:        workersRootBindingProbeRunner{tag: "provider"},
@@ -280,10 +283,6 @@ type recordingsRootConstructionStub struct {
 	recordings.Service
 	recordings.RuntimeScopeService
 	replayInputs recordings.ReplayInputLoader
-}
-
-func (*recordingsRootConstructionStub) Projection() recordings.ProjectionService {
-	return &openingCoordinatorProjection{}
 }
 
 type webhooksConstructionStub struct{ webhooks.Service }

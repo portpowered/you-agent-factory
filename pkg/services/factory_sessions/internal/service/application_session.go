@@ -150,12 +150,12 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		ModelInvoker:         bound.ModelInvoker,
 		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
-		Reader:               bound.Reader,
-		Projections:          bound.Projections,
+		Reader:               r.factorySessionsRuntimeAssembly,
+		Projections:          r.recordingProjections,
 		Clock:                bound.Clock,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
-		Recordings:           bound.Recordings,
+		Recordings:           r.recordingsService,
 	}, nil
 }
 

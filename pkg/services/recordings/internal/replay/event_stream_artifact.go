@@ -756,36 +756,16 @@ func expectJSONDelimiter(decoder *json.Decoder, want json.Delim, message string)
 }
 
 func skipJSONValue(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		for decoder.More() {
-			if _, err := decoder.Token(); err != nil {
-				return err
-			}
-			if err := skipJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-	case '[':
-		for decoder.More() {
-			if err := skipJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-	default:
-		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
-	}
-	_, err = decoder.Token()
-	return err
+	// The decoder validates one value without constructing every token in a
+	// Factory snapshot. Only its transient input buffer is retained, rather
+	// than allocating a string/interface for every skipped member.
+	var ignored metadataIgnoredValue
+	return decoder.Decode(&ignored)
 }
+
+type metadataIgnoredValue struct{}
+
+func (*metadataIgnoredValue) UnmarshalJSON([]byte) error { return nil }
 
 func requireJSONEOF(decoder *json.Decoder) error {
 	token, err := decoder.Token()

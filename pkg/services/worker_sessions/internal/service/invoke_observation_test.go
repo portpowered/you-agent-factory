@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,21 +12,10 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-type observationProjectorFake struct {
-	providersessions.Service
-	result providersessions.ProjectResult
-	err    error
-}
-
-func (f observationProjectorFake) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return f.result, f.err
-}
 
 type observationEventReaderFake struct {
 	subscription   events.Subscription
@@ -65,7 +52,7 @@ func (f *observationEventReaderFake) Read(ctx context.Context, req events.ReadRe
 	return result, nil
 }
 
-func newObservationRegistry(provider providersessions.Service, reader EventsReader) *registry {
+func newObservationRegistry(reader EventsReader) *registry {
 	registry := &registry{
 		historySnapshots: newObservationSnapshots(newTestHistoryBudget()),
 		sessions:         make(map[string]workersessions.Session),
@@ -73,7 +60,6 @@ func newObservationRegistry(provider providersessions.Service, reader EventsRead
 		publications:     make(map[string]*publication),
 		supervisions:     make(map[string]*supervision),
 		dispatchOwners:   make(map[string]string),
-		providerSessions: provider,
 		eventReader:      reader,
 		clock:            platformclock.NewDeterministic(time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC), time.Second),
 		logger:           logging.NoopLogger{},
@@ -111,29 +97,9 @@ func observationMetadata() *observation {
 	}
 }
 
-type countingNativeProjector struct {
-	providersessions.Service
-	path  string
-	opens int
-}
-
-func (p *countingNativeProjector) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	p.opens++
-	file, err := os.Open(p.path)
-	if err != nil {
-		return providersessions.ProjectResult{}, err
-	}
-	defer func() { _ = file.Close() }()
-	return providersessions.ProjectResult{Detail: providersessions.Detail{Parse: providersessions.ParseSummary{EventCount: 1}}}, nil
-}
-
 func TestFleetList200SessionsUsesCapturedFactsWithoutNativeOpens(t *testing.T) {
 	t.Parallel()
-	p := &countingNativeProjector{path: filepath.Join(t.TempDir(), "native.jsonl")}
-	if err := os.WriteFile(p.path, []byte("{}\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	r := newObservationRegistry(p, nil)
+	r := newObservationRegistry(nil)
 	for i := range 200 {
 		id := fmt.Sprintf("worker-%03d", i)
 		r.sessions[id] = observationSession(id, workersessions.StateCompleted)
@@ -161,27 +127,16 @@ func TestFleetList200SessionsUsesCapturedFactsWithoutNativeOpens(t *testing.T) {
 					break
 				}
 			}
-			if seen != 200 || p.opens != 0 {
-				t.Fatalf("seen=%d native opens=%d", seen, p.opens)
+			if seen != 200 {
+				t.Fatalf("seen=%d", seen)
 			}
 		}
 	}
-	assertCountedSelectedDetail(t, r, p)
-	if err := os.Remove(p.path); err != nil {
-		t.Fatal(err)
-	}
-	page, err := r.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 200})
-	if err != nil || len(page.Observations) != 200 || p.opens != 1 {
-		t.Fatalf("missing native page=%d error=%v opens=%d", len(page.Observations), err, p.opens)
-	}
-}
-
-func assertCountedSelectedDetail(t *testing.T, r *registry, p *countingNativeProjector) {
-	t.Helper()
 	show, err := r.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-000"})
-	if err != nil || p.opens != 1 || show.Transcript != workersessions.TranscriptAvailabilityAvailable || show.Parse.EventCount != 1 {
-		t.Fatalf("detail=%#v error=%v opens=%d", show, err, p.opens)
+	if err != nil || show.WorkerSessionID != "worker-000" {
+		t.Fatalf("selected identity: %+v, %v", show, err)
 	}
+	assertFleetHasNoNativeEnrichment(t, show)
 }
 
 func assertCapturedFleetRow(t *testing.T, row workersessions.Observation, index int) {
@@ -202,90 +157,6 @@ func assertFleetHasNoNativeEnrichment(t *testing.T, row workersessions.Observati
 	}
 }
 
-func TestProviderTupleObservationPreservesLiveIdentityWithoutTranscript(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name     string
-		provider providersessions.Service
-		wantErr  error
-	}{
-		{"no projector", nil, workersessions.ErrObservationTranscriptProjectionUnavailable},
-		{"missing storage", observationProjectorFake{err: providersessions.ErrSessionNotFound}, workersessions.ErrObservationTranscriptUnavailable},
-		{"unreadable storage", observationProjectorFake{err: errors.New("storage open failed")}, workersessions.ErrObservationTranscriptProjectionUnavailable},
-		{"canceled projection", observationProjectorFake{err: providersessions.ErrOperationCanceled}, workersessions.ErrObservationCanceled},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			registry := newObservationRegistry(test.provider, nil)
-			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
-			metadata := observationMetadata()
-			metadata.factorySessionID = "selected"
-			registry.observations["worker-1"] = metadata
-			request := workersessions.GetObservationRequest{ProviderSession: observationProviderRef()}
-			got, err := registry.GetObservation(context.Background(), request)
-			if errors.Is(test.wantErr, workersessions.ErrObservationCanceled) {
-				if !errors.Is(err, test.wantErr) {
-					t.Fatalf("show error = %v, want %v", err, test.wantErr)
-				}
-			} else if err != nil || got.WorkerSessionID != "worker-1" || got.State != workersessions.StateCompleted ||
-				got.FactorySessionID != "selected" || got.ProviderSession != request.ProviderSession || !got.ProviderSessionAvailable ||
-				got.Transcript != workersessions.TranscriptAvailabilityUnavailable || got.Failure != nil ||
-				!reflect.DeepEqual(got.WorkIDs, []string{"work-1"}) || got.AttemptID != "attempt-1" {
-				t.Fatalf("show = %#v, %v; want retained live identity with unavailable transcript", got, err)
-			}
-			if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: request.ProviderSession}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
-				t.Fatalf("read without capture error = %v", err)
-			}
-		})
-	}
-}
-
-func TestWorkerIdentityObservationEnrichesOnlySelectedScope(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name       string
-		provider   providersessions.Service
-		transcript workersessions.TranscriptAvailability
-		wantErr    error
-	}{
-		{"available", observationProjectorFake{}, workersessions.TranscriptAvailabilityAvailable, nil},
-		{"missing projector", nil, workersessions.TranscriptAvailabilityUnavailable, nil},
-		{"missing transcript", observationProjectorFake{err: providersessions.ErrSessionNotFound}, workersessions.TranscriptAvailabilityUnavailable, nil},
-		{"failed projection", observationProjectorFake{err: errors.New("storage unavailable")}, workersessions.TranscriptAvailabilityUnavailable, nil},
-		{"canceled", observationProjectorFake{err: providersessions.ErrOperationCanceled}, workersessions.TranscriptAvailabilityUnavailable, workersessions.ErrObservationCanceled},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			registry := newObservationRegistry(test.provider, nil)
-			for _, scope := range []string{"selected", "peer"} {
-				address := scopedWorkerAddress("worker-1", scope)
-				state := workersessions.StateCompleted
-				if scope == "peer" {
-					state = workersessions.StateRunning
-				}
-				registry.sessions[address] = observationSession("worker-1", state)
-				metadata := observationMetadata()
-				metadata.factorySessionID = scope
-				registry.observations[address] = metadata
-			}
-			got, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
-				WorkerSessionID: "worker-1", FactorySessionID: "selected",
-			})
-			if test.wantErr != nil {
-				if !errors.Is(err, test.wantErr) {
-					t.Fatalf("observation error = %v, want %v", err, test.wantErr)
-				}
-				return
-			}
-			if err != nil || got.WorkerSessionID != "worker-1" || got.FactorySessionID != "selected" ||
-				got.State != workersessions.StateCompleted || got.Transcript != test.transcript ||
-				got.ProviderSession != observationProviderRef() || !got.ProviderSessionAvailable ||
-				!reflect.DeepEqual(got.WorkIDs, []string{"work-1"}) || got.AttemptID != "attempt-1" {
-				t.Fatalf("scoped observation = %#v, %v", got, err)
-			}
-		})
-	}
-}
 func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 	if observationContextError(nil) != nil || observationContextError(context.Background()) != nil {
 		t.Fatal("observationContextError() rejected nil/background context")
@@ -342,22 +213,7 @@ func TestInvokeObservationDiagnosticsAndTranscriptHelpers(t *testing.T) {
 	if got := nonNegativeDuration(time.Second); got == nil || *got != time.Second {
 		t.Fatalf("nonNegativeDuration(1s) = %v, want 1s", got)
 	}
-	if observationTokenUsage(nil) != nil {
-		t.Fatal("observationTokenUsage(nil) returned a value")
-	}
-	input := 3
-	usage := observationTokenUsage(&providersessions.TokenUsage{InputTokens: &input, TotalTokens: &input})
-	input = 8
-	if usage == nil || usage.InputTokens == nil || *usage.InputTokens != 3 || *usage.TotalTokens != 3 {
-		t.Fatalf("observationTokenUsage() did not detach pointers: %#v", usage)
-	}
-	parse := observationParseDiagnostics(providersessions.ParseSummary{EventCount: 3, MalformedLineCount: 1, UnknownEventCount: 1, ParseErrors: []providersessions.LineError{
-		{LineNumber: 1, Message: "plain diagnostic"},
-		{LineNumber: 2, Message: `C:\secret\rollout.json`},
-	}})
-	if parse.EventCount != 3 || len(parse.Errors) != 2 || parse.Errors[0].Message != "plain diagnostic" || parse.Errors[1].Message == `C:\secret\rollout.json` {
-		t.Fatalf("observationParseDiagnostics() = %#v", parse)
-	}
+
 }
 
 func TestInvokeObservationTranscriptHelpers(t *testing.T) {
@@ -390,7 +246,7 @@ func TestInvokeObservationMergeOrdering(t *testing.T) {
 }
 
 func TestInvokeRetryAndObservationBoundaryGuards(t *testing.T) {
-	registry := newObservationRegistry(observationProjectorFake{}, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["worker-1"] = workersessions.Session{ID: "worker-1", State: workersessions.StateCompleted}
 	registry.ensureObservation("worker-1", "attempt-1", "turn-1", []string{"work-1"})
 	registry.ensureObservation("worker-1", "attempt-2", "turn-2", []string{"work-2"})
@@ -443,13 +299,7 @@ func TestInvokeRetryAndObservationBoundaryGuards(t *testing.T) {
 
 func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	ref := observationProviderRef()
-	text := "hello"
-	providerResult := providersessions.ProjectResult{Detail: providersessions.Detail{
-		Transcript: []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
-		Parse:      providersessions.ParseSummary{EventCount: 1, CumulativeInputTokens: []int{100, 250, 700}},
-	}}
-	provider := observationProjectorFake{result: providerResult}
-	registry := newObservationRegistry(provider, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	registry.observations["worker-1"] = observationMetadata()
 
@@ -467,7 +317,7 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	}
 
 	got, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref})
-	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityAvailable {
+	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityUnavailable {
 		t.Fatalf("GetObservation() = %#v, %v", got, err)
 	}
 	assertObservationTurnUsage(t, got)
@@ -489,7 +339,7 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 }
 
 func TestListWorkerSessionObservationsUsesFleetDefaultFiltersAndCursor(t *testing.T) {
-	registry := newObservationRegistry(nil, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["direct-a"] = workersessions.Session{ID: "direct-a", State: workersessions.StateCompleted}
 	metadataA := observationMetadata()
 	metadataA.direct = true
@@ -543,10 +393,7 @@ func assertObservationListPage(t *testing.T, label string, result workersessions
 
 func TestReadTranscriptByWorkerSessionIDResolvesRecordedAssociationAndLifecycle(t *testing.T) {
 	text := "continued"
-	projector := &trackingObservationProjector{result: providersessions.ProjectResult{Detail: providersessions.Detail{
-		Transcript: []providersessions.TranscriptEntry{{Order: 1, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
-	}}}
-	registry := newObservationRegistry(projector, nil)
+	registry := newObservationRegistry(nil)
 	registry.sessions["direct-1"] = observationSession("direct-1", workersessions.StateCompleted)
 	registry.observations["direct-1"] = observationMetadata()
 	attachTranscriptCapture(registry, "direct-1", "", text)
@@ -554,10 +401,8 @@ func TestReadTranscriptByWorkerSessionIDResolvesRecordedAssociationAndLifecycle(
 	if err != nil || result.WorkerSessionID != "direct-1" || len(result.Entries) != 1 || result.Entries[0].Text == nil || *result.Entries[0].Text != text {
 		t.Fatalf("identity transcript = %#v, %v, want normalized entry", result, err)
 	}
-	if projector.calls != 0 {
-		t.Fatalf("projector reference = %#v, want recorded association %v", projector.request.Session, observationProviderRef())
-	}
-	active := newObservationRegistry(projector, nil)
+
+	active := newObservationRegistry(nil)
 	active.sessions["direct-active"] = workersessions.Session{ID: "direct-active", State: workersessions.StateRunning}
 	active.observations["direct-active"] = observationMetadata()
 	if _, err := active.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "direct-active"}); !errors.Is(err, workersessions.ErrObservationTranscriptActive) {
@@ -571,12 +416,7 @@ func TestReadTranscriptByWorkerSessionIDResolvesRecordedAssociationAndLifecycle(
 func TestInvokeTranscriptProjectionOutcomes(t *testing.T) {
 	ref := observationProviderRef()
 	text := "hello"
-	providerResult := providersessions.ProjectResult{Detail: providersessions.Detail{
-		Transcript: []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
-		Parse:      providersessions.ParseSummary{EventCount: 1},
-	}}
-	provider := observationProjectorFake{result: providerResult}
-	terminalRegistry := newObservationRegistry(provider, nil)
+	terminalRegistry := newObservationRegistry(nil)
 	terminalRegistry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	terminalRegistry.observations["worker-1"] = observationMetadata()
 	attachTranscriptCapture(terminalRegistry, "worker-1", "", text)
@@ -584,19 +424,19 @@ func TestInvokeTranscriptProjectionOutcomes(t *testing.T) {
 	if err != nil || len(read.Entries) != 1 || read.Entries[0].Text == nil || *read.Entries[0].Text != "hello" {
 		t.Fatalf("ReadTranscript() = %#v, %v", read, err)
 	}
-	active := newObservationRegistry(provider, nil)
+	active := newObservationRegistry(nil)
 	active.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	active.observations["worker-1"] = observationMetadata()
 	if _, err := active.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptActive) {
 		t.Fatalf("ReadTranscript(active) error = %v", err)
 	}
-	withoutProvider := newObservationRegistry(nil, nil)
+	withoutProvider := newObservationRegistry(nil)
 	withoutProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	withoutProvider.observations["worker-1"] = observationMetadata()
 	if _, err := withoutProvider.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
 		t.Fatalf("ReadTranscript(without provider service) error = %v", err)
 	}
-	missingMetadata := newObservationRegistry(provider, nil)
+	missingMetadata := newObservationRegistry(nil)
 	missingMetadata.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	if _, err := missingMetadata.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		t.Fatalf("ReadTranscript(missing metadata) error = %v", err)
@@ -699,7 +539,7 @@ func TestStreamObservationsReplayOnlyUsesReadSnapshotWithoutSubscriber(t *testin
 			return events.Delivery{}
 		}),
 	}
-	registry := newObservationRegistry(observationProjectorFake{}, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 
 	subscription, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
@@ -746,7 +586,7 @@ func TestStreamObservationsReplayOnlyEmitsSummaryForEmptyActiveTopic(t *testing.
 		Next:     events.Cursor{Topic: topic},
 		Retained: events.RetainedRange{Topic: topic},
 	}}}
-	registry := newObservationRegistry(observationProjectorFake{}, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 
 	subscription, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
@@ -788,7 +628,7 @@ func TestStreamObservationsByWorkerSessionIDUsesCanonicalTopic(t *testing.T) {
 		Next:     events.Cursor{Topic: topic, Position: 2},
 		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
 	}}}
-	registry := newObservationRegistry(nil, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
 
 	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
@@ -819,7 +659,7 @@ func TestStreamObservationsByWorkerSessionIDResumesWithScopedCursor(t *testing.T
 		Next:     events.Cursor{Topic: topic, Position: 2},
 		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
 	}}}
-	registry := newObservationRegistry(nil, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 
 	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
@@ -868,7 +708,7 @@ func TestStreamObservationsByWorkerSessionIDClassifiesCursorFailures(t *testing.
 			if test.result.Outcome != events.ReadOutcomeUnspecified {
 				reader.readResults = []events.ReadResult{test.result}
 			}
-			registry := newObservationRegistry(nil, reader)
+			registry := newObservationRegistry(reader)
 			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 			_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
 				WorkerSessionID: "worker-1", ReplayOnly: true, Cursor: &test.cursor,
@@ -887,7 +727,7 @@ func TestStreamObservationsByWorkerSessionIDPassesCursorToLiveSubscribe(t *testi
 			return events.Delivery{Kind: events.DeliveryClosed}
 		}),
 	}
-	registry := newObservationRegistry(nil, reader)
+	registry := newObservationRegistry(reader)
 	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 	_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: "worker-1",
@@ -1022,7 +862,7 @@ func TestStreamObservationsReplayOnlyMapsInitialReadFailures(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			reader := &observationEventReaderFake{readErr: test.err}
-			registry := newObservationRegistry(observationProjectorFake{}, reader)
+			registry := newObservationRegistry(reader)
 			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
 			_, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
 				ProviderSession: ref,
@@ -1154,5 +994,28 @@ func TestReplayObservationSubscriptionCompletesAndCloses(t *testing.T) {
 	subscription.Close()
 	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
 		t.Fatalf("delivery after Close() = %#v, want CLOSED", got)
+	}
+}
+
+func TestUncapturedObservationPreservesScopedIdentity(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	for _, scope := range []string{"selected", "peer"} {
+		id := scopedWorkerAddress("worker-1", scope)
+		r.sessions[id] = observationSession("worker-1", workersessions.StateCompleted)
+		metadata := observationMetadata()
+		metadata.factorySessionID = scope
+		r.observations[id] = metadata
+	}
+	got, err := r.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1", FactorySessionID: "selected"})
+	if err != nil || got.WorkerSessionID != "worker-1" || got.FactorySessionID != "selected" || got.State != workersessions.StateCompleted || got.ProviderSession != observationProviderRef() || !got.ProviderSessionAvailable {
+		t.Fatalf("scoped legacy identity = %+v, %v", got, err)
+	}
+	assertFleetHasNoNativeEnrichment(t, got)
+	if got.TokenUsage != nil {
+		t.Fatalf("uncaptured usage = %+v", got.TokenUsage)
+	}
+	if _, err := r.ReadTranscriptByWorkerSessionID(t.Context(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "worker-1", FactorySessionID: "selected"}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+		t.Fatalf("uncaptured transcript = %v", err)
 	}
 }

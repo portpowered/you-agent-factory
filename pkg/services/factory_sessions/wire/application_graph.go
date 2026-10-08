@@ -154,6 +154,7 @@ func NewRoot(
 	modelInvocation RuntimeModelInvocationOperation,
 	replayBehavior *HistoricalReplayBehavior,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
+	recordingProjections recordings.ProjectionService,
 ) (*Root, error) {
 	return service.NewRoot(
 		providerSessions,
@@ -198,6 +199,7 @@ func NewRoot(
 		modelInvocation,
 		replayBehavior,
 		liveChangeCoordinator,
+		recordingProjections,
 	)
 }
 

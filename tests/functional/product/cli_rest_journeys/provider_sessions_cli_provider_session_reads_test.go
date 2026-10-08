@@ -87,8 +87,8 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 	decodeCLIJSON(t, shownInputs, &shown)
 	assertProviderSessionTerminalIdentity(t, shown, terminal, sessionID, workID)
 	assertProviderSessionReadSafe(t, shownInputs.Stdout(), fixture.homeDir)
-	if shown.Transcript != "UNAVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || len(shown.Parse.Errors) != 0 {
-		t.Fatalf("canonical show copied optional native transcript diagnostics: %#v", shown)
+	if shown.Transcript != "AVAILABLE" || shown.Parse.EventCount != 0 || shown.Parse.MalformedLineCount != 0 || shown.Parse.UnknownEventCount != 0 || len(shown.Parse.Errors) != 0 {
+		t.Fatalf("canonical show = %#v, want captured transcript available without native diagnostics", shown)
 	}
 	// Compatibility lists now use the same captured projection as reads.
 	// Native truncated files cannot contribute parse diagnostics.

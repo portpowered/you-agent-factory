@@ -16,7 +16,16 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+import { timePackagePhase } from "../../scripts/package-phase-timing.mjs";
 import { normalizeStagedMtimes } from "../../scripts/package-release-candidate.mjs";
+import {
+  smokeFrontendPackages,
+  validateFrontendTarballs,
+} from "../../scripts/public-package-install-smoke.mjs";
+import {
+  registryShasum,
+  verifyInstalledRegistryPackages,
+} from "../../scripts/public-package-registry.mjs";
 import {
   assertCandidateSetEvidence,
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -70,15 +79,6 @@ export function assertFrontendCandidateEvidence(evidence) {
   return evidence;
 }
 
-const npmPackArguments = (stagedDirectory, outputDirectory) => [
-  "pack",
-  stagedDirectory,
-  "--json",
-  "--ignore-scripts",
-  "--pack-destination",
-  outputDirectory,
-];
-
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -129,17 +129,46 @@ function runNpm(args, options = {}) {
   return run(process.execPath, [npmCli, ...args], options);
 }
 
-export function packCandidate({ stagedDirectory, outputDirectory }) {
-  return runNpm(npmPackArguments(stagedDirectory, outputDirectory), {
-    cwd: uiRoot,
+export async function packCandidate({ stagedDirectory, outputDirectory }) {
+  const manifest = JSON.parse(
+    await readFile(path.join(stagedDirectory, "package.json"), "utf8"),
+  );
+  const filename = `${manifest.name.replace(/^@/, "").replaceAll("/", "-")}-${manifest.version}.tgz`;
+  const tarballPath = path.join(outputDirectory, filename);
+  await run(
+    "bun",
+    ["pm", "pack", "--ignore-scripts", "--filename", tarballPath],
+    {
+      cwd: stagedDirectory,
+      capture: true,
+    },
+  );
+  const { stdout: listing } = await run("tar", ["-tzf", tarballPath], {
     capture: true,
   });
+  const bytes = await readFile(tarballPath);
+  const report = {
+    name: manifest.name,
+    version: manifest.version,
+    filename,
+    integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+    shasum: createHash("sha1").update(bytes).digest("hex"),
+    files: listing
+      .trim()
+      .split(/\r?\n/)
+      .map((entry) => ({ path: entry.replace(/^package\//, "") })),
+  };
+  return { stdout: JSON.stringify([report]), stderr: "" };
 }
 
 async function stagePackage({ packageSpec, version, stagingRoot }) {
   const sourceDirectory = path.join(uiRoot, "packages", packageSpec.directory);
   const stagedDirectory = path.join(stagingRoot, packageSpec.directory);
-  await run("bun", ["run", "build"], { cwd: sourceDirectory });
+  await timePackagePhase(`build ${packageSpec.name}`, () =>
+    run("bun", ["run", "--bun", "scripts/build-package.mjs"], {
+      cwd: sourceDirectory,
+    }),
+  );
   await cp(sourceDirectory, stagedDirectory, {
     recursive: true,
     filter: (entry) => !entry.split(path.sep).includes("node_modules"),
@@ -199,9 +228,13 @@ export async function preparePublicPackageCandidates({
   const resolvedOutput = path.resolve(outputDirectory);
   const stagingRoot = await mkdtemp(path.join(uiRoot, ".you-public-packages-"));
   await mkdir(resolvedOutput, { recursive: true });
-  await run("bun", ["run", "link:public-package-dependencies"], {
-    cwd: uiRoot,
-  });
+  await run(
+    "bun",
+    ["run", "--bun", "scripts/link-public-package-dependencies.mjs"],
+    {
+      cwd: uiRoot,
+    },
+  );
   const buildOutputs = await snapshotBuildOutputs(stagingRoot);
   const candidates = [];
   try {
@@ -211,14 +244,18 @@ export async function preparePublicPackageCandidates({
         version,
         stagingRoot,
       });
-      const { stdout } = await packCandidate({
-        stagedDirectory,
-        outputDirectory: resolvedOutput,
-      });
+      const { stdout } = await timePackagePhase(
+        `pack ${packageSpec.name}`,
+        () =>
+          packCandidate({
+            stagedDirectory,
+            outputDirectory: resolvedOutput,
+          }),
+      );
       const [report] = JSON.parse(stdout);
       if (report?.name !== packageSpec.name || report?.version !== version) {
         throw new Error(
-          `npm pack returned unexpected identity for ${packageSpec.name}`,
+          `bun pack returned unexpected identity for ${packageSpec.name}`,
         );
       }
       assertPackedExportTargets(report.name, manifest.exports, report.files);
@@ -243,29 +280,6 @@ export async function preparePublicPackageCandidates({
   } finally {
     await restoreBuildOutputs(buildOutputs);
     await rm(stagingRoot, { recursive: true, force: true });
-  }
-}
-
-async function registryShasum(packageName, version) {
-  try {
-    const { stdout } = await runNpm(
-      ["view", `${packageName}@${version}`, "dist.shasum", "--json"],
-      {
-        cwd: uiRoot,
-        capture: true,
-      },
-    );
-    const shasum = JSON.parse(stdout);
-    if (typeof shasum !== "string" || !/^[a-f0-9]{40}$/.test(shasum)) {
-      throw new Error(
-        `Registry returned an invalid digest for ${packageName}@${version}`,
-      );
-    }
-    return shasum;
-  } catch (error) {
-    if (error?.code === 1 && /E404|404 Not Found/.test(error.stderr ?? ""))
-      return null;
-    throw error;
   }
 }
 
@@ -321,6 +335,11 @@ export async function publishPublicPackageCandidates({
   candidateDirectory,
   tag,
   provenance,
+  smoke = smokeFrontendPackages,
+  lookup = registryShasum,
+  publish = (args) => runNpm(args, { cwd: uiRoot }),
+  verify = verifyRegistryVersion,
+  verifyInstalled = verifyInstalledRegistryPackages,
 }) {
   if (!/^[a-z][a-z0-9-]*$/.test(tag ?? ""))
     throw new Error(`Invalid npm dist-tag: ${tag}`);
@@ -332,41 +351,55 @@ export async function publishPublicPackageCandidates({
     ),
   );
   assertFrontendCandidateEvidence(evidence);
-  for (const packageSpec of PUBLIC_PACKAGES) {
-    const candidate = evidence.packages.find(
-      ({ name }) => name === packageSpec.name,
-    );
-    if (!candidate || candidate.version !== evidence.version) {
-      throw new Error(`Missing exact candidate for ${packageSpec.name}`);
-    }
-    if (path.basename(candidate.filename) !== candidate.filename) {
-      throw new Error(`Invalid candidate filename for ${packageSpec.name}`);
-    }
-    const tarballPath = path.join(resolvedDirectory, candidate.filename);
-    const shasum = createHash("sha1")
-      .update(await readFile(tarballPath))
-      .digest("hex");
-    if (shasum !== candidate.shasum) {
-      throw new Error(`Candidate digest mismatch for ${packageSpec.name}`);
-    }
-    const registryDigest = await registryShasum(
-      candidate.name,
-      candidate.version,
-    );
+  const candidates = await validateFrontendTarballs(
+    evidence,
+    resolvedDirectory,
+  );
+  await timePackagePhase("family preflight", () =>
+    smoke({ candidateDirectory: resolvedDirectory, evidence }),
+  );
+  // Inspect the whole immutable family before mutating any registry entry.
+  const registryDigests = await Promise.all(
+    candidates.map((candidate) =>
+      timePackagePhase(`lookup ${candidate.name}`, () =>
+        lookup(candidate.name, candidate.version),
+      ),
+    ),
+  );
+  for (const [index, candidate] of candidates.entries()) {
+    const registryDigest = registryDigests[index];
     if (registryDigest !== null && registryDigest !== candidate.shasum) {
-      throw new Error(`Registry digest conflict for ${packageSpec.name}`);
+      throw new Error(`Registry digest conflict for ${candidate.name}`);
     }
-    if (registryDigest === null) {
-      const args = ["publish", tarballPath, "--tag", tag, "--access", "public"];
-      if (provenance) args.push("--provenance");
-      await runNpm(args, { cwd: uiRoot });
-    }
-    await verifyRegistryVersion(
-      candidate.name,
-      candidate.version,
-      candidate.shasum,
-    );
   }
+  for (const [index, candidate] of candidates.entries()) {
+    const registryDigest = registryDigests[index];
+    if (registryDigest === null) {
+      const args = [
+        "publish",
+        candidate.tarball,
+        "--tag",
+        tag,
+        "--access",
+        "public",
+      ];
+      if (provenance) args.push("--provenance");
+      await timePackagePhase(`publish ${candidate.name}`, () => publish(args));
+    }
+  }
+  // Publication remains ordered; visibility waits overlap within the same bounded window.
+  const visibility = await Promise.allSettled(
+    candidates.map((candidate) =>
+      timePackagePhase(`visibility ${candidate.name}`, () =>
+        verify(candidate.name, candidate.version, candidate.shasum, { lookup }),
+      ),
+    ),
+  );
+  const failure = visibility.find(({ status }) => status === "rejected");
+  if (failure) throw failure.reason;
+  await timePackagePhase("registry installed family", () =>
+    verifyInstalled(evidence),
+  );
   return evidence;
 }
 
@@ -384,16 +417,20 @@ async function main() {
   });
   const result =
     values.action === "prepare"
-      ? await preparePublicPackageCandidates({
-          version: values.version,
-          outputDirectory: values["output-directory"],
-        })
+      ? await timePackagePhase("prepare total", () =>
+          preparePublicPackageCandidates({
+            version: values.version,
+            outputDirectory: values["output-directory"],
+          }),
+        )
       : values.action === "publish"
-        ? await publishPublicPackageCandidates({
-            candidateDirectory: values["candidate-directory"],
-            tag: values.tag,
-            provenance: values.provenance,
-          })
+        ? await timePackagePhase("publish total", () =>
+            publishPublicPackageCandidates({
+              candidateDirectory: values["candidate-directory"],
+              tag: values.tag,
+              provenance: values.provenance,
+            }),
+          )
         : (() => {
             throw new Error(
               `Unsupported public package action: ${values.action ?? "missing"}`,

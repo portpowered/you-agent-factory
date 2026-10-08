@@ -9,12 +9,14 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	inventoryservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recorded_session_inventory/internal/service"
 )
 
 func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *testing.T) {
@@ -45,7 +47,7 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 				paths[3]: {Portable: portableInput("session-same")},
 				paths[4]: {Portable: portableInput("session-same")},
 			}}
-			inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, selectedLogger)
+			inventory := inventoryservice.New(os.ReadDir, loader, selectedLogger)
 
 			result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 			if err != nil {
@@ -88,7 +90,7 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 			if !reflect.DeepEqual(result.Sessions, want) {
 				t.Fatalf("sessions = %#v, want %#v", result.Sessions, want)
 			}
-			if !reflect.DeepEqual(loader.calls, sortedCopy(paths)) {
+			if !reflect.DeepEqual(sortedCopy(loader.calls), sortedCopy(paths)) {
 				t.Fatalf("loader calls = %#v, want %#v", loader.calls, sortedCopy(paths))
 			}
 			if len(loader.metadataOnly) != len(paths) {
@@ -115,7 +117,7 @@ func TestListRecordedSessionsReturnsEmptyForAbsentOrEmptyRoot(t *testing.T) {
 			}
 			for name, root := range tests {
 				t.Run(name, func(t *testing.T) {
-					inventory := recordingswire.NewRecordedSessionInventory(
+					inventory := inventoryservice.New(
 						os.ReadDir,
 						&recordedInputLoader{inputs: map[string]recordings.LoadReplayInputResult{}},
 						selectedLogger,
@@ -149,7 +151,7 @@ func TestListRecordedSessionsSkipsMalformedCandidateAndReportsIt(t *testing.T) {
 				},
 				errors: map[string]error{bad: errors.New("credential=planted-secret absolute-home-path")},
 			}
-			inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, selectedLogger)
+			inventory := inventoryservice.New(os.ReadDir, loader, selectedLogger)
 
 			result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 			if err != nil {
@@ -203,7 +205,7 @@ func TestListRecordedSessionsDoesNotMutateArtifactsAndUsesLoaderBoundary(t *test
 			loader := &recordedInputLoader{inputs: map[string]recordings.LoadReplayInputResult{
 				path: {Legacy: &recordings.ReplayArtifact{}},
 			}}
-			inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, selectedLogger)
+			inventory := inventoryservice.New(os.ReadDir, loader, selectedLogger)
 
 			if _, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root}); err != nil {
 				t.Fatalf("ListRecordedSessions() error = %v", err)
@@ -235,7 +237,7 @@ func TestListRecordedSessionsIgnoresNonDatedAndUnsupportedFiles(t *testing.T) {
 			loader := &recordedInputLoader{inputs: map[string]recordings.LoadReplayInputResult{
 				valid: {Portable: portableInput("valid-session")},
 			}}
-			inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, selectedLogger)
+			inventory := inventoryservice.New(os.ReadDir, loader, selectedLogger)
 
 			result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 			if err != nil {
@@ -266,7 +268,7 @@ func TestListRecordedSessionsSkipsConflictingLegacySessionIdentities(t *testing.
 					{Context: recordings.FactoryEventContext{SessionID: &second}},
 				}}},
 			}}
-			inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, selectedLogger)
+			inventory := inventoryservice.New(os.ReadDir, loader, selectedLogger)
 
 			result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 			if err != nil || len(result.Sessions) != 0 {
@@ -277,6 +279,7 @@ func TestListRecordedSessionsSkipsConflictingLegacySessionIdentities(t *testing.
 }
 
 type recordedInputLoader struct {
+	mu           sync.Mutex
 	inputs       map[string]recordings.LoadReplayInputResult
 	errors       map[string]error
 	calls        []string
@@ -284,6 +287,8 @@ type recordedInputLoader struct {
 }
 
 func (loader *recordedInputLoader) LoadReplayInput(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	loader.mu.Lock()
+	defer loader.mu.Unlock()
 	loader.calls = append(loader.calls, request.Path)
 	loader.metadataOnly = append(loader.metadataOnly, request.MetadataOnly)
 	if err := loader.errors[request.Path]; err != nil {
@@ -384,7 +389,7 @@ func TestListRecordedSessionsPreservesDirectoryFailure(t *testing.T) {
 				if variant == "noop" {
 					logger = logging.NoopLogger{}
 				}
-				inventory := recordingswire.NewRecordedSessionInventory(reader, &recordedInputLoader{}, logger)
+				inventory := inventoryservice.New(reader, &recordedInputLoader{}, logger)
 				result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 				if !errors.Is(err, cause) || !strings.Contains(err.Error(), "read recording directory") || len(result.Sessions) != 0 || len(result.Warnings) != 0 {
 					t.Fatalf("result = %#v, error = %v", result, err)
@@ -423,9 +428,66 @@ func TestListRecordedSessionsPreservesMetadataFailure(t *testing.T) {
 		return entries, err
 	}
 	loader := &recordedInputLoader{}
-	inventory := recordingswire.NewRecordedSessionInventory(reader, loader, logging.NoopLogger{})
+	inventory := inventoryservice.New(reader, loader, logging.NoopLogger{})
 	result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 	if !errors.Is(err, want) || len(result.Sessions) != 0 || len(result.Warnings) != 0 || len(loader.calls) != 0 {
 		t.Fatalf("metadata failure result=%#v error=%v calls=%v", result, err, loader.calls)
 	}
+}
+
+func TestListRecordedSessionsBoundsMetadataReadersAndOrdersWarnings(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for i := range 12 {
+		writeRecordingFile(t, root, filepath.Join("2026", "10", "08", fmt.Sprintf("%02d.json", i)), "fixture")
+	}
+	loader := &gatedMetadataLoader{entered: make(chan struct{}, 12), release: make(chan struct{})}
+	inventory := inventoryservice.New(os.ReadDir, loader, logging.NoopLogger{})
+	done := make(chan recordings.RecordedSessionInventoryResult, 1)
+	go func() {
+		result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+		if err != nil {
+			t.Error(err)
+		}
+		done <- result
+	}()
+	// All four readers must overlap before any can finish. Cancellation is
+	// only a failure ceiling; no sleep/timing assertion controls this proof.
+	for range 4 {
+		select {
+		case <-loader.entered:
+		case <-t.Context().Done():
+			close(loader.release)
+			t.Fatal("metadata readers did not overlap")
+		}
+	}
+	close(loader.release)
+	result := <-done
+	if loader.maximum.Load() != 4 || len(result.Sessions) != 0 || len(result.Warnings) != 12 {
+		t.Fatalf("max readers=%d result=%#v", loader.maximum.Load(), result)
+	}
+	for i, warning := range result.Warnings {
+		if warning.ArtifactReference != fmt.Sprintf("2026/10/08/%02d.json", i) {
+			t.Fatalf("warning order: %#v", result.Warnings)
+		}
+	}
+}
+
+type gatedMetadataLoader struct {
+	entered         chan struct{}
+	release         chan struct{}
+	active, maximum atomic.Int32
+}
+
+func (loader *gatedMetadataLoader) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	active := loader.active.Add(1)
+	defer loader.active.Add(-1)
+	for maximum := loader.maximum.Load(); active > maximum; maximum = loader.maximum.Load() {
+		if loader.maximum.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	loader.entered <- struct{}{}
+	<-loader.release
+	return recordings.LoadReplayInputResult{}, errors.New("controlled unreadable artifact")
 }

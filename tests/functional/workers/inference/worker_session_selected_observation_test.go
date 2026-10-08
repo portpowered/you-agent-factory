@@ -18,11 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Work-scoped compatibility enrichment selects by provider tuple, not Factory
-// Session: it must enumerate the entire profile catalog to prove uniqueness.
-// Unrelated Worker openings invalidate that catalog generation. Give each native
-// availability variant its own profile so public completed-capture reads have a
-// stable membership window without serializing any of the variants. Reuse these
+// Give each native-file availability variant its own profile so public capture
+// reads have a stable membership window without serializing the variants. Reuse these
 // processes across test repetitions; TestMain joins their hosts after all leaves.
 var selectedObservationGroups = map[string]*inferenceProcessGroup{
 	"available":          {},
@@ -240,10 +237,19 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, state)
 	}
 	assertSelectedProviderEnrichment(t, matching[0], false)
-	// Work-scoped compatibility reads the same capture whether native files
-	// exist or are absent. An active prefix remains unavailable.
 	assertSelectedProviderEnrichment(t, workRows[0], state == "COMPLETED" && providerID != "")
-	assertSelectedProviderEnrichment(t, shown, false)
+	assertSelectedProviderEnrichment(t, shown, state == "COMPLETED" && providerID != "")
+	// Committed usage is available across views independently of optional
+	// transcript enrichment and native-file availability.
+	for _, row := range []factoryapi.WorkerSessionObservation{matching[0], workRows[0], shown} {
+		if state == "COMPLETED" {
+			if row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 1 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != 1 {
+				t.Fatalf("committed usage = %#v, want input=1/output=1", row.TokenUsage)
+			}
+		} else if row.TokenUsage != nil {
+			t.Fatalf("active prefix usage = %#v, want omitted usage before publication", row.TokenUsage)
+		}
+	}
 }
 
 func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSessionObservation, sessionID, workerID, providerID, state string) {
@@ -284,13 +290,11 @@ func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObser
 func assertSelectedProviderEnrichment(t *testing.T, row factoryapi.WorkerSessionObservation, available bool) {
 	t.Helper()
 	wantTranscript := factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
-	wantEvents := 0
 	if available {
 		wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
-		wantEvents = 9
 	}
-	if row.Transcript != wantTranscript || row.Parse.EventCount != wantEvents || row.Parse.MalformedLineCount != 0 || row.Parse.UnknownEventCount != 0 || len(row.Parse.Errors) != 0 || row.TurnUsage != nil {
-		t.Fatalf("provider enrichment = %#v, want transcript %s and %d captured events without turn usage", row, wantTranscript, wantEvents)
+	if row.Transcript != wantTranscript || row.Parse.EventCount != 0 || row.Parse.MalformedLineCount != 0 || row.Parse.UnknownEventCount != 0 || len(row.Parse.Errors) != 0 || row.TurnUsage != nil {
+		t.Fatalf("captured observation = %#v, want transcript %s without native parse diagnostics or turn usage", row, wantTranscript)
 	}
 }
 

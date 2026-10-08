@@ -35,7 +35,7 @@ func addActiveHistoryFixture(r *registry, id string, direct bool) {
 
 func TestActiveHistoryRequiresAdmittedOwnersAndFiltersBeforePaging(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "direct-a", true)
 	addActiveHistoryFixture(r, "factory-b", false)
 	addActiveHistoryFixture(r, "orphan", true)
@@ -76,7 +76,7 @@ func TestActiveHistoryRequiresAdmittedOwnersAndFiltersBeforePaging(t *testing.T)
 
 func TestActiveHistoryFreezesMembershipFactsAndKeepsCompatibility(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "a", true)
 	addActiveHistoryFixture(r, "b", false)
 	request := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
@@ -104,7 +104,7 @@ func TestActiveHistoryFreezesMembershipFactsAndKeepsCompatibility(t *testing.T) 
 
 func TestActiveHistoryRejectsMismatchedProfileFiltersAndCanceledReads(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "a", true)
 	addActiveHistoryFixture(r, "b", true)
 	request := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
@@ -116,7 +116,7 @@ func TestActiveHistoryRejectsMismatchedProfileFiltersAndCanceledReads(t *testing
 	if _, err := r.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{NextToken: first.NextToken}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("snapshot cursor on omitted history error = %v", err)
 	}
-	foreign := newObservationRegistry(nil, nil)
+	foreign := newObservationRegistry(nil)
 	if _, err := foreign.ListWorkerSessionObservations(t.Context(), request); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("foreign cursor error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestActiveHistoryRejectsMismatchedProfileFiltersAndCanceledReads(t *testing
 
 func TestActiveHistoryCursorNormalizesEquivalentStateFilters(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "a", true)
 	addActiveHistoryFixture(r, "b", true)
 	request := workersessions.ListWorkerSessionObservationsRequest{
@@ -156,7 +156,7 @@ func TestActiveHistoryCursorNormalizesEquivalentStateFilters(t *testing.T) {
 
 func TestFleetHistorySamplesAllOwnersBeforeSharedArchive(t *testing.T) {
 	t.Parallel()
-	direct, factory := newObservationRegistry(nil, nil), newObservationRegistry(nil, nil)
+	direct, factory := newObservationRegistry(nil), newObservationRegistry(nil)
 	addActiveHistoryFixture(direct, "a-live", true)
 	addActiveHistoryFixture(factory, "b-live", false)
 	fake := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{
@@ -209,7 +209,7 @@ func TestFleetHistorySamplesAllOwnersBeforeSharedArchive(t *testing.T) {
 
 func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 	t.Parallel()
-	source := newObservationRegistry(nil, nil)
+	source := newObservationRegistry(nil)
 	addActiveHistoryFixture(source, "a", true)
 	addActiveHistoryFixture(source, "b", false)
 	calls := 0
@@ -243,7 +243,7 @@ func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 
 func TestFleetHistoryKeepsScopedIdentityAndPropagatesUnavailable(t *testing.T) {
 	t.Parallel()
-	first, second := newObservationRegistry(nil, nil), newObservationRegistry(nil, nil)
+	first, second := newObservationRegistry(nil), newObservationRegistry(nil)
 	addActiveHistoryFixture(first, "shared-id", false)
 	addActiveHistoryFixture(second, "shared-id", false)
 	second.observations["shared-id"].factorySessionID = "factory-2"
@@ -280,7 +280,7 @@ type fleetHistoryPageFake struct {
 
 func TestFleetHistoryOwnerSamplingPreservesRegistryCursor(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "a", true)
 	addActiveHistoryFixture(r, "b", true)
 	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
@@ -361,7 +361,7 @@ func TestFleetHistoryUsesScopedSnapshotInsteadOfCompatibilityCursor(t *testing.T
 
 func TestFleetHistoryReadsBoundedOwnerPagesAndRejectsMalformedSources(t *testing.T) {
 	t.Parallel()
-	r := newObservationRegistry(nil, nil)
+	r := newObservationRegistry(nil)
 	addActiveHistoryFixture(r, "a", true)
 	addActiveHistoryFixture(r, "b", true)
 	addActiveHistoryFixture(r, "c", true)

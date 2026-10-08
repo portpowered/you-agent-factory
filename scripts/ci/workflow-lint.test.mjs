@@ -11,7 +11,24 @@ import {
 	runWorkflowLint,
 	validateControlledRawFailureWorkflowContract,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
+	validateFrontendSharedSetupWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("Workflow Lint guards shared frontend proof, cache identity and policy wiring", () => {
+	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
+	assert.equal(validateFrontendSharedSetupWorkflowContract({ workflow }).status, "pass");
+	for (const [before, after] of [
+		["bun install --frozen-lockfile", "bun install"],
+		["frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}", "frontend-bun-v1"],
+		["if: success() || failure()", "if: success()"],
+		["run: make test-ui-coverage", "run: make ui-test"],
+		["FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}", "FRONTEND_COVERAGE_RESULT: ${{ needs.frontend-component.result }}"],
+	]) {
+		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
+			workflow: workflow.replace(before, after),
+		}), /workflow contract/);
+	}
+});
 
 test("workflow lint isolates the guarded raw failure fixture from shared CI", () => {
 	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");

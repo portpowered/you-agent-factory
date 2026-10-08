@@ -17,7 +17,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -114,7 +113,6 @@ func provideWorkerHistorySnapshotBudget() *workersessionswire.HistorySnapshotBud
 func provideWorkerSessionsService(
 	execution workers.Service,
 	eventsService events.Service,
-	providerSessions providersessions.Service,
 	logger logging.Logger,
 	clock factoryruntime.Clock,
 	scheduler platformclock.TimerSource,
@@ -127,7 +125,7 @@ func provideWorkerSessionsService(
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, providerSessions, recorder, reader, operations, restart, snapshots, providerService)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, reader, operations, restart, snapshots, providerService)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

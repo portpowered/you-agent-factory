@@ -225,7 +225,7 @@ LINT_REPORT_FILE ?=
 # differs from the merge-base with origin/main (or has untracked files), and
 # leaves the slow deadcode ratchet to CI. CI (CI set) or LINT_FULL=1 runs the
 # complete inventory. Override LINT_TARGETS to select targets explicitly.
-LINT_TARGETS_BASE := vet model-provider-package-check golangci lint-migration-smoke fmt-check contracts-check
+LINT_TARGETS_BASE := vet model-provider-package-check golangci docs-reference-check fmt-check contracts-check
 LINT_TARGETS_UI := ui-lint ui-deadcode
 LINT_TARGETS_CI_ONLY := deadcode
 LINT_FULL ?=
@@ -1075,6 +1075,10 @@ model-provider-package-check:
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GOLANGCI_LINT ?= $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 GOLANGCI_DIR ?= .artifacts/golangci
+# Optional diagnostics use distinct profiles for the three authoritative scopes.
+# Verbose logs include package loading and go/analysis pass timings.
+GOLANGCI_PROFILE_DIR ?=
+golangci_profile_flags = $(if $(strip $(GOLANGCI_PROFILE_DIR)),--verbose --cpu-profile-path "$(GOLANGCI_PROFILE_DIR)/$(1).cpu.pprof",)
 ifeq ($(OS),Windows_NT)
 GOLANGCI_REPOSITORY ?= $(GOLANGCI_DIR)/golangci-repository.exe
 else
@@ -1095,8 +1099,9 @@ endif
 
 repository-lint-run: golangci-build
 	@git merge-base HEAD origin/main
-	$(GOLANGCI_REPOSITORY) run --config .golangci-repository-default.yml ./...
-	$(GOLANGCI_REPOSITORY) run --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
+	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
+	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,repository-default) --config .golangci-repository-default.yml ./...
+	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,repository-tagged) --config .golangci-repository.yml --build-tags="$(REPOSITORY_LINT_TAGS)" ./...
 # Compiler tag union shared with the compiler-owner analyzer.
 REPOSITORY_LINT_TAGS ?= integration,functionallong,backendconformance,factoryartifact,managed_process_integration
 
@@ -1108,9 +1113,10 @@ LINT_MIGRATION_COHORT ?= all
 lint-migration-smoke: $(if $(filter markdown,$(LINT_MIGRATION_COHORT)),$(DOCS_MARKDOWN_CACHE)/ready,golangci-build)
 	$(PYTHON) scripts/lint-migration-smoke.py "$(LINT_MIGRATION_COHORT)" --golangci "$(abspath $(GOLANGCI_REPOSITORY))"
 
-golangci-lint-run:
+golangci-lint-run: golangci-build
 	@git merge-base HEAD origin/main
-	$(GOLANGCI_LINT) run ./...
+	@$(if $(strip $(GOLANGCI_PROFILE_DIR)),mkdir -p "$(GOLANGCI_PROFILE_DIR)",:)
+	$(GOLANGCI_REPOSITORY) run $(call golangci_profile_flags,builtin) --config .golangci.yml ./...
 
 deadcode: golangci-build
 	$(PYTHON) scripts/deadcode-report.py --golangci-host-file "$(GOLANGCI_DIR)/host-path.txt" -- $(GO) run golang.org/x/tools/cmd/deadcode@v0.25.1

@@ -39,11 +39,23 @@ Before making a decision, read these files in full:
 Inspect the live Factory Session and queue before submitting or repairing Work:
 
 ```sh
-python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 session list
+python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 session inventory
 python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 work list --session {{.Context.SessionID}}
 ```
 
-Use this helper for these read-only inspection commands.
+Use this helper for these read-only inspection commands. Inventory returns the
+complete ALL API JSON, including recorded history; recorded identities do not
+grant live Work authority. Use the explicit current Session for Work inspection.
+The optional session inventory uses an initial 10-second HTTP timeout and exactly one retry at 60 seconds.
+Every failed admitted inventory read is transient; invalid arguments and cancellation are not retried.
+Backoff for inventory is 1 second plus at most 0.25 seconds of jitter.
+On exhaustion, record the inventory gap in feedback and supervisor working memory; never treat it as an empty inventory.
+For a mission-bearing thoughts loopback, perform the bound mission despite an optional inventory gap.
+A loopback returns FAILED only for its own mission's reasons, never for an optional supervisor inventory read.
+Mission instructions take precedence over the portfolio-supervisor routine.
+Do not claim inventory-dependent portfolio conclusions while the gap remains.
+
+The legacy session list and explicit-session Work list forms retain these rules:
 The helper enables the CLI's supported `--debug` diagnostics to classify
 HTTP status and transport timeouts hidden by the default error envelope.
 Successful command streams are forwarded unchanged; retry metadata omits error bodies.
@@ -51,7 +63,8 @@ It retries HTTP 5xx and timeouts three times after the initial attempt.
 Backoff is 1, 2, then 4 seconds, each with at most 0.25 seconds of jitter.
 Each attempt has a 30-second timeout.
 Do not add another agent-level retry loop after helper exhaustion.
-Fail with the final command evidence when the helper exhausts its budget.
+Fail with the final command evidence when a required mission read exhausts its budget.
+Optional supervisor reads must not prevent the loopback mission or its existing handoff.
 Never use this helper for submissions, Work controls, or other mutations.
 
 The canonical local Factory server for this factory is
@@ -88,7 +101,8 @@ applies:
 
 Work repair and resubmission require new evidence and a concrete reason.
 Record the request identity and allow one attempt for the same unchanged Work failure per supervision pass.
-Read-only inspections use the helper's separate three-retry budget.
+Legacy read-only inspections use the helper's separate three-retry budget;
+optional session inventory uses its separate one-retry budget above.
 A deterministic blocker gets a narrow correction, a contract clarification, or an external hold.
 Supervisor Work authority remains governed by the operating policy.
 Never skip implementation, review, or validation.
@@ -238,7 +252,7 @@ the receipt in supervisor state.
 
 Return only `{"decision":"ACCEPTED","feedback":"<verified submission or hold>","output":"<request ID or hold>"}`.
 For the tagged loopback exception above, output is the saved proposal path.
-On a failed CLI operation or unverified admission, return `FAILED` with the
+On a failed required mission CLI operation or unverified required admission, return `FAILED` with the
 exact blocker. Do not return a Work batch or a `request` wrapper. When no safe
 action remains, record the hold and return an accepted hold decision without
 submitting a batch.

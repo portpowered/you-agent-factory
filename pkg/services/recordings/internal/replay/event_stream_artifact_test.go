@@ -17,6 +17,30 @@ import (
 
 const replayV2TestSessionID = "00000000-0000-4000-8000-000000000001"
 
+func TestLegacyMetadataSkipsNestedValuesAndStopsAtIdentity(t *testing.T) {
+	t.Parallel()
+	for _, skipped := range []string{`{"nested":[{},[true,false,null],42,"text"]}`, `[1,{"nested":[]} ]`, `null`, `"text"`, `42`} {
+		t.Run(skipped, func(t *testing.T) {
+			t.Parallel()
+			prefix := `{"factory":` + skipped + `,"events":[{"payload":` + skipped + `,"context":{"sessionId":"identity"}}`
+			reader := io.MultiReader(strings.NewReader(prefix), metadataForbiddenTail{})
+			id, err := decodeReplayV1Metadata(reader)
+			if err != nil || id != "identity" {
+				t.Fatalf("id=%q error=%v", id, err)
+			}
+		})
+	}
+	if _, err := decodeReplayV1Metadata(strings.NewReader(`{"factory":{"invalid":[},"events":[]}`)); err == nil {
+		t.Fatal("malformed skipped value was accepted")
+	}
+}
+
+type metadataForbiddenTail struct{}
+
+func (metadataForbiddenTail) Read([]byte) (int, error) {
+	return 0, errors.New("metadata attempted to read event history")
+}
+
 func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail(t *testing.T) {
 	artifact := testReplayArtifact(t,
 		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{

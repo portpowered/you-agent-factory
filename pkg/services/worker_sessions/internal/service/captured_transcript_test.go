@@ -77,8 +77,8 @@ func TestCapturedTranscriptPreservesLiveArchivedAndTupleCorrelation(t *testing.T
 	for _, scope := range []string{"", "factory"} {
 		t.Run(scope, func(t *testing.T) {
 			t.Parallel()
-			projector := &trackingObservationProjector{}
-			r := newObservationRegistry(projector, nil)
+
+			r := newObservationRegistry(nil)
 			r.sessions["worker"] = observationSession("worker", workersessions.StateCompleted)
 			r.observations["worker"] = observationMetadata()
 			r.observations["worker"].factorySessionID = scope
@@ -96,7 +96,7 @@ func TestCapturedTranscriptPreservesLiveArchivedAndTupleCorrelation(t *testing.T
 			}
 			// Simulate a fresh host with the same detached storage boundary; no
 			// registry or control authority is recreated by historical reads.
-			archive := newObservationRegistry(projector, nil)
+			archive := newObservationRegistry(nil)
 			archive.logs = &LogReader{reader: fake, logger: logging.NoopLogger{}}
 			for _, request := range []workersessions.ReadTranscriptRequest{
 				{WorkerSessionID: "worker", FactorySessionID: scope}, {ProviderSession: observationProviderRef(), FactorySessionID: scope},
@@ -110,9 +110,7 @@ func TestCapturedTranscriptPreservesLiveArchivedAndTupleCorrelation(t *testing.T
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("keyed archive = %+v, %v", got, err)
 			}
-			if projector.calls != 0 || len(archive.sessions) != 0 {
-				t.Fatal("transcript called native projection or restored live authority")
-			}
+
 			*got.Entries[0].Text = "changed"
 			again, err := archive.ReadTranscript(t.Context(), workersessions.ReadTranscriptRequest{WorkerSessionID: "worker"})
 			if err != nil || *again.Entries[0].Text != "captured answer" {

@@ -20,7 +20,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -2764,7 +2763,6 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2814,7 +2812,6 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		recording,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2874,7 +2871,6 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				logging.NoopLogger{},
 				platformclock.Real{},
 				platformclock.Real{},
-				unavailableProviderSessionsForCapture{},
 				terminalAwareRecordingService{recording: recording},
 				unavailableWorkerControlStore{},
 				unavailableWorkerControlStore{})
@@ -2910,7 +2906,6 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		terminalAwareRecordingService{recording: recording},
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -2978,7 +2973,6 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		logging.NoopLogger{},
 		platformclock.Real{},
 		platformclock.Real{},
-		unavailableProviderSessionsForCapture{},
 		observedRecorder,
 		unavailableWorkerControlStore{},
 		unavailableWorkerControlStore{})
@@ -3176,14 +3170,6 @@ func (service *failingRecordingService) StartWorkerSessionRecording(
 	recordings.WorkerSessionRecordingRequest,
 ) (recordings.WorkerSessionRecording, error) {
 	return nil, service.err
-}
-
-type unavailableProviderSessionsForCapture struct {
-	providersessions.Service
-}
-
-func (unavailableProviderSessionsForCapture) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 var _ recordings.WorkerSessionRecordingService = (*controlledRecordingService)(nil)
@@ -4131,41 +4117,91 @@ func (usagePublishingExecution) InvokeModel(context.Context, string, modelinfere
 	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
 
-func TestInvokeSession_UsagePublicationProjectsDetachedTokenFacts(t *testing.T) {
+type usageSnapshotRecording struct {
+	terminalAwareRecordingService
+	snapshot recordings.WorkerRecordingSnapshot
+}
+
+func (r *usageSnapshotRecording) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return r.snapshot, nil
+}
+
+func newUsagePublicationService(t *testing.T, captured bool) workersessions.Service {
+	t.Helper()
 	var registry workersessions.Service
+	recorder := &usageSnapshotRecording{terminalAwareRecordingService: terminalAwareRecordingService{recording: &terminalAwareRecording{}}}
 	execution := usagePublishingExecution{
 		publish: func(ctx context.Context, request workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
-			return registry.PublishRecord(ctx, request)
+			result, err := registry.PublishRecord(ctx, request)
+			if captured && err == nil && result.Outcome == workersessions.PublishOutcomeAccepted {
+				payload, marshalErr := json.Marshal(request.Draft)
+				if marshalErr != nil {
+					return result, marshalErr
+				}
+				// Model the recorder's committed snapshot at its read boundary.
+				recorder.snapshot = recordings.WorkerRecordingSnapshot{RecordingID: "recording-usage", Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+					WorkerSessionID: "worker-usage", Records: []events.Record{{ID: events.RecordID{Position: result.AggregateSequence}, Payload: payload}},
+				}}}
+			}
+			return result, err
 		},
 	}
-	var err error
-	registry, err = newService(execution, newEventsAppender(), nil)
-	if err != nil {
-		t.Fatalf("service.New() error = %v, want nil", err)
+	var recording recordings.WorkerSessionRecordingService
+	if captured {
+		recording = recorder
 	}
-
+	var err error
+	registry, err = service.New(execution, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	request := validStartRequest("worker-usage", "dispatch-usage")
 	request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-usage"}
-	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+	request.Execution.Execution.RecordingID = "recording-usage"
+	if _, err := registry.InvokeSession(t.Context(), request); err != nil {
 		t.Fatalf("InvokeSession() error = %v, want nil", err)
 	}
+	return registry
+}
 
-	listed, err := registry.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-usage"})
-	if err != nil {
-		t.Fatalf("ListObservations() error = %v, want nil", err)
-	}
-	if len(listed.Observations) != 1 {
-		t.Fatalf("ListObservations() returned %d observations, want 1", len(listed.Observations))
+func readUsagePublicationObservation(t *testing.T, registry workersessions.Service) workersessions.Observation {
+	t.Helper()
+	listed, err := registry.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: "work-usage"})
+	if err != nil || len(listed.Observations) != 1 {
+		t.Fatalf("ListObservations() = %#v, %v, want one observation", listed, err)
 	}
 	observation := listed.Observations[0]
 	if observation.Model == nil || *observation.Model != "model-usage" {
 		t.Fatalf("observation.Model = %v, want model-usage", observation.Model)
 	}
+	return observation
+}
+
+func assertCapturedPublicationUsage(t *testing.T, observation workersessions.Observation) {
+	t.Helper()
 	if observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 11 {
 		t.Fatalf("observation.TokenUsage = %#v, want detached input token count 11", observation.TokenUsage)
 	}
 	if observation.TokenUsage.OutputTokens != nil || observation.TokenUsage.TotalTokens != nil {
 		t.Fatalf("observation.TokenUsage = %#v, want omitted token classes to remain nil", observation.TokenUsage)
+	}
+}
+
+func TestInvokeSession_UsagePublicationProjectsDetachedTokenFacts(t *testing.T) {
+	for _, captured := range []bool{true, false} {
+		t.Run(fmt.Sprintf("captured=%t", captured), func(t *testing.T) {
+			registry := newUsagePublicationService(t, captured)
+			observation := readUsagePublicationObservation(t, registry)
+			if !captured {
+				if observation.TokenUsage != nil {
+					t.Fatalf("uncaptured usage = %#v, want omitted usage", observation.TokenUsage)
+				}
+				return
+			}
+			assertCapturedPublicationUsage(t, observation)
+			*observation.TokenUsage.InputTokens = 99
+			assertCapturedPublicationUsage(t, readUsagePublicationObservation(t, registry))
+		})
 	}
 }
 

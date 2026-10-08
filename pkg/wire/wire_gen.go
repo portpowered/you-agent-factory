@@ -583,7 +583,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	v157 := provideWorkerHistorySnapshotBudget()
-	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, providersessionsService, loggingLogger, source, timerSource, v154, v10, v155, v156, v157, service)
+	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, loggingLogger, source, timerSource, v154, v10, v155, v156, v157, service)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +612,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v166 := provideRuntimeModelWorkerExecution(workersService)
 	v167 := wire5.NewRuntimeModelInvocation(modelsService, v165, v166)
 	v168 := wire5.NewHistoricalReplayBehavior()
-	v169, err := wire5.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, sessionLoggerFactory, source, v17, v18, v19, v28, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v36, v37, replayRuntimeConfigDecoder, v38, v114, v116, factoryScaffoldInitializer, editableFactoryValidator, v118, v42, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, workService, root, webhooksService, modelsService, recordingsService, v150, workersService, v151, v96, backendScopeEnsurer, initialRuntimeActivationOperation, v167, v168, liveChangeCoordinator)
+	v169, err := wire5.NewRoot(providersessionsService, logger, javaScriptWorkflowDefinitions, workflowPreviewOperation, v16, clockResolver, sessionLoggerFactory, source, v17, v18, v19, v28, namedPathResolver, factorydefinitionsService, definitionRuntimeRouter, v36, v37, replayRuntimeConfigDecoder, v38, v114, v116, factoryScaffoldInitializer, editableFactoryValidator, v118, v42, runtimeInstanceIDGenerator, homeDirectoryResolver, providerIdentityResolver, workService, root, webhooksService, modelsService, recordingsService, v150, workersService, v151, v96, backendScopeEnsurer, initialRuntimeActivationOperation, v167, v168, liveChangeCoordinator, v46)
 	if err != nil {
 		return nil, err
 	}
