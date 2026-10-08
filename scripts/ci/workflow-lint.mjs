@@ -213,109 +213,6 @@ export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow
 	return { name: "functional-diagnostics-artifact-workflow", status: "pass" };
 }
 
-function validateControlledRawFailureSelector(workflow, fixtureWorkflow, fixtureJob) {
-	requireWorkflowMatch(
-		workflow,
-		/^  pull_request:\n    types: \[opened, synchronize, reopened\]$/m,
-		"shared CI must not start on pull request label events",
-	);
-	requireWorkflowMatch(
-		fixtureWorkflow,
-		/^  pull_request:\n    types: \[labeled\]$/m,
-		"controlled raw failure selection must use its dedicated labeled-event workflow",
-	);
-	requireWorkflowMatch(
-		fixtureWorkflow,
-		/^concurrency:\n  group: controlled-raw-failure-\$\{\{ github\.event\.pull_request\.number \}\}\n  cancel-in-progress: false$/m,
-		"controlled raw failure must use a distinct non-canceling concurrency group",
-	);
-
-	for (const condition of [
-		"github.event.pull_request.number == 2637",
-		"github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923'",
-		"github.event.pull_request.head.repo.full_name == github.repository",
-		"github.event.label.name == 'ci-controlled-raw-failure'",
-	]) {
-		requireWorkflowText(
-			fixtureJob.replace(/\s+/g, " "),
-			condition,
-			`controlled raw failure job must include ${condition}`,
-		);
-	}
-	const selector = workflowStepSection(fixtureJob, "Validate controlled fixture head and select rendezvous");
-	requireWorkflowMatch(selector, /eventHead !== liveHead/, "controlled selector must reject a stale pull request event");
-	requireWorkflowMatch(selector, /uses: actions\/github-script@v7/, "controlled selector must use github-script");
-	requireWorkflowMatch(selector, /github\.rest\.pulls\.get/, "controlled selector must read the live pull request head");
-	requireWorkflowMatch(
-		selector,
-		/RUNNER_TEMP.*pr2637-raw-failure-.*liveHead/s,
-		"controlled selector must scope its rendezvous to the live head",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_RAW_FAILURE_WITNESS: "1"\s*$/m,
-		"controlled selector must enable the raw failure witness",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT: 90s\s*$/m,
-		"controlled selector must use the bounded rendezvous timeout",
-	);
-	requireWorkflowMatch(
-		fixtureJob,
-		/^      FUNCTIONAL_TEST_VIZ_PACKAGES: github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailure github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailurepeer\s*$/m,
-		"controlled selector must run only the two witness packages",
-	);
-	if (/github\.event\.(?:inputs|client_payload)|workflow_dispatch/.test(selector)) {
-		throw new Error("workflow contract failed: controlled selector must not accept caller-supplied dispatch inputs");
-	}
-	requireWorkflowOrder(
-		fixtureJob,
-		"      - name: Validate controlled fixture head and select rendezvous",
-		"      - name: Run controlled raw failure fixture",
-		"controlled selector must set its environment before the functional runner starts",
-	);
-}
-
-function validateControlledRawFailurePublication(fixtureJob) {
-	const verification = workflowStepSection(fixtureJob, "Verify expected failure and publish witness");
-	const upload = workflowStepSection(fixtureJob, "Upload controlled raw failure diagnostics");
-	requireWorkflowMatch(verification, /^        if: always\(\)\s*$/m, "raw failure witness verification must run after the test step");
-	requireWorkflowMatch(verification, /CONTROLLED_RUN_OUTCOME.*success/, "raw failure witness must require a successful fixture runner");
-	requireWorkflowMatch(verification, /\.captureStatus == "complete"/, "raw failure witness must require complete raw capture");
-	requireWorkflowMatch(verification, /\.failures \| length == 2/, "raw failure witness must require both fixture failures");
-	requireWorkflowMatch(verification, /wc -l < "\$source"\).* -eq 6/, "raw failure witness must require all six interleaved events");
-	requireWorkflowMatch(verification, /cp "\$source" "\$target"/, "raw failure witness must publish the interleaving evidence");
-	requireWorkflowMatch(upload, /^        if: always\(\)\s*$/m, "diagnostics artifact must upload even after an unexpected test failure");
-	requireWorkflowMatch(upload, /^          name: controlled-raw-failure-witness\s*$/m, "controlled raw failure must use its own diagnostic artifact");
-	requireWorkflowMatch(
-		upload,
-		/^            \.artifacts\/functional-test-viz\/raw-failure-interleaving\.jsonl\s*$/m,
-		"controlled raw failure artifact must include the interleaving witness",
-	);
-	requireWorkflowMatch(upload, /^          retention-days: 14\s*$/m, "controlled raw failure artifact retention must remain 14 days");
-	requireWorkflowOrder(
-		fixtureJob,
-		"      - name: Verify expected failure and publish witness",
-		"      - name: Upload controlled raw failure diagnostics",
-		"the fixture artifact must be uploaded after witness validation",
-	);
-}
-
-/**
- * Keep the guarded expected-red capture isolated from shared required CI and
- * preserve its interleaving witness in a dedicated diagnostic artifact.
- */
-export function validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow } = {}) {
-	if (typeof workflow !== "string" || typeof fixtureWorkflow !== "string") {
-		throw new Error("controlled raw failure workflow contract requires shared and fixture workflow text");
-	}
-	const fixtureJob = workflowJobSection(fixtureWorkflow, "controlled-raw-failure");
-	validateControlledRawFailureSelector(workflow, fixtureWorkflow, fixtureJob);
-	validateControlledRawFailurePublication(fixtureJob);
-	return { name: "controlled-raw-failure-workflow", status: "pass" };
-}
-
 export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 	const job = workflowJobSection(workflow, "backend-lint");
 	if (/go test[^\n]*-race/.test(job)) throw new Error("Backend Lint must not run a race step");
@@ -335,7 +232,6 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
 	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
-	const fixtureWorkflow = readFileSync(join(root, ".github", "workflows", "controlled-raw-failure-witness.yml"), "utf8");
 	return {
 		contracts: [
 			validateBackendLintWorkflowContract({
@@ -347,7 +243,6 @@ export function validateRepositoryWorkflowContracts({ repositoryRoot = process.c
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
 			}),
 			validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow }),
-			validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow }),
 		],
 	};
 }

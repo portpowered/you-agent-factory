@@ -9,7 +9,6 @@ import test from "node:test";
 import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
-	validateControlledRawFailureWorkflowContract,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
 } from "./workflow-lint.mjs";
@@ -28,39 +27,6 @@ test("Workflow Lint guards shared frontend proof, cache identity and policy wiri
 			workflow: workflow.replace(before, after),
 		}), /workflow contract/);
 	}
-});
-
-test("workflow lint isolates the guarded raw failure fixture from shared CI", () => {
-	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
-	const fixtureWorkflow = readFileSync(join(process.cwd(), ".github", "workflows", "controlled-raw-failure-witness.yml"), "utf8");
-	assert.deepEqual(validateControlledRawFailureWorkflowContract({ workflow, fixtureWorkflow }), {
-		name: "controlled-raw-failure-workflow",
-		status: "pass",
-	});
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow: workflow.replace("types: [opened, synchronize, reopened]", "types: [opened, synchronize, reopened, labeled, unlabeled]"),
-				fixtureWorkflow,
-			}),
-		/workflow contract failed: shared CI must not start on pull request label events/,
-	);
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow,
-				fixtureWorkflow: fixtureWorkflow.replace("github.event.label.name == 'ci-controlled-raw-failure'", "github.event.label.name == 'other'"),
-			}),
-		/workflow contract failed: controlled raw failure job must include github\.event\.label\.name/,
-	);
-	assert.throws(
-		() =>
-			validateControlledRawFailureWorkflowContract({
-				workflow,
-				fixtureWorkflow: fixtureWorkflow.replace("raw-failure-interleaving.jsonl\n", "other-evidence.jsonl\n"),
-			}),
-		/workflow contract failed: controlled raw failure artifact must include the interleaving witness/,
-	);
 });
 
 test("functional diagnostics artifact uploads bounded raw failure evidence after the verdict", () => {
@@ -192,6 +158,7 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 	const result = runWorkflowLint({
 		actionlint,
 		workflowDirectory: join(process.cwd(), ".github", "workflows"),
+		validateRepositoryContracts: true,
 		log(message) {
 			messages.push(message);
 		},
@@ -200,6 +167,7 @@ test("the checked-in workflow set passes the executable schema-lint gate", (t) =
 	assert.ok(result.workflowFiles.length > 0);
 	assert.deepEqual(messages, [
 		`WORKFLOW_LINT_FILE_COUNT=${result.workflowFiles.length}`,
+		"WORKFLOW_LINT_STATIC_CONTRACTS_OK",
 		`WORKFLOW_LINT_OK files=${result.workflowFiles.length}`,
 	]);
 });
