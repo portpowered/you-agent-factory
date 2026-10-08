@@ -12,6 +12,7 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	resetprovidersessionscli3State()
 	resetprovidersessionscli5State()
 	initializeProvidersessionscliFixture(t)
+	t.Run("TestWorkerSessionsListWorkScopedEmpty", testWorkerSessionsListWorkScopedEmpty)
 	t.Run("TestFactoryTargetReadinessCustomerBehavior", testProvidersessionscliFactoryTargetReadinessCustomerBehavior)
 	t.Run("TestTerminalProviderSessionReadsPreserveTranscriptOutcomes", testProvidersessionscliTerminalProviderSessionReadsPreserveTranscriptOutcomes)
 	t.Run("TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess", testProvidersessionscliWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess)
@@ -24,5 +25,6 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	t.Run("TestWorkerSessionsFleetActiveListDeadlineRepair", testProvidersessionscliWorkerSessionsFleetActiveListDeadlineRepair)
 	t.Run("TestWorkerSessionsFleetListBoundedRootPages", testProvidersessionscliWorkerSessionsFleetListBoundedRootPages)
 	t.Run("TestWorkerSessionsFleetListCLIConcurrent", testProvidersessionscliWorkerSessionsFleetListCLIConcurrent)
+	t.Run("TestWorkerSessionsListWorkScopedDefault", testWorkerSessionsListWorkScopedDefault)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream")
 }

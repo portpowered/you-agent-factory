@@ -135,11 +135,7 @@ func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
 	}
 	first := read()
 	for i, row := range first.Observations {
-		if row.WorkerSessionID != fmt.Sprintf("worker-%d", i) || row.TokenUsage == nil ||
-			row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != i+1 ||
-			row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 0 || row.TokenUsage.OutputTokens != nil {
-			t.Fatalf("usage row %d = %+v", i, row)
-		}
+		assertListCapturedUsage(t, i, row)
 		*row.TokenUsage.TotalTokens = -1
 	}
 	if f.loads != 1 {
@@ -152,6 +148,20 @@ func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
 	if f.loads != 2 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
 		t.Fatalf("fresh detached usage = %+v, loads=%d", second, f.loads)
 	}
+	assertListUnavailableCapture(t, f, read)
+}
+
+func assertListCapturedUsage(t *testing.T, index int, row workersessions.Observation) {
+	t.Helper()
+	if row.WorkerSessionID != fmt.Sprintf("worker-%d", index) || row.TokenUsage == nil ||
+		row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != index+1 ||
+		row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 0 || row.TokenUsage.OutputTokens != nil {
+		t.Fatalf("usage row %d = %+v", index, row)
+	}
+}
+
+func assertListUnavailableCapture(t *testing.T, f *listUsageRecordingFake, read func() workersessions.ListObservationsResult) {
+	t.Helper()
 	for _, fault := range []string{"missing", "wrong-recording"} {
 		if fault == "missing" {
 			f.err = errors.New("capture unavailable")

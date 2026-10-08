@@ -286,6 +286,7 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
+	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
 	for index := range workScopedAttemptCount {
 		addSuccessRoute(workScopedRoute(index), fmt.Sprintf("session_fixture_codex_scoped_%03d", index))
 	}
