@@ -798,6 +798,89 @@ func TestRuntimeInputLoadingFreshFactsAndRetry(t *testing.T) {
 	}
 }
 
+func TestRuntimeInputLoadingDetachedMetadataSurvivesPeerSelection(t *testing.T) {
+	t.Parallel()
+	for _, withSpans := range []bool{false, true} {
+		t.Run(fmt.Sprintf("spans=%v", withSpans), func(t *testing.T) {
+			t.Parallel()
+			snapshot := factorydefinitions.RuntimeSnapshot{
+				FactoryDir: t.TempDir(), RuntimeBaseDir: t.TempDir(),
+				EffectiveFactory:                factorydefinitions.FactoryConfig{Name: "selected"},
+				InvocationSensitiveJSONPointers: []string{"/workers/0/body"},
+				PromptProvenance: []factorydefinitions.RuntimePromptProvenance{
+					{Name: "worker", Body: "selected ${input}"}, {Name: "station", Body: "selected ${task}"},
+				},
+			}
+			if withSpans {
+				snapshot.InvocationSensitiveJSONSpans = []factorydefinitions.InvocationSensitiveJSONSpan{{JSONPointer: "/workers/0/body", Start: 2, End: 7}}
+			}
+			loader := NewRuntimeInputLoading(runtimeInputNoCurrentSource, factorydefinitionfixtures.NewLoadedSource,
+				runtimeInputUnusedDecoder, runtimeInputReplayFunc(func(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+					panic("unexpected replay read")
+				}), runtimeInputUnusedCapture, runtimeInputSessionLogger, zap.NewNop())
+			peer := factorydefinitions.RuntimeSnapshot{FactoryDir: t.TempDir(), RuntimeBaseDir: t.TempDir(),
+				EffectiveFactory: factorydefinitions.FactoryConfig{Name: "peer"},
+				PromptProvenance: []factorydefinitions.RuntimePromptProvenance{{Name: "worker", Body: "peer prompt"}}}
+			if _, err := loader.Load(RuntimeInputLoadRequest{ResolvedSnapshot: &peer, SessionID: "peer"}); err != nil {
+				t.Fatal(err)
+			}
+			selected, err := loader.Load(RuntimeInputLoadRequest{ResolvedSnapshot: &snapshot, SessionID: "selected"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Change the caller-owned artifact and select a peer through the same
+			// fixed loader. Neither operation may rewrite the detached result.
+			snapshot.PromptProvenance[0].Body = "changed authored prompt"
+			snapshot.InvocationSensitiveJSONPointers[0] = "/peer"
+			if withSpans {
+				snapshot.InvocationSensitiveJSONSpans[0].Start = 99
+			}
+			other, err := loader.Load(RuntimeInputLoadRequest{ResolvedSnapshot: &peer, SessionID: "peer"})
+			if err != nil || other.LoadedFactoryCfg.FactoryDir() != peer.FactoryDir {
+				t.Fatalf("peer selection = %#v, %v", other, err)
+			}
+			assertDetachedRuntimeMetadata(t, selected, snapshot, withSpans)
+		})
+	}
+}
+
+func assertDetachedRuntimeMetadata(t *testing.T, selected RuntimeLoad, snapshot factorydefinitions.RuntimeSnapshot, withSpans bool) {
+	t.Helper()
+	source := selected.LoadedFactoryCfg
+	if source.FactoryDir() != snapshot.FactoryDir || source.RuntimeBaseDir() != snapshot.RuntimeBaseDir {
+		t.Fatal("peer changed selected source/base paths")
+	}
+	lookup := source.(factorydefinitions.RuntimePromptProvenanceLookup)
+	worker, workerOK := lookup.WorkerPromptProvenance("worker")
+	station, stationOK := lookup.WorkstationPromptProvenance("station")
+	if !workerOK || !stationOK || worker.Body != "selected ${input}" || station.Body != "selected ${task}" {
+		t.Fatalf("detached provenance = %#v, %#v", worker, station)
+	}
+	if withSpans {
+		lookup := source.(interface {
+			InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan
+		})
+		spans := lookup.InvocationSensitiveJSONSpans()
+		if len(spans) != 1 || spans[0].JSONPointer != "/workers/0/body" || spans[0].Start != 2 || spans[0].End != 7 {
+			t.Fatalf("selected spans = %v", spans)
+		}
+		spans[0].Start = 99
+		if lookup.InvocationSensitiveJSONSpans()[0].Start != 2 {
+			t.Fatal("span accessor exposed mutable metadata")
+		}
+		return
+	}
+	lookupPointers := source.(interface{ InvocationSensitiveJSONPointers() []string })
+	pointers := lookupPointers.InvocationSensitiveJSONPointers()
+	if len(pointers) != 1 || pointers[0] != "/workers/0/body" {
+		t.Fatalf("selected pointers = %v", pointers)
+	}
+	pointers[0] = "/changed"
+	if lookupPointers.InvocationSensitiveJSONPointers()[0] != "/workers/0/body" {
+		t.Fatal("pointer accessor exposed mutable metadata")
+	}
+}
+
 func TestRuntimeInputLoadingPreloadedReplayIsNotReadAgain(t *testing.T) {
 	t.Parallel()
 	snapshot := factorydefinitions.FactorySnapshot(`{"name":"recorded"}`)
