@@ -80,6 +80,8 @@ func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
 	recorder := &runtimeScopeRecorder{inner: inner}
 	recorder.Start(context.Background())
 	recorder.Start(context.Background())
+	recorder.Stop()
+	recorder.Stop()
 	for range 2 {
 		if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
 			t.Fatal(err)
@@ -88,8 +90,30 @@ func TestRuntimeScopeRecorderStartedRunFinalizesOnce(t *testing.T) {
 	if err := recorder.Flush(); err != nil || inner.flushes != 0 {
 		t.Fatalf("terminal flush = %v, publications = %d, want no publication after finalization", err, inner.flushes)
 	}
-	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 0 {
-		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/0", inner.starts, inner.finishes, inner.stops)
+	if inner.starts != 1 || inner.finishes != 1 || inner.stops != 1 {
+		t.Fatalf("run start/finalize/stop = %d/%d/%d, want 1/1/1", inner.starts, inner.finishes, inner.stops)
+	}
+}
+
+func TestRuntimeScopeRecorderStoppedOpeningCannotActivateOrPublish(t *testing.T) {
+	t.Parallel()
+	inner := &openingCleanupRecorder{}
+	recorder := &runtimeScopeRecorder{inner: inner}
+	for range 2 {
+		recorder.Stop()
+		recorder.Start(context.Background())
+		if err := recorder.Flush(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		if err := recorder.Finalize(time.Unix(1, 0)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if inner.starts != 0 || inner.flushes != 0 || inner.finishes != 0 || inner.stops != 1 {
+		t.Fatalf("stopped opening start/flush/finalize/stop = %d/%d/%d/%d, want 0/0/0/1",
+			inner.starts, inner.flushes, inner.finishes, inner.stops)
 	}
 }
 

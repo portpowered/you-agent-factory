@@ -766,6 +766,7 @@ type runtimeScopeRecorder struct {
 	routeKey    string
 	ledger      recordings.RuntimeEventLedger
 	started     bool
+	stopped     bool
 	startErr    error
 	finalized   bool
 	finalizeErr error
@@ -780,7 +781,7 @@ func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if recorder.finalized || recorder.started || recorder.startErr != nil || ctx.Err() != nil {
+	if recorder.finalized || recorder.started || recorder.stopped || recorder.startErr != nil || ctx.Err() != nil {
 		return
 	}
 	if recorder.inner != nil {
@@ -796,7 +797,20 @@ func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
 }
 
 func (recorder *runtimeScopeRecorder) Stop() {
-	if recorder != nil && recorder.inner != nil {
+	if recorder == nil {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.stopLocked()
+}
+
+func (recorder *runtimeScopeRecorder) stopLocked() {
+	if recorder.stopped || recorder.finalized {
+		return
+	}
+	recorder.stopped = true
+	if recorder.inner != nil {
 		recorder.inner.Stop()
 	}
 }
@@ -874,8 +888,6 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 		err := recorder.finalizeErr
 		return err
 	}
-	recorder.finalized = true
-
 	var finalizeErr error
 	if recorder.inner != nil {
 		if recorder.started {
@@ -883,10 +895,11 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 		} else {
 			// Opening cleanup is an abort, not a completed run. Join the
 			// writer without publishing terminal metadata over retained history.
-			recorder.inner.Stop()
+			recorder.stopLocked()
 			finalizeErr = errors.Join(recorder.startErr, recorder.inner.Err())
 		}
 	}
+	recorder.finalized = true
 	var closeErr error
 	if !recorder.scope.IsZero() && recorder.owner != nil {
 		closeErr = recorder.owner.closeRuntimeRecordingScope(
