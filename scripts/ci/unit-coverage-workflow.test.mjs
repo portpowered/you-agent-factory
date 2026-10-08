@@ -40,7 +40,6 @@ test("the ACP replacement SDK and delivered-response boundary retain explicit CI
 		"      - name: Verify Wire generation");
 	assert.match(sdkStep, /if: matrix\.suite == 'unit'/);
 	assert.match(sdkStep, /go test -p=4 [^\n]*\\\n\s+\.\/third_party\/acp-go-sdk\/\.\.\./);
-	assert.doesNotMatch(job, /go test[^\n]* -race/);
 	assert.doesNotMatch(workflow, /backend-models-verification|Backend Models Wire and Race/);
 	const processStep = stepSection(workflow,
 		"      - name: Run delivered ACP response integration",

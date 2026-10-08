@@ -4,6 +4,7 @@ import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKEND_LINT_FALLBACK_JOBS } from "./backend-lint-workflow.mjs";
 import { frontendPlan, apiPlan, workflowPlan } from "./verification-plans.mjs";
+import { validateQueueDispatch } from "./queue-dispatch.mjs";
 
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 
@@ -204,7 +205,7 @@ export function validateFrontendSharedSetupWorkflowContract({ workflow } = {}) {
 	requireWorkflowMatch(policy, /needs: \[[^\]]*\bfrontend-browser\b[^\]]*\]/, "policy needs Frontend Browser");
 	for (const [job, suite] of [[frontend, "component"], [browser, "browser"]]) {
 		requireWorkflowText(job, "needs: classify", "both frontend jobs retain selection");
-		requireWorkflowText(job, "if: always() && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
+		requireWorkflowText(job, "if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'", "both frontend jobs retain selection");
 		requireWorkflowText(job, "bun-version: ${{ env.BUN_VERSION }}", "use the pinned Bun version");
 		requireWorkflowText(job, "path: ~/.bun/install/cache", "cache Bun downloads only");
 		requireWorkflowText(job, "key: frontend-bun-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}", "cache identity must include platform, Bun and frozen lock");
@@ -226,7 +227,7 @@ export function validateConsolidatedCIWorkflowContract({ workflow } = {}) {
 	const packages = workflowJobSection(workflow, "development-package");
 	const policy = workflowJobSection(workflow, "verification-policy");
 	for (const text of ["name: Verification Setup", "actionlint@v1.7.12", "run: bash scripts/ci/run-workflow-verification.sh",
-		"docs_result: ${{ steps.docs-reference.outcome }}", "if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'", "run: make docs-reference-smoke"]) {
+		"docs_result: ${{ steps.docs-reference.outcome }}", "if: success() || failure()", "run: make docs-reference-smoke"]) {
 		requireWorkflowText(setup, text, "retain shared setup proof and fail-closed selection");
 	}
 	requireWorkflowText(packages, "run_api_package: ${{ github.event_name != 'pull_request' && needs.classify.outputs.run_api_package != 'false' }}", "retain non-PR API selection");
@@ -388,11 +389,7 @@ export function validateBackendLintWorkflowContract({ workflow, makefile }) {
 		`LINT_JOBS: \${{ steps.backend-lint-parallelism.outputs.jobs || '${BACKEND_LINT_FALLBACK_JOBS}' }}`,
 		"canonical inventory must retain positive fallback concurrency");
 	requireWorkflowMatch(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/, "required checks run on merge groups");
-	requireWorkflowMatch(workflow,
-		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
-		"classification uses merge group base and head identities");
-	requireWorkflowMatch(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/, "classify both PR and merge group inputs");
-	requireWorkflowMatch(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/, "retain fallback classification for other events");
+	requireWorkflowText(workflowJobSection(workflow, "classify"), "if: github.event_name == 'pull_request'\n        run: go run ./cmd/ciclassify", "only PR paths select lanes; queue defaults full");
 	requireWorkflowText(job, "github.event_name == 'merge_group'", "Backend Lint reports for merge groups");
 	const developmentPackage = workflowJobSection(workflow, "development-package");
 	requireWorkflowText(developmentPackage, "github.event_name == 'merge_group'", "development package reports for merge groups");
@@ -469,6 +466,7 @@ export function runWorkflowLint({
 	}
 	if (validateRepositoryContracts) {
 		validateCIJobGrowthFromHistory();
+		validateQueueDispatch(readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"));
 		validateConsolidatedCIWorkflowContract({
 			workflow: readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8"),
 		});

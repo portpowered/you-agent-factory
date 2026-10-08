@@ -51,6 +51,7 @@ test("real workflow lint CLI compares isolated Git history and reports added job
 	// Include the checker's transitive lint dependencies in the isolated CLI fixture.
 	for (const file of [
 		"scripts/ci/workflow-lint.mjs",
+		"scripts/ci/queue-dispatch.mjs",
 		"scripts/ci/verification-plans.mjs",
 		"scripts/ci/backend-lint-workflow.mjs",
 		"scripts/ci/backend-lint-report.mjs",
@@ -100,7 +101,7 @@ jobs:
     steps:
       - run: go install example/actionlint@v1.7.12
       - run: bash scripts/ci/run-workflow-verification.sh
-      - if: (success() || failure()) && steps.classify.outputs.run_docs_reference != 'false'
+      - if: success() || failure()
         run: make docs-reference-smoke
   api-pr-verification:
     if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package != 'false'
@@ -136,7 +137,7 @@ env:
 jobs:
   frontend:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     env:
       UI_COVERAGE_MAIN_MAX_WORKERS: "4"
     steps:
@@ -162,7 +163,7 @@ jobs:
           FRONTEND_SUITE: component
   frontend-browser:
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend != 'false'
+    if: always() && github.event_name != 'push' && needs.classify.outputs.run_frontend != 'false'
     steps:
       - uses: oven-sh/setup-bun@v2
         with:
