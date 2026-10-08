@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -49,6 +51,11 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
+	var recordedEvents []factoryapi.FactoryEvent
+	if len(apis) > 3 {
+		recordedEvents = restartProbeRecordedHistory(t, dir)
+		assertRestartProbeEventFacts(t, events, recordedEvents)
+	}
 	second := inputs(t, dir)
 	if port != 0 {
 		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
@@ -61,7 +68,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	recoveredEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeEventFacts(t, events, recoveredEvents)
 	if len(apis) > 3 {
-		assertRestartProbeHistoryPrefix(t, events, recoveredEvents)
+		assertRestartProbeHistoryPrefix(t, recordedEvents, recoveredEvents)
 	}
 	if runner.calls.Load() != 1 {
 		t.Fatal("restart dispatched terminal A or blocked descendants")
@@ -103,6 +110,27 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
 	}
+}
+
+func restartProbeRecordedHistory(t *testing.T, dir string) []factoryapi.FactoryEvent {
+	t.Helper()
+	// The emitted recording is the customer recovery artifact. Its startup
+	// header has its own timestamps; compare that retained header in full,
+	// rather than the independently timestamped live startup observation.
+	var recording factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(dir, "current-board.json")), &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording.Events) == 0 {
+		t.Fatal("shutdown emitted no recovery history")
+	}
+	// Use the public representation contract: association model metadata is
+	// recording-only and is deliberately absent from the HTTP event payload.
+	events, err := apisurface.FactoryEventsToAPI(recording.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events
 }
 
 func assertRestartProbeFailedPrerequisite(t *testing.T, url string, runner *restartProbeUnexpectedRunner, recovered []factoryapi.Work) {
@@ -239,23 +267,11 @@ func assertRestartProbeHistoryPrefix(t *testing.T, before, after []factoryapi.Fa
 			t.Fatal(err)
 		}
 		for _, value := range values[index].([]any) {
-			event := value.(map[string]any)
-			// Startup precedes SESSION_STARTED. Existing replay serialization
-			// enriches this frame with its default scope and empty diagnostics;
-			// assert those exact defaults without changing Event semantics.
-			context := event["context"].(map[string]any)
+			context := value.(map[string]any)["context"].(map[string]any)
+			// Legacy startup frames precede session assignment. Public restored
+			// history attaches the selected scope; preserve every recorded field.
 			if _, exists := context["sessionId"]; !exists {
 				context["sessionId"] = "~default"
-			}
-			if event["type"] != string(factoryapi.FactoryEventTypeRunRequest) {
-				continue
-			}
-			body := event["payload"].(map[string]any)
-			if _, exists := body["diagnostics"]; !exists {
-				body["diagnostics"] = map[string]any{}
-			}
-			if _, exists := body["wallClock"]; !exists {
-				body["wallClock"] = map[string]any{"startedAt": body["recordedAt"]}
 			}
 		}
 	}
