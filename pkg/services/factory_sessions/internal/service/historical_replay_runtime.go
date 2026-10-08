@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -419,9 +420,9 @@ const (
 
 // currentBoardHistoryRestoreError is also a safe CLI error. The method names
 // intentionally match the transport's narrow coded-error interface without
-// making runtime opening depend on the CLI package. Its Error method never
-// includes the underlying cause, which keeps startup diagnostics safe while
-// Unwrap retains typed failure matching for service callers.
+// making runtime opening depend on the CLI package. Its message includes only
+// recognized safe cause fields; Unwrap retains the original typed failures for
+// service callers without exposing arbitrary recording or payload text.
 type currentBoardHistoryRestoreError struct {
 	code    string
 	message string
@@ -475,6 +476,7 @@ func logCurrentBoardHistoryFailure(
 		zap.String("session_id", sessionID),
 		zap.String("recording_path", recordPath),
 		zap.String("failure", kind),
+		zap.String("cause", logging.SafeErrorCause(err)),
 	)
 }
 
@@ -649,6 +651,9 @@ func currentBoardHistoryFailure(
 		sessionID,
 		diagnostic,
 	)
+	if safeCause := logging.SafeErrorCause(cause); safeCause != "" {
+		message += ": " + safeCause
+	}
 	code := currentBoardHistoryFailureCode(diagnostic)
 	return &currentBoardHistoryRestoreError{
 		code:    code,

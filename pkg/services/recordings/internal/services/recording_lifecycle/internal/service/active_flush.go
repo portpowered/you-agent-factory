@@ -28,7 +28,7 @@ func (service *Service) startPeriodic(
 	}
 	service.mu.Lock()
 	session, err := service.sessionLocked(id)
-	if err != nil || session.periodicDone != nil {
+	if err != nil || session.periodicDone != nil || session.stopped || session.finalizing || session.terminal {
 		service.mu.Unlock()
 		return
 	}
@@ -91,6 +91,13 @@ func (service *Service) flush(
 	defer session.flushMu.Unlock()
 
 	service.mu.Lock()
+	// A successor can own this target after finalization. Never let an old
+	// identity retry a failed final write over that successor's history.
+	if session.terminal {
+		err := session.finalizeErr
+		service.mu.Unlock()
+		return err
+	}
 	if session.flushedVersion == session.version {
 		service.mu.Unlock()
 		return nil

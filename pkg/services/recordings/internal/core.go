@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +49,95 @@ type combinedService struct {
 	replayConfigDecoder    factorydefinitions.ReplayRuntimeConfigDecoder
 	replayInputs           recordings.ReplayInputLoader
 	logger                 logging.Logger
+	targetClaim            recordings.RecordingTargetClaim
+	targetLeases           map[string]*recordingTargetLease
+}
+
+func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path string) (io.Closer, error) {
+	if service.targetClaim == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, path, err)
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	lease, err := service.targetClaim(ctx, path, key+".recording.lock")
+	if err != nil {
+		return nil, &recordingTargetClaimError{path: path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+	}
+	if lease == nil {
+		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
+	}
+	owned := &recordingTargetLease{Closer: lease, path: path, owner: service, key: key}
+	service.recordingMu.Lock()
+	if service.targetLeases == nil {
+		service.targetLeases = make(map[string]*recordingTargetLease)
+	}
+	service.targetLeases[key] = owned
+	service.recordingMu.Unlock()
+	return owned, nil
+}
+
+type recordingTargetLease struct {
+	io.Closer
+	path  string
+	owner *combinedService
+	key   string
+}
+
+func (lease *recordingTargetLease) Close() error {
+	if err := lease.Closer.Close(); err != nil {
+		return err
+	}
+	lease.owner.recordingMu.Lock()
+	defer lease.owner.recordingMu.Unlock()
+	if lease.owner.targetLeases[lease.key] == lease {
+		delete(lease.owner.targetLeases, lease.key)
+	}
+	return nil
+}
+
+func (service *combinedService) recordingTargetValidator(path string) recordings.RecordingTargetValidator {
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	if lease := service.targetLeases[key]; lease != nil {
+		return lease
+	}
+	return nil
+}
+
+func (lease *recordingTargetLease) Validate() error {
+	if validator, ok := lease.Closer.(recordings.RecordingTargetValidator); ok {
+		if err := validator.Validate(); err != nil {
+			return &recordingTargetClaimError{path: lease.path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
+		}
+	}
+	return nil
+}
+
+type recordingTargetClaimError struct {
+	path  string
+	cause error
+}
+
+func (err *recordingTargetClaimError) Error() string { return err.CLIErrorMessage() }
+
+func (err *recordingTargetClaimError) Unwrap() error { return err.cause }
+
+func (*recordingTargetClaimError) CLIErrorCode() string { return "RECORDING_TARGET_CONFLICT" }
+
+func (err *recordingTargetClaimError) CLIErrorMessage() string {
+	return fmt.Sprintf("cannot acquire exclusive ownership of recording target %q; preserve the recording and resolve destination access or ownership before retrying", err.path)
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -251,6 +343,7 @@ func NewCombinedService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
+	targetClaims ...recordings.RecordingTargetClaim,
 ) recordings.Service {
 	service := &combinedService{
 		Ledger:                 ledger,
@@ -271,6 +364,9 @@ func NewCombinedService(
 		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
+	if len(targetClaims) == 1 {
+		service.targetClaim = targetClaims[0]
+	}
 	return service
 }
 

@@ -3,6 +3,8 @@ package runtimehosting
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"strings"
 	"sync"
@@ -240,7 +242,10 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 
 	core, observed := observer.New(zapcore.ErrorLevel)
 	logger := zap.New(core)
-	apiErr := errors.New("unexpected API starter failure")
+	const secret = "PRIVATE_STARTER_PAYLOAD"
+	primary := &fs.PathError{Op: "open", Path: "retained.json", Err: fs.ErrPermission}
+	cleanup := &fs.PathError{Op: "close", Path: "retained.json", Err: fs.ErrClosed}
+	apiErr := fmt.Errorf("%s: %w", secret, errors.Join(primary, cleanup))
 	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
 	err := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
@@ -259,6 +264,53 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 	entries := observed.FilterMessage("API server error").All()
 	if len(entries) != 1 {
 		t.Fatalf("non-bind API failure log entries = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	const want = `open "retained.json": permission denied; close "retained.json": file already closed`
+	if fields["cause"] != want {
+		t.Fatalf("safe startup cause = %q, want %q", fields["cause"], want)
+	}
+	if strings.Contains(fmt.Sprint(fields), secret) {
+		t.Fatal("API startup log disclosed the starter payload")
+	}
+	if !errors.Is(runtime.failedBecause, primary) || !errors.Is(runtime.failedBecause, cleanup) {
+		t.Fatalf("startup failure lost joined cause identities: %v", runtime.failedBecause)
+	}
+}
+
+func TestServicePublishesAPIStartupFailureAfterLogging(t *testing.T) {
+	t.Parallel()
+	core, _ := observer.New(zapcore.ErrorLevel)
+	logging := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	var transport sync.WaitGroup
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(release) })
+		transport.Wait()
+	})
+	logger := zap.New(core, zap.Hooks(func(zapcore.Entry) error {
+		close(logging)
+		<-release
+		return nil
+	}))
+	apiErr := &fs.PathError{Op: "open", Path: "retained.json", Err: fs.ErrPermission}
+	host := New(func(context.Context, platformhttpserver.StartRequest) error { return apiErr })
+	exit := host.startAPI(t.Context(), &transport, http.NewServeMux(),
+		factorysessions.RuntimeHostRequest{Port: 8123}, logger, make(chan platformhttpserver.Binding, 1))
+	select {
+	case <-logging:
+	case <-t.Context().Done():
+		t.Fatal("API startup failure was not logged")
+	}
+	select {
+	case <-exit:
+		t.Fatal("startup failure published before logging completed; cleanup could close the sink")
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+	if err := <-exit; !errors.Is(err, apiErr) {
+		t.Fatalf("API startup result = %v, want original cause", err)
 	}
 }
 

@@ -715,7 +715,10 @@ func FailStartup(
 	runtimeState.RetireActive(sessionID, handle, nil)
 	if handle != nil && stop != nil {
 		if stopErr := stop(handle); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return errors.Join(startupErr, stopErr)
+			startupErr = errors.Join(startupErr, stopErr)
+			if !handle.Completed() {
+				return startupErr
+			}
 		}
 	}
 	if session != nil {

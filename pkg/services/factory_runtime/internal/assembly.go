@@ -175,8 +175,13 @@ func (a *Assembly) prepareInitialOpening(ctx context.Context, request factoryrun
 	if err != nil {
 		return factoryruntime.SessionBuildSpec{}, err
 	}
-	// Initial recording paths retain the invocation selection; replacements are session-scoped.
+	// Restore and output must address the same session-resolved destination.
+	// Resolving an explicit session's placeholder as ~default writes a different
+	// board from the one validated during opening.
 	spec.RecordPath = runtimebuild.SessionScopedRecordPath(request.Inputs.Recordings.RecordPath, "~default")
+	if strings.Contains(request.Inputs.Recordings.RecordPath, "__factory_session_id__") {
+		spec.RecordPath = runtimebuild.SessionScopedRecordPath(request.Inputs.Recordings.RecordPath, request.FactorySessionID)
+	}
 	spec.MetricsSessionID = firstNonEmptySessionID(metricsID, request.FactorySessionID)
 	if resumeInput != nil {
 		spec.ResumeSourceCanonicalSessionID = strings.TrimSpace(resumeInput.SourceCanonicalSessionID)
@@ -447,9 +452,19 @@ func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryE
 		return false
 	}
 	restartBoundarySeen := false
+	sessionStartSeen := false
 	previousTick := events[0].Context.Tick
 	for _, event := range events {
-		if isRestoredLogicalClockBoundary(event) {
+		if event.Type == factorydefinitions.FactoryEventTypeSessionStarted {
+			// A graceful live reopen starts a new execution without a resume or
+			// interruption marker. Two canonical starts prove that generation
+			// boundary; one initial start must not classify async tick regression
+			// within a single execution as a restart.
+			if sessionStartSeen {
+				return true
+			}
+			sessionStartSeen = true
+		} else if isRestoredLogicalClockBoundary(event) {
 			restartBoundarySeen = true
 		}
 		if restartBoundarySeen && event.Context.Tick < previousTick {
@@ -466,7 +481,8 @@ func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
 }
 
 func isRestoredLogicalClockBoundary(event factorydefinitions.FactoryEvent) bool {
-	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed
+	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed ||
+		event.Type == factorydefinitions.FactoryEventTypeSessionStarted
 }
 
 // initialRuntimeOpening declares publication and retains partial ownership

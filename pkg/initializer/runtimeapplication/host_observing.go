@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
 
@@ -82,8 +83,8 @@ func (runner hostObservingRunner) finishAfterReadinessResult(
 		return <-runResult
 	}
 	err := <-runResult
-	if err == nil && !errors.Is(result.err, context.Canceled) {
-		err = result.err
+	if !lifecycle.CancellationOnly(result.err) {
+		err = errors.Join(result.err, err)
 	}
 	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
 }
@@ -97,6 +98,17 @@ func (runner hostObservingRunner) finishAfterRunResult(
 	readinessObserved, readinessErr := runner.observeReadyResult(readyResult, cancelReady)
 	if readinessObserved {
 		return err
+	}
+	if err != nil && readinessErr == nil {
+		// Join the reader after cancellation. It may already hold the primary
+		// startup failure while Run is returning a separate cleanup failure.
+		cancelReady()
+		result := <-readyResult
+		if result.err == nil {
+			runner.onReady(result.binding)
+			return err
+		}
+		readinessErr = result.err
 	}
 	if err == nil && readinessErr == nil && runner.runtimeHostReadinessConfigured() {
 		// The managed run can publish readiness immediately before returning,
@@ -112,8 +124,8 @@ func (runner hostObservingRunner) finishAfterRunResult(
 		}
 	}
 	cancelReady()
-	if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
-		err = readinessErr
+	if readinessErr != nil && !lifecycle.CancellationOnly(readinessErr) {
+		err = errors.Join(readinessErr, err)
 	}
 	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
 }
@@ -146,7 +158,7 @@ func (runner hostObservingRunner) runtimeHostReadinessConfigured() bool {
 }
 
 func runtimeHostStartupResult(ctx context.Context, configured bool, err error) error {
-	if err == nil || errors.Is(err, context.Canceled) || !configured || (ctx != nil && ctx.Err() != nil) {
+	if err == nil || lifecycle.CancellationOnly(err) || !configured || (ctx != nil && ctx.Err() != nil) {
 		return err
 	}
 	return &initializer.RuntimeHostStartupError{Cause: err}

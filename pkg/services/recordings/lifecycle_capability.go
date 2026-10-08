@@ -131,6 +131,9 @@ type BeginRecordingRequest struct {
 	CanonicalSessionID string
 	ReportedSessionID  string
 	FlushInterval      time.Duration
+	// DeferPeriodic prepares history without starting background publication.
+	// Repeat Begin with the returned identity and false to activate it.
+	DeferPeriodic bool
 }
 
 // BindLifecycleRequest identifies the Factory Session and opaque artifact
@@ -183,6 +186,9 @@ type FlushLifecycleRequest struct {
 // and join. It does not finalize the recording or perform a final flush.
 type StopLifecycleRequest struct {
 	RecordingID LifecycleRecordingID
+	// Abort permanently rejects further writes and releases the prepared target
+	// after joining outstanding writes, without publishing terminal metadata.
+	Abort bool
 }
 
 // FinishLifecycleRequest is the plain finish request for one bound

@@ -88,6 +88,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 	return NewRoot(
 		fixture.ProviderSessions,
 		fixture.Logger,
+		nil,
 		fixture.FactoryWorkflows,
 		fixture.WorkflowPreview,
 		fixture.RuntimeRoot,

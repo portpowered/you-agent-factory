@@ -1,9 +1,12 @@
 package wire
 
 import (
+	"context"
 	"fmt"
+	"io"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -16,7 +19,7 @@ import (
 )
 
 func provideRecordingsCLIAdapter() recordingscli.Adapter {
-	return recordingswire.NewCLIAdapter()
+	return recordingswire.NewCLIAdapter(platformfilesystem.Local{})
 }
 
 func provideRecordingsRoot(
@@ -36,7 +39,8 @@ func provideRecordingsRoot(
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
 ) recordings.Service {
-	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs)
+	claim := provideRecordingTargetClaim(edges)
+	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, claim)
 	if edges.RecordingsRootObserver != nil {
 		edges.RecordingsRootObserver(service)
 	}
@@ -44,6 +48,17 @@ func provideRecordingsRoot(
 		edges.RecordingsWorkSnapshotReaderObserver(recordingswire.NewWorkSnapshotReader(service))
 	}
 	return service
+}
+
+func provideRecordingTargetClaim(edges serviceedges.Edges) recordings.RecordingTargetClaim {
+	if edges.RecordingTargetClaim != nil {
+		return edges.RecordingTargetClaim
+	}
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		return func(context.Context, string, string) (io.Closer, error) { return nil, err }
+	}
+	return coordination.TryLockTarget
 }
 
 func provideRecordingClock(clock factoryruntime.Clock) (recordings.RecordingClock, error) {

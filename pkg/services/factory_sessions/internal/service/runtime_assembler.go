@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -53,4 +55,25 @@ func newOrderlyRecordingFlush(
 		}
 		return nil
 	}
+}
+
+// successorBoardStartup selects a resumed writer only after its initial
+// publication succeeds. Failed publication leaves the previous board selected.
+type successorBoardStartup struct {
+	roles.LifecycleRuntime
+	publish func(context.Context) error
+	once    sync.Once
+	err     error
+}
+
+func (startup *successorBoardStartup) CompleteStartup(ctx context.Context) error {
+	startup.once.Do(func() {
+		startup.err = startup.LifecycleRuntime.CompleteStartup(ctx)
+		if startup.err == nil {
+			if err := startup.publish(ctx); err != nil {
+				startup.err = startup.FailStartup(err)
+			}
+		}
+	})
+	return startup.err
 }

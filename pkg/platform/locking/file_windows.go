@@ -26,3 +26,9 @@ func unlockFile(file File) error {
 	var overlapped windows.Overlapped
 	return windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, &overlapped)
 }
+
+func fileLinkCount(file File) (uint64, error) {
+	var info windows.ByHandleFileInformation
+	err := windows.GetFileInformationByHandle(windows.Handle(file.Fd()), &info)
+	return uint64(info.NumberOfLinks), err
+}

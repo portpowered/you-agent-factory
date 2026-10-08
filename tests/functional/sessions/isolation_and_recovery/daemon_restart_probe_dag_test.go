@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -50,6 +52,11 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	events := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeStates(t, before)
 	restartProbeShutdown(t, url, command)
+	var recordedEvents []factoryapi.FactoryEvent
+	if len(apis) > 3 {
+		recordedEvents = restartProbeRecordedHistory(t, dir)
+		assertRestartProbeEventFacts(t, events, recordedEvents)
+	}
 	second := inputs(t, dir)
 	second.Input.Context = context.WithValue(second.Input.Context, restartProbeServerKey{}, apis[1])
 	if port != 0 {
@@ -74,8 +81,29 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	assertRestartProbeRecoveredWork(t, before, after)
 	recoveredEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	assertRestartProbeEventFacts(t, events, recoveredEvents)
+	if len(apis) > 3 {
+		assertRestartProbeHistoryPrefix(t, recordedEvents, recoveredEvents)
+	}
 	if runner.calls.Load() != 1 {
 		t.Fatal("restart dispatched terminal A or blocked descendants")
+	}
+	if len(apis) > 3 {
+		// F03 keeps the same durable board and waiting descendants through a
+		// second explicit --record restart before allowing new work to run.
+		restartProbeShutdown(t, url, reopened)
+		third := inputs(t, dir)
+		third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, apis[2])
+		reopened = support.StartProcessCommand(t, process, third.Input)
+		url = restartProbeReadyURL(t, apis[2], reopened)
+		after = restartProbeBoardReads(t, url)
+		assertRestartProbeStates(t, after)
+		assertRestartProbeRecoveredWork(t, before, after)
+		repeatedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		assertRestartProbeEventFacts(t, recoveredEvents, repeatedEvents)
+		assertRestartProbeHistoryPrefix(t, recoveredEvents, repeatedEvents)
+		if runner.calls.Load() != 1 {
+			t.Fatal("second restart dispatched terminal A or blocked descendants")
+		}
 	}
 	request, _ := json.Marshal(factoryapi.MoveWorkRequest{StateName: "init"})
 	restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/restart-B/move"), request)
@@ -92,11 +120,32 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	completedEvents := support.GetFactoryEventsForSessionAt(t, url, "~default")
 	restartProbeShutdown(t, url, reopened)
 	if len(apis) > 2 {
-		assertRestartProbeTerminalRestart(t, process, dir, apis[2], runner, inputs, completed, completedEvents)
+		assertRestartProbeTerminalRestart(t, process, dir, apis[len(apis)-1], runner, inputs, completed, completedEvents)
 	}
 	if !bytes.Equal(mustReadSeededReplayArtifact(t, sentinel), []byte("worktree § —")) || !bytes.Equal(mustReadSeededReplayArtifact(t, workPath), []byte(batch)) {
 		t.Fatal("restart mutated worktree sentinel or request source")
 	}
+}
+
+func restartProbeRecordedHistory(t *testing.T, dir string) []factoryapi.FactoryEvent {
+	t.Helper()
+	// The emitted recording is the customer recovery artifact. Its startup
+	// header has its own timestamps; compare that retained header in full,
+	// rather than the independently timestamped live startup observation.
+	var recording factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(mustReadSeededReplayArtifact(t, filepath.Join(dir, "current-board.json")), &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording.Events) == 0 {
+		t.Fatal("shutdown emitted no recovery history")
+	}
+	// Use the public representation contract: association model metadata is
+	// recording-only and is deliberately absent from the HTTP event payload.
+	events, err := apisurface.FactoryEventsToAPI(recording.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events
 }
 
 func assertRestartProbeFailedPrerequisite(t *testing.T, url string, runner *restartProbeUnexpectedRunner, recovered []factoryapi.Work) {
@@ -213,6 +262,41 @@ func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.Facto
 	}
 	if proved < 2 {
 		t.Fatal("prior dispatch/state facts missing")
+	}
+}
+
+func assertRestartProbeHistoryPrefix(t *testing.T, before, after []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(after) < len(before) {
+		t.Fatalf("restored history has %d events, want retained prefix of %d", len(after), len(before))
+	}
+	// Normalize the public JSON union payloads so object-key ordering cannot
+	// hide a changed event or falsely report a changed canonical fact.
+	values := make([]any, 2)
+	for index, events := range [][]factoryapi.FactoryEvent{before, after[:len(before)]} {
+		payload, err := json.Marshal(events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(payload, &values[index]); err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range values[index].([]any) {
+			context := value.(map[string]any)["context"].(map[string]any)
+			// Legacy startup frames precede session assignment. Public restored
+			// history attaches the selected scope; preserve every recorded field.
+			if _, exists := context["sessionId"]; !exists {
+				context["sessionId"] = "~default"
+			}
+		}
+	}
+	if !reflect.DeepEqual(values[0], values[1]) {
+		oldEvents, newEvents := values[0].([]any), values[1].([]any)
+		for index := range oldEvents {
+			if !reflect.DeepEqual(oldEvents[index], newEvents[index]) {
+				t.Fatalf("explicit --record restart changed public prefix event %d (%s)", index, before[index].Id)
+			}
+		}
 	}
 }
 

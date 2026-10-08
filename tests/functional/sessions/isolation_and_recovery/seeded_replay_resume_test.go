@@ -1,12 +1,17 @@
 package isolation_and_recovery_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,9 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -95,32 +102,320 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 			running.daemon.Stop(t)
 		})
 	}
+	t.Run("successor history", func(t *testing.T) {
+		testSeededReplayResumePreservesSuccessorHistory(t, reusable)
+	})
+	t.Run("F01 read failure safety", func(t *testing.T) {
+		testRecordStartupSafetyReadFailurePreservesTargetAndCause(t, reusable)
+	})
+	t.Run("JSON direct restore", func(t *testing.T) {
+		testRecordStartupSafetyDirectRestore(t, reusable)
+	})
+	t.Run("F02 host startup failure", func(t *testing.T) {
+		testRecordStartupSafetyHostFailure(t, reusable)
+	})
+	t.Run("F05 fresh recording boundaries", func(t *testing.T) {
+		testRecordStartupSafetyFreshTargets(t, reusable)
+	})
+}
+
+func testRecordStartupSafetyFreshTargets(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	t.Run("no recording", func(t *testing.T) {
+		t.Parallel()
+		dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+		running := reusable.runForSession(t, dir, "", uuid.NewString(), "--no-record")
+		assertFreshRecordingBoard(t, running)
+		restartProbeShutdown(t, running.url, running.daemon)
+		if _, err := os.Stat(filepath.Join(running.home, ".you-agent-factory", "recordings")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("--no-record created a recording destination: %v", err)
+		}
+	})
+	for _, empty := range []bool{false, true} {
+		t.Run(fmt.Sprintf("empty=%t", empty), func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "fresh.__factory_session_id__.json")
+			path := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			if empty {
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			running := reusable.runForSession(t, dir, "", sessionID, "--record", selected)
+			assertFreshRecordingBoard(t, running)
+			restartProbeShutdown(t, running.url, running.daemon)
+			payload := mustReadSeededReplayArtifact(t, path)
+			if len(payload) == 0 {
+				t.Fatal("successful shutdown left an empty recording")
+			}
+			replayed := reusable.runForSession(t, dir, path, sessionID, "--replay", path, "--no-record")
+			assertFreshRecordingBoard(t, replayed)
+			restartProbeShutdown(t, replayed.url, replayed.daemon)
+			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("read-only replay changed the fresh recording")
+			}
+		})
+	}
+}
+
+func assertFreshRecordingBoard(t *testing.T, running seededReplayResumeRun) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(running.url, running.sessionID))
+	waitForSeededReplayRuntimeStart(t, stream)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(running.url, running.sessionID, "/work"))
+	if len(listed.Results) != 0 {
+		t.Fatalf("fresh board contains unexpected Work: %#v", listed.Results)
+	}
+}
+
+// An explicitly selected UUID does not make a retained JSON board a fresh
+// recording. Restore its Work and prefix before allowing any output flush.
+func testRecordStartupSafetyDirectRestore(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	sessionID := uuid.NewString()
+	selectedPath := filepath.Join(dir, "current-board.__factory_session_id__.json")
+	path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
+	var artifact factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	for index := range artifact.Events {
+		artifact.Events[index].Context.SessionID = &sessionID
+	}
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The same board is reopened only after its preceding host has joined.
+	for opening := 0; opening < 3; opening++ {
+		running := reusable.runForSession(t, dir, path, sessionID, "--record", selectedPath)
+		assertSeededSuccessorWorkAndHistory(t, running, true)
+		running.daemon.Stop(t)
+	}
+}
+
+// A successor must remain recoverable after the live ledger has been released.
+// Each format owns its files, session, profile and host on one shared process.
+func testSeededReplayResumePreservesSuccessorHistory(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	for _, format := range []string{"json", "jsonl"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(dir, "source.json")
+			successor := filepath.Join(dir, "successor."+format)
+			payload := seededReplayResumeArtifactPayload(t, true)
+			sessionID := uuid.NewString()
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(payload, &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			payload, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(source, payload, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			resumed := reusable.runForSession(t, dir, source, sessionID, "--resume", source, "--record", successor)
+			assertSeededSuccessorWorkAndHistory(t, resumed, true)
+			resumed.daemon.Stop(t)
+			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) {
+				t.Fatal("resume changed its source recording")
+			}
+			replayed := reusable.runForSession(t, dir, successor, sessionID, "--replay", successor, "--no-record")
+			assertSeededSuccessorWorkAndHistory(t, replayed, false)
+			replayed.daemon.Stop(t)
+		})
+	}
+}
+
+func assertSeededSuccessorWorkAndHistory(t *testing.T, running seededReplayResumeRun, retainedHistory bool) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(running.url, running.sessionID))
+	waitForSeededReplayRuntimeStart(t, stream)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(running.url, running.sessionID, "/work"))
+	if len(listed.Results) != 1 || !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", "task:complete") {
+		t.Fatalf("successor lost the recorded terminal Work: %#v", listed.Results)
+	}
+	if !retainedHistory {
+		return
+	}
+	events := support.GetFactoryEventsForSessionAt(t, running.url, running.sessionID)
+	wantPrefix := []string{"run-request", "work-request", "work-state-change", "run-response"}
+	if len(events) < len(wantPrefix) {
+		t.Fatalf("successor history has %d events, want retained prefix %v", len(events), wantPrefix)
+	}
+	for index, id := range wantPrefix {
+		if events[index].Id != id {
+			t.Fatalf("successor event %d = %q, want retained %q", index, events[index].Id, id)
+		}
+	}
 }
 
 type seededReplayResumeProcess struct {
 	process support.Process
 
-	mu             sync.RWMutex
-	serversByPort  map[int]*support.ProcessAPIServer
-	payloadsByPath map[string][]byte
-	nextPort       atomic.Int32
+	mu                 sync.RWMutex
+	serversByPort      map[int]*support.ProcessAPIServer
+	payloadsByPath     map[string][]byte
+	readErrorsByPath   map[string]error
+	replacementsByPath map[string][]byte
+	serverErrorsByPort map[int]error
+	nextPort           atomic.Int32
+}
+
+func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, name := range []string{"same path", "normalized path", "relative path", "hard link", "symbolic link"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			factoryDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(factoryDir, "board.json")
+			original := seededReplayResumeArtifactPayload(t, true)
+			if err := os.WriteFile(source, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := seededResumeSourceAlias(t, name, source)
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run", "--session", uuid.NewString(), "--dir", factoryDir,
+				"--continuously", "--with-server", "--quiet", "--resume", source, "--record", target,
+			})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = factoryDir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" {
+				t.Fatalf("source reuse result = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); decodeErr != nil {
+				t.Fatalf("decode source-conflict ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
+			}
+			if response.Code != "RECORDING_SOURCE_CONFLICT" || response.Family != factoryapi.ErrorFamilyBadRequest || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("source-conflict response = %#v", response)
+			}
+			if !bytes.Equal(mustReadSeededReplayArtifact(t, source), original) {
+				t.Fatal("refused successor changed resume source bytes")
+			}
+			if strings.Contains(inputs.Stdout(), "API server:") || strings.Contains(inputs.Stdout(), "Dashboard:") {
+				t.Fatalf("refused alias announced readiness: %s", inputs.Stdout())
+			}
+		})
+	}
+}
+
+func TestRecordStartupSafetyRefusesAliasedDestination(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, kind := range []string{"hard link", "symbolic link"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			source := filepath.Join(dir, "board.json")
+			before := seededReplayResumeArtifactPayload(t, true)
+			if err := os.WriteFile(source, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "alias.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			if kind == "hard link" {
+				if err := os.Link(source, target); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Symlink(source, target); err != nil {
+				t.Skipf("OS does not permit scenario symlink: %v", err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("aliased destination startup = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			for _, path := range []string{source, target} {
+				if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+					t.Fatalf("refused alias changed %q", path)
+				}
+			}
+		})
+	}
+}
+
+func seededResumeSourceAlias(t *testing.T, kind, source string) string {
+	t.Helper()
+	directory := filepath.Dir(source)
+	switch kind {
+	case "normalized path":
+		return directory + string(filepath.Separator) + "." + string(filepath.Separator) + "board.json"
+	case "relative path":
+		return "board.json"
+	case "hard link", "symbolic link":
+		target := filepath.Join(directory, "alias.json")
+		if kind == "hard link" {
+			if err := os.Link(source, target); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.Symlink(source, target); err != nil {
+			t.Skipf("OS does not permit scenario symlink: %v", err)
+		}
+		return target
+	default:
+		return source
+	}
 }
 
 type seededReplayResumeRun struct {
 	url       string
 	sessionID string
+	home      string
 	daemon    *support.ProcessCommand
 }
 
-func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
+func newSeededReplayResumeProcess(t *testing.T, claims ...recordings.RecordingTargetClaim) *seededReplayResumeProcess {
 	t.Helper()
 	reusable := &seededReplayResumeProcess{
-		serversByPort:  make(map[int]*support.ProcessAPIServer),
-		payloadsByPath: make(map[string][]byte),
+		serversByPort:      make(map[int]*support.ProcessAPIServer),
+		payloadsByPath:     make(map[string][]byte),
+		readErrorsByPath:   make(map[string]error),
+		replacementsByPath: make(map[string][]byte),
+		serverErrorsByPort: make(map[int]error),
+	}
+	var claim recordings.RecordingTargetClaim
+	if len(claims) == 1 {
+		claim = claims[0]
 	}
 	process := support.BuildProcess(t, serviceedges.Edges{
+		RecordingTargetClaim:                claim,
 		APIServerStarter:                    reusable.startAPIServer,
 		FactorySessionReplayRecordingReader: reusable.readReplayRecording,
+		RecordingReadFile:                   reusable.readRecording,
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 			Stdout: support.CodexSuccessStdout("unexpected replay dispatch COMPLETE"),
 		}),
@@ -130,17 +425,324 @@ func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 	return reusable
 }
 
+type recordingTargetRelease func() error
+
+func (release recordingTargetRelease) Close() error { return release() }
+
+func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t)
+	for _, name := range []string{"first board", "second board", "unchanged metadata"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			replacement := []byte("externally replaced retained history")
+			if name == "unchanged metadata" {
+				replacement = bytes.Clone(original)
+				replacement[len(replacement)-1] = ' '
+			}
+			reusable.mu.Lock()
+			reusable.replacementsByPath[filepath.Clean(target)] = replacement
+			reusable.mu.Unlock()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("changed restore input = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or changed replacement history")
+			}
+		})
+	}
+}
+
+func TestRecordStartupSafetyDestinationChangesBeforePublication(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	replacement := []byte("external history changed after restoration")
+	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, target, _ string) (io.Closer, error) {
+		return &startupPublicationTarget{target: target, replacement: replacement}, nil
+	})
+	for _, name := range []string{"first board", "second board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			api := support.NewProcessAPIServer()
+			port := 22000 + int(reusable.nextPort.Add(1))
+			reusable.mu.Lock()
+			reusable.serversByPort[port] = api
+			reusable.mu.Unlock()
+			t.Cleanup(func() {
+				reusable.mu.Lock()
+				delete(reusable.serversByPort, port)
+				reusable.mu.Unlock()
+			})
+			inputs.Input.Args = append(inputs.Input.Args, "--listen", fmt.Sprintf("127.0.0.1:%d", port))
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("late destination change = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or overwrote replacement history")
+			}
+		})
+	}
+}
+
+// The first validation represents completed restore. The next check models
+// an external edit before activation, through the supported ownership edge.
+type startupPublicationTarget struct {
+	target      string
+	replacement []byte
+	checks      int
+}
+
+func (*startupPublicationTarget) Close() error { return nil }
+
+func (lease *startupPublicationTarget) Validate() error {
+	lease.checks++
+	if lease.checks == 1 {
+		return nil
+	}
+	if err := os.WriteFile(lease.target, lease.replacement, 0o600); err != nil {
+		return err
+	}
+	return errors.New("destination changed before publication")
+}
+
+func TestRecordStartupSafetyDestinationReplacement(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t, func(ctx context.Context, target, marker string) (io.Closer, error) {
+		files := &startupReplacementFiles{target: target, marker: marker}
+		coordination, err := platformlocking.New(files)
+		if err != nil {
+			return nil, err
+		}
+		return coordination.TryLockTarget(ctx, target, marker)
+	})
+	for _, name := range []string{"first board", "second board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			original := seededReplayResumeArtifactPayload(t, true)
+			replacement := seededReplayResumeArtifactPayload(t, false)
+			for path, payload := range map[string][]byte{target: original, target + ".replacement": replacement} {
+				if err := os.WriteFile(path, payload, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("replaced destination startup = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or changed replacement history")
+			}
+		})
+	}
+}
+
+type startupReplacementFiles struct {
+	platformlocking.LocalFileSystem
+	target, marker string
+}
+
+func (files *startupReplacementFiles) OpenFile(path string, flags int, mode fs.FileMode) (platformlocking.File, error) {
+	if path == files.marker {
+		if err := os.Rename(files.target+".replacement", files.target); err != nil {
+			return nil, err
+		}
+	}
+	return files.LocalFileSystem.OpenFile(path, flags, mode)
+}
+
+func TestRecordStartupSafetyDestinationOwnership(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	var mu sync.Mutex
+	denied := make(map[string]bool)
+	released := make(map[string]int)
+	busy := errors.New("recording destination already has an owner")
+	reusable := newSeededReplayResumeProcess(t, func(_ context.Context, _ string, marker string) (io.Closer, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if denied[marker] {
+			return nil, busy
+		}
+		return recordingTargetRelease(func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			released[marker]++
+			return nil
+		}), nil
+	})
+	for _, name := range []string{"first owned board", "second owned board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			path := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			var artifact factorydefinitions.ReplayArtifact
+			if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+				t.Fatal(err)
+			}
+			for index := range artifact.Events {
+				artifact.Events[index].Context.SessionID = &sessionID
+			}
+			original, err := json.Marshal(artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			marker := path + ".recording.lock"
+			if runtime.GOOS == "windows" {
+				marker = strings.ToLower(marker)
+			}
+			mu.Lock()
+			denied[marker] = true
+			mu.Unlock()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err = reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" ||
+				!strings.Contains(err.Error(), strconv.Quote(path)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatalf("occupied destination startup = %v; stdout=%s", err, inputs.Stdout())
+			}
+			if !bytes.Equal(original, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("failed ownership acquisition changed retained history")
+			}
+			mu.Lock()
+			delete(denied, marker)
+			mu.Unlock()
+			running := reusable.runForSession(t, dir, path, sessionID, "--record", selected)
+			assertSeededSuccessorWorkAndHistory(t, running, true)
+			running.daemon.Stop(t)
+			mu.Lock()
+			count := released[marker]
+			mu.Unlock()
+			if count != 1 {
+				t.Fatalf("successful shutdown released destination %d times; want one", count)
+			}
+		})
+	}
+}
+
 func (reusable *seededReplayResumeProcess) run(
 	t *testing.T,
 	factoryDir string,
 	artifactPath string,
+) seededReplayResumeRun {
+	return reusable.runWithRecordingArgs(t, factoryDir, artifactPath, "--replay", artifactPath, "--no-record")
+}
+
+func (reusable *seededReplayResumeProcess) runWithRecordingArgs(
+	t *testing.T,
+	factoryDir string,
+	artifactPath string,
+	recordingArgs ...string,
+) seededReplayResumeRun {
+	return reusable.runForSession(t, factoryDir, artifactPath, uuid.NewString(), recordingArgs...)
+}
+
+func (reusable *seededReplayResumeProcess) runForSession(
+	t *testing.T,
+	factoryDir string,
+	artifactPath string,
+	sessionID string,
+	recordingArgs ...string,
 ) seededReplayResumeRun {
 	t.Helper()
 	api := support.NewProcessAPIServer()
 	port := 22000 + int(reusable.nextPort.Add(1))
 	reusable.mu.Lock()
 	reusable.serversByPort[port] = api
-	reusable.payloadsByPath[filepath.Clean(artifactPath)] = append([]byte(nil), mustReadSeededReplayArtifact(t, artifactPath)...)
+	if artifactPath != "" {
+		reusable.payloadsByPath[filepath.Clean(artifactPath)] = append([]byte(nil), mustReadSeededReplayArtifact(t, artifactPath)...)
+	}
 	reusable.mu.Unlock()
 	t.Cleanup(func() {
 		reusable.mu.Lock()
@@ -148,7 +750,6 @@ func (reusable *seededReplayResumeProcess) run(
 		delete(reusable.payloadsByPath, filepath.Clean(artifactPath))
 		reusable.mu.Unlock()
 	})
-	sessionID := uuid.NewString()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--session", sessionID,
@@ -156,8 +757,8 @@ func (reusable *seededReplayResumeProcess) run(
 		"--listen", fmt.Sprintf("127.0.0.1:%d", port),
 		"--dir", factoryDir,
 		"--provider", "CODEX", "--model", "gpt-5-codex",
-		"--replay", artifactPath, "--no-record",
 	})
+	inputs.Input.Args = append(inputs.Input.Args, recordingArgs...)
 	home := t.TempDir()
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = factoryDir
@@ -170,7 +771,7 @@ func (reusable *seededReplayResumeProcess) run(
 		}
 	})
 	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, daemon: daemon}
+	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, home: home, daemon: daemon}
 }
 
 func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {
@@ -185,11 +786,129 @@ func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {
 func (reusable *seededReplayResumeProcess) readReplayRecording(path string) ([]byte, error) {
 	reusable.mu.RLock()
 	payload := reusable.payloadsByPath[filepath.Clean(path)]
+	err := reusable.readErrorsByPath[filepath.Clean(path)]
 	reusable.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
 	if len(payload) == 0 {
 		return nil, errors.New("seeded replay payload was not registered for this invocation")
 	}
 	return append([]byte(nil), payload...), nil
+}
+
+// A restore read failure must abort before any writes to the resolved target,
+// including writes from startup cleanup. Each session owns its fault and file.
+func testRecordStartupSafetyReadFailurePreservesTargetAndCause(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, format, payload, code string
+		readFailure                 bool
+	}{
+		{"JSON read denied", "json", "retained recording bytes", "CURRENT_BOARD_RECORDING_UNREADABLE", true},
+		{"JSONL read denied", "jsonl", "retained recording bytes", "CURRENT_BOARD_RECORDING_UNREADABLE", true},
+		{"corrupt JSON", "json", `{"schemaVersion":"replay.v1","events":["PRIVATE_RECORDING_PAYLOAD"`, "CURRENT_BOARD_RECORDING_CORRUPT", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selectedPath := filepath.Join(dir, "retained.__factory_session_id__."+test.format)
+			path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
+			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
+			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+			before := []byte(test.payload)
+			if err := os.WriteFile(path, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cause := &fs.PathError{Op: "read recording", Path: path, Err: fs.ErrPermission}
+			if test.readFailure {
+				reusable.mu.Lock()
+				reusable.readErrorsByPath[path] = cause
+				reusable.mu.Unlock()
+			}
+			t.Cleanup(func() {
+				reusable.mu.Lock()
+				delete(reusable.readErrorsByPath, path)
+				reusable.mu.Unlock()
+			})
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selectedPath,
+				"--provider", "CODEX", "--model", "gpt-5-codex"})
+			home := t.TempDir()
+			logRoot := t.TempDir()
+			inputs.Input.Args = append(inputs.Input.Args, "--runtime-log-dir", logRoot)
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			if test.readFailure && !errors.Is(err, cause) {
+				t.Fatalf("startup error = %v, want original read cause; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); decodeErr != nil {
+				t.Fatalf("decode ErrorResponse: %v; stderr=%s", decodeErr, inputs.Stderr())
+			}
+			if string(response.Code) != test.code || response.Family != factoryapi.ErrorFamilyInternalServerError ||
+				!strings.Contains(response.Message, fmt.Sprintf("%q", path)) {
+				t.Fatalf("startup response omits selected path or file cause: %#v", response)
+			}
+			if test.readFailure {
+				if !strings.Contains(response.Message, "permission denied") {
+					t.Fatalf("startup response omits read cause: %#v", response)
+				}
+				assertRecordStartupLogCauses(t, logRoot, "read recording", "permission denied")
+			} else {
+				assertRecordStartupLogCauses(t, logRoot, "invalid JSON")
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "PRIVATE_RECORDING_PAYLOAD") {
+				t.Fatal("startup diagnostic exposed recording payload")
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness")
+			}
+			if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+				t.Fatal("failed startup cleanup changed the retained recording")
+			}
+		})
+	}
+}
+
+func (reusable *seededReplayResumeProcess) readRecording(path string) ([]byte, error) {
+	reusable.mu.Lock()
+	err := reusable.readErrorsByPath[filepath.Clean(path)]
+	replacement := reusable.replacementsByPath[filepath.Clean(path)]
+	delete(reusable.replacementsByPath, filepath.Clean(path))
+	reusable.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err == nil && replacement != nil {
+		if err := replaceReadRecordingInput(path, data, replacement); err != nil {
+			return nil, err
+		}
+	}
+	return data, err
+}
+
+// The read returns a valid prefix while a path-scoped external actor edits
+// its source. Equal-sized edits also retain inode identity and modification time.
+func replaceReadRecordingInput(path string, original, replacement []byte) error {
+	if len(original) == len(replacement) {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, replacement, 0o600); err != nil {
+			return err
+		}
+		return os.Chtimes(path, info.ModTime(), info.ModTime())
+	}
+	staging := path + ".replacement"
+	if err := os.WriteFile(staging, replacement, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(staging, path)
 }
 
 func (reusable *seededReplayResumeProcess) startAPIServer(
@@ -198,11 +917,127 @@ func (reusable *seededReplayResumeProcess) startAPIServer(
 ) error {
 	reusable.mu.RLock()
 	server := reusable.serversByPort[request.Port]
+	err := reusable.serverErrorsByPort[request.Port]
 	reusable.mu.RUnlock()
+	if err != nil {
+		return err
+	}
 	if server == nil {
 		return fmt.Errorf("seeded replay API server is not registered for requested port %d", request.Port)
 	}
 	return server.Start(ctx, request)
+}
+
+func testRecordStartupSafetyHostFailure(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	sessionID := uuid.NewString()
+	selectedPath := filepath.Join(dir, "protected.__factory_session_id__.json")
+	path := strings.ReplaceAll(selectedPath, "__factory_session_id__", sessionID)
+	var artifact factorydefinitions.ReplayArtifact
+	if err := json.Unmarshal(seededReplayResumeArtifactPayload(t, true), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	for index := range artifact.Events {
+		artifact.Events[index].Context.SessionID = &sessionID
+	}
+	before, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	port := 22000 + int(reusable.nextPort.Add(1))
+	cause := &fs.PathError{Op: "open listener configuration", Path: filepath.Join(dir, "listener"), Err: fs.ErrPermission}
+	reusable.mu.Lock()
+	reusable.payloadsByPath[path] = before
+	// The external listener can fail while its cleanup reports cancellation.
+	// Both identities must survive without classifying the primary as a stop.
+	reusable.serverErrorsByPort[port] = errors.Join(cause, context.Canceled)
+	reusable.mu.Unlock()
+	t.Cleanup(func() {
+		reusable.mu.Lock()
+		delete(reusable.payloadsByPath, path)
+		delete(reusable.serverErrorsByPort, port)
+		reusable.mu.Unlock()
+	})
+	logRoot := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+		"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selectedPath,
+		"--runtime-log-dir", logRoot,
+		"--listen", fmt.Sprintf("127.0.0.1:%d", port), "--provider", "CODEX", "--model", "gpt-5-codex"})
+	profile := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+	inputs.Input.WorkingDirectory = dir
+	err = reusable.process.Execute(inputs.Input)
+	if !errors.Is(err, cause) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("startup lost listener cause: %v; stderr=%s", err, inputs.Stderr())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(strings.NewReader(inputs.Stderr())).Decode(&response); err != nil {
+		t.Fatalf("decode startup ErrorResponse: %v; stderr=%s", err, inputs.Stderr())
+	}
+	if response.Code != "SERVER_START_FAILED" || !strings.Contains(response.Message, "permission denied") {
+		t.Fatalf("startup cause missing: %+v", response)
+	}
+	if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+		t.Fatal("failed host startup replaced validated retained history")
+	}
+	if strings.Contains(inputs.Stdout(), "Factory initiated:") {
+		t.Fatal("failed host startup published readiness")
+	}
+	assertRecordStartupSafetyLog(t, logRoot)
+	// Same-board retry is deliberately serial: the failed invocation must
+	// release its prepared writer before this invocation opens that target.
+	retry := support.FakeInputs(t.Context(), inputs.Input.Args)
+	retry.Input.Env = inputs.Input.Env
+	retry.Input.WorkingDirectory = dir
+	if retryErr := reusable.process.Execute(retry.Input); !errors.Is(retryErr, cause) {
+		t.Fatalf("retry after failed opening = %v; stderr=%s", retryErr, retry.Stderr())
+	}
+	if !bytes.Equal(before, mustReadSeededReplayArtifact(t, path)) {
+		t.Fatal("retry cleanup changed retained history")
+	}
+}
+
+func decodeRecordStartupResponse(t *testing.T, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(strings.NewReader(stderr)).Decode(&response); err != nil {
+		t.Fatalf("decode startup response: %v; stderr=%s", err, stderr)
+	}
+	return response
+}
+
+func assertRecordStartupSafetyLog(t *testing.T, logRoot string) {
+	assertRecordStartupLogCauses(t, logRoot, "permission denied", "open listener configuration")
+}
+
+func assertRecordStartupLogCauses(t *testing.T, logRoot string, causes ...string) {
+	t.Helper()
+	var logs strings.Builder
+	if err := filepath.WalkDir(logRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		payload, err := os.ReadFile(path)
+		logs.Write(payload)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, cause := range causes {
+		if !strings.Contains(logs.String(), cause) {
+			t.Fatalf("runtime log lost startup cause %q: %s", cause, logs.String())
+		}
+	}
+	if strings.Contains(logs.String(), "PRIVATE_RECORDING_PAYLOAD") {
+		t.Fatal("runtime log exposed recording contents")
+	}
 }
 
 func waitForSeededReplayRuntimeStart(t *testing.T, stream *support.FactoryEventStream) {

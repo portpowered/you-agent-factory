@@ -145,6 +145,42 @@ Preserve the reference, recordings, and durable state files.
 you run --dir ./factory --continuously --with-server --record ./recordings/current-board.json
 ```
 
+## Recover a board from a recording copy
+
+`--resume <source>` continues recorded Factory execution and writes a successor recording.
+Without `--record`, the successor uses a dated path in the operator profile.
+`--record <destination>` selects the output path.
+It does not select a separate recovery source.
+Direct startup with an existing `--record` path attempts to restore that board before running.
+Use `--resume` with a distinct destination when recovering from a retained copy.
+A non-empty resume destination is refused before writing.
+
+Existing non-empty recordings remain unchanged through failed startup and cleanup.
+This protection applies to explicit `--record` and plain current-board startup.
+Successful startup retains complete validated history or refuses the selected path before writing.
+Inspect the coded error and runtime log for safe startup and cleanup causes.
+
+1. Stop the owning server gracefully.
+2. Wait for the owning process to exit.
+3. Copy the retained recording to a recovery source.
+
+   ```powershell
+   Copy-Item -LiteralPath ./recordings/current-board.json -Destination ./recordings/recovery-source.json
+   ```
+
+4. Resume the copy into a new destination.
+
+   ```bash
+   you run --continuously --with-server --resume ./recordings/recovery-source.json --record ./recordings/recovered-board.json
+   ```
+
+5. Read the Work through the Factory Session API before submitting new Work.
+6. Check that the expected Work IDs and states are present.
+
+Keep the recovery source until the successor recording has been verified.
+Use a destination that does not exist, and keep it distinct from the source and retained recording.
+If startup fails, preserve the source and inspect the error and runtime log before another recovery attempt.
+
 ## Stop a local server gracefully on Windows
 
 Use this procedure when a Windows terminal cannot deliver a usable console
