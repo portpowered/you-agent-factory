@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -769,6 +769,19 @@ test("collector preserves selection identity and rejects changes during executio
 test("golangci joins every independent scope and propagates each failure", { timeout: 60000 }, async (t) => {
 	const repository = fileURLToPath(new URL("../../", import.meta.url));
 	const root = mkdtempSync(join(tmpdir(), "you-lint-scopes-"));
+	t.after(() => rmSync(root, { recursive: true, force: true }));
+	// Run unchanged recursive Make recipes with owned Git prerequisites, even
+	// when the worker checkout is shallow and has no origin/main ref.
+	copyFileSync(join(repository, "Makefile"), join(root, "Makefile"));
+	const fixtureEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+	for (const args of [
+		["init", "--quiet"],
+		["-c", "user.name=Lint fixture", "-c", "user.email=lint@example.test", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "--allow-empty", "-m", "Lint fixture"],
+		["update-ref", "refs/remotes/origin/main", "HEAD"],
+	]) {
+		const result = spawnSync("git", args, { cwd: root, env: fixtureEnv, encoding: "utf8" });
+		assert.equal(result.status, 0, result.stderr);
+	}
 	const script = join(root, "linter.mjs").replaceAll("\\", "/");
 	writeFileSync(join(root, "host-path.txt"), "controlled host");
 	writeFileSync(script, `#!/usr/bin/env node
@@ -804,7 +817,6 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 		for (const child of children) if (child.exitCode === null) child.kill();
 		for (const socket of sockets) socket.destroy();
 		server.close();
-		rmSync(root, { recursive: true, force: true });
 	});
 	server.listen(0, "127.0.0.1");
 	await once(server, "listening");
@@ -815,7 +827,7 @@ socket.on('close', () => process.exit(config === process.env.LINT_FAIL_SCOPE ? 7
 			"--no-print-directory", "golangci", "GOLANGCI_PREBUILT=1",
 			`LINT_JOBS=${jobs}`, `GOLANGCI_REPOSITORY=${script}`, `GOLANGCI_DIR=${root.replaceAll("\\", "/")}`,
 			...(platform === "win32" ? ["SHELL=C:/Program Files/Git/bin/sh.exe"] : []),
-		], { cwd: repository, env: { ...process.env, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
+		], { cwd: root, env: { ...fixtureEnv, LINT_TEST_PORT: String(server.address().port), LINT_FAIL_SCOPE: failed } });
 		children.push(child);
 		let output = "";
 		child.stdout.on("data", (data) => { output += data; });
