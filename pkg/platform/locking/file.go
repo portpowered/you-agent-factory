@@ -35,6 +35,7 @@ type Service interface {
 // descriptor type to its callers.
 type File interface {
 	Fd() uintptr
+	Stat() (fs.FileInfo, error)
 	Close() error
 }
 
@@ -87,43 +88,59 @@ func (service localService) TryLock(ctx context.Context, path string) (io.Closer
 // TryLockTarget refuses aliases that cannot share a stable pathname marker.
 // The caller selects both the protected target and its coordination marker.
 func (service localService) TryLockTarget(ctx context.Context, target, marker string) (io.Closer, error) {
-	if err := service.validateTarget(target); err != nil {
+	before, err := service.inspectTarget(target)
+	if err != nil {
 		return nil, err
 	}
 	lease, err := service.TryLock(ctx, marker)
 	if err != nil {
 		return nil, err
 	}
-	if err := service.validateTarget(target); err != nil {
+	after, err := service.inspectTarget(target)
+	if err != nil {
 		return nil, errors.Join(err, lease.Close())
+	}
+	if !sameTarget(before, after) {
+		return nil, errors.Join(fmt.Errorf("ownership target %q changed during acquisition", target), lease.Close())
 	}
 	return lease, nil
 }
 
-func (service localService) validateTarget(path string) error {
+func sameTarget(before, after fs.FileInfo) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	return os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime())
+}
+
+func (service localService) inspectTarget(path string) (fs.FileInfo, error) {
 	info, err := service.filesystem.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return fmt.Errorf("inspect ownership target %q: %w", path, err)
+		return nil, fmt.Errorf("inspect ownership target %q: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("ownership target %q must be a regular file without aliases", path)
+		return nil, fmt.Errorf("ownership target %q must be a regular file without aliases", path)
 	}
 	file, err := service.filesystem.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
-		return fmt.Errorf("open ownership target %q: %w", path, err)
+		return nil, fmt.Errorf("open ownership target %q: %w", path, err)
 	}
+	openedInfo, statErr := file.Stat()
 	count, inspectErr := fileLinkCount(file)
 	closeErr := file.Close()
-	if err := errors.Join(inspectErr, closeErr); err != nil {
-		return fmt.Errorf("inspect ownership target links %q: %w", path, err)
+	if err := errors.Join(statErr, inspectErr, closeErr); err != nil {
+		return nil, fmt.Errorf("inspect ownership target links %q: %w", path, err)
+	}
+	if !sameTarget(info, openedInfo) {
+		return nil, fmt.Errorf("ownership target %q changed during inspection", path)
 	}
 	if count != 1 {
-		return fmt.Errorf("ownership target %q has multiple hard links; use a separate copy", path)
+		return nil, fmt.Errorf("ownership target %q has multiple hard links; use a separate copy", path)
 	}
-	return nil
+	return openedInfo, nil
 }
 
 func (service localService) acquire(ctx context.Context, path string, wait bool) (io.Closer, error) {

@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -425,6 +426,69 @@ func newSeededReplayResumeProcess(t *testing.T, claims ...recordings.RecordingTa
 type recordingTargetRelease func() error
 
 func (release recordingTargetRelease) Close() error { return release() }
+
+func TestRecordStartupSafetyDestinationReplacement(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	reusable := newSeededReplayResumeProcess(t, func(ctx context.Context, target, marker string) (io.Closer, error) {
+		files := &startupReplacementFiles{target: target, marker: marker}
+		coordination, err := platformlocking.New(files)
+		if err != nil {
+			return nil, err
+		}
+		return coordination.TryLockTarget(ctx, target, marker)
+	})
+	for _, name := range []string{"first board", "second board"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+			sessionID := uuid.NewString()
+			selected := filepath.Join(dir, "board.__factory_session_id__.json")
+			target := strings.ReplaceAll(selected, "__factory_session_id__", sessionID)
+			original := seededReplayResumeArtifactPayload(t, true)
+			replacement := seededReplayResumeArtifactPayload(t, false)
+			for path, payload := range map[string][]byte{target: original, target + ".replacement": replacement} {
+				if err := os.WriteFile(path, payload, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+				"--dir", dir, "--continuously", "--with-server", "--quiet", "--record", selected})
+			profile := t.TempDir()
+			inputs.Input.Env = append(os.Environ(), "HOME="+profile, "USERPROFILE="+profile)
+			inputs.Input.WorkingDirectory = dir
+			err := reusable.process.Execute(inputs.Input)
+			var coded interface{ CLIErrorCode() string }
+			if !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+				t.Fatalf("replaced destination startup = %v; stderr=%s", err, inputs.Stderr())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != "RECORDING_TARGET_CONFLICT" || !strings.Contains(response.Message, strconv.Quote(target)) {
+				t.Fatalf("missing typed path diagnostic: %#v", response)
+			}
+			if !bytes.Equal(replacement, mustReadSeededReplayArtifact(t, target)) || strings.Contains(inputs.Stdout(), "Factory initiated:") {
+				t.Fatal("failed startup published readiness or changed replacement history")
+			}
+		})
+	}
+}
+
+type startupReplacementFiles struct {
+	platformlocking.LocalFileSystem
+	target, marker string
+}
+
+func (files *startupReplacementFiles) OpenFile(path string, flags int, mode fs.FileMode) (platformlocking.File, error) {
+	if path == files.marker {
+		if err := os.Rename(files.target+".replacement", files.target); err != nil {
+			return nil, err
+		}
+	}
+	return files.LocalFileSystem.OpenFile(path, flags, mode)
+}
 
 func TestRecordStartupSafetyDestinationOwnership(t *testing.T) {
 	t.Parallel()

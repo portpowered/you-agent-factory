@@ -3,11 +3,73 @@ package locking
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestTargetClaimRefusesReplacementDuringAcquisition(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"target open", "marker open"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			target, replacement := filepath.Join(dir, "history.json"), filepath.Join(dir, "replacement.json")
+			for path, content := range map[string]string{target: "original history", replacement: "replacement history"} {
+				if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			marker := target + ".lock"
+			trigger := target
+			if phase == "marker open" {
+				trigger = marker
+			}
+			files := &replacingTargetFiles{trigger: trigger, target: target, replacement: replacement}
+			service, err := New(files)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lease, err := service.TryLockTarget(t.Context(), target, marker)
+			if lease != nil {
+				_ = lease.Close()
+			}
+			if lease != nil || err == nil {
+				t.Fatalf("changed target acquired: %v, %v", lease, err)
+			}
+			got, err := os.ReadFile(target)
+			if err != nil || string(got) != "replacement history" {
+				t.Fatalf("refusal changed replacement bytes: %q, %v", got, err)
+			}
+			// Refusal must release any marker acquired before the change was
+			// observed, allowing an independent owner to inspect the new file.
+			lease, err = mustService(t).TryLockTarget(t.Context(), target, marker)
+			if err != nil {
+				t.Fatalf("refused opening retained ownership: %v", err)
+			}
+			if err := lease.Close(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type replacingTargetFiles struct {
+	LocalFileSystem
+	trigger, target, replacement string
+}
+
+func (files *replacingTargetFiles) OpenFile(path string, flags int, mode fs.FileMode) (File, error) {
+	if path == files.trigger {
+		files.trigger = ""
+		if err := os.Rename(files.replacement, files.target); err != nil {
+			return nil, err
+		}
+	}
+	return files.LocalFileSystem.OpenFile(path, flags, mode)
+}
 
 func TestTargetClaimRefusesHardLinksWithoutChangingBytes(t *testing.T) {
 	t.Parallel()
