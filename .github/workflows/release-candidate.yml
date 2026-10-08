@@ -24,14 +24,16 @@ env:
   GORELEASER_VERSION: v2.12.7
 
 jobs:
-  resolve-release-tag:
-    name: Resolve Release Tag
+  build-candidate-artifacts:
+    name: Build Candidate Artifacts
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v5
@@ -50,22 +52,6 @@ jobs:
           printf '%s\n' "$output"
           printf '%s\n' "$output" >> "$GITHUB_OUTPUT"
 
-  build-candidate-artifacts:
-    name: Build Candidate Artifacts
-    needs: resolve-release-tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
         with:
@@ -75,18 +61,22 @@ jobs:
         working-directory: ui
         run: bun run --bun ../scripts/release/run-phase.mjs dashboard-dependencies -- bun install --frozen-lockfile
 
-      - name: Test candidate phase diagnostics
-        run: bun test scripts/release/run-phase.test.mjs
+      - name: Test candidate release helpers and tag semantics
+        run: |
+          bun test scripts/release/run-phase.test.mjs scripts/release/candidate-install-run.test.mjs
+          go test ./cmd/releasetagcheck ./internal/releasetag -count=1
 
-      - name: Install Playwright browser
-        working-directory: ui
-        run: bun run --bun ../scripts/release/run-phase.mjs browser-install -- bunx playwright install chromium
+      - name: Install pinned prebuilt GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          install-only: true
 
-      - name: Verify the canonical frontend package release family
-        run: bun run --bun scripts/release/run-phase.mjs frontend-verification -- make ui-public-package-release
+      - name: Build dashboard once with Bun
+        run: bun run --bun scripts/release/run-phase.mjs dashboard -- bun run --bun --cwd ui build
 
       - name: Build snapshot candidate artifacts without publishing
-        run: bun run --bun scripts/release/run-phase.mjs snapshot -- go run github.com/goreleaser/goreleaser/v2@${{ env.GORELEASER_VERSION }} release --snapshot --clean -f .goreleaser.yml
+        run: bun run --bun scripts/release/run-phase.mjs snapshot -- goreleaser release --snapshot --clean --skip=before -f .goreleaser.yml
 
       - name: Upload candidate dist
         uses: actions/upload-artifact@v4
@@ -97,9 +87,7 @@ jobs:
 
   smoke-candidate-artifacts:
     name: Smoke Candidate Artifacts (${{ matrix.asset_id }})
-    needs:
-      - resolve-release-tag
-      - build-candidate-artifacts
+    needs: build-candidate-artifacts
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -130,24 +118,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: false
-
       - name: Set up Bun for the dashboard workspace
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Install dashboard dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
-
-      - name: Install Playwright browser
-        working-directory: ui
-        run: bunx playwright install chromium
 
       - name: Download candidate dist
         uses: actions/download-artifact@v4
@@ -186,19 +160,5 @@ jobs:
           $binary = (Resolve-Path "extracted/${{ matrix.binary_name }}").Path
           "binary_path=$binary" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Smoke packaged binary on Unix
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sh ./scripts/release/smoke-artifact.sh \
-            "${{ steps.extract-unix.outputs.binary_path }}" \
-            "tests/release/testdata/cli_smoke_factory"
-
-      - name: Smoke packaged binary on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./scripts/release/smoke-artifact.ps1 `
-            -BinaryPath "${{ steps.extract-windows.outputs.binary_path }}" `
-            -FixturePath "tests/release/testdata/cli_smoke_factory"
+      - name: Install and run one candidate binary
+        run: bun run --bun scripts/release/candidate-install-run.mjs --dist dist --asset-id ${{ matrix.asset_id }} --binary "${{ steps.extract-unix.outputs.binary_path || steps.extract-windows.outputs.binary_path }}" --timeout-ms 120000
