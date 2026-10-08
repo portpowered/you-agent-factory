@@ -16,7 +16,7 @@ import (
 )
 
 func provideRecordingsCLIAdapter() recordingscli.Adapter {
-	return recordingswire.NewCLIAdapter()
+	return recordingswire.NewCLIAdapter(platformfilesystem.Local{})
 }
 
 func provideRecordingsRoot(

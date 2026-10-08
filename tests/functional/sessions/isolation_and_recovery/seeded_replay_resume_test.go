@@ -220,7 +220,7 @@ func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
-	for _, name := range []string{"same path", "normalized path"} {
+	for _, name := range []string{"same path", "normalized path", "relative path", "hard link", "symbolic link"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			factoryDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
@@ -229,10 +229,7 @@ func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 			if err := os.WriteFile(source, original, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			target := source
-			if name == "normalized path" {
-				target = factoryDir + string(filepath.Separator) + "." + string(filepath.Separator) + "board.json"
-			}
+			target := seededResumeSourceAlias(t, name, source)
 			inputs := support.FakeInputs(t.Context(), []string{
 				"you", "run", "--session", uuid.NewString(), "--dir", factoryDir,
 				"--continuously", "--with-server", "--quiet", "--resume", source, "--record", target,
@@ -255,7 +252,33 @@ func TestRecordStartupSafetyResumeSourceConflict(t *testing.T) {
 			if !bytes.Equal(mustReadSeededReplayArtifact(t, source), original) {
 				t.Fatal("refused successor changed resume source bytes")
 			}
+			if strings.Contains(inputs.Stdout(), "API server:") || strings.Contains(inputs.Stdout(), "Dashboard:") {
+				t.Fatalf("refused alias announced readiness: %s", inputs.Stdout())
+			}
 		})
+	}
+}
+
+func seededResumeSourceAlias(t *testing.T, kind, source string) string {
+	t.Helper()
+	directory := filepath.Dir(source)
+	switch kind {
+	case "normalized path":
+		return directory + string(filepath.Separator) + "." + string(filepath.Separator) + "board.json"
+	case "relative path":
+		return "board.json"
+	case "hard link", "symbolic link":
+		target := filepath.Join(directory, "alias.json")
+		if kind == "hard link" {
+			if err := os.Link(source, target); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.Symlink(source, target); err != nil {
+			t.Skipf("OS does not permit scenario symlink: %v", err)
+		}
+		return target
+	default:
+		return source
 	}
 }
 

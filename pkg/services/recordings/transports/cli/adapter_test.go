@@ -3,10 +3,14 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -25,7 +29,7 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 			ReportedPath: plannedPath,
 		}, nil
 	})
-	adapter := New()
+	adapter := New(distinctRecordingPathInspector{})
 
 	tests := []struct {
 		name          string
@@ -106,12 +110,20 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 	}
 }
 
+// Flag-policy fixtures model distinct virtual inputs. File identity behavior
+// is covered separately with scenario-owned OS files.
+type distinctRecordingPathInspector struct{}
+
+func (distinctRecordingPathInspector) Stat(string) (fs.FileInfo, error) {
+	return (fstest.MapFS{"input": &fstest.MapFile{}}).Stat("input")
+}
+
 func TestAdapterRefusesResumeSourceAsSuccessor(t *testing.T) {
 	t.Parallel()
 	for _, target := range []string{"board.json", "./board.json", "unused/../board.json"} {
 		t.Run(target, func(t *testing.T) {
 			t.Parallel()
-			_, err := New().ResolveRecordPath(InvocationRequest{ResumePath: "board.json", RecordPath: target})
+			_, err := New(nil).ResolveRecordPath(InvocationRequest{ResumePath: "board.json", RecordPath: target})
 			var diagnostic interface {
 				CLIErrorCode() string
 				CLIErrorFamily() factoryapi.ErrorFamily
@@ -126,10 +138,73 @@ func TestAdapterRefusesResumeSourceAsSuccessor(t *testing.T) {
 	}
 }
 
+func TestAdapterResumeDestinationFileIdentity(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"relative", "hard link", "distinct existing", "new"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			source := filepath.Join(directory, "source.json")
+			if err := os.WriteFile(source, []byte("retained"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(directory, "successor.json")
+			switch kind {
+			case "relative":
+				target = "source.json"
+			case "hard link":
+				if err := os.Link(source, target); err != nil {
+					t.Fatal(err)
+				}
+			case "distinct existing":
+				if err := os.WriteFile(target, []byte("distinct"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := New(platformfilesystem.Local{}).ResolveRecordPath(InvocationRequest{
+				ResumePath: source, RecordPath: target, WorkingDirectory: directory,
+			})
+			if kind == "relative" || kind == "hard link" {
+				var diagnostic interface{ CLIErrorCode() string }
+				if !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" {
+					t.Fatalf("alias refusal = %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("distinct destination refused: %v", err)
+			}
+			got, readErr := os.ReadFile(source)
+			if readErr != nil || string(got) != "retained" {
+				t.Fatalf("identity inspection changed source: %q, %v", got, readErr)
+			}
+		})
+	}
+}
+
+type deniedRecordingPathInspector struct{ cause error }
+
+func (inspector deniedRecordingPathInspector) Stat(string) (fs.FileInfo, error) {
+	return nil, inspector.cause
+}
+
+func TestAdapterResumeDestinationInspectionFailurePreservesCause(t *testing.T) {
+	t.Parallel()
+	cause := &os.PathError{Op: "stat", Path: "source.json", Err: os.ErrPermission}
+	_, err := New(deniedRecordingPathInspector{cause: cause}).ResolveRecordPath(InvocationRequest{
+		ResumePath: "source.json", RecordPath: "successor.json",
+	})
+	var diagnostic interface{ CLIErrorCode() string }
+	if !errors.Is(err, cause) || !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" {
+		t.Fatalf("inspection refusal lost type/cause: %v", err)
+	}
+	if !strings.Contains(err.Error(), "source.json") || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("inspection refusal lost safe path/cause: %v", err)
+	}
+}
+
 func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 	t.Parallel()
 
-	adapter := New()
+	adapter := New(nil)
 	tests := []struct {
 		name    string
 		request InvocationRequest
@@ -188,7 +263,7 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 func TestAdapterResolveRecordPathRequiresPlannerForDefaultMode(t *testing.T) {
 	t.Parallel()
 
-	_, err := New().ResolveRecordPath(InvocationRequest{HomeDir: "home"})
+	_, err := New(nil).ResolveRecordPath(InvocationRequest{HomeDir: "home"})
 	if err == nil || err.Error() != "Recordings live recording target planner is required" {
 		t.Fatalf("ResolveRecordPath() error = %v, want required planner", err)
 	}
@@ -197,7 +272,7 @@ func TestAdapterResolveRecordPathRequiresPlannerForDefaultMode(t *testing.T) {
 func TestAdapterResolveDefaultRecordPathRejectsEmptyPlannedServicePath(t *testing.T) {
 	t.Parallel()
 
-	_, err := New().ResolveRecordPath(InvocationRequest{
+	_, err := New(nil).ResolveRecordPath(InvocationRequest{
 		HomeDir: t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -213,7 +288,7 @@ func TestAdapterResolveDefaultRecordPathRejectsEmptyPlannedServicePath(t *testin
 func TestAdapterResolveRecordPathPropagatesPlannerFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := New().ResolveRecordPath(InvocationRequest{
+	_, err := New(nil).ResolveRecordPath(InvocationRequest{
 		HomeDir: t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -232,7 +307,7 @@ func TestAdapterResolveRecordPathPropagatesPlannerFailure(t *testing.T) {
 func TestAdapterResolveResumeRecordPathPropagatesPlannerFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := New().ResolveRecordPath(InvocationRequest{
+	_, err := New(nil).ResolveRecordPath(InvocationRequest{
 		ResumePath: "existing.recording.json",
 		HomeDir:    t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
@@ -252,7 +327,7 @@ func TestAdapterResolveResumeRecordPathPropagatesPlannerFailure(t *testing.T) {
 func TestAdapterResolveResumeRecordPathRequiresNonEmptyPlannedServicePath(t *testing.T) {
 	t.Parallel()
 
-	_, err := New().ResolveRecordPath(InvocationRequest{
+	_, err := New(nil).ResolveRecordPath(InvocationRequest{
 		ResumePath: "existing.recording.json",
 		HomeDir:    t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(

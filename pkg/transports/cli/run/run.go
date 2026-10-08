@@ -589,6 +589,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 		ResumePath:              cfg.ResumePath,
 		DisableDefaultRecording: cfg.DisableDefaultRecording,
 		HomeDir:                 cfg.HomeDir,
+		WorkingDirectory:        cfg.ExecutionBaseDir,
 		RecordingTargetPlanner:  cfg.RecordingTargetPlanner,
 		CanonicalSessionID:      cfg.CanonicalSessionID,
 		ReportedSessionID:       reportedSessionID,

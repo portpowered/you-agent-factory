@@ -210,7 +210,7 @@ func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 		RuntimeMetricsConfig: platformmetrics.RuntimeMetricsConfig{
 			MaxSize: 100, MaxBackups: 20, MaxAge: 30,
 		},
-		RecordingsCLI: recordingscli.New(),
+		RecordingsCLI: recordingscli.New(nil),
 	}
 	factory.runDirectoryCreator = testRunDirectoryCreator{}
 	factory.browserOpener = func(context.Context, string) error { return nil }
