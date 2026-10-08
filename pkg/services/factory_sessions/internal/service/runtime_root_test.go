@@ -203,7 +203,7 @@ func (planner *currentBoardTargetPlanner) PlanLiveRecordingTarget(request record
 
 func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"fresh", "retained", "explicit", "cancelled", "reservation failure", "empty target"} {
+	for _, name := range []string{"fresh", "retained", "restored predecessor", "explicit", "cancelled", "reservation failure", "empty target"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "fresh.json"}}
@@ -221,6 +221,10 @@ func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) 
 				opening.configured.Recordings.RecordPath = "retained.json"
 				selection.Recording.RecordPath = "retained.json"
 				wantCalls, wantPath = 0, "retained.json"
+			case "restored predecessor":
+				opening.configured.Recordings.RecordPath = "predecessor.json"
+				selection.Recording.RecordPath = "predecessor.json"
+				opening.restoredWorldState = &factorydefinitions.FactoryWorldState{}
 			case "explicit":
 				selection.Recording.ImplicitCurrentBoard = false
 				wantCalls, wantPath = 0, ""

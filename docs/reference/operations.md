@@ -131,7 +131,11 @@ This includes fresh explicit recordings and refreshes a valid reference for the 
 If flushing fails, the previous reference remains unchanged.
 An invalid or foreign reference is preserved and shutdown reports an error while releasing runtime resources.
 Fresh explicit recordings do not publish during startup. Batch runs, peer sessions, `--replay`, and `--no-record` cannot publish the default board reference.
-A continuous server run with `--resume` publishes its successor recording before readiness, after a successful flush.
+A plain continuous server relaunch and a run with `--resume` reconstruct and validate the board through the same continuation path.
+They preserve the latest failed state even when Work previously reached a completion stage.
+Both publish a successor recording before readiness, after a successful flush.
+A rejected restore leaves its source recording and the previous reference unchanged.
+Structural restore errors identify the Work, recorded places, and bounded event sequence without including prompts.
 The source recording remains unchanged. A later plain launch restores the successor board.
 Batch runs continue to create separate dated recordings.
 To use a selected recording during rollback, run the explicit command below with its actual path.

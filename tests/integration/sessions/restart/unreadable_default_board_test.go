@@ -85,7 +85,8 @@ func readUnreadableBoardStatus(t *testing.T, url string) factoryapi.StatusRespon
 	return status
 }
 
-func assertUnreadableBoardLogsPrivate(t *testing.T, root string) {
+func assertUnreadableBoardLogsPrivate(t *testing.T, root string, sentinels ...string) {
+	sentinels = append(sentinels, "fixture-private-prompt")
 	t.Helper()
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if os.IsNotExist(err) {
@@ -101,8 +102,10 @@ func assertUnreadableBoardLogsPrivate(t *testing.T, root string) {
 		if err != nil {
 			return err
 		}
-		if bytes.Contains(data, []byte("fixture-private-prompt")) {
-			return fmt.Errorf("runtime log exposed damaged content")
+		for _, sentinel := range sentinels {
+			if bytes.Contains(data, []byte(sentinel)) {
+				return fmt.Errorf("runtime log exposed private content")
+			}
 		}
 		return nil
 	})

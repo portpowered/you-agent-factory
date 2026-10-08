@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -37,7 +38,7 @@ func restoreRestoredWorkMarking(
 	restoredItems := restoredWorkItems(restoredForMarking)
 	if !cfg.skipRestoredDispatchReconciliation {
 		if err := materializeRestoredDispatchInputPlaces(restoredForMarking, cfg.net, restoredItems); err != nil {
-			return nil, err
+			return nil, restoredWorkErrorWithEvents(err, cfg.restoredEventPrefix)
 		}
 	}
 	recovery := classifyRestoredWorkRecovery(restoredForMarking, cfg.net, restoredItems)
@@ -64,7 +65,7 @@ func restoreRestoredWorkMarking(
 		recovery.toleratedWorkIDs,
 	)
 	if err != nil {
-		return nil, err
+		return nil, restoredWorkErrorWithEvents(err, cfg.restoredEventPrefix)
 	}
 	histories := subsystems.RecoverWorkHistories(restoredForMarking, cfg.net)
 	for _, token := range marking.Tokens {
@@ -74,6 +75,39 @@ func restoreRestoredWorkMarking(
 	}
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
+}
+
+// Keep the final bounded set of Work facts in canonical append order. Logical
+// ticks may have been normalized for projection; diagnostics use the original
+// sequence identities retained in the source prefix, never payloads or causes.
+func restoredWorkErrorWithEvents(err error, events []interfaces.FactoryEvent) error {
+	var restore *factory.WorkRestoreError
+	if !errors.As(err, &restore) || restore == nil || restore.WorkID == "" {
+		return err
+	}
+	const eventLimit = 8
+	var provenance []factory.WorkRestoreEvent
+	for _, event := range events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventTypeWorkStateChange,
+			interfaces.FactoryEventTypeDispatchRequest, interfaces.FactoryEventTypeDispatchResponse,
+			interfaces.FactoryEventTypeDispatchInterrupted, interfaces.FactoryEventTypeDispatchReconciled:
+		default:
+			continue
+		}
+		ids := make(map[string]struct{})
+		addHistoricalEventWorkIDs(ids, event)
+		if _, contains := ids[restore.WorkID]; !contains {
+			continue
+		}
+		if len(provenance) == eventLimit {
+			copy(provenance, provenance[1:])
+			provenance = provenance[:eventLimit-1]
+		}
+		provenance = append(provenance, factory.WorkRestoreEvent{Sequence: event.Context.Sequence, Kind: event.Type})
+	}
+	restore.Events = provenance
+	return err
 }
 
 func classifyRestoredWorkRecovery(
