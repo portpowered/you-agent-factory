@@ -6,6 +6,7 @@ package locking
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ type Service interface {
 // The platform implementation never exposes an operating-system-specific
 // descriptor type to its callers.
 type File interface {
+	io.Reader
 	Fd() uintptr
 	Stat() (fs.FileInfo, error)
 	Close() error
@@ -100,7 +102,7 @@ func (service localService) TryLockTarget(ctx context.Context, target, marker st
 	if err != nil {
 		return nil, errors.Join(err, lease.Close())
 	}
-	if !sameTarget(before, after) {
+	if !sameClaimedTarget(before, after) {
 		return nil, errors.Join(fmt.Errorf("ownership target %q changed during acquisition", target), lease.Close())
 	}
 	return &targetLock{Closer: lease, service: service, target: target, original: after}, nil
@@ -112,7 +114,7 @@ type targetLock struct {
 	io.Closer
 	service  localService
 	target   string
-	original fs.FileInfo
+	original *targetIdentity
 }
 
 func (lock *targetLock) Validate() error {
@@ -120,10 +122,22 @@ func (lock *targetLock) Validate() error {
 	if err != nil {
 		return err
 	}
-	if !sameTarget(lock.original, current) {
+	if !sameClaimedTarget(lock.original, current) {
 		return fmt.Errorf("ownership target %q changed after acquisition", lock.target)
 	}
 	return nil
+}
+
+type targetIdentity struct {
+	info   fs.FileInfo
+	digest [sha256.Size]byte
+}
+
+func sameClaimedTarget(before, after *targetIdentity) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	return sameTarget(before.info, after.info) && before.digest == after.digest
 }
 
 func sameTarget(before, after fs.FileInfo) bool {
@@ -133,7 +147,7 @@ func sameTarget(before, after fs.FileInfo) bool {
 	return os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime())
 }
 
-func (service localService) inspectTarget(path string) (fs.FileInfo, error) {
+func (service localService) inspectTarget(path string) (*targetIdentity, error) {
 	info, err := service.filesystem.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -150,17 +164,22 @@ func (service localService) inspectTarget(path string) (fs.FileInfo, error) {
 	}
 	openedInfo, statErr := file.Stat()
 	count, inspectErr := fileLinkCount(file)
+	digest := sha256.New()
+	_, readErr := io.Copy(digest, file)
+	readInfo, readStatErr := file.Stat()
 	closeErr := file.Close()
-	if err := errors.Join(statErr, inspectErr, closeErr); err != nil {
+	if err := errors.Join(statErr, inspectErr, readErr, readStatErr, closeErr); err != nil {
 		return nil, fmt.Errorf("inspect ownership target links %q: %w", path, err)
 	}
-	if !sameTarget(info, openedInfo) {
+	if !sameTarget(info, openedInfo) || !sameTarget(openedInfo, readInfo) {
 		return nil, fmt.Errorf("ownership target %q changed during inspection", path)
 	}
 	if count != 1 {
 		return nil, fmt.Errorf("ownership target %q has multiple hard links; use a separate copy", path)
 	}
-	return openedInfo, nil
+	identity := &targetIdentity{info: readInfo}
+	copy(identity.digest[:], digest.Sum(nil))
+	return identity, nil
 }
 
 func (service localService) acquire(ctx context.Context, path string, wait bool) (io.Closer, error) {

@@ -42,6 +42,38 @@ func TestTargetLeaseDetectsChangesAfterAcquisition(t *testing.T) {
 	}
 }
 
+func TestTargetLeaseDetectsEditWithUnchangedMetadata(t *testing.T) {
+	t.Parallel()
+	target := filepath.Join(t.TempDir(), "history.json")
+	want := []byte("old history")
+	if err := os.WriteFile(target, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := mustService(t).TryLockTarget(t.Context(), target, target+".lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lease.Close() })
+	changed := []byte("new history")
+	if err := os.WriteFile(target, changed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(target, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(target)
+	if err != nil || !sameTarget(before, after) {
+		t.Fatalf("fixture did not retain identity, size and mtime: %v", err)
+	}
+	if err := lease.(interface{ Validate() error }).Validate(); err == nil {
+		t.Fatal("changed recording bytes accepted with unchanged metadata")
+	}
+}
+
 func mutateClaimedTarget(t *testing.T, mutation, target string) {
 	t.Helper()
 	switch mutation {

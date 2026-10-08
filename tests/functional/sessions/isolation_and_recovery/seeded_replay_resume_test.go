@@ -433,7 +433,7 @@ func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	reusable := newSeededReplayResumeProcess(t)
-	for _, name := range []string{"first board", "second board"} {
+	for _, name := range []string{"first board", "second board", "unchanged metadata"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
@@ -455,6 +455,10 @@ func TestRecordStartupSafetyDestinationChangesDuringRestore(t *testing.T) {
 				t.Fatal(err)
 			}
 			replacement := []byte("externally replaced retained history")
+			if name == "unchanged metadata" {
+				replacement = bytes.Clone(original)
+				replacement[len(replacement)-1] = ' '
+			}
 			reusable.mu.Lock()
 			reusable.replacementsByPath[filepath.Clean(target)] = replacement
 			reusable.mu.Unlock()
@@ -789,16 +793,31 @@ func (reusable *seededReplayResumeProcess) readRecording(path string) ([]byte, e
 	}
 	data, err := os.ReadFile(path)
 	if err == nil && replacement != nil {
-		// Return the read prefix while an external actor replaces its source.
-		staging := path + ".replacement"
-		if err := os.WriteFile(staging, replacement, 0o600); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(staging, path); err != nil {
+		if err := replaceReadRecordingInput(path, data, replacement); err != nil {
 			return nil, err
 		}
 	}
 	return data, err
+}
+
+// The read returns a valid prefix while a path-scoped external actor edits
+// its source. Equal-sized edits also retain inode identity and modification time.
+func replaceReadRecordingInput(path string, original, replacement []byte) error {
+	if len(original) == len(replacement) {
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, replacement, 0o600); err != nil {
+			return err
+		}
+		return os.Chtimes(path, info.ModTime(), info.ModTime())
+	}
+	staging := path + ".replacement"
+	if err := os.WriteFile(staging, replacement, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(staging, path)
 }
 
 func (reusable *seededReplayResumeProcess) startAPIServer(
