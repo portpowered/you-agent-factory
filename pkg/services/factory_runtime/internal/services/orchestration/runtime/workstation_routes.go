@@ -78,6 +78,7 @@ type runtimeExecutionSelection struct {
 	capabilities                *workers.Capabilities
 	command                     string
 	args                        []string
+	stdin                       string
 	factoryDirectory            string
 	worktreeFactoryDirectory    string
 	systemPrompt                string
@@ -224,6 +225,7 @@ func initialRuntimeExecutionSelection(
 		capabilities:                cloneRuntimeCapabilities(execution.Capabilities),
 		command:                     execution.Command,
 		args:                        append([]string(nil), execution.Args...),
+		stdin:                       execution.Stdin,
 		factoryDirectory:            strings.TrimSpace(execution.FactoryDirectory),
 		systemPrompt:                execution.SystemPrompt,
 		userMessage:                 execution.UserMessage,
@@ -403,6 +405,7 @@ func applyRuntimeWorkerSelection(
 	if len(selection.args) == 0 {
 		selection.args = resolveRuntimeInvocationArgs(worker.Args, invocation)
 	}
+	selection.stdin = firstRuntimeValue(selection.stdin, resolveRuntimeInvocationValue(worker.Stdin, invocation))
 	selection.stopToken = firstRuntimeValue(
 		selection.stopToken,
 		resolveRuntimeInvocationValue(worker.StopToken, invocation),

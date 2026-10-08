@@ -968,3 +968,24 @@ func ruleCanonicalFactoryDefinitionValidation(
 		Validate(cfg).Targets,
 	)
 }
+
+func TestScriptStdinRejectsNonScriptWorkers(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind, stdin string
+		wantErrors  bool
+	}{
+		{kind: factorydefinitions.WorkerTypeScript, stdin: `{{ (index .Inputs 0).Payload }}`},
+		{kind: factorydefinitions.WorkerTypeAgent, stdin: "private payload", wantErrors: true},
+		{kind: factorydefinitions.WorkerTypeAgent},
+	} {
+		cfg := &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker", Type: tc.kind, Stdin: tc.stdin}}}
+		findings := ruleScriptStdin(cfg)
+		if (len(findings) > 0) != tc.wantErrors {
+			t.Fatalf("kind=%s findings=%#v", tc.kind, findings)
+		}
+		if tc.wantErrors && (!strings.Contains(findings[0].Path, ".stdin") || findings[0].Severity != SeverityError) {
+			t.Fatalf("invalid stdin diagnostic=%#v", findings)
+		}
+	}
+}

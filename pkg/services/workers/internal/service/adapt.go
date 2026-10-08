@@ -73,6 +73,7 @@ func adaptRunnerRequest(
 		ModelLocality:                request.Target.Model.Locality,
 		Command:                      request.Target.Command,
 		Args:                         append([]string(nil), request.Target.Args...),
+		Stdin:                        request.Target.Stdin,
 		FactoryDirectory:             context.factoryDirectory,
 		OutputContract:               request.Target.Output.Contract,
 		OutputFormat:                 request.Target.Output.Format,
@@ -354,6 +355,15 @@ func inputTokensFromWorkInputs(
 			Relations:  append([]work.Relation(nil), input.Relations...),
 			Content:    work.CloneWorkContentParts(input.Content),
 			Payload:    payloadFromContent(input.Content),
+		}
+		// An omitted detached content value must not erase the matched Work's
+		// submitted payload. Explicit content (including an empty slice) wins.
+		if input.Content == nil {
+			color.Content = work.CloneWorkContentParts(token.Color.Content)
+			color.Payload = payloadFromContent(color.Content)
+			if color.Content == nil {
+				color.Payload = append([]byte(nil), token.Color.Payload...)
+			}
 		}
 		token.State = input.State
 		token.Color.Name = color.Name

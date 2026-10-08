@@ -6237,6 +6237,8 @@ export interface components {
       command?: string;
       /** @description Additional command arguments passed to the configured command. */
       args?: string[];
+      /** @description Optional Go template for SCRIPT_WORKER standard input. Omit it to keep standard input empty. */
+      stdin?: string;
       /** @description Resource capacity this worker requires before it can be dispatched. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Optional Go duration that caps one worker execution attempt. */

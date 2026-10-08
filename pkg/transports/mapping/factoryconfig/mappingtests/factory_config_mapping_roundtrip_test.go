@@ -960,3 +960,25 @@ func assertMissingKey(t *testing.T, payload map[string]any, key string) {
 		t.Fatalf("did not expect key %q in %#v", key, payload)
 	}
 }
+
+func TestFactoryWorkerStdinRoundTrip(t *testing.T) {
+	t.Parallel()
+	mapper := NewFactoryConfigMapper()
+	for _, stdin := range []string{"", `{{ (index .Inputs 0).Payload }}`} {
+		cfg := &interfaces.FactoryConfig{Name: "stdin-roundtrip", Workers: []interfaces.FactoryWorkerConfig{{Name: "script", Type: interfaces.WorkerTypeScript, Command: "python", Stdin: stdin}}}
+		flattened, err := mapper.Flatten(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expanded, err := mapper.Expand(flattened)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(expanded.Workers) != 1 || expanded.Workers[0].Stdin != stdin {
+			t.Fatalf("stdin roundtrip=%#v", expanded.Workers)
+		}
+		if stdin == "" && strings.Contains(string(flattened), `"stdin"`) {
+			t.Fatal("omitted stdin became explicit")
+		}
+	}
+}

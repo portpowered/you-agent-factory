@@ -77,6 +77,7 @@ type ExecuteResult = AttemptResult
 type ScriptConfig struct {
 	Command          string
 	Args             []string
+	Stdin            string
 	FactoryDirectory string
 	RequestSelected  bool
 }

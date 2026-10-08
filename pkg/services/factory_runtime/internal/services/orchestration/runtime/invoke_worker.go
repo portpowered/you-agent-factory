@@ -448,6 +448,7 @@ func executionTargetFromSelection(
 		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
 		Command:          selection.command,
 		Args:             append([]string(nil), selection.args...),
+		Stdin:            selection.stdin,
 		FactoryDirectory: selection.factoryDirectory,
 		Provider: workers.ProviderReference{
 			ID:    selection.providerID,

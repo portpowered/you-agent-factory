@@ -680,6 +680,7 @@ func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".reasoningEffort", worker.ReasoningEffort, false, "worker.reasoningEffort")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".executorProvider", worker.ExecutorProvider, false, "worker.executorProvider")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".command", worker.Command, false, "worker.command")
+		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".stdin", worker.Stdin, false, "worker.stdin")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".timeout", worker.Timeout, false, "worker.timeout")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".stopToken", worker.StopToken, false, "worker.stopToken")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".body", worker.Body, false, "worker body")

@@ -8887,6 +8887,9 @@ type Worker struct {
 	// SkipPermissions When true, bypasses permission checks for providers that support permission gating.
 	SkipPermissions *bool `json:"skipPermissions,omitempty"`
 
+	// Stdin Optional Go template for SCRIPT_WORKER standard input. Omit it to keep standard input empty.
+	Stdin *string `json:"stdin,omitempty"`
+
 	// StopToken Marker that tells model-oriented workers where to stop generated output when the provider supports it.
 	StopToken *string `json:"stopToken,omitempty"`
 
@@ -14417,6 +14420,14 @@ func (a *Worker) UnmarshalJSON(b []byte) error {
 		delete(object, "skipPermissions")
 	}
 
+	if raw, found := object["stdin"]; found {
+		err = json.Unmarshal(raw, &a.Stdin)
+		if err != nil {
+			return fmt.Errorf("error reading 'stdin': %w", err)
+		}
+		delete(object, "stdin")
+	}
+
 	if raw, found := object["stopToken"]; found {
 		err = json.Unmarshal(raw, &a.StopToken)
 		if err != nil {
@@ -14581,6 +14592,13 @@ func (a Worker) MarshalJSON() ([]byte, error) {
 		object["skipPermissions"], err = json.Marshal(a.SkipPermissions)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'skipPermissions': %w", err)
+		}
+	}
+
+	if a.Stdin != nil {
+		object["stdin"], err = json.Marshal(a.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'stdin': %w", err)
 		}
 	}
 

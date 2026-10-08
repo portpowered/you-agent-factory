@@ -54,6 +54,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 		ruleCronWorkstations,
 		rulePollerWorkstations,
 		ruleHostedWorkers,
+		ruleScriptStdin,
 		ruleWorkerModelOperations,
 		ruleAgentWorkerTools,
 		ruleModelInvokeWorkstations,
@@ -780,4 +781,14 @@ func selectorIsEmpty(selector *factorydefinitions.ModelOperationBindingSelector)
 		strings.TrimSpace(selector.Label) == "" &&
 		strings.TrimSpace(selector.Type) == "" &&
 		strings.TrimSpace(selector.Role) == ""
+}
+
+func ruleScriptStdin(cfg *factorydefinitions.FactoryConfig) []Finding {
+	var findings []Finding
+	for index, worker := range cfg.Workers {
+		if worker.Stdin != "" && worker.Type != factorydefinitions.WorkerTypeScript {
+			findings = append(findings, Finding{Severity: SeverityError, Path: fmt.Sprintf("workers[%d](%s).stdin", index, worker.Name), Message: "stdin is supported only by SCRIPT_WORKER", Rule: "worker-script-stdin"})
+		}
+	}
+	return findings
 }

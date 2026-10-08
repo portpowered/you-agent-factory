@@ -601,3 +601,33 @@ func TestExecuteProviderWithRetryCapacityWaitHonorsCancellation(t *testing.T) {
 		t.Fatalf("canceled capacity wait = (%v, %d attempts), want context.Canceled after one attempt", err, attempts)
 	}
 }
+
+func TestAdaptInputPayloadContentPrecedenceAndIsolation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		content         []work.WorkContentPart
+		originalContent []work.WorkContentPart
+		want            string
+	}{
+		{name: "omitted", want: `{"mission":"café"}`},
+		{name: "explicit", content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "replacement"}}, want: "replacement"},
+		{name: "explicit empty", content: []work.WorkContentPart{}},
+		{name: "original content", originalContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "canonical"}}, want: "canonical"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := workers.Token{ID: "token", Color: workers.Color{WorkID: "work", Payload: []byte(`{"mission":"café"}`), Content: tc.originalContent}}
+			dispatch := work.WorkDispatch{InputTokens: workers.InputTokens(original)}
+			got := inputTokensFromWorkInputs([]workers.WorkInput{{WorkID: "work", Content: tc.content}, {WorkID: "other"}}, dispatch)
+			if string(got[0].Color.Payload) != tc.want || len(got[1].Color.Payload) != 0 {
+				t.Fatalf("payloads = %q/%q, want %q/empty", got[0].Color.Payload, got[1].Color.Payload, tc.want)
+			}
+			if len(got[0].Color.Payload) > 0 {
+				got[0].Color.Payload[0] = 'x'
+			}
+			if string(original.Color.Payload) != `{"mission":"café"}` {
+				t.Fatal("adaptation aliased submitted payload")
+			}
+		})
+	}
+}

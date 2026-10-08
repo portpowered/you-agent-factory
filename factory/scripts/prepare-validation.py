@@ -187,10 +187,11 @@ def prepare(root: Path, name: str, payload: str) -> Path:
 
 def main() -> int:
     if len(sys.argv) != 3:
-        print("usage: prepare-validation.py <name> <payload-json>", file=sys.stderr)
+        print("usage: prepare-validation.py <name> <payload-json> | <name> --payload-stdin", file=sys.stderr)
         return 2
     try:
-        prepare(Path.cwd(), sys.argv[1], sys.argv[2])
+        payload = sys.stdin.buffer.read().decode("utf-8") if sys.argv[2] == "--payload-stdin" else sys.argv[2]
+        prepare(Path.cwd(), sys.argv[1], payload)
     except (ValueError, OSError, TypeError) as error:
         print(f"validation admission failed: {error}", file=sys.stderr)
         return 2

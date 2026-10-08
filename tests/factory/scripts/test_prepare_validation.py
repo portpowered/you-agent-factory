@@ -1,6 +1,8 @@
 """Artifact and isolation admission proofs, without provider calls."""
 
 import hashlib
+import io
+from unittest.mock import patch, Mock
 import importlib.util
 import json
 import sys
@@ -44,6 +46,28 @@ class PrepareValidationTest(unittest.TestCase):
                 "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
             },
         }
+
+
+    def test_cli_stdin_stages_complete_utf8_mission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mission = self.mission(root)
+            mission["mission"] = "measure café 😀 safely"
+            payload = json.dumps(mission, ensure_ascii=False)
+            stream = io.TextIOWrapper(io.BytesIO(payload.encode("utf-8")))
+            with patch.object(MODULE.sys, "argv", ["prepare-validation.py", "stdin-probe", "--payload-stdin"]), patch.object(MODULE.sys, "stdin", stream), patch.object(MODULE.sys, "stdout", io.StringIO()), patch.object(MODULE.Path, "cwd", return_value=root):
+                self.assertEqual(MODULE.main(), 0)
+            staged = json.loads((root / "docs/temp/probes/stdin-probe/mission.json").read_text(encoding="utf-8"))
+            self.assertEqual(staged["mission"], mission["mission"])
+            self.assertEqual(Path(staged["build"]["path"]).read_bytes(), b"prebuilt-test-artifact")
+
+    def test_cli_read_failure_never_admits(self):
+        stream = Mock()
+        stream.buffer.read.side_effect = OSError("read failed")
+        with patch.object(MODULE.sys, "argv", ["prepare-validation.py", "probe", "--payload-stdin"]), patch.object(MODULE.sys, "stdin", stream), patch.object(MODULE.sys, "stderr", io.StringIO()) as stderr, patch.object(MODULE, "prepare") as prepare:
+            self.assertEqual(MODULE.main(), 2)
+            prepare.assert_not_called()
+            self.assertIn("validation admission failed", stderr.getvalue())
 
     def test_stages_verified_bytes_without_packet_preflight(self):
         with tempfile.TemporaryDirectory() as directory:

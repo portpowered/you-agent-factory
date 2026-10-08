@@ -71,6 +71,9 @@ properties:
     description: Additional command arguments passed to the configured command.
     items:
       type: string
+  stdin:
+    type: string
+    description: Optional Go template for SCRIPT_WORKER standard input. Omit it to keep standard input empty.
   resources:
     type: array
     description: Resource capacity this worker requires before it can be dispatched.

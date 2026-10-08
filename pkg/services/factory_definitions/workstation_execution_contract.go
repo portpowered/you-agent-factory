@@ -109,6 +109,7 @@ type ResolvedWorkerDefinition struct {
 	ExecutorProvider string                   `json:"executorProvider,omitempty"`
 	Command          string                   `json:"command,omitempty"`
 	Args             []string                 `json:"args,omitempty"`
+	Stdin            string                   `json:"stdin,omitempty"`
 	Body             string                   `json:"body,omitempty"`
 	PromptSourcePath string                   `json:"promptSourcePath,omitempty"`
 	StopToken        string                   `json:"stopToken,omitempty"`
