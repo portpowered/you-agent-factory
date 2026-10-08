@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, SessionID: "session-1",
 		WorkID: "work-1", OutputFormat: "json", Output: &output,
 	})
@@ -135,7 +136,7 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &output,
 	})
 	if err != nil {
@@ -162,7 +163,7 @@ func TestListHumanRendersAbsentExecutionFactsAsDashes(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &output,
 	}); err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -192,7 +193,7 @@ func TestListPreservesDistinctBoundedFailureKindsInHumanAndJSON(t *testing.T) {
 	defer server.Close()
 
 	var humanOutput bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &humanOutput,
 	}); err != nil {
 		t.Fatalf("human List() error = %v", err)
@@ -204,7 +205,7 @@ func TestListPreservesDistinctBoundedFailureKindsInHumanAndJSON(t *testing.T) {
 	}
 
 	var jsonOutput bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, WorkID: "work-1", OutputFormat: "json", Output: &jsonOutput,
 	}); err != nil {
 		t.Fatalf("JSON List() error = %v", err)
@@ -231,7 +232,7 @@ func TestListHumanRendersKnownWorkWithoutSessions(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &output})
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &output})
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -251,7 +252,7 @@ func TestListJSONMissingWorkReturnsStableMachineReadableError(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, WorkID: "missing", OutputFormat: "json", Output: &output,
 	})
 	if err == nil {
@@ -280,7 +281,7 @@ func TestListWithoutWorkIDUsesTopLevelIdentityCollection(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, OutputFormat: "json", Output: &output,
 	})
 	if err != nil {
@@ -301,7 +302,7 @@ func TestListTopLevelSupportsRepeatedStatesAndPositiveLimit(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server.URL, Scope: "factory", States: []string{"RUNNING", "FAILED"},
 		Limit: 2, LimitSet: true, MaxResults: 9, NextToken: "cursor-1", OutputFormat: "json", Output: &output,
 	}); err != nil {
@@ -377,7 +378,7 @@ func newBoundedWorkerSessionServer(t *testing.T) (*httptest.Server, *[]url.Value
 func runBoundedWorkerSessionList(t *testing.T, server string, nextToken string) factoryapi.ListWorkerSessionsResponse {
 	t.Helper()
 	var output bytes.Buffer
-	if err := NewList(testHTTPProtocol(t))(ListConfig{
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: server,
 		MaxResults: 1, MaxResultsSet: true, NextToken: nextToken, OutputFormat: "json", Output: &output,
 	}); err != nil {
@@ -439,7 +440,7 @@ func TestListRejectsTopLevelFiltersForWorkScopedRoute(t *testing.T) {
 			config.WorkID = "work-1"
 			config.OutputFormat = "json"
 			config.Output = &output
-			err := NewList(testHTTPProtocol(t))(config)
+			err := NewList(testHTTPProtocol(t), testClock{})(config)
 			var typed *CLIError
 			if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED" {
 				t.Fatalf("error = %v, want WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED", err)
@@ -457,7 +458,7 @@ func TestListRejectsTopLevelFiltersForWorkScopedRoute(t *testing.T) {
 
 func TestListRejectsNonPositiveLimit(t *testing.T) {
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: "http://127.0.0.1:1", Limit: 0, LimitSet: true, OutputFormat: "json", Output: &output,
 	})
 	var typed *CLIError
@@ -475,7 +476,7 @@ func TestListRejectsNonPositiveLimit(t *testing.T) {
 
 func TestListRejectsUnsupportedOutputFormat(t *testing.T) {
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{
 		Context: context.Background(), Server: "http://127.0.0.1:1", WorkID: "work-1", OutputFormat: "yaml", Output: &output,
 	})
 	var typed *CLIError
@@ -521,16 +522,23 @@ func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T
 			}
 			var output bytes.Buffer
 			var diagnostics bytes.Buffer
-			err = NewList(protocol)(ListConfig{
+			err = NewList(protocol, testClock{})(ListConfig{
 				Context: context.Background(), Server: "http://factory.test", WorkID: "work-1",
-				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true,
+				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true, Debug: true,
 			})
 			var typed *CLIError
-			if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" {
-				t.Fatalf("error = %v, want FACTORY_UNREACHABLE", err)
+			wantCode := "WORKER_SESSION_LIST_FAILED"
+			if testCase.wantStage == "transport" {
+				wantCode = "FACTORY_UNREACHABLE"
+			}
+			if !errors.As(err, &typed) || typed.Code != wantCode {
+				t.Fatalf("error = %v, want %s", err, wantCode)
 			}
 			if !strings.Contains(diagnostics.String(), "errorStage="+testCase.wantStage) {
 				t.Fatalf("diagnostics = %q, want errorStage=%s", diagnostics.String(), testCase.wantStage)
+			}
+			if !strings.Contains(diagnostics.String(), "bodyDecodeMicros=") || !strings.Contains(diagnostics.String(), "list command durationMicros=") || strings.Contains(diagnostics.String(), "list render durationMicros=") {
+				t.Fatalf("failure diagnostics lost request timing or claimed rendering: %s", diagnostics.String())
 			}
 			if strings.Contains(diagnostics.String(), secret) || strings.Contains(output.String(), secret) {
 				t.Fatalf("failure exposed response payload: diagnostics=%q output=%q", diagnostics.String(), output.String())
@@ -559,7 +567,7 @@ func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
 		t.Fatalf("NewProtocol() error = %v", err)
 	}
 
-	err = NewList(protocol)(ListConfig{
+	err = NewList(protocol, testClock{})(ListConfig{
 		Context: context.Background(), Server: "http://factory.test", WorkID: "work-1", OutputFormat: "json",
 		Output: listFailingWriter{err: errors.New("output sink unavailable")},
 	})
@@ -567,6 +575,63 @@ func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_OUTPUT_FAILED" {
 		t.Fatalf("error = %v, want WORKER_SESSION_OUTPUT_FAILED", err)
 	}
+}
+
+func TestListDebugReportsConsumedRequestAndOutputPhases(t *testing.T) {
+	for _, debug := range []bool{false, true} {
+		t.Run(strconv.FormatBool(debug), func(t *testing.T) {
+			var output, diagnostics bytes.Buffer
+			calls := 0
+			protocol := listTimingProtocol{get: func(_ context.Context, endpoint string, dst any) (clihttp.Response, error) {
+				calls++
+				if !strings.Contains(endpoint, "/factory-sessions/session-1/worker-sessions?workId=work-1") {
+					t.Fatalf("unexpected endpoint: %s", endpoint)
+				}
+				*dst.(*factoryapi.ListWorkerSessionsResponse) = factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}}
+				return clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, Duration: 20 * time.Microsecond}, nil
+			}}
+			err := NewList(protocol, &listObservationClock{})(ListConfig{
+				Context: t.Context(), Server: "http://factory.test", SessionID: "session-1", WorkID: "work-1",
+				OutputFormat: "json", Debug: debug, Output: &output, Diagnostics: &diagnostics,
+			})
+			if err != nil || calls != 1 || output.String() != "{\"sessions\":[]}\n" {
+				t.Fatalf("err=%v calls=%d output=%q", err, calls, output.String())
+			}
+			for _, phase := range []string{"headerWaitMicros=", "bodyDecodeMicros=", "totalMicros=", "list render durationMicros=", "list write durationMicros=", "list command durationMicros="} {
+				if strings.Contains(diagnostics.String(), phase) != debug {
+					t.Fatalf("debug=%t phase=%q diagnostics=%q", debug, phase, diagnostics.String())
+				}
+			}
+			if debug {
+				for _, timing := range []string{"headerWaitMicros=20 bodyDecodeMicros=80 totalMicros=100", "render durationMicros=100", "write durationMicros=100", "command durationMicros=700"} {
+					if !strings.Contains(diagnostics.String(), timing) {
+						t.Fatalf("missing injected-clock timing %q: %s", timing, diagnostics.String())
+					}
+				}
+			}
+			if debug && !strings.Contains(diagnostics.String(), "bytes=16") {
+				t.Fatalf("missing consumed output size: %s", diagnostics.String())
+			}
+		})
+	}
+}
+
+type listObservationClock struct{ tick int64 }
+
+func (clock *listObservationClock) Now() time.Time {
+	clock.tick++
+	return time.Unix(1, clock.tick*int64(100*time.Microsecond))
+}
+
+// The list component owns its diagnostics; HTTP decoding is a controlled
+// collaborator here, rather than a second real component under test.
+type listTimingProtocol struct {
+	clihttp.Protocol
+	get func(context.Context, string, any) (clihttp.Response, error)
+}
+
+func (protocol listTimingProtocol) GetJSON(ctx context.Context, endpoint string, dst any) (clihttp.Response, error) {
+	return protocol.get(ctx, endpoint, dst)
 }
 
 func TestListCanceledContextIsTypedAndDoesNotReturnCollection(t *testing.T) {
@@ -579,12 +644,12 @@ func TestListCanceledContextIsTypedAndDoesNotReturnCollection(t *testing.T) {
 		t.Fatalf("NewProtocol() error = %v", err)
 	}
 	var output bytes.Buffer
-	err = NewList(protocol)(ListConfig{
+	err = NewList(protocol, testClock{})(ListConfig{
 		Context: ctx, Server: "http://factory.test", WorkID: "work-1", OutputFormat: "json", Output: &output,
 	})
 	var typed *CLIError
-	if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" || !errors.Is(err, context.Canceled) {
-		t.Fatalf("error = %v, want FACTORY_UNREACHABLE wrapping context.Canceled", err)
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_LIST_FAILED" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want WORKER_SESSION_LIST_FAILED wrapping context.Canceled", err)
 	}
 	if strings.Contains(output.String(), `"sessions"`) {
 		t.Fatalf("canceled output contains a success collection: %q", output.String())
@@ -635,6 +700,54 @@ func TestWorkerSessionsListTransportErrorClassifiesClientTimeout(t *testing.T) {
 	}
 }
 
+func TestListReceivedResponseFailuresPreserveCauseAndRequestBound(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		body  io.Reader
+		cause error
+		code  string
+	}{
+		{name: "missing body", code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "malformed", body: strings.NewReader("{"), code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "trailing value", body: strings.NewReader(`{"sessions":[]} {}`), code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "body canceled", cause: context.Canceled, code: "WORKER_SESSION_LIST_FAILED"},
+		{name: "body deadline", cause: context.DeadlineExceeded, code: WorkerSessionListRequestTimeoutCode},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			protocol, err := clihttp.NewProtocol(listDoerFunc(func(request *http.Request) (*http.Response, error) {
+				calls++
+				if request.Method != http.MethodGet || request.URL.Path != "/factory-sessions/owner/worker-sessions" || request.URL.Query().Get("workId") != "work-1" {
+					t.Fatalf("unexpected list request: %s %s", request.Method, request.URL)
+				}
+				response := &http.Response{StatusCode: http.StatusOK}
+				if test.cause != nil {
+					response.Body = io.NopCloser(listFailingReader{err: test.cause})
+				} else if test.body != nil {
+					response.Body = io.NopCloser(test.body)
+				}
+				return response, nil
+			}), testClock{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			err = NewList(protocol, testClock{})(ListConfig{Context: t.Context(), Server: "http://factory.test", SessionID: "owner", WorkID: "work-1", Output: &output, JSON: true})
+			if cliErrorCode(err) != test.code || calls != 1 {
+				t.Fatalf("list error=%v calls=%d, want %s and one GET", err, calls, test.code)
+			}
+			if test.cause != nil && !errors.Is(err, test.cause) {
+				t.Fatalf("list lost cause %v: %v", test.cause, err)
+			}
+			if strings.Contains(output.String(), `"sessions"`) {
+				t.Fatalf("failed list emitted success: %s", output.String())
+			}
+		})
+	}
+}
+
 func TestListHistorySelectionAndValidation(t *testing.T) {
 	t.Parallel()
 	for _, history := range []string{"", "active", "all", "archived", "recent"} {
@@ -650,7 +763,7 @@ func TestListHistorySelectionAndValidation(t *testing.T) {
 				_, _ = io.WriteString(w, `{"sessions":[]}`)
 			}))
 			defer server.Close()
-			err := NewList(testHTTPProtocol(t))(ListConfig{Context: t.Context(), Server: server.URL, History: history, HistorySet: true, Output: &output})
+			err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{Context: t.Context(), Server: server.URL, History: history, HistorySet: true, Output: &output})
 			if history == "" || history == "recent" {
 				if err == nil || called || cliErrorCode(err) != "WORKER_SESSION_HISTORY_INVALID" {
 					t.Fatalf("invalid history err=%v called=%t", err, called)
@@ -665,7 +778,7 @@ func TestListHistorySelectionAndValidation(t *testing.T) {
 func TestListHistoryRejectsWorkScopeBeforeHTTP(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t))(ListConfig{Context: t.Context(), WorkID: "work", History: "all", HistorySet: true, Output: &output})
+	err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{Context: t.Context(), WorkID: "work", History: "all", HistorySet: true, Output: &output})
 	if err == nil || cliErrorCode(err) != "WORKER_SESSION_SCOPED_FILTER_UNSUPPORTED" {
 		t.Fatalf("Work history error = %v", err)
 	}

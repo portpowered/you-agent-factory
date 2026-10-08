@@ -142,7 +142,7 @@ func startFleetHost(b *testing.B, process *application.Process, dir, home string
 	return handler
 }
 
-func fleetPOST(b *testing.B, handler http.Handler, path string, body any, status int, out any) {
+func fleetPOST(b testing.TB, handler http.Handler, path string, body any, status int, out any) {
 	b.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
