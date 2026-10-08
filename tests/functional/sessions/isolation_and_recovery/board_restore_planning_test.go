@@ -49,6 +49,7 @@ func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 	var beforeEvents []factoryapi.FactoryEvent
 	sourceCopy := filepath.Join(repo, "same-source-resume.json")
 	for generation, api := range apis {
+		t.Logf("starting board generation %d", generation)
 		inputs := plainBoardFailureInputs(t, repo, home, 24300+generation, "--dir", dir)
 		if generation == 3 {
 			inputs.Input.Args = append(inputs.Input.Args, "--resume", sourceCopy)
@@ -61,6 +62,14 @@ func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 				return status.TotalTokens == 3 && status.Categories.Terminal == 2
 			})
 			assertBoardRestorePlanningStates(t, readBoardRestoreStates(t, url))
+			restartProbeShutdown(t, url, command)
+			assertBoardRestorePlanningCalls(t, 3, planner, script)
+			continue
+		}
+		if generation == 1 {
+			// Fail in a successor generation whose logical tick restarted. The
+			// latest sequence must win over the predecessor's to-complete tick.
+			assertBoardRestorePlanningStates(t, readBoardRestoreStates(t, url))
 			restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/idea-1/move"), []byte(`{"stateName":"failed"}`))
 		}
 		support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
@@ -71,7 +80,7 @@ func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 			t.Fatalf("generation %d lost latest failure: %v", generation, board)
 		}
 		events := support.GetFactoryEventsForSessionAt(t, url, "~default")
-		if generation == 0 {
+		if generation == 1 {
 			before, beforeEvents = board, events
 		} else {
 			if !reflect.DeepEqual(board, before) {
@@ -80,7 +89,7 @@ func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
 			assertRestartProbeEventFacts(t, beforeEvents, events)
 		}
 		restartProbeShutdown(t, url, command)
-		if generation == 0 {
+		if generation == 1 {
 			if err := os.WriteFile(sourceCopy, mustReadSeededReplayArtifact(t, plainBoardSelectedRecording(t, repo)), 0o600); err != nil {
 				t.Fatal(err)
 			}

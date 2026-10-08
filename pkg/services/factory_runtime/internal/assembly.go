@@ -347,7 +347,27 @@ func reconstructRestoredWorldStateForResume(
 	opening recordings.RuntimeScopeService,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
-	return reconstructRestoredWorldStateEvents(opening, normalizeRestoredEventTicks(events))
+	return reconstructRestoredWorldStateEvents(opening, normalizeContinuationEventTicks(events))
+}
+
+// Live continuation consumes the complete append-ordered ledger. A quiescent
+// plain restart need not emit a dispatch interruption or a session resume, so
+// its logical clock reset cannot depend on either marker. Clamp a detached
+// projection's ticks while retaining the original prefix and sequence metadata.
+// Historical replay keeps its selected-tick semantics in the separate path.
+func normalizeContinuationEventTicks(events []factorydefinitions.FactoryEvent) []factorydefinitions.FactoryEvent {
+	normalized := normalizeRestoredEventTicks(events)
+	detached := false
+	for index := 1; index < len(normalized); index++ {
+		if normalized[index].Context.Tick < normalized[index-1].Context.Tick {
+			if !detached {
+				normalized = cloneFactoryEvents(normalized)
+				detached = true
+			}
+			normalized[index].Context.Tick = normalized[index-1].Context.Tick
+		}
+	}
+	return normalized
 }
 
 func reconstructRestoredWorldStateEvents(

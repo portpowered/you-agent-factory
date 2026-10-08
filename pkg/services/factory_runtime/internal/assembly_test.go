@@ -83,6 +83,31 @@ func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 	}
 }
 
+func TestReconstructRestoredWorldStateForResumePreservesQuiescentPlainRestartOrder(t *testing.T) {
+	t.Parallel()
+	events := []interfaces.FactoryEvent{
+		{Id: "planned", Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{Tick: 7, Sequence: 41}},
+		{Id: "failed-after-restart", Type: interfaces.FactoryEventTypeWorkStateChange, Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 42}},
+		{Id: "shutdown", Type: interfaces.FactoryEventTypeRunResponse, Context: interfaces.FactoryEventContext{Tick: 3, Sequence: 43}},
+	}
+	before := cloneFactoryEvents(events)
+	opening := &assemblyWorldStateOpening{}
+	if _, err := reconstructRestoredWorldStateForResume(opening, events); err != nil {
+		t.Fatal(err)
+	}
+	if opening.tick != 7 {
+		t.Fatalf("selected tick = %d, want complete continuation", opening.tick)
+	}
+	for index, event := range opening.events {
+		if event.Context.Tick != 7 || event.Context.Sequence != events[index].Context.Sequence || event.Id != events[index].Id {
+			t.Fatalf("projection event %d changed ordering or identity: %#v", index, event)
+		}
+	}
+	if !reflect.DeepEqual(events, before) {
+		t.Fatal("live reconstruction mutated its canonical prefix")
+	}
+}
+
 func TestReconstructRestoredWorldStateUsesSuccessorTickAfterDispatchInterruption(t *testing.T) {
 	restartSource := "daemon-restart"
 	events := []interfaces.FactoryEvent{
