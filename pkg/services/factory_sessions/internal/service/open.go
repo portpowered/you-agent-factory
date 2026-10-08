@@ -411,6 +411,15 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.initial.Completion = opening.completion
+	if opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
+		flush := newOrderlyRecordingFlush(r.recordingsService, opening.configured.Runtime.RuntimeInstanceID, opening.configured.Recordings.RecordPath)
+		if flush == nil {
+			return fmt.Errorf("resume successor recording flush is unavailable")
+		}
+		if err := flush(ctx); err != nil {
+			return err
+		}
+	}
 	if err := opening.publishCurrentBoardReference(ctx); err != nil {
 		return err
 	}

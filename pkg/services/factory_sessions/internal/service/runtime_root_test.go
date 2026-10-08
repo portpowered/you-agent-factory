@@ -165,6 +165,12 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
 			}
 			if bypass {
+				if name == "resume" {
+					if owner.loads != 0 || owner.saves != 0 {
+						t.Fatal("resume selected the old reference instead of its explicit source")
+					}
+					return // Successor publication is covered by the explicit eligibility table.
+				}
 				if err := opening.publishCurrentBoardReference(t.Context()); err != nil || owner.loads != 0 || owner.saves != 0 {
 					t.Fatal("explicit/peer/batch opening touched reference")
 				}
@@ -1025,7 +1031,11 @@ func TestCurrentBoardReferenceExplicitRestoreEligibility(t *testing.T) {
 			}
 			wantSave := configureExplicitBoardPublication(name, owner, opening)
 			err := opening.publishCurrentBoardReference(t.Context())
-			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != 0 {
+			wantLoads := 0
+			if name == "resume" {
+				wantLoads = 1
+			}
+			if (err != nil) != (name == "publication failure") || (owner.saves == 1) != wantSave || owner.loads != wantLoads {
 				t.Fatalf("publication error=%v saves=%d loads=%d", err, owner.saves, owner.loads)
 			}
 			if wantSave && owner.savedArtifact != artifact {
@@ -1052,6 +1062,7 @@ func configureExplicitBoardPublication(name string, owner *boardReferenceOwner, 
 		opening.sessionID = "peer"
 	case "resume":
 		opening.configured.Recordings.ResumePath = "resume.json"
+		wantSave = true
 	case "replay":
 		opening.configured.Recordings.ReplayPath = "replay.json"
 	case "no record":

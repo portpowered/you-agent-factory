@@ -37,6 +37,9 @@ func (opening *sessionRuntimeOpening) publishCurrentBoardWriter(ctx context.Cont
 	if !opening.publishesCurrentBoardWriter() {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	store, err := opening.currentBoardReferenceStore()
 	if err != nil {
 		return err
@@ -241,6 +244,9 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 }
 
 func (opening *sessionRuntimeOpening) publishCurrentBoardReference(ctx context.Context) error {
+	if opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" {
+		return opening.publishCurrentBoardWriter(ctx)
+	}
 	if !opening.usesImplicitCurrentBoard() {
 		if !opening.restoresExplicitCurrentBoard() {
 			return nil

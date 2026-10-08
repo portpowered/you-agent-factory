@@ -55,6 +55,18 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	}
 	reopened := support.StartProcessCommand(t, process, second.Input)
 	url = restartProbeReadyURL(t, apis[1], reopened)
+	for i, arg := range second.Input.Args {
+		if arg == "--resume" {
+			var reference struct{ ArtifactReference string }
+			path := filepath.Join(second.Input.WorkingDirectory, ".you-agent-factory", "current-board.json")
+			if err := json.Unmarshal(mustReadSeededReplayArtifact(t, path), &reference); err != nil {
+				t.Fatal(err)
+			}
+			if reference.ArtifactReference == "" || reference.ArtifactReference == second.Input.Args[i+1] {
+				t.Fatal("resume readiness did not publish a successor reference")
+			}
+		}
+	}
 	after := restartProbeBoardReads(t, url)
 	assertRestartProbeStates(t, after)
 	assertRestartProbeRecoveredWork(t, before, after)

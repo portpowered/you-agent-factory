@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,9 +20,89 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func testResumeBoardPublishesSuccessorBeforeReadiness(t *testing.T, process support.Process, runner *restartProbeUnexpectedRunner, servers map[int]*support.ProcessAPIServer, files *restartProbeFiles) {
+	t.Helper()
+	// Each generation owns the same local ~default board. Serialize this
+	// cohort while independent repository journeys run in parallel.
+	for variant, name := range []string{"generated", "explicit"} {
+		t.Run(name, func(t *testing.T) {
+			runner.calls.Store(0)
+			repo, home := t.TempDir(), t.TempDir()
+			config := seededReplayResumeFactoryConfig()
+			types := config["workTypes"].([]map[string]any)
+			types[0]["states"] = append(types[0]["states"].([]map[string]string), map[string]string{"name": "waiting", "type": "PROCESSING"})
+			dir := filepath.Join(repo, "factory")
+			if err := os.Rename(support.ScaffoldFactory(t, config), dir); err != nil {
+				t.Fatal(err)
+			}
+			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+			source := filepath.Join(repo, "source.json")
+			var sourceBytes []byte
+			generation, basePort := 0, 24100+variant*3
+			apis := []*support.ProcessAPIServer{servers[basePort], servers[basePort+1], servers[basePort+2]}
+			testRestartProbeDAGWithInputs(t, process, dir, apis, runner, func(t *testing.T, _ string) *support.CapturedInputs {
+				if generation == 1 {
+					sourceBytes = mustReadSeededReplayArtifact(t, source)
+					testResumeBoardStartupFailures(t, process, runner, files, repo, home, dir, source)
+				}
+				if generation == 2 && !bytes.Equal(sourceBytes, mustReadSeededReplayArtifact(t, source)) {
+					t.Fatal("resume changed its source")
+				}
+				inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:" + strconv.Itoa(basePort+generation)})
+				inputs.Input.WorkingDirectory = repo
+				inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+				if generation == 0 {
+					inputs.Input.Args = append(inputs.Input.Args, "--record", source)
+				} else if generation == 1 {
+					inputs.Input.Args = append(inputs.Input.Args, "--resume", source)
+					if name == "explicit" {
+						inputs.Input.Args = append(inputs.Input.Args, "--record", filepath.Join(repo, "successor.json"))
+					}
+				}
+				generation++
+				return inputs
+			}, 0)
+		})
+	}
+}
+
+func testResumeBoardStartupFailures(t *testing.T, process support.Process, runner *restartProbeUnexpectedRunner, files *restartProbeFiles, repo, home, dir, source string) {
+	t.Helper()
+	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
+	previous := mustReadSeededReplayArtifact(t, refPath)
+	for _, name := range []string{"missing source", "corrupt source", "flush failure", "publication failure"} {
+		t.Run(name, func(t *testing.T) {
+			selected := source
+			if name == "missing source" || name == "corrupt source" {
+				selected = filepath.Join(repo, name+".json")
+				if name == "corrupt source" {
+					writeRestartProbeFile(t, selected, []byte(`{"private":"`+restartProbeSecret+`"`))
+				}
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:24101", "--resume", selected, "--record", filepath.Join(repo, name+"-successor.json")})
+			inputs.Input.WorkingDirectory = repo
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			files.failReference.Store(name == "publication failure")
+			files.failRecording.Store(name == "flush failure")
+			before := runner.calls.Load()
+			err := process.Execute(inputs.Input)
+			files.failReference.Store(false)
+			files.failRecording.Store(false)
+			if err == nil || runner.calls.Load() != before || !bytes.Equal(previous, mustReadSeededReplayArtifact(t, refPath)) {
+				t.Fatalf("resume failure did not preserve reference before activation: %v", err)
+			}
+			if strings.Contains(inputs.Stdout()+inputs.Stderr()+err.Error(), restartProbeSecret) {
+				t.Fatal("resume failure leaked source contents")
+			}
+		})
+	}
+}
 
 func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	t.Parallel()
@@ -49,10 +130,29 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 	files := &restartProbeFiles{corruptRoot: corruptDir}
 	runner := &restartProbeUnexpectedRunner{requests: make(chan platformprocess.CommandRequest, 4)}
 	var starts atomic.Int32
+	resumeServers := make(map[int]*support.ProcessAPIServer)
+	for port := 24100; port < 24106; port++ {
+		resumeServers[port] = support.NewProcessAPIServer()
+	}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		FactorySessionRuntimePersistenceFileSystem: files,
-		ProviderCommandRunner:                      runner,
+		RecordingWriteFile: func(path string, data []byte) error {
+			if files.failRecording.Load() {
+				return errors.New("controlled recording flush failure")
+			}
+			return os.WriteFile(path, data, 0o600)
+		},
+		RecordingCreateTempFile: func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			if files.failRecording.Load() {
+				return nil, errors.New("controlled recording flush failure")
+			}
+			return os.CreateTemp(dir, pattern)
+		},
+		ProviderCommandRunner: runner,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if server := resumeServers[request.Port]; server != nil {
+				return server.Start(ctx, request)
+			}
 			// The two ordered local journeys own the first five starts. Route
 			// the exact-command journey without changing its default listener.
 			if index := starts.Add(1); index <= int32(len(boardAPIs)) {
@@ -221,6 +321,9 @@ func TestDaemonRestartProbePreservesBoard(t *testing.T) {
 		}
 	})
 
+	t.Run("PlainBoard F3 resume successor before readiness", func(t *testing.T) {
+		testResumeBoardPublishesSuccessorBeforeReadiness(t, process, runner, resumeServers, files)
+	})
 	t.Run("F3 fresh board opens empty", func(t *testing.T) {
 		t.Parallel()
 		testRestartProbeFreshBoard(t, process, emptyDir, api, runner)
@@ -508,6 +611,7 @@ type restartProbeFiles struct {
 	corruptReads  atomic.Int32
 	corruptWrites atomic.Int32
 	failReference atomic.Bool
+	failRecording atomic.Bool
 }
 
 func (files *restartProbeFiles) MkdirAll(path string, mode fs.FileMode) error {
