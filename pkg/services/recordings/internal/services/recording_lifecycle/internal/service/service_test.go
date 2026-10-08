@@ -28,6 +28,11 @@ type namedTargetReserver struct {
 func TestRecordingTargetAliasesShareOwnershipUntilAbort(t *testing.T) {
 	t.Parallel()
 	aliases := []string{"./retained.json", "child/../retained.json"}
+	absolute, err := filepath.Abs("retained.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases = append(aliases, absolute)
 	if runtime.GOOS == "windows" {
 		aliases = append(aliases, "RETAINED.JSON", `child\..\retained.json`)
 	}

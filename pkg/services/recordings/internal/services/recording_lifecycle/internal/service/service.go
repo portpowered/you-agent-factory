@@ -18,6 +18,7 @@ import (
 type recordingSession struct {
 	artifact         recordings.RecordingArtifactReference
 	serviceTarget    string
+	targetKey        string
 	selection        recordings.RecordingTargetRequest
 	scope            recordings.CanonicalEventScope
 	events           []recordings.CanonicalEvent
@@ -208,6 +209,10 @@ func (service *Service) bind(
 		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
 		return recordings.BindRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
+	targetKey, err := recordingTargetKey(serviceTarget)
+	if err != nil {
+		return recordings.BindRecordingResult{}, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, serviceTarget, err)
+	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	id := strings.TrimSpace(string(request.RecordingID))
@@ -223,7 +228,7 @@ func (service *Service) bind(
 			Status: recordingStatus(recordings.RecordingID(id), existing),
 		}, nil
 	}
-	if _, owned := service.targetOwners[recordingTargetKey(serviceTarget)]; owned {
+	if _, owned := service.targetOwners[targetKey]; owned {
 		return recordings.BindRecordingResult{}, fmt.Errorf(
 			"%w: recording target %q already has a writer", recordings.ErrRecordingBindingConflict, serviceTarget,
 		)
@@ -231,11 +236,12 @@ func (service *Service) bind(
 	session := &recordingSession{
 		artifact:      request.Artifact,
 		serviceTarget: serviceTarget,
+		targetKey:     targetKey,
 		selection:     selection,
 		scope:         request.Scope,
 	}
 	service.byID[id] = session
-	service.targetOwners[recordingTargetKey(serviceTarget)] = id
+	service.targetOwners[targetKey] = id
 	return recordings.BindRecordingResult{
 		Status: recordingStatus(recordings.RecordingID(id), session),
 	}, nil
@@ -432,7 +438,7 @@ func (service *Service) FinishRecording(
 }
 
 func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *recordingSession) {
-	key := recordingTargetKey(session.serviceTarget)
+	key := session.targetKey
 	if service.targetOwners[key] == string(id) {
 		delete(service.targetOwners, key)
 	}
@@ -441,12 +447,15 @@ func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *
 // Keep the caller's path for persistence and diagnostics, but prevent lexical
 // aliases from acquiring independent writer ownership. Windows targets are
 // conservatively case folded, including on volumes with case-sensitive paths.
-func recordingTargetKey(target string) string {
-	key := filepath.Clean(target)
+func recordingTargetKey(target string) (string, error) {
+	key, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
 	if runtime.GOOS == "windows" {
 		key = strings.ToLower(key)
 	}
-	return key
+	return key, nil
 }
 
 func stopPeriodic(session *recordingSession) {
