@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { validateQueueDispatch } from "./queue-dispatch.mjs";
+import { REQUIRED_ARTIFACTS } from "./merge-queue-evidence.mjs";
 
 import {
 	discoverWorkflowFiles,
@@ -16,6 +18,48 @@ import {
 	validateFrontendSharedSetupWorkflowContract,
 	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("queue dispatch rejects omissions of every main-required artifact producer", () => {
+	const workflow = readFileSync(".github/workflows/ci.yml", "utf8").replaceAll("\r\n", "\n");
+	assert.equal(validateQueueDispatch(workflow).status, "pass");
+	const owners = {
+		"unit-coverage-diagnostics": ["backend-coverage", "Run backend coverage", "make test-unit-coverage", "unit"],
+		"functional-test-diagnostics": ["backend-coverage", "Run Linux functional coverage with concurrent quarantine verification", "run: bash scripts/ci/run-functional-coverage-with-quarantine.sh", "functional"],
+		"backend-deadcode-evidence": ["backend-lint", "Run complete canonical Backend Lint inventory", 'make LINT_REPORT_FILE="$LINT_REPORT_FILE" lint'],
+	};
+	for (const artifact of REQUIRED_ARTIFACTS) {
+		const [owner, producingName, command, suite] = owners[artifact];
+		const jobPattern = new RegExp(`\\n  ${owner}:\\n[\\s\\S]*?(?=\\n  [a-z0-9_-]+:\\n|$)`);
+		const job = workflow.match(jobPattern)[0];
+		const steps = job.split(/\n      - /).slice(1);
+		const upload = steps.find((step) => step.includes(`          name: ${artifact}\n`));
+		const producing = steps.find((step) => step.startsWith(`name: ${producingName}\n`));
+		const mutations = [
+			"",
+			job.replace(upload, "name: Removed upload\n"),
+			job.replace(producing, "name: Removed producer\n"),
+			job.replace(command, "run: true"),
+			job.replace(/^    if: .+$/m, "    if: github.event_name == 'pull_request'"),
+			job.replace(upload, upload.replace(/^        if: .+$/m, "        if: github.event_name == 'pull_request'")),
+			job.replace(producing, producing.replace(/^        if: .+$/m, "        if: github.event_name == 'pull_request'")),
+			job.replace(upload, upload.replace("uses: actions/upload-artifact@v4", "uses: actions/download-artifact@v4")),
+			job.replace(upload, upload.replace("coverage.out", "absent.out").replace("bin/deadcode-current.txt", "bin/absent.txt")),
+		];
+		if (suite) mutations.push(job.replace(`{\"suite\":\"${suite}\",\"label\":\"${suite === "unit" ? "Unit" : "Functional"}\"}`, "{}"));
+		for (const mutation of mutations) {
+			// Limit requirements to this artifact so a shared-job failure names
+			// the exact consumer requirement under mutation.
+			assert.throws(() => validateQueueDispatch(workflow.replace(jobPattern, () => mutation), { requiredArtifacts: [artifact] }),
+				(error) => error.message.includes(artifact));
+		}
+	}
+	for (const artifact of REQUIRED_ARTIFACTS.filter((name) => name !== "backend-deadcode-evidence")) {
+		assert.throws(() => validateQueueDispatch(workflow.replace("run_backend: \${{ steps.classify.outputs.run_backend != 'false' }}", 'run_backend: "false"'), { requiredArtifacts: [artifact] }),
+			(error) => error.message.includes(artifact));
+	}
+	assert.throws(() => validateQueueDispatch(workflow, { requiredArtifacts: [...REQUIRED_ARTIFACTS, "new-main-requirement"] }), /new-main-requirement.*no mapped producer/);
+	assert.throws(() => validateQueueDispatch(workflow, { selectInputs: () => ({ deadcode: 0 }) }), /backend-deadcode-evidence.*selector omits/);
+});
 
 test("CI job guard accepts legacy jobs, deletion and formatting, but rejects added IDs", () => {
 	const baselineWorkflow = "name: CI\njobs:\n  unit:\n    steps:\n      - run: go test -race ./pkg/example\n  legacy:\n    steps: []\n";
@@ -53,6 +97,7 @@ test("real workflow lint CLI compares isolated Git history and reports added job
 	for (const file of [
 		"scripts/ci/workflow-lint.mjs",
 		"scripts/ci/queue-dispatch.mjs",
+		"scripts/ci/merge-queue-evidence.mjs",
 		"scripts/ci/verification-plans.mjs",
 		"scripts/ci/backend-lint-workflow.mjs",
 		"scripts/ci/backend-lint-report.mjs",

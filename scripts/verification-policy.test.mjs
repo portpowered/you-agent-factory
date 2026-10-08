@@ -44,6 +44,20 @@ function policy(overrides = {}) {
 	};
 }
 
+test("queue coverage and lint producers require successful results", () => {
+	const producers = ["Backend Coverage", "Backend Lint"];
+	const queue = (name, result) => policy({ lanes: producers.map((producer) => lane(producer, true, producer === name ? result : "success")) });
+	assert.deepEqual(evaluateVerificationPolicy(queue("", "success")), { ok: true, failures: [] });
+	for (const name of producers) {
+		for (const result of ["", "skipped", "failure", "cancelled", "timed_out"]) {
+			const evaluation = evaluateVerificationPolicy(queue(name, result));
+			assert.equal(evaluation.ok, false, `${name}: ${result}`);
+			assert.ok(evaluation.failures.some((failure) => failure.includes(name)));
+		}
+	}
+	assert.deepEqual(evaluateVerificationPolicy(policy({ lanes: [lane("Backend Coverage", true), lane("Backend Lint", true), lane("Backend", false)] })), { ok: true, failures: [] });
+});
+
 test("minimal selected verification passes and unselected lanes may be skipped", () => {
 	const result = evaluateVerificationPolicy(
 		policy({
