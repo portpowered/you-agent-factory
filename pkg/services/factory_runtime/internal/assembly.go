@@ -535,12 +535,19 @@ func initialRuntimeCloser(record factoryruntime.RuntimeRecord, clock factoryrunt
 				finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
 			}
 			finalized = finalizationErr == nil
+			var terminal *recordings.RecordingCleanupError
+			if errors.As(finalizationErr, &terminal) && terminal.Complete {
+				finalized = true
+			}
 		}
 		if !artifactsClosed {
 			artifactsErr = record.CloseArtifacts()
 			artifactsClosed = artifactsErr == nil
 		}
-		return errors.Join(finalizationErr, artifactsErr)
+		if err := errors.Join(finalizationErr, artifactsErr); err != nil {
+			return &recordings.RecordingCleanupError{Cause: err, Complete: finalized && artifactsClosed}
+		}
+		return nil
 	}
 }
 

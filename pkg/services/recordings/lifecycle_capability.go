@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+// RecordingCleanupError preserves a terminal diagnostic separately from whether
+// the addressed resources have been released. Incomplete cleanup is retryable.
+type RecordingCleanupError struct {
+	Cause    error
+	Complete bool
+}
+
+func (err *RecordingCleanupError) Error() string { return err.Cause.Error() }
+func (err *RecordingCleanupError) Unwrap() error { return err.Cause }
+
 // CompletedFlushWatermarkReader is the narrow Recordings capability used by
 // read projections that need to distinguish a live canonical fact from one
 // covered by completed durable recording storage.

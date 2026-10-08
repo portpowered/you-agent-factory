@@ -1019,7 +1019,10 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 		recorder.owner.runtimeRouter.unregister(recorder.routeKey, recorder.ledger)
 	}
 	recorder.finalizeErr = errors.Join(finalizeErr, closeErr)
-	return errors.Join(finalizeErr, closeErr)
+	if recorder.finalizeErr != nil {
+		recorder.finalizeErr = &recordings.RecordingCleanupError{Cause: recorder.finalizeErr, Complete: true}
+	}
+	return recorder.finalizeErr
 }
 
 var _ recordings.RuntimeRecorder = (*runtimeScopeRecorder)(nil)

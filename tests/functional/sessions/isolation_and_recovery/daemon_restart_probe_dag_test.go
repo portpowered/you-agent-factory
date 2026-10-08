@@ -5,20 +5,64 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+type restartProbeCommand struct {
+	*support.ProcessCommand
+	ready <-chan struct{}
+}
+
+type restartProbeStartupOutput struct {
+	mu    sync.Mutex
+	text  string
+	ready chan struct{}
+	once  sync.Once
+}
+
+type restartProbeWriter struct {
+	output  io.Writer
+	startup *restartProbeStartupOutput
+}
+
+func (writer restartProbeWriter) Write(data []byte) (int, error) {
+	writer.startup.mu.Lock()
+	defer writer.startup.mu.Unlock()
+	n, err := writer.output.Write(data)
+	writer.startup.text += string(data[:n])
+	if strings.Contains(writer.startup.text, "Dashboard URL: ") {
+		writer.startup.once.Do(func() { close(writer.startup.ready) })
+	}
+	return n, err
+}
+
+func startRestartProbeCommand(t *testing.T, process support.Process, input root.Input) *restartProbeCommand {
+	t.Helper()
+	startup := &restartProbeStartupOutput{ready: make(chan struct{})}
+	for _, arg := range input.Args {
+		if arg == "--quiet" {
+			startup.once.Do(func() { close(startup.ready) })
+		}
+	}
+	input.Stdout = restartProbeWriter{output: input.Stdout, startup: startup}
+	input.Stderr = restartProbeWriter{output: input.Stderr, startup: startup}
+	return &restartProbeCommand{ProcessCommand: support.StartProcessCommand(t, process, input), ready: startup.ready}
+}
 
 func testRestartProbeDAG(t *testing.T, process support.Process, dir string, apis []*support.ProcessAPIServer, runner *restartProbeUnexpectedRunner) {
 	t.Helper()
@@ -37,7 +81,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	if port != 0 {
 		first.Input.Args = append(first.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port), "--work", workPath)
 	}
-	command := support.StartProcessCommand(t, process, first.Input)
+	command := startRestartProbeCommand(t, process, first.Input)
 	url := restartProbeReadyURL(t, apis[0], command)
 	if port == 0 {
 		admitRestartProbeDAG(t, url, batch)
@@ -62,7 +106,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 	if port != 0 {
 		second.Input.Args = append(second.Input.Args, "--listen", "127.0.0.1:"+strconv.Itoa(port+1))
 	}
-	reopened := support.StartProcessCommand(t, process, second.Input)
+	reopened := startRestartProbeCommand(t, process, second.Input)
 	url = restartProbeReadyURL(t, apis[1], reopened)
 	for i, arg := range second.Input.Args {
 		if arg == "--resume" {
@@ -93,7 +137,7 @@ func testRestartProbeDAGWithInputs(t *testing.T, process support.Process, dir st
 		restartProbeShutdown(t, url, reopened)
 		third := inputs(t, dir)
 		third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, apis[2])
-		reopened = support.StartProcessCommand(t, process, third.Input)
+		reopened = startRestartProbeCommand(t, process, third.Input)
 		url = restartProbeReadyURL(t, apis[2], reopened)
 		after = restartProbeBoardReads(t, url)
 		assertRestartProbeStates(t, after)
@@ -199,7 +243,10 @@ func waitForRestartProbeConfirmed(t *testing.T, url string) {
 	t.Fatal("DAG Work did not reach CONFIRMED before shutdown")
 }
 
-func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *support.ProcessCommand) string {
+func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command interface {
+	Done() <-chan struct{}
+	Err() error
+}) string {
 	t.Helper()
 	ready := make(chan string, 1)
 	go func() {
@@ -210,7 +257,20 @@ func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *
 	}()
 	select {
 	case url := <-ready:
-		return url
+		probe, ok := command.(*restartProbeCommand)
+		if !ok {
+			return url
+		}
+		// A bound listener precedes recording activation and reference publication.
+		// The CLI's endpoint disclosure observes completed startup.
+		select {
+		case <-probe.ready:
+			return url
+		case <-command.Done():
+			t.Fatalf("restart command ended before completed startup: %s", restartProbeFailureCauses(command.Err()))
+		case <-time.After(support.ScaledTimeout(60 * time.Second)):
+			t.Fatal("restart command did not disclose completed startup")
+		}
 	case <-command.Done():
 		var causes []string
 		for err := command.Err(); err != nil; err = errors.Unwrap(err) {
@@ -221,6 +281,21 @@ func restartProbeReadyURL(t *testing.T, api *support.ProcessAPIServer, command *
 		t.Fatal("restart command did not publish API readiness")
 	}
 	return ""
+}
+
+func restartProbeFailureCauses(err error) string {
+	if err == nil {
+		return ""
+	}
+	result := err.Error()
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, cause := range joined.Unwrap() {
+			result += "; " + restartProbeFailureCauses(cause)
+		}
+	} else if cause := errors.Unwrap(err); cause != nil {
+		result += "; " + restartProbeFailureCauses(cause)
+	}
+	return result
 }
 
 func assertRestartProbeEventFacts(t *testing.T, before, after []factoryapi.FactoryEvent) {
@@ -359,7 +434,10 @@ func restartProbePost(t *testing.T, endpoint string, body []byte) {
 	}
 }
 
-func restartProbeShutdown(t *testing.T, url string, command *support.ProcessCommand) {
+func restartProbeShutdown(t *testing.T, url string, command interface {
+	Done() <-chan struct{}
+	Err() error
+}) {
 	t.Helper()
 	restartProbePost(t, url+"/shutdown", []byte(`{}`))
 	select {
@@ -420,7 +498,7 @@ func assertRestartProbeTerminalRestart(t *testing.T, process support.Process, di
 	// Work is terminal. Reuse is the invariant, so this journey is ordered.
 	third := inputs(t, dir)
 	third.Input.Context = context.WithValue(third.Input.Context, restartProbeServerKey{}, api)
-	repeated := support.StartProcessCommand(t, process, third.Input)
+	repeated := startRestartProbeCommand(t, process, third.Input)
 	url := restartProbeReadyURL(t, api, repeated)
 	for i, work := range restartProbeBoardReads(t, url) {
 		if work.State == nil || work.State.Name != "complete" || !reflect.DeepEqual(work.Content, completed[i].Content) || !reflect.DeepEqual(work.WorkId, completed[i].WorkId) || !reflect.DeepEqual(work.Relations, completed[i].Relations) {

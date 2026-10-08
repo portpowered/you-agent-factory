@@ -96,7 +96,9 @@ func testResumeBoardStartupFailures(t *testing.T, process support.Process, runne
 			sourceBytes := mustReadSeededReplayArtifact(t, source)
 			inputs.Input.WorkingDirectory = repo
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-			ctx, cancel := context.WithCancel(inputs.Input.Context)
+			// Each failed opening owns its listener; it must not consume the
+			// successful successor generation's one-shot transport edge.
+			ctx, cancel := context.WithCancel(context.WithValue(inputs.Input.Context, restartProbeServerKey{}, support.NewProcessAPIServer()))
 			defer cancel()
 			inputs.Input.Context = ctx
 			if name == "cancellation" {
@@ -418,7 +420,7 @@ func testPlainBoardStopFailures(t *testing.T, process support.Process, servers m
 			repo, home, port := scaffoldPlainBoardFailureRepository(t), t.TempDir(), 24200+index*3
 			source := filepath.Join(repo, "previous.json")
 			seed := plainBoardFailureInputs(t, repo, home, port, "--record", source)
-			command := support.StartProcessCommand(t, process, seed.Input)
+			command := startRestartProbeCommand(t, process, seed.Input)
 			url := restartProbeReadyURL(t, servers[port], command)
 			restartProbeShutdown(t, url, command)
 			refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
@@ -426,7 +428,7 @@ func testPlainBoardStopFailures(t *testing.T, process support.Process, servers m
 			validReference := previous
 			sourceBytes := mustReadSeededReplayArtifact(t, source)
 			inputs := plainBoardFailureInputs(t, repo, home, port+1, "--record", filepath.Join(repo, "new-writer.json"))
-			command = support.StartProcessCommand(t, process, inputs.Input)
+			command = startRestartProbeCommand(t, process, inputs.Input)
 			url = restartProbeReadyURL(t, servers[port+1], command)
 			if name == "invalid reference" {
 				previous = []byte(`{"private":"` + restartProbeSecret + `"`)
@@ -460,7 +462,7 @@ func testPlainBoardStopFailures(t *testing.T, process support.Process, servers m
 			}
 			// Reopen through the public command to prove failure released ownership.
 			reopen := plainBoardFailureInputs(t, repo, home, port+2)
-			command = support.StartProcessCommand(t, process, reopen.Input)
+			command = startRestartProbeCommand(t, process, reopen.Input)
 			url = restartProbeReadyURL(t, servers[port+2], command)
 			if works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(url, "~default", "/work")); len(works.Results) != 0 {
 				t.Fatal("failed stop substituted another board")
@@ -475,7 +477,7 @@ func testPlainBoardExcludedPublishers(t *testing.T, process support.Process, ser
 	repo, home := scaffoldPlainBoardFailureRepository(t), t.TempDir()
 	source := filepath.Join(repo, "source.json")
 	seed := plainBoardFailureInputs(t, repo, home, 24210, "--record", source)
-	command := support.StartProcessCommand(t, process, seed.Input)
+	command := startRestartProbeCommand(t, process, seed.Input)
 	url := restartProbeReadyURL(t, servers[24210], command)
 	restartProbeShutdown(t, url, command)
 	refPath := filepath.Join(repo, ".you-agent-factory", "current-board.json")
@@ -499,7 +501,7 @@ func testPlainBoardExcludedPublishers(t *testing.T, process support.Process, ser
 					t.Fatal(err)
 				}
 			} else {
-				command := support.StartProcessCommand(t, process, inputs.Input)
+				command := startRestartProbeCommand(t, process, inputs.Input)
 				url := restartProbeReadyURL(t, servers[port], command)
 				restartProbeShutdown(t, url, command)
 			}
@@ -562,7 +564,7 @@ func testRestartProbeFreshBoard(t *testing.T, process support.Process, dir strin
 	t.Helper()
 	beforeCalls := runner.calls.Load()
 	inputs := restartProbeInputs(t, dir)
-	command := support.StartProcessCommand(t, process, inputs.Input)
+	command := startRestartProbeCommand(t, process, inputs.Input)
 	baseURL := api.WaitForURL(t)
 	session := support.GetDefaultSession(t, baseURL)
 	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, session.Id, "/work"))
@@ -841,8 +843,8 @@ func startPlainBoardInRepository(t *testing.T, process support.Process, repo, ho
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--continuously", "--with-server"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = repo
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	return command, restartProbeReadyURL(t, api, command)
+	command := startRestartProbeCommand(t, process, inputs.Input)
+	return command.ProcessCommand, restartProbeReadyURL(t, api, command)
 }
 
 func waitForPlainBoardWorkConfirmed(t *testing.T, url string) factoryapi.Work {

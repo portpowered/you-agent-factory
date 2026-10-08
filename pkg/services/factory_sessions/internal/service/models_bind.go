@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // modelsRuntimeBind carries the process-scoped Models root and the opaque
@@ -95,11 +96,15 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	cleanup.mu.Unlock()
 	// A failed consumer still owns its dependency. Release independent resources
 	// now, but keep Models available until every consumer has closed successfully.
-	if closeErr == nil && !consumersAdded {
-		models, closeErr = cleanup.releaseModels(models)
+	if len(pending) == 0 && !consumersAdded {
+		var err error
+		models, err = cleanup.releaseModels(models)
+		closeErr = errors.Join(closeErr, err)
 	}
-	if closeErr == nil && !consumersAdded {
-		targets, closeErr = cleanup.releaseModels(targets)
+	if len(pending) == 0 && len(models) == 0 && !consumersAdded {
+		var err error
+		targets, err = cleanup.releaseModels(targets)
+		closeErr = errors.Join(closeErr, err)
 	}
 	cleanup.mu.Lock()
 	cleanup.actions = append(pending, cleanup.actions...)
@@ -111,7 +116,11 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 	if closeErr == nil && (len(cleanup.actions) != 0 || len(cleanup.models) != 0 || len(cleanup.targets) != 0) {
 		closeErr = errRuntimeOpeningCleanupPending
 	}
+	complete := len(cleanup.actions) == 0 && len(cleanup.models) == 0 && len(cleanup.targets) == 0
 	cleanup.mu.Unlock()
+	if closeErr != nil {
+		return &recordings.RecordingCleanupError{Cause: closeErr, Complete: complete}
+	}
 	return closeErr
 }
 
@@ -141,6 +150,10 @@ func (*runtimeOpeningCleanup) releaseActions(actions []func() error) ([]func() e
 	for index := len(actions) - 1; index >= 0; index-- {
 		if err := actions[index](); err != nil {
 			closeErr = errors.Join(closeErr, err)
+			var terminal *recordings.RecordingCleanupError
+			if errors.As(err, &terminal) && terminal.Complete {
+				actions[index] = nil
+			}
 		} else {
 			actions[index] = nil
 		}
