@@ -1460,6 +1460,20 @@ def validate_recovery_pr(repo_root, workspace):
         raise ValueError("recovery PR remote head must be an ancestor of local HEAD")
 
 
+def recovery_delivery_active(work):
+    """Fail closed on relevant metadata; only delivery roles own workspaces."""
+    state = work.get("state")
+    if not isinstance(state, dict) or state.get("type") not in ("INITIAL", "PROCESSING", "TERMINAL", "FAILED"):
+        raise ValueError("recovery ownership cannot classify retained Work")
+    role = work.get("workTypeName")
+    if not isinstance(role, str) or role not in (
+        "idea", "plan", "task", "project", "project-cycle", "project-report",
+        "thoughts", "review", "validation",
+    ):
+        raise ValueError("recovery ownership cannot classify Work role")
+    return role in ("idea", "plan", "task") and state["type"] in ("INITIAL", "PROCESSING")
+
+
 def recovery_owner(work, successor_name, workspace):
     """Identify another live lane using the retained branch or directory."""
     tags = work.get("tags") or {}
@@ -1468,12 +1482,10 @@ def recovery_owner(work, successor_name, workspace):
         isinstance(retained, str) and normalized_absolute_path(retained)
         == normalized_absolute_path(workspace["worktree"])
     )
-    if not matches or work.get("name") == successor_name:
+    if not matches:
         return False
-    state = work.get("state", {})
-    if state.get("type") not in ("INITIAL", "PROCESSING", "TERMINAL", "FAILED"):
-        raise ValueError("recovery ownership cannot classify retained Work")
-    return state["type"] in ("INITIAL", "PROCESSING")
+    active = recovery_delivery_active(work)
+    return active and work.get("name") != successor_name
 
 
 def validate_recovery_ownership(repo_root, successor_name, workspace):
@@ -1499,7 +1511,7 @@ def validate_recovery_ownership(repo_root, successor_name, workspace):
             for work in page["results"]:
                 if recovery_owner(work, successor_name, workspace):
                     raise ValueError(f"recovery workspace has an active owner: {safe_identity_display(work.get('workId'))}")
-                if work.get("name") == successor_name and work.get("state", {}).get("type") in ("INITIAL", "PROCESSING"):
+                if work.get("name") == successor_name and recovery_delivery_active(work):
                     successor_sessions.add(session_id)
             pagination = page.get("paginationContext")
             if not isinstance(pagination, dict):
