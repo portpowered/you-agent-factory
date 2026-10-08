@@ -275,6 +275,12 @@ func awaitCapturedCursorDetail(t *testing.T, host *support.FunctionalAPIServer, 
 func assertCapturedCursorDetail(t *testing.T, detail factoryapi.ProviderSessionDetailResponse, id string) {
 	t.Helper()
 	assertProviderSessionDetailIdentity(t, detail, id, factoryapi.Cursor, factoryapi.LoadableProviderSessionKindSessionID)
+	assertCapturedCursorTranscript(t, detail)
+	assertCapturedCursorSourceAndUsage(t, detail)
+}
+
+func assertCapturedCursorTranscript(t *testing.T, detail factoryapi.ProviderSessionDetailResponse) {
+	t.Helper()
 	if len(detail.Transcript) != 3 || detail.Transcript[2].Text == nil || *detail.Transcript[2].Text != "captured Cursor answer COMPLETE" || len(detail.Parse.FunctionCalls) != 2 {
 		t.Fatalf("captured facts lost: %#v", detail)
 	}
@@ -283,7 +289,19 @@ func assertCapturedCursorDetail(t *testing.T, detail factoryapi.ProviderSessionD
 			t.Fatalf("invalid captured entry: %#v", entry)
 		}
 	}
-	if detail.Source.RelativePath != "" || detail.Source.SizeBytes != 0 || detail.Source.ModifiedAt != nil || detail.Parse.LineCount != 0 || detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.TotalTokens == nil || *detail.Parse.TokenUsage.TotalTokens != 14 {
+}
+
+func assertCapturedCursorSourceAndUsage(t *testing.T, detail factoryapi.ProviderSessionDetailResponse) {
+	t.Helper()
+	assertCapturedCursorSource(t, detail)
+	if detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.TotalTokens == nil || *detail.Parse.TokenUsage.TotalTokens != 14 {
+		t.Fatalf("usage/source facts: %#v", detail)
+	}
+}
+
+func assertCapturedCursorSource(t *testing.T, detail factoryapi.ProviderSessionDetailResponse) {
+	t.Helper()
+	if detail.Source.RelativePath != "" || detail.Source.SizeBytes != 0 || detail.Source.ModifiedAt != nil || detail.Parse.LineCount != 0 {
 		t.Fatalf("usage/source facts: %#v", detail)
 	}
 }
