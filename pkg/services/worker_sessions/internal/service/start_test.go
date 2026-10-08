@@ -4117,41 +4117,78 @@ func (usagePublishingExecution) InvokeModel(context.Context, string, modelinfere
 	return modelinference.Result{}, workers.ErrExecuteUnavailable
 }
 
+type usageSnapshotRecording struct {
+	terminalAwareRecordingService
+	snapshot recordings.WorkerRecordingSnapshot
+}
+
+func (r *usageSnapshotRecording) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return r.snapshot, nil
+}
+
 func TestInvokeSession_UsagePublicationProjectsDetachedTokenFacts(t *testing.T) {
-	var registry workersessions.Service
-	execution := usagePublishingExecution{
-		publish: func(ctx context.Context, request workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
-			return registry.PublishRecord(ctx, request)
-		},
-	}
-	var err error
-	registry, err = newService(execution, newEventsAppender(), nil)
-	if err != nil {
-		t.Fatalf("service.New() error = %v, want nil", err)
-	}
-
-	request := validStartRequest("worker-usage", "dispatch-usage")
-	request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-usage"}
-	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
-		t.Fatalf("InvokeSession() error = %v, want nil", err)
-	}
-
-	listed, err := registry.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-usage"})
-	if err != nil {
-		t.Fatalf("ListObservations() error = %v, want nil", err)
-	}
-	if len(listed.Observations) != 1 {
-		t.Fatalf("ListObservations() returned %d observations, want 1", len(listed.Observations))
-	}
-	observation := listed.Observations[0]
-	if observation.Model == nil || *observation.Model != "model-usage" {
-		t.Fatalf("observation.Model = %v, want model-usage", observation.Model)
-	}
-	if observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 11 {
-		t.Fatalf("observation.TokenUsage = %#v, want detached input token count 11", observation.TokenUsage)
-	}
-	if observation.TokenUsage.OutputTokens != nil || observation.TokenUsage.TotalTokens != nil {
-		t.Fatalf("observation.TokenUsage = %#v, want omitted token classes to remain nil", observation.TokenUsage)
+	for _, captured := range []bool{true, false} {
+		t.Run(fmt.Sprintf("captured=%t", captured), func(t *testing.T) {
+			var registry workersessions.Service
+			recorder := &usageSnapshotRecording{terminalAwareRecordingService: terminalAwareRecordingService{recording: &terminalAwareRecording{}}}
+			execution := usagePublishingExecution{
+				publish: func(ctx context.Context, request workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
+					result, err := registry.PublishRecord(ctx, request)
+					if captured && err == nil && result.Outcome == workersessions.PublishOutcomeAccepted {
+						payload, marshalErr := json.Marshal(request.Draft)
+						if marshalErr != nil {
+							return result, marshalErr
+						}
+						// Model the recorder's committed snapshot at its read boundary.
+						recorder.snapshot = recordings.WorkerRecordingSnapshot{RecordingID: "recording-usage", Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+							WorkerSessionID: "worker-usage", Records: []events.Record{{ID: events.RecordID{Position: result.AggregateSequence}, Payload: payload}},
+						}}}
+					}
+					return result, err
+				},
+			}
+			var recording recordings.WorkerSessionRecordingService
+			if captured {
+				recording = recorder
+			}
+			var err error
+			registry, err = service.New(execution, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := validStartRequest("worker-usage", "dispatch-usage")
+			request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-usage"}
+			request.Execution.Execution.RecordingID = "recording-usage"
+			if _, err := registry.InvokeSession(t.Context(), request); err != nil {
+				t.Fatalf("InvokeSession() error = %v, want nil", err)
+			}
+			listRequest := workersessions.ListObservationsRequest{WorkID: "work-usage"}
+			listed, err := registry.ListObservations(t.Context(), listRequest)
+			if err != nil || len(listed.Observations) != 1 {
+				t.Fatalf("ListObservations() = %#v, %v, want one observation", listed, err)
+			}
+			observation := listed.Observations[0]
+			if observation.Model == nil || *observation.Model != "model-usage" {
+				t.Fatalf("observation.Model = %v, want model-usage", observation.Model)
+			}
+			if !captured {
+				if observation.TokenUsage != nil {
+					t.Fatalf("uncaptured usage = %#v, want omitted usage", observation.TokenUsage)
+				}
+				return
+			}
+			if observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 11 {
+				t.Fatalf("observation.TokenUsage = %#v, want detached input token count 11", observation.TokenUsage)
+			}
+			if observation.TokenUsage.OutputTokens != nil || observation.TokenUsage.TotalTokens != nil {
+				t.Fatalf("observation.TokenUsage = %#v, want omitted token classes to remain nil", observation.TokenUsage)
+			}
+			*observation.TokenUsage.InputTokens = 99
+			again, err := registry.ListObservations(t.Context(), listRequest)
+			if err != nil || len(again.Observations) != 1 || again.Observations[0].TokenUsage == nil || again.Observations[0].TokenUsage.InputTokens == nil || *again.Observations[0].TokenUsage.InputTokens != 11 {
+				t.Fatalf("read after caller mutation = %#v, %v, want committed input=11", again, err)
+			}
+		})
 	}
 }
 

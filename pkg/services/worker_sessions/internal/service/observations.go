@@ -746,14 +746,6 @@ func sortObservationAttempts(observations []workersessions.Observation) {
 	})
 }
 
-func cloneInt(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
 // observationSubscription adapts the canonical Events subscription to the
 // Worker Sessions outcome vocabulary and closes itself immediately after the
 // lifecycle terminal record.
