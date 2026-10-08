@@ -151,17 +151,12 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 		recorder.initialEvent,
 		recorder.initialProvenance,
 	); err != nil {
-		appendErr := fmt.Errorf("record initial Factory snapshot: %w", err)
-		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
-			RecordingID: recorder.recordingID,
-		})
-		recorder.bindErr = errors.Join(appendErr, recorder.stopErr)
-		return recorder.bindErr
+		return recorder.abortBindingLocked(fmt.Errorf("record initial Factory snapshot: %w", err))
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
 			if err := recorder.recordEventLockedWithProvenance(*pending.event, pending.provenance); err != nil {
-				recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
+				return recorder.abortBindingLocked(fmt.Errorf("record buffered Factory history: %w", err))
 			}
 		} else {
 			recorder.recordErrorLocked(
@@ -173,6 +168,17 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	}
 	recorder.pending = nil
 	return nil
+}
+
+func (recorder *lifecycleRuntimeRecorder) abortBindingLocked(cause error) error {
+	// A partially accepted prefix is not a writable board. Stop joins the
+	// periodic writer; preserve both causes and prohibit cleanup publication.
+	recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
+		RecordingID: recorder.recordingID,
+	})
+	recorder.bindErr = errors.Join(cause, recorder.stopErr)
+	recorder.pending = nil
+	return recorder.bindErr
 }
 
 func (recorder *lifecycleRuntimeRecorder) Start(context.Context) {}
@@ -227,6 +233,9 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLockedWithProvenance(
 	event recordings.FactoryEvent,
 	provenance []recordings.RecordingSecret,
 ) error {
+	if recorder.bindErr != nil {
+		return recorder.bindErr
+	}
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
 	}

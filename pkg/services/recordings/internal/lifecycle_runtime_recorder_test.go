@@ -204,6 +204,7 @@ type stubRecordingLifecycle struct {
 	beginErr        error
 	beginRequest    recordings.BeginRecordingRequest
 	appendErr       error
+	appendErrorAt   int
 	appendCalls     int
 	stopCalls       int
 	stopErr         error
@@ -228,7 +229,11 @@ func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordin
 func (s *stubRecordingLifecycle) AppendEvent(request recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
 	s.appendCalls++
 	s.appendRequests = append(s.appendRequests, request)
-	return recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{AcceptedEvents: s.appendCalls}}, s.appendErr
+	var err error
+	if s.appendErrorAt == 0 || s.appendCalls == s.appendErrorAt {
+		err = s.appendErr
+	}
+	return recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{AcceptedEvents: s.appendCalls}}, err
 }
 
 func (s *stubRecordingLifecycle) RecordFailure(request recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
@@ -258,6 +263,38 @@ func (s *stubRecordingLifecycle) Status(recordings.LifecycleStatusRequest) (reco
 }
 
 var _ recordings.RecordingLifecycle = (*stubRecordingLifecycle)(nil)
+
+func TestLifecycleRuntimeRecorderBindAbortsOnBufferedEventFailure(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
+	appendErr := errors.New("buffered history append failed")
+	stopErr := errors.New("writer stop failed")
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{Status: recordings.LifecycleStatus{RecordingID: "buffered-history"}},
+		appendErr:   appendErr, appendErrorAt: 2, stopErr: stopErr,
+	}
+	recorder := newLifecycleRecorderForTest(t, startedAt, "retained.json")
+	for _, id := range []string{"rejected-event", "later-event"} {
+		recorder.RecordEvent(factorydefinitions.FactoryEvent{Id: id, Payload: []byte(`{}`)})
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: "buffered-session"}
+	if err := recorder.BindRecordingLifecycle(lifecycle, scope); !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+		t.Fatalf("bind = %v, want buffered append and cleanup causes", err)
+	}
+	recorder.RecordEvent(factorydefinitions.FactoryEvent{Id: "after-abort", Payload: []byte(`{}`)})
+	for _, err := range []error{
+		recorder.BindRecordingLifecycle(lifecycle, scope), recorder.Flush(),
+		recorder.Finalize(startedAt.Add(time.Minute)), recorder.Err(),
+	} {
+		if !errors.Is(err, appendErr) || !errors.Is(err, stopErr) {
+			t.Fatalf("operation after aborted bind = %v, want preserved causes", err)
+		}
+	}
+	if lifecycle.appendCalls != 2 || lifecycle.stopCalls != 1 || lifecycle.flushCalls != 0 || lifecycle.finishCalls != 0 {
+		t.Fatalf("aborted binding calls: append=%d stop=%d flush=%d finish=%d",
+			lifecycle.appendCalls, lifecycle.stopCalls, lifecycle.flushCalls, lifecycle.finishCalls)
+	}
+}
 
 func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *testing.T) {
 	t.Parallel()
