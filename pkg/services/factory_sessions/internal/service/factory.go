@@ -65,6 +65,7 @@ type Root struct {
 	automationService              automations.Service
 	recordingsService              recordings.Service
 	recordingsRuntime              recordings.RuntimeScopeService
+	recordingProjections           recordings.ProjectionService
 	replayInputs                   recordings.ReplayInputLoader
 	webhooksService                webhooks.Service
 	factoryDefinitions             factorydefinitions.Service
@@ -144,6 +145,7 @@ func NewRoot(
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	replayBehavior *recordingreplay.Behavior,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordingProjections recordings.ProjectionService,
 ) (*Root, error) {
 	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
 	if err != nil {
@@ -162,6 +164,7 @@ func NewRoot(
 		factorySessionsRuntimeAssembly: assembly,
 		recordingsService:              recordingsService,
 		recordingsRuntime:              recordingsRuntime,
+		recordingProjections:           recordingProjections,
 		replayInputs:                   recordingsRuntime,
 		webhooksService:                webhooksService,
 		factoryDefinitions:             definitions,

@@ -20,7 +20,7 @@ func TestOperatorConfigPathRequiresExplicitProcessHome(t *testing.T) {
 	}
 }
 
-func TestNewOrderlyRecordingFlushSkipsUnboundRecording(t *testing.T) {
+func TestOrderlyRecordingFlushSkipsUnboundRecording(t *testing.T) {
 	service := &orderlyRecordingService{}
 	tests := map[string]struct {
 		service     recordings.Service
@@ -51,7 +51,7 @@ func TestNewOrderlyRecordingFlushSkipsUnboundRecording(t *testing.T) {
 	}
 }
 
-func TestNewOrderlyRecordingFlushDelegatesSynchronously(t *testing.T) {
+func TestOrderlyRecordingFlushDelegatesSynchronously(t *testing.T) {
 	service := &orderlyRecordingService{}
 	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
 	if operation == nil {
@@ -65,7 +65,7 @@ func TestNewOrderlyRecordingFlushDelegatesSynchronously(t *testing.T) {
 	}
 }
 
-func TestNewOrderlyRecordingFlushPreservesFailure(t *testing.T) {
+func TestOrderlyRecordingFlushPreservesFailure(t *testing.T) {
 	want := errors.New("recording write failed")
 	service := &orderlyRecordingService{err: want}
 	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
@@ -75,7 +75,7 @@ func TestNewOrderlyRecordingFlushPreservesFailure(t *testing.T) {
 	}
 }
 
-func TestNewOrderlyRecordingFlushHonorsCanceledContext(t *testing.T) {
+func TestOrderlyRecordingFlushHonorsCanceledContext(t *testing.T) {
 	service := &orderlyRecordingService{}
 	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
 	ctx, cancel := context.WithCancel(context.Background())

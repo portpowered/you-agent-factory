@@ -82,7 +82,6 @@ type sessionRuntimeOpening struct {
 	canonicalSessionIDGenerated bool
 	sessionSelection            *factorysessions.SessionRuntimeSelection
 	operatorSettingsPath        string
-	recordingProjections        recordings.ProjectionService
 	providerForDurable          providers.Service
 	durableExecution            DurableExecution
 	observations                factoryruntime.SessionObservations
@@ -238,10 +237,6 @@ func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRun
 	}
 	if opening.clock == nil {
 		return fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
-	}
-	opening.recordingProjections = r.recordingsRuntime.Projection()
-	if opening.recordingProjections == nil {
-		return fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
 	}
 	if r.durableOpening == nil {
 		return fmt.Errorf("construct runtime scope: durable execution operation is required")
@@ -606,8 +601,6 @@ func (r *Root) bindSessionOpeningProducts(
 		opening.startupRuntime,
 		sessionRuntime,
 		processRuntime,
-		r.factorySessionsRuntimeAssembly,
-		opening.recordingProjections,
 		opening.configured.Definition.Directory,
 		opening.configured.Runtime.RuntimeInstanceID,
 		opening.sessionSelection.BackendScopeID,
@@ -617,7 +610,6 @@ func (r *Root) bindSessionOpeningProducts(
 	opened.engine = opening.activation.Service
 	opened.activation = opening.activation
 	opened.clock = opening.clock
-	opened.recordings = r.recordingsService
 	opened.orderlyStop = newOrderlyRecordingFlush(
 		r.recordingsService,
 		opened.runtimeInstanceID,
@@ -631,7 +623,6 @@ func (r *Root) bindSessionOpeningProducts(
 		[]recordings.MetadataMismatchWarning(nil),
 		opening.load.ReplayMetadataWarnings...,
 	)
-	opened.recordings = r.recordingsService
 	return opened, nil
 }
 
