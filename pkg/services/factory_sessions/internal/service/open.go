@@ -398,7 +398,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
-	if opening.recordingTargetValidator != nil {
+	if opening.configured.Recordings.RecordPath == selectedPath && opening.recordingTargetValidator != nil {
 		if err := opening.recordingTargetValidator.Validate(); err != nil {
 			return err
 		}
@@ -406,7 +406,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	if err := r.reserveFreshCurrentBoard(ctx, opening); err != nil {
 		return err
 	}
-	if strings.TrimSpace(selectedPath) == "" {
+	if opening.configured.Recordings.RecordPath != selectedPath {
 		if err := r.claimSessionRecordingTarget(ctx, opening, cleanup); err != nil {
 			return err
 		}
@@ -436,7 +436,9 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.initial.Completion = opening.completion
-	if !opening.usesImplicitCurrentBoard() && strings.TrimSpace(opening.configured.Recordings.ResumePath) == "" {
+	// Quarantine starts an empty board. Preserve its existing pre-host
+	// reference-publication failure boundary; no retained history is activated.
+	if (!opening.usesImplicitCurrentBoard() || opening.startupRecovery != nil) && strings.TrimSpace(opening.configured.Recordings.ResumePath) == "" {
 		if err := opening.publishCurrentBoardReference(ctx); err != nil {
 			return err
 		}
@@ -596,7 +598,7 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
 	var startup roles.LifecycleRuntime = sessionRuntime
-	if opening.usesImplicitCurrentBoard() || (opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "") {
+	if (opening.usesImplicitCurrentBoard() && opening.startupRecovery == nil) || (opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "") {
 		startup = &successorBoardStartup{LifecycleRuntime: sessionRuntime, publish: opening.publishCurrentBoardReference}
 	}
 	processRuntime, err := r.processRuntimeFactory.Bind(

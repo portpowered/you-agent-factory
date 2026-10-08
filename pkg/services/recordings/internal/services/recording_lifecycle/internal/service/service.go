@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +50,7 @@ type Service struct {
 	clock           recordings.RecordingClock
 	byID            map[string]*recordingSession
 	targetOwners    map[string]string
+	caseInsensitive bool
 	durableThrough  map[string]recordings.CanonicalEventCursor
 	nextRecordingID int
 }
@@ -73,15 +73,17 @@ func New(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
+	caseInsensitive ...bool,
 ) *Service {
 	return &Service{
-		targets:        targets,
-		writer:         writer,
-		tickers:        tickers,
-		clock:          clock,
-		byID:           make(map[string]*recordingSession),
-		targetOwners:   make(map[string]string),
-		durableThrough: make(map[string]recordings.CanonicalEventCursor),
+		targets:         targets,
+		caseInsensitive: len(caseInsensitive) == 1 && caseInsensitive[0],
+		writer:          writer,
+		tickers:         tickers,
+		clock:           clock,
+		byID:            make(map[string]*recordingSession),
+		targetOwners:    make(map[string]string),
+		durableThrough:  make(map[string]recordings.CanonicalEventCursor),
 	}
 }
 
@@ -209,7 +211,7 @@ func (service *Service) bind(
 		strings.TrimSpace(request.Scope.FactorySessionID) == "" {
 		return recordings.BindRecordingResult{}, recordings.ErrInvalidRecordingScope
 	}
-	targetKey, err := recordingTargetKey(serviceTarget)
+	targetKey, err := service.recordingTargetKey(serviceTarget)
 	if err != nil {
 		return recordings.BindRecordingResult{}, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, serviceTarget, err)
 	}
@@ -447,12 +449,12 @@ func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *
 // Keep the caller's path for persistence and diagnostics, but prevent lexical
 // aliases from acquiring independent writer ownership. Windows targets are
 // conservatively case folded, including on volumes with case-sensitive paths.
-func recordingTargetKey(target string) (string, error) {
+func (service *Service) recordingTargetKey(target string) (string, error) {
 	key, err := filepath.Abs(target)
 	if err != nil {
 		return "", err
 	}
-	if runtime.GOOS == "windows" {
+	if service.caseInsensitive {
 		key = strings.ToLower(key)
 	}
 	return key, nil

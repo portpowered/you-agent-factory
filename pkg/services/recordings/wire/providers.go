@@ -164,8 +164,9 @@ func NewRecordingLifecycleOwner(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
+	caseInsensitive ...bool,
 ) RecordingLifecycleOwner {
-	return recordinglifecyclewire.NewService(targets, writer, tickers, clock)
+	return recordinglifecyclewire.NewService(targets, writer, tickers, clock, caseInsensitive...)
 }
 
 func NewCanonicalLedgerOwner(ledger recordings.Ledger) CanonicalLedgerOwner {

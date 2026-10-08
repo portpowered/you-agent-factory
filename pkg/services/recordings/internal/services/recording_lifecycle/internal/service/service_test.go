@@ -43,7 +43,7 @@ func TestRecordingTargetAliasesShareOwnershipUntilAbort(t *testing.T) {
 			owner := lifecycleservice.New(nil, func(string, recordings.RecordingSnapshot) error {
 				writes++
 				return nil
-			}, nil, fixedRecordingClock{})
+			}, nil, fixedRecordingClock{}, runtime.GOOS == "windows")
 			if _, err := owner.BindRecording(recordings.BindRecordingRequest{
 				RecordingID: "prepared", Artifact: "retained.json",
 			}); err != nil {
@@ -72,7 +72,7 @@ func TestRecordingTargetHasOneOwnerAndAbortReleasesWithoutPublication(t *testing
 	owner := lifecycleservice.New(nil, func(string, recordings.RecordingSnapshot) error {
 		writes++
 		return nil
-	}, nil, fixedRecordingClock{})
+	}, nil, fixedRecordingClock{}, runtime.GOOS == "windows")
 	request := recordings.BindRecordingRequest{
 		RecordingID: "prepared", Artifact: "retained.json",
 		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
@@ -147,7 +147,7 @@ func TestAbortJoinsPublicationBeforeSuccessorBinding(t *testing.T) {
 		close(writeStarted)
 		<-releaseWrite
 		return nil
-	}, nil, fixedRecordingClock{})
+	}, nil, fixedRecordingClock{}, runtime.GOOS == "windows")
 	request := recordings.BindRecordingRequest{
 		RecordingID: "old", Artifact: "shared.json",
 		Scope: recordings.CanonicalEventScope{FactorySessionID: "session-active"},
@@ -194,7 +194,7 @@ func TestFinalizedRecordingCannotOverwriteSuccessorAfterFailedFinalWrite(t *test
 			return writeErr
 		}
 		return nil
-	}, nil, fixedRecordingClock{})
+	}, nil, fixedRecordingClock{}, runtime.GOOS == "windows")
 	request := recordings.StartRecordingRequest{
 		Enabled: true, RecordingID: "old", DeferPeriodic: true,
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-active"},
@@ -289,7 +289,7 @@ func TestLifecycleSnapshotReportsPublicReferenceWhileWriterUsesPrivateTarget(t *
 	owner := lifecycleservice.New(planner, func(path string, _ recordings.RecordingSnapshot) error {
 		writtenPath = path
 		return nil
-	}, nil, fixedRecordingClock{})
+	}, nil, fixedRecordingClock{}, runtime.GOOS == "windows")
 	started, err := owner.StartRecording(recordings.StartRecordingRequest{
 		Enabled: true, RecordingID: "recording-private-target",
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-private-target"},

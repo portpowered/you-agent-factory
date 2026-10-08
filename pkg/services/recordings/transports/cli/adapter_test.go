@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -728,5 +729,48 @@ func TestAdapterResumeRefusesRetainedSuccessor(t *testing.T) {
 		if readErr != nil || string(got) != "retained" {
 			t.Fatalf("refusal changed history: %q, %v", got, readErr)
 		}
+	}
+}
+
+type destinationDeniedInspector struct{ cause error }
+
+func (inspector destinationDeniedInspector) Stat(path string) (fs.FileInfo, error) {
+	if path == "successor.json" {
+		return nil, inspector.cause
+	}
+	return distinctRecordingPathInspector{}.Stat(path)
+}
+
+func TestAdapterResumeDestinationRefusals(t *testing.T) {
+	t.Parallel()
+	cause := &os.PathError{Op: "stat", Path: "successor.json", Err: os.ErrPermission}
+	for _, cell := range []struct {
+		name    string
+		paths   platformfilesystem.PathInspector
+		planned bool
+		cause   error
+	}{
+		{name: "missing inspector"},
+		{name: "target inspection", paths: destinationDeniedInspector{cause: cause}, cause: cause},
+		{name: "planned source alias", planned: true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			request := InvocationRequest{ResumePath: "source.json", RecordPath: "successor.json"}
+			if cell.planned {
+				request.RecordPath = ""
+				request.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+					return recordings.LiveRecordingTarget{ServicePath: "source.json"}, nil
+				})
+			}
+			resolved, err := New(cell.paths).ResolveRecordPathWithContext(context.Background(), request)
+			var diagnostic interface{ CLIErrorCode() string }
+			if err == nil || resolved.ServicePath != "" || !errors.As(err, &diagnostic) || diagnostic.CLIErrorCode() != "RECORDING_SOURCE_CONFLICT" {
+				t.Fatalf("unsafe successor accepted or lost refusal: resolved=%#v err=%v", resolved, err)
+			}
+			if cell.cause != nil && (!errors.Is(err, cell.cause) || !strings.Contains(err.Error(), "successor.json") || !strings.Contains(err.Error(), "permission denied")) {
+				t.Fatalf("target refusal lost safe path/cause identity: %v", err)
+			}
+		})
 	}
 }

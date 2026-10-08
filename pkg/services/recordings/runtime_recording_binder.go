@@ -3,6 +3,8 @@ package recordings
 import (
 	"context"
 	"io"
+
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
 )
 
 // RecordingTargetClaim acquires exclusive destination ownership without
@@ -10,24 +12,14 @@ import (
 // Arguments are the target path and its stable coordination marker path.
 type RecordingTargetClaim func(context.Context, string, string) (io.Closer, error)
 
-// RecordingTargetOwnership protects a live opening before it reads history.
-type RecordingTargetOwnership interface {
-	ClaimRecordingTarget(context.Context, string) (io.Closer, error)
-}
+type RecordingTargetOwnership = recordingcontracts.RecordingTargetOwnership
+type RecordingTargetValidator = recordingcontracts.RecordingTargetValidator
+type RuntimeRecordingStartup = recordingcontracts.RuntimeRecordingStartup
 
-// RecordingTargetValidator is an optional lease capability for checking that
-// a retained input has not changed while startup read and reconstructed it.
-// It detects changes at the check; it is not an atomic publication operation.
-type RecordingTargetValidator interface {
-	Validate() error
-}
-
-// RuntimeRecordingStartup keeps a prepared recording read-only until the
-// owning Factory Session has completed its startup transaction. Aborting
-// before activation must stop without publishing terminal metadata.
-type RuntimeRecordingStartup interface {
-	DeferRecordingPublication()
-	ActivateRecordingPublication(context.Context) error
+// RecordingTargetOptions supplies host path policy and ownership effects from Wire.
+type RecordingTargetOptions struct {
+	Claim           RecordingTargetClaim
+	CaseInsensitive bool
 }
 
 // RuntimeRecordingBinder is implemented by RuntimeRecorder producers that

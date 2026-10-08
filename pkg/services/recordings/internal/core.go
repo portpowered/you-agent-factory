@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +49,7 @@ type combinedService struct {
 	replayInputs           recordings.ReplayInputLoader
 	logger                 logging.Logger
 	targetClaim            recordings.RecordingTargetClaim
+	caseInsensitive        bool
 	targetLeases           map[string]*recordingTargetLease
 }
 
@@ -61,7 +61,7 @@ func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path s
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, path, err)
 	}
-	if runtime.GOOS == "windows" {
+	if service.caseInsensitive {
 		key = strings.ToLower(key)
 	}
 	lease, err := service.targetClaim(ctx, path, key+".recording.lock")
@@ -83,9 +83,11 @@ func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path s
 
 type recordingTargetLease struct {
 	io.Closer
-	path  string
-	owner *combinedService
-	key   string
+	path          string
+	owner         *combinedService
+	key           string
+	publicationMu sync.Mutex
+	published     bool
 }
 
 func (lease *recordingTargetLease) Close() error {
@@ -105,7 +107,7 @@ func (service *combinedService) recordingTargetValidator(path string) recordings
 	if err != nil {
 		return nil
 	}
-	if runtime.GOOS == "windows" {
+	if service.caseInsensitive {
 		key = strings.ToLower(key)
 	}
 	service.recordingMu.Lock()
@@ -117,12 +119,52 @@ func (service *combinedService) recordingTargetValidator(path string) recordings
 }
 
 func (lease *recordingTargetLease) Validate() error {
+	lease.publicationMu.Lock()
+	defer lease.publicationMu.Unlock()
+	return lease.validateUnpublished()
+}
+
+func (lease *recordingTargetLease) validateUnpublished() error {
+	if lease.published {
+		return nil
+	}
 	if validator, ok := lease.Closer.(recordings.RecordingTargetValidator); ok {
 		if err := validator.Validate(); err != nil {
 			return &recordingTargetClaimError{path: lease.path, cause: errors.Join(recordings.ErrRecordingBindingConflict, err)}
 		}
 	}
 	return nil
+}
+
+// FlushRecording validates retained input before the first owned publication.
+// After that boundary the lease protects a writer, not the old input digest.
+// Public flushes can precede CompleteStartup while startup Work is executing.
+func (service *combinedService) FlushRecording(request recordings.FlushRecordingRequest) (recordings.FlushRecordingResult, error) {
+	service.recordingMu.Lock()
+	hasLeases := len(service.targetLeases) != 0
+	service.recordingMu.Unlock()
+	if !hasLeases {
+		return service.Service.FlushRecording(request)
+	}
+	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest(request))
+	if err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	validator := service.recordingTargetValidator(string(status.Status.Artifact))
+	lease, ok := validator.(*recordingTargetLease)
+	if !ok {
+		return service.Service.FlushRecording(request)
+	}
+	lease.publicationMu.Lock()
+	defer lease.publicationMu.Unlock()
+	if err := lease.validateUnpublished(); err != nil {
+		return recordings.FlushRecordingResult{}, err
+	}
+	result, err := service.Service.FlushRecording(request)
+	if err == nil && result.Status.FlushedThrough != nil {
+		lease.published = true
+	}
+	return result, err
 }
 
 type recordingTargetClaimError struct {
@@ -343,7 +385,7 @@ func NewCombinedService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
-	targetClaims ...recordings.RecordingTargetClaim,
+	targetOptions ...recordings.RecordingTargetOptions,
 ) recordings.Service {
 	service := &combinedService{
 		Ledger:                 ledger,
@@ -364,8 +406,9 @@ func NewCombinedService(
 		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
-	if len(targetClaims) == 1 {
-		service.targetClaim = targetClaims[0]
+	if len(targetOptions) == 1 {
+		service.targetClaim = targetOptions[0].Claim
+		service.caseInsensitive = targetOptions[0].CaseInsensitive
 	}
 	return service
 }

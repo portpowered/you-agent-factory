@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
@@ -40,7 +41,7 @@ func provideRecordingsRoot(
 	replayInputs recordings.ReplayInputLoader,
 ) recordings.Service {
 	claim := provideRecordingTargetClaim(edges)
-	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, claim)
+	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, recordings.RecordingTargetOptions{Claim: claim, CaseInsensitive: runtime.GOOS == "windows"})
 	if edges.RecordingsRootObserver != nil {
 		edges.RecordingsRootObserver(service)
 	}
@@ -146,4 +147,8 @@ func provideRecordedSessionInventory(
 
 func provideWorkerWorkAttributionReader(writer recordings.WorkerRecordingWriter, history recordingswire.HistoricalQueryOwner, root *factorysessionwire.Root) recordings.WorkerWorkAttributionReader {
 	return recordingswire.NewWorkerWorkAttributionReader(writer, history, root.CurrentBoardRecordingArtifact)
+}
+
+func provideRecordingLifecycleOwner(targets recordings.LiveRecordingTargetPlanner, writer recordings.RecordingSnapshotWriter, tickers recordings.RecordingFlushTickerFactory, clock recordings.RecordingClock) recordingswire.RecordingLifecycleOwner {
+	return recordingswire.NewRecordingLifecycleOwner(targets, writer, tickers, clock, runtime.GOOS == "windows")
 }
