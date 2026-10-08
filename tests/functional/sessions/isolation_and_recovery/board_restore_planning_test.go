@@ -2,6 +2,8 @@ package isolation_and_recovery_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -13,6 +15,79 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Generations serialize the customer-owned local ~default board. The distinct
+// provider edge proves live planning before failure; one graph serves every
+// plain and resume generation, with isolated home, files and server handles.
+func TestDaemonRestartProbeRestoresFailureAfterPlanning(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+	repo, home := t.TempDir(), t.TempDir()
+	dir := filepath.Join(repo, "factory")
+	if err := os.Rename(support.ScaffoldFactory(t, boardRestorePlanningConfig()), dir); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteAgentConfig(t, dir, "planner", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+	support.WriteAgentConfig(t, dir, "script", "---\ntype: SCRIPT_WORKER\ncommand: synthetic-script\n---\n")
+	for _, name := range []string{"plan", "script"} {
+		support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+	}
+	support.WriteWorkstationConfig(t, dir, "finish", "---\ntype: LOGICAL_MOVE\n---\n")
+	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}
+	var starts atomic.Int32
+	planner := &boardRestorePlannerRunner{entered: make(chan struct{}), release: make(chan struct{})}
+	close(planner.release)
+	script := &boardRestoreScriptRunner{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: planner, ScriptCommandRunner: script,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return apis[starts.Add(1)-1].Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	var before map[string]boardRestoreWorkState
+	var beforeEvents []factoryapi.FactoryEvent
+	sourceCopy := filepath.Join(repo, "same-source-resume.json")
+	for generation, api := range apis {
+		inputs := plainBoardFailureInputs(t, repo, home, 24300+generation, "--dir", dir)
+		if generation == 3 {
+			inputs.Input.Args = append(inputs.Input.Args, "--resume", sourceCopy)
+		}
+		command := support.StartProcessCommand(t, process, inputs.Input)
+		url := restartProbeReadyURL(t, api, command)
+		if generation == 0 {
+			putPlainBoardBatch(t, url, "plan-then-fail", []byte(`{"requestId":"plan-then-fail","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"idea-1","name":"idea","workTypeName":"idea","payload":"synthetic planning"}]}`))
+			support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+				return status.TotalTokens == 3 && status.Categories.Terminal == 2
+			})
+			assertBoardRestorePlanningStates(t, readBoardRestoreStates(t, url))
+			restartProbePost(t, support.SessionWorkURL(url, "~default", "/work/idea-1/move"), []byte(`{"stateName":"failed"}`))
+		}
+		support.WaitForStatus(t, url, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+			return status.TotalTokens == 3 && status.Categories.Terminal == 2 && status.Categories.Failed == 1
+		})
+		board := readBoardRestoreStates(t, url)
+		if board["idea-1"] != (boardRestoreWorkState{"idea", "failed", "FAILED"}) {
+			t.Fatalf("generation %d lost latest failure: %v", generation, board)
+		}
+		events := support.GetFactoryEventsForSessionAt(t, url, "~default")
+		if generation == 0 {
+			before, beforeEvents = board, events
+		} else {
+			if !reflect.DeepEqual(board, before) {
+				t.Fatalf("generation %d changed Work IDs or states: before=%v after=%v", generation, before, board)
+			}
+			assertRestartProbeEventFacts(t, beforeEvents, events)
+		}
+		restartProbeShutdown(t, url, command)
+		if generation == 0 {
+			if err := os.WriteFile(sourceCopy, mustReadSeededReplayArtifact(t, plainBoardSelectedRecording(t, repo)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		assertBoardRestorePlanningCalls(t, 3, planner, script)
+	}
+}
 
 func TestBoardRestoreReproducesFailedAndEscalatedStatesSecondRestorePlanning(t *testing.T) {
 	t.Parallel()
