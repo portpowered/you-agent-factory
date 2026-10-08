@@ -1,4 +1,8 @@
 import { BACKEND_LINT_COMMENT_MARKER } from "./backend-lint-report.mjs";
+import { execFileSync } from "node:child_process";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const BACKEND_LINT_EVENTS = Object.freeze(["pull_request", "merge_group", "push"]);
 // Keep this positive: the workflow must never pass an empty jobs value to
@@ -54,7 +58,7 @@ export async function resolveBackendLintParallelism(
 			};
 		}
 
-		return { ...selection, warning: "" };
+		return { logicalCPUs: selection.logicalCPUs, jobs: selection.logicalCPUs, warning: "" };
 	} catch (error) {
 		return {
 			logicalCPUs: 0,
@@ -105,4 +109,91 @@ export function upsertBackendLintComment(comments, body, options = {}) {
 		return { action: "update", commentId: existing.id, body };
 	}
 	return { action: "create", body };
+}
+
+// Exclusions are intentionally narrow. Anything not known to be independent
+// of compiler/embed or lint inputs selects every optional check.
+export function selectLintInputs({ event = "", baseSha = "", testedSha = "", paths = null } = {}) {
+	const selection = { version: 1, event, baseSha, testedSha, docs: 1, deadcode: 1, directBoundary: 1,
+		reasons: { docs: "conservative", deadcode: "conservative", directBoundary: "conservative" } };
+	if (!["pull_request", "merge_group"].includes(event) || !COMMIT_SHA_PATTERN.test(baseSha)
+		|| !COMMIT_SHA_PATTERN.test(testedSha) || !Array.isArray(paths) || !paths.length) return selection;
+	const isUI = (path) => /^ui\/src\/.+\.(tsx?|css|scss|svg)$/.test(path);
+	const isProse = (path) => path === "README.md" || /^docs\/(?!reference\/).+\.md$/.test(path);
+	const isGo = (path) => path.endsWith(".go");
+	const isDocs = (path) => /^docs\/.+\.md$/.test(path);
+	const known = (path) => isUI(path) || isProse(path) || isGo(path) || isDocs(path);
+	if (paths.some((path) => typeof path !== "string" || !known(path))) return selection;
+	selection.docs = Number(paths.some(isDocs));
+	selection.deadcode = Number(paths.some((path) => isGo(path) || path.startsWith("docs/reference/")));
+	selection.directBoundary = Number(paths.some((path) => /^(internal\/lint\/|tools\/golangcilintplugin\/)/.test(path)));
+	for (const key of ["docs", "deadcode", "directBoundary"]) selection.reasons[key] = selection[key] ? "input" : "unaffected inputs";
+	return selection;
+}
+
+export function validateLintSelection(selection, identity = {}) {
+	const conservative = selection && ["docs", "deadcode", "directBoundary"].every((key) => selection[key] === 1 && selection.reasons?.[key] === "conservative");
+	if (!selection || selection.version !== 1 || !BACKEND_LINT_EVENTS.includes(selection.event)
+		|| (!COMMIT_SHA_PATTERN.test(selection.baseSha) && !(conservative && selection.baseSha === "")) || !COMMIT_SHA_PATTERN.test(selection.testedSha)
+		|| ["docs", "deadcode", "directBoundary"].some((key) => ![0, 1].includes(selection[key])
+			|| typeof selection.reasons?.[key] !== "string" || !selection.reasons[key].trim())
+		|| (identity.testedSha && selection.testedSha !== identity.testedSha)
+		|| (identity.event && selection.event !== identity.event)
+		|| (selection.event === "push" && [selection.docs, selection.deadcode, selection.directBoundary].includes(0))) {
+		throw new Error("invalid or mismatched lint input selection");
+	}
+	return selection;
+}
+
+export function readLintInputPaths(baseSha, testedSha, git = execFileSync) {
+	if (!COMMIT_SHA_PATTERN.test(baseSha) || !COMMIT_SHA_PATTERN.test(testedSha)) return null;
+	try {
+		// --no-renames reports both old deletion and new addition, including
+		// renames out of an input tree; NUL separation preserves unusual names.
+		return git("git", ["diff", "--no-renames", "--name-only", "-z", baseSha, testedSha, "--"], { encoding: "utf8" })
+			.split("\0").filter(Boolean);
+	} catch { return null; }
+}
+
+export function pathsMayBeEmbedded(paths, testedSha, git = execFileSync) {
+	try {
+		// A cheap Git read guards otherwise independent UI/prose inputs against
+		// newly authored embeds. Inspect all tags conservatively, without loading
+		// Go packages again. Quoted/complex patterns are never grounds to skip.
+		const records = git("git", ["grep", "-z", "--full-name", "-e", "^[[:space:]]*//go:embed ", testedSha, "--", "*.go"], { encoding: "utf8" });
+		for (const record of records.split("\n").filter(Boolean)) {
+			const separator = record.indexOf("\0");
+			if (separator < 0 || !record.startsWith(testedSha + ":")) return true;
+			const directory = dirname(record.slice(testedSha.length + 1, separator));
+			const relative = paths.filter((path) => directory === "." || path.startsWith(directory + "/"))
+				.map((path) => directory === "." ? path : path.slice(directory.length + 1));
+			if (!relative.length) continue;
+			const patterns = record.slice(separator + 1).trim().replace(/^\/\/go:embed\s+/, "").split(/\s+/);
+			for (let pattern of patterns) {
+				pattern = pattern.replace(/^all:/, "");
+				if (/[\[\]"`\\]/.test(pattern)) return true;
+				const expression = new RegExp("^" + pattern.replace(/[.+^${}()|]/g, "\\$&").replaceAll("*", "[^/]*").replaceAll("?", "[^/]") + "$");
+				if (relative.some((path) => path.split("/").some((_, index, parts) => expression.test(parts.slice(0, index + 1).join("/"))))) return true;
+			}
+		}
+		return false;
+	} catch (error) { return error.status !== 1; }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+	try {
+		const args = process.argv.slice(2);
+		const value = (name) => { const index = args.indexOf(name); if (index < 0 || args[index + 1] === undefined) throw new Error(`missing ${name}`); return args[index + 1]; };
+		if (!args.includes("--select-inputs")) throw new Error("expected --select-inputs");
+		const event = value("--event"), baseSha = value("--base"), testedSha = value("--head"), output = value("--output");
+		let paths = readLintInputPaths(baseSha, testedSha);
+		if (paths?.length && pathsMayBeEmbedded(paths, testedSha)) paths = null;
+		const selection = selectLintInputs({ event, baseSha, testedSha, paths });
+		// Unavailable Git metadata must still produce an all-selected record.
+		mkdirSync(dirname(resolve(output)), { recursive: true });
+		writeFileSync(output, JSON.stringify(selection, null, 2) + "\n");
+		console.log(JSON.stringify(selection));
+		if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT,
+			`docs=${selection.docs}\ndeadcode=${selection.deadcode}\ndirect_boundary=${selection.directBoundary}\n`);
+	} catch (error) { console.error(error.message); process.exitCode = 1; }
 }

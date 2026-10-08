@@ -257,10 +257,12 @@ func (a *Assembly) configureRestoredWorldState(
 		spec.SkipRestoredDispatchReconciliation = true
 		return nil
 	}
-	// Live daemon openings supply detached current-board state explicitly.
-	if restoredWorldState != nil {
+	// A snapshot without event history remains a supported opening input. When
+	// current-board history is available, reconstruct it through the same live
+	// continuation path as explicit resume: the historical view has tick ordering
+	// semantics that can select stale predecessor state after a daemon restart.
+	if restoredWorldState != nil && len(restoredEventHistory) == 0 {
 		spec.RestoredWorldState = restoredWorldState
-		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEventHistory)
 		return nil
 	}
 	// Resume is a live continuation: reconstruct the successor's starting
@@ -270,7 +272,10 @@ func (a *Assembly) configureRestoredWorldState(
 	if err != nil {
 		return err
 	}
-	if resumeInput != nil {
+	if resumeInput == nil && len(restoredEventHistory) > 0 {
+		restoredEvents = restoredEventHistory
+	}
+	if resumeInput != nil || len(restoredEventHistory) > 0 {
 		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
 	}
 	restored, err := reconstructRestoredWorldStateForResume(recordingsRuntime, restoredEvents)
@@ -342,7 +347,27 @@ func reconstructRestoredWorldStateForResume(
 	opening recordings.RuntimeScopeService,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
-	return reconstructRestoredWorldStateEvents(opening, normalizeRestoredEventTicks(events))
+	return reconstructRestoredWorldStateEvents(opening, normalizeContinuationEventTicks(events))
+}
+
+// Live continuation consumes the complete append-ordered ledger. A quiescent
+// plain restart need not emit a dispatch interruption or a session resume, so
+// its logical clock reset cannot depend on either marker. Clamp a detached
+// projection's ticks while retaining the original prefix and sequence metadata.
+// Historical replay keeps its selected-tick semantics in the separate path.
+func normalizeContinuationEventTicks(events []factorydefinitions.FactoryEvent) []factorydefinitions.FactoryEvent {
+	normalized := normalizeRestoredEventTicks(events)
+	detached := false
+	for index := 1; index < len(normalized); index++ {
+		if normalized[index].Context.Tick < normalized[index-1].Context.Tick {
+			if !detached {
+				normalized = cloneFactoryEvents(normalized)
+				detached = true
+			}
+			normalized[index].Context.Tick = normalized[index-1].Context.Tick
+		}
+	}
+	return normalized
 }
 
 func reconstructRestoredWorldStateEvents(

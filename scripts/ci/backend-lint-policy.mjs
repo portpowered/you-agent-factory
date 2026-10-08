@@ -17,7 +17,7 @@ export const BACKEND_LINT_REQUIRED_TARGETS = Object.freeze({
 		ownerOrLane: "Shared repository lint",
 	},
 	deadcode: {
-		reason: "Exact normalized backend dead-code finding set: the committed baseline is the sole durable tolerance source, and the analyzer must run on every Backend Lint report.",
+		reason: "Exact normalized backend dead-code finding set: the committed baseline is the sole durable tolerance source; selected inputs and legacy reports require the analyzer.",
 		ownerOrLane: "Backend dead-code gate",
 	},
 });
@@ -37,7 +37,7 @@ function allowanceStatus(target, allowance) {
 		: "exceeded";
 }
 
-export function evaluateBackendLintPolicy(targets) {
+export function evaluateBackendLintPolicy(targets, selection = null) {
 	const failures = [];
 	const evaluatedTargets = targets.map((target) => {
 		const allowance = BACKEND_LINT_ALLOWANCES[target.name];
@@ -70,7 +70,15 @@ export function evaluateBackendLintPolicy(targets) {
 		}
 	}
 
-	const requiredTargets = Object.entries(BACKEND_LINT_REQUIRED_TARGETS).map(([name, requirement]) => {
+	const requirements = { ...BACKEND_LINT_REQUIRED_TARGETS };
+	if (selection) {
+		if (selection.deadcode === 0) delete requirements.deadcode;
+		if (selection.docs === 1) requirements["docs-reference-check"] = { reason: "Selected documentation inputs must be checked without allowance.", ownerOrLane: "Documentation lint" };
+		for (const [name, key] of [["deadcode", "deadcode"], ["docs-reference-check", "docs"]]) {
+			if (selection[key] === 0 && targets.some((target) => target.name === name)) failures.push(`${name} was declared skipped but was observed.`);
+		}
+	}
+	const requiredTargets = Object.entries(requirements).map(([name, requirement]) => {
 		const target = evaluatedTargets.find((item) => item.name === name);
 		if (BACKEND_LINT_ALLOWANCES[name]) {
 			failures.push(`${name} is gated with no allowance but a baseline allowance was recorded for it; remove one of the two entries.`);

@@ -89,8 +89,8 @@ original terminal state and one origin-preserving project-report. The existing
 tag match wakes only the waiting owning lead; reports wait while it is busy.
 The lead reviews/edits the draft against immutable authority and live ownership,
 then submits with a verified receipt or records a reason and release event in
-progress.md. Request/origin deduplication and the existing two-successor recovery
-budget still apply. Untagged loopbacks retain their own dry-run/submission/receipt
+progress.md. Request/origin deduplication and recovery lineage still apply;
+attempts are positive integers with no ceiling. Untagged loopbacks retain dry-run/submission/receipt
 or accepted hold and cannot wake a tagged peer Project.
 
 Activate config and prompts together after independent validation and merge.

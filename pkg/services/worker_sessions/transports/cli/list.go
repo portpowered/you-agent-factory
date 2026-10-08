@@ -45,18 +45,25 @@ type ListConfig struct {
 	Output        io.Writer
 	Diagnostics   io.Writer
 	HTTP          clihttp.Protocol
+	clock         clihttp.Clock
 }
 
 // NewList returns the composition-facing list operation bound to one HTTP
-// protocol.
-func NewList(transport clihttp.Protocol) func(ListConfig) error {
+// protocol and observation clock.
+func NewList(transport clihttp.Protocol, clock clihttp.Clock) func(ListConfig) error {
 	return func(config ListConfig) error {
 		config.HTTP = transport
+		config.clock = clock
 		return list(config)
 	}
 }
 
 func list(config ListConfig) error {
+	started := config.clock.Now()
+	defer func() {
+		clidiag.Printf(config.Diagnostics, config.Debug,
+			"worker sessions list command durationMicros=%d", config.clock.Now().Sub(started).Microseconds())
+	}()
 	config.WorkID = strings.TrimSpace(config.WorkID)
 	config.Scope = strings.TrimSpace(config.Scope)
 	config.History = strings.TrimSpace(config.History)
@@ -78,21 +85,8 @@ func list(config ListConfig) error {
 	if err != nil {
 		return err
 	}
-	clidiag.Printf(
-		config.Diagnostics,
-		config.Verbose || config.Debug,
-		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
-		endpoint.Path,
-		endpoint.String(),
-		config.Server,
-		clidiag.SessionLabel(config.SessionID),
-		config.WorkID,
-		config.Scope,
-		len(config.States),
-	)
-
 	var result factoryapi.ListWorkerSessionsResponse
-	response, requestErr := config.HTTP.GetJSON(config.Context, endpoint.String(), &result)
+	response, requestErr := requestWorkerSessionList(config, endpoint, &result)
 	if requestErr != nil {
 		clidiag.Printf(
 			config.Diagnostics,
@@ -123,10 +117,24 @@ func list(config ListConfig) error {
 		response.Duration.Milliseconds(),
 		len(result.Sessions),
 	)
-	if jsonOutput {
-		return writeListOutput(config.Output, result, true)
-	}
-	return writeListOutput(config.Output, result, false)
+	return writeListOutput(config, result, jsonOutput)
+}
+
+func requestWorkerSessionList(config ListConfig, endpoint url.URL, result *factoryapi.ListWorkerSessionsResponse) (clihttp.Response, error) {
+	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
+		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
+		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkID, config.Scope, len(config.States))
+	started := config.clock.Now()
+	response, err := config.HTTP.GetJSON(config.Context, endpoint.String(), result)
+	// The protocol duration ends at headers. The enclosing duration includes
+	// request construction, response consumption and JSON decoding, including a
+	// failed body read. This residual is attribution, not a latency assertion.
+	duration := config.clock.Now().Sub(started)
+	bodyDecodeDuration := max(time.Duration(0), duration-response.Duration)
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list request timing endpointPath=%s headerWaitMicros=%d bodyDecodeMicros=%d totalMicros=%d",
+		endpoint.Path, response.Duration.Microseconds(), bodyDecodeDuration.Microseconds(), duration.Microseconds())
+	return response, err
 }
 
 func validateListConfig(config ListConfig) error {
@@ -259,7 +267,8 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions, PaginationContext: result.PaginationContext})
 }
 
-func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
+func writeListOutput(config ListConfig, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
+	started := config.clock.Now()
 	var rendered bytes.Buffer
 	var err error
 	if jsonOutput {
@@ -267,11 +276,17 @@ func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsRespo
 	} else {
 		err = renderList(&rendered, result)
 	}
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list render durationMicros=%d bytes=%d", config.clock.Now().Sub(started).Microseconds(), rendered.Len())
 	if err != nil {
 		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to render Worker Session list", err)
 	}
-	if _, err := io.Copy(output, &rendered); err != nil {
-		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", err)
+	started = config.clock.Now()
+	written, writeErr := io.Copy(config.Output, &rendered)
+	clidiag.Printf(config.Diagnostics, config.Debug,
+		"worker sessions list write durationMicros=%d bytes=%d", config.clock.Now().Sub(started).Microseconds(), written)
+	if writeErr != nil {
+		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", writeErr)
 	}
 	return nil
 }
@@ -281,16 +296,21 @@ func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsRespo
 // which is a different fact from the factory being unreachable.
 const WorkerSessionListRequestTimeoutCode = "WORKER_SESSION_LIST_REQUEST_TIMEOUT"
 
-// workerSessionsListTransportError classifies a failure that produced no HTTP
-// response: a client deadline reports a timeout, anything else stays unreachable.
+// workerSessionsListTransportError distinguishes connection failures from
+// failures reading a received response and caller cancellation. Keep the cause
+// so central diagnostics can still recognize cancellation and deadlines.
 func workerSessionsListTransportError(endpoint string, cause error) *CLIError {
 	var networkError net.Error
 	if errors.Is(cause, context.DeadlineExceeded) || (errors.As(cause, &networkError) && networkError.Timeout()) {
 		return newCLIError(
 			WorkerSessionListRequestTimeoutCode,
-			fmt.Sprintf("no response from %s before the client request timeout; the factory may still be working, retry or narrow the request", endpoint),
+			fmt.Sprintf("Worker Session list request to %s exceeded the client request timeout; the factory may still be working, retry or narrow the request", endpoint),
 			cause,
 		)
+	}
+	stage := workerSessionsListFailureStage(cause)
+	if errors.Is(cause, context.Canceled) || stage == "body" || stage == "decode" {
+		return newCLIError("WORKER_SESSION_LIST_FAILED", "failed to read Worker Session list", cause)
 	}
 	return newCLIError("FACTORY_UNREACHABLE", fmt.Sprintf("factory not reachable at %s", endpoint), cause)
 }

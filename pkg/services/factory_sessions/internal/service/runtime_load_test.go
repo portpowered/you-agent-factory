@@ -675,10 +675,9 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		runtimeRoot:               root,
 		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        definitions,
-		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+		snapshotSelection: NewRuntimeSnapshotSelection((definitions).ResolveRuntimeSnapshot, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
 			return replayRuntimeConfigStub{factoryDir: "/recorded"}, nil
-		},
+		}, nil, nil, nil),
 	}
 
 	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{

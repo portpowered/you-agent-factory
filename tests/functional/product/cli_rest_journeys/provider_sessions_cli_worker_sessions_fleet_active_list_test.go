@@ -270,7 +270,7 @@ func (a activeFleetFixture) assertCanceledRead(t *testing.T, ctx context.Context
 		if err == nil || strings.TrimSpace(canceledInputs.Stdout()) != "" {
 			t.Fatalf("canceled fleet read returned success: err=%v stdout=%s", err, canceledInputs.Stdout())
 		}
-		assertFleetJSONErrorCode(t, []byte(canceledInputs.Stderr()), "FACTORY_UNREACHABLE", "canceled fleet read")
+		assertFleetJSONErrorCode(t, []byte(canceledInputs.Stderr()), "WORKER_SESSION_LIST_FAILED", "canceled fleet read")
 	case <-ctx.Done():
 		t.Fatal("canceled CLI read did not join")
 	}

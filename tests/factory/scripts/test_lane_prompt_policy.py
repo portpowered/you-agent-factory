@@ -116,6 +116,29 @@ do not reset the rejection marker.
 """
 
 
+RECOVERY = {
+    'project-lead': '''visit_cap_with_progress breaker_one_blocker deterministic_failure
+positive integer with no ceiling; reconcile with the same request ID.
+tags.recovery-worktree uses a normalized repo-relative managed path.
+Bind replacements by targetWorkId within the evidenced failed DEPENDS_ON closure.
+operatorOverride repair remain forbidden even after operator answers.
+Keep about 2,000 changed lines (added plus deleted).''',
+    'project-lead-wake': '''Apply the lead's Corrected successor recovery procedure.
+positive integer with no ceiling; targetWorkId; reconcile with the same request ID.''',
+    'project-lead-checkin': '''Apply the lead's Corrected successor recovery procedure.
+positive integer with no ceiling; targetWorkId; reconcile with the same request ID.''',
+    'plan': '''forward recovery exactly to context.recovery.
+Preserve recovery-worktree tags and the same normalized repo-relative path.
+originalLaneWorkId; positive integer (not bool), with no ceiling.''',
+    'process': '''Select tasks/todo/ from context.recovery.workspace; never create a second PR.
+Ordinary input without the tag continues to use root prd.json.
+Preserve positive integer attempt, with no ceiling.''',
+    'review': '''select tasks/todo/ from context.recovery.workspace; never create a second PR.
+Ordinary input without this tag keeps root prd.json.
+Preserve positive integer attempt, with no ceiling.''',
+}
+
+
 class LanePromptPolicyTests(unittest.TestCase):
     def test_mission_compliant_and_wrapped_policy(self):
         self.assertEqual(policy.check_mission_policy(MISSION), [])
@@ -371,8 +394,7 @@ class LanePromptPolicyTests(unittest.TestCase):
         self.assertTrue(any(r.startswith('process:entry:') for r in results))
 
     def test_recovery_diagnostics_require_each_owned_policy(self):
-        prompts = {owner: '\n'.join(clause for _, clause in rules)
-                   for owner, rules in policy.RECOVERY_RULES.items()}
+        prompts = dict(RECOVERY)
         self.assertEqual(policy.check_recovery_policy(prompts), [])
         for owner, rules in policy.RECOVERY_RULES.items():
             for name, clause in rules:
@@ -382,10 +404,32 @@ class LanePromptPolicyTests(unittest.TestCase):
                     self.assertTrue(any(result.startswith(f'{owner}:recovery-{name}:')
                                         for result in policy.check_recovery_policy(changed)))
 
-    def test_wrapped_recovery_policy_keeps_diagnosis_budget_and_binding(self):
-        prompts = {owner: '\n'.join(clause for _, clause in rules).replace(' ', '\n')
-                   for owner, rules in policy.RECOVERY_RULES.items()}
+    def test_wrapped_recovery_policy_keeps_positive_attempt_diagnosis_and_binding(self):
+        prompts = {owner: text.replace(' ', '\n') for owner, text in RECOVERY.items()}
         self.assertEqual(policy.check_recovery_policy(prompts), [])
+
+    def test_recovery_ceiling_conflicts_even_beside_valid_policy(self):
+        instructions = (
+            'at most two accepted successors per original lineage',
+            'Only 2 successors are allowed.',
+            'Apply the two-successor lineage budget.',
+            'Validate attempt 1/2 (not bool).',
+            'Set attempt to integer 1 or 2.',
+            'attempt must be integer 1 or 2.',
+            'This is the last-successor rule.',
+            'Admit the final successor.',
+            'Exhausted lineage takes a hold.',
+            "Do not reset the original lineage's attempt budget.",
+            'Never assume unused budget.',
+        )
+        for owner in RECOVERY:
+            for instruction in instructions:
+                for text in (instruction, instruction.replace(' ', '\n')):
+                    with self.subTest(owner=owner, instruction=text):
+                        prompts = dict(RECOVERY)
+                        prompts[owner] += '\n' + text
+                        self.assertEqual(policy.check_recovery_policy(prompts),
+                                         [f'{owner}:recovery-ceiling: conflicting recovery instruction; remove or reconcile it'])
 
 
 if __name__ == '__main__':

@@ -72,7 +72,8 @@ RECOVERY_RULES = {
         ('diagnosis', 'visit_cap_with_progress'),
         ('breaker', 'breaker_one_blocker'),
         ('deterministic', 'deterministic_failure'),
-        ('budget', 'at most two accepted successors per original lineage'),
+        ('attempt', 'positive integer'),
+        ('uncapped', 'with no ceiling'),
         ('idempotency', 'with the same request ID'),
         ('adoption', 'tags.recovery-worktree'),
         ('relative-path', 'normalized repo-relative managed path'),
@@ -83,13 +84,15 @@ RECOVERY_RULES = {
     ),
     'project-lead-wake': (
         ('recovery', "lead's Corrected successor recovery procedure"),
-        ('budget', 'at most two accepted successors'),
+        ('attempt', 'positive integer'),
+        ('uncapped', 'with no ceiling'),
         ('binding', 'targetWorkId'),
         ('idempotency', 'with the same request ID'),
     ),
     'project-lead-checkin': (
         ('recovery', "lead's Corrected successor recovery procedure"),
-        ('budget', 'At most two accepted successors per original lineage'),
+        ('attempt', 'positive integer'),
+        ('uncapped', 'with no ceiling'),
         ('binding', 'targetWorkId'),
         ('idempotency', 'with the same request ID'),
     ),
@@ -98,21 +101,35 @@ RECOVERY_RULES = {
         ('tag', 'recovery-worktree tags'),
         ('relative-path', 'same normalized repo-relative'),
         ('lineage', 'originalLaneWorkId'),
-        ('attempt', 'attempt 1/2 (not bool)'),
+        ('attempt', 'positive integer (not bool)'),
+        ('uncapped', 'with no ceiling'),
     ),
     'process': (
+        ('attempt', 'positive integer'),
+        ('uncapped', 'with no ceiling'),
         ('packet', 'Select tasks/todo/'),
         ('adoption', 'context.recovery.workspace'),
         ('same-pr', 'never create a second PR'),
         ('ordinary', 'without the tag continues to use root prd.json'),
     ),
     'review': (
+        ('attempt', 'positive integer'),
+        ('uncapped', 'with no ceiling'),
         ('packet', 'select tasks/todo/'),
         ('adoption', 'context.recovery.workspace'),
         ('same-pr', 'never create a second PR'),
         ('ordinary', 'without this tag keeps root prd.json'),
     ),
 }
+
+RECOVERY_CONFLICTS = (
+    ('ceiling', r'two[- ]successor|(?:at most|only|maximum of) (?:two|2) (?:accepted )?successors'
+     r'|attempt(?:s)? (?:1/2|(?:(?:must be|to) )?(?:integer )?1 or 2)'
+     r'|last[- ]successor|(?:final|last) (?:accepted )?successor'
+     r'|attempt budget'
+     r'|(?:exhausted|unused)[^.]* (?:lineage|budget)'
+     r'|(?:lineage|attempt) (?:has|have)[^.]* (?:cap|ceiling)'),
+)
 
 
 def check_recovery_policy(prompts):
@@ -123,6 +140,9 @@ def check_recovery_policy(prompts):
         for name, clause in rules:
             if clause not in normalized:
                 diagnostics.append(f'{owner}:recovery-{name}: missing policy clause: {clause}')
+        for name, pattern in RECOVERY_CONFLICTS:
+            if re.search(pattern, normalized, re.IGNORECASE):
+                diagnostics.append(f'{owner}:recovery-{name}: conflicting recovery instruction; remove or reconcile it')
     return diagnostics
 MAILBOX_RULES = (
     ('lead-first', 'address the request to its project lead first'),

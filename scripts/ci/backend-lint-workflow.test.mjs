@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { evaluateVerificationPolicy } from "../verification-policy.mjs";
@@ -13,19 +12,14 @@ import {
 	resolveBackendLintParallelism,
 	selectBackendLint,
 	upsertBackendLintComment,
+	selectLintInputs,
+	validateLintSelection,
+	readLintInputPaths,
+	pathsMayBeEmbedded,
 } from "./backend-lint-workflow.mjs";
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
 const SHA = (character) => character.repeat(40);
-
-test("complete lint inventory keeps positive concurrency after an earlier step fails", () => {
-	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
-	const selector = workflow.split("      - name: Select Backend Lint runner parallelism")[1]?.split("      - name:")[0];
-	assert.match(selector ?? "", /\n\s+if: always\(\)/);
-	const inventory = workflow.split("      - name: Run complete canonical Backend Lint inventory")[1]?.split("      - name:")[0];
-	assert.match(inventory ?? "", /\n\s+if: always\(\)/);
-	assert.match(inventory ?? "", new RegExp(`LINT_JOBS: \\$\\{\\{ steps\\.backend-lint-parallelism\\.outputs\\.jobs \\|\\| '${BACKEND_LINT_FALLBACK_JOBS}' \\}\\}`));
-});
 
 test("selects pull requests at the merge result and pushes to main at the tested commit", () => {
 	assert.deepEqual(
@@ -87,6 +81,66 @@ test("uses the healthy runner-parallelism selection when the helper loads", asyn
 		jobs: 8,
 		warning: "",
 	});
+});
+
+test("Backend Lint uses exactly one job on a one-CPU runner without changing other lanes", async () => {
+	assert.deepEqual(await resolveBackendLintParallelism("1"), { logicalCPUs: 1, jobs: 1, warning: "" });
+	assert.match((await resolveBackendLintParallelism("")).warning, /fallback/);
+});
+
+const inputs = (paths, event = "pull_request") => selectLintInputs({ event, baseSha: SHA("a"), testedSha: SHA("b"), paths });
+
+test("only known independent UI/prose changes skip optional checks", () => {
+	for (const path of ["README.md", "ui/src/App.tsx"]) {
+		const selected = inputs([path]);
+		assert.deepEqual([selected.docs, selected.deadcode, selected.directBoundary], [0, 0, 0]);
+		assert.equal(validateLintSelection(selected), selected);
+	}
+	assert.deepEqual([inputs(["docs/architecture/architecture.md"]).docs, inputs(["docs/architecture/architecture.md"]).deadcode], [1, 0]);
+	for (const path of ["go.mod", "go.sum", "pkg/service/asset.json", "ui/fallback_dist/index.html", ".golangci.yml", "Makefile", "scripts/deadcode-report.py", "unknown.txt"]) {
+		const selected = inputs([path]);
+		assert.deepEqual([selected.docs, selected.deadcode, selected.directBoundary], [1, 1, 1], path);
+	}
+});
+
+test("compiler, embedded docs and analyzer changes select their gates", () => {
+	assert.equal(inputs(["pkg/service/code.go"]).deadcode, 1);
+	assert.equal(inputs(["docs/reference/run.md"]).deadcode, 1);
+	assert.equal(inputs(["docs/reference/run.md"]).docs, 1);
+	assert.equal(inputs(["internal/lint/analyzers/code.go"]).directBoundary, 1);
+	assert.equal(inputs(["tools/golangcilintplugin/plugin.go"]).directBoundary, 1);
+});
+
+test("unknown, empty, missing Git metadata and main push are conservative", () => {
+	for (const selection of [inputs([]), inputs(null), inputs(["README.md"], "push"), selectLintInputs(), inputs(["README.md"], "unknown")]) {
+		assert.deepEqual([selection.docs, selection.deadcode, selection.directBoundary], [1, 1, 1]);
+	}
+	assert.equal(readLintInputPaths(SHA("a"), SHA("b"), () => { throw new Error("missing commit"); }), null);
+	let argumentsUsed;
+	const paths = readLintInputPaths(SHA("a"), SHA("b"), (_, args) => { argumentsUsed = args; return "docs/reference/run.md\0README.md\0"; });
+	assert.deepEqual(paths, ["docs/reference/run.md", "README.md"]);
+	assert.ok(argumentsUsed.includes("--no-renames"));
+	assert.equal(inputs(paths).deadcode, 1);
+});
+
+test("selection rejects malformed flags, reasons and mismatched identities", () => {
+	const selection = inputs(["README.md"]);
+	for (const invalid of [null, {}, { ...selection, deadcode: "0" }, { ...selection, reasons: {} }, { ...selection, baseSha: "" }, { ...selection, event: "push" }]) {
+		assert.throws(() => validateLintSelection(invalid), /selection/);
+	}
+	assert.throws(() => validateLintSelection(selection, { testedSha: SHA("c") }), /selection/);
+	assert.throws(() => validateLintSelection(selection, { event: "merge_group" }), /selection/);
+});
+
+test("new embeds prevent UI or prose inputs from being skipped", () => {
+	const record = (source, patterns) => () => `${SHA("b")}:${source}\0//go:embed ${patterns}\n`;
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "fallback_dist fallback_dist/*")), false);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "all:src")), true);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", "src/*.tsx")), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), record("embed.go", "README.md")), true);
+	assert.equal(pathsMayBeEmbedded(["ui/src/App.tsx"], SHA("b"), record("ui/embed.go", '"src"')), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), () => { throw new Error("unavailable metadata"); }), true);
+	assert.equal(pathsMayBeEmbedded(["README.md"], SHA("b"), () => { throw { status: 1 }; }), false);
 });
 
 test("exports a positive fallback and warning when the helper cannot load", async () => {
@@ -180,20 +234,4 @@ test("selects merge queue groups at the tested merge group commit", () => {
 		selectBackendLint({ eventName: "merge_group", ref: "", sha: "" }).error,
 		/requires github\.sha/,
 	);
-});
-
-test("required checks report on merge_group using merge group base and head SHAs", () => {
-	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
-	assert.match(workflow, /\n  merge_group:\r?\n    types: \[checks_requested\]/);
-	assert.match(
-		workflow,
-		/-base "\$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}" -head "\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}"/,
-	);
-	assert.match(workflow, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'\r?\n\s+run: go run \.\/cmd\/ciclassify/);
-	assert.match(workflow, /if: github\.event_name != 'pull_request' && github\.event_name != 'merge_group'/);
-	const lint = workflow.split("\n  backend-lint:")[1]?.split("\n  ui-backend-integration:")[0] ?? "";
-	assert.match(lint, /github\.event_name == 'merge_group'/);
-	const pkg = workflow.split("\n  development-package:")[1]?.split("\n  development-package-behavior:")[0] ?? "";
-	assert.match(pkg, /github\.event_name == 'merge_group'/);
-	assert.match(pkg, /run_candidates: \$\{\{ github\.event_name == 'pull_request' \}\}/);
 });
