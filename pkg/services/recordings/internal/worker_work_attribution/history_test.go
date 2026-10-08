@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -213,6 +214,9 @@ func TestRetainedNamesConcurrentReadsAndEviction(t *testing.T) {
 		})
 	}
 	readers.Wait()
+	if len(query.requests) != 1 {
+		t.Fatalf("unchanged concurrent artifact decoded %d times", len(query.requests))
+	}
 	for index := range maxNameArtifacts + 1 {
 		candidate := page
 		candidate.Catalog.OriginatingArtifact = fmt.Sprintf("artifact-%d.json", index)
@@ -225,5 +229,142 @@ func TestRetainedNamesConcurrentReadsAndEviction(t *testing.T) {
 	got, err := reader.readWorkerFactoryNames(t.Context(), page)
 	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != calls+1 {
 		t.Fatalf("evicted artifact retry = %+v, %v", got, err)
+	}
+}
+
+type gatedNamesQuery struct {
+	canonicalQueryFake
+	entered chan struct{}
+	release chan struct{}
+}
+
+type observedWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (ctx *observedWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.waiting) })
+	return ctx.Context.Done()
+}
+
+func (f *gatedNamesQuery) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, payload []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	f.entered <- struct{}{}
+	<-f.release
+	return f.canonicalQueryFake.DecodeHistoricalEvents(request, payload)
+}
+
+func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &gatedNamesQuery{
+		canonicalQueryFake: canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")},
+		entered:            make(chan struct{}, 3), release: make(chan struct{}),
+	}
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(query.release) }) }
+	t.Cleanup(unblock)
+	read := make(chan struct{}, 3)
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		read <- struct{}{}
+		return []byte("same"), nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	waiter := &observedWaitContext{Context: ctx, waiting: make(chan struct{})}
+	result := make(chan error, 3)
+	invoke := func(ctx context.Context) {
+		got, err := reader.readWorkerFactoryNames(ctx, page)
+		if err == nil && got.names["work"] != "Alpha" {
+			err = fmt.Errorf("name = %q", got.names["work"])
+		}
+		result <- err
+	}
+	go invoke(t.Context())
+	<-query.entered
+	<-read
+	go invoke(waiter)
+	<-read
+	select {
+	case <-waiter.waiting:
+	case <-time.After(5 * time.Second):
+		t.Fatal("waiter did not join the shared decode")
+	}
+	cancel()
+	// Failure ceiling only: the leader remains gated until cancellation returns.
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waiter cancellation = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled waiter waited for the unrelated decode")
+	}
+	go invoke(t.Context())
+	<-read
+	unblock()
+	for range 2 {
+		if err := <-result; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(query.requests) != 1 {
+		t.Fatalf("shared decode count = %d", len(query.requests))
+	}
+}
+
+func TestRetainedNamesSurvivesCanceledLeader(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &gatedNamesQuery{
+		canonicalQueryFake: canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")},
+		entered:            make(chan struct{}, 3), release: make(chan struct{}),
+	}
+	var release sync.Once
+	unblock := func() { release.Do(func() { close(query.release) }) }
+	t.Cleanup(unblock)
+	read := make(chan struct{}, 3)
+	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+		read <- struct{}{}
+		return []byte("same"), nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	leader := make(chan error, 1)
+	go func() {
+		_, err := reader.readWorkerFactoryNames(ctx, page)
+		leader <- err
+	}()
+	<-query.entered
+	<-read
+	survivor := make(chan error, 1)
+	waiter := &observedWaitContext{Context: t.Context(), waiting: make(chan struct{})}
+	go func() {
+		got, err := reader.readWorkerFactoryNames(waiter, page)
+		if err == nil && got.names["work"] != "Alpha" {
+			err = fmt.Errorf("surviving name = %q", got.names["work"])
+		}
+		survivor <- err
+	}()
+	<-read
+	select {
+	case <-waiter.waiting:
+	case <-time.After(5 * time.Second):
+		t.Fatal("survivor did not join the shared decode")
+	}
+	cancel()
+	unblock()
+	if err := <-leader; !errors.Is(err, context.Canceled) {
+		t.Fatalf("leader cancellation = %v", err)
+	}
+	if err := <-survivor; err != nil {
+		t.Fatal(err)
+	}
+	got, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != 2 {
+		t.Fatalf("fresh result = %+v, %v; decode count = %d", got, err, len(query.requests))
 	}
 }

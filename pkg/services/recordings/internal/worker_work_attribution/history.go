@@ -28,10 +28,11 @@ type ArtifactHistoryReader struct {
 	readFile     recordings.RecordingReadFile
 	mu           sync.Mutex
 	names        map[historyIdentity]cachedNames
+	decodes      map[nameDecodeKey]*nameDecode
 }
 
 func NewArtifactHistoryReader(query CanonicalHistoryQuery, currentBoard CurrentBoardArtifact, readFile recordings.RecordingReadFile) *ArtifactHistoryReader {
-	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, names: make(map[historyIdentity]cachedNames)}
+	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, names: make(map[historyIdentity]cachedNames), decodes: make(map[nameDecodeKey]*nameDecode)}
 }
 
 func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, page recordings.WorkerCapturedActivityPage) (recordings.HistoricalRecordingQueryResult, error) {
@@ -70,6 +71,17 @@ type cachedNames struct {
 	projection nameProjection
 }
 
+type nameDecodeKey struct {
+	identity historyIdentity
+	digest   [sha256.Size]byte
+}
+
+type nameDecode struct {
+	done       chan struct{}
+	projection nameProjection
+	err        error
+}
+
 func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page recordings.WorkerCapturedActivityPage) (nameProjection, error) {
 	if err := ctx.Err(); err != nil {
 		return nameProjection{}, err
@@ -99,29 +111,70 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 	}
 	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, string(artifact)}
 	digest := sha256.Sum256(payload)
-	r.mu.Lock()
-	cached, ok := r.names[key]
-	r.mu.Unlock()
-	if ok && cached.digest == digest {
-		return cached.projection, ctx.Err()
+	return r.sharedNames(ctx, nameDecodeKey{key, digest}, identity, payload)
+}
+
+// The leading caller owns the synchronous decode; no detached work needs a
+// lifecycle join. Waiters can cancel independently. If the leader is canceled,
+// a surviving waiter retries with its own context and already-read snapshot.
+// Different source digests never share results, even at the same artifact path.
+func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeKey, identity recordings.HistoricalRecordingIdentity, payload []byte) (nameProjection, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nameProjection{}, err
+		}
+		r.mu.Lock()
+		if cached, ok := r.names[key.identity]; ok && cached.digest == key.digest {
+			r.mu.Unlock()
+			return cached.projection, ctx.Err()
+		}
+		if pending, ok := r.decodes[key]; ok {
+			r.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nameProjection{}, ctx.Err()
+			case <-pending.done:
+				if errors.Is(pending.err, context.Canceled) || errors.Is(pending.err, context.DeadlineExceeded) {
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					return nameProjection{}, err
+				}
+				return pending.projection, pending.err
+			}
+		}
+		pending := &nameDecode{done: make(chan struct{})}
+		r.decodes[key] = pending
+		r.mu.Unlock()
+
+		projection, err := r.decodeNames(ctx, identity, payload)
+		r.mu.Lock()
+		if err == nil {
+			if len(r.names) >= maxNameArtifacts {
+				clear(r.names)
+			}
+			r.names[key.identity] = cachedNames{digest: key.digest, projection: projection}
+		}
+		pending.projection, pending.err = projection, err
+		delete(r.decodes, key)
+		close(pending.done)
+		r.mu.Unlock()
+		return projection, err
 	}
+}
+
+func (r *ArtifactHistoryReader) decodeNames(ctx context.Context, identity recordings.HistoricalRecordingIdentity, payload []byte) (nameProjection, error) {
 	history, err := r.query.DecodeHistoricalEvents(recordings.HistoricalRecordingQueryRequest{Recording: identity, InferFactorySessionScope: true}, payload)
 	if err != nil {
 		return nameProjection{}, err
 	}
-	projection, err := scopedNames(history, page.Catalog.FactorySessionID)
+	projection, err := scopedNames(history, identity.Scope.FactorySessionID)
 	if err != nil {
 		return nameProjection{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nameProjection{}, err
 	}
-	r.mu.Lock()
-	if len(r.names) >= maxNameArtifacts {
-		clear(r.names)
-	}
-	r.names[key] = cachedNames{digest: digest, projection: projection}
-	r.mu.Unlock()
 	return projection, nil
 }
 
