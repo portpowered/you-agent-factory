@@ -70,7 +70,7 @@ func (r *Root) InspectHistoricalApplication(
 			}
 			return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay Sessions routing is unavailable")
 		}
-		release = binder.BindHistoricalExecution(products.historicalReplay.Session.SessionID, products.execution)
+		release = binder.BindHistoricalExecution(products.historicalReplay.Session.SessionID, products.replayExecution)
 	}
 	closeInspection := func() error {
 		defer release()
