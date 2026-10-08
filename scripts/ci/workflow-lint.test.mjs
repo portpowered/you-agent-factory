@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,10 +9,77 @@ import test from "node:test";
 import {
 	discoverWorkflowFiles,
 	runWorkflowLint,
+	validateCIJobGrowth,
+	validateCIJobGrowthFromHistory,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
 	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("CI job guard accepts legacy jobs, deletion and formatting, but rejects added IDs", () => {
+	const baselineWorkflow = "name: CI\njobs:\n  unit:\n    steps:\n      - run: go test -race ./pkg/example\n  legacy:\n    steps: []\n";
+	for (const workflow of [baselineWorkflow, baselineWorkflow.replace("  legacy:\n    steps: []\n", ""),
+		baselineWorkflow.replace("  unit:", "  'unit': # formatting").replaceAll("\n", "\r\n")]) {
+		assert.equal(validateCIJobGrowth({ workflow, baselineWorkflow }).status, "pass");
+	}
+	assert.throws(() => validateCIJobGrowth({ baselineWorkflow, workflow: `${baselineWorkflow}  witness:\n    steps: []\n` }),
+		/added job IDs witness; put checks in their primary suite job or lint instead/);
+	for (const workflow of ["jobs: { unit: {} }", "jobs:\n  <<: *jobs", "jobs:\n  unit: *job", "jobs:\n  unit:\n  unit:\n", "jobs:\njobs:\n"]) {
+		assert.throws(() => validateCIJobGrowth({ workflow, baselineWorkflow }), /CI job guard/);
+	}
+});
+
+test("CI job guard fails closed on absent merge base or unreadable baseline", () => {
+	for (const failure of [{ status: 128 }, { error: new Error("git missing") }, { status: 0, stdout: "" }]) {
+		assert.throws(() => validateCIJobGrowthFromHistory({ spawn: () => failure }), /comparison history unavailable.*fetch full origin\/main/);
+	}
+	let calls = 0;
+	assert.throws(() => validateCIJobGrowthFromHistory({ spawn: () => ++calls === 1 ? { status: 0, stdout: "deadbeef" } : { status: 128 } }),
+		/comparison history unavailable.*\(show\)/);
+});
+
+test("real workflow lint CLI compares isolated Git history and reports added jobs", async (t) => {
+	const actionlint = process.env.ACTIONLINT_BIN || "actionlint";
+	if (spawnSync(actionlint, ["-version"], { windowsHide: true }).error) {
+		t.skip("pinned actionlint is supplied by hosted Workflow proof");
+		return;
+	}
+	const root = await mkdtemp(join(tmpdir(), "workflow-lint-history-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	await mkdir(join(root, "scripts/ci"), { recursive: true });
+	await mkdir(join(root, ".github/workflows"), { recursive: true });
+	for (const file of ["scripts/ci/workflow-lint.mjs", "scripts/ci/verification-plans.mjs", "Makefile"]) {
+		await copyFile(file, join(root, file));
+	}
+	for (const file of discoverWorkflowFiles()) await copyFile(file, join(root, ".github/workflows", file.split(/[\\/]/).at(-1)));
+	const git = (...args) => {
+		const result = spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true });
+		assert.equal(result.status, 0, result.stderr);
+		return result.stdout.trim();
+	};
+	git("init", "--quiet");
+	git("add", ".");
+	git("-c", "user.name=Lint Fixture", "-c", "user.email=lint@example.invalid", "commit", "--quiet", "-m", "baseline");
+	git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+	const cli = () => spawnSync(process.execPath, ["scripts/ci/workflow-lint.mjs", "--actionlint", actionlint], {
+		cwd: root, encoding: "utf8", windowsHide: true,
+	});
+	const workflowPath = join(root, ".github/workflows/ci.yml");
+	const baseline = readFileSync(workflowPath, "utf8");
+	await writeFile(workflowPath, `${baseline}\n# Formatting-only edit\n`);
+	let result = cli();
+	assert.equal(result.status, 0, result.stderr);
+	assert.match(result.stdout, /WORKFLOW_LINT_STATIC_CONTRACTS_OK/);
+	await writeFile(workflowPath, `${baseline}\n  added-witness:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo witness\n`);
+	result = cli();
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /added job IDs added-witness/);
+	await writeFile(workflowPath, baseline);
+	git("update-ref", "-d", "refs/remotes/origin/main");
+	result = cli();
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /comparison history unavailable/);
+});
 
 test("consolidated workflow checker identifies the invalid proof or result mapping", () => {
 	const workflow = `name: fixture

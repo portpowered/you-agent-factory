@@ -316,7 +316,7 @@ serializing API/session journeys that own their state.
 
 Each parallel scenario **MUST** own unique identifiers, routes, ports,
 directories, streams, and fake-edge state. Shared test support **MUST** be safe
-under the race detector. Package setup may be shared, but mutable scenario
+under concurrent execution. Package setup may be shared, but mutable scenario
 state may not leak through it.
 
 A scenario **MUST NOT** test its shared fake, router, ledger, or selector table
@@ -481,14 +481,13 @@ functional, or integration packages and **MUST NOT** run as an accidental part
 of their default suites. Each harness names its workload, environment,
 duration, resource budget, success thresholds, and captured measurements.
 
-Race detection is a correctness gate, not a load test. Changed concurrent code
-and functional support **MUST** receive race coverage in hosted CI's race jobs;
-shared harnesses **SHOULD** also receive a broad scheduled or PR race run.
-Native `-race` does not work on the Windows factory host, so no workstation runs
-it locally, and a race in code a PR does not change is a separate fix that
-never blocks that PR. A race-detector
-`DATA RACE` report is distinct from a timeout caused by slower instrumented
-execution. Both must be addressed at their root cause.
+CI **MUST NOT** run tests with `-race`; apply the repository's
+[CI pipeline policy](../../../docs/internal/standards/code/general-backend-standards.md#ci-pipeline-policy).
+Changed concurrent code and functional support **MUST** retain scenario-owned
+state, deterministic synchronization, and focused concurrent or repeat-run
+correctness proof. Dedicated stress coverage **SHOULD** protect shared harnesses
+when needed. Native `-race` is unavailable on the Windows factory host.
+Concurrency defects and timeouts **MUST** be addressed at their root cause.
 
 Wall-clock assertions are allowed only for an explicit customer latency
 contract in a controlled performance lane. Ordinary tests **MUST NOT** fail
@@ -543,8 +542,8 @@ dedicated package and resource budget.
 
 Implementers **MUST** reclassify a planned test when repository evidence shows
 the chosen layer violates this standard; that is a plan delta, not permission
-to disguise the test. They **MUST** run focused normal tests locally (race coverage comes from
-hosted CI) and must not weaken assertions to gain parallelism.
+to disguise the test. They **MUST** run focused normal tests locally and must
+not weaken assertions to gain parallelism.
 
 Reviewers **MUST** reject:
 
@@ -560,7 +559,7 @@ Reviewers **MUST** reject:
 - load or stress behavior placed in another test layer.
 
 Review evidence **MUST** identify the behavior proved, layer, dependency
-fidelity, artifact identity where applicable, parallel/race result, and any
+fidelity, artifact identity where applicable, concurrent/repeat-run result, and any
 remaining unproven edge. A generic suite pass is not sufficient evidence by
 itself.
 
@@ -577,7 +576,7 @@ For every slow package, the auditor **MUST**:
 
 1. capture package and leaf-subtest timings in normal execution;
 2. repeat the focused package enough times to distinguish a stable cost from
-   host variance; race coverage comes from hosted CI;
+   host variance; use focused concurrent or repeat-run correctness proof;
 3. count executable builds, subprocess launches, application construction
    sites, actual constructed process instances, and immutable edge shapes as
    separate quantities;
@@ -698,7 +697,7 @@ Apply optimizations in this order so speed does not weaken the proof:
    other timing out.
 8. Drain already-retained public event or response heads when available rather
    than waiting for a new live event that may never arrive.
-9. Re-run focused normal tests locally; hosted CI runs the race and broader functional lanes.
+9. Re-run focused normal tests locally; hosted CI runs the broader functional lanes.
    Record before-and-after package and slowest-leaf timings, remaining
    serialization, and the customer invariant that requires it.
 
@@ -724,4 +723,4 @@ replace construction cost with cross-scenario coupling and flakes.
 - Load and stress coverage is isolated in a dedicated suite.
 - Readiness is signal-driven; timeouts are ceilings and no fixed sleep hides a
   race or lifecycle defect.
-- Focused tests pass locally; hosted CI's race coverage and broader gates pass.
+- Focused tests pass locally; hosted CI's broader gates pass.
