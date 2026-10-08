@@ -21,6 +21,47 @@ type namedTargetReserver struct {
 	calls int
 }
 
+func TestFinalizedRecordingCannotOverwriteSuccessorAfterFailedFinalWrite(t *testing.T) {
+	t.Parallel()
+	writeErr := errors.New("controlled final write failure")
+	var published []recordings.RecordingID
+	owner := lifecycleservice.New(nil, func(_ string, snapshot recordings.RecordingSnapshot) error {
+		published = append(published, snapshot.Status.RecordingID)
+		if snapshot.Status.RecordingID == "old" {
+			return writeErr
+		}
+		return nil
+	}, nil, fixedRecordingClock{})
+	request := recordings.StartRecordingRequest{
+		Enabled: true, RecordingID: "old", DeferPeriodic: true,
+		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-active"},
+		Target: recordings.RecordingTargetRequest{Artifact: "retained-board.json"},
+	}
+	if _, err := owner.StartRecording(request); err != nil {
+		t.Fatal(err)
+	}
+	recordEvent(t, owner, "old", activeFlushEvent(1))
+	if _, err := owner.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: "old", FinishedAt: time.Unix(1_700_000_001, 0),
+	}); !errors.Is(err, writeErr) {
+		t.Fatalf("final write = %v, want preserved write error", err)
+	}
+	request.RecordingID = "successor"
+	if _, err := owner.StartRecording(request); err != nil {
+		t.Fatalf("successor start: %v", err)
+	}
+	recordEvent(t, owner, "successor", activeFlushEvent(1))
+	if _, err := owner.FlushRecording(recordings.FlushRecordingRequest{RecordingID: "successor"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.FlushRecording(recordings.FlushRecordingRequest{RecordingID: "old"}); !errors.Is(err, writeErr) {
+		t.Fatalf("old identity flush = %v, want original terminal cause", err)
+	}
+	if want := []recordings.RecordingID{"old", "successor"}; !reflect.DeepEqual(published, want) {
+		t.Fatalf("published identities = %v, want %v", published, want)
+	}
+}
+
 func TestLifecyclePlanLiveRecordingTargetForwardsRequestAndResult(t *testing.T) {
 	t.Parallel()
 	request := recordings.LiveRecordingTargetRequest{
