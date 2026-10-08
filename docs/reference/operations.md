@@ -850,7 +850,7 @@ capture time. The duration includes capture completion and has basis
 `RECORDED_TIMESTAMPS`. Captures without both timestamps leave end and duration
 unavailable. Restart does not create missing timestamps.
 
-Worker Session observations use facts captured by Portos. Captured `tokenUsage`
+Worker Session observations use facts captured by `you`. Captured `tokenUsage`
 remains available after reload when retained usage records are readable. Missing
 counters stay omitted; an explicit zero remains zero.
 
