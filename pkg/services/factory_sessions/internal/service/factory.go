@@ -79,12 +79,9 @@ type Root struct {
 	namedPaths                     factorydefinitions.NamedPathResolver
 	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
-	loadFactory                    factorydefinitions.LoadedFactoryLoader
-	newLoadedFactory               factorydefinitions.LoadedFactorySourceFactory
+	runtimeInputLoading            *RuntimeInputLoading
 	decodeReplayConfig             factorydefinitions.ReplayRuntimeConfigDecoder
-	captureLoadedFactorySnapshot   factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                   factoryruntime.ClockResolver
-	newSessionLogger               factoryruntime.SessionLoggerFactory
 	baseLogger                     *zap.Logger
 	processRuntimeFactory          roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope     operatorsettings.BackendScopeEnsurer
@@ -109,7 +106,6 @@ func NewRoot(
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
 	clock factoryruntime.Clock,
 	providerOverride ProviderOverrideService,
 	submissionRecorder recordings.SubmissionRecorder,
@@ -118,10 +114,8 @@ func NewRoot(
 	namedPaths factorydefinitions.NamedPathResolver,
 	definitions factorydefinitions.Service,
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	runtimeInputLoading *RuntimeInputLoading,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	assembly roles.RuntimeAssembly,
 	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -177,12 +171,9 @@ func NewRoot(
 		namedPaths:                     namedPaths,
 		factoryWorkflows:               factoryWorkflows,
 		workflowPreview:                workflowPreview,
-		loadFactory:                    loadFactory,
-		newLoadedFactory:               newLoadedFactory,
+		runtimeInputLoading:            runtimeInputLoading,
 		decodeReplayConfig:             decodeReplayConfig,
-		captureLoadedFactorySnapshot:   captureLoadedFactorySnapshot,
 		resolveClock:                   resolveClock,
-		newSessionLogger:               newSessionLogger,
 		baseLogger:                     logger,
 		processRuntimeFactory:          processRuntimeFactory,
 		generateSessionID:              generateSessionID,

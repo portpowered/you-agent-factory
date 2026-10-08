@@ -662,18 +662,17 @@ func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.
 		t.Fatalf("construct current source: %v", err)
 	}
 	core, logs := observer.New(zapcore.WarnLevel)
-	warnReplayMetadataMismatches(
-		factoryDir,
-		"recording.replay.json",
-		nil,
-		&factorydefinitions.ReplayArtifact{Factory: artifactFactory},
-		zap.New(core),
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return current, nil
-		},
+	NewRuntimeInputLoading(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return current, nil
+	},
+		factorydefinitionfixtures.NewLoadedSource,
+		runtimeInputUnusedDecoder,
+		runtimeInputReplayFunc(func(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+			panic("unexpected replay read")
+		}),
 		capture,
-		defaults,
-	)
+		runtimeInputSessionLogger,
+		zap.New(core)).warnReplayMetadataMismatches(factoryDir, "recording.replay.json", &factorydefinitions.ReplayArtifact{Factory: artifactFactory}, zap.New(core), defaults)
 	if logs.Len() != 0 {
 		t.Fatalf("equivalent effective config emitted replay metadata warnings: %v", logs.All())
 	}
@@ -709,18 +708,17 @@ func TestWarnReplayMetadataMismatchesReturnsStructuredComponentWarnings(t *testi
 		t.Fatalf("capture recorded source: %v", err)
 	}
 	core, logs := observer.New(zapcore.WarnLevel)
-	warnings := warnReplayMetadataMismatches(
-		factoryDir,
-		"recording.replay.json",
-		nil,
-		&factorydefinitions.ReplayArtifact{Factory: artifactFactory},
-		zap.New(core),
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return current, nil
-		},
+	warnings := NewRuntimeInputLoading(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return current, nil
+	},
+		factorydefinitionfixtures.NewLoadedSource,
+		runtimeInputUnusedDecoder,
+		runtimeInputReplayFunc(func(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+			panic("unexpected replay read")
+		}),
 		capture,
-		operatorconfig.ResolvedDefaults{},
-	)
+		runtimeInputSessionLogger,
+		zap.New(core)).warnReplayMetadataMismatches(factoryDir, "recording.replay.json", &factorydefinitions.ReplayArtifact{Factory: artifactFactory}, zap.New(core), operatorconfig.ResolvedDefaults{})
 	gotKeys := make(map[string]bool, len(warnings))
 	for _, warning := range warnings {
 		gotKeys[warning.Key] = true
@@ -787,12 +785,18 @@ func TestLoadRuntimeRoutesStructurallyValidLegacyReplayToDetachedProjection(t *t
 		state:    recordings.FactoryWorldState{FactoryState: "RUNNING"},
 	}
 
-	loaded, err := LoadRuntime(
-		t.TempDir(), "", "legacy-replay.jsonl", operatorconfig.ResolvedDefaults{}, nil,
-		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
-		nil, nil, nil, loader, nil,
+	loaded, err := NewRuntimeInputLoading(runtimeInputNoCurrentSource,
+		factorydefinitionfixtures.NewLoadedSource,
+		runtimeInputUnusedDecoder,
+		loader,
+		runtimeInputUnusedCapture,
 		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
-	)
+		zap.NewNop()).Load(RuntimeInputLoadRequest{Dir: t.TempDir(),
+		ExecutionBaseDir:     "",
+		ReplayPath:           "legacy-replay.jsonl",
+		OperatorDefaults:     operatorconfig.ResolvedDefaults{},
+		FactoryRootDir:       t.TempDir(),
+		HistoricalInspection: true})
 	if err != nil {
 		t.Fatalf("LoadRuntime: %v", err)
 	}

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"reflect"
@@ -93,7 +92,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.WorkflowPreview,
 		fixture.RuntimeRoot,
 		fixture.ResolveClock,
-		fixture.NewSessionLogger,
 		fixture.Clock,
 		fixture.ProviderOverride,
 		fixture.SubmissionRecorder,
@@ -102,10 +100,8 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.NamedPaths,
 		fixture.Definitions,
 		fixture.RuntimeRouter,
-		fixture.LoadFactory,
-		fixture.NewLoadedFactory,
+		NewRuntimeInputLoading(fixture.LoadFactory, fixture.NewLoadedFactory, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, fixture.CaptureLoadedFactorySnapshot, fixture.NewSessionLogger, fixture.Logger),
 		fixture.DecodeReplayConfig,
-		fixture.CaptureLoadedFactorySnapshot,
 		fixture.Assembly,
 		fixture.DurableOpening,
 		fixture.FactoryScaffoldInitializer,
@@ -158,10 +154,7 @@ func TestNewFactoryRemainsInert(t *testing.T) {
 func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testing.T) {
 	t.Parallel()
 
-	portable, err := recordings.DecodePortableRecording(bytes.NewReader(runtimeLoadPortablePayload(t, nil)))
-	if err != nil {
-		t.Fatalf("decode portable recording: %v", err)
-	}
+	portable := runtimeInputPortableFixture()
 	var events []string
 	calls := 0
 	dependencies := validRuntimeOpeningCollaborators(&calls)

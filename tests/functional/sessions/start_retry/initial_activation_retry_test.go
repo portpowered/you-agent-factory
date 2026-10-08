@@ -73,6 +73,8 @@ func initialOpeningFactoryConfig() map[string]any {
 func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T) {
 	t.Parallel()
 
+	detached := newInitialOpeningScenario(t)
+	inputFailure := newInitialOpeningScenario(t)
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
@@ -96,12 +98,17 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		gatedPath: filepath.Join(canceled.candidateDir, factorydefinitions.InputsDir),
 		gate:      gate, effects: effects,
 	}
+	definitionFiles := &selectedInputFiles{gatedPath: filepath.Join(detached.candidateDir, "factory.json"),
+		failedPath: filepath.Join(inputFailure.candidateDir, "factory.json"),
+		entered:    make(chan struct{}), release: make(chan struct{}), failure: errors.New("selected definition reader unavailable")}
+	t.Cleanup(definitionFiles.unblock)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
+		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
 		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects},
@@ -137,6 +144,14 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		testInitialOpeningChildInvocation(t, sessions, process, child, effects, api.WaitForURL(t))
 	})
 
+	t.Run("selected bytes survive authored changes and peer opening", func(t *testing.T) {
+		t.Parallel()
+		testSelectedInputDetachment(t, sessions, detached, definitionFiles, effects)
+	})
+	t.Run("definition failures preserve peer and allow corrected retry", func(t *testing.T) {
+		t.Parallel()
+		testSelectedInputFailureRetry(t, sessions, inputFailure, definitionFiles)
+	})
 	runInitialOpeningCompatibilityScenarios(t, sessions, process, api.WaitForURL(t), home)
 	for _, recovery := range []string{"retained", "corrupt", "missing"} {
 		t.Run("current board recovery "+recovery, func(t *testing.T) {
@@ -823,4 +838,103 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	testFixedRecordingFault(t, sessions, process, fault)
 	// Execute may also surface the already asserted terminal resource error.
 	command.AcceptError()
+}
+
+// Capture selected bytes at the public loading effect. Only the owned source
+// is gated; independent peers and all production resolution remain concurrent.
+type selectedInputFiles struct {
+	platformfilesystem.Local
+	gatedPath, failedPath string
+	entered, release      chan struct{}
+	failure               error
+	gated, failed         atomic.Bool
+	once                  sync.Once
+}
+
+func (files *selectedInputFiles) unblock() { files.once.Do(func() { close(files.release) }) }
+func (files *selectedInputFiles) ReadFile(path string) ([]byte, error) {
+	if filepath.Clean(path) == files.failedPath && files.failed.CompareAndSwap(false, true) {
+		return nil, files.failure
+	}
+	data, err := os.ReadFile(path)
+	if err == nil && filepath.Clean(path) == files.gatedPath && files.gated.CompareAndSwap(false, true) {
+		close(files.entered)
+		<-files.release
+	}
+	return data, err
+}
+
+func testSelectedInputDetachment(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, files *selectedInputFiles, effects *initialOpeningEffects) {
+	t.Helper()
+	request := scenario.request()
+	base := t.TempDir()
+	request.RuntimeSelection.ExecutionBaseDir = base
+	type outcome struct {
+		result factorysessions.SessionStartResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() { result, err := sessions.Start(t.Context(), request); done <- outcome{result, err} }()
+	select {
+	case <-files.entered:
+	case opened := <-done:
+		t.Fatalf("opening ended before selected read: %#v, %v", opened.result, opened.err)
+	case <-t.Context().Done():
+		t.Fatal("selected source was never read")
+	}
+	t.Cleanup(files.unblock)
+	if err := os.WriteFile(files.gatedPath, []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	peerHistory := scenario.startPeer(t, sessions)
+	files.unblock()
+	opened := <-done
+	if opened.err != nil || opened.result.SessionID != scenario.candidateID {
+		t.Fatalf("selected opening = %#v, %v", opened.result, opened.err)
+	}
+	t.Cleanup(func() {
+		_, err := sessions.Control(context.Background(), factorysessions.SessionControlRequest{SessionID: scenario.candidateID,
+			Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose})
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	observations := effects.forScenario(initialOpeningScenario{candidateDir: base})
+	if observations[filepath.Clean(base)+"|worker.run"] != 1 {
+		t.Fatalf("selected execution base observations = %v", observations)
+	}
+	initialOpeningHistory(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func testSelectedInputFailureRetry(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, files *selectedInputFiles) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	_, err := sessions.Start(t.Context(), request)
+	if !errors.Is(err, files.failure) {
+		t.Fatalf("definition loading lost injected cause: %v", err)
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	selected, err := os.ReadFile(files.failedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(files.failedPath, []byte(`{"name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions.Start(t.Context(), request); err == nil {
+		t.Fatal("invalid definition opened successfully")
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	if err := os.WriteFile(files.failedPath, selected, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startInitialOpeningSession(t, sessions, request)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
 }

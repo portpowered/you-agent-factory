@@ -85,6 +85,7 @@ type (
 	ScriptCommandRunner          = service.ScriptCommandRunner
 	FactoryRuntimeRoot           = service.FactoryRuntimeRoot
 	RuntimeRoot                  = service.RuntimeRoot
+	RuntimeInputLoading          = service.RuntimeInputLoading
 	ModelPullMetricsRecorder     = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem = factorysessioncontracts.InvocationArtifactFileSystem
 	InvocationArtifactExporter   = factorysessioncontracts.InvocationArtifactExporter
@@ -118,7 +119,7 @@ func NewRoot(
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
+
 	clock factoryruntime.Clock,
 	providerOverride ProviderOverrideService,
 	submissionRecorder recordings.SubmissionRecorder,
@@ -127,10 +128,10 @@ func NewRoot(
 	namedPaths factorydefinitions.NamedPathResolver,
 	definitions factorydefinitions.Service,
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+
+	runtimeInputLoading *RuntimeInputLoading,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+
 	assembly RuntimeAssembly,
 	durableOpening *DurableOpening,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -163,7 +164,7 @@ func NewRoot(
 		workflowPreview,
 		runtimeRoot,
 		resolveClock,
-		newSessionLogger,
+
 		clock,
 		providerOverride,
 		submissionRecorder,
@@ -172,10 +173,10 @@ func NewRoot(
 		namedPaths,
 		definitions,
 		runtimeRouter,
-		loadFactory,
-		newLoadedFactory,
+
+		runtimeInputLoading,
 		decodeReplayConfig,
-		captureLoadedFactorySnapshot,
+
 		assembly,
 		durableOpening,
 		factoryScaffoldInitializer,
@@ -241,4 +242,17 @@ func NewRuntimeModelInvocation(modelService models.Service, gateway RuntimeModel
 // NewHistoricalReplayBehavior constructs fixed behavior inside its service owner.
 func NewHistoricalReplayBehavior() *HistoricalReplayBehavior {
 	return recordingreplay.NewBehavior()
+}
+
+func NewRuntimeInputLoading(
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.RuntimeScopeService,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+	baseLogger *zap.Logger,
+) *RuntimeInputLoading {
+	return service.NewRuntimeInputLoading(loadFactory, newLoadedFactory, decodeReplayConfig,
+		replayInputs, captureLoadedFactorySnapshot, newSessionLogger, baseLogger)
 }

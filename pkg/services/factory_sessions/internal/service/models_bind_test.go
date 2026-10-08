@@ -281,10 +281,11 @@ func earlyScopeOpeningRoot(execution durableexecution.Service, modelService mode
 			return nil
 		},
 		factoryDefinitionValidator: validatorConstructionStub{},
-		loadFactory: func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, nil
-		},
-		newSessionLogger:  func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger },
+		runtimeInputLoading: NewRuntimeInputLoading(
+			func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, nil
+			},
+			nil, nil, recordingRoot, nil, func(logger *zap.Logger, _, _, _ string) *zap.Logger { return logger }, zap.NewNop()),
 		recordingsService: recordingRoot, recordingsRuntime: recordingRoot,
 		factorySessionsRuntimeAssembly: &factorySessionsConstructionStub{}, modelService: modelService,
 		durableOpening: opening,
