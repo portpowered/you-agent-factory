@@ -6,13 +6,13 @@ required:
 properties:
   relativePath:
     type: string
-    description: Path to the loaded session file relative to the configured provider sessions root.
+    description: Legacy source path. Empty when native source metadata was not captured.
   sizeBytes:
     type: integer
     format: int64
     minimum: 0
-    description: Size of the loaded session file in bytes.
+    description: Legacy source size. Zero when native source metadata was not captured.
   modifiedAt:
     type: string
     format: date-time
-    description: Filesystem modification time when available.
+    description: Native source modification time when captured. Otherwise omitted.

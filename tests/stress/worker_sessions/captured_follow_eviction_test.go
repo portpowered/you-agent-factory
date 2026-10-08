@@ -185,7 +185,6 @@ func startEvictionHost(t *testing.T, ctx context.Context, dir string, gate *evic
 	ready := make(chan string, 1)
 	process, err := root.BuildProcess(ctx, edges.Edges{
 		ScriptCommandRunner: runner, FactorySessionsWorkingDirectory: evictionWorkingDirectory(dir),
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
 		APIServerStarter: func(hostCtx context.Context, request platformhttpserver.StartRequest) error {
 			server := httptest.NewServer(gate.wrap(request.Handler))
 			defer server.Close()

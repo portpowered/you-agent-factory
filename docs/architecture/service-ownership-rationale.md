@@ -608,38 +608,18 @@ Top-level owner · `pkg/services/provider_sessions`
 
 | Aspect | Rationale |
 | --- | --- |
-| Authority | Secure resolution and read-only inspection of provider-owned persisted session artifacts, transcripts, reasoning, tools, parse errors, and usage. |
+| Authority | Read-only inspection of captured provider associations, transcripts, tools, reasoning summaries and usage. |
 | State store | Resolved provider-session and transcript projections; no provider execution store. |
 | Lifecycle | Read-only resolve/inspect lifecycle; no execution daemon. |
-| Consumers | Factory Sessions, Workers (carry SessionRef), HTTP Provider Sessions adapters. |
+| Consumers | HTTP Provider Sessions adapters; execution consumers carry Provider Session identity independently. |
 | Transaction boundary | Readers share Provider Sessions root transaction for one SessionRef resolve; Providers owns SessionRef minting. |
-| Failure recovery | Secure path/parse failures and unknown SessionRef errors are Provider Sessions facts. |
+| Failure recovery | Unknown or ambiguous associations and unavailable captured history are Provider Sessions facts. |
 
-#### `provider_sessions/codex_reader`
-
-Nested subservice of `provider_sessions` · `pkg/services/provider_sessions/internal/services/codex_reader`
-
-| Aspect | Rationale |
-| --- | --- |
-| Authority | Secure JSONL rollout discovery, timestamped layouts, symlink containment, native parsing, normalized detail projection. |
-| State store | Codex transcript discovery/projection state for a resolve. |
-| Lifecycle | Read-only resolve path for Codex SessionRefs. |
-| Consumers | Provider Sessions root registry. |
-| Transaction boundary | Reader-local parse projection; no cross-owner writes. |
-| Failure recovery | Symlink/path and parse errors normalize through Codex Reader. |
-
-#### `provider_sessions/cursor_reader`
-
-Nested subservice of `provider_sessions` · `pkg/services/provider_sessions/internal/services/cursor_reader`
-
-| Aspect | Rationale |
-| --- | --- |
-| Authority | Cursor directory/store resolution, SQLite access, protobuf/blob decoding, transcript reconstruction, usage projection. |
-| State store | Cursor store resolution/projection state for a resolve. |
-| Lifecycle | Read-only resolve path for Cursor SessionRefs. |
-| Consumers | Provider Sessions root registry. |
-| Transaction boundary | Reader-local decode projection; no provider execution. |
-| Failure recovery | Store/decode failures normalize through Cursor Reader. |
+Captured Codex and Cursor inspection resolves exact associations through the
+Recordings catalog and projects recorded transcript and usage facts. Provider
+Sessions owns the read projection. Recordings owns durable storage and capture
+health. Native rollout and SQLite readers are retired; provider execution and
+continuation identity remain Providers-owned.
 
 ### `providers`
 

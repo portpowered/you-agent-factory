@@ -1581,12 +1581,12 @@ paths:
         - Provider Sessions
       operationId: getProviderSessionDetails
       summary: Get provider session details
-      description: Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
+      description: Returns captured Codex or Cursor details from the selected profile. Supply a provider, session_id kind, and identifier. Native-only sessions return NOT_FOUND. No filesystem path is accepted.
       parameters:
         - name: provider
           in: query
           required: true
-          description: Provider that emitted the session identifier. Only codex sessions are currently loadable.
+          description: Provider that emitted the captured session identifier. Codex and Cursor are supported.
           schema:
             $ref: '#/components/schemas/LoadableProviderSessionProvider'
         - name: kind
@@ -1603,7 +1603,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Parsed provider-session details.
+          description: Captured provider-session details.
           content:
             application/json:
               schema:

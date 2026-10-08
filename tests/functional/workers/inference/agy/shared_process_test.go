@@ -426,9 +426,6 @@ func (fixture *agyProcessFixture) startProcess() error {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      api.start,
 		ProviderCommandRunner: fixture.router,
-		ProviderSessionResolveHomeDirectory: func() (string, error) {
-			return fixture.homeDir, nil
-		},
 	})
 	if err != nil {
 		return fmt.Errorf("BuildProcess: %w", err)

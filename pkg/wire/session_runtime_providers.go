@@ -2,7 +2,6 @@ package wire
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -319,44 +318,12 @@ func provideFactorySessionProviderIdentityResolver(
 	}
 }
 
-func provideProviderSessions(edges serviceedges.Edges, writer recordings.WorkerRecordingWriter) (providersessions.Service, error) {
-	files := edges.ProviderSessionFileSystem
-	if files == nil {
-		files = platformfilesystem.Local{}
-	}
-	resolveHome := edges.ProviderSessionResolveHomeDirectory
-	if resolveHome == nil {
-		resolveHome = os.UserHomeDir
-	}
+func provideProviderSessions(writer recordings.WorkerRecordingWriter) (providersessions.Service, error) {
 	captured, ok := writer.(recordings.WorkerCapturedActivityReader)
 	if !ok || captured == nil {
 		return nil, fmt.Errorf("provider-session captured activity reader is required")
 	}
-	cursorWalkDirectory := edges.ProviderSessionCursorWalkDirectory
-	if cursorWalkDirectory == nil {
-		cursorWalkDirectory = providersessionswire.CursorWalkDirectory(filepath.WalkDir)
-	}
-	cursorResolveSymlinks := edges.ProviderSessionCursorResolveSymlinks
-	if cursorResolveSymlinks == nil {
-		cursorResolveSymlinks = providersessionswire.CursorResolveSymlinks(filepath.EvalSymlinks)
-	}
-	cursorOpenDatabase := edges.ProviderSessionCursorOpenDatabase
-	if cursorOpenDatabase == nil {
-		cursorOpenDatabase = providersessionswire.CursorOpenSQLDatabase(sql.Open)
-	}
-	operatingSystem := edges.ProviderSessionOperatingSystem
-	if operatingSystem == "" {
-		operatingSystem = runtime.GOOS
-	}
-	return providersessionswire.NewService(
-		files,
-		resolveHome,
-		cursorWalkDirectory,
-		cursorResolveSymlinks,
-		cursorOpenDatabase,
-		providersessionswire.OperatingSystem(operatingSystem),
-		captured,
-	)
+	return providersessionswire.NewService(captured)
 }
 
 func provideFactoryRuntimeIDGenerator(edges serviceedges.Edges) factoryruntime.IDGenerator {

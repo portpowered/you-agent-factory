@@ -1,14 +1,6 @@
-// Package details owns functional post-lifecycle Provider Session detail inspection
-// through the public GET /provider-sessions/detail HTTP surface. Proofs construct
-// only through support.StartFunctionalAPIServer (root.BuildProcess +
-// Process.Execute) with serviceedges.Edges effect replacement (for example
-// ProviderSessionResolveHomeDirectory), wait for runtime lifecycle readiness, then
-// assert identity/provider/kind and inspectable transcript or adverse outcomes on
-// the public detail response. codex_details_test.go covers Codex golden success,
-// missing-transcript not-found, and corrupt-transcript diagnostics;
-// cursor_details_test.go covers Cursor golden success, unavailable-blob inspection,
-// and missing-session not-found; http_test.go covers HTTP/API golden success,
-// raw filesystem path rejection, and unsupported-kind validation.
-// storage_unavailable_test.go covers redacted storage faults, failed SQL Ping
-// cleanup, and valid transcript retention alongside a truncated Codex record.
+// Package details proves captured Codex and Cursor inspection through the public
+// HTTP detail boundary. Production capture and real isolated storage are composed
+// through root.BuildProcess and Process.Execute, with controlled provider command
+// or ACP effects at edges.Edges. Tests cover exact identities, joined reload,
+// ordered facts, profile isolation, ambiguity, damaged history and safe errors.
 package details

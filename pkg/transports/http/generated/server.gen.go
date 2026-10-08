@@ -7459,7 +7459,7 @@ type ProviderSessionMetadata struct {
 
 // ProviderSessionParseSummary defines model for ProviderSessionParseSummary.
 type ProviderSessionParseSummary struct {
-	// EventCount Number of JSON event records parsed from the session stream.
+	// EventCount Number of captured records inspected for this detail projection.
 	EventCount int `json:"eventCount"`
 
 	// FunctionCalls Function and tool calls observed in chronological order.
@@ -7514,13 +7514,13 @@ type ProviderSessionReasoningSummary struct {
 
 // ProviderSessionSourceMetadata defines model for ProviderSessionSourceMetadata.
 type ProviderSessionSourceMetadata struct {
-	// ModifiedAt Filesystem modification time when available.
+	// ModifiedAt Native source modification time when captured. Otherwise omitted.
 	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
 
-	// RelativePath Path to the loaded session file relative to the configured provider sessions root.
+	// RelativePath Legacy source path. Empty when native source metadata was not captured.
 	RelativePath string `json:"relativePath"`
 
-	// SizeBytes Size of the loaded session file in bytes.
+	// SizeBytes Legacy source size. Zero when native source metadata was not captured.
 	SizeBytes int64 `json:"sizeBytes"`
 }
 
@@ -7560,7 +7560,7 @@ type ProviderSessionTranscriptEntry struct {
 	// Output Compact tool output when present.
 	Output *string `json:"output,omitempty"`
 
-	// SourceType Captured event type for Codex when available; raw event type for Cursor.
+	// SourceType Captured event type when available. Otherwise omitted.
 	SourceType *string `json:"sourceType,omitempty"`
 
 	// Status Provider or inferred status value when present.
@@ -7572,7 +7572,7 @@ type ProviderSessionTranscriptEntry struct {
 	// Text Plaintext transcript body when present.
 	Text *string `json:"text,omitempty"`
 
-	// Timestamp Capture time for Codex; provider time for Cursor.
+	// Timestamp Capture time when present in the recorded history.
 	Timestamp *time.Time `json:"timestamp,omitempty"`
 
 	// TurnIndex One-based inferred turn index when the session parser can associate the entry with a turn.
@@ -10194,7 +10194,7 @@ type RemoveModelParams struct {
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
-	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
+	// Provider Provider that emitted the captured session identifier. Codex and Cursor are supported.
 	Provider LoadableProviderSessionProvider `form:"provider" json:"provider"`
 
 	// Kind Provider-session identifier kind. Only session_id is currently loadable.

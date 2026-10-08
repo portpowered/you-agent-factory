@@ -3,10 +3,6 @@ package details
 import (
 	"context"
 	"encoding/json"
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
 	"io/fs"
 	"net/http"
@@ -17,6 +13,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -154,9 +155,8 @@ func startCapturedCodexHost(t *testing.T, home, dir string, runner platformproce
 	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, RecordingReadFile: readFile,
-			ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		Env:   []string{"HOME=" + home, "USERPROFILE=" + home},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, RecordingReadFile: readFile},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
 		},

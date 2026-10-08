@@ -11,7 +11,6 @@ package edges
 
 import (
 	"context"
-	"database/sql"
 	"io"
 	"io/fs"
 	"net/http"
@@ -200,19 +199,10 @@ type Edges struct {
 	FactoryDefinitionAuthoredWriterFileSystem             factorydefinitions.AuthoredLayoutWriterFileSystem
 	FactoryDefinitionScaffoldFileSystem                   factorydefinitions.ScaffoldFileSystem
 	FactoryDefinitionScaffoldOutput                       factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                             interface {
-		Open(string) (io.ReadCloser, error)
-		Stat(string) (fs.FileInfo, error)
-	}
-	ProviderSessionResolveHomeDirectory  func() (string, error)
-	ProviderSessionCursorWalkDirectory   func(string, fs.WalkDirFunc) error
-	ProviderSessionCursorResolveSymlinks func(string) (string, error)
-	ProviderSessionCursorOpenDatabase    func(string, string) (*sql.DB, error)
-	ProviderSessionOperatingSystem       string
-	OperatorSettingsFileSystem           operatorsettings.FileSystem
-	OperatorSettingsCreateTemporaryFile  operatorsettings.CreateTemporaryFile
-	OperatorSettingsIDGenerator          operatorsettings.IDGenerator
-	SystemInitializationInspectPath      func(string) (fs.FileInfo, error)
+	OperatorSettingsFileSystem                            operatorsettings.FileSystem
+	OperatorSettingsCreateTemporaryFile                   operatorsettings.CreateTemporaryFile
+	OperatorSettingsIDGenerator                           operatorsettings.IDGenerator
+	SystemInitializationInspectPath                       func(string) (fs.FileInfo, error)
 
 	// RecordingsRootObserver is a construction-time observation seam for
 	// functional callers that need to exercise the public Recordings root
@@ -606,24 +596,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactoryDefinitionScaffoldOutput != nil {
 		defaults.FactoryDefinitionScaffoldOutput = replacements.FactoryDefinitionScaffoldOutput
-	}
-	if replacements.ProviderSessionFileSystem != nil {
-		defaults.ProviderSessionFileSystem = replacements.ProviderSessionFileSystem
-	}
-	if replacements.ProviderSessionResolveHomeDirectory != nil {
-		defaults.ProviderSessionResolveHomeDirectory = replacements.ProviderSessionResolveHomeDirectory
-	}
-	if replacements.ProviderSessionCursorWalkDirectory != nil {
-		defaults.ProviderSessionCursorWalkDirectory = replacements.ProviderSessionCursorWalkDirectory
-	}
-	if replacements.ProviderSessionCursorResolveSymlinks != nil {
-		defaults.ProviderSessionCursorResolveSymlinks = replacements.ProviderSessionCursorResolveSymlinks
-	}
-	if replacements.ProviderSessionCursorOpenDatabase != nil {
-		defaults.ProviderSessionCursorOpenDatabase = replacements.ProviderSessionCursorOpenDatabase
-	}
-	if replacements.ProviderSessionOperatingSystem != "" {
-		defaults.ProviderSessionOperatingSystem = replacements.ProviderSessionOperatingSystem
 	}
 	if replacements.OperatorSettingsFileSystem != nil {
 		defaults.OperatorSettingsFileSystem = replacements.OperatorSettingsFileSystem

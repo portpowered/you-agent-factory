@@ -17,8 +17,8 @@ func (e requestValidationError) Error() string {
 func decodeDetailsParams(
 	params factoryapi.GetProviderSessionDetailsParams,
 ) (provider string, kind string, id string, err error) {
-	id = strings.TrimSpace(params.Id)
-	if id == "" {
+	id = params.Id
+	if strings.TrimSpace(id) == "" {
 		return "", "", "", requestValidationError{message: "provider session id is required"}
 	}
 	return string(params.Provider), string(params.Kind), id, nil

@@ -82,8 +82,7 @@ func startL1Host(t *testing.T, ctx context.Context, dir string, runner platformp
 	process, err := root.BuildProcess(ctx, edges.Edges{
 		WorkerRecordingWriter: writer,
 		ScriptCommandRunner:   runner, FactorySessionsWorkingDirectory: evictionWorkingDirectory(dir),
-		WorkerRecordingStoreObserver:        func(value recordings.WorkerRecordingStore) { store = value },
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		WorkerRecordingStoreObserver: func(value recordings.WorkerRecordingStore) { store = value },
 		APIServerStarter: func(hostCtx context.Context, request platformhttpserver.StartRequest) error {
 			server := httptest.NewServer(request.Handler)
 			defer server.Close()

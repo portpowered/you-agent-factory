@@ -50,12 +50,11 @@ describe("ProviderSessionDetailPanel", () => {
             provider: "cursor",
           },
           source: {
-            relativePath: "store.db",
-            sizeBytes: 4096,
+            relativePath: "",
+            sizeBytes: 0,
           },
           transcript: [
             {
-              lineNumber: 1,
               order: 1,
               text: "Hello from Cursor",
               type: "assistant_message",
@@ -98,71 +97,81 @@ describe("ProviderSessionDetailPanel", () => {
     );
   });
 
-  it("renders captured Codex content and usage without native source facts", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(
-      jsonResponse(
-        buildProviderSessionDetailResponse({
-          source: { relativePath: "", sizeBytes: 0 },
-          parse: {
-            eventCount: 8,
-            lineCount: 0,
-            tokenUsage: {
-              inputTokens: 10,
-              cachedInputTokens: 3,
-              outputTokens: 4,
-              totalTokens: 14,
+  it.each(["codex", "cursor"] as const)(
+    "renders captured %s content and usage without native source facts",
+    async (provider) => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        jsonResponse(
+          buildProviderSessionDetailResponse({
+            providerSession: {
+              id: SELECTED_SESSION.id,
+              kind: "session_id",
+              provider,
             },
-          },
-          transcript: [
-            {
-              order: 1,
-              type: "tool_call",
-              callId: "captured-tool",
-              name: "inspect public fixture",
-              timestamp: "2026-10-06T14:00:00Z",
+            source: { relativePath: "", sizeBytes: 0 },
+            parse: {
+              eventCount: 8,
+              lineCount: 0,
+              tokenUsage: {
+                inputTokens: 10,
+                cachedInputTokens: 3,
+                outputTokens: 4,
+                totalTokens: 14,
+              },
             },
-            {
-              order: 2,
-              type: "tool_output",
-              callId: "captured-tool",
-              output: "public result",
-              timestamp: "2026-10-06T14:00:01Z",
-            },
-            {
-              order: 3,
-              type: "assistant_message",
-              text: "captured answer COMPLETE",
-              timestamp: "2026-10-06T14:00:02Z",
-            },
-          ],
-        }),
-      ),
-    );
-    renderWithQueryClient(
-      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
-    );
-    await waitFor(() =>
-      expect(screen.getByText("captured answer COMPLETE")).toBeTruthy(),
-    );
-    expect(
-      screen.getAllByText("inspect public fixture").length,
-    ).toBeGreaterThan(0);
-    expandDisclosure("Expand Tool output");
-    expect(screen.getByText("public result")).toBeTruthy();
-    expect(
-      screen.queryByText("2026/05/18/rollout-sess_active.jsonl"),
-    ).toBeNull();
-    const transcript = screen.getByRole("button", {
-      name: "Collapse Transcript",
-    });
-    expect(transcript.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.click(transcript);
-    expect(
-      screen
-        .getByRole("button", { name: "Expand Transcript" })
-        .getAttribute("aria-expanded"),
-    ).toBe("false");
-  });
+            transcript: [
+              {
+                order: 1,
+                type: "tool_call",
+                callId: "captured-tool",
+                name: "inspect public fixture",
+                timestamp: "2026-10-06T14:00:00Z",
+              },
+              {
+                order: 2,
+                type: "tool_output",
+                callId: "captured-tool",
+                output: "public result",
+                timestamp: "2026-10-06T14:00:01Z",
+              },
+              {
+                order: 3,
+                type: "assistant_message",
+                text: "captured answer COMPLETE",
+                timestamp: "2026-10-06T14:00:02Z",
+              },
+            ],
+          }),
+        ),
+      );
+      renderWithQueryClient(
+        <ProviderSessionDetailPanel
+          selectedProviderSession={{ ...SELECTED_SESSION, provider }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByText("captured answer COMPLETE")).toBeTruthy(),
+      );
+      expect(
+        screen.getAllByText("inspect public fixture").length,
+      ).toBeGreaterThan(0);
+      expandDisclosure("Expand Tool output");
+      expect(screen.getByText("public result")).toBeTruthy();
+      expect(
+        screen.queryByText("2026/05/18/rollout-sess_active.jsonl"),
+      ).toBeNull();
+      const transcript = screen.getByRole("button", {
+        name: "Collapse Transcript",
+      });
+      expect(transcript.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(transcript);
+      expect(
+        screen
+          .getByRole("button", { name: "Expand Transcript" })
+          .getAttribute("aria-expanded"),
+      ).toBe("false");
+    },
+  );
 
   it("shows an explicit loading state while session details are being fetched", () => {
     vi.mocked(globalThis.fetch).mockReturnValue(new Promise(() => undefined));

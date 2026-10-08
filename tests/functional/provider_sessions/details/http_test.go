@@ -180,9 +180,6 @@ func startAPIProviderSessionDetailServer(
 ) *support.FunctionalAPIServer {
 	t.Helper()
 
-	if edges.ProviderSessionResolveHomeDirectory == nil {
-		edges.ProviderSessionResolveHomeDirectory = func() (string, error) { return homeDir, nil }
-	}
 	dir := support.ScaffoldSingleStepFactory(t, "api-provider-session-detail")
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

@@ -136,7 +136,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	providersessionsService, err := provideProviderSessions(edges2, v10)
+	providersessionsService, err := provideProviderSessions(v10)
 	if err != nil {
 		return nil, err
 	}

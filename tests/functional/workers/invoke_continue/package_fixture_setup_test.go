@@ -408,9 +408,6 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
 		ProviderCommandRunner: route,
-		ProviderSessionResolveHomeDirectory: func() (string, error) {
-			return homeDir, nil
-		},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
 			err := api.Start(ctx, request)
