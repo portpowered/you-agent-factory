@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -221,7 +223,7 @@ func (service *Service) bind(
 			Status: recordingStatus(recordings.RecordingID(id), existing),
 		}, nil
 	}
-	if _, owned := service.targetOwners[serviceTarget]; owned {
+	if _, owned := service.targetOwners[recordingTargetKey(serviceTarget)]; owned {
 		return recordings.BindRecordingResult{}, fmt.Errorf(
 			"%w: recording target %q already has a writer", recordings.ErrRecordingBindingConflict, serviceTarget,
 		)
@@ -233,7 +235,7 @@ func (service *Service) bind(
 		scope:         request.Scope,
 	}
 	service.byID[id] = session
-	service.targetOwners[serviceTarget] = id
+	service.targetOwners[recordingTargetKey(serviceTarget)] = id
 	return recordings.BindRecordingResult{
 		Status: recordingStatus(recordings.RecordingID(id), session),
 	}, nil
@@ -430,9 +432,21 @@ func (service *Service) FinishRecording(
 }
 
 func (service *Service) releaseTargetLocked(id recordings.RecordingID, session *recordingSession) {
-	if service.targetOwners[session.serviceTarget] == string(id) {
-		delete(service.targetOwners, session.serviceTarget)
+	key := recordingTargetKey(session.serviceTarget)
+	if service.targetOwners[key] == string(id) {
+		delete(service.targetOwners, key)
 	}
+}
+
+// Keep the caller's path for persistence and diagnostics, but prevent lexical
+// aliases from acquiring independent writer ownership. Windows targets are
+// conservatively case folded, including on volumes with case-sensitive paths.
+func recordingTargetKey(target string) string {
+	key := filepath.Clean(target)
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	return key
 }
 
 func stopPeriodic(session *recordingSession) {

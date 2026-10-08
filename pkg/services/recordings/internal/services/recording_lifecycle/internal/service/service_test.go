@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +23,42 @@ type unusedLedger struct {
 type namedTargetReserver struct {
 	path  string
 	calls int
+}
+
+func TestRecordingTargetAliasesShareOwnershipUntilAbort(t *testing.T) {
+	t.Parallel()
+	aliases := []string{"./retained.json", "child/../retained.json"}
+	if runtime.GOOS == "windows" {
+		aliases = append(aliases, "RETAINED.JSON", `child\..\retained.json`)
+	}
+	for _, alias := range aliases {
+		t.Run(alias, func(t *testing.T) {
+			t.Parallel()
+			writes := 0
+			owner := lifecycleservice.New(nil, func(string, recordings.RecordingSnapshot) error {
+				writes++
+				return nil
+			}, nil, fixedRecordingClock{})
+			if _, err := owner.BindRecording(recordings.BindRecordingRequest{
+				RecordingID: "prepared", Artifact: "retained.json",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			competitor := recordings.BindRecordingRequest{RecordingID: "successor", Artifact: recordings.RecordingArtifactReference(alias)}
+			if _, err := owner.BindRecording(competitor); !errors.Is(err, recordings.ErrRecordingBindingConflict) || !strings.Contains(err.Error(), strconv.Quote(alias)) {
+				t.Fatalf("alias bind = %v, want path-specific conflict", err)
+			}
+			if _, err := owner.StopRecording(recordings.StopRecordingRequest{RecordingID: "prepared", Abort: true}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := owner.BindRecording(competitor); err != nil {
+				t.Fatalf("alias bind after abort: %v", err)
+			}
+			if writes != 0 {
+				t.Fatalf("binding and abort published %d times", writes)
+			}
+		})
+	}
 }
 
 func TestRecordingTargetHasOneOwnerAndAbortReleasesWithoutPublication(t *testing.T) {
