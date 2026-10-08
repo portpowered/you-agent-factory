@@ -3,13 +3,16 @@ package workersessions_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,6 +21,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -44,6 +48,7 @@ func TestArchivedWorkAttributionJourneys(t *testing.T) {
 		{"reused Work identity", runArchivedWorkAttributionReusedWorkID},
 		{"profile isolation", runArchivedWorkAttributionProfileIsolation},
 		{"named close", runArchivedWorkAttributionNamedCloseJourneys},
+		{"canceled history read", runArchivedWorkAttributionCanceledRead},
 	} {
 		t.Run(scenario.name, func(t *testing.T) { scenario.run(t, process) })
 	}
@@ -60,6 +65,147 @@ func runArchivedWorkAttributionEmptyAndLegacy(t *testing.T, process support.Proc
 	assertHistoryReadFailure(t, host, "unknown-worker", http.StatusNotFound, "NOT_FOUND")
 	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "unknown-worker"}), "worker_session.not_found", false)
 	runCapturedMetadataRecovery(t, process)
+}
+
+// F-07 owns a real recorded scope and gates only its artifact-read effect.
+// The host and real decoder/store are shared by canceled, surviving and fresh
+// requests; no source scan or private cache state is part of the observer.
+func runArchivedWorkAttributionCanceledRead(t *testing.T, process support.Process) {
+	t.Parallel()
+	gate := &attributionReadGate{}
+	host, sessions, runner, dir := startRecordedAttributionReadHost(t, gate.read)
+	session, ctx := startMCP(t, process, host.URL())
+	scopeID := admitRecordedAttributionWork(t, ctx, sessions, host, runner, dir, "canceled-history")
+	live := historyParityPage(t, ctx, session, host, "active", "factory", "")["sessions"].([]any)
+	if len(live) != 1 {
+		t.Fatalf("cancellation fixture membership: %v", live)
+	}
+	row := live[0].(map[string]any)
+	id := row["workerSessionId"].(string)
+	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+scopeID+"/pause", map[string]any{}, http.StatusOK)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "CANCEL"})
+	support.CloseFactorySessionAt(t, host.URL(), scopeID)
+	// Both cancellation attempts own the same retained scope and read gate.
+	// Serialize this observation window while reusing one root-built host.
+	for _, view := range []string{"archived", "all"} {
+		t.Run(view, func(t *testing.T) {
+			entered, release := gate.arm(filepath.Join(dir, "canceled-history.json"))
+			t.Cleanup(release)
+			assertCanceledAttributionList(t, ctx, session, host, view, id, row, entered, release)
+		})
+	}
+}
+
+func assertCanceledAttributionList(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, view, id string, row map[string]any, entered <-chan struct{}, release func()) {
+	t.Helper()
+	bounded, done := context.WithTimeout(ctx, 30*time.Second)
+	defer done()
+	var requests sync.WaitGroup
+	t.Cleanup(func() { release(); requests.Wait() })
+	canceled, cancel := context.WithCancel(bounded)
+	defer cancel()
+	endpoint := host.URL() + "/worker-sessions?history=" + view + "&scope=factory"
+	first := beginAttributionList(canceled, endpoint, &requests)
+	select {
+	case <-entered:
+	case <-bounded.Done():
+		t.Fatalf("history read did not reach scenario gate: %v", bounded.Err())
+	}
+	cancel()
+	select {
+	case result := <-first:
+		if !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("canceled list error = %v, want context.Canceled", result.err)
+		}
+	case <-bounded.Done():
+		t.Fatal("canceled caller did not leave blocked history read")
+	}
+	// Independent active reads must remain usable while history IO is
+	// blocked. A surviving archived/all request owns a separate context.
+	active := historyParityPage(t, bounded, session, host, "active", "factory", "")
+	if len(active["sessions"].([]any)) != 0 {
+		t.Fatalf("closed owner returned as active: %v", active)
+	}
+	survivor := beginAttributionList(bounded, endpoint, &requests)
+	release()
+	select {
+	case result := <-survivor:
+		if result.err != nil {
+			t.Fatalf("independent history list: %v", result.err)
+		}
+		if len(result.page["sessions"].([]any)) != 1 {
+			t.Fatalf("independent list lost or duplicated retained row: %v", result.page)
+		}
+		assertArchivedAttributionRow(t, result.page, id, row, true)
+	case <-bounded.Done():
+		t.Fatal("surviving history request did not complete")
+	}
+	assertRetainedAttributionViews(t, bounded, session, host, id, row, true)
+}
+
+type attributionReadGate struct {
+	mu      sync.Mutex
+	path    string
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g *attributionReadGate) arm(path string) (<-chan struct{}, func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.path = path
+	g.entered, g.release = make(chan struct{}), make(chan struct{})
+	release := g.release
+	return g.entered, sync.OnceFunc(func() { close(release) })
+}
+
+func (g *attributionReadGate) read(path string) ([]byte, error) {
+	g.mu.Lock()
+	blocked := g.path != "" && filepath.Clean(path) == filepath.Clean(g.path)
+	release := g.release
+	if blocked {
+		g.path = ""
+		close(g.entered)
+	}
+	g.mu.Unlock()
+	if blocked {
+		<-release
+	}
+	return os.ReadFile(path)
+}
+
+type attributionListResult struct {
+	page map[string]any
+	err  error
+}
+
+func beginAttributionList(ctx context.Context, endpoint string, requests *sync.WaitGroup) <-chan attributionListResult {
+	result := make(chan attributionListResult, 1)
+	requests.Add(1)
+	go func() {
+		defer requests.Done()
+		page, err := readAttributionList(ctx, endpoint)
+		result <- attributionListResult{page, err}
+	}()
+	return result
+}
+
+func readAttributionList(ctx context.Context, endpoint string) (map[string]any, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("history list status %d", response.StatusCode)
+	}
+	var page map[string]any
+	err = json.NewDecoder(response.Body).Decode(&page)
+	return page, err
 }
 
 func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Process) {
@@ -256,13 +402,18 @@ func assertFrozenAttributionAfterSiblingClose(t *testing.T, ctx context.Context,
 
 func startRecordedAttributionHost(t *testing.T) (*support.FunctionalAPIServer, support.FactorySessionStarter, controlHostRunner, string) {
 	t.Helper()
+	return startRecordedAttributionReadHost(t, nil)
+}
+
+func startRecordedAttributionReadHost(t *testing.T, readFile recordings.RecordingReadFile) (*support.FunctionalAPIServer, support.FactorySessionStarter, controlHostRunner, string) {
+	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "scoped-attribution")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
 	runner := controlHostRunner{started: make(chan (<-chan struct{}), 2)}
 	var sessions support.FactorySessionStarter
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), RecordingReadFile: readFile},
 		BeforeStart: func(_ testing.TB, p support.Process, _ root.Input) {
 			sessions = p.(support.ApplicationProcess).FactorySessions()
 		},
