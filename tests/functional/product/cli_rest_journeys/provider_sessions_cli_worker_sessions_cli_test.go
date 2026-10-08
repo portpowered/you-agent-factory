@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,6 +24,15 @@ import (
 
 func testWorkerSessionsCLIListReceivedFailures(t *testing.T) {
 	t.Parallel()
+	for _, stage := range []string{"headers", "body"} {
+		for _, outcome := range []string{"cancel", "deadline"} {
+			t.Run(stage+"-"+outcome, func(t *testing.T) {
+				t.Parallel()
+				testWorkerSessionsCLIListInterrupted(t, stage, outcome)
+			})
+		}
+	}
+	t.Run("connection-refused", testWorkerSessionsCLIListConnectionRefused)
 	for _, kind := range []string{"decode", "body"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -51,6 +62,86 @@ func testWorkerSessionsCLIListReceivedFailures(t *testing.T) {
 			assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), "WORKER_SESSION_LIST_FAILED", kind)
 		})
 	}
+}
+
+// Faults are owned by a unique Session/Work route. Readiness and drain signals
+// ensure cancellation crosses the request boundary and leaves no blocked read.
+func testWorkerSessionsCLIListInterrupted(t *testing.T, stage, outcome string) {
+	c := newWorkerSessionsCLICase(t)
+	f := c.fixture
+	sessionID := c.openSession(t)
+	workID := "list-interrupted-" + stage + "-" + outcome
+	received, drained := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	f.api.listFault(t, sessionID, workID, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if stage == "body" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, `{"sessions":[`)
+			w.(http.Flusher).Flush()
+		}
+		close(received)
+		<-r.Context().Done()
+		close(drained)
+	}))
+	ctx, cancel := context.WithCancel(t.Context())
+	if outcome == "deadline" {
+		cancel()
+		ctx, cancel = context.WithTimeout(t.Context(), 2*time.Second)
+	}
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--server", f.baseURL, "worker-sessions", "list", "--session", sessionID,
+		"--work-id", workID, "--output", "json",
+	})
+	inputs.Input.Env = functionalEnvironment(f.homeDir)
+	inputs.Input.WorkingDirectory = c.factoryDir
+	done := make(chan error, 1)
+	go func() { done <- f.process.Execute(inputs.Input) }()
+	select {
+	case <-received:
+	case <-ctx.Done():
+		t.Fatalf("request never reached %s fault: %v", stage, ctx.Err())
+	}
+	if outcome == "cancel" {
+		cancel()
+	}
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(workerSessionsCLISharedShutdownTimeout):
+		t.Fatal("interrupted CLI did not return")
+	}
+	wantCause, wantCode := context.Canceled, "WORKER_SESSION_LIST_FAILED"
+	if outcome == "deadline" {
+		wantCause, wantCode = context.DeadlineExceeded, "WORKER_SESSION_LIST_REQUEST_TIMEOUT"
+	}
+	if !errors.Is(err, wantCause) || strings.TrimSpace(inputs.Stdout()) != "" || calls.Load() != 1 {
+		t.Fatalf("interrupted list err=%v want cause=%v stdout=%q GETs=%d", err, wantCause, inputs.Stdout(), calls.Load())
+	}
+	assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), wantCode, stage+"-"+outcome)
+	select {
+	case <-drained:
+	case <-time.After(workerSessionsCLISharedShutdownTimeout):
+		t.Fatal("interrupted request did not drain")
+	}
+}
+
+func testWorkerSessionsCLIListConnectionRefused(t *testing.T) {
+	t.Parallel()
+	c := newWorkerSessionsCLICase(t)
+	// Bind then close a loopback listener to exercise a real connection failure.
+	server := httptest.NewServer(http.NotFoundHandler())
+	server.Close()
+	inputs, err := executeCLIExpectError(t, t.Context(), c.fixture.process,
+		functionalEnvironment(c.fixture.homeDir), c.factoryDir,
+		"--server", server.URL, "worker-sessions", "list", "--session", c.openSession(t),
+		"--work-id", "list-connection-refused", "--output", "json")
+	if err == nil || strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("connection failure err=%v stdout=%q", err, inputs.Stdout())
+	}
+	assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), "FACTORY_UNREACHABLE", "connection-refused")
 }
 
 const (
