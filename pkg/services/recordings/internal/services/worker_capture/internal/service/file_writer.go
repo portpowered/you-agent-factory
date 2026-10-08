@@ -301,6 +301,25 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, id string) (r
 	return snapshot, nil
 }
 func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordingEntry) error {
+	return writer.hydrateFromScan(ctx, id, entry, nil)
+}
+
+// scannedWorkerFile is a startup-owned snapshot, not a cross-request cache.
+// Recovery runs before admission; ordinary reads still acquire their source
+// behind entry.mu so an in-progress append cannot publish an unsynced prefix.
+type scannedWorkerFile struct {
+	path string
+	data []byte
+}
+
+func (writer *FileWriter) readHydrationFile(path string, scanned *scannedWorkerFile) ([]byte, error) {
+	if scanned != nil && scanned.path == path {
+		return scanned.data, nil
+	}
+	return writer.storage.ReadFile(path)
+}
+
+func (writer *FileWriter) hydrateFromScan(ctx context.Context, id string, entry *recordingEntry, scanned *scannedWorkerFile) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -309,15 +328,18 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 	}
 	// Build privately so malformed input cannot become cached accepted state.
 	loaded := &recordingEntry{sessions: make(map[string]*recordingSession)}
-	if err := writer.loadLegacy(id, loaded); err != nil {
+	if err := writer.loadLegacy(id, loaded, scanned); err != nil {
 		return err
 	}
-	data, err := writer.storage.ReadFile(writer.path(id) + "l")
+	data, err := writer.readHydrationFile(writer.path(id)+"l", scanned)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("load Worker journal: %w", err)
 	}
 	if err == nil {
 		for len(data) > 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			end := bytes.IndexByte(data, '\n')
 			if end < 0 {
 				loaded.damaged = true
@@ -338,6 +360,9 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 			session.projection = p
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	entry.sessions = loaded.sessions
 	entry.order = loaded.order
 	entry.exists = loaded.exists
@@ -346,8 +371,8 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 	entry.loaded = true
 	return nil
 }
-func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry) error {
-	data, err := writer.storage.ReadFile(writer.path(id))
+func (writer *FileWriter) loadLegacy(id string, entry *recordingEntry, scanned *scannedWorkerFile) error {
+	data, err := writer.readHydrationFile(writer.path(id), scanned)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

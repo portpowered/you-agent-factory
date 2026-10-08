@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -68,6 +71,123 @@ func TestOwnerRecoveryCatalogReusesCommittedPrefixes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The file owner proves startup IO with a counting storage edge and asserts
+// recovered public facts. No application graph or capacity fixture is needed.
+func TestOwnerRecoveryReadsEachCaptureSourceOnce(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name, format string
+		journalFirst bool
+	}{
+		{name: "journal", format: "journal"},
+		{name: "snapshot", format: "snapshot"},
+		{name: "snapshot-first", format: "snapshot-and-journal"},
+		{name: "journal-first", format: "snapshot-and-journal", journalFirst: true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			original := seedRecoverySource(t, local, fixture.format)
+			want, err := original.LoadWorkerRecording(t.Context(), "recording")
+			if err != nil {
+				t.Fatal(err)
+			}
+			storage := &recoverySourceReadProbe{Local: local, reads: make(map[string]int), journalFirst: fixture.journalFirst}
+			store, err := NewFileWriter(storage, local, storage, &captureTimeProbe{}, original.root, "reopened", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range []string{original.path("recording"), original.path("recording") + "l"} {
+				_, err := local.ReadFile(path)
+				count := 1
+				if errors.Is(err, os.ErrNotExist) {
+					count = 0
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				if storage.reads[path] != count {
+					t.Fatalf("successful source reads = %d, want %d for %s", storage.reads[path], count, fixture.name)
+				}
+			}
+			storage.fault = errors.New("read after readiness")
+			got, err := store.LoadWorkerRecording(t.Context(), "recording")
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("recovery changed committed history: got=%+v want=%+v err=%v", got, want, err)
+			}
+			page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+			if err != nil || len(page.Items) != 1 || page.Items[0].Terminal == nil || page.Items[0].Terminal.Status != "COMPLETED" {
+				t.Fatalf("ready catalog: %+v err=%v", page, err)
+			}
+		})
+	}
+}
+
+func seedRecoverySource(t *testing.T, local platformreplay.Local, format string) *FileWriter {
+	t.Helper()
+	original := journalWriter(t, local)
+	opening := journalRecord(t, "recording", "worker")
+	terminal := opening
+	terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "worker"), 2)
+	if format == "journal" {
+		persistWorkerRecoveryPrefix(t, original, "recording", "worker", opening.Record, terminal.Record)
+		return original
+	}
+	records := []events.Record{opening.Record}
+	if format == "snapshot" {
+		records = append(records, terminal.Record)
+	}
+	data, err := json.Marshal(recordings.WorkerRecordingSnapshot{
+		RecordingID: "recording", Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: "worker", Topic: opening.Record.ID.Topic, Records: records,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := local.WriteFile(original.path("recording"), data); err != nil {
+		t.Fatal(err)
+	}
+	if format == "snapshot-and-journal" {
+		if err := original.PersistWorkerRecord(t.Context(), terminal); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return original
+}
+
+type recoverySourceReadProbe struct {
+	platformreplay.Local
+	reads        map[string]int
+	fault        error
+	journalFirst bool
+}
+
+func (probe *recoverySourceReadProbe) ScanDirectory(path string, size int, visit func([]os.DirEntry) error) error {
+	return probe.Local.ScanDirectory(path, size, func(files []os.DirEntry) error {
+		sort.Slice(files, func(i, j int) bool {
+			if probe.journalFirst {
+				return files[i].Name() > files[j].Name()
+			}
+			return files[i].Name() < files[j].Name()
+		})
+		return visit(files)
+	})
+}
+
+func (probe *recoverySourceReadProbe) ReadFile(path string) ([]byte, error) {
+	if probe.fault != nil {
+		return nil, probe.fault
+	}
+	data, err := probe.Local.ReadFile(path)
+	if err == nil {
+		probe.reads[path]++
+	}
+	return data, err
 }
 
 func assertRecoveredCatalogState(t *testing.T, item recordings.WorkerCapturedCatalogItem, state string) {

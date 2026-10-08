@@ -61,7 +61,7 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		if file.IsDir() || (!strings.HasSuffix(file.Name(), ".worker.jsonl") && !strings.HasSuffix(file.Name(), ".worker.json")) {
+		if file.IsDir() || seen[file.Name()] || (!strings.HasSuffix(file.Name(), ".worker.jsonl") && !strings.HasSuffix(file.Name(), ".worker.json")) {
 			continue
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
@@ -77,11 +77,12 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 			writer.markCatalogDamaged()
 			continue // Unreadable identities grant no recovery authority.
 		}
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		if err := writer.recoverRecordingOwner(ctx, id); err != nil {
+		// Hydration combines the legacy snapshot and its journal. Enumerating
+		// the second file must not read those same source bytes again.
+		seen[filepath.Base(writer.path(id))] = true
+		seen[filepath.Base(writer.path(id)+"l")] = true
+		scanned := scannedWorkerFile{path: filepath.Join(writer.root, file.Name()), data: data}
+		if err := writer.recoverRecordingOwner(ctx, id, &scanned); err != nil {
 			return false, err
 		}
 		// Recovery hydrated this entry behind the append barrier. Reuse it
@@ -105,11 +106,11 @@ func (writer *FileWriter) markCatalogDamaged() {
 	writer.catalogMu.Unlock()
 }
 
-func (writer *FileWriter) recoverRecordingOwner(ctx context.Context, id string) error {
+func (writer *FileWriter) recoverRecordingOwner(ctx context.Context, id string, scanned *scannedWorkerFile) error {
 	entry := writer.entry(id)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	if err := writer.hydrate(ctx, id, entry); err != nil {
+	if err := writer.hydrateFromScan(ctx, id, entry, scanned); err != nil {
 		return nil // Corrupt journals remain unreadable; never append through them.
 	}
 	if entry.damaged {
