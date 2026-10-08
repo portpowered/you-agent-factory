@@ -189,6 +189,9 @@ func TestHistoricalQueryRejectsInvalidHistoryBeforeProjection(t *testing.T) {
 			_, err = New(func(string) ([]byte, error) { return payload, nil }, peer).
 				QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 			assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
+			_, err = New(func(string) ([]byte, error) { return payload, nil }, nil).
+				ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+			assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 			if peer.events != nil {
 				t.Fatal("invalid history reached projection")
 			}
@@ -331,4 +334,84 @@ func assertIgnoredJSONPaths(t *testing.T, got, want []string) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ignored paths = %#v, want %#v", got, want)
 	}
+}
+
+// Derived event readers preserve the decoded contract while leaving the world
+// projection dependency unused. A subsequent read must see changed bytes.
+func TestHistoricalEventReadPreservesFactsAndFreshness(t *testing.T) {
+	t.Parallel()
+	identity, payload := historicalLoaderFixture(t, false)
+	peer := &historicalProjectionPeer{}
+	query := New(func(string) ([]byte, error) { return payload, nil }, peer)
+	request := recordings.HistoricalRecordingQueryRequest{Recording: identity}
+	full, err := query.QueryHistoricalRecording(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer.events = nil
+	compact, err := query.ReadHistoricalEvents(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full.WorldState = recordings.WorldStateView{}
+	full.WorkstationRequests = recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
+	if !reflect.DeepEqual(compact, full) || peer.events != nil {
+		t.Fatalf("event facts differ from canonical query or reached world projection: %v", err)
+	}
+	compact.Events[0].Payload = "changed detached result"
+	fresh, err := query.ReadHistoricalEvents(request)
+	if err != nil || fresh.Events[0].Payload != full.Events[0].Payload {
+		t.Fatalf("mutated result contaminated subsequent read: %v", err)
+	}
+	var artifact legacyArtifactDocument
+	if err := json.Unmarshal(payload, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact.Events[0].Id = "replacement"
+	payload, err = json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err = query.ReadHistoricalEvents(request)
+	if err != nil || fresh.Events[0].ID != "replacement" {
+		t.Fatalf("replaced artifact was stale: %v", err)
+	}
+}
+
+func TestHistoricalEventReadValidatesDispatchAndReadFailures(t *testing.T) {
+	t.Parallel()
+	identity, payload := historicalLoaderFixture(t, false)
+	for _, scenario := range []struct {
+		name    string
+		failure error
+		kind    recordings.HistoricalRecordingQueryErrorKind
+	}{
+		{"missing", os.ErrNotExist, recordings.HistoricalRecordingQueryErrorMissingHistory},
+		{"unavailable", os.ErrPermission, recordings.HistoricalRecordingQueryErrorUnavailable},
+		{"canceled", context.Canceled, recordings.HistoricalRecordingQueryErrorUnavailable},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := New(func(string) ([]byte, error) { return nil, scenario.failure }, nil).
+				ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+			assertHistoricalQueryKind(t, err, scenario.kind)
+			if !errors.Is(err, scenario.failure) {
+				t.Fatalf("lost read failure: %v", err)
+			}
+		})
+	}
+	var artifact legacyArtifactDocument
+	if err := json.Unmarshal(payload, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact.Events[0].Type = factorydefinitions.FactoryEventTypeDispatchRequest
+	dispatch := "dispatch"
+	artifact.Events[0].Context.DispatchID = &dispatch
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = New(func(string) ([]byte, error) { return payload, nil }, nil).
+		ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+	assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 }

@@ -16,7 +16,7 @@ type canonicalQueryFake struct {
 	cancel   context.CancelFunc
 }
 
-func (f *canonicalQueryFake) QueryHistoricalRecording(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+func (f *canonicalQueryFake) ReadHistoricalEvents(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
 	f.requests = append(f.requests, request)
 	if f.cancel != nil {
 		f.cancel()

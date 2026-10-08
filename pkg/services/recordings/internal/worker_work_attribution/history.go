@@ -8,7 +8,7 @@ import (
 
 // CanonicalHistoryQuery is the existing Recordings decoder and projection.
 type CanonicalHistoryQuery interface {
-	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
 }
 
 // CurrentBoardArtifact selects only the configured current board in one scope.
@@ -40,7 +40,7 @@ func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, pa
 	if artifact == "" {
 		return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: recordings.RecordingID(page.Catalog.RecordingID)}
 	}
-	result, err := r.query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{InferFactorySessionScope: true, Recording: recordings.HistoricalRecordingIdentity{
+	result, err := r.query.ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest{InferFactorySessionScope: true, Recording: recordings.HistoricalRecordingIdentity{
 		RecordingID: recordings.RecordingID(page.Catalog.RecordingID), Artifact: artifact,
 		Scope: recordings.CanonicalEventScope{FactorySessionID: page.Catalog.FactorySessionID},
 	}})

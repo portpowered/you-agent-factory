@@ -8,4 +8,7 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 // state without consulting the live ledger.
 type Service interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	// ReadHistoricalEvents validates the selected artifact for derived readers
+	// that do not consume a reconstructed world or workstation requests.
+	ReadHistoricalEvents(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
 }

@@ -349,6 +349,9 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 	}
 	archived := historyParityPage(t, ctx, session, host, "archived", "factory", "")
 	closed := assertArchivedAttributionRow(t, archived, id, live, recorded)
+	all := historyParityPage(t, ctx, session, host, "all", "factory", "")
+	allRow := assertArchivedAttributionRow(t, all, id, live, recorded)
+	assertJSONEqual(t, closed, allRow)
 	selected := getHost(t, endpoint)
 	assertJSONEqual(t, closed, selected)
 	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
