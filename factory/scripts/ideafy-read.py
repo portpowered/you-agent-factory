@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """Bounded retries for ideafy's session and explicit-session Work inspection.
 
-Only recognized HTTP 5xx and transport timeouts are retried. subprocess.run
-kills and reaps a timed-out child before the next attempt. No shell or writes.
+Legacy CLI forms retry only recognized HTTP 5xx and transport timeouts.
+Optional ALL inventory retries any failed read once with a longer timeout.
+subprocess.run kills and reaps a timed-out child. No shell or writes.
 """
 
+import json
+from http.client import HTTPException
 import random
 import re
 import subprocess
 import sys
 import time
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 from uuid import UUID
 
 
 BACKOFF = (1, 2, 4)
 ATTEMPT_TIMEOUT = 30
+INVENTORY_TIMEOUTS = (10, 60)
 MAX_JITTER = 0.25
 DIAGNOSTIC_PREFIX = r"^(?:Error: |debug: cause\[\d+\]=)?"
 STATUS = re.compile(
@@ -30,9 +35,9 @@ TRANSPORT_TIMEOUT = re.compile(
 
 
 def command_for(args):
-    """Allow exactly the prompt's two read forms, with explicit authority."""
+    """Allow only the prompt's read forms, with explicit authority."""
     if len(args) not in (4, 6) or args[0] != "--server":
-        raise ValueError("expected --server <url> session list or work list --session <UUID>")
+        raise ValueError("expected --server <url> session list/inventory or work list --session <UUID>")
     server = urlsplit(args[1])
     if (server.scheme not in ("http", "https") or not server.hostname
             or server.username or server.password or server.query or server.fragment):
@@ -41,10 +46,35 @@ def command_for(args):
     server.port
     if args[2:] == ["session", "list"]:
         return ["you", "--debug", *args], "session-list"
+    if args[2:] == ["session", "inventory"]:
+        return args[1].rstrip("/") + "/factory-sessions?scope=all", "session-inventory"
     if len(args) == 6 and args[2:5] == ["work", "list", "--session"]:
         UUID(args[5])
         return ["you", "--debug", *args], "work-list"
-    raise ValueError("only session list and work list --session <UUID> are permitted")
+    raise ValueError("only session list/inventory and work list --session <UUID> are permitted")
+
+
+def inventory_read(url, *, http, sleep, jitter, stdout, stderr):
+    """Optional read: every admitted failure gets one longer retry; no bodies in diagnostics."""
+    for attempt, timeout in enumerate(INVENTORY_TIMEOUTS, 1):
+        try:
+            with http(Request(url, method="GET"), timeout=timeout) as response:
+                if response.status != 200:
+                    raise ValueError("unsuccessful inventory status")
+                body = response.read()
+            payload = json.loads(body)
+            if not isinstance(payload, dict) or not isinstance(payload.get("sessions"), list):
+                raise ValueError("invalid inventory response")
+        except (OSError, ValueError, UnicodeError, HTTPException):
+            stderr.write((f"ideafy-read: session-inventory attempt={attempt}/2"
+                          f" class=transient timeout={timeout}s\n").encode("utf-8"))
+            if attempt == len(INVENTORY_TIMEOUTS):
+                stderr.write(b"ideafy-read: optional session inventory gap after 2 attempts; perform the bound mission\n")
+                return 1
+            sleep(1 + max(0, min(MAX_JITTER, jitter())))
+            continue
+        stdout.write(body)
+        return 0
 
 
 def retry_class(stderr):
@@ -57,7 +87,7 @@ def retry_class(stderr):
 
 
 def main(args, *, runner=subprocess.run, sleep=time.sleep,
-         jitter=lambda: random.uniform(0, MAX_JITTER), stdout=None, stderr=None):
+         jitter=lambda: random.uniform(0, MAX_JITTER), http=urlopen, stdout=None, stderr=None):
     stdout = sys.stdout.buffer if stdout is None else stdout
     stderr = sys.stderr.buffer if stderr is None else stderr
     try:
@@ -65,6 +95,10 @@ def main(args, *, runner=subprocess.run, sleep=time.sleep,
     except ValueError as error:
         stderr.write(f"ideafy-read: invalid arguments: {error}\n".encode("utf-8"))
         return 2
+
+    if family == "session-inventory":
+        return inventory_read(command, http=http, sleep=sleep, jitter=jitter,
+                              stdout=stdout, stderr=stderr)
 
     for attempt in range(1, len(BACKOFF) + 2):
         try:

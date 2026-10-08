@@ -238,6 +238,13 @@ def check_mailbox_policy(plan, process, lead):
 
 LOOPBACK_RULES = {
     'ideafy': (
+        ('inventory-command', 'python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 session inventory'),
+        ('inventory-retry', 'The optional session inventory uses an initial 10-second HTTP timeout and exactly one retry at 60 seconds.'),
+        ('inventory-class', 'Every failed admitted inventory read is transient; invalid arguments and cancellation are not retried.'),
+        ('inventory-gap', 'On exhaustion, record the inventory gap in feedback and supervisor working memory; never treat it as an empty inventory.'),
+        ('mission', 'For a mission-bearing thoughts loopback, perform the bound mission despite an optional inventory gap.'),
+        ('mission-failure', "A loopback returns FAILED only for its own mission's reasons, never for an optional supervisor inventory read."),
+        ('mission-precedence', 'Mission instructions take precedence over the portfolio-supervisor routine.'),
         ('stable-path', 'docs/temp/projects/<project>/proposals/<loopback-name>.json in the main checkout.'),
         ('handoff', 'Dry-run the saved proposal in the explicit Factory Session; submit no Project children.'),
         ('ownership', 'Return ACCEPTED with the proposal path in output; admission ownership alone never causes FAILED.'),
@@ -265,6 +272,9 @@ def check_loopback_policy(prompts):
         for name, clause in rules:
             if clause not in normalized:
                 diagnostics.append(f'{owner}:loopback-{name}: missing policy clause: {clause}')
+    ideafy = ' '.join(prompts.get('ideafy', '').split())
+    if re.search(r'Fail with the final command evidence when the helper exhausts|On a failed CLI operation or unverified admission|inventory[^.\n]*\b(?:return|returns)\s+`?FAILED', ideafy):
+        diagnostics.append('ideafy:loopback-inventory-fatal: conflicting optional inventory failure policy')
     return diagnostics
 
 
