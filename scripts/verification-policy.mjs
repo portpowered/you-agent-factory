@@ -185,7 +185,7 @@ function packageLane(name, selectedEnv, reasonEnv, resultEnv, candidateResultEnv
 		name,
 		selected: env(selectedEnv),
 		reason: env(reasonEnv),
-		packageLane: true,
+		packageLane: name !== "API Package" || env("API_INDEPENDENT") !== "true",
 		checks: [
 			{
 				name: "verification",

@@ -12,7 +12,19 @@ import {
 	validateControlledRawFailureWorkflowContract,
 	validateFunctionalDiagnosticsArtifactWorkflowContract,
 	validateFrontendSharedSetupWorkflowContract,
+	validateConsolidatedCIWorkflowContract,
 } from "./workflow-lint.mjs";
+
+test("consolidated workflow preserves selected proof and merged result mappings", () => {
+	const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+	assert.equal(validateConsolidatedCIWorkflowContract({ workflow }).status, "pass");
+	for (const text of ["actionlint@v1.7.12", "run: make docs-reference-smoke",
+		"API_INDEPENDENT: ${{ github.event_name == 'pull_request' }}",
+		"DOCS_RESULT: ${{ needs.classify.outputs.docs_result }}",
+		"run: bash scripts/ci/run-api-pr-verification.sh"]) {
+		assert.throws(() => validateConsolidatedCIWorkflowContract({ workflow: workflow.replace(text, "removed") }), /workflow contract/);
+	}
+});
 
 test("Workflow Lint guards shared frontend proof, cache identity and policy wiring", () => {
 	const workflow = readFileSync(join(process.cwd(), ".github", "workflows", "ci.yml"), "utf8");
@@ -25,7 +37,8 @@ test("Workflow Lint guards shared frontend proof, cache identity and policy wiri
 		["FRONTEND_COVERAGE_RESULT: ${{ needs.frontend.result }}", "FRONTEND_COVERAGE_RESULT: ${{ needs.frontend-component.result }}"],
 	]) {
 		assert.throws(() => validateFrontendSharedSetupWorkflowContract({
-			workflow: workflow.replace(before, after),
+			workflow: workflow.slice(0, workflow.indexOf("\n  frontend:\n")) +
+				workflow.slice(workflow.indexOf("\n  frontend:\n")).replace(before, after),
 		}), /workflow contract/);
 	}
 });
