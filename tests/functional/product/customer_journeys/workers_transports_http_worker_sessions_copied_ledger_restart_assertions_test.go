@@ -12,10 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -93,57 +90,6 @@ func copiedLedgerChangedFieldNames(left, right any) []string {
 		}
 	}
 	return changed
-}
-
-func assertCopiedLedgerWorkerRecordingTimings(
-	t *testing.T,
-	snapshot recordings.WorkerRecordingSnapshot,
-	public copiedLedgerPublicSnapshot,
-) {
-	t.Helper()
-	if snapshot.RecordingID == "" || len(snapshot.Sessions) == 0 {
-		t.Fatalf("Worker recording sidecar lacks identity or retained sessions: %#v", snapshot)
-	}
-	startedAtBySession := make(map[string]time.Time, len(snapshot.Sessions))
-	for _, session := range snapshot.Sessions {
-		if _, duplicate := startedAtBySession[session.WorkerSessionID]; duplicate {
-			t.Fatalf("Worker recording sidecar repeats Worker Session %q", session.WorkerSessionID)
-		}
-		if len(session.Records) == 0 {
-			t.Fatalf("Worker recording sidecar has no opening record for %q", session.WorkerSessionID)
-		}
-		var draft workerexecution.Draft
-		if err := json.Unmarshal(session.Records[0].Payload, &draft); err != nil {
-			t.Fatalf("decode Worker Session %q opening draft: %v", session.WorkerSessionID, err)
-		}
-		if draft.Kind != workerexecution.KindSession || draft.Phase != workerexecution.PhaseStarted {
-			t.Fatalf("Worker Session %q opening draft = %s/%s, want SESSION/STARTED", session.WorkerSessionID, draft.Kind, draft.Phase)
-		}
-		var payload workerexecution.SessionPayload
-		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
-			t.Fatalf("decode Worker Session %q opening payload: %v", session.WorkerSessionID, err)
-		}
-		if payload.WorkerSessionID != session.WorkerSessionID || payload.StartedAt == nil {
-			t.Fatalf("Worker Session %q opening payload lacks its exact identity/timestamp: %#v", session.WorkerSessionID, payload)
-		}
-		startedAtBySession[session.WorkerSessionID] = payload.StartedAt.UTC()
-	}
-	seenPublicSessions := make(map[string]struct{}, len(startedAtBySession))
-	for workID, list := range public.lists {
-		for _, observation := range list.Sessions {
-			startedAt, exists := startedAtBySession[observation.WorkerSessionId]
-			if !exists {
-				t.Fatalf("Work %q Worker Session %q is absent from copied Worker recording", workID, observation.WorkerSessionId)
-			}
-			if observation.StartedAt == nil || !observation.StartedAt.Equal(startedAt) {
-				t.Fatalf("Work %q Worker Session %q StartedAt = %v, want source-native opening time %v", workID, observation.WorkerSessionId, observation.StartedAt, startedAt)
-			}
-			seenPublicSessions[observation.WorkerSessionId] = struct{}{}
-		}
-	}
-	if len(seenPublicSessions) != len(startedAtBySession) {
-		t.Fatalf("copied Worker recording has %d sessions but public Work lists expose %d", len(startedAtBySession), len(seenPublicSessions))
-	}
 }
 
 func assertCopiedLedgerSessionListsEqual(
@@ -386,4 +332,152 @@ func readCopiedLedgerEvents(t *testing.T, endpoint string) []factoryapi.WorkerSe
 		t.Fatalf("Worker Session replay ended without a complete summary: %#v", frames)
 	}
 	return frames
+}
+
+// Execution-terminal events do not prove a completed recording flush. There is
+// no public durability-settled notification for these combined projections, so
+// observe the public condition before capturing each recovery epoch's facts.
+func waitCopiedLedgerSnapshotConfirmed(t *testing.T, baseURL, factoryID string, workIDs []string, targetWorkID, failureWorkID string) copiedLedgerPublicSnapshot {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), copiedLedgerReplayTimeout)
+	defer cancel()
+	last, err := support.WaitForObservation(copiedLedgerReplayTimeout,
+		func() (copiedLedgerPublicSnapshot, error) {
+			return observeCopiedLedgerSnapshot(ctx, baseURL, factoryID, workIDs)
+		}, func(snapshot copiedLedgerPublicSnapshot) bool {
+			return copiedLedgerSnapshotConfirmed(snapshot, factoryID, workIDs, targetWorkID, failureWorkID)
+		})
+	if err != nil {
+		// Snapshot fields are private; encode each public response explicitly.
+		response, _ := json.Marshal([]any{last.inventory, last.works, last.lists, last.details})
+		t.Fatalf("settle copied-ledger session %q Works %v: %v; last public responses=%s", factoryID, workIDs, err, response)
+	}
+	for _, workID := range workIDs {
+		count, state := 1, factoryapi.WorkerSessionObservationStateCompleted
+		if workID == targetWorkID {
+			count = 2
+		}
+		if workID == failureWorkID {
+			state = factoryapi.WorkerSessionObservationStateFailed
+		}
+		assertCopiedLedgerWorkRows(t, last.lists[workID], factoryID, workID, count, state)
+	}
+	return last
+}
+
+func observeCopiedLedgerSnapshot(ctx context.Context, baseURL, factoryID string, workIDs []string) (copiedLedgerPublicSnapshot, error) {
+	snapshot := copiedLedgerPublicSnapshot{
+		works:   make(map[string]factoryapi.Work),
+		lists:   make(map[string]factoryapi.ListWorkerSessionsResponse),
+		details: make(map[string]factoryapi.WorkerSessionObservation),
+	}
+	if err := readCopiedLedgerJSON(ctx, copiedLedgerWorkListURL(baseURL, factoryID), &snapshot.inventory); err != nil {
+		return snapshot, err
+	}
+	for _, workID := range workIDs {
+		var work factoryapi.Work
+		if err := readCopiedLedgerJSON(ctx, copiedLedgerWorkURL(baseURL, factoryID, workID), &work); err != nil {
+			return snapshot, err
+		}
+		snapshot.works[workID] = work
+		var list factoryapi.ListWorkerSessionsResponse
+		endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(factoryID) + "/worker-sessions?workId=" + url.QueryEscape(workID)
+		if err := readCopiedLedgerJSON(ctx, endpoint, &list); err != nil {
+			return snapshot, err
+		}
+		snapshot.lists[workID] = list
+		for _, observation := range list.Sessions {
+			var detail factoryapi.WorkerSessionObservation
+			if err := readCopiedLedgerJSON(ctx, copiedLedgerWorkerSessionURL(baseURL, factoryID, observation.WorkerSessionId), &detail); err != nil {
+				return snapshot, err
+			}
+			snapshot.details[observation.WorkerSessionId] = detail
+		}
+	}
+	return snapshot, nil
+}
+
+func readCopiedLedgerJSON(ctx context.Context, endpoint string, target any) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET %s: status=%d body=%s", endpoint, response.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("decode %s: %w; body=%s", endpoint, err, body)
+	}
+	return nil
+}
+
+func copiedLedgerSnapshotConfirmed(snapshot copiedLedgerPublicSnapshot, factoryID string, workIDs []string, targetWorkID, failureWorkID string) bool {
+	if len(snapshot.inventory.Results) != len(workIDs) || len(snapshot.works) != len(workIDs) {
+		return false
+	}
+	inventory := make(map[string]factoryapi.Work)
+	for _, work := range snapshot.inventory.Results {
+		inventory[support.StringPointerValue(work.WorkId)] = work
+	}
+	if len(inventory) != len(workIDs) {
+		return false
+	}
+	seenSessions, seenAttempts := make(map[string]bool), make(map[string]bool)
+	for _, workID := range workIDs {
+		state, count, attemptState := "complete", 1, factoryapi.WorkerSessionObservationStateCompleted
+		if workID == targetWorkID {
+			count = 2
+		}
+		if workID == failureWorkID {
+			state, attemptState = "failed", factoryapi.WorkerSessionObservationStateFailed
+		}
+		if !copiedLedgerWorkConfirmed(inventory[workID], workID, state) || !copiedLedgerWorkConfirmed(snapshot.works[workID], workID, state) {
+			return false
+		}
+		if !copiedLedgerAttemptsConfirmed(snapshot.lists[workID], snapshot.details, factoryID, workID, count, attemptState, seenSessions, seenAttempts) {
+			return false
+		}
+	}
+	return len(snapshot.details) == len(seenSessions)
+}
+
+func copiedLedgerWorkConfirmed(work factoryapi.Work, workID, state string) bool {
+	return support.StringPointerValue(work.WorkId) == workID && work.State != nil &&
+		work.State.Name == state && copiedLedgerConfirmation(work) == "CONFIRMED"
+}
+
+func copiedLedgerAttemptConfirmed(observation factoryapi.WorkerSessionObservation, factoryID, workID string, state factoryapi.WorkerSessionObservationState) bool {
+	return observation.WorkerSessionId != "" && observation.AttemptId != "" && observation.State == state &&
+		observation.ConfirmationState == factoryapi.CONFIRMED && support.StringPointerValue(observation.FactorySessionId) == factoryID &&
+		support.StringPointerValue(observation.WorkId) == workID && reflect.DeepEqual(observation.WorkIds, []string{workID}) &&
+		(state != factoryapi.WorkerSessionObservationStateFailed || observation.Failure != nil)
+}
+
+func copiedLedgerAttemptsConfirmed(list factoryapi.ListWorkerSessionsResponse, details map[string]factoryapi.WorkerSessionObservation,
+	factoryID, workID string, count int, state factoryapi.WorkerSessionObservationState, seenSessions, seenAttempts map[string]bool) bool {
+	if len(list.Sessions) != count {
+		return false
+	}
+	for _, listed := range list.Sessions {
+		if seenSessions[listed.WorkerSessionId] || seenAttempts[listed.AttemptId] {
+			return false
+		}
+		seenSessions[listed.WorkerSessionId], seenAttempts[listed.AttemptId] = true, true
+		detail := details[listed.WorkerSessionId]
+		if detail.WorkerSessionId != listed.WorkerSessionId || detail.AttemptId != listed.AttemptId ||
+			!copiedLedgerAttemptConfirmed(listed, factoryID, workID, state) ||
+			!copiedLedgerAttemptConfirmed(detail, factoryID, workID, state) {
+			return false
+		}
+	}
+	return true
 }

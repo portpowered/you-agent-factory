@@ -374,15 +374,8 @@ func writeCompactVerdict(logPath, verdictPath string, exitCode int) error {
 		return fmt.Errorf("open functional coverage log: %w", err)
 	}
 	defer logFile.Close()
-	lines := make([]string, 0)
-	scanner := bufio.NewScanner(logFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if compactVerdictLine(line) {
-			lines = append(lines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
+	lines, err := readCompactVerdictLines(logFile)
+	if err != nil {
 		return fmt.Errorf("read functional coverage log: %w", err)
 	}
 	if len(lines) == 0 {
@@ -398,6 +391,25 @@ func writeCompactVerdict(logPath, verdictPath string, exitCode int) error {
 		outcome = "coverage-gate-failure"
 	}
 	return writeTextFile(verdictPath, fmt.Sprintf("Functional coverage outcome: %s\n%s\n", outcome, joined))
+}
+
+// ReadString retains complete lines without Scanner's token-size ceiling.
+func readCompactVerdictLines(input io.Reader) ([]string, error) {
+	reader := bufio.NewReader(input)
+	lines := make([]string, 0)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		if compactVerdictLine(line) {
+			lines = append(lines, line)
+		}
+		if errors.Is(err, io.EOF) {
+			return lines, nil
+		}
+	}
 }
 
 func compactVerdictLine(line string) bool {

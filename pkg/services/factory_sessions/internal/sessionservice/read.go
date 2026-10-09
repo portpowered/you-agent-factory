@@ -847,3 +847,9 @@ func canonicalDurableSessionViews(
 	}
 	return views
 }
+
+// ResolveOpeningSessionIdentity projects only the effective identity for final live binding.
+func (s *Service) ResolveOpeningSessionIdentity(ctx context.Context, sessionID string) (string, error) {
+	projection, err := s.GetFactorySession(ctx, sessionID)
+	return projection.Context.FactorySessionID, err
+}

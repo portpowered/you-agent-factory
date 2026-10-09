@@ -180,13 +180,13 @@ guess. A not-yet-admitted prerequisite remains an explicit hold. Preserve each
 recovered lineage's identity and attempt across cascades.
 This existing-loopback exception does not authorize new speculative joins.
 
-For oversized recovery, retain the independently mergeable PR slice with at
-most 2 stories, about 8 criteria total, and JSON below 20 KB (20,000 UTF-8 bytes)
-with status headroom.
+For recovery, retain the independently mergeable PR slice with JSON below
+20 KB (20,000 UTF-8 bytes) with status headroom. Do not split work to meet a
+story or criterion count; prefer one larger slice over several dependent ones.
 Preserve immutable criterion IDs, source-plan alignment and later proof gates.
 Preserve old oversized artifacts unchanged. Remaining slices are Markdown
 names/outcomes/requirements only; lead/operator admits them after retained
-merge. Escalate inseparable scope; never weaken acceptance to meet a cap.
+merge. Never weaken acceptance.
 
 Work move/reset/restore, equivalent APIs, canonical state edits and
 operatorOverride repair remain forbidden even after operator answers.
