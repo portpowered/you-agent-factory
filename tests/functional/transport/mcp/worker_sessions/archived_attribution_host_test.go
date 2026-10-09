@@ -676,6 +676,22 @@ func readAttributionList(ctx context.Context, endpoint string) (map[string]any, 
 // edge, then observe startup warming and optional absence through public reads.
 func runArchivedWorkAttributionStartup(t *testing.T, process support.Process) {
 	t.Parallel()
+	for _, native := range []bool{true, false} {
+		name := "controlled reads and replay"
+		if native {
+			name = "native recording reads"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runArchivedWorkAttributionStartupProfile(t, process, native)
+		})
+	}
+}
+
+// Each immutable recording-read shape owns its profile. Within a profile,
+// seed, joined shutdown, legacy edits and reconstruction preserve single-writer
+// recovery ordering; all compatible capture cells share that host graph.
+func runArchivedWorkAttributionStartupProfile(t *testing.T, process support.Process, native bool) {
 	host, sessions, runner, dir := startRecordedAttributionHost(t)
 	connection, ctx := startMCP(t, process, host.URL())
 	expected := make(map[string]map[string]any)
@@ -696,12 +712,15 @@ func runArchivedWorkAttributionStartup(t *testing.T, process support.Process) {
 	prepareLegacyAttributionFixtures(t, dir, expected)
 	var forbidden atomic.Bool
 	var reads, replayReads atomic.Int64
-	read := func(path string) ([]byte, error) {
-		if forbidden.Load() {
-			reads.Add(1)
-			return nil, errors.New("presentation recording IO forbidden")
+	var read recordings.RecordingReadFile
+	if !native {
+		read = func(path string) ([]byte, error) {
+			if forbidden.Load() {
+				reads.Add(1)
+				return nil, errors.New("presentation recording IO forbidden")
+			}
+			return os.ReadFile(path)
 		}
-		return os.ReadFile(path)
 	}
 	reopened := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
@@ -714,7 +733,12 @@ func runArchivedWorkAttributionStartup(t *testing.T, process support.Process) {
 	assertHistoryReadFailure(t, reopened, damagedID, http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
 	assertToolError(t, callAction(t, ctx, connection, "READ", map[string]any{"workerSessionId": damagedID}), "worker_session.internal_error", false)
 	delete(expected, "damaged")
-	assertStartupAttribution(t, ctx, connection, reopened, expected)
+	for range 2 {
+		assertStartupAttribution(t, ctx, connection, reopened, expected)
+	}
+	if native {
+		return
+	}
 	if reads.Load() != 0 {
 		t.Fatalf("startup presentation recording reads=%d", reads.Load())
 	}
@@ -793,7 +817,7 @@ func assertStartupAttribution(t *testing.T, ctx context.Context, connection *mcp
 		if name == "absent" {
 			wantName = nil
 		}
-		if selected["workName"] != wantName || selected["workId"] != row["workId"] || selected["provider"] != row["provider"] || selected["recordingHealth"] != "COMPLETE" {
+		if selected["workName"] != wantName || selected["workId"] != row["workId"] || selected["factorySessionId"] != row["factorySessionId"] || selected["provider"] != row["provider"] || selected["recordingHealth"] != "COMPLETE" {
 			t.Fatalf("startup %s attribution=%v", name, selected)
 		}
 		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, connection, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
@@ -803,6 +827,16 @@ func assertStartupAttribution(t *testing.T, ctx context.Context, connection *mcp
 		page := historyParityPage(t, ctx, connection, reopened, view, "factory", "")
 		if len(page["sessions"].([]any)) != 3 {
 			t.Fatalf("startup fleet membership=%v", page)
+		}
+		for name, row := range expected {
+			want := make(map[string]any, len(row))
+			for key, value := range row {
+				want[key] = value
+			}
+			if name == "absent" {
+				delete(want, "workName")
+			}
+			assertArchivedAttributionRow(t, page, row["workerSessionId"].(string), want, true)
 		}
 	}
 }
