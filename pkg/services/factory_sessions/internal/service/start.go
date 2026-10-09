@@ -191,12 +191,12 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	products, err := r.openForRequest(ctx, selected)
+	lifecycle, _, closeArtifacts, err := r.openForRequest(ctx, selected)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
-	activation, err := startSessionLifecycle(ctx, products.lifecycle, products.closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
+	activation, err := startSessionLifecycle(ctx, lifecycle, closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}

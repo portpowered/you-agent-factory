@@ -550,7 +550,7 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 
-	products, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{
+	_, _, closeArtifacts, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/factory",
 	})
 	if err != nil {
@@ -564,9 +564,9 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		name  string
 		close func() error
 	}{
-		{name: "application", close: products.closeArtifacts},
-		{name: "invocation", close: products.closeArtifacts},
-		{name: "execution", close: products.closeArtifacts},
+		{name: "application", close: closeArtifacts},
+		{name: "invocation", close: closeArtifacts},
+		{name: "execution", close: closeArtifacts},
 	}
 	for _, role := range roleCleanups {
 		if role.close == nil {
@@ -595,6 +595,7 @@ type cleanupRoutingRoot struct {
 	factoryruntime.Service
 	activations   int
 	deactivations int
+	deactivate    func(context.Context, factoryruntime.RuntimeDeactivationRequest) error
 }
 
 func (root *cleanupRoutingRoot) Activate(
@@ -613,11 +614,62 @@ func (root *cleanupRoutingRoot) Activate(
 }
 
 func (root *cleanupRoutingRoot) Deactivate(
-	context.Context,
-	factoryruntime.RuntimeDeactivationRequest,
+	ctx context.Context,
+	request factoryruntime.RuntimeDeactivationRequest,
 ) (factoryruntime.RuntimeDeactivationResult, error) {
 	root.deactivations++
+	if root.deactivate != nil {
+		return factoryruntime.RuntimeDeactivationResult{}, root.deactivate(ctx, request)
+	}
 	return factoryruntime.RuntimeDeactivationResult{}, nil
+}
+
+func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCancellation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		firstError error
+		wantCalls  int
+	}{
+		{name: "failed close retries", firstError: errors.New("selected runtime close failed"), wantCalls: 2},
+		{name: "already inactive closes once", firstError: factoryruntime.ErrRuntimeNotActive, wantCalls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			caller, cancel := context.WithCancel(t.Context())
+			cancel()
+			root := &cleanupRoutingRoot{}
+			root.deactivate = func(ctx context.Context, request factoryruntime.RuntimeDeactivationRequest) error {
+				if caller.Err() == nil || ctx.Err() != nil {
+					t.Fatalf("cleanup cancellation: caller=%v cleanup=%v", caller.Err(), ctx.Err())
+				}
+				if request.RuntimeID != "selected-generation" {
+					t.Fatalf("cleanup selected runtime = %q", request.RuntimeID)
+				}
+				if root.deactivations == 1 {
+					return test.firstError
+				}
+				return nil
+			}
+			factory := &Root{runtimeRoot: root}
+			closeRuntime := factory.activationCloser(factoryruntime.RuntimeBinding{}, "selected-generation")
+			firstErr := closeRuntime()
+			if test.wantCalls == 2 && !errors.Is(firstErr, test.firstError) {
+				t.Fatalf("first cleanup error = %v, want original close cause", firstErr)
+			}
+			if test.wantCalls == 1 && firstErr != nil {
+				t.Fatalf("already inactive cleanup error = %v", firstErr)
+			}
+			for range 2 {
+				if err := closeRuntime(); err != nil {
+					t.Fatalf("cleanup retry = %v", err)
+				}
+			}
+			if root.deactivations != test.wantCalls {
+				t.Fatalf("cleanup attempts = %d, want %d", root.deactivations, test.wantCalls)
+			}
+		})
+	}
 }
 
 func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.T) {

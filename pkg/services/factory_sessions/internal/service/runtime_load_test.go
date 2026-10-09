@@ -679,7 +679,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		}, nil, nil, nil),
 	}
 
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{
 			Directory:        "/authored-b",
 			SourcePath:       "/authored-b/factory.json",

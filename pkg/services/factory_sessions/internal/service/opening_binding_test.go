@@ -120,7 +120,7 @@ func TestRuntimeOpeningBindingObservationCapabilities(t *testing.T) {
 				runtime = &portableReplayRuntimeService{}
 				want = nil
 			}
-			gateway := &runtimeProductsSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
+			gateway := &openingSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
 				if id != "explicit" {
 					t.Fatalf("lookup selected %q", id)
 				}
@@ -155,7 +155,7 @@ func TestRuntimeOpeningBindingFailureAndSameIdentityRetry(t *testing.T) {
 		return nil
 	})
 	lookups := 0
-	gateway := &runtimeProductsSessionsRole{readLiveSession: func(string) (factorysessions.LiveControlSnapshot, error) {
+	gateway := &openingSessionsRole{readLiveSession: func(string) (factorysessions.LiveControlSnapshot, error) {
 		lookups++
 		return factorysessions.LiveControlSnapshot{}, nil
 	}}

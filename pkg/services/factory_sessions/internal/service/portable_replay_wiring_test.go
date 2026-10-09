@@ -16,6 +16,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -42,22 +43,22 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, closeArtifacts, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
 
-	if _, err := products.replayExecution.Resume(
+	if _, err := replay.Resume(
 		t.Context(),
 		"session-js-checkpoint-001",
 		factorysessions.ControlRequest{RequestID: "resume-application-cleanup"},
 	); err != nil {
 		t.Fatalf("checkpoint Resume() error = %v", err)
 	}
-	if err := products.closeArtifacts(); err != nil {
+	if err := closeArtifacts(); err != nil {
 		t.Fatalf("application cleanup error = %v", err)
 	}
-	if err := products.closeArtifacts(); err != nil {
+	if err := closeArtifacts(); err != nil {
 		t.Fatalf("repeated application cleanup error = %v", err)
 	}
 
@@ -81,11 +82,11 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 		}},
 		err: openingErr,
 	}.Open)
-	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, closeArtifacts, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = products.replayExecution.Resume(t.Context(), "session-js-checkpoint-001",
+	_, err = replay.Resume(t.Context(), "session-js-checkpoint-001",
 		factorysessions.ControlRequest{RequestID: "resume-partial-opening"})
 	if !errors.Is(err, openingErr) {
 		t.Fatalf("resume error = %v, want original opening cause", err)
@@ -94,7 +95,7 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 		t.Fatalf("failed opening resumed or closed outside its owner: resumes=%d events=%v", owner.resumeCalls, events)
 	}
 	for range 2 {
-		if err := products.closeArtifacts(); !errors.Is(err, artifactErr) {
+		if err := closeArtifacts(); !errors.Is(err, artifactErr) {
 			t.Fatalf("application cleanup = %v, want retained partial artifact cause", err)
 		}
 	}
@@ -160,13 +161,13 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 				return acquire(ctx, facts, clock, logger)
 			})
 			request := portableCheckpointOwnerFixture(t).startRequest()
-			failed, err := factory.openForRequest(t.Context(), request)
-			assertFailedReplayAcquisition(t, failed, err, failure, closeErr, events)
-			retried, err := factory.openForRequest(t.Context(), request)
-			if err != nil || retried.replayExecution == nil || attempts != 2 {
-				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retried.replayExecution != nil)
+			failedLifecycle, failedReplay, failedClose, err := factory.openForRequest(t.Context(), request)
+			assertFailedReplayAcquisition(t, failedLifecycle, failedReplay, failedClose, err, failure, closeErr, events)
+			_, retriedReplay, retriedClose, err := factory.openForRequest(t.Context(), request)
+			if err != nil || retriedReplay == nil || attempts != 2 {
+				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retriedReplay != nil)
 			}
-			if err := retried.closeArtifacts(); err != nil {
+			if err := retriedClose(); err != nil {
 				t.Fatal(err)
 			}
 			want := []string{"durable-owner-close"}
@@ -180,22 +181,22 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 	}
 }
 
-func assertFailedReplayAcquisition(t *testing.T, failed runtimeProducts, err, failure, closeErr error, events []string) {
+func assertFailedReplayAcquisition(t *testing.T, failedLifecycle roles.LifecycleRuntime, failedReplay *recordingreplay.Scope, failedClose func() error, err, failure, closeErr error, events []string) {
 	t.Helper()
 	if !errors.Is(err, failure) || (closeErr != nil && !errors.Is(err, closeErr)) {
 		t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
 	}
-	if failed.replayExecution != nil || failed.lifecycle != nil {
+	if failedReplay != nil || failedLifecycle != nil {
 		t.Fatal("failed acquisition published usable session roles")
 	}
 	if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
 		t.Fatalf("failed owner cleanup = %v, want immediate release", events)
 	}
 	if closeErr != nil {
-		if failed.closeArtifacts == nil {
+		if failedClose == nil {
 			t.Fatal("failed release lost its owned cleanup handle")
 		}
-		if err := failed.closeArtifacts(); !errors.Is(err, closeErr) {
+		if err := failedClose(); !errors.Is(err, closeErr) {
 			t.Fatalf("retained cleanup error = %v, want release cause", err)
 		}
 	}
@@ -348,11 +349,11 @@ func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, _, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.replayExecution
+	var execution factorysessions.DurableExecutionService = replay
 	assertHistoricalDispatchReads(t, execution, owner, sessionID)
 	assertUnknownDispatchReads(t, execution)
 
@@ -771,7 +772,7 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 			return replayRuntimeConfigStub{}, nil
 		}, nil, nil, nil),
 	}
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings: recordings.RuntimeSelection{
 			RecordPath: "successor.recording.json",
@@ -935,33 +936,33 @@ func TestCheckpointPortableReplayBindingFailureRetainsCleanupAndRetry(t *testing
 	owner := &portableReplayRuntimeOwner{restorable: true, workerErr: cause, closeErr: cleanupCause}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
 	request := portableCheckpointOwnerFixture(t).startRequest()
-	failed, err := factory.openForRequest(t.Context(), request)
+	_, failedReplay, failedClose, err := factory.openForRequest(t.Context(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = failed.replayExecution.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{})
+	_, err = failedReplay.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{})
 	var typed *factorysessions.DetachedRequestError
 	if !errors.Is(err, cause) || !errors.As(err, &typed) || owner.resumeCalls != 0 || owner.liveChangeBound {
 		t.Fatalf("failed binding resumed or lost cause: err=%v resumes=%d live=%t", err, owner.resumeCalls, owner.liveChangeBound)
 	}
-	if err := failed.closeArtifacts(); !errors.Is(err, cleanupCause) {
+	if err := failedClose(); !errors.Is(err, cleanupCause) {
 		t.Fatalf("owned cleanup: %v", err)
 	}
 	owner.closeErr = nil
-	if err := failed.closeArtifacts(); err != nil {
+	if err := failedClose(); err != nil {
 		t.Fatalf("cleanup retry: %v", err)
 	}
 	owner.workerErr = nil
-	retried, err := factory.openForRequest(t.Context(), request)
+	_, retriedReplay, retriedClose, err := factory.openForRequest(t.Context(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := retried.closeArtifacts(); err != nil {
+		if err := retriedClose(); err != nil {
 			t.Error(err)
 		}
 	}()
-	if _, err := retried.replayExecution.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{}); err != nil {
+	if _, err := retriedReplay.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if owner.resumeCalls != 1 || !owner.liveChangeBound {

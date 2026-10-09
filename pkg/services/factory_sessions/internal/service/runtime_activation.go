@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -22,13 +23,13 @@ import (
 func (r *Root) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (runtimeProducts, *factoryruntime.RuntimeActivation, roles.ApplicationRuntime, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, *factoryruntime.RuntimeActivation, roles.ApplicationRuntime, error) {
 	if err := ctx.Err(); err != nil {
-		return runtimeProducts{}, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	definition, err := definitionRequestFromActivation(request)
 	if err != nil {
-		return runtimeProducts{}, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	session := sessionRequestFromActivation(request)
 	worker := workerRequestFromActivation(request.Inputs.Workers)
@@ -40,7 +41,7 @@ func (r *Root) activateRuntime(
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
 	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
-		return runtimeProducts{}, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
 		strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
@@ -239,7 +240,7 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 func (r *Root) openActivatedRuntime(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
@@ -247,7 +248,7 @@ func (r *Root) openActivatedRuntimeWithReplayInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
 }
 
@@ -255,7 +256,7 @@ func (r *Root) openActivatedRuntimeWithResumeInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	resumeInput *recordings.LoadResumeInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
 }
 
@@ -264,27 +265,29 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	if r == nil || r.runtimeRoot == nil {
-		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Runtime root is required")
+		return nil, nil, nil, fmt.Errorf("open Factory Runtime: Runtime root is required")
 	}
 	activationRequest, err := r.activationRequestWithInputs(ctx, request, preloadedReplayInput, resumeInput)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, err
 	}
-	var products runtimeProducts
+	var lifecycle roles.LifecycleRuntime
+	var replay *recordingreplay.Scope
 	var selectedRuntime roles.ApplicationRuntime
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
-		opened, published, selected, openErr := r.activateRuntime(activationCtx, activation)
+		openedLifecycle, openedReplay, _, published, selected, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
 			return published, openErr
 		}
-		products = opened
+		lifecycle = openedLifecycle
+		replay = openedReplay
 		selectedRuntime = selected
 		return published, nil
 	})
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, err
 	}
 	binding := result.Binding
 	if binding.IsZero() {
@@ -293,11 +296,10 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	closeRuntime := r.activationCloser(binding, result.RuntimeID)
 	if !binding.IsZero() {
 		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
-			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
+			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
-	products.closeArtifacts = closeRuntime
-	return products, nil
+	return lifecycle, replay, closeRuntime, nil
 }
 
 func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {

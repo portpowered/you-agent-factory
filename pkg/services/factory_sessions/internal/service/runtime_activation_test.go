@@ -872,7 +872,7 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 			return replayRuntimeConfigStub{}, nil
 		}, nil, nil, nil),
 	}
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings:        recordings.RuntimeSelection{ReplayPath: "legacy.json"},
 	}).startRequest())
@@ -903,7 +903,7 @@ func TestOpenForRequestReplayRequiresRuntimeRootAndReplayInputs(t *testing.T) {
 		{"replay inputs", &Root{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := test.factory.openForRequest(t.Context(), request)
+			_, _, _, err := test.factory.openForRequest(t.Context(), request)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("openForRequest() error = %v, want %q", err, test.want)
 			}
@@ -930,7 +930,7 @@ func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t 
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
 
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings:        recordings.RuntimeSelection{ResumePath: "source.recording.json"},
 	}).startRequest())

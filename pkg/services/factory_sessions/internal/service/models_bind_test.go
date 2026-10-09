@@ -568,7 +568,7 @@ func TestRuntimeOpeningBindingRetainsEffectiveSessionFacts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			calls := 0
-			gateway := &runtimeProductsSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
+			gateway := &openingSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
 				calls++
 				if id != "selected" {
 					t.Fatalf("lookup ID = %q", id)
@@ -956,12 +956,12 @@ func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t
 	assertOnlyOwnedModelsScopeClosed(t, modelService.closeRequests, bind.Scope)
 }
 
-type runtimeProductsSessionsRole struct {
+type openingSessionsRole struct {
 	roles.SessionGateway
 	readLiveSession func(string) (factorysessions.LiveControlSnapshot, error)
 }
 
-func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
+func (role *openingSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
 	return role.readLiveSession(sessionID)
 }
 

@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
@@ -19,14 +17,6 @@ func recoveryRecordingID(recordingID string) string {
 	}
 	digest := sha256.Sum256([]byte(recordingID))
 	return "sha256:" + hex.EncodeToString(digest[:])
-}
-
-// runtimeProducts is the invocation-local output of Factory Runtime assembly.
-// It is consumed by canonical Start and never stored as another session graph.
-type runtimeProducts struct {
-	lifecycle       roles.LifecycleRuntime
-	replayExecution *recordingreplay.Scope
-	closeArtifacts  func() error
 }
 
 type workerSessionsObservationProvider interface {
