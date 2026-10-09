@@ -396,14 +396,12 @@ func remoteInterruptTransportError(config InterruptConfig, err error) error {
 
 func remoteInterruptHTTPError(response *http.Response, status int) error {
 	payload := struct {
-		Code    string                                  `json:"code"`
-		Message string                                  `json:"message"`
-		Phase   string                                  `json:"phase"`
-		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
+		factoryapi.ErrorResponse
+		Phase string `json:"phase"`
 	}{}
 	if response != nil && response.Body != nil {
 		if err := json.NewDecoder(response.Body).Decode(&payload); err == nil && strings.TrimSpace(payload.Message) != "" {
-			code := strings.TrimSpace(payload.Code)
+			code := strings.TrimSpace(string(payload.Code))
 			if code == "" {
 				code = interruptHTTPErrorCode(status)
 			}
@@ -411,7 +409,7 @@ func remoteInterruptHTTPError(response *http.Response, status int) error {
 			if phase == "" {
 				phase = interruptHTTPErrorPhase(status)
 			}
-			return &CLIError{Code: code, Message: payload.Message, Phase: phase, Details: payload.Details}
+			return &CLIError{Code: code, Message: payload.Message, Phase: phase, Details: remoteAddressDetails(payload.ErrorResponse)}
 		}
 	}
 	return newInterruptCLIError(interruptHTTPErrorCode(status), fmt.Sprintf("remote Worker Session interrupt failed (%d)", status), interruptHTTPErrorPhase(status), nil)
