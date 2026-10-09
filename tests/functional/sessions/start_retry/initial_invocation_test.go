@@ -823,6 +823,13 @@ func assertBindingChildCapacity(t *testing.T, ctx context.Context, process suppo
 
 func assertBindingChildCompletion(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
 	t.Helper()
+	assertBindingChildResult(t, ctx, sessions, id, selected)
+	assertBindingChildDispatches(t, ctx, sessions, id)
+	assertBindingChildResponses(t, ctx, sessions, id, selected)
+}
+
+func assertBindingChildResult(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
+	t.Helper()
 	read, err := support.WaitForObservation(30*time.Second, func() (factorysessions.SessionReadResult, error) {
 		return sessions.GetSession(ctx, id)
 	}, func(value factorysessions.SessionReadResult) bool {
@@ -835,6 +842,10 @@ func assertBindingChildCompletion(t *testing.T, ctx context.Context, sessions fa
 	if err != nil || strings.Count(string(result.PrimaryResult), selected+" COMPLETE") != 2 {
 		t.Fatalf("selected child results: %+v %v", result, err)
 	}
+}
+
+func assertBindingChildDispatches(t *testing.T, ctx context.Context, sessions factorysessions.Service, id string) {
+	t.Helper()
 	dispatches, err := sessions.ListDispatches(ctx, id)
 	if err != nil || len(dispatches.Dispatches) != 2 {
 		t.Fatalf("child dispatches: %+v %v", dispatches, err)
@@ -844,6 +855,10 @@ func assertBindingChildCompletion(t *testing.T, ctx context.Context, sessions fa
 			t.Fatalf("child attempt/recording policy: %+v", dispatch)
 		}
 	}
+}
+
+func assertBindingChildResponses(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
+	t.Helper()
 	subscription, err := sessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
 	if err != nil {
 		t.Fatal(err)
