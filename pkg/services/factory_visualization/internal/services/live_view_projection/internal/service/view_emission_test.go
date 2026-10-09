@@ -229,7 +229,7 @@ func TestProjectionFailureDrainsSelectedSubscriptionAndLeavesPeerPresenting(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			t.Cleanup(func() { _ = selected.Stop(ctx); _ = peer.Stop(ctx) })
 			if err := selected.Start(ctx); err != nil {

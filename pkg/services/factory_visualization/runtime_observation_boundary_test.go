@@ -44,7 +44,7 @@ func TestRuntimeObservationUsesRootServiceObserve(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
@@ -97,7 +97,7 @@ func TestRuntimeObservationPropagatesRootObserveFailure(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	_, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if !errors.Is(err, wantErr) {
@@ -120,7 +120,7 @@ func TestRuntimeObservationUnavailableRuntimeDoesNotCallObserve(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	_, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
@@ -148,7 +148,7 @@ func TestRuntimeSubscribeUsesDeclaredWorkAndEventIngress(t *testing.T) {
 			})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	stream, err := source.SubscribeFactoryEvents(
 		context.Background(),
@@ -187,7 +187,7 @@ func TestRuntimeSubscribeDoesNotRecoverIngressFromRuntimeValue(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	stream, err := source.SubscribeFactoryEvents(
 		context.Background(),

@@ -4,7 +4,6 @@ package factory_visualization
 
 import (
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // View is the transport-independent presentation input emitted after the
@@ -44,8 +43,7 @@ type ErrorReporter = liveviewprojection.ErrorReporter
 // RuntimeFactory constructs one inert visualization root for a selected Factory
 // Session runtime. Wire injects this operation into runtime assembly.
 type RuntimeFactory func(
-	RuntimeReader,
-	recordings.ProjectionService,
+	string,
 	Clock,
 	Sink,
 	ErrorReporter,

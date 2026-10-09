@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -36,7 +37,7 @@ func TestCurrentRuntimeSourceBindsThroughSessionRuntimeReader(t *testing.T) {
 			})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	stream, err := source.SubscribeFactoryEvents(
 		context.Background(),
@@ -73,7 +74,7 @@ func TestCurrentRuntimeSourceUnavailableRuntimeDoesNotSubscribe(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	_, err := source.SubscribeFactoryEvents(
 		context.Background(),
@@ -107,7 +108,7 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 		},
 	}
 	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
+		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
@@ -144,7 +145,7 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 		},
 	}
 	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
+		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
@@ -169,7 +170,8 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 }
 
 type sessionRuntimeReaderStub struct {
-	withRuntimeRead func(func(*factorysessions.LiveRuntime) error) error
+	withRuntimeRead           func(func(*factorysessions.LiveRuntime) error) error
+	withRuntimeReadForSession func(string, func(*factorysessions.LiveRuntime) error) error
 }
 
 func (s sessionRuntimeReaderStub) WithRuntimeRead(
@@ -181,8 +183,54 @@ func (s sessionRuntimeReaderStub) WithRuntimeRead(
 	return s.withRuntimeRead(fn)
 }
 
-func (s sessionRuntimeReaderStub) WithRuntimeReadForSession(_ string, fn func(*factorysessions.LiveRuntime) error) error {
+func (s sessionRuntimeReaderStub) WithRuntimeReadForSession(id string, fn func(*factorysessions.LiveRuntime) error) error {
+	if s.withRuntimeReadForSession != nil {
+		return s.withRuntimeReadForSession(id, fn)
+	}
 	return s.WithRuntimeRead(fn)
+}
+
+func TestRuntimeSourceOpeningKeepsConcurrentSessionObservationsIsolated(t *testing.T) {
+	t.Parallel()
+	runtimes := map[string]*sessionBoundRuntimeFactory{
+		"selected": {stream: &factorydefinitions.FactoryEventStream{History: []factorydefinitions.FactoryEvent{{Id: "selected-retained"}}}, observation: factoryruntime.Observation{Progress: factoryruntime.ObservationProgress{TickCount: 4}}},
+		"peer":     {stream: &factorydefinitions.FactoryEventStream{History: []factorydefinitions.FactoryEvent{{Id: "peer-retained"}}}, observation: factoryruntime.Observation{Progress: factoryruntime.ObservationProgress{TickCount: 9}}},
+	}
+	open := internalservice.NewRuntimeSourceOpening(sessionRuntimeReaderStub{
+		withRuntimeRead: func(func(*factorysessions.LiveRuntime) error) error {
+			return errors.New("unexpected Current Factory read")
+		},
+		withRuntimeReadForSession: func(id string, read func(*factorysessions.LiveRuntime) error) error {
+			runtime := runtimes[id]
+			if runtime == nil {
+				return factorysessions.ErrSessionNotFound
+			}
+			return read(&factorysessions.LiveRuntime{Factory: runtime, WorkAndEventIngress: runtime})
+		},
+	})
+	for id, runtime := range runtimes {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			source := open(id)
+			stream, err := source.SubscribeFactoryEvents(t.Context(), nil, factorydefinitions.FactoryEventReconnectScope{})
+			if err != nil || stream != runtime.stream || stream.History[0].Id != id+"-retained" {
+				t.Fatalf("selected stream = (%#v, %v)", stream, err)
+			}
+			facts, err := source.GetRuntimeSnapshotFacts(t.Context())
+			if err != nil || facts == nil || facts.TickCount != runtime.observation.Progress.TickCount {
+				t.Fatalf("selected observation = (%#v, %v)", facts, err)
+			}
+		})
+	}
+	for _, id := range []string{"", "missing"} {
+		source := open(id)
+		if stream, err := source.SubscribeFactoryEvents(t.Context(), nil, factorydefinitions.FactoryEventReconnectScope{}); stream != nil || !errors.Is(err, factorysessions.ErrSessionNotFound) {
+			t.Fatalf("missing %q stream = (%#v, %v)", id, stream, err)
+		}
+		if facts, err := source.GetRuntimeSnapshotFacts(t.Context()); facts != nil || !errors.Is(err, factorysessions.ErrSessionNotFound) {
+			t.Fatalf("missing %q observation = (%#v, %v)", id, facts, err)
+		}
+	}
 }
 
 type sessionBoundRuntimeFactory struct {

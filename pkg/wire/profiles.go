@@ -519,16 +519,19 @@ func provideProcessRuntimeFactory(
 	return factorysessionwire.NewProcessLifecycleFactory(host)
 }
 
-func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
+func provideFactoryVisualizationFactory(
+	root *factorysessionwire.Root,
+	projections recordings.ProjectionService,
+) factoryvisualization.RuntimeFactory {
+	openSource := factoryvisualizationwire.NewRuntimeSourceOpening(root)
 	return func(
-		reader factoryvisualization.RuntimeReader,
-		projections recordings.ProjectionService,
+		sessionID string,
 		clock factoryvisualization.Clock,
 		sink factoryvisualization.Sink,
 		reportError factoryvisualization.ErrorReporter,
 	) (factoryvisualization.Service, error) {
 		return factoryvisualizationwire.NewRoot(
-			factoryvisualizationwire.NewCurrentRuntimeSource(reader),
+			openSource(sessionID),
 			projections,
 			clock,
 			sink,

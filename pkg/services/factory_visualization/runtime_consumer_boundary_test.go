@@ -54,7 +54,7 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 	}
 	emitted := make([]View, 0, 2)
 	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
+		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(view View) {
@@ -94,7 +94,7 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 		t.Fatalf("Observe ObservedAt = %v, want %v", result.View.ObservedAt, now)
 	}
 
-	facts, err := factoryvisualizationwire.NewCurrentRuntimeSource(reader).GetRuntimeSnapshotFacts(context.Background())
+	facts, err := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session").GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
 		t.Fatalf("GetRuntimeSnapshotFacts after Observe: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestVisualizationConsumerObservationFailsClosedWithoutPetriSnapshot(t *test
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session")
 
 	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
@@ -182,7 +182,7 @@ func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *tes
 		},
 	}
 	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
+		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),

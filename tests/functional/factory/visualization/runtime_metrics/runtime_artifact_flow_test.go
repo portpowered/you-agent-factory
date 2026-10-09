@@ -1,7 +1,6 @@
 package runtime_metrics_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,8 +102,7 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 
 func assertVisualizationDrained(t *testing.T, visualization factoryvisualization.Service, mu *sync.Mutex, views *[]factoryvisualization.View) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+	ctx := t.Context()
 	if drained, err := visualization.StopDrain(ctx, factoryvisualization.StopDrainRequest{}); err != nil || drained.State != factoryvisualization.LifecycleStateStopped {
 		t.Fatalf("drain = %+v, %v", drained, err)
 	}

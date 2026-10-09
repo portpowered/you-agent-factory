@@ -31,13 +31,12 @@ func provideRunRuntimeRunnerBuilder(
 	root *factorysessionwire.Root,
 	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
-	projections recordings.ProjectionService,
 	visualizationSinks factoryvisualization.RuntimeSinkOwner,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (runcli.RuntimeRunnerBuilder, error) {
-	if root == nil || visualizationFactory == nil || projections == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
+	if root == nil || visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
 		return nil, errors.New("run Factory Session: process root and presentation operations are required")
 	}
 	return func(ctx context.Context, request *factorysessions.SessionStartRequest, cancellation initializer.InvocationCancellation, sinkID factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
@@ -57,7 +56,7 @@ func provideRunRuntimeRunnerBuilder(
 		if historical {
 			return buildHistoricalRunSession(inspection, planLifecycle)
 		}
-		runner, err := buildCanonicalRunSession(*request, cancellation, sinkID, root, edges, visualizationFactory, projections, visualizationSinks, httpBinding, newRunner, planLifecycle)
+		runner, err := buildCanonicalRunSession(*request, cancellation, sinkID, root, edges, visualizationFactory, visualizationSinks, httpBinding, newRunner, planLifecycle)
 		if err != nil {
 			return nil, err
 		}
@@ -254,17 +253,16 @@ func buildCanonicalRunSession(
 	root *factorysessionwire.Root,
 	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
-	projections recordings.ProjectionService,
 	visualizationSinks factoryvisualization.RuntimeSinkOwner,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (runSessionRunner, error) {
-	if root == nil || visualizationFactory == nil || projections == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
+	if root == nil || visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
 		return runSessionRunner{}, errors.New("run Factory Session: process root and presentation operations are required")
 	}
 	process := newRunSessionProcess(root, request)
-	visualizationComponent := newRunVisualizationComponent(process, sinkID, root, edges, visualizationFactory, projections, visualizationSinks)
+	visualizationComponent := newRunVisualizationComponent(process, sinkID, root, edges, visualizationFactory, visualizationSinks)
 	transport := newRunner(func(ctx context.Context) error {
 		handler, err := httpBinding(process.ID(), cancellation)
 		if err != nil {
@@ -296,7 +294,6 @@ func newRunVisualizationComponent(
 	root *factorysessionwire.Root,
 	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
-	projections recordings.ProjectionService,
 	visualizationSinks factoryvisualization.RuntimeSinkOwner,
 ) lifecycle.Functions {
 	var visualization factoryvisualization.Service
@@ -317,8 +314,7 @@ func newRunVisualizationComponent(
 				return err
 			}
 			logger := view.Logger
-			reader := selectedVisualizationRuntimeReader{root: root, sessionID: process.ID()}
-			visualization, err = visualizationFactory(reader, projections, view.Clock, sink, func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) })
+			visualization, err = visualizationFactory(process.ID(), view.Clock, sink, func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) })
 			if err != nil {
 				return err
 			}
@@ -335,21 +331,6 @@ func newRunVisualizationComponent(
 			return err
 		},
 	}
-}
-
-// selectedVisualizationRuntimeReader retains only a session selection over the
-// fixed Sessions owner. Current Factory changes cannot redirect this host.
-type selectedVisualizationRuntimeReader struct {
-	root      *factorysessionwire.Root
-	sessionID string
-}
-
-func (reader selectedVisualizationRuntimeReader) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
-	return reader.root.WithRuntimeReadForSession(reader.sessionID, read)
-}
-
-func (reader selectedVisualizationRuntimeReader) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
-	return reader.root.WithRuntimeReadForSession(sessionID, read)
 }
 
 type historicalRunProcess struct{}

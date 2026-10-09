@@ -146,10 +146,10 @@ func NewService(
 	return NewRoot(source, peer, clock, sink, reportError)
 }
 
-// NewCurrentRuntimeSource adapts a selected Factory Session runtime reader to
-// the Visualization source contract.
-func NewCurrentRuntimeSource(reader factoryvisualization.RuntimeReader) factoryvisualization.Source {
-	return internalservice.NewCurrentRuntimeSource(reader)
+// NewRuntimeSourceOpening constructs one addressed runtime observation owner.
+// Its returned operation allocates only a session identity handle.
+func NewRuntimeSourceOpening(reader factoryvisualization.RuntimeReader) func(string) factoryvisualization.Source {
+	return internalservice.NewRuntimeSourceOpening(reader)
 }
 
 // NewResponsePresentation constructs the inert response/event presentation

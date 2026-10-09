@@ -10,25 +10,47 @@ import (
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 )
 
-type currentRuntimeSource struct {
+type runtimeSource struct {
 	reader RuntimeReader
 }
 
-// NewCurrentRuntimeSource adapts the currently selected Factory Session to the
-// exact observation capability consumed by Factory Visualization.
-func NewCurrentRuntimeSource(reader RuntimeReader) Source {
-	return &currentRuntimeSource{reader: reader}
+// NewRuntimeSourceOpening retains one observation owner. Opening a source only
+// retains its addressed session identity; it never changes Current Factory.
+func NewRuntimeSourceOpening(reader RuntimeReader) func(string) Source {
+	owner := &runtimeSource{reader: reader}
+	return func(sessionID string) Source {
+		return selectedRuntimeSource{owner: owner, sessionID: sessionID}
+	}
 }
 
-func (s *currentRuntimeSource) SubscribeFactoryEvents(
-	ctx context.Context,
+type selectedRuntimeSource struct {
+	owner     *runtimeSource
+	sessionID string
+}
+
+func (source selectedRuntimeSource) SubscribeFactoryEvents(ctx context.Context,
 	reconnect *factorydefinitions.FactoryEventReconnectCursor,
 	scope factorydefinitions.FactoryEventReconnectScope,
-) (stream *factorydefinitions.FactoryEventStream, err error) {
+) (*factorydefinitions.FactoryEventStream, error) {
+	return source.owner.subscribeFactoryEvents(ctx, reconnect, scope, source.sessionID)
+}
+
+func (source selectedRuntimeSource) GetRuntimeSnapshotFacts(ctx context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+	return source.owner.getRuntimeSnapshotFacts(ctx, source.sessionID)
+}
+
+func (s *runtimeSource) withRuntimeRead(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
 	if s == nil || s.reader == nil {
-		return nil, factorysessions.ErrRuntimeNotAvailable
+		return factorysessions.ErrRuntimeNotAvailable
 	}
-	err = s.reader.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
+	return s.reader.WithRuntimeReadForSession(sessionID, read)
+}
+
+func (s *runtimeSource) subscribeFactoryEvents(ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope, sessionID string,
+) (stream *factorydefinitions.FactoryEventStream, err error) {
+	err = s.withRuntimeRead(sessionID, func(runtime *factorysessions.LiveRuntime) error {
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
@@ -47,13 +69,8 @@ func (s *currentRuntimeSource) SubscribeFactoryEvents(
 	return stream, err
 }
 
-func (s *currentRuntimeSource) GetRuntimeSnapshotFacts(
-	ctx context.Context,
-) (facts *liveviewprojection.RuntimeSnapshotFacts, err error) {
-	if s == nil || s.reader == nil {
-		return nil, factorysessions.ErrRuntimeNotAvailable
-	}
-	err = s.reader.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
+func (s *runtimeSource) getRuntimeSnapshotFacts(ctx context.Context, sessionID string) (facts *liveviewprojection.RuntimeSnapshotFacts, err error) {
+	err = s.withRuntimeRead(sessionID, func(runtime *factorysessions.LiveRuntime) error {
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}

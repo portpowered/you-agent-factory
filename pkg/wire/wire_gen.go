@@ -724,7 +724,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	resumeWorkerSessionOperation := provideResumeWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	cancelWorkerSessionOperation := provideCancelWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
-	runtimeFactory := provideFactoryVisualizationFactory()
+	runtimeFactory := provideFactoryVisualizationFactory(v182, v19)
 	v198 := wire10.NewRuntimeSinkOwner()
 	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	promptTemplates, err := provideHTTPWorkerPrompts(workersService)
@@ -755,7 +755,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
 	v200 := wire3.NewLifecyclePlanOperation()
-	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, edges2, runtimeFactory, v19, v198, wireHttpRuntimeBinding, runnerFactory, v200)
+	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, edges2, runtimeFactory, v198, wireHttpRuntimeBinding, runnerFactory, v200)
 	if err != nil {
 		return nil, err
 	}

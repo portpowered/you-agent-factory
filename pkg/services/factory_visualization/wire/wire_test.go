@@ -113,8 +113,8 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 func TestWireConstructorsKeepAdaptersInertAndValidateServiceAlias(t *testing.T) {
 	t.Parallel()
 
-	if source := factoryvisualizationwire.NewCurrentRuntimeSource(nil); source == nil {
-		t.Fatal("NewCurrentRuntimeSource(nil) returned nil source")
+	if source := factoryvisualizationwire.NewRuntimeSourceOpening(nil)("selected-session"); source == nil {
+		t.Fatal("NewRuntimeSourceOpening(nil) returned nil source")
 	}
 	if presentation := factoryvisualizationwire.NewResponsePresentation(); presentation == nil {
 		t.Fatal("NewResponsePresentation() returned nil presentation")
