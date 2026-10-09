@@ -156,6 +156,19 @@ func TestScopedWorkHistoricalListSelectsCommittedCaptureWithoutProviderReads(t *
 	}
 }
 
+func TestCapturedFactoryIdentitySelectsSummaryWithoutRecordingLoad(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+	service.recordingID, service.recordingReader = "owned", reader
+	service.providerSessions = forbiddenCapturedProviderProjection{}
+	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+	if err != nil || got.TokenUsage == nil || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 4 || len(reader.ids) != 1 || reader.ids[0] != fixture.workerSessionID {
+		t.Fatalf("selected exact-ID observation=%+v err=%v selected=%v", got, err, reader.ids)
+	}
+}
+
 func TestScopedWorkHistoricalCaptureErrorsDoNotReturnPartialRows(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -427,7 +440,7 @@ func TestScopedWorkHealthRejectsForeignAndMalformedSelections(t *testing.T) {
 	if result, err := service.selectedRecordingHealth(t.Context(), nil, nil); err != nil || len(result) != 0 || len(reader.ids) != 0 {
 		t.Fatalf("empty selected health = %+v, %v, selectors=%v", result, err, reader.ids)
 	}
-	service.recordingReader = &scriptedWorkerRecordingReader{}
+	service.recordingReader = struct{ recordings.WorkerRecordingReader }{&scriptedWorkerRecordingReader{}}
 	if _, err := service.selectedRecordingHealth(t.Context(), nil, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("missing prepared-health capability = %v", err)
 	}
@@ -511,12 +524,12 @@ func TestCapturedFactoryIdentityUsesOnlyCommittedUsage(t *testing.T) {
 		RecordingID: service.recordingID,
 		Sessions: []recordings.WorkerSessionRecordingSnapshot{
 			{WorkerSessionID: "sibling", Status: recordings.WorkerRecordingStatusComplete,
-				Records: []events.Record{{Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"sibling"}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":999}}`)}}},
+				Records: []events.Record{{ID: events.RecordID{Position: 1}, Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"sibling"}}`)},
+					{ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":999}}`)}}},
 			{WorkerSessionID: fixture.workerSessionID, Status: recordings.WorkerRecordingStatusComplete,
-				Records: []events.Record{{Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-recorded-exact"}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"outputTokens":4,"cachedInputTokens":2,"reasoningOutputTokens":1}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"STARTED","payload":{"inputTokens":999}}`)}}},
+				Records: []events.Record{{ID: events.RecordID{Position: 1}, Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-recorded-exact"}}`)},
+					{ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"outputTokens":4,"cachedInputTokens":2,"reasoningOutputTokens":1}}`)},
+					{ID: events.RecordID{Position: 3}, Payload: []byte(`{"kind":"USAGE","phase":"STARTED","payload":{"inputTokens":999}}`)}}},
 		},
 	}}
 	service.recordingReader = reader

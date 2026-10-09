@@ -226,57 +226,22 @@ func selectedCapturedTranscriptMatches(transcript workersessions.ReadTranscriptR
 	return transcript.WorkerSessionID == observation.WorkerSessionID && transcript.ProviderSession == observation.ProviderSession && transcript.AttemptID == observation.AttemptID && transcript.State == observation.State
 }
 
-// Canonical-ID summaries retain Factory lifecycle facts, but usage must come
-// from the committed Worker capture rather than provider files or diagnostics.
+// Exact-ID runtime reads share the selected capture and health capabilities
+// used by scoped lists. Current-runtime attribution remains distinct from the
+// immutable captured owner exposed by archived inspection.
 func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
-	observation.TokenUsage = nil
-	if s.factorySessionID != "" {
-		observation.FactorySessionID = s.factorySessionID
-	}
-	if observation.State == workersessions.StateCanceled && s.Service != nil {
-		archived, found, err := archivedFactoryWorker(ctx, s.Service, observation.FactorySessionID, observation.WorkerSessionID)
-		if err != nil {
-			return workersessions.Observation{}, err
-		}
-		if found && archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
-			observation = archived
-		}
-	}
-	if s.recordingReader == nil || s.recordingID == "" {
-		return observation, nil
-	}
-	snapshot, err := s.recordingReader.LoadWorkerRecording(ctx, s.recordingID)
-	if err != nil {
-		if healthErr := recordingHealthLoadError(err); healthErr != nil {
-			return workersessions.Observation{}, healthErr
-		}
-		return observation, nil
-	}
-	health, err := workerRecordingHealthMap(snapshot, s.recordingID)
+	observation, err := s.withSelectedCapturedIdentity(ctx, observation)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
-	if current, ok := health[observation.WorkerSessionID]; ok {
-		observation.RecordingHealth = current.status
-		observation.RecordingHealthReason = current.reason
-		if current.startedAt != nil {
-			started := *current.startedAt
-			observation.StartedAt = &started
-		}
+	health, err := s.selectedRecordingHealth(ctx, []workersessions.Observation{observation}, nil)
+	if err != nil {
+		return workersessions.Observation{}, err
 	}
-	observation.TokenUsage = capturedFactoryWorkerUsage(snapshot, observation.WorkerSessionID)
-	return observation, nil
+	rows := []workersessions.Observation{observation}
+	s.decorateRecordingHealth(rows, health)
+	return rows[0], nil
 }
-
-func capturedFactoryWorkerUsage(snapshot recordings.WorkerRecordingSnapshot, id string) *workersessions.TokenUsage {
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID == id {
-			return capturedWorkerUsageRecords(session.Records, ^uint64(0))
-		}
-	}
-	return nil
-}
-
 func capturedWorkerUsageRecords(records []events.Record, head uint64) *workersessions.TokenUsage {
 	var usage *workersessions.TokenUsage
 	for _, record := range records {

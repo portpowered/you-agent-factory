@@ -674,6 +674,34 @@ func (reader *scriptedWorkerRecordingReader) LoadWorkerRecording(context.Context
 	return reader.snapshot, nil
 }
 
+func (reader *scriptedWorkerRecordingReader) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if reader.err != nil {
+		return recordings.WorkerCapturedSummary{}, reader.err
+	}
+	for _, session := range reader.snapshot.Sessions {
+		if session.WorkerSessionID == id {
+			return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{
+				Catalog:         recordings.WorkerSessionCatalogEntry{WorkerSessionID: id, RecordingID: reader.snapshot.RecordingID, CommittedPosition: uint64(len(session.Records))},
+				MetadataRecords: session.Records,
+			}}, nil
+		}
+	}
+	return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingIncomplete
+}
+
+func (reader *scriptedWorkerRecordingReader) CurrentWorkerRecordingHealth(_ context.Context, _ string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	snapshot := reader.snapshot
+	snapshot.Sessions = nil
+	for _, session := range reader.snapshot.Sessions {
+		for _, id := range ids {
+			if session.WorkerSessionID == id {
+				snapshot.Sessions = append(snapshot.Sessions, session)
+			}
+		}
+	}
+	return snapshot, reader.err
+}
+
 func TestRecordedWorkerSessionObservationProjectsDurableRecordingHealth(t *testing.T) {
 	fixture := newRecordedExactObservationFixture(t)
 	service := fixture.service.(*recordedWorkerSessionObservation)
