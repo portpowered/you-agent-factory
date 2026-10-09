@@ -704,8 +704,12 @@ successor. Exact retries of previously admitted requests retain their original
 outcome.
 
 To replace an active direct Worker Session, interrupt its admitted dispatch and
-provide a distinct successor identity and replacement input. The server first
-records the source as canceled, then admits the successor against the same
+provide a distinct successor identity and replacement input.
+If the source ID is shared, add `--session <factory-session-id>` to select its owner.
+HTTP callers supply `factorySessionId` in the interrupt request body.
+An unscoped shared ID returns `WORKER_SESSION_AMBIGUOUS` before cancellation or successor admission.
+
+The server first records the source as canceled, then admits the successor against the same
 Provider Session association. Use `--async` to return after those admission
 barriers, or omit it to wait for the successor terminal output:
 

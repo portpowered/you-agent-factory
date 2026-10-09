@@ -18,7 +18,7 @@ const interruptContextMaxBytes = 65536
 // source stop. Admission uses these same values even if the source emits more.
 func (r *registry) freezeInterruptInput(ctx context.Context, plan interruptPlan) (interruptPlan, error) {
 	plan.request = plan.request.Normalize()
-	target, err := r.freezeControlTarget(plan.request.SourceWorkerSessionID)
+	target, err := r.freezeControlTarget(plan.sourceAddressOrID())
 	if err != nil {
 		return plan, err
 	}
@@ -27,7 +27,7 @@ func (r *registry) freezeInterruptInput(ctx context.Context, plan interruptPlan)
 		return plan, err
 	}
 	if plan.request.ResumeMode == "recorded" {
-		_, metadata, exists := r.loadObservationState(plan.request.SourceWorkerSessionID)
+		_, metadata, exists := r.loadObservationState(plan.sourceAddressOrID())
 		if r.logs == nil || !exists || !metadata.direct {
 			return plan, workersessions.ErrInterruptExecutionUnavailable
 		}
@@ -41,7 +41,7 @@ func (r *registry) freezeInterruptInput(ctx context.Context, plan interruptPlan)
 	if _, err := encodeInterruptInput(plan); err != nil {
 		return plan, err
 	}
-	_, metadata, direct := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	_, metadata, direct := r.loadObservationState(plan.sourceAddressOrID())
 	if direct && metadata.direct && r.logs != nil {
 		if err := r.restart.ValidateWorkerRestartRecipe(ctx, plan.request.SuccessorWorkerSessionID, interruptSuccessorExecution(plan)); err != nil {
 			return plan, err
@@ -140,7 +140,7 @@ func interruptContinuationAssociation(req workersessions.ContinueRequest, execut
 // The interrupt owner already synced input and joined the exact source. Reuse
 // continuation admission/lineage without re-reading mutable source input.
 func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.ContinueResult, error) {
-	req := workersessions.ContinueRequest{RequestID: interruptContinuationRequestID(plan.request.RequestID),
+	req := workersessions.ContinueRequest{FactorySessionID: plan.request.FactorySessionID, RequestID: interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID: plan.request.SourceWorkerSessionID, SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID,
 		FollowUpInput: plan.request.ReplacementMessage}
 	r.mu.Lock()
@@ -148,8 +148,9 @@ func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.C
 		r.mu.Unlock()
 		return workersessions.ContinueResult{}, workersessions.ErrInterruptServerStopping
 	}
-	source := r.sessions[req.SourceWorkerSessionID]
-	if source.State != workersessions.StateCanceled || source.SuccessorWorkerSessionID != "" || r.continuationSources[source.ID] != "" {
+	address := plan.sourceAddressOrID()
+	source := r.sessions[address]
+	if source.State != workersessions.StateCanceled || source.SuccessorWorkerSessionID != "" || r.continuationSources[address] != "" {
 		r.mu.Unlock()
 		return workersessions.ContinueResult{}, workersessions.ErrInterruptSourceConflict
 	}
@@ -162,15 +163,15 @@ func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.C
 		r.mu.Unlock()
 		return workersessions.ContinueResult{}, workersessions.ErrInterruptSuccessorAdmissionFailed
 	}
-	snapshot := continuationSourceSnapshot{session: source, execution: plan.execution, dispatchID: plan.dispatchID,
+	snapshot := continuationSourceSnapshot{address: address, session: source, execution: plan.execution, dispatchID: plan.dispatchID,
 		executor: plan.supervision.executor, clock: plan.supervision.clock, scheduler: plan.supervision.scheduler, turnID: plan.supervision.turnID}
-	if metadata := r.observations[source.ID]; metadata != nil {
+	if metadata := r.observations[address]; metadata != nil {
 		snapshot.direct = metadata.direct
 	}
 	if r.continueReplays == nil {
 		r.continueReplays = make(map[string]*continueReplay)
 	}
-	replay := r.storeContinuationReservationLocked(req, continueTuple{sourceID: source.ID, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}, snapshot, execution)
+	replay := r.storeContinuationReservationLocked(req, continueTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}, snapshot, execution)
 	replay.plan.interrupt = true
 	r.mu.Unlock()
 	defer r.finishStart()

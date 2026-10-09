@@ -423,6 +423,12 @@ func WorkerSessionInterruptRequestFromAPI(
 		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
 		ReplacementMessage:       request.ReplacementMessage,
 	}
+	if request.FactorySessionId != nil {
+		interrupt.FactorySessionID = strings.TrimSpace(*request.FactorySessionId)
+		if interrupt.FactorySessionID == "" {
+			return workersessions.InterruptRequest{}, workersessions.ErrInvalidInterruptLineage
+		}
+	}
 	if request.ResumeMode != nil {
 		interrupt.ResumeMode = string(*request.ResumeMode)
 	}

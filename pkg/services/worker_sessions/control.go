@@ -147,6 +147,8 @@ const (
 // source association from Worker Sessions state. Recorded mode starts fresh
 // from captured context; neither mode accepts a caller-supplied reference.
 type InterruptRequest struct {
+	// FactorySessionID optionally selects the exact source owner.
+	FactorySessionID         string `json:",omitempty"`
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -160,6 +162,7 @@ func (req InterruptRequest) Normalize() InterruptRequest {
 	if req.ResumeMode == "" {
 		req.ResumeMode = "provider"
 	}
+	req.FactorySessionID = strings.TrimSpace(req.FactorySessionID)
 	req.RequestID = strings.TrimSpace(req.RequestID)
 	req.SourceWorkerSessionID = strings.TrimSpace(req.SourceWorkerSessionID)
 	req.SuccessorWorkerSessionID = strings.TrimSpace(req.SuccessorWorkerSessionID)
@@ -170,6 +173,9 @@ func (req InterruptRequest) Normalize() InterruptRequest {
 // does not inspect Worker Sessions or cause any downstream effect.
 func (req InterruptRequest) Validate() error {
 	normalized := req.Normalize()
+	if req.FactorySessionID != "" && normalized.FactorySessionID == "" {
+		return ErrInvalidSessionID
+	}
 	if normalized.ResumeMode != "provider" && normalized.ResumeMode != "recorded" {
 		return errors.Join(ErrInvalidInterruptMessage, fmt.Errorf("worker session: invalid interrupt resume mode"))
 	}

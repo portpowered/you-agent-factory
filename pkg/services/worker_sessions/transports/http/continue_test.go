@@ -146,6 +146,7 @@ func TestInterruptWorkerSessionReturnsPhaseAwareSnapshotsAfterAdmission(t *testi
 	handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+		"factorySessionId": " factory-a ",
 		"requestId": " request-1 ",
 		"successorWorkerSessionId": " successor-1 ",
 		"replacementMessage": "  replace the work  "
@@ -165,7 +166,7 @@ func TestInterruptWorkerSessionReturnsPhaseAwareSnapshotsAfterAdmission(t *testi
 		response.Successor.WorkerSessionId != "successor-1" || response.Successor.State != factoryapi.WorkerSessionInterruptSnapshotStateRunning {
 		t.Fatalf("response = %#v, want phase-aware source/successor snapshots", response)
 	}
-	if !service.interruptCalled || service.interruptRequest.RequestID != "request-1" ||
+	if !service.interruptCalled || service.interruptRequest.FactorySessionID != "factory-a" || service.interruptRequest.RequestID != "request-1" ||
 		service.interruptRequest.SourceWorkerSessionID != "source-1" ||
 		service.interruptRequest.SuccessorWorkerSessionID != "successor-1" ||
 		service.interruptRequest.ReplacementMessage != "  replace the work  " {
@@ -472,6 +473,25 @@ func TestContinueWorkerSessionRejectsEmptyExplicitScopeBeforeService(t *testing.
 			handler.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source/continue", strings.NewReader(string(body))), factoryapi.WorkerSessionID("source"))
 			if recorder.Code != http.StatusBadRequest || service.continueCalled || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
 				t.Fatalf("status=%d called=%t body=%s", recorder.Code, service.continueCalled, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestInterruptWorkerSessionRejectsEmptyExplicitScopeBeforeService(t *testing.T) {
+	for _, scope := range []string{"", "   "} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{}
+			handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
+			body, err := json.Marshal(map[string]string{"factorySessionId": scope, "requestId": "request", "successorWorkerSessionId": "successor", "replacementMessage": "next"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source/interrupt", strings.NewReader(string(body))), factoryapi.WorkerSessionID("source"))
+			if recorder.Code != http.StatusBadRequest || service.interruptCalled || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
+				t.Fatalf("status=%d called=%t body=%s", recorder.Code, service.interruptCalled, recorder.Body.String())
 			}
 		})
 	}

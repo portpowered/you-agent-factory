@@ -202,7 +202,7 @@ func TestInterruptLocalAsyncReturnsAdmissionSnapshotsWithoutStreaming(t *testing
 	}}
 	var output bytes.Buffer
 	err := BindInterrupt(nil, boundary, unexpectedWorkerID)(InterruptConfig{
-		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
+		FactorySessionID: " factory-a ", Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "take a different path",
 	})
@@ -216,7 +216,7 @@ func TestInterruptLocalAsyncReturnsAdmissionSnapshotsWithoutStreaming(t *testing
 		t.Fatalf("interrupt request count = %d, want 1", len(boundary.interruptRequests))
 	}
 	request := boundary.interruptRequests[0]
-	if request.RequestID != "interrupt-request" || request.SourceWorkerSessionID != "source-session" ||
+	if request.FactorySessionID != "factory-a" || request.RequestID != "interrupt-request" || request.SourceWorkerSessionID != "source-session" ||
 		request.SuccessorWorkerSessionID != "successor-session" || request.ReplacementMessage != "take a different path" {
 		t.Fatalf("interrupt request = %#v, want exact source/successor/input", request)
 	}
@@ -295,14 +295,14 @@ func TestInterruptRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
 	err := BindInterrupt(testHTTPProtocol(t), boundary, unexpectedWorkerID)(InterruptConfig{
-		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
+		FactorySessionID: " factory-a ", Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "remote replacement",
 	})
 	if err != nil {
 		t.Fatalf("remote async interrupt error = %v", err)
 	}
-	if postCount != 1 || len(boundary.interruptRequests) != 0 {
+	if received.FactorySessionId == nil || *received.FactorySessionId != "factory-a" || postCount != 1 || len(boundary.interruptRequests) != 0 {
 		t.Fatalf("remote/local calls = POST:%d local:%d, want POST:1 local:0", postCount, len(boundary.interruptRequests))
 	}
 	if received.RequestId != "interrupt-request" || received.SuccessorWorkerSessionId != "successor-session" || received.ReplacementMessage != "remote replacement" {

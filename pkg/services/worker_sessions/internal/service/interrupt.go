@@ -25,13 +25,14 @@ type interruptTuple struct {
 }
 
 type interruptPlan struct {
-	request     workersessions.InterruptRequest
-	execution   workers.WorkstationDispatchRequest
-	reference   providers.SessionRef
-	dispatchID  string
-	context     string
-	truncated   bool
-	supervision *supervision
+	sourceAddress string
+	request       workersessions.InterruptRequest
+	execution     workers.WorkstationDispatchRequest
+	reference     providers.SessionRef
+	dispatchID    string
+	context       string
+	truncated     bool
+	supervision   *supervision
 }
 
 type interruptReplay struct {
@@ -64,40 +65,47 @@ func (r *registry) Interrupt(
 	}
 	req = req.Normalize()
 	r.mu.RLock()
-	_, addressErr := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID)
+	address, addressErr := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	address = firstNonEmpty(address, req.SourceWorkerSessionID)
+	if existing := r.interruptReplays[req.RequestID]; addressErr == nil && existing != nil &&
+		existing.tuple != interruptRequestTuple(req, address) {
+		addressErr = workersessions.ErrInterruptRequestIDConflict
+	}
 	r.mu.RUnlock()
 	if addressErr != nil {
 		result := workersessions.InterruptResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
 			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Phase: workersessions.InterruptPhaseValidation}
 		return result, newInterruptError(result.Phase, result, addressErr)
 	}
-	if result, found, err := r.replayDurableInterrupt(callerCtx, req); found {
+	if result, found, err := r.replayDurableInterrupt(callerCtx, req, address); found {
 		return result, err
 	}
-	if err := r.interruptOrigin(req.SourceWorkerSessionID); err != nil {
-		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
+	if err := r.interruptOrigin(address); err != nil {
+		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false, address)
 		return result, newInterruptError(result.Phase, result, err)
 	}
-	reservation, historyErr := r.beginControlHistory(
-		callerCtx,
-		req.SourceWorkerSessionID,
-		workersessions.ControlActionInterrupt,
-		req.RequestID,
-	)
-	if historyErr != nil && !errors.Is(historyErr, workersessions.ErrSessionNotFound) {
-		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
-		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, historyErr)
-	}
-	replay, owner, err := r.reserveInterrupt(req)
+	replay, owner, err := r.reserveInterrupt(req, address)
 	if err != nil {
-		r.finishInterruptControlHistory(reservation, req.SourceWorkerSessionID, workersessions.ControlOutcomeFailed, "")
-		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
+		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false, address)
 		r.logInterruptRejected(req, workersessions.InterruptPhaseValidation, err)
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
 	}
 	if !owner {
-		result, replayErr := awaitInterruptReplay(callerCtx, replay)
-		return result, replayErr
+		return awaitInterruptReplay(callerCtx, replay)
+	}
+	// Claim the immutable tuple before publishing history. Concurrent reuse of
+	// one request ID against another owner must not mutate that owner's stream.
+	reservation, historyErr := r.beginControlHistory(
+		callerCtx, address, workersessions.ControlActionInterrupt, req.RequestID,
+	)
+	if historyErr != nil && !errors.Is(historyErr, workersessions.ErrSessionNotFound) {
+		finishInterruptExecution(replay.plan.supervision, false)
+		finishInterruptOperation(replay.plan.supervision)
+		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false, address)
+		err := newInterruptError(result.Phase, result, historyErr)
+		r.finishInterruptReplay(replay, result, err)
+		r.finishStart()
+		return result, err
 	}
 
 	outcomes := make(chan interruptCompletion, 1)
@@ -107,7 +115,7 @@ func (r *registry) Interrupt(
 		if interruptErr == nil || result.Source.State == workersessions.StateCanceled {
 			outcome = workersessions.ControlOutcomeApplied
 		}
-		r.finishInterruptControlHistory(reservation, req.SourceWorkerSessionID, outcome, replay.plan.dispatchID)
+		r.finishInterruptControlHistory(reservation, address, outcome, replay.plan.dispatchID)
 		r.finishInterruptReplay(replay, result, interruptErr)
 		r.finishStart()
 		outcomes <- interruptCompletion{result: result, err: interruptErr}
@@ -475,16 +483,22 @@ func controlReservationFor(supervision *supervision) *controlHistoryReservation 
 
 func (r *registry) reserveInterrupt(
 	req workersessions.InterruptRequest,
+	addresses ...string,
 ) (*interruptReplay, bool, error) {
-	tuple := interruptTuple{
-		sourceID:    req.SourceWorkerSessionID,
-		successorID: req.SuccessorWorkerSessionID,
-		message:     req.ReplacementMessage,
-		mode:        req.ResumeMode,
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	address := ""
+	if len(addresses) > 0 {
+		address = addresses[0]
+	} else {
+		var err error
+		address, err = r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	address = firstNonEmpty(address, req.SourceWorkerSessionID)
+	tuple := interruptRequestTuple(req, address)
 	if r.interruptReplays == nil {
 		r.interruptReplays = make(map[string]*interruptReplay)
 	}
@@ -497,7 +511,7 @@ func (r *registry) reserveInterrupt(
 	if r.stopping {
 		return nil, false, workersessions.ErrInterruptServerStopping
 	}
-	plan, err := r.prepareInterruptPlanLocked(req)
+	plan, err := r.prepareInterruptPlanLocked(req, address)
 	if err != nil {
 		return nil, false, err
 	}
@@ -507,14 +521,15 @@ func (r *registry) reserveInterrupt(
 
 func (r *registry) prepareInterruptPlanLocked(
 	req workersessions.InterruptRequest,
+	address string,
 ) (interruptPlan, error) {
-	source, err := r.interruptSourceLocked(req)
+	source, err := r.interruptSourceLocked(req, address)
 	if err != nil {
 		return interruptPlan{}, err
 	}
 	association := workersessions.ProviderSessionAssociation{}
 	if req.ResumeMode == "recorded" {
-		return r.reserveInterruptSupervisionLocked(req, source, association)
+		return r.reserveInterruptSupervisionLocked(req, source, association, address)
 	}
 	association, err = interruptSourceAssociation(source)
 	if err != nil {
@@ -529,11 +544,11 @@ func (r *registry) prepareInterruptPlanLocked(
 			return interruptPlan{}, workersessions.ErrInterruptContinuationUnsupported
 		}
 	}
-	return r.reserveInterruptSupervisionLocked(req, source, association)
+	return r.reserveInterruptSupervisionLocked(req, source, association, address)
 }
 
-func (r *registry) interruptSourceLocked(req workersessions.InterruptRequest) (workersessions.Session, error) {
-	source, exists := r.sessions[req.SourceWorkerSessionID]
+func (r *registry) interruptSourceLocked(req workersessions.InterruptRequest, address string) (workersessions.Session, error) {
+	source, exists := r.sessions[address]
 	if !exists {
 		return workersessions.Session{}, workersessions.ErrInterruptSourceNotFound
 	}
@@ -553,8 +568,9 @@ func (r *registry) reserveInterruptSupervisionLocked(
 	req workersessions.InterruptRequest,
 	source workersessions.Session,
 	association workersessions.ProviderSessionAssociation,
+	address string,
 ) (interruptPlan, error) {
-	supervision := r.supervisions[source.ID]
+	supervision := r.supervisions[address]
 	if supervision == nil {
 		return interruptPlan{}, workersessions.ErrInterruptExecutionUnavailable
 	}
@@ -580,7 +596,7 @@ func (r *registry) reserveInterruptSupervisionLocked(
 	supervision.controlDone = make(chan struct{})
 	supervision.requestedAction = workersessions.ControlActionCancel
 	plan := interruptPlan{
-		request:     req,
+		sourceAddress: address, request: req,
 		execution:   cloneWorkstationDispatchRequest(supervision.execution),
 		reference:   association.Reference.Clone(),
 		dispatchID:  supervision.dispatchID,
@@ -655,35 +671,35 @@ func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordin
 		cause := interruptCancellationCause(cancelResult, cancelErr)
 		r.finishInterruptControlHistory(
 			controlReservationFor(plan.supervision),
-			plan.request.SourceWorkerSessionID,
+			plan.sourceAddressOrID(),
 			workersessions.ControlOutcomeFailed,
 			plan.dispatchID,
 		)
-		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false, plan.sourceAddressOrID())
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
 	<-plan.supervision.done
-	source, _ := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
+	source := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false, plan.sourceAddressOrID()).Source
 	if source.State != workersessions.StateCanceled {
 		cause := fmt.Errorf("%w: authoritative source state is %s", workersessions.ErrInterruptSourceCancellationFailed, source.State)
 		r.finishInterruptControlHistory(
 			controlReservationFor(plan.supervision),
-			plan.request.SourceWorkerSessionID,
+			plan.sourceAddressOrID(),
 			workersessions.ControlOutcomeFailed,
 			plan.dispatchID,
 		)
-		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false, plan.sourceAddressOrID())
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
 
 	boundaryContext := context.WithoutCancel(r.serverOwnedContext())
-	stopped := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+	stopped := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false, plan.sourceAddressOrID())
 	if err := r.commitInterruptPhase(boundaryContext, operation, "SOURCE_STOPPED", stopped, nil); err != nil {
-		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, false, plan.sourceAddressOrID())
 		return result, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
 	continued, continueErr := r.admitInterruptSuccessor(plan)
-	result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, continueErr == nil)
+	result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSuccessorAdmission, continueErr == nil, plan.sourceAddressOrID())
 	if continueErr != nil {
 		return result, newInterruptError(workersessions.InterruptPhaseSuccessorAdmission, result, errors.Join(workersessions.ErrInterruptSuccessorAdmissionFailed, continueErr))
 	}
@@ -718,9 +734,11 @@ func (r *registry) finishInterruptControlHistory(
 		return
 	}
 	state := workersessions.StateReserved
-	if session, err := r.Get(context.Background(), workersessions.GetRequest{ID: sourceID}); err == nil {
+	r.mu.RLock()
+	if session, exists := r.sessions[sourceID]; exists {
 		state = session.State
 	}
+	r.mu.RUnlock()
 	r.finishControlHistory(reservation, outcome, dispatchID, state)
 }
 
@@ -812,10 +830,15 @@ func (r *registry) interruptResultSnapshot(
 	req workersessions.InterruptRequest,
 	phase workersessions.InterruptPhase,
 	accepted bool,
+	addresses ...string,
 ) workersessions.InterruptResult {
 	result := interruptResult(req, phase, accepted)
 	r.mu.RLock()
-	if source, ok := r.sessions[req.SourceWorkerSessionID]; ok {
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	if len(addresses) > 0 {
+		address = addresses[0]
+	}
+	if source, ok := r.sessions[address]; ok {
 		result.Source = cloneSession(source)
 	}
 	if successor, ok := r.sessions[req.SuccessorWorkerSessionID]; ok {
@@ -1054,4 +1077,12 @@ func (r *registry) finishResumeHistory(
 ) (workersessions.ControlResult, error) {
 	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
 	return result, resumeErr
+}
+
+func (plan interruptPlan) sourceAddressOrID() string {
+	return firstNonEmpty(plan.sourceAddress, plan.request.SourceWorkerSessionID)
+}
+
+func interruptRequestTuple(req workersessions.InterruptRequest, address string) interruptTuple {
+	return interruptTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, message: req.ReplacementMessage, mode: req.ResumeMode}
 }

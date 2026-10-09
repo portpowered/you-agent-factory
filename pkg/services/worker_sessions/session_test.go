@@ -521,13 +521,14 @@ func TestSession_Validate_RejectsMalformedLineage(t *testing.T) {
 
 func TestInterruptRequestNormalizeValidateAndClonePreserveObservableContract(t *testing.T) {
 	request := workersessions.InterruptRequest{
+		FactorySessionID:         " factory-a ",
 		RequestID:                " request-1 ",
 		SourceWorkerSessionID:    " source-1 ",
 		SuccessorWorkerSessionID: " successor-1 ",
 		ReplacementMessage:       "  preserve surrounding whitespace  ",
 	}
 	normalized := request.Normalize()
-	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+	if normalized.FactorySessionID != "factory-a" || normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
 		t.Fatalf("Normalize() = %#v, want trimmed identities", normalized)
 	}
 	if normalized.ReplacementMessage != request.ReplacementMessage {
@@ -538,6 +539,7 @@ func TestInterruptRequestNormalizeValidateAndClonePreserveObservableContract(t *
 	}
 
 	for name, invalid := range map[string]workersessions.InterruptRequest{
+		"blank explicit scope":      {FactorySessionID: " \t", RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "message"},
 		"missing request ID":        {SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "message"},
 		"invalid lineage":           {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "source", ReplacementMessage: "message"},
 		"blank replacement message": {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: " \t"},

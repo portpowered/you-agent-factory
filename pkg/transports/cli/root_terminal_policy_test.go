@@ -641,14 +641,14 @@ func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"--json", "--server", "http://factory.test:7437",
-		"worker-sessions", "interrupt", "source-1", "--request-id", "request-1",
+		"worker-sessions", "interrupt", "source-1", "--session", "factory-a", "--request-id", "request-1",
 		"--successor-worker-session-id", "successor-1", "--replacement-message", "hello",
 		"--async", "--output", "json", "replace", "input",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute worker-sessions interrupt: %v", err)
 	}
-	if interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
+	if interrupt.FactorySessionID != "factory-a" || interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
 		interrupt.SuccessorWorkerSessionID != "successor-1" || interrupt.ReplacementMessage != "hello" ||
 		interrupt.Server != "http://factory.test:7437" || interrupt.Remote || !interrupt.Async ||
 		interrupt.OutputFormat != "json" || !interrupt.JSON || len(interrupt.Prompt) != 2 {

@@ -85,6 +85,7 @@ func validInterruptInput(input durableInterruptInput, req workersessions.Interru
 	start := workersessions.StartRequest{RequestID: req.RequestID, ID: req.SourceWorkerSessionID, Execution: input.Execution}
 	return req.Validate() == nil && input.ReplacementMessage == req.ReplacementMessage &&
 		input.Execution.Execution.Dispatch.DispatchID == attemptID && start.Validate() == nil &&
+		(req.FactorySessionID == "" || req.FactorySessionID == input.Execution.Execution.FactorySessionID) &&
 		interruptExecutionReplaySafe(input.Execution.Execution)
 
 }
@@ -155,6 +156,12 @@ func validateCapturedInterruptInput(stored, legacyPayload []byte, req workersess
 	}
 	var legacy workersessions.InterruptRequest
 	if json.Unmarshal(stored, &legacy) == nil && legacy.RequestID != "" {
+		// The journal target already proved the owner. Older request-only
+		// artifacts omitted scope, so explicit selection of that same owner
+		// must not change the original request identity.
+		if legacy.FactorySessionID == "" {
+			legacy.FactorySessionID = req.Normalize().FactorySessionID
+		}
 		if legacy.ResumeMode == "" && legacy.Normalize() == req.Normalize() && canonicalInterruptJSONFields(stored, legacy) {
 			return nil
 		}

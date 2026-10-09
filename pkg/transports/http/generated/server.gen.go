@@ -9153,8 +9153,11 @@ type WorkerSessionInterruptError struct {
 // WorkerSessionInterruptErrorPhase Stable operation boundary or caller/transport phase.
 type WorkerSessionInterruptErrorPhase string
 
-// WorkerSessionInterruptRequest Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route.
+// WorkerSessionInterruptRequest Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS in VALIDATION before cancellation or successor admission.
 type WorkerSessionInterruptRequest struct {
+	// FactorySessionId Exact source Factory Session; omit only when the Worker Session ID is unique.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
 	// ReplacementMessage Non-empty replacement input delivered to the admitted successor.
 	ReplacementMessage string `json:"replacementMessage"`
 

@@ -61,7 +61,7 @@ func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool 
 // discovering an unusable recipe in Continue after the source has stopped.
 // Capture identity remains pinned by the existing interrupt fence.
 func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan, target recordings.WorkerControlTarget) (interruptPlan, error) {
-	_, metadata, exists := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	_, metadata, exists := r.loadObservationState(plan.sourceAddressOrID())
 	if r.logs == nil || !exists || !metadata.direct {
 		// Component fixtures and legacy non-direct interruption have no direct
 		// recipe. Preserve those paths; they do not authorize captured restart.

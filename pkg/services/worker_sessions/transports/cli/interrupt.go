@@ -43,6 +43,7 @@ type InterruptConfig struct {
 	Server  string
 	Remote  bool
 
+	FactorySessionID         string
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -171,6 +172,9 @@ func normalizeInterruptRequest(config InterruptConfig) (normalizedInterruptReque
 		RequestId:                requestID,
 		SuccessorWorkerSessionId: successorID,
 		ReplacementMessage:       replacement,
+	}
+	if scope := strings.TrimSpace(config.FactorySessionID); scope != "" {
+		apiRequest.FactorySessionId = &scope
 	}
 	serviceRequest, err := workersessionshttp.WorkerSessionInterruptRequestFromAPI(config.SourceWorkerSessionID, apiRequest)
 	if err != nil {

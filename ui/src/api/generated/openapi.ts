@@ -1595,8 +1595,10 @@ export interface components {
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
-    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. */
+    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS in VALIDATION before cancellation or successor admission. */
     WorkerSessionInterruptRequest: {
+      /** @description Exact source Factory Session; omit only when the Worker Session ID is unique. */
+      factorySessionId?: string;
       /** @description Required caller idempotency key for this interrupt. */
       requestId: string;
       /** @description Distinct Worker Session identity to reserve for the replacement. */

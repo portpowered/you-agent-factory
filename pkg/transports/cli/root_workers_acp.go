@@ -526,7 +526,8 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 		return err
 	}
 	return interrupt(workersessionscli.InterruptConfig{
-		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		FactorySessionID: inputs.factorySessionID,
+		Context:          cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage, ResumeMode: inputs.resumeMode,
 		Prompt: inputs.replacementInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
@@ -538,6 +539,7 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 }
 
 type generatedWorkerSessionsInterruptInputs struct {
+	factorySessionID                                           string
 	sourceWorkerSessionID, requestID, successorWorkerSessionID string
 	userMessage, outputFormat, resumeMode                      string
 	replacementInput                                           []string
@@ -559,6 +561,7 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		target *string
 	}{
 		{"you.worker-sessions.interrupt.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.interrupt.flag.session", &inputs.factorySessionID},
 		{"you.worker-sessions.interrupt.flag.request-id", &inputs.requestID},
 		{"you.worker-sessions.interrupt.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
 		{"you.worker-sessions.interrupt.flag.replacement-message", &inputs.userMessage},
