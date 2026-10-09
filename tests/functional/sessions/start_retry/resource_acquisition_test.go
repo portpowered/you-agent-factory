@@ -50,6 +50,7 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 				t.Fatal("explicit sessions shared an event generation")
 			}
 		}
+		assertSelectedRunningWorker(t, baseURL, scenario.candidateID)
 	}
 	closeInitialOpeningSession(t, sessions, scenarios[0].candidateID)
 	select {
@@ -69,6 +70,7 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 			t.Fatal("closing another session retargeted a peer stream")
 		}
 		assertGatedPeerWork(t, initialOpeningScenario{peerID: id}, baseURL, done[i])
+		assertSelectedRunningWorker(t, baseURL, id)
 	}
 	gate.unblock()
 	for i := 1; i < len(scenarios); i++ {
@@ -81,6 +83,28 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 	}
 }
 
+// Read while the provider edge is held, so terminal output cannot substitute
+// for a live, correctly attributed Worker observation during the overlap.
+func assertSelectedRunningWorker(t *testing.T, baseURL, id string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, id, "/work"))
+	if len(listed.Results) != 1 || listed.Results[0].WorkId == nil {
+		t.Fatalf("gated Work for %s = %#v, want one identified Work", id, listed)
+	}
+	workers := support.ListSessionWorkerSessions(t, baseURL, id, *listed.Results[0].WorkId)
+	if len(workers.Sessions) != 1 {
+		t.Fatalf("gated Worker observations for %s = %#v, want one", id, workers)
+	}
+	worker := workers.Sessions[0]
+	if worker.FactorySessionId == nil || *worker.FactorySessionId != id ||
+		worker.WorkId == nil || *worker.WorkId != *listed.Results[0].WorkId ||
+		worker.WorkerSessionId == "" || worker.AttemptId == "" || worker.EndedAt != nil ||
+		worker.Provider == nil || *worker.Provider != "codex" ||
+		worker.Model == nil || *worker.Model != "gpt-5-codex" {
+		t.Fatalf("gated Worker observation lost selected identity/model: %#v", worker)
+	}
+}
+
 func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions factorysessions.Service, id string) {
 	t.Helper()
 	subscription, err := sessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
@@ -90,6 +114,7 @@ func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions
 	defer subscription.Cursor.Detach()
 	var lastSequence int64
 	var messages int
+	var observed []factorysessions.FactoryResponseEvent
 	// Invocation completion is asserted by selectedProviderInvoke. The public
 	// response cursor independently proves the provider's attributed message;
 	// this live Work route does not promise the durable child's terminal frame.
@@ -99,6 +124,7 @@ func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions
 			t.Fatal(err)
 		}
 		for _, event := range events {
+			observed = append(observed, event)
 			if event.FactorySessionID != id || event.Sequence <= lastSequence || event.DispatchID == "" {
 				t.Fatalf("peer response lost identity or ordering: %+v", event)
 			}
@@ -118,6 +144,32 @@ func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions
 	}
 	if messages != 1 {
 		t.Fatalf("peer completed native response messages=%d, want one", messages)
+	}
+	if len(observed) < 2 {
+		t.Fatal("selected response history has no acknowledged prefix and suffix")
+	}
+	reconnected, err := sessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{
+		SessionID: id, AfterSequence: observed[0].Sequence,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reconnected.Cursor.Detach()
+	remaining := observed[1:]
+	for len(remaining) > 0 {
+		events, err := reconnected.Cursor.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, event := range events {
+			if len(remaining) == 0 {
+				break
+			}
+			if !reflect.DeepEqual(event, remaining[0]) {
+				t.Fatalf("selected cursor replay changed retained event: got %#v, want %#v", event, remaining[0])
+			}
+			remaining = remaining[1:]
+		}
 	}
 }
 

@@ -921,17 +921,6 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 	return source, nil
 }
 
-// LegacyInvocationSourcesForService resolves the paired compatibility
-// capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (legacysnapshot.Provider, LegacyEventSource, error) {
-	observation, err := LegacyObservationForService(runtime)
-	if err != nil {
-		return nil, nil, err
-	}
-	events, err := LegacyEventSourceForService(runtime)
-	return observation, events, err
-}
-
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {
 	if resolver != nil {
 		if session := resolver.Resolve(sessionID); session != nil && session.Runtime != nil && session.Runtime.RuntimeConfig != nil {

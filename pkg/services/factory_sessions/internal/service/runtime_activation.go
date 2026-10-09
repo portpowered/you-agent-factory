@@ -342,13 +342,6 @@ func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
 	)
 }
 
-func (r *RuntimeOpening) activationRequest(
-	ctx context.Context,
-	request factorysessions.SessionStartRequest,
-) (factoryruntime.RuntimeActivationRequest, error) {
-	return r.activationRequestWithInputs(ctx, request, nil, nil)
-}
-
 func (r *RuntimeOpening) activationRequestWithInputs(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,

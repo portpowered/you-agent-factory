@@ -12,7 +12,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -36,40 +35,6 @@ type Service struct {
 	invoker           roles.SessionInvoker
 	activate          func(context.Context, string) error
 	activationGateway factorydefinitions.DefinitionActivationGateway
-}
-
-// New constructs a session gateway with explicit host and dataplane dependencies.
-func New(host legacyHost, responseStreams *responsestream.Registry) *Service {
-	return NewWithResponseStreams(host, responseStreams)
-}
-
-// NewWithResponseStreams constructs a session gateway around an explicitly
-// injected response-stream registry.
-func NewWithResponseStreams(host legacyHost, responseStreams *responsestream.Registry) *Service {
-	return NewWithStreamDependencies(host, host, host, responseStreams)
-}
-
-// NewWithStreamDependencies separates session control-plane callbacks from
-// canonical response-stream lookup and telemetry dependencies.
-func NewWithStreamDependencies(host legacyControlHost, sessions stream.SessionResolver, observer stream.Observer, responseStreams *responsestream.Registry) *Service {
-	return NewWithReconnectValidation(host, sessions, observer, responseStreams, nil, nil)
-}
-
-// NewWithReconnectValidation injects Recordings-owned reconnect validation
-// without exposing its ledger implementation to Factory Sessions.
-func NewWithReconnectValidation(
-	host legacyControlHost,
-	sessions stream.SessionResolver,
-	observer stream.Observer,
-	responseStreams *responsestream.Registry,
-	reconnects factorysessions.ReconnectCursorValidator,
-	results factoryruntime.SessionResultProjectionOperation,
-) *Service {
-	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
-		return nil
-	}
-	streams := stream.NewManagerWithResponseService(sessions, observer, responseStreams, nil)
-	return NewWithLiveChangeCoordinator(host, streams, reconnects, results, nil, nil, nil, host.DurableExecution(), nil, nil, nil)
 }
 
 // NewWithLiveChangeCoordinator constructs the session gateway with the

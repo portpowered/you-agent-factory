@@ -1055,15 +1055,6 @@ func TestLegacyObservationHelpersResolveMigrationCapabilities(t *testing.T) {
 		t.Fatalf("LegacyEventSourceForService = (%v, %v), want source", source, err)
 	}
 
-	combined := struct {
-		factory.Service
-		legacySnapshotService
-		legacyEventService
-	}{Service: replacementFactory{}}
-	snapshotProvider, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(combined)
-	if err != nil || snapshotProvider == nil || eventSource == nil {
-		t.Fatalf("LegacyInvocationSourcesForService = (%v, %v, %v)", snapshotProvider, eventSource, err)
-	}
 }
 
 func assertShutdownCapturedGenerations(t *testing.T, state *sessionruntime.Service, keep, replacement *livesession.LiveSession, firstRun, laterRun, keepRun factory.RuntimeRun, phase string, err, stopErr error) {

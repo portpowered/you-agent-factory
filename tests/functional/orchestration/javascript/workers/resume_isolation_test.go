@@ -6,15 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -276,43 +273,23 @@ func assertJavaScriptResumedWorker(t *testing.T, fixture *javascriptSharedProces
 
 func resumeJavaScriptAndAwaitDurableResult(t *testing.T, fixture *javascriptSharedProcessFixture, sessionID string) {
 	t.Helper()
-	path := filepath.Join(fixture.hostDir, ".you-agent-factory", "durable-sessions", sessionID+".json")
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer watcher.Close()
-	if err := watcher.Add(filepath.Dir(path)); err != nil {
-		t.Fatal(err)
-	}
 	resumed := postJavaScriptResumeJSON[factoryapi.FactorySessionLifecycleControlResponse](t, fixture.baseURL+"/factory-sessions/"+sessionID+"/resume", factoryapi.FactorySessionLifecycleControlRequest{})
 	if resumed.SessionId != sessionID || resumed.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("resume outcome: %+v", resumed)
 	}
-	// Interrupted-session history reads are finite. Atomic snapshot replacement
-	// supplies the readiness signal; only the public session read proves success.
-	deadline := time.NewTimer(30 * time.Second)
-	defer deadline.Stop()
-	for {
-		select {
-		case event := <-watcher.Events:
-			if !strings.EqualFold(filepath.Clean(event.Name), filepath.Clean(path)) {
-				continue
-			}
-			data, err := os.ReadFile(path)
-			var snapshot struct{ Session struct{ Status string } }
-			if err != nil || json.Unmarshal(data, &snapshot) != nil || snapshot.Session.Status != "SUCCEEDED" {
-				continue
-			}
-			session := readJavaScriptSharedDurableSession(t, fixture.baseURL, sessionID)
-			if session.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-				t.Fatalf("resumed public outcome: %+v", session)
-			}
-			return
-		case err := <-watcher.Errors:
-			t.Fatal(err)
-		case <-deadline.C:
-			t.Fatalf("resumed session did not publish terminal snapshot: %s", path)
-		}
+	// The interrupted response stream is closed and its history is finite;
+	// provider completion precedes durable publication. Observe the public
+	// lifecycle until terminal rather than depending on private snapshot writes
+	// or OS watcher delivery to signal readiness.
+	session, err := support.WaitForObservation(30*time.Second, func() (factoryapi.FactorySessionDurableReadModel, error) {
+		read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, fixture.baseURL+"/factory-sessions/"+sessionID)
+		return read.AsFactorySessionDurableReadModel()
+	}, func(session factoryapi.FactorySessionDurableReadModel) bool {
+		return session.Status == factoryapi.FactorySessionDurableLifecycleStatusSucceeded ||
+			session.Status == factoryapi.FactorySessionDurableLifecycleStatusFailed ||
+			session.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceled
+	})
+	if err != nil || session.SessionId != sessionID || session.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("resumed public outcome: %+v, error: %v", session, err)
 	}
 }

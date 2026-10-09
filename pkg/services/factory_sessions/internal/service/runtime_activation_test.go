@@ -635,7 +635,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), request.startRequest())
+	activation, err := factory.activationRequestWithInputs(context.Background(), request.startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -734,7 +734,7 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), request.startRequest())
+	activation, err := factory.activationRequestWithInputs(context.Background(), request.startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -762,12 +762,12 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	activation, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		FactorySession: sessionOwnerFixture{
 			FactorySessionID: "session-1",
 		},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -787,9 +787,9 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 			DefinitionVersion: &factorydefinitions.FactoryVersion{Logical: 1},
 		}}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	activation, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{SourcePath: sourcePath},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -813,9 +813,9 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{err: want}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 		generateSessionID:         func() string { return "" },
 	}
-	_, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	_, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if !errors.Is(err, factorydefinitions.ErrInvalidRuntimeSnapshotDefinition) {
 		t.Fatalf("activationRequest() error = %v, want typed Definitions failure", err)
 	}

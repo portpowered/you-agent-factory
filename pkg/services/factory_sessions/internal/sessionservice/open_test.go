@@ -28,7 +28,9 @@ func newServiceTestGateway(host interface {
 	stream.Host
 }) *factorysessionservice.Service {
 	registry := responsestream.NewRegistry(newServiceTestResponseStream, serviceTestClock)
-	return factorysessionservice.New(host, registry)
+	return factorysessionservice.NewWithLiveChangeCoordinator(host,
+		stream.NewManagerWithResponseService(host, host, registry, nil),
+		nil, nil, nil, nil, nil, host.DurableExecution(), nil, nil, nil)
 }
 
 type openTestHost struct {

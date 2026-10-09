@@ -40,11 +40,11 @@ func TestService_StreamMethods_RequireGateway(t *testing.T) {
 	}
 }
 
-func TestServiceConstructionRequiresResponseStreamRegistry(t *testing.T) {
+func TestServiceConstructionRequiresStreamManager(t *testing.T) {
 	t.Parallel()
 
-	if gateway := New(nil, nil); gateway != nil {
-		t.Fatalf("New without response-stream registry = %#v, want nil", gateway)
+	if gateway := NewWithLiveChangeCoordinator(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); gateway != nil {
+		t.Fatalf("NewWithLiveChangeCoordinator without stream manager = %#v, want nil", gateway)
 	}
 }
 func canonicalInspectionReadFixture(t *testing.T) (*Service, *canonicalInspectionLiveRuntimeFake, *canonicalInspectionDurableFake) {

@@ -391,9 +391,9 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), factorysessions.SessionStartRequest{
+	activation, err := factory.activationRequestWithInputs(context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/factory",
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
