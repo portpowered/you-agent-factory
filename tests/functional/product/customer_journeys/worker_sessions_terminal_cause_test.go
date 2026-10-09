@@ -105,16 +105,21 @@ func TestShutdownTerminalCausePublicParity(t *testing.T) {
 		!reflect.DeepEqual(live.StartedAt, archived.StartedAt) || archived.EndedAt == nil || archived.DurationMillis == nil {
 		t.Fatalf("shutdown archive facts = %+v", archived)
 	}
-	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "show", "--worker-session-id", target.workerSessionID, "--output", "json"})
+	assertShutdownCLIHTTPParity(t, server, target.workerSessionID, archived)
+	if runner.callCount() != 1 {
+		t.Fatalf("closed Runtime admitted %d executions, want one", runner.callCount())
+	}
+}
+
+func assertShutdownCLIHTTPParity(t *testing.T, server *fleetCharacterizationServer, workerSessionID string, archived factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "show", "--worker-session-id", workerSessionID, "--output", "json"})
 	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("CLI shutdown summary: %v %s", err, inputs.Stderr())
 	}
 	var shown factoryapi.WorkerSessionObservation
 	if err := json.Unmarshal([]byte(inputs.Stdout()), &shown); err != nil || !reflect.DeepEqual(shown, archived) {
 		t.Fatalf("CLI/HTTP shutdown summary disagree: %s (%v)", inputs.Stdout(), err)
-	}
-	if runner.callCount() != 1 {
-		t.Fatalf("closed Runtime admitted %d executions, want one", runner.callCount())
 	}
 }
 

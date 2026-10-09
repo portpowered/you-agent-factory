@@ -212,22 +212,7 @@ func TestArchivedOrdinaryReplay(t *testing.T) {
 			if first.Kind != workersessions.ObservationDeliveryRecord || !reflect.DeepEqual(first.Event, expected) {
 				t.Fatalf("replay differs from logs: %+v %+v", first, expected)
 			}
-			last := stream.Next(t.Context())
-			if cell == "complete" {
-				if last.Kind != workersessions.ObservationDeliveryTerminalReplay || last.Summary == nil || !last.Summary.Complete {
-					t.Fatalf("complete replay = %+v", last)
-				}
-			} else {
-				if cell == "incomplete" {
-					if last.Kind != workersessions.ObservationDeliveryRecord || last.Event.Position != 2 {
-						t.Fatalf("incomplete committed terminal = %+v", last)
-					}
-					last = stream.Next(t.Context())
-				}
-				if last.Kind != workersessions.ObservationDeliveryReplaySummary || last.Summary == nil || last.Summary.Complete {
-					t.Fatalf("prefix presented as complete/live: %+v", last)
-				}
-			}
+			assertOrdinaryReplaySummary(t, stream, cell)
 			if stream.Next(t.Context()).Kind != workersessions.ObservationDeliveryClosed {
 				t.Fatal("archive replay did not close")
 			}
@@ -235,6 +220,26 @@ func TestArchivedOrdinaryReplay(t *testing.T) {
 				t.Fatal("archive restored live authority")
 			}
 		})
+	}
+}
+
+func assertOrdinaryReplaySummary(t *testing.T, stream workersessions.ObservationSubscription, cell string) {
+	t.Helper()
+	last := stream.Next(t.Context())
+	if cell == "complete" {
+		if last.Kind != workersessions.ObservationDeliveryTerminalReplay || last.Summary == nil || !last.Summary.Complete {
+			t.Fatalf("complete replay = %+v", last)
+		}
+	} else {
+		if cell == "incomplete" {
+			if last.Kind != workersessions.ObservationDeliveryRecord || last.Event.Position != 2 {
+				t.Fatalf("incomplete committed terminal = %+v", last)
+			}
+			last = stream.Next(t.Context())
+		}
+		if last.Kind != workersessions.ObservationDeliveryReplaySummary || last.Summary == nil || last.Summary.Complete {
+			t.Fatalf("prefix presented as complete/live: %+v", last)
+		}
 	}
 }
 

@@ -382,27 +382,7 @@ func assertArchivedCapturedCLIReplay(t *testing.T, server *support.FunctionalAPI
 	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("archived CLI replay: %v, %s", err, inputs.Stderr())
 	}
-	scanner := bufio.NewScanner(strings.NewReader(inputs.Stdout()))
-	var frames []factoryapi.WorkerSessionEvent
-	var summary *factoryapi.WorkerSessionReplaySummary
-	for scanner.Scan() {
-		var frame factoryapi.WorkerSessionEvent
-		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
-			t.Fatal(err)
-		}
-		if frame.Delivery == "" {
-			var standalone factoryapi.WorkerSessionReplaySummary
-			if err := json.Unmarshal(scanner.Bytes(), &standalone); err != nil || standalone.Kind != "replay-summary" {
-				t.Fatalf("unknown CLI replay output: %s", scanner.Bytes())
-			}
-			summary = &standalone
-			continue
-		}
-		frames = append(frames, frame)
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatal(err)
-	}
+	frames, summary := decodeArchivedCLIReplay(t, inputs.Stdout())
 	if len(frames) > 0 && frames[len(frames)-1].Delivery == "REPLAY_SUMMARY" {
 		summary = frames[len(frames)-1].ReplaySummary
 		frames = frames[:len(frames)-1]
@@ -426,4 +406,30 @@ func assertArchivedCapturedCLIReplay(t *testing.T, server *support.FunctionalAPI
 	if summary == nil || summary.Complete != complete || summary.EventsEmitted != int64(len(frames)) {
 		t.Fatalf("archive did not finish completely: %+v", last)
 	}
+}
+
+func decodeArchivedCLIReplay(t *testing.T, output string) ([]factoryapi.WorkerSessionEvent, *factoryapi.WorkerSessionReplaySummary) {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	var frames []factoryapi.WorkerSessionEvent
+	var summary *factoryapi.WorkerSessionReplaySummary
+	for scanner.Scan() {
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Delivery == "" {
+			var standalone factoryapi.WorkerSessionReplaySummary
+			if err := json.Unmarshal(scanner.Bytes(), &standalone); err != nil || standalone.Kind != "replay-summary" {
+				t.Fatalf("unknown CLI replay output: %s", scanner.Bytes())
+			}
+			summary = &standalone
+			continue
+		}
+		frames = append(frames, frame)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return frames, summary
 }

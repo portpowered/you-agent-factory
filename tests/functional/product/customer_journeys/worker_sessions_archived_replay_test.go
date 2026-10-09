@@ -95,7 +95,14 @@ func assertArchivedCapturedMCPReplay(t *testing.T, server *support.FunctionalAPI
 		summary = frames[len(frames)-1].ReplaySummary
 		frames = frames[:len(frames)-1]
 	}
-	if envelope.Result.Events.Truncated || len(frames) != len(logs.Events) {
+	assertArchivedMCPReplayRecords(t, logs, frames, summary, envelope.Result.Events.Truncated, complete)
+	assertArchivedUnknownCLIHTTP(t, server, logs.WorkerSessionId)
+	assertArchivedUnknownMCPReads(t, ctx, connection)
+}
+
+func assertArchivedMCPReplayRecords(t *testing.T, logs factoryapi.WorkerSessionLogPage, frames []factoryapi.WorkerSessionEvent, summary *factoryapi.WorkerSessionReplaySummary, truncated, complete bool) {
+	t.Helper()
+	if truncated || len(frames) != len(logs.Events) {
 		t.Fatalf("MCP replay records=%d logs=%d", len(frames), len(logs.Events))
 	}
 	for i, frame := range frames {
@@ -109,7 +116,10 @@ func assertArchivedCapturedMCPReplay(t *testing.T, server *support.FunctionalAPI
 	if summary == nil || summary.Complete != complete || summary.EventsEmitted != int64(len(frames)) {
 		t.Fatalf("MCP completeness: %+v", summary)
 	}
-	assertArchivedUnknownCLIHTTP(t, server, logs.WorkerSessionId)
+}
+
+func assertArchivedUnknownMCPReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession) {
+	t.Helper()
 	for _, view := range []string{"summary", "logs", "events"} {
 		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": "unknown-archive-id"}})
 		if err != nil || !result.IsError || len(result.Content) != 1 {
@@ -141,22 +151,7 @@ func assertIncompleteCapturedReplay(t *testing.T, server *support.FunctionalAPIS
 		t.Fatalf("incomplete replay status=%d", response.StatusCode)
 	}
 	// An incomplete replay has no committed terminal; consume to finite EOF.
-	decoder := bufio.NewScanner(response.Body)
-	var frames []factoryapi.WorkerSessionEvent
-	for decoder.Scan() {
-		line := decoder.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		var frame factoryapi.WorkerSessionEvent
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &frame); err != nil {
-			t.Fatal(err)
-		}
-		frames = append(frames, frame)
-	}
-	if err := decoder.Err(); err != nil {
-		t.Fatal(err)
-	}
+	frames := decodeIncompleteReplayFrames(t, response.Body)
 	if len(frames) != len(logs.Events)+1 {
 		t.Fatalf("prefix replay=%+v", frames)
 	}
@@ -173,6 +168,27 @@ func assertIncompleteCapturedReplay(t *testing.T, server *support.FunctionalAPIS
 	if len(active.Sessions) != 0 {
 		t.Fatalf("archive restored live authority: %+v", active)
 	}
+}
+
+func decodeIncompleteReplayFrames(t *testing.T, body io.Reader) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	decoder := bufio.NewScanner(body)
+	var frames []factoryapi.WorkerSessionEvent
+	for decoder.Scan() {
+		line := decoder.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &frame); err != nil {
+			t.Fatal(err)
+		}
+		frames = append(frames, frame)
+	}
+	if err := decoder.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return frames
 }
 
 // The public resolved script contract has no command field. Its failed

@@ -89,11 +89,7 @@ func readShutdownHistorySnapshot(t *testing.T, ctx context.Context, binary, proj
 		t.Fatalf("shutdown archive membership = %+v", rows)
 	}
 	observation := rows[0]
-	if observation.State != "CANCELED" || observation.TerminalCause == nil || *observation.TerminalCause != api.WorkerSessionTerminalCauseOperatorCancel ||
-		observation.StartedAt == nil || observation.EndedAt == nil || observation.DurationMillis == nil ||
-		observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
-		t.Fatalf("shutdown terminal facts = %+v", observation)
-	}
+	assertShutdownHistoryTerminalFacts(t, observation)
 	selected := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId)
 	var shown api.WorkerSessionObservation
 	if err := json.Unmarshal(selected, &shown); err != nil || !reflect.DeepEqual(observation, shown) {
@@ -115,6 +111,15 @@ func readShutdownHistorySnapshot(t *testing.T, ctx context.Context, binary, proj
 	assertHistoryMCP(t, ctx, binary, project, env, server, observation, logs)
 	assertHistoryReplay(t, ctx, binary, project, env, server, logs)
 	return historySnapshot{Observation: observation, Logs: logs}
+}
+
+func assertShutdownHistoryTerminalFacts(t *testing.T, observation api.WorkerSessionObservation) {
+	t.Helper()
+	if observation.State != "CANCELED" || observation.TerminalCause == nil || *observation.TerminalCause != api.WorkerSessionTerminalCauseOperatorCancel ||
+		observation.StartedAt == nil || observation.EndedAt == nil || observation.DurationMillis == nil ||
+		observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
+		t.Fatalf("shutdown terminal facts = %+v", observation)
+	}
 }
 
 func awaitShutdownHistoryAttempt(t *testing.T, ctx context.Context, binary, project string, env []string, server, ready string) api.WorkerSessionObservation {
