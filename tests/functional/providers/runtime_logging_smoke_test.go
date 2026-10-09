@@ -149,7 +149,7 @@ func assertExplicitRuntimeTelemetryArtifacts(t *testing.T, rollingConfig logging
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetention() error = %v", err)
 	}
-	retentionScheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	retentionScheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(retention, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler() error = %v", err)
 	}

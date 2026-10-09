@@ -89,7 +89,7 @@ func newRetentionTestOpener(t *testing.T, paths platformartifact.Reserver) *Runt
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
 	}
-	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)
 	}

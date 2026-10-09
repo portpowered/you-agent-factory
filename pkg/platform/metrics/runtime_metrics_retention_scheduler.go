@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 const runtimeMetricsRetentionInterval = time.Hour
@@ -52,19 +54,26 @@ type RuntimeMetricsRetentionScheduler struct {
 }
 
 // NewRuntimeMetricsRetentionScheduler constructs a process-scoped scheduler.
-// A nil ticker factory selects the production time.Ticker implementation. A
+// A nil ticker factory selects periodic timers on the supplied process scheduler.
+// A nil timer source preserves wall scheduling for standalone callers. A
 // nil reporter discards reports while the sweep still returns deterministic
 // totals to direct callers.
 func NewRuntimeMetricsRetentionScheduler(
 	retention *RuntimeMetricsRetention,
 	tickerFactory RuntimeMetricsRetentionTickerFactory,
 	reporter RuntimeMetricsRetentionReporter,
+	timerSource platformclock.TimerSource,
 ) (*RuntimeMetricsRetentionScheduler, error) {
 	if retention == nil {
 		return nil, errors.New("construct runtime metrics retention scheduler: retention is required")
 	}
 	if tickerFactory == nil {
-		tickerFactory = newRuntimeMetricsRetentionTicker
+		if timerSource == nil {
+			timerSource = platformclock.Real{}
+		}
+		tickerFactory = func(interval time.Duration) RuntimeMetricsRetentionTicker {
+			return newRuntimeMetricsRetentionTicker(interval, timerSource)
+		}
 	}
 	return &RuntimeMetricsRetentionScheduler{
 		retention: retention, tickerFactory: tickerFactory, reporter: reporter,
@@ -268,23 +277,51 @@ func (lease *runtimeMetricsRetentionLease) Close() error {
 }
 
 type runtimeMetricsRetentionTicker struct {
-	ticker *time.Ticker
+	ticks chan time.Time
+	stop  chan struct{}
+	done  chan struct{}
+	once  sync.Once
 }
 
-func newRuntimeMetricsRetentionTicker(interval time.Duration) RuntimeMetricsRetentionTicker {
-	return runtimeMetricsRetentionTicker{ticker: time.NewTicker(interval)}
-}
-
-func (ticker runtimeMetricsRetentionTicker) C() <-chan time.Time {
-	if ticker.ticker == nil {
-		return nil
+// Adapt the process TimerSource to the retention ticker boundary. Keeping the
+// loop here preserves platform ownership of timer lifecycle and coalesces ticks
+// while a sweep is busy, without adding operational logic to Wire.
+func newRuntimeMetricsRetentionTicker(interval time.Duration, source platformclock.TimerSource) RuntimeMetricsRetentionTicker {
+	ticker := &runtimeMetricsRetentionTicker{
+		ticks: make(chan time.Time, 1), stop: make(chan struct{}), done: make(chan struct{}),
 	}
-	return ticker.ticker.C
+	timer := source.NewTimer(interval)
+	go ticker.run(interval, source, timer)
+	return ticker
 }
 
-func (ticker runtimeMetricsRetentionTicker) Stop() {
-	if ticker.ticker != nil {
-		ticker.ticker.Stop()
+func (ticker *runtimeMetricsRetentionTicker) C() <-chan time.Time {
+	return ticker.ticks
+}
+
+func (ticker *runtimeMetricsRetentionTicker) Stop() {
+	if ticker == nil || ticker.done == nil {
+		return
+	}
+	ticker.once.Do(func() { close(ticker.stop) })
+	<-ticker.done
+}
+
+func (ticker *runtimeMetricsRetentionTicker) run(interval time.Duration, source platformclock.TimerSource, timer platformclock.Timer) {
+	defer close(ticker.done)
+	defer func() { timer.Stop() }()
+	for {
+		select {
+		case <-ticker.stop:
+			return
+		case at := <-timer.C():
+			timer.Stop()
+			timer = source.NewTimer(interval)
+			select {
+			case ticker.ticks <- at:
+			default:
+			}
+		}
 	}
 }
 

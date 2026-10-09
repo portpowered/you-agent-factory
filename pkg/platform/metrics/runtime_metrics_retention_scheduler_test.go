@@ -11,9 +11,75 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
+
+func TestRuntimeMetricsTickerDeliversSelectedDeadlinesAndStops(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+	source := &retentionTickerTimerSource{
+		Deterministic: platformclock.NewDeterministic(base, time.Minute),
+		created:       make(chan platformclock.Timer, 4),
+	}
+	ticker := newRuntimeMetricsRetentionTicker(time.Hour, source)
+	t.Cleanup(ticker.Stop)
+	first := <-source.created
+	source.SetTick(59)
+	select {
+	case <-ticker.C():
+		t.Fatal("retention tick arrived before the selected hourly deadline")
+	default:
+	}
+	source.SetTick(60)
+	assertSelectedRetentionTick(t, ticker, base.Add(time.Hour))
+	second := <-source.created
+	if first.Stop() {
+		t.Fatal("delivered retention timer remained active after rearm")
+	}
+	source.SetTick(120)
+	assertSelectedRetentionTick(t, ticker, base.Add(2*time.Hour))
+	last := <-source.created
+	if second.Stop() {
+		t.Fatal("second delivered retention timer remained active after rearm")
+	}
+	ticker.Stop()
+	ticker.Stop()
+	if last.Stop() {
+		t.Fatal("ticker shutdown left the pending process timer active")
+	}
+	source.SetTick(180)
+	select {
+	case <-ticker.C():
+		t.Fatal("stopped retention ticker delivered another tick")
+	default:
+	}
+}
+
+type retentionTickerTimerSource struct {
+	*platformclock.Deterministic
+	created chan platformclock.Timer
+}
+
+func (source *retentionTickerTimerSource) NewTimer(duration time.Duration) platformclock.Timer {
+	timer := source.Deterministic.NewTimer(duration)
+	source.created <- timer
+	return timer
+}
+
+func assertSelectedRetentionTick(t *testing.T, ticker RuntimeMetricsRetentionTicker, want time.Time) {
+	t.Helper()
+	// The deadline is logical; wall time only bounds a failed synchronization.
+	select {
+	case got := <-ticker.C():
+		if !got.Equal(want) {
+			t.Fatalf("retention tick = %v, want selected deadline %v", got, want)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected retention deadline was not delivered")
+	}
+}
 
 func TestRuntimeMetricsRetentionSchedulerRunsStartupAndOneSharedPeriodicLoop(t *testing.T) {
 	root := t.TempDir()
@@ -128,7 +194,7 @@ func TestRuntimeMetricsRetentionSchedulerRetriesFailedCandidateOnNextTick(t *tes
 }
 
 func TestRuntimeMetricsRetentionSchedulerValidatesConfiguration(t *testing.T) {
-	if scheduler, err := NewRuntimeMetricsRetentionScheduler(nil, nil, nil); scheduler != nil || err == nil || !strings.Contains(err.Error(), "retention is required") {
+	if scheduler, err := NewRuntimeMetricsRetentionScheduler(nil, nil, nil, nil); scheduler != nil || err == nil || !strings.Contains(err.Error(), "retention is required") {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler(nil) = (%#v, %v)", scheduler, err)
 	}
 	var nilScheduler *RuntimeMetricsRetentionScheduler
@@ -158,6 +224,7 @@ func TestRuntimeMetricsRetentionSchedulerStartsAndClosesDeterministically(t *tes
 			intervals = append(intervals, interval)
 			return manualTicker
 		},
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -223,7 +290,7 @@ func TestRuntimeMetricsRetentionSchedulerRejectsMissingTickers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
 			}
-			caseScheduler, err := NewRuntimeMetricsRetentionScheduler(caseRetention, test.factory, nil)
+			caseScheduler, err := NewRuntimeMetricsRetentionScheduler(caseRetention, test.factory, nil, nil)
 			if err != nil {
 				t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)
 			}
@@ -247,7 +314,7 @@ func TestRuntimeMetricsRetentionSchedulerReportsPreparationAndCanceledSweep(t *t
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetention(ensure root): %v", err)
 	}
-	workerScheduler, err := NewRuntimeMetricsRetentionScheduler(workerRetention, nil, nil)
+	workerScheduler, err := NewRuntimeMetricsRetentionScheduler(workerRetention, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler(ensure root): %v", err)
 	}
@@ -261,7 +328,7 @@ func TestRuntimeMetricsRetentionSchedulerReportsPreparationAndCanceledSweep(t *t
 	}
 	sweepScheduler, err := NewRuntimeMetricsRetentionScheduler(sweepRetention, nil, func(RuntimeMetricsRetentionReport, error) {
 		t.Fatal("canceled worker sweep published an observation")
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler(sweep): %v", err)
 	}
@@ -281,10 +348,11 @@ func TestRuntimeMetricsRetentionSchedulerHandlesNilLifecycleValues(t *testing.T)
 	if err := (&runtimeMetricsRetentionLease{}).Close(); err != nil {
 		t.Fatalf("lease without scheduler Close() = %v, want nil", err)
 	}
-	if (runtimeMetricsRetentionTicker{}).C() != nil {
+	var zeroTicker runtimeMetricsRetentionTicker
+	if zeroTicker.C() != nil {
 		t.Fatal("zero runtime ticker C() = non-nil, want nil")
 	}
-	(runtimeMetricsRetentionTicker{}).Stop()
+	zeroTicker.Stop()
 }
 
 type nilChannelRetentionTicker struct{}
@@ -320,6 +388,7 @@ func newRuntimeMetricsRetentionSchedulerHarness(
 		func(report RuntimeMetricsRetentionReport, sweepErr error) {
 			harness.reports <- runtimeMetricsRetentionObservation{report: report, err: sweepErr}
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)

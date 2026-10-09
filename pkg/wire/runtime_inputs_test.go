@@ -820,6 +820,7 @@ func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwn
 		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
 		metricsFileSystem,
 		metricsCoordination,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("provideRuntimeMetricsOwner(): %v", err)
