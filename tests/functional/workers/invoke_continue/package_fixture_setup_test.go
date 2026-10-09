@@ -302,6 +302,7 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		"interrupt-mode-recorded",
 		"interrupt-mode-empty",
 		"interrupt-mode-bounded",
+		"interrupt-mode-missing-provider",
 		"manager-interrupt-single-successor",
 		"manager-interrupt-parity",
 		"manager-interrupt-race",
