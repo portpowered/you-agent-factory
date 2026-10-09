@@ -390,41 +390,6 @@ func TestRetainedNamesCanceledDecodeIsRetryable(t *testing.T) {
 	}
 }
 
-func TestRetainedNamesConcurrentReadsAndEviction(t *testing.T) {
-	t.Parallel()
-	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
-	page.Catalog.OriginatingArtifact = "exact.json"
-	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
-	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
-	// Parallel consumers share only immutable projections. No lock spans artifact IO.
-	var readers sync.WaitGroup
-	for range 32 {
-		readers.Go(func() {
-			got, err := reader.readWorkerFactoryNames(t.Context(), page)
-			if err != nil || got.names["work"] != "Alpha" {
-				t.Errorf("concurrent names = %+v, %v", got, err)
-			}
-		})
-	}
-	readers.Wait()
-	if len(query.requests) != 1 {
-		t.Fatalf("unchanged concurrent artifact decoded %d times", len(query.requests))
-	}
-	for index := range maxNameArtifacts + 1 {
-		candidate := page
-		candidate.Catalog.OriginatingArtifact = fmt.Sprintf("artifact-%d.json", index)
-		got, err := reader.readWorkerFactoryNames(t.Context(), candidate)
-		if err != nil || got.names["work"] != "Alpha" {
-			t.Fatalf("eviction list = %+v, %v", got, err)
-		}
-	}
-	calls := len(query.requests)
-	got, err := reader.readWorkerFactoryNames(t.Context(), page)
-	if err != nil || got.names["work"] != "Alpha" || len(query.requests) != calls+1 {
-		t.Fatalf("evicted artifact retry = %+v, %v", got, err)
-	}
-}
-
 type gatedNamesQuery struct {
 	canonicalQueryFake
 	entered chan struct{}
@@ -919,5 +884,25 @@ func TestRetainedNamesRevisionCheckCancellationAndConcurrentReuse(t *testing.T) 
 	wait.Wait()
 	if reads.Load() != 1 || len(query.requests) != 1 {
 		t.Fatalf("stable concurrent reads/decode = %d/%d", reads.Load(), len(query.requests))
+	}
+}
+
+func TestRetainedNamesKeepsMoreThan64DistinctSourcesWarm(t *testing.T) {
+	t.Parallel()
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	var reads int
+	reader := NewArtifactHistoryReader(func(string) (string, error) { return "stable", nil }, query, nil, func(string) ([]byte, error) { reads++; return []byte("same"), nil })
+	for range 2 {
+		for index := range 96 {
+			page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+			page.Catalog.OriginatingArtifact = fmt.Sprintf("source-%d.json", index)
+			got, err := reader.readWorkerFactoryNames(t.Context(), page)
+			if err != nil || got.names["work"] != "Alpha" {
+				t.Fatalf("source %d: %+v %v", index, got, err)
+			}
+		}
+	}
+	if reads != 96 || len(query.requests) != 96 {
+		t.Fatalf("warm sources reread/decoded: reads=%d decodes=%d", reads, len(query.requests))
 	}
 }

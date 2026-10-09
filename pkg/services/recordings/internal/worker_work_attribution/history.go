@@ -63,11 +63,12 @@ func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, pa
 	return result, err
 }
 
-// Retain only names and associations, never events, worlds or source bytes.
+// Retain bounded compact names and associations, never events, worlds or source bytes.
+// Capacity covers thousands of distinct profile sources without startup/list churn.
 // A content digest deliberately catches same-size, same-timestamp replacement.
 // A supported filesystem revision avoids rereading unchanged sources. Without
 // a reliable revision edge, reads still establish freshness through the digest.
-const maxNameArtifacts = 64
+const maxNameArtifacts = 4096
 
 type cachedNames struct {
 	digest     [sha256.Size]byte
@@ -263,14 +264,11 @@ func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeK
 // opening and association in attributionQuery; no capture facts are borrowed.
 // Keeping one entry per source avoids eviction churn from many Worker attempts.
 func (r *ArtifactHistoryReader) cachedProjection(key nameDecodeKey) (nameProjection, bool) {
-	for identity, cached := range r.names {
-		if identity.factory != key.identity.factory || identity.recording != key.identity.recording ||
-			identity.artifact != key.identity.artifact || cached.digest != key.digest {
-			continue
-		}
+	cached, ok := r.names[key.identity]
+	if ok && cached.digest == key.digest {
 		r.nameUse++
 		cached.lastUse = r.nameUse
-		r.names[identity] = cached
+		r.names[key.identity] = cached
 		return cached.projection, true
 	}
 	return nameProjection{}, false
@@ -279,16 +277,14 @@ func (r *ArtifactHistoryReader) cachedProjection(key nameDecodeKey) (nameProject
 // Caller holds mu. Replace revisions of the same exact source, and evict only
 // the least recently used source when full, preserving other warm histories.
 func (r *ArtifactHistoryReader) retainProjection(key nameDecodeKey, projection nameProjection) {
-	var oldest historyIdentity
-	var oldestUse uint64
-	for identity, cached := range r.names {
-		if identity.factory == key.identity.factory && identity.recording == key.identity.recording && identity.artifact == key.identity.artifact {
-			delete(r.names, identity)
-		} else if oldestUse == 0 || cached.lastUse < oldestUse {
-			oldest, oldestUse = identity, cached.lastUse
+	if _, exists := r.names[key.identity]; !exists && len(r.names) >= maxNameArtifacts {
+		var oldest historyIdentity
+		var oldestUse uint64
+		for identity, cached := range r.names {
+			if oldestUse == 0 || cached.lastUse < oldestUse {
+				oldest, oldestUse = identity, cached.lastUse
+			}
 		}
-	}
-	if len(r.names) >= maxNameArtifacts {
 		delete(r.names, oldest)
 	}
 	r.nameUse++
