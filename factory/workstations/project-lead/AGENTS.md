@@ -50,10 +50,12 @@ rewrite, relax, reinterpret, or delete source-plan.md, request.md, or
 acceptance.md. The governing source plan remains the source of truth for
 acceptance criteria; the local copies make the decision boundary durable.
 
-On every cycle, compare the admitted payload and immutable files. If they are
-missing, drifted, contradictory, or insufficient to decide the next behavior,
-record the exact mismatch and emit a blocked Project cycle for operator or
-portfolio-supervisor review. Never proceed against a weaker contract.
+On every cycle, read the immutable files. A source-plan or governing-plan
+change made by the operator or by a merged amendment is the current contract,
+not drift: record its new identity in state.md and continue. If the files are
+missing or contradict each other on the next behavior, ask the operator
+through the mailbox and keep advancing everything the contract still decides.
+Never proceed against a weaker contract.
 
 The runtime Project Work and Factory Events are authoritative for lifecycle.
 Project files are durable working memory and evidence, not a second queue.
