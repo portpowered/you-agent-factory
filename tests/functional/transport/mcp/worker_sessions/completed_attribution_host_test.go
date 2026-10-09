@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -128,7 +129,14 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	host = support.StartFunctionalAPIServer(t, cfg)
 	connection, ctx = startMCP(t, process, host.URL())
 	assertFailedAttributionWork(t, host, support.GetDefaultSession(t, host.URL()).Id, workID)
-	endpoint = host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	selected := assertRestoredCompletedAttributionReads(t, ctx, connection, host, before, logs, transcript)
+	assertRestoredCompletedAttributionControls(t, ctx, connection, host, selected, siblingRunner)
+}
+
+func assertRestoredCompletedAttributionReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession, host *support.FunctionalAPIServer, before map[string]any, logs, transcript any) map[string]any {
+	t.Helper()
+	id, scope := before["workerSessionId"].(string), before["factorySessionId"].(string)
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
 	selected := getHost(t, endpoint).(map[string]any)
 	assertCompletedFailedWorkCapture(t, selected, scope, id)
 	for _, field := range []string{"attemptId", "startedAt", "endedAt", "durationMillis"} {
@@ -157,6 +165,12 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	assertJSONEqual(t, transcript, getHost(t, endpoint+"/transcript"))
 	assertTranscriptEqual(t, transcript, callWorker(t, ctx, connection, "read", map[string]any{"workerSessionId": id, "view": "transcript"})["result"].(map[string]any)["transcript"])
 	assertCompletedAttributionCLITranscript(t, host, id, transcript)
+	return selected
+}
+
+func assertRestoredCompletedAttributionControls(t *testing.T, ctx context.Context, connection *mcp.ClientSession, host *support.FunctionalAPIServer, selected map[string]any, siblingRunner controlHostRunner) {
+	t.Helper()
+	id := selected["workerSessionId"].(string)
 	done := admitControlWorker(t, ctx, host.URL(), "new-unrelated-owner", siblingRunner)
 	assertCompletedAttributionControls(t, host, id)
 	for _, operation := range []string{"CANCEL", "TERMINATE", "KILL", "INTERRUPT"} {
@@ -176,7 +190,7 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 		assertToolError(t, callAction(t, ctx, connection, "CONTROL", args), "worker_session.not_found", false)
 	}
 	assertForceStillActive(t, host, "new-unrelated-owner", done)
-	assertJSONEqual(t, selected, getHost(t, endpoint))
+	assertJSONEqual(t, selected, getHost(t, host.URL()+"/worker-sessions/"+url.PathEscape(id)))
 	assertHistoryReadFailure(t, host, "must-not-exist", http.StatusNotFound, "NOT_FOUND")
 }
 

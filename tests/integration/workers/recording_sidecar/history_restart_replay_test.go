@@ -115,13 +115,30 @@ func writeFailedWorkCaptureMock(t *testing.T, project, factory, node string) {
 
 func assertCompletedFailedWorkArtifact(t *testing.T, got api.WorkerSessionObservation) {
 	t.Helper()
+	assertCompletedArtifactIdentity(t, got)
+	assertCompletedArtifactTerminal(t, got)
+	assertCompletedArtifactUsage(t, got)
+}
+
+func assertCompletedArtifactIdentity(t *testing.T, got api.WorkerSessionObservation) {
+	t.Helper()
 	if got.FactorySessionId == nil || got.WorkId == nil || got.AttemptId == "" ||
-		got.Provider == nil || *got.Provider != "codex" || got.Model == nil || *got.Model != "gpt-5" ||
-		got.State != "COMPLETED" || got.TerminalCause == nil || *got.TerminalCause != api.WorkerSessionTerminalCauseCompleted ||
+		got.Provider == nil || *got.Provider != "codex" || got.Model == nil || *got.Model != "gpt-5" {
+		t.Fatalf("completed capture lost facts: %+v", got)
+	}
+}
+
+func assertCompletedArtifactTerminal(t *testing.T, got api.WorkerSessionObservation) {
+	t.Helper()
+	if got.State != "COMPLETED" || got.TerminalCause == nil || *got.TerminalCause != api.WorkerSessionTerminalCauseCompleted ||
 		got.RecordingHealth == nil || *got.RecordingHealth != "COMPLETE" ||
 		got.StartedAt == nil || got.EndedAt == nil || got.DurationMillis == nil {
 		t.Fatalf("completed capture lost facts: %+v", got)
 	}
+}
+
+func assertCompletedArtifactUsage(t *testing.T, got api.WorkerSessionObservation) {
+	t.Helper()
 	u := got.TokenUsage
 	if u == nil || u.InputTokens == nil || *u.InputTokens != 11 || u.OutputTokens == nil || *u.OutputTokens != 7 || u.TotalTokens == nil || *u.TotalTokens != 18 {
 		t.Fatalf("completed capture usage: %+v", u)

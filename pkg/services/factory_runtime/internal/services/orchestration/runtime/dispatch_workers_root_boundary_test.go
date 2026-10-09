@@ -622,7 +622,7 @@ func TestFactoryImpl_PlanDispatchCapturesResolvedWorkerDefinitionFactsInObservat
 	if observationService == nil {
 		t.Fatal("WorkerSessionsObservation() returned nil")
 	}
-	prepareScopedTestFacts(observationService.(workersessions.Service))
+	prepareScopedTestFacts(observationService)
 	observation, err := observationService.GetObservationByWorkerSessionID(
 		t.Context(),
 		workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: plan.DispatchID},

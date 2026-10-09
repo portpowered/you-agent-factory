@@ -246,18 +246,7 @@ func TestExactLegacyWorkerUsesPreparedSelectorWithoutHistoryReplay(t *testing.T)
 			service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
 				panic("legacy exact summary replayed canonical history")
 			}
-			workerID := fixture.workerSessionID
-			var want error
-			switch scenario {
-			case "missing capture":
-				reader.err = os.ErrNotExist
-			case "unknown worker":
-				workerID, reader.err, want = "unknown", os.ErrNotExist, workersessions.ErrObservationSessionNotFound
-			case "projection unavailable":
-				ledger.err, want = errors.New("unavailable"), workersessions.ErrObservationProjectionUnavailable
-			case "projection canceled":
-				ledger.err, want = context.Canceled, workersessions.ErrObservationCanceled
-			}
+			workerID, want := configureLegacyWorkerScenario(scenario, fixture.workerSessionID, ledger, reader)
 			got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
 			if !errors.Is(err, want) || (want != nil && got.WorkerSessionID != "") {
 				t.Fatalf("prepared legacy summary = %+v, %v; want %v", got, err, want)
@@ -270,6 +259,21 @@ func TestExactLegacyWorkerUsesPreparedSelectorWithoutHistoryReplay(t *testing.T)
 			}
 		})
 	}
+}
+
+func configureLegacyWorkerScenario(scenario, workerID string, ledger *selectedWorkFactsLedger, reader *selectedCapturedIdentityReader) (string, error) {
+	var want error
+	switch scenario {
+	case "missing capture":
+		reader.err = os.ErrNotExist
+	case "unknown worker":
+		workerID, reader.err, want = "unknown", os.ErrNotExist, workersessions.ErrObservationSessionNotFound
+	case "projection unavailable":
+		ledger.err, want = errors.New("unavailable"), workersessions.ErrObservationProjectionUnavailable
+	case "projection canceled":
+		ledger.err, want = context.Canceled, workersessions.ErrObservationCanceled
+	}
+	return workerID, want
 }
 
 func TestExactLegacyWorkerSurvivesAnotherOwnersCaptureCorrelation(t *testing.T) {

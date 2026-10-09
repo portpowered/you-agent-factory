@@ -52,12 +52,27 @@ func TestWorkerSessionSummaryClosedScopeUsesCapturedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertClosedCaptureIdentity(t, got, model)
+	assertClosedCaptureTerminal(t, got, cause)
+	assertClosedCaptureTimingAndScope(t, got, start, end, live, capture)
+}
+
+func assertClosedCaptureIdentity(t *testing.T, got factoryapi.WorkerSessionObservation, model string) {
+	t.Helper()
 	if got.State != factoryapi.WorkerSessionObservationStateCompleted || got.FactorySessionId == nil || *got.FactorySessionId != "factory-original" || got.AttemptId != "attempt-original" || got.Provider == nil || *got.Provider != "codex" || got.Model == nil || *got.Model != model {
 		t.Fatalf("captured identity lost: %+v", got)
 	}
+}
+
+func assertClosedCaptureTerminal(t *testing.T, got factoryapi.WorkerSessionObservation, cause string) {
+	t.Helper()
 	if got.TokenUsage == nil || got.TokenUsage.InputTokens == nil || *got.TokenUsage.InputTokens != 11 || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 7 || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != 18 || got.RecordingHealth == nil || string(*got.RecordingHealth) != "COMPLETE" || got.TerminalCause == nil || string(*got.TerminalCause) != cause {
 		t.Fatalf("captured terminal facts lost: %+v", got)
 	}
+}
+
+func assertClosedCaptureTimingAndScope(t *testing.T, got factoryapi.WorkerSessionObservation, start, end time.Time, live *fakeObservationService, capture *closedScopeCaptureStub) {
+	t.Helper()
 	if got.StartedAt == nil || !got.StartedAt.Equal(start) || got.EndedAt == nil || !got.EndedAt.Equal(end) || live.getByWorkerCalled || capture.request.FactorySessionID != "factory-original" || capture.request.WorkerSessionID != "worker-original" {
 		t.Fatalf("closed capture timing/scope lost: %+v request=%+v", got, capture.request)
 	}

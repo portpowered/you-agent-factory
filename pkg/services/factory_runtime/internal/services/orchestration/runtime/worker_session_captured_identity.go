@@ -265,18 +265,8 @@ func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx contex
 		return workersessions.Observation{}, false, true, failure
 	}
 	if err != nil {
-		if errors.Is(err, recordings.ErrWorkerRecordingReplay) && s.Service != nil {
-			// Preserve the capture owner's public failure classification rather
-			// than reclassifying a damaged unrelated archive as runtime history.
-			_, captureErr := s.Service.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
-			if captureErr != nil {
-				return workersessions.Observation{}, false, true, captureErr
-			}
-		}
-		if failure := recordingHealthLoadError(err); failure != nil {
-			return workersessions.Observation{}, false, true, failure
-		}
-		return workersessions.Observation{}, false, false, nil
+		failure := s.selectedCapturedLookupError(ctx, workerID, err)
+		return workersessions.Observation{}, false, failure != nil, failure
 	}
 	var draft workers.Draft
 	var opening workers.SessionPayload
@@ -300,6 +290,18 @@ func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx contex
 	// from this Work selection is not absence from the selected canonical
 	// ledger; its prepared exact selector still resolves the legacy peer.
 	return observation, found, found || err != nil, err
+}
+
+func (s *recordedWorkerSessionObservation) selectedCapturedLookupError(ctx context.Context, workerID string, err error) error {
+	if errors.Is(err, recordings.ErrWorkerRecordingReplay) && s.Service != nil {
+		// Preserve the capture owner's public failure classification rather
+		// than reclassifying a damaged unrelated archive as runtime history.
+		_, captureErr := s.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
+		if captureErr != nil {
+			return captureErr
+		}
+	}
+	return recordingHealthLoadError(err)
 }
 
 func (s *recordedWorkerSessionObservation) readSelectedWorkerSummary(ctx context.Context, workerID, workID, dispatchID string) (workersessions.Observation, bool, error) {
