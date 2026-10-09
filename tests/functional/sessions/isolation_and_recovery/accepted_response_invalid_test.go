@@ -196,6 +196,10 @@ func TestAcceptedResponseSurvivesRecordedCompletionWithoutRedispatch(t *testing.
 			}
 			session := uuid.NewString()
 			payload := invalidAcceptedRecording(t, "complete", session)
+			// These parallel logical sessions deliberately share dispatch IDs,
+			// but their complete output must never cross session boundaries.
+			output := name + " accepted output COMPLETE"
+			payload = bytes.ReplaceAll(payload, []byte("accepted recorded output COMPLETE"), []byte(output))
 			source := filepath.Join(dir, "accepted-source.json")
 			if err := os.WriteFile(source, payload, 0o600); err != nil {
 				t.Fatal(err)
@@ -229,7 +233,7 @@ func TestAcceptedResponseSurvivesRecordedCompletionWithoutRedispatch(t *testing.
 				case "DISPATCH_RESPONSE":
 					completions++
 					response, err := event.Payload.AsDispatchResponseEventPayload()
-					if err != nil || response.Output == nil || *response.Output != "accepted recorded output COMPLETE" {
+					if err != nil || response.Output == nil || *response.Output != output {
 						t.Fatalf("recovered response output = %#v, %v", response.Output, err)
 					}
 				case "DISPATCH_INTERRUPTED":

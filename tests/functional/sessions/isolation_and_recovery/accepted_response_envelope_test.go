@@ -57,7 +57,9 @@ func TestAcceptedResponseSurvivesEnvelopeAndRepeatedReopen(t *testing.T) {
 
 func acceptedEnvelopeFactory() map[string]any {
 	config := processExecuteRuntimeOpeningFactoryConfig()
+	config["resources"] = []map[string]any{{"name": "accepted-slot", "capacity": 1}}
 	station := config["workstations"].([]map[string]any)[0]
+	station["resources"] = []map[string]any{{"name": "accepted-slot", "capacity": 1}}
 	station["outcomeFormat"] = "decision-envelope"
 	station["outputSchema"] = `{"type":"object","properties":{"answer":{"type":"integer"}},"required":["answer"]}`
 	return config
@@ -76,6 +78,16 @@ func acceptedEnvelopeRecording(t *testing.T, config map[string]any, session, sha
 	artifact.Events[0] = seededReplayResumeEvent(t, "run-request", 0, 0, artifact.RecordedAt,
 		definitions.FactoryEventTypeRunRequest, definitions.RunRequestEventPayload{Factory: snapshot, RecordedAt: artifact.RecordedAt})
 	artifact.Events[0].Context.SessionID = &session
+	for index := range artifact.Events {
+		if artifact.Events[index].Type == definitions.FactoryEventTypeDispatchRequest {
+			var request definitions.DispatchRequestEventPayload
+			if err := artifact.Events[index].DecodePayload(&request); err != nil {
+				t.Fatal(err)
+			}
+			request.Resources = &[]definitions.DispatchResourceRef{{Name: "accepted-slot", Capacity: 1}}
+			artifact.Events[index].Payload, _ = json.Marshal(request)
+		}
+	}
 	modelIndex := len(artifact.Events) - 2
 	primary := `{"answer":42}`
 	content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: primary}}
@@ -120,6 +132,7 @@ func acceptedEnvelopeRecording(t *testing.T, config map[string]any, session, sha
 
 func assertAcceptedEnvelopeWork(t *testing.T, running seededReplayResumeRun, previousChildID string) string {
 	t.Helper()
+	assertAcceptedResourceReleased(t, running)
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(running.url, running.sessionID, "/work"))
 	// Explicit output Work replaces the default output token on the authored
 	// arc. The original consumed Work remains visible in dispatch lineage.
@@ -173,12 +186,33 @@ func assertAcceptedEnvelopeHistory(t *testing.T, running seededReplayResumeRun) 
 				response.Output == nil || *response.Output != `{"answer":42}` {
 				t.Fatalf("recovered envelope response = %#v, %v", response, err)
 			}
+			if response.OutputResources == nil || len(*response.OutputResources) != 1 || (*response.OutputResources)[0].Name != "accepted-slot" || (*response.OutputResources)[0].Capacity != 1 {
+				t.Fatalf("recovered resource release = %#v, want one accepted-slot", response.OutputResources)
+			}
 		case "DISPATCH_INTERRUPTED":
 			t.Fatal("accepted turn was interrupted on reopen")
 		}
 	}
 	if requests != 1 || completions != 1 {
 		t.Fatalf("accepted requests=%d completions=%d, want one each", requests, completions)
+	}
+}
+
+func assertAcceptedResourceReleased(t *testing.T, running seededReplayResumeRun) {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, running.url+"/factory-sessions/"+running.sessionID)
+	session, err := response.AsFactorySession()
+	if err != nil || session.Runtime.Petri == nil {
+		t.Fatalf("read restored marking: %v", err)
+	}
+	available := 0
+	for _, token := range session.Runtime.Petri.Marking {
+		if token.PlaceId == "accepted-slot:available" {
+			available++
+		}
+	}
+	if available != 1 {
+		t.Fatalf("available resources after recovery = %d, want one", available)
 	}
 }
 

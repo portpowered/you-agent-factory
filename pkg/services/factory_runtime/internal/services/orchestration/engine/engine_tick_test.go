@@ -665,6 +665,7 @@ func TestPausedResultAppliesWorkMutationWithoutSchedulingOrTermination(t *testin
 	marking.AddToken(&factorytoken.Token{ID: "work-1", PlaceID: "task:init", Color: factorytoken.Color{WorkTypeID: "task"}})
 	scheduler := &mockSubsystem{group: subsystems.Dispatcher}
 	termination := &mockSubsystem{group: subsystems.TerminationCheck}
+	applications := 0
 	router := &mockSubsystem{group: subsystems.Transitioner, execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 		if len(snapshot.Results) == 0 {
 			return nil, nil
@@ -672,6 +673,7 @@ func TestPausedResultAppliesWorkMutationWithoutSchedulingOrTermination(t *testin
 		if len(snapshot.Results) != 1 || snapshot.Results[0].DispatchID != "dispatch-1" {
 			t.Fatalf("routing results = %#v, want one correlated result", snapshot.Results)
 		}
+		applications++
 		return &interfaces.TickResult{
 			Mutations:           []interfaces.MarkingMutation{{Type: interfaces.MutationMove, TokenID: "work-1", FromPlace: "task:init", ToPlace: "task:complete"}},
 			CompletedDispatches: []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted}},
@@ -680,12 +682,23 @@ func TestPausedResultAppliesWorkMutationWithoutSchedulingOrTermination(t *testin
 	engine := newTestFactoryEngine(buildTestNet(), marking, []subsystems.Subsystem{scheduler, router, termination}, WithAutomaticTicksPaused(func() bool { return true }))
 	engine.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{DispatchID: "dispatch-1", TransitionID: "t1"}
 	engine.runtimeState.InFlightCount = 1
-	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{DispatchID: "dispatch-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted})
+	result := workerexecution.WorkResult{DispatchID: "dispatch-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted}
+	// Acceptance is already queued when the pause becomes observable. Duplicate
+	// delivery before draining must still route the Work outcome only once.
+	for range 2 {
+		engine.GetResultBuffer().Write(context.Background(), result)
+	}
 	engine.NotifyResult()
 	for range 2 {
 		if err := engine.Tick(context.Background()); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A late duplicate after application must not repeat Work mutations.
+	engine.GetResultBuffer().Write(context.Background(), result)
+	engine.NotifyResult()
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	snapshot := engine.GetRuntimeStateSnapshot()
 	if got := snapshot.Marking.Tokens["work-1"].PlaceID; got != "task:complete" {
@@ -696,5 +709,8 @@ func TestPausedResultAppliesWorkMutationWithoutSchedulingOrTermination(t *testin
 	}
 	if scheduler.callCount != 0 || termination.callCount != 0 {
 		t.Fatalf("paused phase calls: scheduler=%d termination=%d", scheduler.callCount, termination.callCount)
+	}
+	if applications != 1 {
+		t.Fatalf("Work applications = %d, want one across duplicate deliveries", applications)
 	}
 }
