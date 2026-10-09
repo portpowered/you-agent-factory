@@ -574,6 +574,71 @@ func mustCatalogSummary(t *testing.T, reader recordings.WorkerCapturedActivityRe
 	return page.Items[0]
 }
 
+func TestFileWriterRepeatedCatalogSummariesRemainDetachedAcrossCommits(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "summary", "worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":10}`, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	frozen := mustCatalogSummary(t, writer)
+	assertConcurrentSummaryDetachment(t, writer, frozen)
+	if got := mustCatalogSummary(t, writer); !reflect.DeepEqual(got, frozen) {
+		t.Fatalf("reader mutation escaped into a later page: %+v", got)
+	}
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":20}`, 3)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	updated := mustCatalogSummary(t, writer)
+	if updated.Catalog.CommittedPosition != 3 || len(updated.MetadataRecords) != 1 || updated.MetadataRecords[0].ID.Position != 3 || frozen.MetadataRecords[0].ID.Position != 2 {
+		t.Fatalf("commit failed to refresh selection or changed a frozen page: %+v %+v", updated, frozen)
+	}
+	if err := writer.PersistWorkerRecordingFailure(t.Context(), recordings.WorkerRecordingFailure{
+		RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic, Code: "PERSISTENCE_FAILED",
+		ExecutionTerminal: &recordings.WorkerRecordingTerminal{Position: 4, Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	failed := mustCatalogSummary(t, writer)
+	if failed.Terminal == nil || failed.Terminal.Position != 4 || failed.Health != recordings.WorkerRecordingStatusDegraded || updated.Terminal != nil {
+		t.Fatalf("failure commit left a stale summary: %+v", failed)
+	}
+	failed.Terminal.Status = "caller mutation"
+	if got := mustCatalogSummary(t, writer); got.Terminal.Status != "COMPLETED" {
+		t.Fatalf("terminal pointer escaped into later pages: %+v", got)
+	}
+}
+
+func assertConcurrentSummaryDetachment(t *testing.T, writer recordings.WorkerCapturedActivityReader, frozen recordings.WorkerCapturedCatalogItem) {
+	t.Helper()
+	// Concurrent readers own their returned payloads and timestamp maps. Their
+	// mutations must not alter the retained selection or each other's pages.
+	var readers sync.WaitGroup
+	for range 8 {
+		readers.Go(func() {
+			page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+			if err != nil || len(page.Items) != 1 {
+				t.Errorf("concurrent summary: %+v %v", page, err)
+				return
+			}
+			item := page.Items[0]
+			if !reflect.DeepEqual(item, frozen) {
+				t.Errorf("reader received changed summary: %+v", item)
+			}
+			item.Opening.Payload[0] = '!'
+			item.MetadataRecords[0].Payload[0] = '!'
+			item.CapturedAt["1"] = time.Time{}
+		})
+	}
+	readers.Wait()
+}
+
 func assertCatalogSummaryFacts(t *testing.T, item recordings.WorkerCapturedCatalogItem) {
 	t.Helper()
 	var positions []uint64

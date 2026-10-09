@@ -78,6 +78,7 @@ type recordingSession struct {
 	identities          map[events.AppendIdentity]events.Record
 	summaryPositions    [summaryFactCount]uint64
 	usagePositions      []uint64
+	catalogSummary      *recordings.WorkerCapturedCatalogItem
 }
 type workerJournalEntry struct {
 	OriginatingArtifact   string                                   `json:"originatingArtifact,omitempty"`
@@ -141,6 +142,9 @@ func (entry *recordingEntry) session(recordingID, sessionID string, topic events
 		Status: recordings.WorkerRecordingStatusIncomplete}, identities: make(map[events.AppendIdentity]events.Record)}
 }
 func (entry *recordingEntry) commit(session *recordingSession) {
+	// Summary selection belongs to this committed head. Rejected/uncertain
+	// appends never publish a new selection; successful recovery replaces it.
+	session.catalogSummary = nil
 	id := session.projection.WorkerSessionID
 	if entry.sessions[id] == nil {
 		entry.order = append(entry.order, id)
@@ -358,6 +362,7 @@ func (writer *FileWriter) hydrateFromScan(ctx context.Context, id string, entry 
 				return err
 			}
 			session.projection = p
+			session.catalogSummary = nil
 		}
 	}
 	if err := ctx.Err(); err != nil {
