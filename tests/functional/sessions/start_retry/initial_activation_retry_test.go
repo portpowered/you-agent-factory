@@ -89,10 +89,15 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
 	overlap := newInitialOpeningProviderScenario(t)
-	canceledWork := newInitialOpeningProviderScenario(t)
-	canceledWorkGate := &selectedProviderGate{paths: map[string]string{
-		canceledWork.candidateDir: canceledWork.candidateID, canceledWork.peerDir: canceledWork.peerID,
-	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	canceledWork := []initialOpeningScenario{
+		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
+		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
+	}
+	canceledWorkGate := &selectedProviderGate{paths: make(map[string]string),
+		entered: make(chan platformprocess.CommandRequest, len(canceledWork)), release: make(chan struct{})}
+	for _, scenario := range canceledWork {
+		canceledWorkGate.paths[scenario.candidateDir] = scenario.candidateID
+	}
 	t.Cleanup(canceledWorkGate.unblock)
 	providerGate := &selectedProviderGate{paths: map[string]string{
 		overlap.candidateDir: overlap.candidateID, overlap.peerDir: overlap.peerID,
@@ -135,6 +140,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		// Preserve actual recording bytes and errors without the platform's
+		// Windows replacement retry loop on absent hydration files. OS file
+		// replacement races belong to the compiled integration lane.
+		RecordingReadFile:         os.ReadFile,
 		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
@@ -177,6 +186,9 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = hostDir
+	// First-run packaged Factory installation is fixture setup. Complete it
+	// through the same public process before the host readiness window begins.
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostDir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	api.WaitForURL(t)
 	t.Cleanup(func() { command.Stop(t) })
@@ -249,7 +261,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
-	t.Run("closing one session preserves a peer with gated live Work", func(t *testing.T) {
+	t.Run("four explicit sessions overlap and closing one preserves three gated peers", func(t *testing.T) {
 		t.Parallel()
 		testSelectedProviderCancellation(t, sessions, canceledWork, canceledWorkGate, api.WaitForURL(t))
 	})

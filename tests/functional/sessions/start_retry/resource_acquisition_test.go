@@ -2,69 +2,168 @@ package start_retry_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // The public close must cancel only the selected session's running worker.
-// Both exact command edges enter before close; the peer stays gated until its
-// live route and event generation have been observed after candidate cleanup.
-func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string) {
+// All four exact command edges enter before close. The three peers stay gated
+// until their live routes and event generations are observed after cleanup.
+func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Service, scenarios []initialOpeningScenario, gate *selectedProviderGate, baseURL string) {
 	t.Helper()
 	defer gate.unblock()
-	startInitialOpeningSession(t, sessions, scenario.request())
-	peer := scenario.request()
-	peer.SessionID, peer.FolderPath = scenario.peerID, scenario.peerDir
-	peer.RuntimeSelection.DefinitionSourcePath = scenario.peerDir + "/factory.json"
-	peer.RuntimeSelection.ExecutionBaseDir, peer.RuntimeSelection.RuntimeInstanceID = scenario.peerDir, uuid.NewString()
-	startInitialOpeningSession(t, sessions, peer)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	candidateDone, peerDone := make(chan error, 1), make(chan error, 1)
-	go func() { candidateDone <- selectedProviderInvoke(ctx, sessions, scenario.candidateID) }()
-	go func() { peerDone <- selectedProviderInvoke(ctx, sessions, scenario.peerID) }()
-	awaitSelectedProviderPair(t, ctx, gate)
-	peerHistory := initialOpeningHistory(t, sessions, scenario.peerID)
-	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	done := make([]chan error, len(scenarios))
+	joinSelectedProviderCommands(t, cancel, gate, done)
+	history := make([]*factorydefinitions.FactoryEventStream, len(scenarios))
+	identities := make([]factoryapi.FactorySessionStreamIdentity, len(scenarios))
+	for i, scenario := range scenarios {
+		startInitialOpeningSession(t, sessions, scenario.request())
+		identities[i] = selectedProviderStreamIdentity(t, baseURL, scenario.candidateID)
+		done[i] = make(chan error, 1)
+		go func() {
+			defer close(done[i])
+			done[i] <- selectedProviderInvoke(ctx, sessions, scenario.candidateID)
+		}()
+	}
+	awaitSelectedProviders(t, ctx, gate)
+	for i, scenario := range scenarios {
+		history[i] = initialOpeningHistory(t, sessions, scenario.candidateID)
+		if history[i].StreamGenerationID != identities[i].StreamGenerationID {
+			t.Fatal("session route and retained history selected different generations")
+		}
+		for j := range i {
+			if identities[j].StreamGenerationID == identities[i].StreamGenerationID {
+				t.Fatal("explicit sessions shared an event generation")
+			}
+		}
+	}
+	closeInitialOpeningSession(t, sessions, scenarios[0].candidateID)
 	select {
-	case err := <-candidateDone:
+	case err := <-done[0]:
 		if err == nil {
 			t.Fatal("closed candidate returned successful worker output")
 		}
 	case <-ctx.Done():
 		t.Fatal("closing the candidate did not cancel its invocation")
 	}
-	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	assertGatedPeerWork(t, scenario, baseURL, peerDone)
+	assertInitialOpeningNotPublished(t, sessions, scenarios[0].candidateID)
+	for i := 1; i < len(scenarios); i++ {
+		scenario := scenarios[i]
+		id := scenario.candidateID
+		assertInitialOpeningHistoryPreserved(t, sessions, id, history[i])
+		if !reflect.DeepEqual(selectedProviderStreamIdentity(t, baseURL, id), identities[i]) {
+			t.Fatal("closing another session retargeted a peer stream")
+		}
+		assertGatedPeerWork(t, initialOpeningScenario{peerID: id}, baseURL, done[i])
+	}
 	gate.unblock()
+	for i := 1; i < len(scenarios); i++ {
+		awaitSelectedProviderCompletion(t, ctx, done[i])
+		assertInitialOpeningHistoryPreserved(t, sessions, scenarios[i].candidateID, history[i])
+		assertSelectedProviderResponses(t, ctx, sessions, scenarios[i].candidateID)
+		if err := selectedProviderInvoke(ctx, sessions, scenarios[i].candidateID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions factorysessions.Service, id string) {
+	t.Helper()
+	subscription, err := sessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Cursor.Detach()
+	var lastSequence int64
+	var messages int
+	// Invocation completion is asserted by selectedProviderInvoke. The public
+	// response cursor independently proves the provider's attributed message;
+	// this live Work route does not promise the durable child's terminal frame.
+	for messages == 0 {
+		events, err := subscription.Cursor.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, event := range events {
+			if event.FactorySessionID != id || event.Sequence <= lastSequence || event.DispatchID == "" {
+				t.Fatalf("peer response lost identity or ordering: %+v", event)
+			}
+			lastSequence = event.Sequence
+			if event.Kind != factorysessions.ResponseEventKindMessage || event.Phase != factorysessions.ResponseEventPhaseCompleted || event.Provenance.Delivery != factorysessions.ResponseEventDeliveryNativeStream {
+				continue
+			}
+			var message factorysessions.ResponseEventMessage
+			if err := json.Unmarshal(event.Payload, &message); err != nil {
+				t.Fatal(err)
+			}
+			if event.Provenance.Provider != "codex" || len(message.ContentBlocks) != 1 || message.ContentBlocks[0].Text != id+" COMPLETE" {
+				t.Fatalf("peer response crossed provider/session output: %s", event.Payload)
+			}
+			messages++
+		}
+	}
+	if messages != 1 {
+		t.Fatalf("peer completed native response messages=%d, want one", messages)
+	}
+}
+
+func joinSelectedProviderCommands(t *testing.T, cancel context.CancelFunc, gate *selectedProviderGate, done []chan error) {
+	t.Helper()
+	t.Cleanup(func() {
+		cancel()
+		gate.unblock()
+		for _, completion := range done {
+			if completion == nil {
+				continue
+			}
+			select {
+			case <-completion:
+			case <-time.After(initialOpeningReadCeiling):
+				t.Error("owned explicit invocation did not join")
+			}
+		}
+	})
+}
+
+func selectedProviderStreamIdentity(t *testing.T, baseURL, id string) factoryapi.FactorySessionStreamIdentity {
+	t.Helper()
+	session := support.GetJSON[factoryapi.FactorySession](t, baseURL+"/factory-sessions/"+id)
+	if session.Id != id || session.Runtime.StreamIdentity == nil || session.Runtime.StreamIdentity.FactorySessionID != id || session.Runtime.StreamIdentity.StreamGenerationID == "" {
+		t.Fatalf("selected session stream identity = %#v, want %s", session, id)
+	}
+	return *session.Runtime.StreamIdentity
+}
+
+func awaitSelectedProviderCompletion(t *testing.T, ctx context.Context, done <-chan error) {
+	t.Helper()
 	select {
-	case err := <-peerDone:
+	case err := <-done:
 		if err != nil {
 			t.Fatalf("peer did not retain its selected result after candidate cleanup: %v", err)
 		}
 	case <-ctx.Done():
 		t.Fatal("peer invocation did not finish after release")
 	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	if err := selectedProviderInvoke(ctx, sessions, scenario.peerID); err != nil {
-		t.Fatal(err)
-	}
 }
 
-func awaitSelectedProviderPair(t *testing.T, ctx context.Context, gate *selectedProviderGate) {
+func awaitSelectedProviders(t *testing.T, ctx context.Context, gate *selectedProviderGate) {
 	t.Helper()
 	seen := make(map[string]bool)
-	for range 2 {
+	for range len(gate.paths) {
 		select {
 		case request := <-gate.entered:
 			id := gate.paths[request.WorkDir]
@@ -73,7 +172,7 @@ func awaitSelectedProviderPair(t *testing.T, ctx context.Context, gate *selected
 			}
 			seen[id] = true
 		case <-ctx.Done():
-			t.Fatal("both workers did not reach their owned command gate")
+			t.Fatal("all workers did not reach their owned command gates")
 		}
 	}
 }
