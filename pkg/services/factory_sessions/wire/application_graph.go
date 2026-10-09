@@ -169,12 +169,11 @@ func NewRoot(
 	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
 	definitions factorydefinitions.Service,
 	recordingsService recordings.Service,
-	recordingProjections recordings.ProjectionService,
 	modelInvocation RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
 	return service.NewRoot(assembly, durable, start, liveChangeCoordinator, inspectHistorical,
-		definitions, recordingsService, recordingProjections, modelInvocation, generateSessionID)
+		definitions, recordingsService, modelInvocation, generateSessionID)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {

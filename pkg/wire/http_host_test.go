@@ -455,6 +455,8 @@ func (root *stubVisualizationRoot) StopDrain(
 	return factoryvisualization.StopDrainResult{}, nil
 }
 
+type stubVisualizationProjections struct{ recordings.ProjectionService }
+
 // recordedVisualizationBuild is one observed call into the injected Factory
 // Visualization runtime factory.
 type recordedVisualizationBuild struct {
@@ -534,7 +536,7 @@ func TestProvideRunRuntimeRunnerBuilderRejectsMissingDependencies(t *testing.T) 
 	}
 	for _, operation := range missing {
 		if _, err := provideRunRuntimeRunnerBuilder(
-			operation.root, serviceedges.Edges{}, operation.factory, operation.sinks, operation.binding, operation.runner, operation.plan,
+			operation.root, serviceedges.Edges{}, operation.factory, &stubVisualizationProjections{}, operation.sinks, operation.binding, operation.runner, operation.plan,
 		); err == nil {
 			t.Fatalf("missing %s = nil error, want a construction failure", operation.name)
 		}

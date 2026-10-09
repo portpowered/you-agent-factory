@@ -42,7 +42,6 @@ func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
 
 // runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
-	RecordingProjections         recordings.ProjectionService
 	LiveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	Logger                       *zap.Logger
 	RuntimeRoot                  FactoryRuntimeRoot
@@ -92,7 +91,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*runtimeOpeningTestRoot, erro
 		fixture.GenerateRuntimeInstanceID, fixture.ResolveHome, fixture.Definitions, inventory)
 	root, err := NewRoot(fixture.Assembly, durable, opening.Start, fixture.LiveChangeCoordinator,
 		opening.InspectHistoricalApplication, fixture.Definitions, fixture.RecordingsService,
-		fixture.RecordingProjections, nil, fixture.GenerateSessionID)
+		nil, fixture.GenerateSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +185,6 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		ModelService:                 &modelsConstructionStub{},
 		RecordingsService:            &recordingsRootConstructionStub{},
 		RecordingsRuntime:            &recordingsRootConstructionStub{},
-		RecordingProjections:         &openingCoordinatorProjection{},
 		WebhooksService:              webhooksConstructionStub{},
 		ProviderCommandRunner:        workersRootBindingProbeRunner{tag: "provider"},
 		EnsureBackendScope:           inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),

@@ -127,7 +127,6 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 type SessionPresentation struct {
 	ModelsScope          models.RuntimeScopeRef
 	Logger               *zap.Logger
-	Projections          recordings.ProjectionService
 	Clock                factoryruntime.Clock
 	MetricsRootDir       string
 	OperatorSettingsPath string
@@ -141,7 +140,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 	return SessionPresentation{
 		ModelsScope:          bound.ModelsScope,
 		Logger:               bound.Logger,
-		Projections:          r.recordingProjections,
 		Clock:                bound.Clock,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,

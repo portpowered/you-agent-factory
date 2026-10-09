@@ -48,7 +48,6 @@ type Root struct {
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	recordingsService              recordings.Service
-	recordingProjections           recordings.ProjectionService
 	factoryDefinitions             factorydefinitions.Service
 	generateSessionID              factorysessions.SessionIDGenerator
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly
@@ -62,7 +61,6 @@ func NewRoot(
 	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
 	definitions factorydefinitions.Service,
 	recordingsService recordings.Service,
-	recordingProjections recordings.ProjectionService,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
@@ -77,7 +75,6 @@ func NewRoot(
 		modelInvocation:                modelInvocation,
 		factorySessionsRuntimeAssembly: assembly,
 		recordingsService:              recordingsService,
-		recordingProjections:           recordingProjections,
 		factoryDefinitions:             definitions,
 		generateSessionID:              generateSessionID,
 	}

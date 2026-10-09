@@ -459,7 +459,7 @@ func TestStartUsesInjectedOperationsAndPreservesTypedFailure(t *testing.T) {
 				return inspectionResult, true, outcomeErr
 			}
 			root, err := NewRoot(&legacyservice.Assembly{}, nil, start, livechange.NewCoordinator(), inspect,
-				nil, nil, nil, nil, nil)
+				nil, nil, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -496,7 +496,7 @@ func TestStartUsesInjectedDurableOwner(t *testing.T) {
 	t.Parallel()
 	owner := &rootDurableStartStub{failure: &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}}
 	root, err := NewRoot(&legacyservice.Assembly{}, owner, nil, livechange.NewCoordinator(), nil,
-		nil, nil, nil, nil, nil)
+		nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

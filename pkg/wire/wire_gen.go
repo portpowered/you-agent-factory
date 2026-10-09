@@ -623,7 +623,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v179 := provideRuntimeModelFactoryConfigReader(v106)
 	v180 := provideRuntimeModelWorkerExecution(workersService)
 	v181 := wire3.NewRuntimeModelInvocation(modelsService, v179, v180)
-	v182, err := wire3.NewRoot(v106, v76, v177, liveChangeCoordinator, v178, factorydefinitionsService, recordingsService, v19, v181, v13)
+	v182, err := wire3.NewRoot(v106, v76, v177, liveChangeCoordinator, v178, factorydefinitionsService, recordingsService, v181, v13)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +755,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
 	v200 := wire3.NewLifecyclePlanOperation()
-	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, edges2, runtimeFactory, v198, wireHttpRuntimeBinding, runnerFactory, v200)
+	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, edges2, runtimeFactory, v19, v198, wireHttpRuntimeBinding, runnerFactory, v200)
 	if err != nil {
 		return nil, err
 	}

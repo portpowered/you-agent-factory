@@ -965,10 +965,6 @@ func (role *openingSessionsRole) GetFactorySession(_ context.Context, sessionID 
 	return role.readLiveSession(sessionID)
 }
 
-type openingCoordinatorProjection struct {
-	recordings.ProjectionService
-}
-
 type openingCoordinatorClock struct{}
 
 func (openingCoordinatorClock) Now() time.Time {
