@@ -134,7 +134,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 // retain completed-dispatch associations after Factory Session recovery.
 func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.CompletedDispatch) error {
 	if e == nil || e.runtimeState == nil {
-		return fmt.Errorf("Factory Runtime engine is required")
+		return fmt.Errorf("factory runtime engine is required")
 	}
 	if len(history) == 0 {
 		return nil
@@ -157,7 +157,7 @@ func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.Complet
 // The opening owns removal of these claims from the fresh marking.
 func (e *FactoryEngine) SeedRestoredDispatch(entry interfaces.DispatchEntry) error {
 	if e == nil || e.runtimeState == nil {
-		return fmt.Errorf("Factory Runtime engine is required")
+		return fmt.Errorf("factory runtime engine is required")
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()

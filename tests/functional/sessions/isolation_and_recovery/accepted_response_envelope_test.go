@@ -149,21 +149,26 @@ func assertAcceptedEnvelopeWork(t *testing.T, running seededReplayResumeRun, pre
 		if !support.HasWorkAtCustomerState(listed, *item.WorkId, "task:complete") {
 			t.Fatal("generated child lost its configured terminal state")
 		}
-		if item.StructuredResult == nil || item.Tags == nil || (*item.Tags)["_source_dispatch_id"] != "dispatch-accepted" {
-			t.Fatalf("generated child lost structured result or parent lineage: %#v", item)
-		}
-		structured, err := json.Marshal(item.StructuredResult)
-		if err != nil || string(structured) != `{"answer":42}` || item.Content == nil || len(*item.Content) != 1 {
-			t.Fatalf("recovered child content/result = %#v, %v", item, err)
-		}
-		text, err := (*item.Content)[0].AsWorkTextContentPart()
-		if err != nil || text.Text != "child content" {
-			t.Fatalf("recovered child content = %#v, %v", text, err)
-		}
+		assertAcceptedEnvelopeChildContent(t, item)
 		return *item.WorkId
 	}
 	t.Fatal("generated child is missing")
 	return ""
+}
+
+func assertAcceptedEnvelopeChildContent(t *testing.T, item factoryapi.Work) {
+	t.Helper()
+	if item.StructuredResult == nil || item.Tags == nil || (*item.Tags)["_source_dispatch_id"] != "dispatch-accepted" {
+		t.Fatalf("generated child lost structured result or parent lineage: %#v", item)
+	}
+	structured, err := json.Marshal(item.StructuredResult)
+	if err != nil || string(structured) != `{"answer":42}` || item.Content == nil || len(*item.Content) != 1 {
+		t.Fatalf("recovered child content/result = %#v, %v", item, err)
+	}
+	text, err := (*item.Content)[0].AsWorkTextContentPart()
+	if err != nil || text.Text != "child content" {
+		t.Fatalf("recovered child content = %#v, %v", text, err)
+	}
 }
 
 func assertAcceptedEnvelopeHistory(t *testing.T, running seededReplayResumeRun) {
@@ -181,20 +186,25 @@ func assertAcceptedEnvelopeHistory(t *testing.T, running seededReplayResumeRun) 
 			requests++
 		case "DISPATCH_RESPONSE":
 			completions++
-			response, err := event.Payload.AsDispatchResponseEventPayload()
-			if err != nil || response.Feedback == nil || *response.Feedback != "recovered feedback" ||
-				response.Output == nil || *response.Output != `{"answer":42}` {
-				t.Fatalf("recovered envelope response = %#v, %v", response, err)
-			}
-			if response.OutputResources == nil || len(*response.OutputResources) != 1 || (*response.OutputResources)[0].Name != "accepted-slot" || (*response.OutputResources)[0].Capacity != 1 {
-				t.Fatalf("recovered resource release = %#v, want one accepted-slot", response.OutputResources)
-			}
+			assertAcceptedEnvelopeResponse(t, event)
 		case "DISPATCH_INTERRUPTED":
 			t.Fatal("accepted turn was interrupted on reopen")
 		}
 	}
 	if requests != 1 || completions != 1 {
 		t.Fatalf("accepted requests=%d completions=%d, want one each", requests, completions)
+	}
+}
+
+func assertAcceptedEnvelopeResponse(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	response, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil || response.Feedback == nil || *response.Feedback != "recovered feedback" ||
+		response.Output == nil || *response.Output != `{"answer":42}` {
+		t.Fatalf("recovered envelope response = %#v, %v", response, err)
+	}
+	if response.OutputResources == nil || len(*response.OutputResources) != 1 || (*response.OutputResources)[0].Name != "accepted-slot" || (*response.OutputResources)[0].Capacity != 1 {
+		t.Fatalf("recovered resource release = %#v, want one accepted-slot", response.OutputResources)
 	}
 }
 
@@ -250,32 +260,37 @@ func TestAcceptedResponseSurvivesTrueInterruptionRetry(t *testing.T) {
 			if !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", "task:complete") {
 				t.Fatalf("true interruption retry did not complete Work: %#v", listed.Results)
 			}
-			interruptions, retries := 0, 0
-			for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, session) {
-				if string(event.Type) == "DISPATCH_INTERRUPTED" {
-					interruptions++
-					response, err := event.Payload.AsDispatchInterruptedEventPayload()
-					if err != nil || !response.RetryPlanned || response.Reason != "daemon restart interrupted process-bound attempt" {
-						t.Fatalf("restart interruption = %#v, %v", response, err)
-					}
-				}
-				if string(event.Type) == "DISPATCH_REQUEST" {
-					request, err := event.Payload.AsDispatchRequestEventPayload()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if request.TransitionId == "process" && event.Context.DispatchId != nil && *event.Context.DispatchId != "dispatch-accepted" {
-						retries++
-					}
-				}
-			}
-			if interruptions != 1 || retries != 1 {
-				t.Fatalf("true interruption events=%d retries=%d, want one each", interruptions, retries)
-			}
+			assertAcceptedInterruptionRetryHistory(t, running)
 			running.daemon.Stop(t)
 			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) {
 				t.Fatal("interruption retry altered the source recording")
 			}
 		})
+	}
+}
+
+func assertAcceptedInterruptionRetryHistory(t *testing.T, running seededReplayResumeRun) {
+	t.Helper()
+	interruptions, retries := 0, 0
+	for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, running.sessionID) {
+		if string(event.Type) == "DISPATCH_INTERRUPTED" {
+			interruptions++
+			response, err := event.Payload.AsDispatchInterruptedEventPayload()
+			if err != nil || !response.RetryPlanned || response.Reason != "daemon restart interrupted process-bound attempt" {
+				t.Fatalf("restart interruption = %#v, %v", response, err)
+			}
+		}
+		if string(event.Type) == "DISPATCH_REQUEST" {
+			request, err := event.Payload.AsDispatchRequestEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if request.TransitionId == "process" && event.Context.DispatchId != nil && *event.Context.DispatchId != "dispatch-accepted" {
+				retries++
+			}
+		}
+	}
+	if interruptions != 1 || retries != 1 {
+		t.Fatalf("true interruption events=%d retries=%d, want one each", interruptions, retries)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Only generations of this customer's board serialize. The invoking lane
@@ -136,10 +137,7 @@ func assertAcceptedRestartHistory(t *testing.T, baseURL string) {
 			if id == "accepted-dispatch" {
 				acceptedRequests++
 			} else if id != "interrupted-dispatch" {
-				request, err := event.Payload.AsDispatchRequestEventPayload()
-				if err != nil || len(request.Inputs) != 1 || request.Inputs[0].WorkId != "interrupted-work" {
-					t.Fatalf("unexpected executed dispatch: %#v, %v", request, err)
-				}
+				assertAcceptedRestartRetryRequest(t, event)
 				retries++
 			}
 		case "DISPATCH_RESPONSE":
@@ -147,14 +145,27 @@ func assertAcceptedRestartHistory(t *testing.T, baseURL string) {
 				acceptedCompletions++
 			}
 		case "DISPATCH_INTERRUPTED":
-			response, err := event.Payload.AsDispatchInterruptedEventPayload()
-			if id != "interrupted-dispatch" || err != nil || !response.RetryPlanned {
-				t.Fatalf("accepted dispatch interrupted or retry lost: %s %#v %v", id, response, err)
-			}
+			assertAcceptedRestartInterruption(t, event, id)
 			interruptions++
 		}
 	}
 	if acceptedRequests != 1 || acceptedCompletions != 1 || interruptions != 1 || retries != 1 {
 		t.Fatalf("requests=%d accepted completions=%d interruptions=%d retries=%d, want one each", acceptedRequests, acceptedCompletions, interruptions, retries)
+	}
+}
+
+func assertAcceptedRestartRetryRequest(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	request, err := event.Payload.AsDispatchRequestEventPayload()
+	if err != nil || len(request.Inputs) != 1 || request.Inputs[0].WorkId != "interrupted-work" {
+		t.Fatalf("unexpected executed dispatch: %#v, %v", request, err)
+	}
+}
+
+func assertAcceptedRestartInterruption(t *testing.T, event factoryapi.FactoryEvent, id string) {
+	t.Helper()
+	response, err := event.Payload.AsDispatchInterruptedEventPayload()
+	if id != "interrupted-dispatch" || err != nil || !response.RetryPlanned {
+		t.Fatalf("accepted dispatch interrupted or retry lost: %s %#v %v", id, response, err)
 	}
 }

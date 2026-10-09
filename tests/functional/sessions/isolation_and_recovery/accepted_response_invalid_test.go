@@ -213,40 +213,50 @@ func TestAcceptedResponseSurvivesRecordedCompletionWithoutRedispatch(t *testing.
 			if !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", "task:complete") {
 				t.Fatalf("recovered Work = %#v, want task:complete", listed.Results)
 			}
-			completions, originalRequests, processRequests := 0, 0, 0
-			for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, session) {
-				if string(event.Type) == "DISPATCH_REQUEST" {
-					request, err := event.Payload.AsDispatchRequestEventPayload()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if request.TransitionId == "process" {
-						processRequests++
-					}
-				}
-				if event.Context.DispatchId == nil || *event.Context.DispatchId != "dispatch-accepted" {
-					continue
-				}
-				switch string(event.Type) {
-				case "DISPATCH_REQUEST":
-					originalRequests++
-				case "DISPATCH_RESPONSE":
-					completions++
-					response, err := event.Payload.AsDispatchResponseEventPayload()
-					if err != nil || response.Output == nil || *response.Output != output {
-						t.Fatalf("recovered response output = %#v, %v", response.Output, err)
-					}
-				case "DISPATCH_INTERRUPTED":
-					t.Fatal("accepted dispatch was classified as interrupted")
-				}
-			}
-			if completions != 1 || originalRequests != 1 || processRequests != 1 {
-				t.Fatalf("original requests=%d completions=%d process requests=%d, want one recorded request and one recovered completion", originalRequests, completions, processRequests)
-			}
+			assertAcceptedRecordedCompletionHistory(t, running, output)
 			running.daemon.Stop(t)
 			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) {
 				t.Fatal("accepted recovery changed its source recording")
 			}
 		})
+	}
+}
+
+func assertAcceptedRecordedCompletionHistory(t *testing.T, running seededReplayResumeRun, output string) {
+	t.Helper()
+	completions, originalRequests, processRequests := 0, 0, 0
+	for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, running.sessionID) {
+		if string(event.Type) == "DISPATCH_REQUEST" {
+			request, err := event.Payload.AsDispatchRequestEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if request.TransitionId == "process" {
+				processRequests++
+			}
+		}
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != "dispatch-accepted" {
+			continue
+		}
+		switch string(event.Type) {
+		case "DISPATCH_REQUEST":
+			originalRequests++
+		case "DISPATCH_RESPONSE":
+			completions++
+			assertAcceptedRecordedOutput(t, event, output)
+		case "DISPATCH_INTERRUPTED":
+			t.Fatal("accepted dispatch was classified as interrupted")
+		}
+	}
+	if completions != 1 || originalRequests != 1 || processRequests != 1 {
+		t.Fatalf("original requests=%d completions=%d process requests=%d, want one recorded request and one recovered completion", originalRequests, completions, processRequests)
+	}
+}
+
+func assertAcceptedRecordedOutput(t *testing.T, event factoryapi.FactoryEvent, output string) {
+	t.Helper()
+	response, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil || response.Output == nil || *response.Output != output {
+		t.Fatalf("recovered response output = %#v, %v", response.Output, err)
 	}
 }
