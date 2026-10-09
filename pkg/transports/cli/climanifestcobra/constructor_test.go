@@ -895,6 +895,26 @@ func TestGenericGroupHelpCharacterization(t *testing.T) {
 			wantErr: `unknown command "definitely-missing" for "forge"`,
 		},
 		{
+			name:    "unknown command before unknown flag",
+			args:    []string{"save", "staging", "--from", "./factory.json"},
+			wantErr: `unknown command "save" for "forge"`,
+		},
+		{
+			name:    "unknown long flag input",
+			args:    []string{"--unknown"},
+			wantErr: `unknown command "--unknown" for "forge"`,
+		},
+		{
+			name:    "unknown short flag input",
+			args:    []string{"-x"},
+			wantErr: `unknown command "-x" for "forge"`,
+		},
+		{
+			name:    "runnable child retains flag diagnostic",
+			args:    []string{"run", "--unknown"},
+			wantErr: `unknown flag: --unknown`,
+		},
+		{
 			name:      "help with positional input",
 			args:      []string{"--help", "extra"},
 			wantUsage: 1,

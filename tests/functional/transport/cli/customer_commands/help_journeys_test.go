@@ -33,22 +33,30 @@ func testWorkerSessionHelpAndUsage(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(server.Close)
-	for _, args := range [][]string{
-		{"--server", server.URL, "worker-sessions", "--help"},
-		{"worker-sessions", "--help", "--server", server.URL},
-		{"worker-sessions", "--server", server.URL, "-h"},
-		{"worker-sessions"}, {"help", "worker-sessions"},
-		{"worker-sessions", "invoke", "--help"},
-		{"--server", server.URL, "worker-sessions", "missing"},
-		{"worker-sessions", "missing", "--server", server.URL},
+	for _, cell := range []struct {
+		args    []string
+		unknown string
+	}{
+		{args: []string{"--server", server.URL, "worker-sessions", "--help"}},
+		{args: []string{"worker-sessions", "--help", "--server", server.URL}},
+		{args: []string{"worker-sessions", "--server", server.URL, "-h"}},
+		{args: []string{"worker-sessions"}}, {args: []string{"help", "worker-sessions"}},
+		{args: []string{"worker-sessions", "invoke", "--help"}},
+		{args: []string{"--server", server.URL, "worker-sessions", "missing"}, unknown: "missing"},
+		{args: []string{"worker-sessions", "missing", "--server", server.URL}, unknown: "missing"},
+		{args: []string{"worker-sessions", "--unknown"}, unknown: "--unknown"},
+		{args: []string{"--server", server.URL, "worker-sessions", "--unknown"}, unknown: "--unknown"},
+		{args: []string{"factory", "save", "staging", "--from", "./factory.json"}, unknown: "save"},
 	} {
+		args := cell.args
 		result := fixture.execute(t, append([]string{"you"}, args...)...)
-		if strings.Contains(strings.Join(args, " "), "missing") {
+		if cell.unknown != "" {
+			diagnostic := `unknown command "` + cell.unknown + `"`
 			var usage *clidiag.UsageError
-			if !errors.As(result.err, &usage) || !strings.Contains(usage.Error(), `unknown command "missing"`) {
+			if !errors.As(result.err, &usage) || !strings.Contains(usage.Error(), diagnostic) {
 				t.Fatalf("%q: expected typed actual-token usage error, got %v", args, result.err)
 			}
-			if result.inputs.Stdout() != "" || !strings.Contains(result.inputs.Stderr(), `unknown command "missing"`) || !strings.Contains(result.inputs.Stderr(), "--help") {
+			if result.inputs.Stdout() != "" || !strings.Contains(result.inputs.Stderr(), diagnostic) || !strings.Contains(result.inputs.Stderr(), "--help") {
 				t.Fatalf("usage streams: stdout=%q stderr=%q", result.inputs.Stdout(), result.inputs.Stderr())
 			}
 		} else if result.err != nil || strings.Count(result.inputs.Stdout(), "Usage:") != 1 || result.inputs.Stderr() != "" {

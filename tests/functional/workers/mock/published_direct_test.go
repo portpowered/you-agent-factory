@@ -50,7 +50,7 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 			ProviderCommandRunner: denied, ScriptCommandRunner: denied,
 			PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
 				nativeCalls.Add(1)
-				return exec.Command("published-example-native-execution-denied")
+				return &exec.Cmd{}
 			},
 			ProvidersStdioPipeFactory: func() (platformprocess.StdioChannel, error) {
 				nativeCalls.Add(1)
