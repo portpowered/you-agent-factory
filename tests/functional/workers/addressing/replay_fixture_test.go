@@ -100,6 +100,8 @@ func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunne
 		}
 		f.url = servers[23999].WaitForURL(t)
 	}
+	commands := make([]*support.ProcessCommand, len(f.owners))
+	stderrs := make([]func() string, len(f.owners))
 	for i, owner := range f.owners {
 		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", owner.session,
 			"--dir", owner.dir, "--replay", filepath.Join(owner.dir, "legacy.json"), "--no-record",
@@ -108,12 +110,18 @@ func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunne
 		inputs.Input.WorkingDirectory = owner.dir
 		command := support.StartProcessCommand(t, f.process, inputs.Input)
 		t.Cleanup(func() { command.Stop(t) })
+		commands[i], stderrs[i] = command, inputs.Stderr
+	}
+	// All scenario-owned replay commands may reach the external reader together;
+	// no invocation-wide gate serializes distinct Factory Session completion.
+	for i, owner := range f.owners {
+		command := commands[i]
 		select {
 		case <-started[24000+i]:
 		case <-command.Done():
-			t.Fatalf("replay opening failed: %v; stderr=%s", command.Err(), inputs.Stderr())
+			t.Fatalf("replay opening failed: %v; stderr=%s", command.Err(), stderrs[i]())
 		case <-time.After(30 * time.Second):
-			t.Fatalf("replay opening did not reach listener; stderr=%s", inputs.Stderr())
+			t.Fatalf("replay opening did not reach listener; stderr=%s", stderrs[i]())
 		}
 		endpoint := servers[24000+i].WaitForURL(t)
 		support.WaitForSessionTerminalStatus(t, endpoint, owner.session, 15*time.Second)

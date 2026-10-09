@@ -4,14 +4,76 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// F2-11: both equal-ID legacy owners enter through the production replay
+// boundary together. Terminal publication and concurrent scoped reads/refusals
+// must preserve both identities. This does not create two active direct runs:
+// public invocation deliberately refuses a duplicate direct ID.
+func TestLegacyOwnersCompleteConcurrently(t *testing.T) {
+	t.Parallel()
+	var arrived atomic.Int32
+	var readers sync.Map
+	bothReaders := make(chan struct{})
+	f := newReplayFixtureWithEdges(t, nil, 2, serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, err
+			}
+			if _, repeated := readers.LoadOrStore(path, struct{}{}); !repeated && arrived.Add(1) == 2 {
+				close(bothReaders)
+			}
+			select {
+			case <-bothReaders:
+				return data, nil
+			case <-time.After(15 * time.Second):
+				return nil, fmt.Errorf("peer replay did not reach the public reader")
+			}
+		},
+	})
+	status, raw := f.http(t, "GET", "/worker-sessions/"+f.worker, nil)
+	if status != http.StatusConflict {
+		t.Fatalf("concurrently completed owners = %d: %s", status, raw)
+	}
+	assertAmbiguity(t, f, raw, false)
+	t.Cleanup(func() {
+		if f.calls.Load() != 0 {
+			t.Fatalf("concurrent historical controls launched %d providers", f.calls.Load())
+		}
+	})
+	for _, owner := range f.owners {
+		t.Run(owner.session, func(t *testing.T) {
+			t.Parallel()
+			assertOwner(t, f, owner, f.cli(t, false, "show", "--worker-session-id", f.worker, "--session", owner.session))
+			status, raw := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+owner.session, nil)
+			if status != http.StatusOK {
+				t.Fatalf("concurrent selected owner = %d: %s", status, raw)
+			}
+			assertOwner(t, f, owner, raw)
+			for _, operation := range []string{"continue", "interrupt"} {
+				body, flags := controlInput(operation)
+				body["factorySessionId"] = owner.session
+				status, raw := f.http(t, "POST", "/worker-sessions/"+f.worker+"/"+operation, body)
+				assertNotFound(t, status, raw)
+				args := append(append([]string{operation, f.worker}, flags...), "--session", owner.session)
+				assertErrorCode(t, f.cli(t, true, args...), "NOT_FOUND")
+				assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+			}
+			assertAmbiguity(t, f, f.cli(t, true, "show", "--worker-session-id", f.worker), false)
+		})
+	}
+}
 
 // F2-11: archived history proves a real captured representation exists while
 // the same process retains the terminal live observation. Both representations

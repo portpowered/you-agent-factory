@@ -45,8 +45,15 @@ func TestActiveLegacyCollisionControls(t *testing.T) {
 	assertActiveCandidates(t, f, live, raw, false)
 
 	// F2-04: both public adapters refuse before cancel, launch or admission.
-	for _, operation := range []string{"continue", "interrupt"} {
+	for _, control := range []struct{ operation, mode string }{
+		{"continue", ""}, {"interrupt", "provider"}, {"interrupt", "recorded"},
+	} {
+		operation := control.operation
 		body, flags := controlInput(operation)
+		if control.mode != "" {
+			body["resumeMode"] = control.mode
+			flags = append(flags, "--resume-mode", control.mode)
+		}
 		status, raw := f.http(t, "POST", "/worker-sessions/"+f.worker+"/"+operation, body)
 		if status != http.StatusConflict {
 			t.Fatalf("ambiguous active %s = %d: %s", operation, status, raw)
