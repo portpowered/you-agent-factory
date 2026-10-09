@@ -992,19 +992,20 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 	}
 	history := prepareRecordedObservationHistory(replayEvents, restoredEventPrefix)
 	return &recordedWorkerSessionObservation{
-		Service:             live,
-		ledger:              ledger,
-		durability:          completedFlushWatermarkReader(ledger),
-		projector:           projector,
-		clock:               clock,
-		providerSessions:    providerSessions,
-		replayEvents:        history.replayEvents,
-		restoredWorldState:  restoredWorldState,
-		restoredEventPrefix: history.restoredEventPrefix,
-		restoredSessionIDs:  history.restoredSessionIDs,
-		recordingID:         strings.TrimSpace(recordingID),
-		recordingReader:     recordingReader,
-		factorySessionID:    factorySessionID,
+		Service:              live,
+		ledger:               ledger,
+		durability:           completedFlushWatermarkReader(ledger),
+		projector:            projector,
+		clock:                clock,
+		providerSessions:     providerSessions,
+		replayEvents:         history.replayEvents,
+		restoredWorldState:   restoredWorldState,
+		restoredEventPrefix:  history.restoredEventPrefix,
+		restoredSessionIDs:   history.restoredSessionIDs,
+		restoredWorkerScopes: history.restoredWorkerScopes,
+		recordingID:          strings.TrimSpace(recordingID),
+		recordingReader:      recordingReader,
+		factorySessionID:     factorySessionID,
 	}
 }
 
@@ -1025,20 +1026,28 @@ func (s *recordedWorkerSessionObservation) liveObservationBelongsToRestoredPrefi
 // preparedWorkerSessionHistory is prepared before runtime publication. Views
 // share its detached values read-only; request results remain detached.
 type preparedWorkerSessionHistory struct {
-	replayEvents        []interfaces.FactoryEvent
-	restoredEventPrefix []interfaces.FactoryEvent
-	restoredSessionIDs  map[string]struct{}
+	replayEvents         []interfaces.FactoryEvent
+	restoredEventPrefix  []interfaces.FactoryEvent
+	restoredSessionIDs   map[string]struct{}
+	restoredWorkerScopes map[string]string
 }
 
 func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent) preparedWorkerSessionHistory {
 	history := preparedWorkerSessionHistory{
-		replayEvents:        cloneAndSortFactoryEvents(replay),
-		restoredEventPrefix: cloneFactoryEventsInOrder(prefix),
-		restoredSessionIDs:  make(map[string]struct{}),
+		replayEvents:         cloneAndSortFactoryEvents(replay),
+		restoredEventPrefix:  cloneFactoryEventsInOrder(prefix),
+		restoredSessionIDs:   make(map[string]struct{}),
+		restoredWorkerScopes: make(map[string]string),
 	}
 	for _, event := range history.restoredEventPrefix {
 		if id := strings.TrimSpace(stringPointerValue(event.Context.SessionID)); id != "" {
 			history.restoredSessionIDs[id] = struct{}{}
+			if event.Type == interfaces.FactoryEventTypeDispatchWorkerSessionAssoc {
+				var association interfaces.DispatchWorkerSessionAssociationEventPayload
+				if event.DecodePayload(&association) == nil && association.WorkerSessionID != "" {
+					history.restoredWorkerScopes[association.WorkerSessionID] = id
+				}
+			}
 		}
 	}
 	return history

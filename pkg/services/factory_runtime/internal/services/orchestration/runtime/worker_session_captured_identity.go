@@ -82,15 +82,55 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 		return observation, nil
 	}
 	item := summary.Capture
-	if item.Catalog.WorkerSessionID != observation.WorkerSessionID || item.Catalog.RecordingID != s.recordingID {
+	restoredScope := s.restoredWorkerScopes[observation.WorkerSessionID]
+	if !s.selectedCaptureMatches(observation.WorkerSessionID, item.Catalog) {
 		return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
+	}
+	if restoredScope != "" {
+		observation, err = s.withRestoredCaptureHealth(observation, item)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
 	}
 	observation.TokenUsage = capturedWorkerUsageRecords(item.MetadataRecords, item.Catalog.CommittedPosition)
 	return observation, nil
 }
 
+func (s *recordedWorkerSessionObservation) selectedCaptureMatches(workerID string, catalog recordings.WorkerSessionCatalogEntry) bool {
+	if catalog.WorkerSessionID != workerID {
+		return false
+	}
+	if restoredScope := s.restoredWorkerScopes[workerID]; restoredScope != "" {
+		return catalog.FactorySessionID == restoredScope
+	}
+	return catalog.RecordingID == s.recordingID
+}
+
+// A restored canonical association authorizes this exact physical capture in
+// its original scope. The summary has already validated its committed opening.
+func (s *recordedWorkerSessionObservation) withRestoredCaptureHealth(observation workersessions.Observation, item recordings.WorkerCapturedCatalogItem) (workersessions.Observation, error) {
+	health, err := workerRecordingHealthMap(recordings.WorkerRecordingSnapshot{
+		RecordingID: item.Catalog.RecordingID,
+		Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: observation.WorkerSessionID, Status: item.Health,
+			Failure: item.HealthReason, InterruptionReason: item.HealthReason,
+			Records: []events.Record{item.Opening},
+		}},
+	}, item.Catalog.RecordingID)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	rows := []workersessions.Observation{observation}
+	s.decorateRecordingHealth(rows, health)
+	return rows[0], nil
+}
+
 func (s *recordedWorkerSessionObservation) selectedCapturedCancellation(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, bool, error) {
-	archived, found, err := archivedFactoryWorker(ctx, s.Service, observation.FactorySessionID, observation.WorkerSessionID)
+	scope := observation.FactorySessionID
+	if restored := s.restoredWorkerScopes[observation.WorkerSessionID]; restored != "" {
+		scope = restored
+	}
+	archived, found, err := archivedFactoryWorker(ctx, s.Service, scope, observation.WorkerSessionID)
 	if failure := observationContextError(ctx); failure != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return workersessions.Observation{}, false, workersessions.ErrObservationCanceled
 	}
@@ -99,6 +139,7 @@ func (s *recordedWorkerSessionObservation) selectedCapturedCancellation(ctx cont
 	}
 	observation.TokenUsage = cloneRecordedTokenUsage(archived.TokenUsage)
 	if archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
+		archived.FactorySessionID = observation.FactorySessionID
 		return archived, true, nil
 	}
 	return observation, true, nil
@@ -111,6 +152,9 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedTranscript(ctx, o
 		return observation, observationContextError(ctx)
 	}
 	scope := s.executionFactorySessionID
+	if restored := s.restoredWorkerScopes[observation.WorkerSessionID]; restored != "" {
+		scope = restored
+	}
 	if scope == "" {
 		scope = observation.FactorySessionID
 	}

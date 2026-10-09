@@ -263,6 +263,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 	view.replayEvents = history.replayEvents
 	view.restoredEventPrefix = history.restoredEventPrefix
 	view.restoredSessionIDs = history.restoredSessionIDs
+	view.restoredWorkerScopes = history.restoredWorkerScopes
 	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
 	view.executionFactorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	return view
@@ -281,6 +282,7 @@ type recordedWorkerSessionObservation struct {
 	restoredWorldState        *interfaces.FactoryWorldState
 	restoredEventPrefix       []interfaces.FactoryEvent
 	restoredSessionIDs        map[string]struct{}
+	restoredWorkerScopes      map[string]string
 	recordingID               string
 	recordingReader           recordings.WorkerRecordingReader
 	factorySessionID          string
