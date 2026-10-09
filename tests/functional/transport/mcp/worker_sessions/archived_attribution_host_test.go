@@ -51,6 +51,7 @@ func TestArchivedWorkAttributionJourneys(t *testing.T) {
 		{"profile isolation", runArchivedWorkAttributionProfileIsolation},
 		{"named close", runArchivedWorkAttributionNamedCloseJourneys},
 		{"canceled history read", runArchivedWorkAttributionCanceledRead},
+		{"provider completion preserves frozen history", runArchivedWorkAttributionCompleted},
 	} {
 		t.Run(scenario.name, func(t *testing.T) { scenario.run(t, process) })
 	}
