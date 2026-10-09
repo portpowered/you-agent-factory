@@ -932,6 +932,46 @@ func TestAttemptShutdownDrainsRejectedPreparation(t *testing.T) {
 	}
 }
 
+func TestAttemptShutdownSealsAndJoinsOpeningBeforeControlSnapshot(t *testing.T) {
+	t.Parallel()
+	opening := make(chan struct{})
+	release := make(chan struct{})
+	started := make(chan error, 1)
+	executor := attemptExecuteFunc(func(_ context.Context, req workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return workers.ExecuteResult{Correlation: req.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	})
+	pool := newAttemptLifecycle(executor, func() string { return "physical" }, 1)
+	go func() {
+		started <- pool.startWithPreparation(context.Background(), attemptTestRequest("dispatch", "physical"), true,
+			func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}, false,
+			func(context.Context, *workers.ExecuteRequest) (attemptCompletionFunc, error) {
+				close(opening)
+				<-release
+				return nil, nil
+			})
+	}()
+	<-opening
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := pool.sealAdmission(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("seal with pending opening = %v, want canceled wait", err)
+	}
+	if err := pool.startRetry(context.Background(), attemptTestRequest("late", "late"), true,
+		func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}); !errors.Is(err, dispatchplanning.ErrDispatchRuntimeStopped) {
+		t.Errorf("admission after seal = %v", err)
+	}
+	close(release)
+	if err := <-started; err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.sealAdmission(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // requestWorkers observes only the injected Workers boundary.
 type requestWorkers struct {
 	workers.Service

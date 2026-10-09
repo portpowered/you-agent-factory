@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -32,6 +33,106 @@ func TestWorkerSessionHistoryRestart(t *testing.T) {
 			t.Parallel()
 			runWorkerSessionHistoryRestart(t, name)
 		})
+	}
+}
+
+func TestWorkerSessionShutdownCauseRestart(t *testing.T) {
+	t.Parallel()
+	binary, project, home, factory, ready, env := incompleteHistoryFixture(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock, err := json.Marshal(workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		WorkerName: "worker", WorkstationName: "process", RunType: workers.MockWorkerRunTypeScript,
+		ScriptConfig: &workers.MockWorkerScriptConfig{Command: node, Args: []string{filepath.Join(project, "worker.cjs"), ready}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mockPath := filepath.Join(project, "mock.json")
+	if err := os.WriteFile(mockPath, mock, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	first := startHistoryHost(t, ctx, binary, project, env, "--dir", factory, "--continuously", "--with-mock-workers="+mockPath)
+	live := awaitShutdownHistoryAttempt(t, ctx, binary, project, env, first.url, ready)
+	if live.TerminalCause != nil || live.StartedAt == nil || live.EndedAt != nil {
+		t.Fatalf("live attempt facts = %+v", live)
+	}
+	removeHistorySeeds(t, factory)
+	first.stop(t, ctx, binary, project, env)
+	for _, name := range []string{".codex", ".cursor", ".claude"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte("not a provider directory"), 0o000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	second := startHistoryHost(t, ctx, binary, project, env)
+	before := readShutdownHistorySnapshot(t, ctx, binary, project, env, second.url)
+	if before.Observation.WorkerSessionId != live.WorkerSessionId || !reflect.DeepEqual(before.Observation.StartedAt, live.StartedAt) {
+		t.Fatalf("shutdown changed original identity/start: live=%+v archive=%+v", live, before.Observation)
+	}
+	second.stop(t, ctx, binary, project, env)
+	third := startHistoryHost(t, ctx, binary, project, env)
+	after := readShutdownHistorySnapshot(t, ctx, binary, project, env, third.url)
+	third.stop(t, ctx, binary, project, env)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("restart changed terminal cause/times/captured records: before=%+v after=%+v", before, after)
+	}
+}
+
+func readShutdownHistorySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string) historySnapshot {
+	t.Helper()
+	rows := historyRows(t, ctx, binary, project, env, server, "archived")
+	if len(rows) != 1 {
+		t.Fatalf("shutdown archive membership = %+v", rows)
+	}
+	observation := rows[0]
+	if observation.State != "CANCELED" || observation.TerminalCause == nil || *observation.TerminalCause != api.WorkerSessionTerminalCauseOperatorCancel ||
+		observation.StartedAt == nil || observation.EndedAt == nil || observation.DurationMillis == nil ||
+		observation.RecordingHealth == nil || *observation.RecordingHealth != "COMPLETE" {
+		t.Fatalf("shutdown terminal facts = %+v", observation)
+	}
+	selected := historyCLI(t, ctx, binary, project, env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId)
+	var shown api.WorkerSessionObservation
+	if err := json.Unmarshal(selected, &shown); err != nil || !reflect.DeepEqual(observation, shown) {
+		t.Fatalf("shutdown list/show disagree: %s (%v)", selected, err)
+	}
+	if active := historyRows(t, ctx, binary, project, env, server, "active"); len(active) != 0 {
+		t.Fatalf("shutdown restored execution authority: %+v", active)
+	}
+	assertHistoryHTTP(t, ctx, server, observation)
+	logs := historyLogPage(t, ctx, binary, project, env, server, observation.WorkerSessionId, "")
+	if logs.Health != "COMPLETE" || len(logs.Events) == 0 || logs.NextToken != nil {
+		t.Fatalf("shutdown captured history = %+v", logs)
+	}
+	for _, event := range logs.Events {
+		if event.Event.CapturedAt == nil {
+			t.Fatal("shutdown capture lost committed capturedAt")
+		}
+	}
+	assertHistoryMCP(t, ctx, binary, project, env, server, observation, logs)
+	assertHistoryReplay(t, ctx, binary, project, env, server, logs)
+	return historySnapshot{Observation: observation, Logs: logs}
+}
+
+func awaitShutdownHistoryAttempt(t *testing.T, ctx context.Context, binary, project string, env []string, server, ready string) api.WorkerSessionObservation {
+	t.Helper()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			rows := historyRows(t, ctx, binary, project, env, server, "active")
+			if len(rows) == 1 && rows[0].State == "RUNNING" {
+				return rows[0]
+			}
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatal("owned mock attempt did not reach physical readiness")
+		}
 	}
 }
 

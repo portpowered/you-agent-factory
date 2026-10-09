@@ -3,7 +3,15 @@ package customer_journeys_test
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"reflect"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -55,4 +63,80 @@ func TestExactStopTerminateReportsCommittedCause(t *testing.T) {
 		t.Fatalf("terminal repeat status=%d", repeat.StatusCode)
 	}
 	assertCapturedStopCause(t, server.URL(), "cause-worker", "OPERATOR_TERMINATE")
+}
+
+// The Factory Session close owns an ordered stop/join. Provider cancellation
+// and completion are separate gates; retained reads use the same root process.
+func TestShutdownTerminalCausePublicParity(t *testing.T) {
+	t.Parallel()
+	runner := newFleetCharacterizationRunner()
+	sessionID := uuid.NewString()
+	server := startShutdownCauseServer(t, runner, sessionID)
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), sessionID))
+	name := "shutdown-cause"
+	submitted := support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+		Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name},
+	})
+	waitFleetCharacterizationSignal(t, runner.slots[0].started, "owned provider admission")
+	target := waitForRouteCharacterizationAssociation(t, stream, support.StringPointerValue(submitted.WorkId))
+	live := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+target.workerSessionID)
+	if live.TerminalCause != nil || live.StartedAt == nil || live.ProviderSession != nil {
+		t.Fatalf("live no-reference attempt = %+v", live)
+	}
+	released := make(chan struct{})
+	go func() {
+		select {
+		case <-runner.slots[0].canceled:
+			runner.slots[0].release()
+		case <-runner.slots[0].returned:
+		}
+		close(released)
+	}()
+	support.CloseFactorySessionAt(t, server.URL(), sessionID)
+	waitFleetCharacterizationSignal(t, released, "joined cancellation")
+	waitFleetCharacterizationSignal(t, runner.slots[0].canceled, "owned cancellation effect")
+	archived := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+target.workerSessionID)
+	if archived.State != "CANCELED" || archived.TerminalCause == nil || string(*archived.TerminalCause) != "OPERATOR_CANCEL" ||
+		!reflect.DeepEqual(live.StartedAt, archived.StartedAt) || archived.EndedAt == nil || archived.DurationMillis == nil {
+		t.Fatalf("shutdown archive facts = %+v", archived)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "show", "--worker-session-id", target.workerSessionID, "--output", "json"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI shutdown summary: %v %s", err, inputs.Stderr())
+	}
+	var shown factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &shown); err != nil || !reflect.DeepEqual(shown, archived) {
+		t.Fatalf("CLI/HTTP shutdown summary disagree: %s (%v)", inputs.Stdout(), err)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("closed Runtime admitted %d executions, want one", runner.callCount())
+	}
+}
+
+func startShutdownCauseServer(t *testing.T, runner *fleetCharacterizationRunner, sessionID string) *fleetCharacterizationServer {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "shutdown-cause")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	home := t.TempDir()
+	server := &fleetCharacterizationServer{env: []string{"HOME=" + home, "USERPROFILE=" + home}, dir: dir}
+	server.FunctionalAPIServer = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true, Env: server.env,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
+		BeforeStart: func(tb testing.TB, process support.Process, _ root.Input) {
+			result, err := process.(support.ApplicationProcess).FactorySessions().Start(tb.Context(), factorysessions.SessionStartRequest{
+				SessionID: sessionID, Mode: factorysessions.SessionOperationModeLive, FolderPath: dir, ActivationOnly: true,
+				RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+					Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: home,
+					DefinitionSourcePath: filepath.Join(dir, "factory.json"), ExecutionBaseDir: dir, RuntimeInstanceID: uuid.NewString(),
+					Recording: factorysessions.SessionRecordingSelection{RecordPath: filepath.Join(dir, "shutdown.json")},
+				},
+			})
+			if err != nil || result.SessionID != sessionID {
+				tb.Fatalf("activate shutdown Factory Session: %+v %v", result, err)
+			}
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	t.Cleanup(runner.releaseAll)
+	return server
 }

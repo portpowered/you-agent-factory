@@ -190,6 +190,13 @@ func startStatelessAttemptWithRequestMode(
 	allowRetry bool,
 ) error {
 	request = runtimeRecordingRequest(cfg, request)
+	// Runtime owns the admitted attempt's lifetime. Engine/host cancellation
+	// stops scheduling; scoped close must commit CANCEL before touching the
+	// physical attempt. Explicit attempt controls and execution timeouts remain
+	// authoritative after detaching the producer's cancellation.
+	if ctx != nil {
+		ctx = context.WithoutCancel(ctx)
+	}
 	if strings.TrimSpace(executeRequest.Correlation.RuntimeID) == "" {
 		executeRequest.Correlation.RuntimeID = strings.TrimSpace(request.Execution.RecordingID)
 	}
