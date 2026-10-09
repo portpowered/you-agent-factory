@@ -20,6 +20,20 @@ func projectHistoricalDispatches(
 	byID := make(map[string]int)
 	dispatches := make([]recordings.HistoricalDispatch, 0)
 	for _, event := range events {
+		// Canonical decoding validates every event before this reducer runs.
+		// Only dispatch facts need the legacy representation: copying unrelated
+		// Work payloads and decoding their contexts scales with history bytes,
+		// although those events cannot change this projection.
+		switch factorydefinitions.FactoryEventType(event.Kind) {
+		case factorydefinitions.FactoryEventTypeDispatchRequest,
+			factorydefinitions.FactoryEventTypeDispatchResponse,
+			factorydefinitions.FactoryEventTypeDispatchQueued,
+			factorydefinitions.FactoryEventTypeDispatchInterrupted,
+			factorydefinitions.FactoryEventTypeDispatchReconciled,
+			factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc:
+		default:
+			continue
+		}
 		legacy := canonical.FactoryEventFromCanonical(event)
 		if legacy.Type == factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc {
 			if err := applyHistoricalWorkerSessionAssociation(identity, event, legacy, byID, dispatches); err != nil {
