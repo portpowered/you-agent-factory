@@ -1128,6 +1128,27 @@ class RecoveryWorkspacePreservationTest(unittest.TestCase):
                 self.assertEqual(git(["diff", "--cached", "--binary"], retained).stdout, index_before)
                 self.assertEqual(Path(result["prd_path"]).read_bytes(), source.read_bytes())
                 self.assertEqual(Path(result["prd_md_path"]).read_bytes(), source.with_suffix(".md").read_bytes())
+            for progress_bytes in (b"", None):
+                with self.subTest(retained_progress=progress_bytes):
+                    progress = retained / "progress.txt"
+                    if progress_bytes is None:
+                        progress.unlink()
+                    else:
+                        progress.write_bytes(progress_bytes)
+                    with mock.patch.object(module, "get_repo_root", return_value=repo), \
+                         mock.patch.object(module, "recovery_command_json", side_effect=external), \
+                         mock.patch.object(module, "initialize_progress_log") as initialize, \
+                         mock.patch.object(sys, "argv", ["setup-workspace.py", "lane-r2", "--recovery-worktree", ".claude/worktrees/lane"]):
+                        stdout, stderr = io.StringIO(), io.StringIO()
+                        with redirect_stdout(stdout), redirect_stderr(stderr):
+                            module.main()
+                        self.assertEqual(json.loads(stdout.getvalue())["status"], "ready")
+                        initialize.assert_not_called()
+                    if progress_bytes is None:
+                        self.assertFalse(progress.exists())
+                    else:
+                        self.assertEqual(progress.read_bytes(), progress_bytes)
+            (retained / "progress.txt").write_bytes(saved["progress.txt"])
             # A closed retained PR must refuse with no receipt or file/ref effects.
             def closed_pr(command, cwd):
                 data = external(command, cwd)
