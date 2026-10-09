@@ -231,6 +231,10 @@ answer or expiry returns the lane to init. Ordinary task CONTINUE returns to
 init; ordinary idea CONTINUE follows reporting-failed. An unchanged second
 idea park follows reporting-failed; a second task park returns immediately.
 Never move, reset, restore, duplicate or rewrite a parked lane to release it.
+Never answer a lane "wait until another PR merges": its task park returns
+immediately and burns visits to the cap. Let the lane ship what it can and
+admit the dependent criterion as a successor with DEPENDS_ON on the
+prerequisite's idea Work ID.
 AM-T0 stays temporary; AM-T11 owns wholesale removal.
 
 On every initial, wake and check-in visit, reconcile outstanding forwarded
