@@ -66,7 +66,6 @@ type Root struct {
 	recordingProjections           recordings.ProjectionService
 	replayInputs                   recordings.ReplayInputLoader
 	factoryDefinitions             factorydefinitions.Service
-	initialEngine                  *RuntimeInitialEngine
 	workService                    work.Service
 	providerSessions               providersessions.Service
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
@@ -99,7 +98,6 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	initialEngine *RuntimeInitialEngine,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordingProjections recordings.ProjectionService,
@@ -112,7 +110,6 @@ func NewRoot(
 		opening:                        opening,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
-		initialEngine:                  initialEngine,
 		modelInvocation:                modelInvocation,
 		resourceAcquisition:            resourceAcquisition,
 		workerService:                  workerService,

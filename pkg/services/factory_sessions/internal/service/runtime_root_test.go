@@ -160,7 +160,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "fresh.json"}},
 			}
 			bypass, wantError := configureBoardReferenceCase(name, owner, opening)
-			err := (&Root{}).selectCurrentBoardReference(t.Context(), opening)
+			err := (&RuntimeOpening{}).selectCurrentBoardReference(t.Context(), opening)
 			if (err != nil) != wantError {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
 			}
@@ -238,7 +238,7 @@ func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) 
 				planner.target = recordings.LiveRecordingTarget{}
 				wantError, wantPath = true, ""
 			}
-			root := &Root{recordingsRuntime: planner}
+			root := &RuntimeOpening{recordingsRuntime: planner}
 			err := root.reserveFreshCurrentBoard(ctx, opening)
 			if (err != nil) != wantError || planner.calls != wantCalls {
 				t.Fatalf("reservation error/calls = %v/%d, want error=%v calls=%d", err, planner.calls, wantError, wantCalls)
@@ -1061,7 +1061,7 @@ func assertCurrentBoardPublication(t *testing.T, name string, owner *boardRefere
 		if !opening.emptyCurrentBoard {
 			t.Fatal("missing snapshot did not select empty startup")
 		}
-		if err := (&Root{recordingsRuntime: planner}).reserveFreshCurrentBoard(t.Context(), opening); err != nil {
+		if err := (&RuntimeOpening{recordingsRuntime: planner}).reserveFreshCurrentBoard(t.Context(), opening); err != nil {
 			t.Fatal(err)
 		}
 		wantPath = "fresh.json"
@@ -1090,10 +1090,10 @@ func TestCurrentBoardMissingSnapshotSkipsStaleHistory(t *testing.T) {
 			}
 			// No history reader is injected: missing state must never replay the
 			// stale reference, even if its target is unreadable or absent.
-			if err := (&Root{}).selectCurrentBoardReference(t.Context(), opening); err != nil {
+			if err := (&RuntimeOpening{}).selectCurrentBoardReference(t.Context(), opening); err != nil {
 				t.Fatal(err)
 			}
-			if err := (&Root{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
+			if err := (&RuntimeOpening{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
 				t.Fatal(err)
 			}
 			if !opening.emptyCurrentBoard || opening.hasCurrentBoardReference ||

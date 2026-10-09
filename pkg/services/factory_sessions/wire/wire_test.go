@@ -729,7 +729,6 @@ func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveCha
 		nil,
 		nil,
 		nil,
-		nil,
 		liveChangeCoordinator,
 		nil,
 	)

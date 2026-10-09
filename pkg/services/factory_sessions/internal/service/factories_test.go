@@ -81,8 +81,9 @@ type runtimeOpeningFixture struct {
 
 func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 	initialEngine := NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation)
+	inventory, _ := fixture.Assembly.(recordings.RecordedSessionInventory)
 	return NewRoot(
-		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil),
+		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory),
 		fixture.ProviderSessions,
 		fixture.Logger,
 		fixture.WorkflowPreview,
@@ -101,7 +102,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.RecordingsService,
 		fixture.RecordingsRuntime,
 		fixture.WorkerService,
-		initialEngine,
 		nil,
 		fixture.LiveChangeCoordinator,
 		fixture.RecordingProjections,
@@ -558,7 +558,7 @@ func TestRuntimeOpeningPreparationFailureDoesNotAllocateCanonicalMetricsIdentity
 				func() (string, error) { return preparationPath("home"), nil }, nil, nil, nil, nil, nil)
 			operation := NewRuntimeOpening(preparation, nil, nil, nil, nil,
 				&recordingsRootConstructionStub{}, &recordingsRootConstructionStub{}, nil, nil, nil,
-				func() string { identityRequests++; return id + "-metrics-identity" }, nil)
+				func() string { identityRequests++; return id + "-metrics-identity" }, nil, nil, nil)
 			if loadRequests != 0 || identityRequests != 0 {
 				t.Fatal("construction performed request-scoped work")
 			}

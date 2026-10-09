@@ -22,7 +22,7 @@ func TestRuntimeActivationInitialFailureRetainsSoleCloserForRetry(t *testing.T) 
 	snapshot := activationSnapshot()
 	openingErr, closeErr := errors.New("initial opening failed"), errors.New("partial release failed")
 	calls := 0
-	owner := &Root{initialEngine: NewRuntimeInitialEngine(nil, func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+	owner := &RuntimeOpening{initialEngine: NewRuntimeInitialEngine(nil, func(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
 		return &factoryruntime.RuntimeInitialOpening{Activation: &factoryruntime.RuntimeActivation{
 			Close: func(ctx context.Context) error {
 				if ctx.Err() != nil {

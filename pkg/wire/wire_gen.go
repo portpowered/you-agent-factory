@@ -592,7 +592,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v163 := wire5.NewRuntimeInitialEngine(v103, initialRuntimeActivationOperation)
 	v164 := wire5.NewExecutionBinding(v91, v160)
 	v165 := wire5.NewHistoricalReplayBehavior()
-	v166 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner)
+	v166 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner, v45, recordedSessionInventory)
 	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	v167 := provideRuntimeDispatchPlanning()
 	v168, err := provideFactoryRuntimeRoot(v43, v109, v167)
@@ -620,7 +620,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v174 := provideRuntimeModelFactoryConfigReader(v126)
 	v175 := provideRuntimeModelWorkerExecution(workersService)
 	v176 := wire5.NewRuntimeModelInvocation(modelsService, v174, v175)
-	v177, err := wire5.NewRoot(v166, providersessionsService, logger, workflowPreviewOperation, v168, factorydefinitionsService, v103, v126, v169, v172, v173, v45, runtimeInstanceIDGenerator, homeDirectoryResolver, workService, modelsService, recordingsService, v34, workersService, v163, v176, liveChangeCoordinator, v21)
+	v177, err := wire5.NewRoot(v166, providersessionsService, logger, workflowPreviewOperation, v168, factorydefinitionsService, v103, v126, v169, v172, v173, v45, runtimeInstanceIDGenerator, homeDirectoryResolver, workService, modelsService, recordingsService, v34, workersService, v176, liveChangeCoordinator, v21)
 	if err != nil {
 		return nil, err
 	}

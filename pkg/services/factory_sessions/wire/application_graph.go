@@ -126,10 +126,11 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
+	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 ) *RuntimeOpening {
 	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
 		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
-		generateRuntimeInstanceID, runtimeLogs)
+		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory)
 }
 
 func NewRoot(
@@ -154,7 +155,6 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	initialEngine *RuntimeInitialEngine,
 	modelInvocation RuntimeModelInvocationOperation,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 	recordingProjections recordings.ProjectionService,
@@ -181,7 +181,6 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		initialEngine,
 		modelInvocation,
 		liveChangeCoordinator,
 		recordingProjections,

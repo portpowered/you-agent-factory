@@ -28,9 +28,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// RuntimeOpening owns fixed preparation and historical acquisition behavior.
+// RuntimeOpening owns fixed preparation, engine opening and historical acquisition behavior.
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
+	generateSessionID         factorysessions.SessionIDGenerator
+	recordedInventory         recordings.RecordedSessionInventory
 	preparation               *RuntimePreparation
 	durableOpening            *DurableOpening
 	initialEngine             *RuntimeInitialEngine
@@ -53,8 +55,9 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
+	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 ) *RuntimeOpening {
-	return &RuntimeOpening{preparation: preparation, durableOpening: durableOpening,
+	return &RuntimeOpening{generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
 		replayBehavior: replayBehavior, recordingsService: recordingsService,
 		recordingsRuntime: recordingsRuntime, clock: clock, resolveClock: resolveClock,
@@ -118,7 +121,7 @@ func (r *Root) openRuntimeWithOptions(
 	opening.durableExecution = resources.DurableExecution
 	opening.observations = resources.Observations
 	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
-	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
+	if err = r.opening.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 	completionRequest := opening.completionRequest()
@@ -320,7 +323,7 @@ func (r *RuntimeOpening) openHistoricalSessionRuntime(ctx context.Context, openi
 	return r.replayBehavior.Acquire(*opening.load.HistoricalReplay, liveOwner), replayClose, nil
 }
 
-func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
+func (r *RuntimeOpening) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
 	if opening.emptyCurrentBoard {
 		return nil
@@ -382,7 +385,7 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 	return nil
 }
 
-func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
 		return err
 	}
@@ -447,7 +450,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	return nil
 }
 
-func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	path := strings.TrimSpace(opening.configured.Recordings.RecordPath)
 	if path == "" {
 		return nil
