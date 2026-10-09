@@ -845,9 +845,10 @@ func TestWorkerSessionCommandsRejectExplicitBlankScope(t *testing.T) {
 					err := root.Execute()
 					var typed *workersessionscli.CLIError
 					want := "WORKER_SESSION_SHOW_INVALID"
-					if operation == "continue" {
+					switch operation {
+					case "continue":
 						want = "WORKER_SESSION_CONTINUATION_INVALID"
-					} else if operation == "interrupt" {
+					case "interrupt":
 						want = "WORKER_SESSION_INTERRUPT_INVALID"
 					}
 					if !errors.As(err, &typed) || typed.Code != want || !strings.Contains(stderr.String(), want) {

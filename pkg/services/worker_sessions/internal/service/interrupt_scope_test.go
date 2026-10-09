@@ -39,21 +39,7 @@ func scopedInterruptSources(t *testing.T) (*registry, workersessions.InterruptRe
 func TestInterruptScopedReservationPreservesOwnerAndReplay(t *testing.T) {
 	t.Parallel()
 	r, req := scopedInterruptSources(t)
-	for _, mode := range []string{"provider", "recorded"} {
-		req.ResumeMode = mode
-		result, err := r.Interrupt(t.Context(), req)
-		var ambiguous *workersessions.AmbiguousAddressError
-		if !errors.As(err, &ambiguous) || result.Phase != workersessions.InterruptPhaseValidation || result.Source.ID != "" || result.Successor.ID != "" {
-			t.Fatalf("unscoped %s result=%+v error=%v", mode, result, err)
-		}
-		expected := []workersessions.AddressCandidate{
-			{FactorySessionID: "factory-a", WorkerSessionID: "source", State: workersessions.StateRunning},
-			{FactorySessionID: "factory-b", WorkerSessionID: "source", State: workersessions.StateRunning},
-		}
-		if !reflect.DeepEqual(ambiguous.Candidates, expected) {
-			t.Fatalf("candidates=%+v", ambiguous.Candidates)
-		}
-	}
+	assertScopedInterruptAmbiguity(t, r, req)
 	req.FactorySessionID = "factory-missing"
 	if _, _, err := r.reserveInterrupt(req); !errors.Is(err, workersessions.ErrInterruptSourceNotFound) {
 		t.Fatalf("foreign scope=%v", err)
@@ -78,10 +64,34 @@ func TestInterruptScopedReservationPreservesOwnerAndReplay(t *testing.T) {
 	if _, err := r.Interrupt(t.Context(), peer); !errors.Is(err, workersessions.ErrInterruptRequestIDConflict) {
 		t.Fatalf("cross-owner replay=%v", err)
 	}
+	assertInterruptPeerUnchanged(t, r)
+}
+
+func assertInterruptPeerUnchanged(t *testing.T, r *registry) {
+	t.Helper()
 	peerSession := r.sessions[scopedWorkerAddress("source", "factory-b")]
 	peerSupervision := r.supervisions[scopedWorkerAddress("source", "factory-b")]
 	if peerSession.State != workersessions.StateRunning || peerSession.SuccessorWorkerSessionID != "" || peerSupervision.interrupting || peerSupervision.controlActive || len(r.sessions) != 2 {
 		t.Fatal("peer or successor changed during validation")
+	}
+}
+
+func assertScopedInterruptAmbiguity(t *testing.T, r *registry, req workersessions.InterruptRequest) {
+	t.Helper()
+	for _, mode := range []string{"provider", "recorded"} {
+		req.ResumeMode = mode
+		result, err := r.Interrupt(t.Context(), req)
+		var ambiguous *workersessions.AmbiguousAddressError
+		if !errors.As(err, &ambiguous) || result.Phase != workersessions.InterruptPhaseValidation || result.Source.ID != "" || result.Successor.ID != "" {
+			t.Fatalf("unscoped %s result=%+v error=%v", mode, result, err)
+		}
+		expected := []workersessions.AddressCandidate{
+			{FactorySessionID: "factory-a", WorkerSessionID: "source", State: workersessions.StateRunning},
+			{FactorySessionID: "factory-b", WorkerSessionID: "source", State: workersessions.StateRunning},
+		}
+		if !reflect.DeepEqual(ambiguous.Candidates, expected) {
+			t.Fatalf("candidates=%+v", ambiguous.Candidates)
+		}
 	}
 }
 

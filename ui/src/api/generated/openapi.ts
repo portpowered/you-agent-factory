@@ -11732,6 +11732,8 @@ export const WorkFailureType = {
     "structured_output_schema_violation",
   // A successful worker did not satisfy its expected artifact declarations.
   WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
+  // The worker explicitly returned a FAILED decision with a completed response.
+  WorkFailureTypeWorkerDeclaredFailure: "worker_declared_failure",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];

@@ -1385,6 +1385,7 @@ const (
 	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
 	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
 	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
+	WorkFailureTypeWorkerDeclaredFailure           WorkFailureType = "worker_declared_failure"
 )
 
 // Defines values for WorkOutcome.

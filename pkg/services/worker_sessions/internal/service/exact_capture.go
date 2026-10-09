@@ -102,16 +102,7 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 	metadata := r.observations[address]
 	_, replay := r.continueReplays[req.RequestID]
 	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
-	factorySessionID := ""
-	var terminalPublished <-chan struct{}
-	if supervision := r.supervisions[address]; supervision != nil {
-		supervision.mu.Lock()
-		factorySessionID = supervision.execution.Execution.FactorySessionID
-		if supervision.accepted {
-			terminalPublished = supervision.done
-		}
-		supervision.mu.Unlock()
-	}
+	factorySessionID, terminalPublished := r.continuationPublicationLocked(address)
 	source = cloneSession(source)
 	r.mu.RUnlock()
 	if !read {
@@ -121,19 +112,12 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 		return nil, err
 	}
 	ctx := r.serverOwnedContext()
-	// Terminal state is visible before capture finalization. Join the exact
-	// admitted attempt's publication, outside the registry lock, before reading
-	// the durable recipe. A peer's completion cannot release this barrier.
-	if terminalPublished != nil {
-		waitCtx := ctx
-		if len(callers) != 0 && callers[0] != nil {
-			waitCtx = callers[0]
-		}
-		select {
-		case <-terminalPublished:
-		case <-waitCtx.Done():
-			return nil, waitCtx.Err()
-		}
+	waitCtx := ctx
+	if len(callers) != 0 && callers[0] != nil {
+		waitCtx = callers[0]
+	}
+	if err := waitContinuationPublication(waitCtx, terminalPublished); err != nil {
+		return nil, err
 	}
 	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
 	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
@@ -145,6 +129,35 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
 	}
 	return r.readCapturedContinuationRecipe(ctx, target, source)
+}
+
+// The caller holds r.mu while selecting the exact attempt's publication.
+func (r *registry) continuationPublicationLocked(address string) (string, <-chan struct{}) {
+	factorySessionID := ""
+	var terminalPublished <-chan struct{}
+	if supervision := r.supervisions[address]; supervision != nil {
+		supervision.mu.Lock()
+		factorySessionID = supervision.execution.Execution.FactorySessionID
+		if supervision.accepted {
+			terminalPublished = supervision.done
+		}
+		supervision.mu.Unlock()
+	}
+	return factorySessionID, terminalPublished
+}
+
+func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}) error {
+	// Terminal state is visible before capture finalization. Join the exact
+	// admitted attempt's publication, outside the registry lock, before reading
+	// the durable recipe. A peer's completion cannot release this barrier.
+	if terminalPublished != nil {
+		select {
+		case <-terminalPublished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {

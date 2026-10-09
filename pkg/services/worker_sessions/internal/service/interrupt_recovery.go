@@ -57,26 +57,38 @@ func (r *registry) replayDurableInterrupt(ctx context.Context, req workersession
 	if err != nil {
 		return result, true, newInterruptError(result.Phase, result, recordings.ErrWorkerRecordingPersistence)
 	}
-	payload, _ := json.Marshal(req)
-	if record.Operation.Action != "interrupt" || record.Operation.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
-		return result, true, newInterruptError(result.Phase, result, workersessions.ErrInterruptRequestIDConflict)
-	}
-	target.ExpectedAttemptID = record.Target.ExpectedAttemptID
-	if record.Target != target {
-		return result, true, newInterruptError(result.Phase, result, workersessions.ErrInterruptSourceConflict)
-	}
-	if err := r.validateInterruptReplayInput(ctx, key, req, record, payload); err != nil {
-		r.logger.Warn("worker session interrupt replay refused", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", "VALIDATION", "outcome", "persistence_unavailable")
+	if err := r.validateDurableInterruptReplay(ctx, req, key, record, target); err != nil {
 		return result, true, newInterruptError(result.Phase, result, err)
 	}
+	replayed, replayErr := r.readDurableInterruptOutcome(ctx, req, record)
+	r.logger.Info("worker session interrupt replay", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", record.Operation.Phase, "outcome", "read_only")
+	return replayed, true, replayErr
+}
+
+func (r *registry) readDurableInterruptOutcome(ctx context.Context, req workersessions.InterruptRequest, record recordings.WorkerControlOperationRecord) (workersessions.InterruptResult, error) {
 	replayed, replayErr := decodeInterruptOutcome(req, record)
 	if record.Operation.Phase == "SOURCE_STOPPED" && errors.Is(replayErr, workersessions.ErrInterruptExecutionUnavailable) {
 		if err := r.inspectPendingInterruptSuccessor(ctx, req, record.Target); err != nil {
 			replayErr = newInterruptError(replayed.Phase, replayed, err)
 		}
 	}
-	r.logger.Info("worker session interrupt replay", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", record.Operation.Phase, "outcome", "read_only")
-	return replayed, true, replayErr
+	return replayed, replayErr
+}
+
+func (r *registry) validateDurableInterruptReplay(ctx context.Context, req workersessions.InterruptRequest, key recordings.WorkerControlOperationKey, record recordings.WorkerControlOperationRecord, target recordings.WorkerControlTarget) error {
+	payload, _ := json.Marshal(req)
+	if record.Operation.Action != "interrupt" || record.Operation.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+		return workersessions.ErrInterruptRequestIDConflict
+	}
+	target.ExpectedAttemptID = record.Target.ExpectedAttemptID
+	if record.Target != target {
+		return workersessions.ErrInterruptSourceConflict
+	}
+	if err := r.validateInterruptReplayInput(ctx, key, req, record, payload); err != nil {
+		r.logger.Warn("worker session interrupt replay refused", "sessionID", req.SourceWorkerSessionID, "requestID", req.RequestID, "phase", "VALIDATION", "outcome", "persistence_unavailable")
+		return err
+	}
+	return nil
 }
 
 // An opening precedes provider admission. Inspect the reserved identity to

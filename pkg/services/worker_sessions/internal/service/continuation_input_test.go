@@ -417,7 +417,13 @@ func TestContinuationScopedReservationPreservesOwnerAndPublicLineage(t *testing.
 	if _, _, err := r.reserveContinuation(foreign); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
 		t.Fatalf("request ID reused across owners = %v, want conflict", err)
 	}
-	r.commitContinuationSessionLinks(replay.plan, replay.plan.sourceAddressOrID())
+	assertScopedContinuationLineage(t, r, req, replay.plan)
+	r.finishStart()
+}
+
+func assertScopedContinuationLineage(t *testing.T, r *registry, req workersessions.ContinueRequest, plan continuePlan) {
+	t.Helper()
+	r.commitContinuationSessionLinks(plan, plan.sourceAddressOrID())
 	selected, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SourceWorkerSessionID, FactorySessionID: "factory-a"})
 	if err != nil || selected.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
 		t.Fatalf("selected source lineage = %+v, %v", selected, err)
@@ -430,7 +436,6 @@ func TestContinuationScopedReservationPreservesOwnerAndPublicLineage(t *testing.
 	if err != nil || successor.PredecessorWorkerSessionID != req.SourceWorkerSessionID {
 		t.Fatalf("public successor lineage = %+v, %v", successor, err)
 	}
-	r.finishStart()
 }
 
 func TestContinuationInputScopeMatchesPersistedTarget(t *testing.T) {

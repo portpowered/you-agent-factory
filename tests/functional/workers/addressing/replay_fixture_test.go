@@ -83,32 +83,7 @@ func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunne
 		runner = &refuseProviderCalls{calls: &f.calls}
 	}
 	f.runner = runner
-	group.mu.Lock()
-	for path, payload := range payloads {
-		data := append([]byte(nil), payload...)
-		reader := replacements.FactorySessionReplayRecordingReader
-		if reader == nil {
-			reader = func(string) ([]byte, error) { return append([]byte(nil), data...), nil }
-		}
-		group.readers[path] = reader
-	}
-	for port, server := range servers {
-		group.servers[port] = server
-		group.started[port] = started[port]
-	}
-	if host.dir != "" {
-		group.runners[host.dir] = runner
-	}
-	if store, ok := replacements.WorkerRecordingWriter.(*selectedOpeningFailureStore); ok {
-		store.WorkerRecordingStore = group.WorkerRecordingStore
-		group.failures[store.successor] = store
-	}
-	if store, ok := replacements.WorkerRecordingWriter.(*selectedTerminalGateStore); ok {
-		store.WorkerRecordingStore = group.WorkerRecordingStore
-		store.source = f.worker
-		group.failures[f.worker] = store
-	}
-	group.mu.Unlock()
+	f.registerReplayEffects(replacements, payloads, servers, started, host)
 
 	if host.session != "" {
 		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", host.session,
@@ -126,6 +101,42 @@ func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunne
 		}
 		f.url = servers[hostPort].WaitForURL(t)
 	}
+	f.startReplayOwners(t, replayPort, servers, started, host.session != "")
+	return f
+}
+
+func (f *replayFixture) registerReplayEffects(replacements serviceedges.Edges, payloads map[string][]byte, servers map[int]*support.ProcessAPIServer, started map[int]chan struct{}, host replayOwner) {
+	group := f.group
+	group.mu.Lock()
+	for path, payload := range payloads {
+		data := append([]byte(nil), payload...)
+		reader := replacements.FactorySessionReplayRecordingReader
+		if reader == nil {
+			reader = func(string) ([]byte, error) { return append([]byte(nil), data...), nil }
+		}
+		group.readers[path] = reader
+	}
+	for port, server := range servers {
+		group.servers[port] = server
+		group.started[port] = started[port]
+	}
+	if host.dir != "" {
+		group.runners[host.dir] = f.runner
+	}
+	if store, ok := replacements.WorkerRecordingWriter.(*selectedOpeningFailureStore); ok {
+		store.WorkerRecordingStore = group.WorkerRecordingStore
+		group.failures[store.successor] = store
+	}
+	if store, ok := replacements.WorkerRecordingWriter.(*selectedTerminalGateStore); ok {
+		store.WorkerRecordingStore = group.WorkerRecordingStore
+		store.source = f.worker
+		group.failures[f.worker] = store
+	}
+	group.mu.Unlock()
+}
+
+func (f *replayFixture) startReplayOwners(t *testing.T, replayPort int, servers map[int]*support.ProcessAPIServer, started map[int]chan struct{}, hasHost bool) {
+	t.Helper()
 	commands := make([]*support.ProcessCommand, len(f.owners))
 	stderrs := make([]func() string, len(f.owners))
 	for i, owner := range f.owners {
@@ -151,11 +162,10 @@ func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunne
 		}
 		endpoint := servers[replayPort+i].WaitForURL(t)
 		support.WaitForSessionTerminalStatus(t, endpoint, owner.session, 15*time.Second)
-		if host.session == "" {
+		if !hasHost {
 			f.url = endpoint
 		}
 	}
-	return f
 }
 
 type refuseProviderCalls struct{ calls *atomic.Int32 }

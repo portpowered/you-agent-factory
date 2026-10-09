@@ -374,6 +374,30 @@ func TestSelectedLegacyCollisionContinuation(t *testing.T) {
 	args := append([]string{"continue", f.worker}, flags...)
 	args = append(args, "--session", live.session)
 	assertSameJSON(t, first, f.cli(t, false, args...))
+	assertContinuationRequestConflicts(t, f, path, body)
+	assertAddressingEffects(t, runner, 2, 0)
+	runner.mu.Lock()
+	requests := append([]platformprocess.CommandRequest(nil), runner.requests...)
+	nativeSession := runner.nativeSession
+	runner.mu.Unlock()
+	if len(requests) != 2 || strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
+		t.Fatalf("initial provider requests: %#v", requests)
+	}
+	resume := strings.Join(requests[1].Args, " ")
+	if !strings.Contains(resume, "resume") || !strings.Contains(resume, nativeSession) ||
+		string(requests[1].Stdin) != "replacement" || requests[1].WorkDir != live.dir {
+		t.Fatalf("selected provider continuation: %#v", requests[1])
+	}
+	assertAddressingState(t, f, live, "COMPLETED")
+	status, peer := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+f.owners[0].session, nil)
+	if status != http.StatusOK {
+		t.Fatalf("peer = %d: %s", status, peer)
+	}
+	assertOwner(t, f, f.owners[0], peer)
+}
+
+func assertContinuationRequestConflicts(t *testing.T, f *replayFixture, path string, body map[string]any) {
+	t.Helper()
 	for _, change := range []map[string]any{
 		{"factorySessionId": f.owners[0].session},
 		{"followUpInput": "different input"},
@@ -396,25 +420,6 @@ func TestSelectedLegacyCollisionContinuation(t *testing.T) {
 			"--user-message", changed["followUpInput"].(string), "--async"}
 		assertErrorCode(t, f.cli(t, true, changedFlags...), "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT")
 	}
-	assertAddressingEffects(t, runner, 2, 0)
-	runner.mu.Lock()
-	requests := append([]platformprocess.CommandRequest(nil), runner.requests...)
-	nativeSession := runner.nativeSession
-	runner.mu.Unlock()
-	if len(requests) != 2 || strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
-		t.Fatalf("initial provider requests: %#v", requests)
-	}
-	resume := strings.Join(requests[1].Args, " ")
-	if !strings.Contains(resume, "resume") || !strings.Contains(resume, nativeSession) ||
-		string(requests[1].Stdin) != "replacement" || requests[1].WorkDir != live.dir {
-		t.Fatalf("selected provider continuation: %#v", requests[1])
-	}
-	assertAddressingState(t, f, live, "COMPLETED")
-	status, peer := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+f.owners[0].session, nil)
-	if status != http.StatusOK {
-		t.Fatalf("peer = %d: %s", status, peer)
-	}
-	assertOwner(t, f, f.owners[0], peer)
 }
 
 func waitAddressingCompleted(t *testing.T, f *replayFixture, worker, owner string) {

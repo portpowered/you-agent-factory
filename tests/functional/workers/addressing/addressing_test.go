@@ -82,52 +82,62 @@ func TestLegacyWorkerAddressing(t *testing.T) {
 	})
 	t.Run("empty explicit owner is invalid before ambiguous controls", func(t *testing.T) {
 		t.Parallel()
-		for _, scope := range []string{"", "   "} {
-			status, raw := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+strings.ReplaceAll(scope, " ", "%20"), nil)
-			assertBadRequest(t, status, raw)
-			for _, operation := range []string{"continue", "interrupt"} {
-				body, _ := controlInput(operation)
-				body["factorySessionId"] = scope
-				status, raw = f.http(t, "POST", "/worker-sessions/"+f.worker+"/"+operation, body)
-				assertBadRequest(t, status, raw)
-				if operation == "interrupt" {
-					assertValidationPhase(t, raw)
-				}
-				assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
-			}
-		}
+		assertEmptyLegacyOwner(t, f)
 	})
 	t.Run("F2-09 F2-10 foreign and unknown IDs", func(t *testing.T) {
 		t.Parallel()
-		for _, scoped := range []bool{false, true} {
-			id, scope := uuid.NewString(), ""
-			if scoped {
-				id, scope = f.worker, uuid.NewString()
-			}
-			query := ""
-			if scoped {
-				query = "?factorySessionId=" + scope
-			}
-			status, raw := f.http(t, "GET", "/worker-sessions/"+id+query, nil)
-			assertNotFound(t, status, raw)
-			args := []string{"show", "--worker-session-id", id}
-			if scoped {
-				args = append(args, "--session", scope)
-			}
-			assertErrorCode(t, f.cli(t, true, args...), "WORKER_SESSION_NOT_FOUND")
-			for _, operation := range []string{"continue", "interrupt"} {
-				body, flags := controlInput(operation)
-				if scoped {
-					body["factorySessionId"] = scope
-					flags = append(flags, "--session", scope)
-				}
-				status, raw = f.http(t, "POST", "/worker-sessions/"+id+"/"+operation, body)
-				assertNotFound(t, status, raw)
-				assertErrorCode(t, f.cli(t, true, append([]string{operation, id}, flags...)...), "NOT_FOUND")
-				assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
-			}
-		}
+		assertUnknownLegacyAddresses(t, f)
 	})
+}
+
+func assertEmptyLegacyOwner(t *testing.T, f *replayFixture) {
+	t.Helper()
+	for _, scope := range []string{"", "   "} {
+		status, raw := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+strings.ReplaceAll(scope, " ", "%20"), nil)
+		assertBadRequest(t, status, raw)
+		for _, operation := range []string{"continue", "interrupt"} {
+			body, _ := controlInput(operation)
+			body["factorySessionId"] = scope
+			status, raw = f.http(t, "POST", "/worker-sessions/"+f.worker+"/"+operation, body)
+			assertBadRequest(t, status, raw)
+			if operation == "interrupt" {
+				assertValidationPhase(t, raw)
+			}
+			assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+		}
+	}
+}
+
+func assertUnknownLegacyAddresses(t *testing.T, f *replayFixture) {
+	t.Helper()
+	for _, scoped := range []bool{false, true} {
+		id, scope := uuid.NewString(), ""
+		if scoped {
+			id, scope = f.worker, uuid.NewString()
+		}
+		query := ""
+		if scoped {
+			query = "?factorySessionId=" + scope
+		}
+		status, raw := f.http(t, "GET", "/worker-sessions/"+id+query, nil)
+		assertNotFound(t, status, raw)
+		args := []string{"show", "--worker-session-id", id}
+		if scoped {
+			args = append(args, "--session", scope)
+		}
+		assertErrorCode(t, f.cli(t, true, args...), "WORKER_SESSION_NOT_FOUND")
+		for _, operation := range []string{"continue", "interrupt"} {
+			body, flags := controlInput(operation)
+			if scoped {
+				body["factorySessionId"] = scope
+				flags = append(flags, "--session", scope)
+			}
+			status, raw = f.http(t, "POST", "/worker-sessions/"+id+"/"+operation, body)
+			assertNotFound(t, status, raw)
+			assertErrorCode(t, f.cli(t, true, append([]string{operation, id}, flags...)...), "NOT_FOUND")
+			assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+		}
+	}
 }
 
 func assertBadRequest(t *testing.T, status int, raw []byte) {
