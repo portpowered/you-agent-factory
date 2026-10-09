@@ -1219,7 +1219,6 @@ pkg/services/factory_visualization/transports/http/root_binding.go: unreachable 
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: projectionErrorResponse
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: visualizationErrorMessage
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: visualizationRootErrorResponse
-pkg/services/factory_visualization/wire/wire.go: unreachable func: NewService
 pkg/services/models/catalog_contract.go: unreachable func: BuiltInCatalog.ModelCatalog
 pkg/services/models/internal/artifacts/integrity.go: unreachable func: ArtifactDescriptor.VerifyBytes
 pkg/services/models/internal/artifacts/integrity.go: unreachable func: VerifyBytes

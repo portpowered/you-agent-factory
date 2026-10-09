@@ -180,3 +180,49 @@ func TestSharedProjectionOwnerKeepsScopedObservationsIndependent(t *testing.T) {
 		})
 	}
 }
+
+type openingSourceStub struct {
+	reads *int
+}
+
+func (s openingSourceStub) SubscribeFactoryEvents(
+	context.Context,
+	*factorydefinitions.FactoryEventReconnectCursor,
+	factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	(*s.reads)++
+	return nil, nil
+}
+
+func (s openingSourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+	(*s.reads)++
+	return nil, nil
+}
+
+type openingSinkStub struct{}
+
+func (openingSinkStub) PresentFactoryView(liveviewprojection.View) {}
+
+type openingClock struct{}
+
+func (openingClock) Now() time.Time { return time.Unix(1, 0) }
+
+func TestOwnerOpeningIsInert(t *testing.T) {
+	t.Parallel()
+
+	reads := 0
+	behavior := projectionservice.NewOwner(&recordingsstub.Service{})
+	svc := behavior.Open(nil, openingSourceStub{reads: &reads}, openingClock{}, openingSinkStub{}, nil)
+	if svc == nil {
+		t.Fatal("Open() returned nil")
+	}
+	if reads != 0 {
+		t.Fatalf("opening read the source %d times, want inert opening", reads)
+	}
+	if err := svc.Wait(context.Background()); err == nil {
+		t.Fatal("Wait before Start returned no error")
+	}
+	if reads != 0 {
+		t.Fatalf("Wait before Start read the source %d times", reads)
+	}
+}

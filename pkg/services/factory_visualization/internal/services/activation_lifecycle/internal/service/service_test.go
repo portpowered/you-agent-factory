@@ -10,6 +10,7 @@ import (
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
@@ -78,6 +79,7 @@ type lifecycleSourceStub struct {
 	stream        *factorydefinitions.FactoryEventStream
 	subscribeHook func()
 	snapshot      *activationlifecycle.EngineObservation
+	snapshotErr   error
 }
 
 func (s *lifecycleSourceStub) SubscribeFactoryEvents(
@@ -92,7 +94,7 @@ func (s *lifecycleSourceStub) SubscribeFactoryEvents(
 }
 
 func (s *lifecycleSourceStub) GetEngineObservation(context.Context) (*activationlifecycle.EngineObservation, error) {
-	return s.snapshot, nil
+	return s.snapshot, s.snapshotErr
 }
 
 func newLifecycleEventStream() *factorydefinitions.FactoryEventStream {
@@ -167,5 +169,261 @@ func TestSharedActivationOwnerKeepsScopedSubscriptionsIndependent(t *testing.T) 
 	}
 	if cursor := scopes[1].handle.ReconnectCursor(); cursor == nil || cursor.AfterEventID != "peer-live" {
 		t.Fatalf("peer cursor = %#v", cursor)
+	}
+}
+
+type wireSourceStub struct {
+	subscribeHook func()
+}
+
+func (s wireSourceStub) SubscribeFactoryEvents(
+	context.Context,
+	*factorydefinitions.FactoryEventReconnectCursor,
+	factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	if s.subscribeHook != nil {
+		s.subscribeHook()
+	}
+	return &factorydefinitions.FactoryEventStream{
+		Events: make(chan factorydefinitions.FactoryEvent),
+	}, nil
+}
+
+func (wireSourceStub) GetEngineObservation(context.Context) (*activationlifecycle.EngineObservation, error) {
+	return &activationlifecycle.EngineObservation{}, nil
+}
+
+type wireClock struct{}
+
+func (wireClock) Now() time.Time { return time.Unix(1, 0) }
+
+func TestOwnerOpeningIsInert(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	presentCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
+	serviceBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
+	if service == nil {
+		t.Fatal("Open() returned nil")
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatalf("Open() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
+	}
+
+	_, err := service.Join(context.Background(), activationlifecycle.JoinRequest{})
+	if err == nil {
+		t.Fatal("Join before Activate: error = nil, want not-activated failure")
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatal("Join before Activate must not subscribe or present")
+	}
+}
+
+func TestOwnerOpeningExplicitRequestActivation(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	presentCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
+	serviceBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
+
+	_, err := service.Activate(context.Background(), activationlifecycle.ActivateRequest{})
+	if err == nil {
+		t.Fatal("zero-value Activate: error = nil, want missing-parameters failure")
+	}
+	if subscribeCalls != 0 || presentCalls != 0 {
+		t.Fatal("zero-value Activate must not subscribe or present")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result, err := service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("Activate RETAINED_THEN_LIVE: error = %v", err)
+	}
+	if result.State != activationlifecycle.LifecycleStateStarted {
+		t.Fatalf("Activate state = %q, want %q", result.State, activationlifecycle.LifecycleStateStarted)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls = %d, want 1 after explicit Activate", subscribeCalls)
+	}
+
+	_, err = service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	})
+	if err == nil {
+		t.Fatal("repeat Activate: error = nil, want already-activated failure")
+	}
+
+	cancel()
+	if _, err := service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+}
+
+func TestOwnerOpeningStopWaitCleanup(t *testing.T) {
+	t.Parallel()
+
+	subscribeCalls := 0
+	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
+	serviceBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) {}), nil)
+
+	if err := service.Wait(context.Background()); err == nil {
+		t.Fatal("Wait before Activate: error = nil, want not-started failure")
+	}
+
+	ctx := context.Background()
+	if _, err := service.Activate(ctx, activationlifecycle.ActivateRequest{
+		Mode: activationlifecycle.ActivateModeRetainedThenLive,
+	}); err != nil {
+		t.Fatalf("Activate: error = %v", err)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls = %d, want 1", subscribeCalls)
+	}
+
+	stopResult, err := service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{})
+	if err != nil {
+		t.Fatalf("StopDrain: error = %v", err)
+	}
+	if stopResult.State != activationlifecycle.LifecycleStateStopped {
+		t.Fatalf("StopDrain state = %q, want %q", stopResult.State, activationlifecycle.LifecycleStateStopped)
+	}
+	if err := service.Wait(ctx); err != nil {
+		t.Fatalf("Wait after StopDrain: error = %v", err)
+	}
+
+	stopResult, err = service.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{})
+	if err != nil {
+		t.Fatalf("repeat StopDrain: error = %v", err)
+	}
+	if stopResult.State != activationlifecycle.LifecycleStateStopped {
+		t.Fatalf("repeat StopDrain state = %q, want %q", stopResult.State, activationlifecycle.LifecycleStateStopped)
+	}
+	if subscribeCalls != 1 {
+		t.Fatalf("subscribe calls after repeated StopDrain = %d, want no reopened subscription", subscribeCalls)
+	}
+}
+
+type wireSinkFunc func(activationlifecycle.View)
+
+func (f wireSinkFunc) PresentFactoryView(view activationlifecycle.View) { f(view) }
+
+func TestActivationProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 20, 10, 0, 0, 0, time.UTC)
+	live := make(chan factorydefinitions.FactoryEvent, 1)
+	history := activationEvent("history", 3)
+	source := &lifecycleSourceStub{
+		stream: &factorydefinitions.FactoryEventStream{
+			History: []factorydefinitions.FactoryEvent{history},
+			Events:  live,
+		},
+		snapshot: &activationlifecycle.EngineObservation{TickCount: 3},
+	}
+	projected := make(chan []factorydefinitions.FactoryEvent, 2)
+	projections := &recordingsstub.Service{
+		DashboardData: recordings.SimpleDashboardRenderData{InFlightDispatchCount: 7},
+		ReconstructWorldStateFn: func(request recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+			if request.SelectedTick != 3 {
+				t.Fatalf("projection tick = %d, want 3", request.SelectedTick)
+			}
+			events := make([]factorydefinitions.FactoryEvent, len(request.Events))
+			for index, event := range request.Events {
+				events[index] = factorydefinitions.FactoryEvent{
+					Id: string(event.ID),
+					Context: factorydefinitions.FactoryEventContext{
+						Sequence: int(event.Sequence),
+					},
+				}
+			}
+			projected <- events
+			return recordings.ReconstructWorldStateResult{
+				WorldState: recordings.WorldStateView{
+					SchemaVersion: recordings.WorldStateViewSchemaV1,
+					Payload:       `{"topology":{}}`,
+				},
+			}, nil
+		},
+	}
+	rendered := make(chan activationlifecycle.View, 2)
+	service := lifecycleservice.NewOwner(projections).Open(
+		source,
+		fixedLifecycleClock{now: now},
+		lifecycleSinkFunc(func(view activationlifecycle.View) { rendered <- view }),
+		nil,
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	if got := <-projected; len(got) != 1 || got[0].Id != history.Id {
+		t.Fatalf("initial projection events = %#v", got)
+	}
+	assertActivationInitialView(t, <-rendered, now)
+
+	liveEvent := activationEvent("live", 4)
+	live <- liveEvent
+	if got := <-projected; len(got) != 2 || got[1].Id != liveEvent.Id {
+		t.Fatalf("live projection events = %#v", got)
+	}
+	<-rendered
+
+	cursor := service.ReconnectCursor()
+	if cursor == nil || cursor.AfterEventID != liveEvent.Id ||
+		cursor.AfterSequence == nil || *cursor.AfterSequence != 4 {
+		t.Fatalf("cursor = %#v, want live event", cursor)
+	}
+	cancel()
+	if err := service.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+}
+
+func TestActivationReportsProjectionReadFailureWithoutStoppingSubscription(t *testing.T) {
+	t.Parallel()
+
+	live := make(chan factorydefinitions.FactoryEvent)
+	readFailure := errors.New("snapshot unavailable")
+	reported := make(chan error, 1)
+	service := lifecycleservice.NewOwner(&recordingsstub.Service{}).Open(
+		&lifecycleSourceStub{
+			stream:      &factorydefinitions.FactoryEventStream{Events: live},
+			snapshotErr: readFailure,
+		},
+		fixedLifecycleClock{},
+		lifecycleSinkFunc(func(activationlifecycle.View) { t.Fatal("sink called after snapshot failure") }),
+		func(err error) { reported <- err },
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if got := <-reported; !errors.Is(got, readFailure) {
+		t.Fatalf("reported error = %v, want %v", got, readFailure)
+	}
+	cancel()
+	if err := service.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait() error = %v", err)
+	}
+}
+
+func activationEvent(id string, sequence int) factorydefinitions.FactoryEvent {
+	return factorydefinitions.FactoryEvent{Id: id, Context: factorydefinitions.FactoryEventContext{Sequence: sequence, Tick: sequence}}
+}
+
+func assertActivationInitialView(t *testing.T, view activationlifecycle.View, now time.Time) {
+	t.Helper()
+	if !view.ObservedAt.Equal(now) || view.EngineObservation.TickCount != 3 || view.RenderData.InFlightDispatchCount != 7 {
+		t.Fatalf("initial view=%#v, want selected clock, tick 3 and injected dashboard count 7", view)
 	}
 }

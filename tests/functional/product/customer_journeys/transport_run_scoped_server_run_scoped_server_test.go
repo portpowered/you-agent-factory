@@ -950,11 +950,9 @@ func startSelectedShutdownHost(t *testing.T, process support.Process) selectedSh
 	}()
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("selected host cleanup did not join")
-		}
+		// Cancellation releases the owned listener; join its invocation before
+		// disposing test resources. The suite deadline bounds a broken join.
+		<-done
 	})
 	select {
 	case url := <-ready:
@@ -991,7 +989,7 @@ func assertSelectedHostJoined(t *testing.T, host selectedShutdownHost) {
 		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("host completion: %v", err)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("selected shutdown did not join invocation and listener")
+	case <-t.Context().Done():
+		t.Fatal("test canceled before selected shutdown joined invocation and listener")
 	}
 }
