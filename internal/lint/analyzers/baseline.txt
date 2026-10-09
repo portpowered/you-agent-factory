@@ -3035,8 +3035,6 @@ recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_observation.go#registry.capturedListUsage#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_observation.go#registry.capturedObservationUsage#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_replay.go#registry.replayCaptureTimes#LoadWorkerRecording::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_summary.go#LogReader.GetObservationByWorkerSessionID#ReadWorkerCapturedActivity::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_summary.go#LogReader.archivedCapturedFacts#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_archive.go#registry.readArchivedContinuationSource#ReadWorkerCapturedActivity::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_archive.go#registry.readArchivedContinuationSource#ReadWorkerContinuationSource::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_input.go#registry.persistContinuationInput#LookupWorkerSessionCapture::count=1

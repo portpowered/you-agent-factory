@@ -108,3 +108,14 @@ type WorkerRecordingFailureWriter interface {
 type WorkerRecordingWriter interface {
 	PersistWorkerRecord(context.Context, workerrecording.WorkerRecordingRecord) error
 }
+
+// WorkerCapturedSummary contains bounded committed metadata and control facts.
+type WorkerCapturedSummary struct {
+	Capture           workerrecording.WorkerCapturedCatalogItem
+	ControlOperations []workerrecording.WorkerControlOperationRecord
+}
+
+// WorkerCapturedSummaryReader never hydrates or scans recording history.
+type WorkerCapturedSummaryReader interface {
+	LookupWorkerSessionSummary(context.Context, string) (WorkerCapturedSummary, error)
+}

@@ -36,6 +36,9 @@ func (writer *FileWriter) RecoverWorkerOwners(ctx context.Context) error {
 		err = nil
 	}
 	if err == nil {
+		err = writer.prepareSummaryCatalog(ctx)
+	}
+	if err == nil {
 		writer.ownerRecoveryDone = true
 	}
 	return err

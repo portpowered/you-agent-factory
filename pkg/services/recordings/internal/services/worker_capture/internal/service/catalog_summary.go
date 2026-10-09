@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -171,4 +174,117 @@ func (session *recordingSession) copySummaryStamp(stamps map[string]time.Time, p
 	if stamp, ok := session.capturedAt[key]; ok {
 		stamps[key] = stamp
 	}
+}
+
+var _ recordings.WorkerCapturedSummaryReader = (*FileWriter)(nil)
+
+// LookupWorkerSessionSummary joins the append barrier, selecting only metadata
+// slots already admitted by durable sync. It never retries journal hydration.
+func (writer *FileWriter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	if strings.TrimSpace(id) == "" {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	catalog, err := writer.preparedSummaryIdentity(id)
+	if err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	entry := writer.entry(catalog.RecordingID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	session := entry.sessions[id]
+	if !entry.loaded || entry.damaged || session == nil || len(session.records) == 0 || session.generation != catalog.RecordingGenerationID {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingReplay
+	}
+	// Another journal may have admitted a colliding ID while we joined this
+	// append barrier. Never return the earlier, now-ambiguous selection.
+	if !writer.summaryCatalogMatches(catalog) {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingReplay
+	}
+	item := session.capturedSummary()
+	item.Catalog = writer.catalogEntry(session)
+	item.OwnerLost = item.Terminal == nil && session.ownerEpoch != "" && session.ownerEpoch != "historical" && session.ownerEpoch != writer.ownerEpoch
+	item.SuccessorWorkerSessionID, err = writer.capturedSuccessor(session, item.Catalog)
+	if err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	return recordings.WorkerCapturedSummary{Capture: item, ControlOperations: entry.summaryControls(item.Catalog)}, ctx.Err()
+}
+
+func (writer *FileWriter) summaryCatalogMatches(catalog recordings.WorkerSessionCatalogEntry) bool {
+	writer.catalogMu.Lock()
+	defer writer.catalogMu.Unlock()
+	current, indexed := writer.catalog[catalog.WorkerSessionID]
+	return indexed && current.RecordingID == catalog.RecordingID && current.RecordingGenerationID == catalog.RecordingGenerationID && current.FactorySessionID == catalog.FactorySessionID
+}
+
+func (writer *FileWriter) preparedSummaryIdentity(id string) (recordings.WorkerSessionCatalogEntry, error) {
+	writer.catalogMu.Lock()
+	catalog, exists := writer.catalog[id]
+	_, ambiguous := writer.ambiguous[id]
+	_, unavailable := writer.unavailable[id]
+	damaged := writer.catalogDamaged
+	writer.catalogMu.Unlock()
+	if ambiguous || unavailable {
+		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+	}
+	if !exists {
+		writer.rebuildMu.Lock()
+		prepared := writer.catalogLoaded
+		writer.rebuildMu.Unlock()
+		if !prepared || damaged {
+			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+		}
+		return recordings.WorkerSessionCatalogEntry{}, os.ErrNotExist
+	}
+	return catalog, nil
+}
+
+func (entry *recordingEntry) summaryControls(catalog recordings.WorkerSessionCatalogEntry) []recordings.WorkerControlOperationRecord {
+	var result []recordings.WorkerControlOperationRecord
+	for _, history := range entry.operations {
+		for _, record := range history {
+			target := record.Target
+			if target.WorkerSessionID == catalog.WorkerSessionID && target.RecordingID == catalog.RecordingID && target.FactorySessionID == catalog.FactorySessionID && target.RecordingGenerationID == catalog.RecordingGenerationID && target.OwnerEpoch == catalog.OwnerEpoch {
+				result = append(result, record.Detached())
+			}
+		}
+	}
+	return result
+}
+
+// Activation inventories every retained file even when one is unreadable. A
+// damaged inventory cannot prove absence, but healthy peers remain inspectable.
+func (writer *FileWriter) prepareSummaryCatalog(ctx context.Context) error {
+	writer.rebuildMu.Lock()
+	defer writer.rebuildMu.Unlock()
+	if writer.catalogLoaded {
+		return ctx.Err()
+	}
+	err := writer.directory.ScanDirectory(writer.root, 64, func(files []os.DirEntry) error {
+		for _, file := range files {
+			if err := writer.indexCatalogFiles(ctx, []os.DirEntry{file}); err != nil {
+				if canceled := ctx.Err(); canceled != nil {
+					return canceled
+				}
+				if !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+					return err
+				}
+				writer.catalogMu.Lock()
+				writer.catalogDamaged = true
+				writer.catalogMu.Unlock()
+			}
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	writer.catalogLoaded = true
+	return nil
 }
