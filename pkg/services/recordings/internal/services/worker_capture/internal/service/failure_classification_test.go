@@ -325,6 +325,32 @@ func TestFileWriterSelectedSummaryNeverReadsHistory(t *testing.T) {
 	}
 }
 
+func TestFileWriterSelectedSummaryPreservesTornCommittedPrefix(t *testing.T) {
+	t.Parallel()
+	probe := &catalogReadProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	opening := journalRecord(t, "torn-summary", "selected")
+	if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+		t.Fatal(err)
+	}
+	if err := probe.AppendFile(writer.path(opening.RecordingID)+"l", []byte(`{"uncommitted":`)); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(probe, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(*FileWriter)
+	if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.fault = errors.New("recording reads denied")
+	got, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
+	if err != nil || got.Capture.Catalog.CommittedPosition != 1 || got.Capture.Health != recordings.WorkerRecordingStatusIncomplete || got.Capture.Terminal != nil || !got.Capture.OwnerLost {
+		t.Fatalf("torn committed summary=%+v err=%v", got, err)
+	}
+}
+
 func TestFileWriterSelectedSummaryRejectsDamagedAndAmbiguous(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"damaged", "ambiguous", "unreadable"} {

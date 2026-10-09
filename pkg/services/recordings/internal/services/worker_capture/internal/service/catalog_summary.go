@@ -215,7 +215,9 @@ func (writer *FileWriter) LookupWorkerSessionSummary(ctx context.Context, id str
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	session := entry.sessions[id]
-	if !entry.loaded || entry.damaged || session == nil || len(session.records) == 0 || session.generation != catalog.RecordingGenerationID {
+	// A torn, uncommitted tail fences writes but leaves the validated committed
+	// prefix readable with INCOMPLETE health. Invalid complete lines never load.
+	if !entry.loaded || session == nil || len(session.records) == 0 || session.generation != catalog.RecordingGenerationID {
 		return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingReplay
 	}
 	// Another journal may have admitted a colliding ID while we joined this

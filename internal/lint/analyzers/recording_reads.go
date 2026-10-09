@@ -54,6 +54,8 @@ var recordingReadOwners = setOf(
 	"pkg/services/worker_sessions/internal/service#LogReader.capturedTranscript",
 	"pkg/services/worker_sessions/internal/service#LogReader.transcriptByProvider",
 	// Explicit replay/resume and startup restore activation.
+	// Operator-approved startup catalog preparation, never a request handler.
+	"pkg/services/recordings/internal/worker_work_attribution#Service.PrepareWorkerWorkAttribution",
 	"pkg/services/factory_sessions/internal/service#Root.openForRequest",
 	"pkg/services/factory_sessions/internal/service#Root.InspectHistoricalApplication",
 	"pkg/services/factory_sessions/internal/service#restoreCurrentBoardHistory",

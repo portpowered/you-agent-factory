@@ -24,6 +24,11 @@ named “query” or “summary” does not establish bounded behavior.
 `recordingReadOwners` lists exact package/declaration pairs and explains each
 owner family. There is no blanket Recordings, runtime, Worker Sessions or Wire
 allowance. Nested closures inherit their enclosing declaration's ownership.
+`Service.PrepareWorkerWorkAttribution` is an exact startup owner: it warms the
+capture catalog before readiness rather than serving a recording request.
+The remaining `attributionQuery.loadProjection` historical fallback is exact
+debt owned by `worker-session-list-never-replays-a-recording`; that successor
+removes the fallback and its allowance. Missing recorded names remain null.
 Generated sources are excluded; a production filename, package or declaration
 containing “test” does not gain recording access. `_test.go` files may exercise
 the readers as their test subject.
