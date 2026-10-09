@@ -612,3 +612,27 @@ func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error
 	})
 	return reached
 }
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *workerSessionCaptureReads) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	store.mu.Lock()
+	fault, selected := store.faults[id]
+	store.mu.Unlock()
+	if selected {
+		select {
+		case fault.reached <- struct{}{}:
+		default:
+		}
+		if fault.err == nil {
+			<-ctx.Done()
+			fault.err = ctx.Err()
+		}
+		return recordings.WorkerCapturedSummary{}, fault.err
+	}
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *workerSessionCaptureReads) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}

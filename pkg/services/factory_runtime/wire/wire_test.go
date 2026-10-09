@@ -15,7 +15,7 @@ import (
 
 func TestNewAssemblyRejectsMissingResourceOwner(t *testing.T) {
 	t.Parallel()
-	opening, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	opening, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if opening != nil || err == nil || err.Error() != "factory runtime factory is required" {
 		t.Fatalf("NewAssembly(nil) = %v, %v; want no operation and missing owner error", opening, err)
 	}

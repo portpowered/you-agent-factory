@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -192,4 +194,113 @@ func (session *recordingSession) copySummaryStamp(stamps map[string]time.Time, p
 	if stamp, ok := session.capturedAt[key]; ok {
 		stamps[key] = stamp
 	}
+}
+
+var _ recordings.WorkerCapturedSummaryReader = (*FileWriter)(nil)
+
+// LookupWorkerSessionSummary joins the append barrier, selecting only metadata
+// slots already admitted by durable sync. It never retries journal hydration.
+func (writer *FileWriter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	if strings.TrimSpace(id) == "" {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	catalog, err := writer.preparedSummaryIdentity(ctx, id)
+	if err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	entry := writer.entry(catalog.RecordingID)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	session := entry.sessions[id]
+	// A torn, uncommitted tail fences writes but leaves the validated committed
+	// prefix readable with INCOMPLETE health. Invalid complete lines never load.
+	if !entry.loaded || session == nil || len(session.records) == 0 || session.generation != catalog.RecordingGenerationID {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingReplay
+	}
+	// Another journal may have admitted a colliding ID while we joined this
+	// append barrier. Never return the earlier, now-ambiguous selection.
+	if !writer.summaryCatalogMatches(catalog) {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrWorkerRecordingReplay
+	}
+	item := session.capturedSummary()
+	item.Catalog = writer.catalogEntry(session)
+	item.OwnerLost = item.Terminal == nil && session.ownerEpoch != "" && session.ownerEpoch != "historical" && session.ownerEpoch != writer.ownerEpoch
+	item.SuccessorWorkerSessionID, err = writer.capturedSuccessor(session, item.Catalog)
+	if err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	return recordings.WorkerCapturedSummary{Capture: item, ControlOperations: entry.summaryControls(item)}, ctx.Err()
+}
+
+func (writer *FileWriter) summaryCatalogMatches(catalog recordings.WorkerSessionCatalogEntry) bool {
+	writer.catalogMu.Lock()
+	defer writer.catalogMu.Unlock()
+	current, indexed := writer.catalog[catalog.WorkerSessionID]
+	return indexed && current.RecordingID == catalog.RecordingID && current.RecordingGenerationID == catalog.RecordingGenerationID && current.FactorySessionID == catalog.FactorySessionID
+}
+
+func (writer *FileWriter) preparedSummaryIdentity(ctx context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	writer.catalogMu.Lock()
+	catalog, exists := writer.catalog[id]
+	_, ambiguous := writer.ambiguous[id]
+	_, unavailable := writer.unavailable[id]
+	damaged := writer.catalogDamaged
+	writer.catalogMu.Unlock()
+	if ambiguous || unavailable {
+		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+	}
+	if !exists {
+		if err := writer.lockCatalogRebuild(ctx); err != nil {
+			return recordings.WorkerSessionCatalogEntry{}, err
+		}
+		prepared := writer.catalogLoaded
+		writer.unlockCatalogRebuild()
+		if !prepared || damaged {
+			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
+		}
+		return recordings.WorkerSessionCatalogEntry{}, os.ErrNotExist
+	}
+	return catalog, nil
+}
+
+func (entry *recordingEntry) summaryControls(item recordings.WorkerCapturedCatalogItem) []recordings.WorkerControlOperationRecord {
+	if item.Terminal == nil || item.Terminal.Position == 0 {
+		return nil
+	}
+	var terminal workers.Draft
+	for _, record := range item.MetadataRecords {
+		if record.ID.Position == item.Terminal.Position {
+			if json.Unmarshal(record.Payload, &terminal) != nil {
+				return nil
+			}
+			break
+		}
+	}
+	if terminal.DispatchID == "" {
+		return nil
+	}
+	catalog := item.Catalog
+	target := recordings.WorkerControlTarget{
+		WorkerSessionID: catalog.WorkerSessionID, RecordingID: catalog.RecordingID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: terminal.DispatchID,
+	}
+	// Index admission shares the durable append barrier and startup reducer.
+	// Only this physical target's facts are copied; sibling histories are never
+	// searched. Worker Sessions retains strict result/cause interpretation.
+	history := entry.summaryOperations[target]
+	result := make([]recordings.WorkerControlOperationRecord, len(history))
+	for i, record := range history {
+		result[i] = record.Detached()
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Operation.RequestID == result[j].Operation.RequestID {
+			return result[i].Revision < result[j].Revision
+		}
+		return result[i].Operation.RequestID < result[j].Operation.RequestID
+	})
+	return result
 }

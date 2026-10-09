@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -271,5 +273,121 @@ func TestFileWriterRetainsScopedTopicAcrossReload(t *testing.T) {
 	after, err := reloaded.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), recordingID)
 	if err != nil || !reflect.DeepEqual(snapshot, after) {
 		t.Fatalf("foreign topic changed retained recording: %v", err)
+	}
+}
+
+func TestFileWriterSelectedSummaryNeverReadsHistory(t *testing.T) {
+	t.Parallel()
+	probe := &catalogReadProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	opening := journalRecord(t, "summary-denied", "selected")
+	if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+		t.Fatal(err)
+	}
+	usage := opening
+	usage.Record = catalogMetadataRecord(t, opening.Record.ID.Topic, workers.KindUsage, `{"inputTokens":0,"totalTokens":12}`, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), usage); err != nil {
+		t.Fatal(err)
+	}
+	terminal := opening
+	terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "selected"), 3)
+	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(probe, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(*FileWriter)
+	if _, err := reader.LookupWorkerSessionSummary(t.Context(), "selected"); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unprepared lookup=%v", err)
+	}
+	if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.fault = errors.New("recording reads denied")
+	for i := 0; i < 3; i++ {
+		got, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
+		if err != nil || got.Capture.Catalog.CommittedPosition != 3 || len(got.Capture.MetadataRecords) != 2 || got.Capture.Terminal.Status != "COMPLETED" {
+			t.Fatalf("summary=%+v err=%v", got, err)
+		}
+		got.Capture.Opening.Payload[0] = '!'
+		got.Capture.MetadataRecords[0].Payload[0] = '!'
+		got.Capture.CapturedAt["1"] = time.Time{}
+	}
+	if _, err := reader.LookupWorkerSessionSummary(t.Context(), "missing"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing lookup=%v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := reader.LookupWorkerSessionSummary(ctx, "selected"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled lookup=%v", err)
+	}
+}
+
+func TestFileWriterSelectedSummaryPreservesTornCommittedPrefix(t *testing.T) {
+	t.Parallel()
+	probe := &catalogReadProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	opening := journalRecord(t, "torn-summary", "selected")
+	if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+		t.Fatal(err)
+	}
+	if err := probe.AppendFile(writer.path(opening.RecordingID)+"l", []byte(`{"uncommitted":`)); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(probe, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(*FileWriter)
+	if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.fault = errors.New("recording reads denied")
+	got, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
+	if err != nil || got.Capture.Catalog.CommittedPosition != 1 || got.Capture.Health != recordings.WorkerRecordingStatusIncomplete || got.Capture.Terminal != nil || !got.Capture.OwnerLost {
+		t.Fatalf("torn committed summary=%+v err=%v", got, err)
+	}
+}
+
+func TestFileWriterSelectedSummaryRejectsDamagedAndAmbiguous(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"damaged", "ambiguous", "unreadable"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			probe := &catalogReadProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+			writer := journalWriter(t, probe)
+			opening := journalRecord(t, "bad-summary", "bad")
+			if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "damaged" {
+				if err := probe.AppendFile(writer.path(opening.RecordingID)+"l", []byte("damaged\n")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if kind == "ambiguous" {
+				opening.RecordingID = "collision"
+				if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+					t.Fatal(err)
+				}
+			}
+			reopened, err := newTestFileWriter(probe, writer.root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := reopened.(*FileWriter)
+			if kind == "unreadable" {
+				probe.fault = errors.New("private path")
+			}
+			if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			probe.fault = errors.New("recording reads denied")
+			if _, err := reader.LookupWorkerSessionSummary(t.Context(), "bad"); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+				t.Fatalf("unsafe %s summary=%v", kind, err)
+			}
+		})
 	}
 }

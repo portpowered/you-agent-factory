@@ -49,7 +49,7 @@ func TestCapturedArchivedSummaryPreservesKnownFacts(t *testing.T) {
 	got.WorkIDs[0] = "mutated"
 	*got.TokenUsage.TotalTokens = 321
 	again, err := reader.GetObservationByWorkerSessionID(t.Context(), req)
-	if err != nil || *again.Model != "model" || again.WorkIDs[0] != "work" || *again.TokenUsage.TotalTokens != 12 || fake.request.Limit != 1 {
+	if err != nil || *again.Model != "model" || again.WorkIDs[0] != "work" || *again.TokenUsage.TotalTokens != 12 {
 		t.Fatalf("archived summary aliases data or uses an unbounded page: %+v %v", again, err)
 	}
 }
@@ -114,5 +114,59 @@ func TestCapturedArchivedSummaryPersistsOwnerLossCause(t *testing.T) {
 	got, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
 	if err != nil || got.TerminalCause == nil || *got.TerminalCause != "OWNER_LOST" || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone {
 		t.Fatalf("owner loss observation=%+v error=%v", got, err)
+	}
+}
+
+// The component fake supplies the new capability independently of history IO.
+func (f *capturedActivityFake) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
+	return recordings.WorkerCapturedSummary{Capture: summaryTestItem(f.page)}, f.err
+}
+
+func summaryTestItem(page recordings.WorkerCapturedActivityPage) recordings.WorkerCapturedCatalogItem {
+	return recordings.WorkerCapturedCatalogItem{Catalog: page.Catalog, Opening: page.Opening, Terminal: page.Terminal,
+		Health: page.Health, HealthReason: page.HealthReason, OwnerLost: page.OwnerLost, SuccessorWorkerSessionID: page.SuccessorWorkerSessionID}
+}
+
+func summaryTestSnapshot(page recordings.WorkerCapturedActivityPage, snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerCapturedSummary {
+	item := summaryTestItem(page)
+	for _, session := range snapshot.Sessions {
+		if session.WorkerSessionID != item.Catalog.WorkerSessionID {
+			continue
+		}
+		item.CapturedAt = session.CapturedAt
+		for _, record := range session.Records {
+			if uint64(record.ID.Position) <= item.Catalog.CommittedPosition {
+				item.MetadataRecords = append(item.MetadataRecords, record.Detached())
+			}
+		}
+	}
+	return recordings.WorkerCapturedSummary{Capture: item}
+}
+
+func (f *capturedSummaryFake) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
+	return summaryTestSnapshot(f.page, f.snapshot), f.err
+}
+
+func (f *capturedMetadataReader) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
+	return summaryTestSnapshot(f.page, f.snapshot), f.err
+}
+
+func (f *archivedCauseStore) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
+	summary := summaryTestSnapshot(f.page, f.snapshot)
+	if f.listErr == nil {
+		summary.ControlOperations = f.records
+	}
+	return summary, f.err
+}
+
+type activityWithoutSummary struct {
+	recordings.WorkerCapturedActivityReader
+}
+
+func TestCapturedArchivedSummaryRequiresMaterializedCapability(t *testing.T) {
+	t.Parallel()
+	reader := &LogReader{reader: activityWithoutSummary{&capturedActivityFake{}}}
+	if _, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("missing capability=%v", err)
 	}
 }

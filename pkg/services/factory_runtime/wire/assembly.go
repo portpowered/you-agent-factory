@@ -120,6 +120,7 @@ func NewAssembly(
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
+	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("factory runtime factory is required")
@@ -135,7 +136,7 @@ func NewAssembly(
 		preparation,
 		recordingsRuntime,
 		automationService,
-		progressFactory, completionFactory)
+		progressFactory, completionFactory, recoverOwners)
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening
