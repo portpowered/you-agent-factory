@@ -895,9 +895,9 @@ func TestGenericGroupHelpCharacterization(t *testing.T) {
 			wantErr: `unknown command "definitely-missing" for "forge"`,
 		},
 		{
-			name:    "multiple input",
-			args:    []string{"--help", "extra"},
-			wantErr: `unknown command "--help" for "forge"`,
+			name:      "help with positional input",
+			args:      []string{"--help", "extra"},
+			wantUsage: 1,
 		},
 	}
 
@@ -942,6 +942,39 @@ func TestGenericGroupHelpCharacterization(t *testing.T) {
 			}
 			if productHandlerCalls != 0 {
 				t.Fatalf("product handler calls = %d, want 0", productHandlerCalls)
+			}
+		})
+	}
+}
+
+func TestGenericGroupInheritedFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--server", "http://unused", "group", "--help"},
+		{"group", "--help", "--server", "http://unused"},
+		{"group", "--server", "http://unused", "-h"},
+		{"--server", "http://unused", "group", "missing"},
+		{"group", "missing", "--server", "http://unused"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := &cobra.Command{Use: "you", SilenceErrors: true, SilenceUsage: true}
+			root.PersistentFlags().String("server", "", "selected host")
+			group := &cobra.Command{Use: "group"}
+			configureGenericGroupCommand(group)
+			root.AddCommand(group)
+			var stdout, stderr bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs(args)
+			err := root.Execute()
+			if strings.Contains(strings.Join(args, " "), "missing") {
+				if err == nil || err.Error() != `unknown command "missing" for "you group"` || stdout.Len() != 0 {
+					t.Fatalf("unknown subcommand: err=%v stdout=%q", err, stdout.String())
+				}
+			} else if err != nil || countExactOutputLines(stdout.String(), "Usage:") != 1 {
+				t.Fatalf("help: err=%v stdout=%q", err, stdout.String())
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("unexpected stderr: %s", &stderr)
 			}
 		})
 	}

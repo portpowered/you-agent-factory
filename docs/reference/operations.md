@@ -637,18 +637,65 @@ document fields produce sorted field-path warnings on stderr; their values do
 not appear in those warnings. An admitted provider failure remains inspectable
 as a failed Worker Session.
 
-For observers in later commands, invoke against a running host:
+Save this complete request as `execution.json`:
 
-```bash
-you --remote --server http://localhost:7437 --json worker-sessions invoke \
-  --execution execution.json --model MODEL --reasoning-effort high --async
-you --server http://localhost:7437 --json worker-sessions show --worker-session-id WS_ID
-you --server http://localhost:7437 --json worker-sessions read --worker-session-id WS_ID --view logs
-you --remote --server http://localhost:7437 --json worker-sessions cancel WS_ID
+```json
+{
+  "requestId": "direct-example-request",
+  "workerSessionId": "direct-example-session",
+  "execution": {
+    "workstationName": "direct",
+    "workerType": "direct-worker",
+    "runnerId": "codex",
+    "executorProvider": "codex",
+    "modelProvider": "codex",
+    "model": "gpt-5",
+    "reasoningEffort": "high",
+    "systemPrompt": "Return the requested short reply.",
+    "userMessage": "Reply with DIRECT_EXAMPLE_OK.",
+    "workingDirectory": ".",
+    "dispatch": {
+      "dispatchId": "direct-example-attempt",
+      "workstationName": "direct",
+      "workerType": "direct-worker",
+      "execution": {
+        "requestId": "direct-example-request"
+      }
+    }
+  },
+  "retry": {
+    "maxAttempts": 1
+  }
+}
 ```
 
-Use the returned `workerSessionId` in place of `WS_ID`. It identifies the same
-execution before a Provider Session ID exists and after execution ends.
+Choose fresh request, session, and dispatch IDs for each new execution.
+The working directory resolves on the selected host. Choose an existing,
+host-visible directory. Model availability depends on the selected provider's
+configuration. Keep credentials in provider configuration, outside this document.
+
+For observers in later commands, invoke against your running host:
+
+```powershell
+you --server http://127.0.0.1:17437 worker-sessions --help
+you --remote --server http://127.0.0.1:17437 --json worker-sessions invoke --execution execution.json --user-message "Reply with DIRECT_EXAMPLE_OK." --async
+```
+
+Copy the admission JSON's `workerSessionId` into `$workerSessionId`:
+
+```powershell
+$workerSessionId = 'direct-example-session' # Replace with the returned ID.
+you --server http://127.0.0.1:17437 --json worker-sessions show --worker-session-id $workerSessionId
+you --server http://127.0.0.1:17437 --json worker-sessions read --worker-session-id $workerSessionId --view logs
+```
+
+The canonical ID identifies the same execution before a Provider Session ID
+exists and after execution ends. Early logs can be empty while capture commits.
+Read the same ID again after completion. Provider failures remain inspectable
+with state `FAILED`.
+
+For `--execution -`, supply the message in the document or through
+`--user-message`. Close document stdin after sending the JSON.
 
 A completed synchronous local invocation also leaves captured history. Start a
 host from the same project directory to inspect it with `list --history archived`,

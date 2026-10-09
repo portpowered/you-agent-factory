@@ -537,12 +537,8 @@ func projectCommand(
 }
 
 func configureGenericGroupCommand(command *cobra.Command) {
-	command.DisableFlagParsing = true
 	command.Args = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return nil
-		}
-		if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 			return nil
 		}
 		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
