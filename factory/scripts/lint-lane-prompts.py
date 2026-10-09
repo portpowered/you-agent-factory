@@ -13,8 +13,6 @@ PLAN_RULES = (
     ('slice', 'Plan at most ONE independently mergeable slice per lane.'),
     ('stories', 'at most 2 stories'),
     ('criteria', 'about 8 unique process-owned criteria total'),
-    ('lines', 'about 2,000 changed lines (added plus deleted)'),
-    ('bytes', 'below 20 KB (20,000 UTF-8 bytes)'),
     ('first-slice', 'retain the first correct slice'),
     ('successors', 'remaining names/outcomes/requirements and merge gates'),
     ('successor-section', 'Named successor slices — not admitted'),
@@ -23,24 +21,19 @@ PLAN_RULES = (
     ('admission', 'only lead/operator admits them through existing routes'),
     ('merge-gate', "Each named successor must depend on this lane's merge before lead/operator admission"),
     ('immutable', 'Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates'),
-    ('indivisible', 'escalate indivisible scope'),
-    ('no-evasion', 'Never evade caps with compound scope or weakened acceptance'),
+    ('no-evasion', 'Never evade behavior/criterion caps with compound scope or weakened acceptance'),
     ('no-routing', 'No runtime/routing change or invented approval'),
 )
 PROCESS_RULES = (
-    ('bytes', 'Keep new prd.json below 20 KB (20,000 UTF-8 bytes)'),
-    ('minimal-status', 'update minimal status/passes/blockers only'),
+    ('minimal-status', 'Update minimal status/passes/blockers only'),
     ('immutable', 'Preserve requirements/amendments'),
     ('false-pass', 'never falsely pass unproved/delegated criteria'),
-    ('overflow', 'escalate if minimal status cannot fit'),
-    ('entry', 'at most one short four-line progress.txt entry per visit'),
+    ('entry', 'Keep concise visit/story, changed, blocker and next records'),
     ('interrupted', 'even blocked/interrupted'),
     ('handoffs', 'put deferred handoffs in the PR body too'),
-    ('evidence', 'Evidence/transcripts/audits/CI references go only in PR comments'),
-    ('pre-pr', 'retain in session before a PR exists'),
+    ('pre-pr', 'Retain observations in session before a PR exists'),
     ('no-commit', 'Never commit scaffolding/verification records'),
-    ('legacy', 'Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive'),
-    ('prospective', 'only new entries follow these rules'),
+    ('legacy', 'without retroactive rewrite/truncation/compaction/archive'),
     ('push-count', 'Push at most once per visit, at its end, after focused tests/lint, when the visit changed code'),
     ('running-ci', 'If previous-head CI is still running, push anyway; the superseding push cancels it'),
     ('no-ci-wait', 'Never spend a visit only waiting for CI or return CONTINUE solely because CI is running'),
@@ -67,6 +60,42 @@ CONFLICTS = (
     ('scaffold-evidence', r'record (?:that )?exact result in progress\.txt'),
 )
 
+# These checks cover authored output policy, not customer runtime constraints.
+OUTPUT_RULES = (
+    ('customer-size', 'Do not prescribe arbitrary output-size requirements unless the customer explicitly asks for them.'),
+    ('evidence-location', 'Measurements, timings, calibration runs and evidence belong in the PR body or a PR comment; CI evidence belongs only in PR comments.'),
+    ('behavior-tests', 'Committed tests protect customer behavior and ship with the change.'),
+    ('no-proof-files', 'Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof files.'),
+    ('closable', 'Each observable process outcome names one measurement or test and can close in one visit once the behavior and witness exist.'),
+    ('no-escalating-proof', 'Do not invent gates that demand repeated or escalating proof; preserve independent review, CI and merge obligations.'),
+)
+# Detect familiar positive prescriptions, even beside the correct policy.
+# Deliberately bounded diagnostics: semantic policy and customer exceptions
+# still need independent review; numeric resource/runtime limits are unrelated.
+OUTPUT_CONFLICTS = (
+    ('output-size', r'(?:under|below|at most|maximum(?: of)?|target(?: of)?|budget(?: of)?|cap(?: of)?) (?:about )?[\d,]+(?:[-–][\d,]+)? (?:changed lines|lines(?: of (?:diff|output))?|files|tests|test cases|(?:UTF-8 )?bytes|KB|MB)'
+     r'|(?:changed[- ]line|file[- ]count|test[- ]count|diff|packet|output)[^.]*? (?:target|budget|cap|limit)(?: is| of|:)? [\d,]+'
+     r'|(?:JSON-byte|PR-line) caps|escalate indivisible scope'
+     r'|at most one short four-line progress\.txt entry'),
+    ('committed-proof', r'(?:must|always|require(?:d)?) commit (?:the |an? )?(?:proof|evidence document|calibration harness|one-off fixture)'
+     r'|(?:commit|add) (?:the |an? )?(?:proof file|evidence document|calibration harness|one-off fixture) (?:to|in) (?:the )?(?:PR|repository)'),
+)
+
+
+def check_output_policy(prompts):
+    """Diagnose size/proof policy in isolated role strings, without I/O."""
+    diagnostics = []
+    for owner in ('plan', 'process', 'review', 'planning-standard'):
+        normalized = ' '.join(prompts.get(owner, '').split())
+        for name, clause in OUTPUT_RULES:
+            if clause not in normalized:
+                diagnostics.append(f'{owner}:{name}: missing policy clause: {clause}')
+        for name, pattern in OUTPUT_CONFLICTS:
+            if re.search(pattern, normalized, re.IGNORECASE):
+                diagnostics.append(f'{owner}:{name}: conflicting output policy; remove arbitrary output budgets or committed proof instructions')
+    return diagnostics
+
+
 RECOVERY_RULES = {
     'project-lead': (
         ('diagnosis', 'visit_cap_with_progress'),
@@ -80,7 +109,6 @@ RECOVERY_RULES = {
         ('binding', 'Bind replacements by targetWorkId'),
         ('closure', 'evidenced failed DEPENDS_ON closure'),
         ('no-controls', 'operatorOverride repair remain forbidden even after operator answers'),
-        ('size', 'about 2,000 changed lines (added plus deleted)'),
     ),
     'project-lead-wake': (
         ('recovery', "lead's Corrected successor recovery procedure"),
@@ -359,6 +387,8 @@ def main(argv=None):
             owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
             for owner in RECOVERY_RULES
         }
+        output_prompts = {owner: recovery[owner] for owner in ('plan', 'process', 'review')}
+        output_prompts['planning-standard'] = (args.root / 'factory/docs/standards/planning-standards.md').read_text(encoding='utf-8')
         verifier = (args.root / 'factory/workstations/verify-mission/AGENTS.md').read_text(encoding='utf-8')
         loopback = {
             owner: (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
@@ -367,7 +397,7 @@ def main(argv=None):
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
-    diagnostics = (check_policy(*texts[:2]) + check_mailbox_policy(*texts)
+    diagnostics = (check_output_policy(output_prompts) + check_policy(*texts[:2]) + check_mailbox_policy(*texts)
                    + check_recovery_policy(recovery)
                    + check_ownership_policy(texts[0], texts[1], recovery['review'])
                    + check_loopback_policy(loopback)
