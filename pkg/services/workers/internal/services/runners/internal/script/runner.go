@@ -34,6 +34,7 @@ const (
 type Config struct {
 	Command          string
 	Args             []string
+	Stdin            string
 	FactoryDirectory string
 	RequestSelected  bool
 }
@@ -41,6 +42,7 @@ type Config struct {
 type runner struct {
 	command          string
 	args             []string
+	stdin            string
 	factoryDirectory string
 	commandRunner    workerprocess.StreamingCommandRunner
 	factoryDocs      workers.FactoryDocsLoader
@@ -63,6 +65,7 @@ func New(
 	return &runner{
 		command:          config.Command,
 		args:             append([]string(nil), config.Args...),
+		stdin:            config.Stdin,
 		factoryDirectory: strings.TrimSpace(config.FactoryDirectory),
 		commandRunner:    commandRunner,
 		factoryDocs:      factoryDocs,
@@ -322,6 +325,7 @@ func (r *runner) resolveCommandRequest(
 	workDir := effectiveWorkDir(request)
 	command := r.command
 	argsTemplate := r.args
+	stdinTemplate := r.stdin
 	workflowContext := request.WorkflowContext.Clone()
 	if workflowContext == nil {
 		workflowContext = &workers.Context{}
@@ -330,6 +334,7 @@ func (r *runner) resolveCommandRequest(
 	if strings.TrimSpace(request.Command) != "" {
 		command = request.Command
 		argsTemplate = request.Args
+		stdinTemplate = request.Stdin
 	}
 	if strings.TrimSpace(request.FactoryDirectory) != "" {
 		factoryDirectory = request.FactoryDirectory
@@ -370,8 +375,13 @@ func (r *runner) resolveCommandRequest(
 		return workerprocess.CommandRequest{}, err
 	}
 
+	stdin, err := resolveArgs([]string{stdinTemplate}, data)
+	if err != nil {
+		return workerprocess.CommandRequest{}, fmt.Errorf("stdin: %w", err)
+	}
 	dispatch := request.Dispatch
 	return workerprocess.CommandRequest{
+		Stdin:                    []byte(stdin[0]),
 		Command:                  resolveFactoryScript(factoryDirectory, command),
 		Args:                     resolveFactoryScripts(factoryDirectory, args),
 		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),

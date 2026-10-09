@@ -114,6 +114,9 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
+	if next.Stdin, err = interpolateInvocationField(next.Stdin, args, "worker.stdin", false, readFile); err != nil {
+		return workerconfig.Config{}, err
+	}
 	for i := range next.Args {
 		if next.Args[i], err = interpolateInvocationField(next.Args[i], args, "worker.args entry", false, readFile); err != nil {
 			return workerconfig.Config{}, err

@@ -110,6 +110,7 @@ type ResolvedExecutionPolicy struct {
 	ExecutorProvider            string                           `json:"executor_provider,omitempty"`
 	Command                     string                           `json:"command,omitempty"`
 	Args                        []string                         `json:"args,omitempty"`
+	Stdin                       string                           `json:"stdin,omitempty"`
 	StopToken                   string                           `json:"stop_token,omitempty"`
 	AgentToolPolicy             string                           `json:"agent_tool_policy,omitempty"`
 	SkipPermissions             bool                             `json:"skip_permissions,omitempty"`
@@ -205,6 +206,7 @@ type WorkstationExecutionRequest struct {
 	ReasoningEffort             string                                   `json:"reasoning_effort,omitempty"`
 	Command                     string                                   `json:"command,omitempty"`
 	Args                        []string                                 `json:"args,omitempty"`
+	Stdin                       string                                   `json:"stdin,omitempty"`
 	FactoryDirectory            string                                   `json:"factory_directory,omitempty"`
 	OutputFormat                string                                   `json:"output_format,omitempty"`
 	StopToken                   string                                   `json:"stop_token,omitempty"`
@@ -268,6 +270,7 @@ type ProviderInferenceRequest struct {
 	ReasoningEffort              string                                   `json:"reasoning_effort,omitempty"`
 	Command                      string                                   `json:"command,omitempty"`
 	Args                         []string                                 `json:"args,omitempty"`
+	Stdin                        string                                   `json:"stdin,omitempty"`
 	FactoryDirectory             string                                   `json:"factory_directory,omitempty"`
 	OutputContract               string                                   `json:"output_contract,omitempty"`
 	OutputFormat                 string                                   `json:"output_format,omitempty"`
@@ -479,6 +482,7 @@ type ExecutionTarget struct {
 	Capabilities     *Capabilities
 	Command          string
 	Args             []string
+	Stdin            string
 	FactoryDirectory string
 	Provider         ProviderReference
 	Model            ModelReference

@@ -57,6 +57,7 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		ExecutorProvider: parsed.ExecutorProvider,
 		Command:          parsed.Command,
 		Args:             append([]string(nil), parsed.Args...),
+		Stdin:            parsed.Stdin,
 		Resources:        append([]factorydefinitions.ResourceConfig(nil), parsed.Resources...),
 		Timeout:          parsed.Timeout,
 		StopToken:        parsed.StopToken,
@@ -88,6 +89,7 @@ type workerFrontmatterInput struct {
 	ExecutorProvider string                                       `yaml:"executorProvider,omitempty"`
 	Command          string                                       `yaml:"command,omitempty"`
 	Args             []string                                     `yaml:"args,omitempty"`
+	Stdin            string                                       `json:"stdin,omitempty" yaml:"stdin,omitempty"`
 	Resources        []factorydefinitions.ResourceConfig          `yaml:"resources,omitempty"`
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
@@ -267,6 +269,7 @@ type workerFrontmatter struct {
 	ExecutorProvider string                                       `yaml:"executorProvider,omitempty"`
 	Command          string                                       `yaml:"command,omitempty"`
 	Args             []string                                     `yaml:"args,omitempty"`
+	Stdin            string                                       `json:"stdin,omitempty" yaml:"stdin,omitempty"`
 	Resources        []factorydefinitions.ResourceConfig          `yaml:"resources,omitempty"`
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
@@ -418,6 +421,7 @@ func workerFrontmatterForExpansion(def factorydefinitions.FactoryWorkerConfig) w
 		ExecutorProvider: executorProvider,
 		Command:          def.Command,
 		Args:             append([]string(nil), def.Args...),
+		Stdin:            def.Stdin,
 		Resources:        append([]factorydefinitions.ResourceConfig(nil), def.Resources...),
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,

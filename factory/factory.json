@@ -1583,8 +1583,9 @@
       "args": [
         "factory/scripts/prepare-validation.py",
         "{{ (index .Inputs 0).Name }}",
-        "{{ (index .Inputs 0).Payload }}"
-      ]
+        "--payload-stdin"
+      ],
+      "stdin": "{{ (index .Inputs 0).Payload }}"
     },
     {
       "id": "validator",
@@ -1623,8 +1624,9 @@
       "command": "python",
       "args": [
         "factory/scripts/route-thoughts.py",
-        "{{ (index .Inputs 0).Payload }}"
-      ]
+        "--payload-stdin"
+      ],
+      "stdin": "{{ (index .Inputs 0).Payload }}"
     },
     {
       "id": "mission-output-checker",

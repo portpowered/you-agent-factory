@@ -179,6 +179,7 @@ func scriptImplementation(
 		script.Config{
 			Command:          config.Command,
 			Args:             append([]string(nil), config.Args...),
+			Stdin:            config.Stdin,
 			FactoryDirectory: config.FactoryDirectory,
 			RequestSelected:  config.RequestSelected,
 		},

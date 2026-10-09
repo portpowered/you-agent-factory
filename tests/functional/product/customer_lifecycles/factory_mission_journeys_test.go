@@ -93,17 +93,17 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 }
 
 // The script edge supplies controlled branch responses; U1 proves the actual
-// Python parser. Here expanded argv and persisted feedback are observed.
+// Python parser. Here script stdin, checker argv and persisted feedback are observed.
 func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureCommandResponder {
 	return func(_ context.Context, request platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
 		for index, arg := range request.Args {
 			if strings.HasSuffix(arg, "route-thoughts.py") {
-				if index+1 >= len(request.Args) {
-					t.Error("route payload absent")
+				if index+1 >= len(request.Args) || request.Args[index+1] != "--payload-stdin" || len(request.Stdin) == 0 {
+					t.Error("route stdin payload or flag absent")
 					return platformprocess.CommandResult{}, errors.New("payload absent")
 				}
 				label := "supervision"
-				if strings.Contains(request.Args[index+1], "measure") {
+				if strings.Contains(string(request.Stdin), "measure") {
 					label = "mission"
 				}
 				return platformprocess.CommandResult{Stdout: []byte(label)}, nil

@@ -387,6 +387,7 @@ func resolvedExecutionWorkerValue(
 		ExecutorProvider: strings.TrimSpace(worker.ExecutorProvider),
 		Command:          worker.Command,
 		Args:             append([]string(nil), worker.Args...),
+		Stdin:            worker.Stdin,
 		Body:             worker.Body,
 		PromptSourcePath: worker.PromptSourcePath,
 		StopToken:        worker.StopToken,
