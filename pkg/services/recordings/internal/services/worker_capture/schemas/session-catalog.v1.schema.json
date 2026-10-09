@@ -5,6 +5,7 @@
   "additionalProperties": false,
   "required": ["version", "workerSessionId", "recordingId", "recordingGenerationId", "origin", "ownerEpoch", "committedPosition"],
   "properties": {
+    "workName": {"type": "string", "minLength": 1},
     "version": {"const": 1},
     "workerSessionId": {"type": "string", "minLength": 1},
     "recordingId": {"type": "string", "minLength": 1},

@@ -273,7 +273,7 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate), &testRuntimeScopeServiceStub{}, nil, fixedTestProgress(t, &effects), fixedTestCompletion(&effects))
+	assembly, err := factoryinternal.NewAssembly(opening.Open, nil, nil, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, provider, script, decorate), &testRuntimeScopeServiceStub{}, nil, fixedTestProgress(t, &effects), fixedTestCompletion(&effects), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

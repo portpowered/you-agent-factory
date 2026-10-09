@@ -31,6 +31,7 @@ type Assembly struct {
 	automationService automations.Service
 	progressFactory   func(*zap.Logger) func(string) workers.ProgressPublisher
 	completionFactory func(string) func(string)
+	recoverOwners     recordings.WorkerCapturePreparationOperation
 }
 
 // NewAssembly constructs the inert assembly selected by Wire.
@@ -45,6 +46,7 @@ func NewAssembly(
 	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
+	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*Assembly, error) {
 	if bundleOpening == nil {
 		return nil, fmt.Errorf("factory runtime bundle opening is required")
@@ -58,6 +60,7 @@ func NewAssembly(
 		recordingsRuntime: recordingsRuntime,
 		automationService: automationService,
 		progressFactory:   progressFactory, completionFactory: completionFactory,
+		recoverOwners: recoverOwners,
 	}, nil
 }
 
@@ -66,6 +69,14 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 	loaded factorydefinitions.MutableLoadedFactorySource, clock factoryruntime.Clock, logger *zap.Logger,
 	observations factoryruntime.SessionObservations,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
+	// Replay's engine opening reads committed force dispositions before the
+	// HTTP binding exists. Prepare capture facts before any runtime consumes
+	// them, including headless sessions, rather than hydrating on a detail read.
+	if a.recoverOwners != nil {
+		if err := a.recoverOwners(ctx); err != nil {
+			return nil, fmt.Errorf("prepare Worker captures for runtime activation: %w", err)
+		}
+	}
 	recovery := request.Inputs.RecoveryInput
 	if clock == nil && recovery.ReplayArtifact != nil {
 		clock = a.recordingsRuntime.ReplayClock(recovery.ReplayArtifact)

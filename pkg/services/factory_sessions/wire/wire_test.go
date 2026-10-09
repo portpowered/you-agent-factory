@@ -284,8 +284,9 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		assemblyResponses = nil
 	}
 
+	gateway := NewGateway(NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()), streams, nil, in.sessionResultProjection, responses, in.liveChangeCoordinator, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, in.clock))
 	return NewRuntimeAssembly(
-		NewGateway(NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, in.clock, nil, in.newJavaScriptCheckpointStore, zap.NewNop()), streams, nil, in.sessionResultProjection, responses, in.liveChangeCoordinator, nil, nil, nil, NewNamedFactoryActivator(state), NewKeyedDefinitionActivationGateway(state, in.clock)),
+		gateway,
 		registry, state, streams, sessioninvocation.NewSessionOwner(NewInvocationAuthority(state, platformclock.Real{}, nil), NewScopeControl(state, nil, zap.NewNop()), nil, nil, in.interpolation, in.invocationWorkTypes, in.invocationInputFiles, nil), NewScopeControl(state, nil, zap.NewNop()), NewScopeActivation(state),
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
@@ -647,7 +648,8 @@ func newOwnerGatewayFixture(t *testing.T, durable DurableExecutionService, histo
 	state := NewSessionState(NewSessionRegistry(), registry, inputs.clock, inputs.eventIDs, inputs.sessionIDs, responses)
 	host := NewSessionHost(state, NewScopeControl(state, nil, zap.NewNop()), identity, inputs.clock, nil, inputs.newJavaScriptCheckpointStore, zap.NewNop())
 	streams := NewStreamManager(state, NewStreamObserver(), registry, responses)
-	return NewGateway(host, streams, nil, inputs.sessionResultProjection, responses, inputs.liveChangeCoordinator, durable, history, invoker, activate, NewKeyedDefinitionActivationGateway(state, inputs.clock))
+	gateway := NewGateway(host, streams, nil, inputs.sessionResultProjection, responses, inputs.liveChangeCoordinator, durable, history, invoker, activate, NewKeyedDefinitionActivationGateway(state, inputs.clock))
+	return gateway
 }
 
 func TestOwnerGatewayPreservesInjectedInvocationAndActivation(t *testing.T) {
@@ -708,8 +710,8 @@ func TestOwnerGatewayPreservesUnavailableRequiredCollaborators(t *testing.T) {
 func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveChangeCoordinator) (*Root, error) {
 	return NewRoot(
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, assembly, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, assembly, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		NewHistoricalReplayBehavior(), liveChangeCoordinator, nil,
 	)
 }

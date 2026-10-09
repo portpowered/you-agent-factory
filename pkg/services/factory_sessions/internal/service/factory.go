@@ -57,6 +57,7 @@ type Root struct {
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	openingCompletion              *RuntimeOpeningCompletion
+	openingBinding                 *RuntimeOpeningBinding
 	resourceAcquisition            *RuntimeResourceAcquisition
 	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
@@ -84,8 +85,7 @@ type Root struct {
 	runtimeRoot                    FactoryRuntimeRoot
 	clock                          factoryruntime.Clock
 	providerOverride               providers.Service
-	providerCommandRunner          platformprocess.CommandRunner
-	scriptCommandRunner            platformprocess.CommandRunner
+	executionBinding               *ExecutionBinding
 	submissionRecorder             recordings.SubmissionRecorder
 	dispatchRecorder               recordings.DispatchRecorder
 }
@@ -109,6 +109,7 @@ func NewRoot(
 	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
 	openingCompletion *RuntimeOpeningCompletion,
+	openingBinding *RuntimeOpeningBinding,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -118,8 +119,7 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerCommandRunner ProviderCommandRunner,
-	scriptCommandRunner ScriptCommandRunner,
+	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	replayBehavior *recordingreplay.Behavior,
@@ -156,13 +156,13 @@ func NewRoot(
 		baseLogger:                     logger,
 		runtimeLogs:                    runtimeLogs,
 		openingCompletion:              openingCompletion,
+		openingBinding:                 openingBinding,
 		generateSessionID:              generateSessionID,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
 		clock:                          clock,
 		providerOverride:               providerOverride,
-		providerCommandRunner:          providerCommandRunner,
-		scriptCommandRunner:            scriptCommandRunner,
+		executionBinding:               executionBinding,
 		submissionRecorder:             submissionRecorder,
 		dispatchRecorder:               dispatchRecorder,
 	}

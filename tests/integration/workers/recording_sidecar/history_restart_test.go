@@ -96,7 +96,7 @@ func runWorkerSessionHistoryRestart(t *testing.T, mode string) {
 		}
 	}
 	if mode != "originating-artifact" {
-		removeHistoryOriginatingArtifact(t, project)
+		downgradeHistoryCapture(t, project)
 	}
 	first := startHistoryHost(t, ctx, binary, project, env, readerArgs...)
 	before := readNamedHistorySnapshot(t, ctx, binary, project, env, first.url, mode == "legacy-unavailable")
@@ -145,8 +145,14 @@ func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project
 	if observation.WorkId == nil || *observation.WorkId == "" {
 		t.Fatalf("archived Work identity = %+v", observation)
 	}
-	if legacy && (observation.WorkName != nil || observation.Provider != nil) {
+	if legacy && observation.WorkName != nil {
 		t.Fatalf("legacy capture without an available scoped artifact borrowed attribution: %+v", observation)
+	}
+	// Script execution has no inference-provider fact in its capture. This
+	// remains independent of optional Work-name availability; named provider
+	// captures retain their facts in the public attribution journey.
+	if observation.Provider != nil {
+		t.Fatalf("script capture invented an inference provider: %+v", observation)
 	}
 	if !legacy && (observation.WorkName == nil || *observation.WorkName != "seed-archived-name") {
 		t.Fatalf("archived known name = %+v", observation)
@@ -164,11 +170,11 @@ func readNamedHistorySnapshot(t *testing.T, ctx context.Context, binary, project
 	return snapshot
 }
 
-// Downgrade only the test-owned persisted capture to its pre-provenance shape.
+// Downgrade only the test-owned persisted capture to its pre-provenance/name shape.
 // All real admissions, canonical history, identities and captured logs survive.
 // Readers exercise both a validated configured-board candidate and the
 // authorized unavailable result when no candidate is configured.
-func removeHistoryOriginatingArtifact(t *testing.T, home string) {
+func downgradeHistoryCapture(t *testing.T, home string) {
 	t.Helper()
 	removed := 0
 	err := filepath.WalkDir(home, func(path string, entry fs.DirEntry, err error) error {
@@ -195,6 +201,7 @@ func removeHistoryOriginatingArtifact(t *testing.T, home string) {
 				continue
 			}
 			delete(record, "originatingArtifact")
+			delete(record, "workName")
 			removed++
 			lines[i], err = json.Marshal(record)
 			if err != nil {

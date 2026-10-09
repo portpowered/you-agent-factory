@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -689,4 +690,234 @@ func (writer *preparationInspectionWriter) Write(p []byte) (int, error) {
 		<-writer.release
 	}
 	return len(p), nil
+}
+
+func newBindingChildScenario(t *testing.T) initialOpeningScenario {
+	t.Helper()
+	scenario := newInitialOpeningChildScenario(t)
+	path := filepath.Join(scenario.candidateDir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["orchestrator"].(map[string]any)["javascript"].(map[string]any)["inlineSource"].(map[string]any)["inline"] = `return parallel([
+ {prompt: "scoped child 1", label: "child-1", modelProvider: "codex", model: "gpt-5-codex", resourceId: "opening-child-slot"},
+ {prompt: "scoped child 2", label: "child-2", modelProvider: "codex", model: "gpt-5-codex", resourceId: "opening-child-slot"}
+]);`
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return scenario
+}
+
+// Ordinary remote CLI invocation captures the selected live binding. Public
+// durable reads observe the queued children before either provider is released.
+func testBindingChildOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenarios []initialOpeningScenario, gate *bindingChildGate, serverURL string) {
+	t.Helper()
+	defer gate.unblock()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	done := make([]chan bindingChildOutcome, len(scenarios))
+	for i, scenario := range scenarios {
+		startInitialOpeningSession(t, sessions, scenario.request())
+		done[i] = startBindingChildCommand(t, ctx, process, scenario, serverURL, gate)
+	}
+	seen := map[string]bool{}
+	for range scenarios {
+		select {
+		case request := <-gate.entered:
+			if seen[request.WorkDir] || gate.selected[request.WorkDir] == "" {
+				t.Fatalf("crossed or over-admitted child: %+v", request)
+			}
+			seen[request.WorkDir] = true
+		case <-ctx.Done():
+			t.Fatal("both selected child providers did not overlap")
+		}
+	}
+	for _, scenario := range scenarios {
+		assertBindingChildCapacity(t, ctx, process, scenario, serverURL)
+	}
+	gate.unblock()
+	for i, scenario := range scenarios {
+		select {
+		case result := <-done[i]:
+			if result.err != nil {
+				t.Fatalf("CLI child invocation: %v", result.err)
+			}
+			assertBindingChildCompletion(t, ctx, sessions, result.id, scenario.candidateID)
+		case <-ctx.Done():
+			t.Fatal("CLI child invocation did not complete")
+		}
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	for _, scenario := range scenarios {
+		if gate.maximum[scenario.candidateDir] != 1 || gate.active[scenario.candidateDir] != 0 {
+			t.Fatalf("child capacity over-admission or leak: max=%v active=%v", gate.maximum, gate.active)
+		}
+	}
+}
+
+func startBindingChildCommand(t *testing.T, ctx context.Context, process support.Process, scenario initialOpeningScenario, serverURL string, gate *bindingChildGate) chan bindingChildOutcome {
+	t.Helper()
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
+		"--json", "run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--output", "primary", "--no-record", "scoped children"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	done := make(chan bindingChildOutcome, 1)
+	go func() {
+		defer close(done)
+		err := process.Execute(inputs.Input)
+		var response factoryapi.InvocationResponse
+		if err == nil {
+			err = json.Unmarshal([]byte(inputs.Stdout()), &response)
+		}
+		id := ""
+		if response.SessionId != nil {
+			id = *response.SessionId
+		}
+		done <- bindingChildOutcome{id: id, err: err}
+	}()
+	t.Cleanup(func() {
+		gate.unblock()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			t.Error("owned child command did not join")
+		}
+	})
+	return done
+}
+
+type bindingChildOutcome struct {
+	id  string
+	err error
+}
+
+func assertBindingChildCapacity(t *testing.T, ctx context.Context, process support.Process, scenario initialOpeningScenario, serverURL string) {
+	t.Helper()
+	// Requesting the existing capacity is a public no-op accounting read.
+	inputs := support.FakeInputs(ctx, []string{"you", "--json", "--server", serverURL, "session", "resource", "set",
+		"opening-child-slot", "1", scenario.candidateID, "--request-id", uuid.NewString(), "--expected-revision", "0", "--reason", "observe held child capacity"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("capacity accounting: %v %s", err, inputs.Stderr())
+	}
+	var capacity factoryapi.FactorySessionResourceCapacityResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &capacity); err != nil {
+		t.Fatal(err)
+	}
+	if capacity.Outcome != factoryapi.FactorySessionResourceCapacityOutcomeNOOP || capacity.InUseCount != 1 || capacity.AvailableCount != 0 || capacity.EffectiveCapacity != 1 {
+		t.Fatalf("selected held capacity: %+v", capacity)
+	}
+}
+
+func assertBindingChildCompletion(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
+	t.Helper()
+	assertBindingChildResult(t, ctx, sessions, id, selected)
+	assertBindingChildDispatches(t, ctx, sessions, id)
+	assertBindingChildResponses(t, ctx, sessions, id, selected)
+}
+
+func assertBindingChildResult(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
+	t.Helper()
+	read, err := support.WaitForObservation(30*time.Second, func() (factorysessions.SessionReadResult, error) {
+		return sessions.GetSession(ctx, id)
+	}, func(value factorysessions.SessionReadResult) bool {
+		return value.Status == factorysessions.LifecycleStatusSucceeded
+	})
+	if err != nil || read.Progress == nil || read.Progress.CompletedDispatches != 2 {
+		t.Fatalf("selected child completion: %+v %v", read, err)
+	}
+	result, err := sessions.GetResult(ctx, id, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal})
+	if err != nil || strings.Count(string(result.PrimaryResult), selected+" COMPLETE") != 2 {
+		t.Fatalf("selected child results: %+v %v", result, err)
+	}
+}
+
+func assertBindingChildDispatches(t *testing.T, ctx context.Context, sessions factorysessions.Service, id string) {
+	t.Helper()
+	dispatches, err := sessions.ListDispatches(ctx, id)
+	if err != nil || len(dispatches.Dispatches) != 2 {
+		t.Fatalf("child dispatches: %+v %v", dispatches, err)
+	}
+	for _, dispatch := range dispatches.Dispatches {
+		if dispatch.Attempt != 1 || dispatch.ModelProvider != "codex" || dispatch.ConfirmationState != factorysessions.ConfirmationStateUnconfirmed {
+			t.Fatalf("child attempt/recording policy: %+v", dispatch)
+		}
+	}
+}
+
+func assertBindingChildResponses(t *testing.T, ctx context.Context, sessions factorysessions.Service, id, selected string) {
+	t.Helper()
+	subscription, err := sessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Cursor.Detach()
+	events, err := subscription.Cursor.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed := map[string]bool{}
+	var lastSequence int64
+	for _, event := range events {
+		if event.FactorySessionID != id || event.Sequence <= lastSequence || event.DispatchID == "" {
+			t.Fatalf("crossed child progress: %+v", event)
+		}
+		lastSequence = event.Sequence
+		if event.Phase == factorysessions.ResponseEventPhaseCompleted && event.Provenance.NativeEventType == "STREAM_COMPLETED" {
+			completed[event.DispatchID] = true
+		}
+		if event.Provenance.Delivery == factorysessions.ResponseEventDeliveryNativeStream && event.Kind == factorysessions.ResponseEventKindMessage {
+			var message factorysessions.ResponseEventMessage
+			if err := json.Unmarshal(event.Payload, &message); err != nil {
+				t.Fatal(err)
+			}
+			if len(message.ContentBlocks) != 1 || message.ContentBlocks[0].Text != selected+" COMPLETE" {
+				t.Fatalf("crossed provider output: %s", event.Payload)
+			}
+		}
+	}
+	if len(completed) != 2 {
+		t.Fatalf("lost child completion progress: %+v", completed)
+	}
+}
+
+type bindingChildGate struct {
+	mu              sync.Mutex
+	selected        map[string]string
+	active, maximum map[string]int
+	entered         chan platformprocess.CommandRequest
+	release         chan struct{}
+	once            sync.Once
+}
+
+func (gate *bindingChildGate) unblock() { gate.once.Do(func() { close(gate.release) }) }
+func (gate *bindingChildGate) run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	gate.mu.Lock()
+	gate.active[request.WorkDir]++
+	gate.maximum[request.WorkDir] = max(gate.maximum[request.WorkDir], gate.active[request.WorkDir])
+	gate.mu.Unlock()
+	defer func() { gate.mu.Lock(); gate.active[request.WorkDir]--; gate.mu.Unlock() }()
+	select {
+	case gate.entered <- request:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case <-gate.release:
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(gate.selected[request.WorkDir] + " COMPLETE")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
 }

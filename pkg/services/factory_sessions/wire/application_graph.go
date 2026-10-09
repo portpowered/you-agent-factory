@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"github.com/google/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -20,6 +21,7 @@ import (
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	sessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -80,6 +82,8 @@ type (
 	ProviderOverrideService      = service.ProviderOverrideService
 	RuntimeResourceAcquisition   = service.RuntimeResourceAcquisition
 	RuntimeOpeningCompletion     = service.RuntimeOpeningCompletion
+	RuntimeOpeningBinding        = service.RuntimeOpeningBinding
+	OpeningSessionIdentity       = service.OpeningSessionIdentity
 	DurableOpening               = service.DurableOpening
 	DurableExecution             = service.DurableExecution
 	WorkerCommandRunnerAdapter   = service.WorkerCommandRunnerAdapter
@@ -136,6 +140,7 @@ func NewRoot(
 	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
 	openingCompletion *RuntimeOpeningCompletion,
+	openingBinding *RuntimeOpeningBinding,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -145,8 +150,7 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerCommandRunner ProviderCommandRunner,
-	scriptCommandRunner ScriptCommandRunner,
+	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation RuntimeModelInvocationOperation,
 	replayBehavior *HistoricalReplayBehavior,
@@ -175,6 +179,7 @@ func NewRoot(
 		durableOpening,
 		resourceAcquisition,
 		openingCompletion,
+		openingBinding,
 		generateSessionID,
 		generateRuntimeInstanceID,
 		resolveHome,
@@ -184,8 +189,7 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		providerCommandRunner,
-		scriptCommandRunner,
+		executionBinding,
 		initialEngine,
 		modelInvocation,
 		replayBehavior,
@@ -296,3 +300,20 @@ func NewRuntimeOpeningCompletion(assembly RuntimeAssembly, routing *factorysessi
 	webhooksService webhooks.Service, host ProcessRuntimeFactory) *RuntimeOpeningCompletion {
 	return service.NewRuntimeOpeningCompletion(assembly, routing, webhooksService, host)
 }
+
+// ExecutionBinding is the focused capability registration operation for live and replay opening.
+type ExecutionBinding = service.ExecutionBinding
+
+func NewExecutionBinding(providerOverride ProviderOverrideService, commandRunner ProviderCommandRunner) *ExecutionBinding {
+	return service.NewExecutionBinding(providerOverride, commandRunner)
+}
+
+func NewRuntimeOpeningBinding(gateway OpeningSessionIdentity, recordingsService recordings.Service,
+	providerOverride ProviderOverrideService, commandRunner ProviderCommandRunner) *RuntimeOpeningBinding {
+	return service.NewRuntimeOpeningBinding(gateway, recordingsService, providerOverride, commandRunner)
+}
+
+// RuntimeOpeningBindingSet exposes exact roles of the one canonical gateway instance.
+var RuntimeOpeningBindingSet = wire.NewSet(NewGateway, NewRuntimeOpeningBinding,
+	wire.Bind(new(OpeningSessionIdentity), new(*sessionservice.Service)),
+	wire.Bind(new(roles.SessionGateway), new(*sessionservice.Service)))

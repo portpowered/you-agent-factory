@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -957,5 +958,41 @@ func TestContinuationTerminalPublicationWaitHonorsCallerCancellation(t *testing.
 	}
 	if len(r.continueReplays) != 0 || len(r.sessions) != 1 {
 		t.Fatal("canceled publication wait reserved a successor")
+	}
+}
+
+func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"named", "missing-primary", "nameless", "resource"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			recorder := &originatingArtifactRecorder{}
+			registry := &registry{recording: recorder}
+			request := workersessions.InvokeSessionRequest{ID: "worker"}
+			request.Execution.Execution.RecordingID = "recording"
+			dispatch := work.WorkDispatch{Execution: work.ExecutionMetadata{WorkIDs: []string{"primary", "secondary"}}}
+			primary := workers.Token{ID: "token-primary", Color: workers.Color{DataType: workers.DataTypeWork, WorkID: "primary", Name: "Primary"}}
+			secondary := workers.Token{ID: "token-secondary", Color: workers.Color{DataType: workers.DataTypeWork, WorkID: "secondary", Name: "Secondary"}}
+			want := "Primary"
+			switch scenario {
+			case "missing-primary":
+				primary.Color.WorkID = "foreign"
+				want = ""
+			case "nameless":
+				primary.Color.Name = ""
+				want = ""
+			case "resource":
+				primary.Color.DataType = workers.DataTypeResource
+				want = ""
+			}
+			dispatch.InputTokens = workers.InputTokens(secondary, primary)
+			request.Execution.Execution.Dispatch = dispatch
+			if _, err := registry.startWorkerRecording(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.request.WorkName != want {
+				t.Fatalf("primary capture name=%q want=%q", recorder.request.WorkName, want)
+			}
+		})
 	}
 }

@@ -342,3 +342,13 @@ func (g *addressingProcessGroup) PersistWorkerRecord(ctx context.Context, record
 	}
 	return g.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
+
+// Preserve the real store's summary capability when replacing only recording
+// writes; archived lookup must retain the same unknown-ID behavior.
+func (g *addressingProcessGroup) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	reader, ok := g.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return recordings.WorkerCapturedSummary{}, fmt.Errorf("recording store has no summary reader")
+	}
+	return reader.LookupWorkerSessionSummary(ctx, id)
+}

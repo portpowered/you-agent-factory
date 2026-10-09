@@ -2546,6 +2546,9 @@
     },
     {
       "id": "escalate-project",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
       "name": "escalate-project",
       "type": "LOGICAL_MOVE",
       "inputs": [

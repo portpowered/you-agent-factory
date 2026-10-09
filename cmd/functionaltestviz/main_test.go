@@ -385,3 +385,84 @@ func TestRunWritesCatalog(t *testing.T) {
 		t.Fatalf("output missing TestHelp:\n%s", got)
 	}
 }
+
+func TestWriteCompactVerdictCompleteLinesAndOutcomes(t *testing.T) {
+	t.Parallel()
+	longSelected := "  package=" + strings.Repeat("x", 70*1024)
+	for _, tc := range []struct {
+		name, log, selected, outcome string
+		code                         int
+	}{
+		{"long lines", "Functional suite inventory: before\r\n" + strings.Repeat("diagnostic", 8192) + "\n" + longSelected + "\r\nFunctional package coverage verdict: final",
+			"Functional suite inventory: before\n" + longSelected + "\nFunctional package coverage verdict: final", "green", 0},
+		{"advisory", "!!! COVERAGE FLOOR POLICY: advisory !!!\npackage coverage regression: example\n", "!!! COVERAGE FLOOR POLICY: advisory !!!\npackage coverage regression: example", "advisory", 0},
+		{"test failure", "coverage not evaluated: package floors were NOT checked\n", "coverage not evaluated: package floors were NOT checked", "test-failure", 1},
+		{"coverage failure", "  floor violation: example\n", "  floor violation: example", "coverage-gate-failure", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			logPath, verdictPath := filepath.Join(root, "log"), filepath.Join(root, "verdict")
+			if err := os.WriteFile(logPath, []byte(tc.log), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeCompactVerdict(logPath, verdictPath, tc.code); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(verdictPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "Functional coverage outcome: " + tc.outcome + "\n" + tc.selected + "\n"
+			if string(got) != want {
+				t.Fatalf("verdict differs: got length=%d want=%d", len(got), len(want))
+			}
+		})
+	}
+}
+
+func TestWriteCompactVerdictMissingOrEmptyLog(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, log, want string
+		missing         bool
+	}{
+		{"missing", "", "open functional coverage log", true},
+		{"empty", "", "functional coverage verdict extract is empty", false},
+		{"unselected", "unselected diagnostic\n", "functional coverage verdict extract is empty", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			logPath, verdictPath := filepath.Join(root, "log"), filepath.Join(root, "verdict")
+			if !tc.missing {
+				if err := os.WriteFile(logPath, []byte(tc.log), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := writeCompactVerdict(logPath, verdictPath, 0)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want %q", err, tc.want)
+			}
+			if _, err := os.Stat(verdictPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("failed extraction published verdict: %v", err)
+			}
+		})
+	}
+}
+
+type compactVerdictErrorReader struct{ err error }
+
+func (reader compactVerdictErrorReader) Read([]byte) (int, error) { return 0, reader.err }
+
+func TestReadCompactVerdictLinesPropagatesReadError(t *testing.T) {
+	t.Parallel()
+	readErr := errors.New("controlled log read failure")
+	for _, prefix := range []string{"", "Functional suite inventory: selected\n", "Functional suite inventory: partial"} {
+		input := io.MultiReader(strings.NewReader(prefix), compactVerdictErrorReader{err: readErr})
+		lines, err := readCompactVerdictLines(input)
+		if !errors.Is(err, readErr) || lines != nil {
+			t.Fatalf("lines=%v error=%v, want no verdict and original read error", lines, err)
+		}
+	}
+}

@@ -36,7 +36,7 @@ type factoryDefinitionsConstructionStub struct {
 }
 
 func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
-	_, err := bindWorkerScope("session-42", struct{}{}, nil, "runtime-1", "generation-1", nil, nil, nil, nil, nil)
+	_, err := NewExecutionBinding(nil, nil).bindWorkerScope("session-42", struct{}{}, nil, "runtime-1", "generation-1", nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "session-42") || !strings.Contains(err.Error(), "binder is required") {
 		t.Fatalf("missing scope binder error = %v, want session and required binder", err)
 	}
@@ -80,7 +80,6 @@ type runtimeOpeningFixture struct {
 	RecordingsRuntime            recordings.RuntimeScopeService
 	WorkerService                workers.Service
 	ProviderCommandRunner        ProviderCommandRunner
-	ScriptCommandRunner          ScriptCommandRunner
 	EnsureBackendScope           operatorsettings.BackendScopeEnsurer
 	InitialActivation            factoryruntime.InitialRuntimeActivationOperation
 }
@@ -105,6 +104,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.DurableOpening,
 		fixture.resourceAcquisition(),
 		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
+		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner),
 		fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,
@@ -114,8 +114,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.RecordingsService,
 		fixture.RecordingsRuntime,
 		fixture.WorkerService,
-		fixture.ProviderCommandRunner,
-		fixture.ScriptCommandRunner,
+		NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner),
 		NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation),
 		nil,
 		recordingreplay.NewBehavior(),
@@ -230,7 +229,6 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		WebhooksService:              webhooksConstructionStub{},
 		WorkerService:                &workersConstructionStub{},
 		ProviderCommandRunner:        workersRootBindingProbeRunner{tag: "provider"},
-		ScriptCommandRunner:          workersRootBindingProbeRunner{tag: "script"},
 		EnsureBackendScope:           inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
 	}
 }

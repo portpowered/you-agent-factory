@@ -23,6 +23,18 @@ type WorkerWorkAttributionReader = recordingcontracts.WorkerWorkAttributionReade
 // before a host accepts controls or new execution. It never stops children.
 type WorkerOwnerRecoveryOperation func(context.Context) error
 
+// WorkerCapturePreparationOperation prepares committed captures before runtime
+// consumers start; it does not depend on Factory Session attribution.
+type WorkerCapturePreparationOperation = recordingcontracts.WorkerCapturePreparationOperation
+
+// WorkerCapturedSummary contains selected committed metadata and control facts.
+// Worker Sessions owns interpretation of the terminal cause.
+type WorkerCapturedSummary = recordingcontracts.WorkerCapturedSummary
+
+// WorkerCapturedSummaryReader never hydrates or scans recording history.
+// Host activation prepares retained generations before accepting requests.
+type WorkerCapturedSummaryReader = recordingcontracts.WorkerCapturedSummaryReader
+
 // WorkerControlInputMaxBytes bounds the complete serialized control input,
 // including execution settings and replacement text, before artifact encoding.
 const WorkerControlInputMaxBytes = 1 << 20

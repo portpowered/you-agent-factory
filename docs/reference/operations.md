@@ -616,6 +616,12 @@ does not expose that fact. The Worker Session ID is the canonical identity for
 provider-issued correlation value. JSON output preserves these identities and
 includes `workId` and `workName` when Work attribution can be resolved.
 
+Worker Session list and show use names captured at dispatch, prepared at startup,
+or supplied by live Work. These reads do not open Factory recordings.
+For older captures without an available name, `workName` is null while the
+associated Work ID remains visible. A missing name does not change capture
+health or an available provider fact.
+
 ### Invoke and inspect a direct Worker Session
 
 An execution document supplies the base settings for `worker-sessions invoke`.

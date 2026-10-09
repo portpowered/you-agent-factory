@@ -513,6 +513,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 }
 
 type portableReplayRuntimeOwner struct {
+	workerErr error
 	durableexecution.Service
 	restorable bool
 	probeErr   error
@@ -664,6 +665,9 @@ func (owner *portableReplayRuntimeOwner) BindWorkerScope(
 	publisher workers.ProgressPublisher,
 	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) (func(), error) {
+	if owner.workerErr != nil {
+		return nil, owner.workerErr
+	}
 	owner.progressPublisher = publisher
 	owner.attemptStarter = starter
 	owner.workerRuntimeID = runtimeID
@@ -891,8 +895,8 @@ func TestDurableCapabilityRegistrationOwnsCompletedFlushRelease(t *testing.T) {
 			if fail {
 				owner.workerErr = errors.New("worker registration failed")
 			}
-			release, err := bindDurableExecutionCapabilities("session-owned-flush", owner, &portableReplayRuntimeService{}, nil,
-				"runtime-owned-flush", "generation-owned-flush", nil, nil, nil, nil, nil, nil)
+			release, err := NewExecutionBinding(nil, nil).Bind("session-owned-flush", owner, &portableReplayRuntimeService{}, nil,
+				"runtime-owned-flush", "generation-owned-flush", nil, nil, nil, nil)
 			if fail {
 				if !errors.Is(err, owner.workerErr) || release != nil || len(owner.events) != 0 {
 					t.Fatalf("failed registration = %v, release present %v, events %v", err, release != nil, owner.events)
@@ -939,4 +943,115 @@ func (owner *durabilityRegistrationOwner) BindLiveChangeScope(
 ) func() {
 	owner.events = append(owner.events, "live-change-register")
 	return func() { owner.events = append(owner.events, "live-change-release") }
+}
+
+// The checkpoint acquisition already owns resources when registration fails.
+// Failure stays typed, resume never runs, and cleanup remains with that opening.
+func TestCheckpointPortableReplayBindingFailureRetainsCleanupAndRetry(t *testing.T) {
+	t.Parallel()
+	cause := &factorysessions.DetachedRequestError{Field: "binding", Message: "controlled registration failure"}
+	cleanupCause := errors.New("owned release failed")
+	owner := &portableReplayRuntimeOwner{restorable: true, workerErr: cause, closeErr: cleanupCause}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	request := portableCheckpointOwnerFixture(t).startRequest()
+	failed, err := factory.openForRequest(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = failed.replayExecution.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{})
+	var typed *factorysessions.DetachedRequestError
+	if !errors.Is(err, cause) || !errors.As(err, &typed) || owner.resumeCalls != 0 || owner.liveChangeBound {
+		t.Fatalf("failed binding resumed or lost cause: err=%v resumes=%d live=%t", err, owner.resumeCalls, owner.liveChangeBound)
+	}
+	if err := failed.closeArtifacts(); !errors.Is(err, cleanupCause) {
+		t.Fatalf("owned cleanup: %v", err)
+	}
+	owner.closeErr = nil
+	if err := failed.closeArtifacts(); err != nil {
+		t.Fatalf("cleanup retry: %v", err)
+	}
+	owner.workerErr = nil
+	retried, err := factory.openForRequest(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := retried.closeArtifacts(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if _, err := retried.replayExecution.Resume(t.Context(), "session-js-checkpoint-001", factorysessions.ControlRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if owner.resumeCalls != 1 || !owner.liveChangeBound {
+		t.Fatalf("corrected same-identity retry did not bind: %+v", owner)
+	}
+}
+
+// The operation stores effects inertly and sends acquired observations only to
+// their selected registration. Keyed release semantics are tested in execution.
+func TestExecutionBindingPreservesSelectedEffectsAndObservationHandles(t *testing.T) {
+	t.Parallel()
+	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "selected"})
+	runner := &executionBindingRunner{}
+	operation := NewExecutionBinding(provider, runner)
+	if runner.calls != 0 || provider.CallCount() != 0 {
+		t.Fatal("construction invoked effects")
+	}
+	for _, id := range []string{"checkpoint", "live-peer"} {
+		owner := &executionBindingObserver{t: t, id: id, provider: provider}
+		progress := ""
+		attempts := 0
+		release, err := operation.Bind(id, owner, nil, nil, "runtime-"+id, "generation-"+id, nil,
+			&workers.MockWorkersConfig{UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough},
+			func(fragment workers.ProgressFragment) { progress = fragment.Payload },
+			func(_ context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+				if request.Correlation.FactorySessionID != id {
+					t.Fatalf("crossed attempt: %+v", request.Correlation)
+				}
+				attempts++
+				return nil, nil
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if progress != id || attempts != 1 {
+			t.Fatalf("observations %s: progress=%q attempts=%d", id, progress, attempts)
+		}
+		release()
+	}
+	if runner.calls != 2 {
+		t.Fatalf("selected runner calls=%d", runner.calls)
+	}
+}
+
+type executionBindingRunner struct{ calls int }
+
+func (runner *executionBindingRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.calls++
+	return platformprocess.CommandResult{Stdout: []byte(request.WorkDir)}, nil
+}
+
+type executionBindingObserver struct {
+	durableexecution.Service
+	t        *testing.T
+	id       string
+	provider providers.Service
+}
+
+func (owner *executionBindingObserver) BindWorkerScope(id string, _ factoryruntime.ResourceCapacityLeaseAdmission,
+	runtimeID, generationID string, provider providers.Service, mock *workers.MockWorkersConfig,
+	runner platformprocess.CommandRunner, progress workers.ProgressPublisher,
+	starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
+) (func(), error) {
+	if id != owner.id || runtimeID != "runtime-"+id || generationID != "generation-"+id || provider != owner.provider || mock.UnmatchedDispatchPolicy != workers.MockWorkerUnmatchedDispatchPolicyPassthrough {
+		owner.t.Fatalf("selected registration changed: %s %s %s %+v", id, runtimeID, generationID, mock)
+	}
+	result, err := runner.Run(owner.t.Context(), platformprocess.CommandRequest{WorkDir: id})
+	if err != nil {
+		return nil, err
+	}
+	progress(workers.ProgressFragment{Payload: string(result.Stdout)})
+	_, err = starter(owner.t.Context(), &workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{FactorySessionID: id}})
+	return func() {}, err
 }

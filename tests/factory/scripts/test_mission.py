@@ -209,7 +209,7 @@ class MissionOutputTests(unittest.TestCase):
         examples = [
             {"decision": "ACCEPTED", "feedback": "Measured pending Work.", "output": {
                 "measurements": [{"name": "pending", "value": 0, "source": "authorized Work list"}]}},
-            {"decision": "FAILED", "feedback": "Required read unavailable.", "output": {
+            {"decision": "ACCEPTED", "feedback": "Required read unavailable.", "output": {
                 "precondition": "Required recording read unavailable; pending Work observed: 0"}},
         ]
         for example in examples:
