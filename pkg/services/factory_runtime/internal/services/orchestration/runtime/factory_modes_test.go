@@ -53,6 +53,63 @@ func TestWorkerSessionRuntimeShutdownClosesOwnedScopesWithoutStoppingSupervisor(
 	}
 }
 
+type shutdownAttemptCloser struct {
+	factory.WorkerAttemptOpener
+	close func(context.Context, string) error
+}
+
+func (s shutdownAttemptCloser) CloseRuntimeAttempts(ctx context.Context, runtimeID string) error {
+	return s.close(ctx, runtimeID)
+}
+
+func TestShutdownTerminalCauseOrdering(t *testing.T) {
+	t.Parallel()
+	producer, cancelProducer := context.WithCancel(context.Background())
+	defer cancelProducer()
+	started := make(chan context.Context, 1)
+	completed := make(chan struct{})
+	executor := attemptExecuteFunc(func(ctx context.Context, req workerexecution.ExecuteRequest) (workerexecution.ExecuteResult, error) {
+		started <- ctx
+		<-ctx.Done()
+		return workerexecution.ExecuteResult{Correlation: req.Correlation, Outcome: workerexecution.ExecutionOutcomeCanceled}, nil
+	})
+	pool := newAttemptLifecycle(executor, func() string { return "physical" }, 1)
+	cfg := &runtimeConfig{attempts: pool, runtimeID: "owned"}
+	err := startStatelessAttemptWithRequestMode(producer, cfg, workerexecution.WorkstationDispatchRequest{},
+		attemptTestRequest("dispatch", "physical"), true,
+		func(context.Context, workerexecution.WorkstationDispatchRequest, workerexecution.WorkstationDispatchResult, error) {
+			close(completed)
+		}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution := <-started
+	cancelProducer()
+	if execution.Err() != nil {
+		t.Fatal("producer cancellation removed execution before scoped close")
+	}
+	cfg.workerAttempts = shutdownAttemptCloser{close: func(ctx context.Context, runtimeID string) error {
+		if runtimeID != "owned" || execution.Err() != nil {
+			t.Error("scoped close lost the owned live attempt")
+		}
+		if err := pool.startRetry(ctx, attemptTestRequest("late", "late"), true,
+			func(context.Context, workerexecution.ExecuteRequest, workerexecution.ExecuteResult, error) {}); !errors.Is(err, dispatchplanning.ErrDispatchRuntimeStopped) {
+			t.Errorf("admission during close = %v", err)
+		}
+		_, err := pool.cancel(ctx, "dispatch")
+		return err
+	}}
+	f := &factoryImpl{cfg: cfg}
+	if err := f.stopDispatchRuntime(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("shutdown returned before terminal callback joined")
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
 func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *testing.T) {
 	live := make(chan interfaces.FactoryEvent, 1)

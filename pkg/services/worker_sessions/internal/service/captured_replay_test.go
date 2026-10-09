@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -27,7 +29,7 @@ func (f *continuationPageReader) ReadWorkerCapturedActivity(_ context.Context, r
 	if req.NextToken == "next" {
 		return f.next, f.err
 	}
-	return f.page, nil
+	return f.page, f.err
 }
 
 func TestContinuationCapturedStreamPagesAndFailsClosed(t *testing.T) {
@@ -113,7 +115,7 @@ func continuationStreamPages(t *testing.T) *continuationPageReader {
 
 func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"foreign-scope", "foreign-worker", "incomplete", "non-terminal", "missing-opening", "cursor"} {
+	for _, cell := range []string{"foreign-scope", "foreign-worker", "non-terminal", "missing-opening", "cursor"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			reader := continuationStreamPages(t)
@@ -125,8 +127,6 @@ func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.
 				req.FactorySessionID = "foreign"
 			case "foreign-worker":
 				reader.page.Catalog.WorkerSessionID = "foreign"
-			case "incomplete":
-				reader.page.Health = recordings.WorkerRecordingStatusIncomplete
 			case "non-terminal":
 				reader.page.Terminal.Status = "RUNNING"
 			case "missing-opening":
@@ -177,4 +177,103 @@ func TestCapturedAtReplayKeepsStoredTimeAndOmitsUnknown(t *testing.T) {
 	if second.Event.CapturedAt != nil {
 		t.Fatal("replay invented a timestamp for an unknown record")
 	}
+}
+
+func TestArchivedOrdinaryReplay(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"complete", "incomplete", "owner-lost", "active", "storage-failure", "unknown"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			reader := ordinaryReplayPages(t, cell)
+			r := newContinuationSource(t, continuationReservationRequest())
+			r.logs = &LogReader{reader: reader}
+			// Compare the exact detached public events, including captured timestamps.
+			stamp := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+			reader.page.Records[0].CapturedAt = &stamp
+			expected := projectObservationEvent(reader.page.Records[0].Record, "archived-successor")
+			expected.CapturedAt = &stamp
+			if cell == "unknown" || cell == "storage-failure" {
+				_, streamErr := r.StreamObservationsByWorkerSessionID(t.Context(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived-successor", ReplayOnly: true})
+				want := workersessions.ErrObservationSourceUnavailable
+				if cell == "unknown" {
+					want = workersessions.ErrObservationSessionNotFound
+				}
+				if !errors.Is(streamErr, want) {
+					t.Fatalf("stream error = %v, want %v", streamErr, want)
+				}
+				return
+			}
+			stream, err := r.StreamObservationsByWorkerSessionID(t.Context(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived-successor", ReplayOnly: true, Limit: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			first := stream.Next(t.Context())
+			if first.Kind != workersessions.ObservationDeliveryRecord || !reflect.DeepEqual(first.Event, expected) {
+				t.Fatalf("replay differs from logs: %+v %+v", first, expected)
+			}
+			assertOrdinaryReplaySummary(t, stream, cell)
+			if stream.Next(t.Context()).Kind != workersessions.ObservationDeliveryClosed {
+				t.Fatal("archive replay did not close")
+			}
+			if _, exists := r.sessions["archived-successor"]; exists || len(r.supervisions) != 0 {
+				t.Fatal("archive restored live authority")
+			}
+		})
+	}
+}
+
+func assertOrdinaryReplaySummary(t *testing.T, stream workersessions.ObservationSubscription, cell string) {
+	t.Helper()
+	last := stream.Next(t.Context())
+	if cell == "complete" {
+		if last.Kind != workersessions.ObservationDeliveryTerminalReplay || last.Summary == nil || !last.Summary.Complete {
+			t.Fatalf("complete replay = %+v", last)
+		}
+	} else {
+		if cell == "incomplete" {
+			if last.Kind != workersessions.ObservationDeliveryRecord || last.Event.Position != 2 {
+				t.Fatalf("incomplete committed terminal = %+v", last)
+			}
+			last = stream.Next(t.Context())
+		}
+		if last.Kind != workersessions.ObservationDeliveryReplaySummary || last.Summary == nil || last.Summary.Complete {
+			t.Fatalf("prefix presented as complete/live: %+v", last)
+		}
+	}
+}
+
+func ordinaryReplayPages(t *testing.T, cell string) *continuationPageReader {
+	t.Helper()
+	reader := continuationStreamPages(t)
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if err := json.Unmarshal(reader.page.Opening.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+		t.Fatal(err)
+	}
+	opening.Lineage, opening.Continuation = nil, nil
+	draft.Payload, _ = json.Marshal(opening)
+	reader.page.Opening.Payload, _ = json.Marshal(draft)
+	reader.page.Records[0].Record = reader.page.Opening
+	switch cell {
+	case "incomplete":
+		reader.page.Health = recordings.WorkerRecordingStatusIncomplete
+	case "owner-lost", "active":
+		reader.page.Catalog.CommittedPosition = 1
+		reader.page.NextToken = ""
+		reader.page.Terminal = nil
+		if cell == "owner-lost" {
+			reader.page.Health = recordings.WorkerRecordingStatusIncomplete
+			reader.page.Terminal = &recordings.WorkerRecordingTerminal{Status: "CANCELED", Position: 0}
+		}
+	case "storage-failure":
+		reader.err = recordings.ErrWorkerRecordingPersistence
+	case "unknown":
+		reader.err = os.ErrNotExist
+	}
+	reader.next.Health = reader.page.Health
+	return reader
 }

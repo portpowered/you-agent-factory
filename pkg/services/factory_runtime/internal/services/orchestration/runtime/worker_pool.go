@@ -76,6 +76,7 @@ type activeAttempt struct {
 type attemptLifecycle struct {
 	mu       sync.Mutex
 	pending  sync.WaitGroup
+	opening  sync.WaitGroup
 	stopped  bool
 	service  executeCapability
 	newID    factory.IDGenerator
@@ -167,6 +168,8 @@ func (l *attemptLifecycle) startWithPreparation(
 		cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 		return err
 	}
+	// Closing admission must join preparation before Worker Sessions takes its
+	// scoped control snapshot. Execution itself is joined after durable CANCEL.
 	request = attachAttemptProcessObserver(request, l, attempt)
 	var preparedTerminal attemptCompletionFunc
 	if prepare != nil {
@@ -176,6 +179,7 @@ func (l *attemptLifecycle) startWithPreparation(
 			cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 			close(attempt.done)
 			l.pending.Done()
+			l.opening.Done()
 			return err
 		}
 	}
@@ -201,6 +205,7 @@ func (l *attemptLifecycle) startWithPreparation(
 		}
 		terminal(context.Background(), request, result, err)
 	}
+	l.opening.Done()
 	if async {
 		go run()
 		return nil
@@ -269,7 +274,28 @@ func (l *attemptLifecycle) admitAttempt(
 	}
 	l.active[attempt.dispatchID] = attempt
 	l.pending.Add(1)
+	l.opening.Add(1)
 	return true, nil
+}
+
+func (l *attemptLifecycle) sealAdmission(ctx context.Context) error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	l.stopped = true
+	l.mu.Unlock()
+	drained := make(chan struct{})
+	go func() {
+		l.opening.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (l *attemptLifecycle) executeSafely(
@@ -680,18 +706,19 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	var stopErr error
+	if f.cfg != nil && f.cfg.attempts != nil {
+		stopErr = errors.Join(stopErr, f.cfg.attempts.sealAdmission(stopCtx))
+	}
+	// Commit exact CANCEL through Worker Sessions before either the outbox or
+	// pool's fallback cancellation can remove an owned physical attempt.
+	if f.cfg != nil && f.cfg.workerAttempts != nil {
+		stopErr = errors.Join(stopErr, f.cfg.workerAttempts.CloseRuntimeAttempts(stopCtx, f.cfg.runtimeID))
+	}
 	if f.dispatchPlan != nil {
 		stopErr = errors.Join(stopErr, f.dispatchPlan.Stop(stopCtx, reason))
 	}
 	if f.cfg != nil && f.cfg.attempts != nil {
 		stopErr = errors.Join(stopErr, f.cfg.attempts.stop(stopCtx))
-	}
-	// Detached execution admission and terminal callbacks are now drained.
-	// Seal and join this runtime's supervision scope, including compatibility
-	// invocations. The process supervisor retains peer Factory Sessions and
-	// remains available for their admission; only its lifecycle owner stops it.
-	if f.cfg != nil && f.cfg.workerAttempts != nil {
-		stopErr = errors.Join(stopErr, f.cfg.workerAttempts.CloseRuntimeAttempts(stopCtx, f.cfg.runtimeID))
 	}
 	return stopErr
 }

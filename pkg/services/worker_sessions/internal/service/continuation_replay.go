@@ -105,7 +105,8 @@ func completedContinuationIdentityMatches(opening workers.SessionPayload, input 
 func (r *registry) readContinuationTerminalResult(ctx context.Context, page recordings.WorkerCapturedActivityPage, input durableContinuationInput) (*workersessions.TerminalResult, error) {
 	stream := &continuationCaptureStream{reader: r.logs.reader,
 		request: recordings.WorkerCapturedActivityRequest{WorkerSessionID: input.SuccessorWorkerSessionID, Limit: 1},
-		page:    page, catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status}
+		page:    page, catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status,
+		head: uint64(page.Terminal.Position), health: recordings.WorkerRecordingStatusComplete, topic: page.Opening.ID.Topic}
 	defer stream.Close()
 	for {
 		delivery := stream.Next(ctx)
