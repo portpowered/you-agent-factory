@@ -9,6 +9,7 @@ import (
 
 // WorkerSessionCatalogEntry is a rebuildable identity index, never an execution authority.
 type WorkerSessionCatalogEntry struct {
+	WorkName              string `json:"workName,omitempty"`
 	Version               int    `json:"version"`
 	WorkerSessionID       string `json:"workerSessionId"`
 	RecordingID           string `json:"recordingId"`
