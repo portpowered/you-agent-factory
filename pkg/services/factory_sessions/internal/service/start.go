@@ -10,9 +10,11 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -34,7 +36,7 @@ func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.Sess
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions opening owner is required")
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return r.assembly.StartDurable(ctx, r.prepareDurableStartRequest(request))
+		return r.startDurable(ctx, r.prepareDurableStartRequest(request))
 	}
 	if request.Wait.TimeoutMillis < 0 {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "wait.timeoutMillis", Message: "timeout must not be negative"}
@@ -59,6 +61,21 @@ func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.Sess
 		return value.(factorysessions.SessionStartResult), nil
 	}
 	return r.startLive(ctx, request)
+}
+
+func (r *RuntimeOpening) startDurable(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	if err := legacyservice.ValidateCanonicalDurableStartRequest(request); err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	execution, ok := r.durable.(canonicaldurable.Service)
+	if !ok || execution == nil {
+		return factorysessions.SessionStartResult{}, fmt.Errorf("%w: canonical durable start service is required", factorysessions.ErrExecutionServiceNotConfigured)
+	}
+	started, err := execution.StartCanonical(ctx, legacyservice.CanonicalDurableStartRequest(request), request.Synchronous)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	return legacyservice.CanonicalDurableStartResult(started)
 }
 
 func (r *RuntimeOpening) prepareDurableStartRequest(request factorysessions.SessionStartRequest) factorysessions.SessionStartRequest {

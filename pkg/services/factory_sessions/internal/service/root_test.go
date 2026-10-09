@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"net/http"
 	"os"
@@ -550,5 +552,78 @@ func TestStartUsesInjectedDurableOwner(t *testing.T) {
 	}
 	if owner.syncCalls != 1 || owner.asyncCalls != 1 {
 		t.Fatalf("durable calls = %d/%d", owner.syncCalls, owner.asyncCalls)
+	}
+}
+
+type openingCanonicalDurableOwner interface {
+	canonicaldurable.Service
+}
+
+type openingDurableStartStub struct {
+	durableexecution.Service
+	openingCanonicalDurableOwner
+	request     factorysessions.StartRequest
+	ctx         context.Context
+	synchronous bool
+	calls       int
+	failure     error
+}
+
+func (s *openingDurableStartStub) StartCanonical(ctx context.Context, request factorysessions.StartRequest, synchronous bool) (durableexecution.CanonicalStartResult, error) {
+	s.ctx, s.request, s.synchronous = ctx, request, synchronous
+	s.calls++
+	if s.failure != nil {
+		return durableexecution.CanonicalStartResult{}, s.failure
+	}
+	async := factorysessions.AsyncStartResult{SessionID: request.RequestID, Status: "running"}
+	if synchronous {
+		return durableexecution.CanonicalStartResult{Sync: &factorysessions.SyncStartResult{AsyncStartResult: async}}, nil
+	}
+	return durableexecution.CanonicalStartResult{Async: &async}, nil
+}
+
+func TestRuntimeOpeningUsesInjectedDurableStartOwner(t *testing.T) {
+	t.Parallel()
+	for _, synchronous := range []bool{false, true} {
+		t.Run(fmt.Sprint(synchronous), func(t *testing.T) {
+			t.Parallel()
+			owner := &openingDurableStartStub{}
+			// An Assembly without a gateway cannot supply a replacement durable owner.
+			opening := &RuntimeOpening{assembly: &legacyservice.Assembly{}, durable: owner}
+			request := factorysessions.SessionStartRequest{
+				Mode: factorysessions.SessionOperationModeDurable, FolderPath: " /selected ",
+				Correlation: factorysessions.SessionOperationCorrelation{RequestID: " selected-request "},
+				Synchronous: synchronous, Args: map[string]any{"selected": "original"},
+				WorkerSettings: &factoryruntime.JavaScriptWorkerSettings{},
+			}
+			result, err := opening.Start(t.Context(), request)
+			if err != nil || result.SessionID != "selected-request" || result.Status != "running" || result.Mode != request.Mode {
+				t.Fatalf("start = (%+v, %v)", result, err)
+			}
+			if owner.calls != 1 || owner.ctx != t.Context() || owner.synchronous != synchronous || owner.request.ProjectRoot != "/selected" {
+				t.Fatalf("durable request = %+v, calls = %d", owner.request, owner.calls)
+			}
+			if (result.Sync != nil) != synchronous || (result.Async != nil) == synchronous {
+				t.Fatalf("mode result = %+v", result)
+			}
+			owner.request.Args["selected"] = "changed"
+			if request.Args["selected"] != "original" || owner.request.WorkerSettings == request.WorkerSettings {
+				t.Fatal("durable owner retained mutable caller selections")
+			}
+			cause := &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}
+			owner.failure = cause
+			if _, err := opening.Start(t.Context(), request); !errors.Is(err, cause) {
+				t.Fatalf("typed cause = %v", err)
+			}
+			owner.failure = nil
+			if _, err := opening.Start(t.Context(), request); err != nil || owner.calls != 3 {
+				t.Fatalf("corrected retry = %v, calls = %d", err, owner.calls)
+			}
+			request.Wait.TimeoutMillis = -1
+			var invalid *factorysessions.DetachedRequestError
+			if _, err := opening.Start(t.Context(), request); !errors.As(err, &invalid) || invalid.Field != "wait.timeoutMillis" || owner.calls != 3 {
+				t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
+			}
+		})
 	}
 }

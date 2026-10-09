@@ -120,21 +120,24 @@ var (
 )
 
 // NewRuntimeOpening keeps the private implementation behind the Sessions Wire boundary.
-func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableOpening,
-	initialEngine *RuntimeInitialEngine, executionBinding *ExecutionBinding,
+func NewRuntimeOpening(assembly RuntimeAssembly, durable DurableExecutionService,
+	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
+	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
+	binding *RuntimeOpeningBinding, runtimeRoot FactoryRuntimeRoot,
 	replayBehavior *HistoricalReplayBehavior, recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeScopeService, clock factoryruntime.Clock,
-	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
+	recordingsRuntime recordings.RuntimeScopeService, executionBinding *ExecutionBinding,
+	providerOverride ProviderOverrideService, runtimeLogs factoryruntime.RuntimeLogOwner,
+	logger *zap.Logger, clock factoryruntime.Clock, resolveClock factoryruntime.ClockResolver,
+	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
-	runtimeLogs factoryruntime.RuntimeLogOwner,
-	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
-	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
-	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
-	assembly RuntimeAssembly, definitions factorydefinitions.Service, resolveHome factorysessions.HomeDirectoryResolver,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	definitions factorydefinitions.Service, inventory recordings.RecordedSessionInventory,
 ) *RuntimeOpening {
-	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
-		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
-		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding, runtimeRoot, snapshots, logger, assembly, definitions, resolveHome)
+	return service.NewRuntimeOpening(assembly, durable, preparation, snapshots, resources, durableOpening,
+		initialEngine, completion, binding, runtimeRoot, replayBehavior, recordingsService, recordingsRuntime,
+		executionBinding, providerOverride, runtimeLogs, logger, clock, resolveClock, generateSessionID,
+		generateRuntimeInstanceID, resolveHome, definitions, inventory)
 }
 
 // RuntimeOpeningStart selects the fixed opening operation without retaining Root.

@@ -271,13 +271,21 @@ func (s *Service) ListSessions(ctx context.Context, request factorysessions.List
 
 // StartDurable admits persisted execution through the process-owned durable service.
 func (s *Service) StartDurable(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
-	if err := validateCanonicalStartRequest(request); err != nil {
+	if err := ValidateCanonicalDurableStartRequest(request); err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	if request.Mode != factorysessions.SessionOperationModeDurable {
-		return factorysessions.SessionStartResult{}, canonicalRequestError("mode", "mode must be durable")
-	}
 	return s.startCanonicalDurable(ctx, request)
+}
+
+// ValidateCanonicalDurableStartRequest preserves mode-neutral admission validation.
+func ValidateCanonicalDurableStartRequest(request factorysessions.SessionStartRequest) error {
+	if err := validateCanonicalStartRequest(request); err != nil {
+		return err
+	}
+	if request.Mode != factorysessions.SessionOperationModeDurable {
+		return canonicalRequestError("mode", "mode must be durable")
+	}
+	return nil
 }
 
 // Invoke executes one mode-neutral invocation through the already-bound
@@ -381,11 +389,16 @@ func (s *Service) startCanonicalDurable(
 			"%w: canonical durable start service is required", factorysessions.ErrExecutionServiceNotConfigured,
 		)
 	}
-	legacyRequest := canonicalDurableStartRequest(request)
+	legacyRequest := CanonicalDurableStartRequest(request)
 	started, err := canonicalExecution.StartCanonical(ctx, legacyRequest, request.Synchronous)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
+	return CanonicalDurableStartResult(started)
+}
+
+// CanonicalDurableStartResult projects and clones the selected durable result.
+func CanonicalDurableStartResult(started durableexecution.CanonicalStartResult) (factorysessions.SessionStartResult, error) {
 	if started.Sync != nil {
 		syncResult := started.Sync
 		return factorysessions.SessionStartResult{
@@ -414,7 +427,8 @@ func canonicalStartedStatus(status, fallback string) string {
 	return fallback
 }
 
-func canonicalDurableStartRequest(
+// CanonicalDurableStartRequest snapshots the mode-neutral selections for durable execution.
+func CanonicalDurableStartRequest(
 	request factorysessions.SessionStartRequest,
 ) factorysessions.StartRequest {
 	source := cloneCanonicalSource(request.Source)

@@ -34,6 +34,7 @@ import (
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
 	assembly                  *legacyservice.Assembly
+	durable                   durableexecution.Service
 	startFlights              singleflight.Group
 	factoryDefinitions        factorydefinitions.Service
 	resolveHome               factorysessions.HomeDirectoryResolver
@@ -61,21 +62,23 @@ type RuntimeOpening struct {
 }
 
 // NewRuntimeOpening constructs inert behavior; acquisition happens only on a request.
-func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableOpening,
-	initialEngine *RuntimeInitialEngine, executionBinding *ExecutionBinding,
+func NewRuntimeOpening(assembly roles.RuntimeAssembly, durable durableexecution.Service,
+	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
+	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
+	binding *RuntimeOpeningBinding, runtimeRoot FactoryRuntimeRoot,
 	replayBehavior *recordingreplay.Behavior, recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeScopeService, clock factoryruntime.Clock,
-	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
+	recordingsRuntime recordings.RuntimeScopeService, executionBinding *ExecutionBinding,
+	providerOverride ProviderOverrideService, runtimeLogs factoryruntime.RuntimeLogOwner,
+	logger *zap.Logger, clock factoryruntime.Clock, resolveClock factoryruntime.ClockResolver,
+	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
-	runtimeLogs factoryruntime.RuntimeLogOwner,
-	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
-	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
-	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
-	assembly roles.RuntimeAssembly, definitions factorydefinitions.Service, resolveHome factorysessions.HomeDirectoryResolver,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	definitions factorydefinitions.Service, inventory recordings.RecordedSessionInventory,
 ) *RuntimeOpening {
 	concrete, _ := assembly.(*legacyservice.Assembly)
 	return &RuntimeOpening{
-		assembly: concrete, factoryDefinitions: definitions, resolveHome: resolveHome,
+		assembly: concrete, durable: durable, factoryDefinitions: definitions, resolveHome: resolveHome,
 		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger, replayInputs: recordingsRuntime,
 		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
