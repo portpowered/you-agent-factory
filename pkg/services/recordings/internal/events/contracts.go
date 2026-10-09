@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,21 +80,34 @@ var _ recordings.WorkerSessionWorkProjectionReader = (*FactoryEventHistory)(nil)
 // CurrentWorkerSessionWorkFacts reads only matching materialized dispatches;
 // activation and canonical append own preparation, including a seeded prefix.
 func (h *FactoryEventHistory) CurrentWorkerSessionWorkFacts(ctx context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
+	facts, visits, err := h.currentWorkerSessionWorkFacts(ctx, workID)
+	if err == nil {
+		h.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+			Name:   "worker_sessions.read.selected_dispatches",
+			Labels: map[string]string{"dispatch_visits": strconv.Itoa(visits)},
+		})
+	}
+	return facts, err
+}
+
+// Telemetry runs after releasing the append barrier so a recorder can inspect
+// ledger statistics without blocking the writer or reacquiring a held lock.
+func (h *FactoryEventHistory) currentWorkerSessionWorkFacts(ctx context.Context, workID string) (recordings.WorkerSessionWorkFacts, int, error) {
 	if err := ctx.Err(); err != nil {
-		return recordings.WorkerSessionWorkFacts{}, err
+		return recordings.WorkerSessionWorkFacts{}, 0, err
 	}
 	if h == nil {
-		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("factory event history is unavailable")
+		return recordings.WorkerSessionWorkFacts{}, 0, fmt.Errorf("factory event history is unavailable")
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if err := ctx.Err(); err != nil {
-		return recordings.WorkerSessionWorkFacts{}, err
+		return recordings.WorkerSessionWorkFacts{}, 0, err
 	}
 	if h.sessionProjectionErr != nil {
-		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
+		return recordings.WorkerSessionWorkFacts{}, 0, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
 	}
-	facts := h.sessionProjection.WorkerSessionWorkFacts(workID)
+	facts, visits := h.sessionProjection.WorkerSessionWorkFacts(workID)
 	facts.StreamGenerationID = h.streamGenerationID
 	for id, cursor := range facts.StateCursors {
 		cursor.StreamGenerationID = h.streamGenerationID
@@ -103,7 +117,7 @@ func (h *FactoryEventHistory) CurrentWorkerSessionWorkFacts(ctx context.Context,
 		cursor.StreamGenerationID = h.streamGenerationID
 		facts.ResponseCursors[id] = cursor
 	}
-	return facts, nil
+	return facts, visits, nil
 }
 
 // CurrentSessionProjectionFacts returns detached event-derived facts maintained

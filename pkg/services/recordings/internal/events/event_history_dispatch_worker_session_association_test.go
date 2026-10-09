@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -35,25 +36,7 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 	if err := seeded.SeedCanonicalEvents(prefix); err != nil {
 		t.Fatal(err)
 	}
-	before := seeded.CanonicalHistoryReadStats()
-	facts, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
-	if err != nil || !facts.KnownWork || len(facts.Associations) != 1 || facts.Associations["dispatch-selected"].WorkerSessionID != "worker-selected" {
-		t.Fatalf("seeded selected facts = %+v, %v", facts, err)
-	}
-	if facts.StreamGenerationID != seeded.StreamGenerationID() || facts.StateCursors["dispatch-selected"].StreamGenerationID != facts.StreamGenerationID {
-		t.Fatal("selected facts lost the generation fence")
-	}
-	if cursor := facts.ResponseCursors[dispatchID]; cursor.StreamGenerationID != facts.StreamGenerationID || int(cursor.Sequence) != prefix[len(prefix)-1].Context.Sequence {
-		t.Fatalf("seeded response cursor = %+v", cursor)
-	}
-	if seeded.CanonicalHistoryReadStats() != before {
-		t.Fatal("selected projection read canonical history")
-	}
-	*facts.Associations["dispatch-selected"].Model = "poisoned"
-	again, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
-	if err != nil || *again.Associations["dispatch-selected"].Model != "model-one" {
-		t.Fatalf("seeded facts were not detached: %+v, %v", again, err)
-	}
+	assertSeededWorkerSessionWorkFacts(t, seeded, dispatchID, prefix[len(prefix)-1].Context.Sequence)
 	record.DispatchID, record.Dispatch.DispatchID = "dispatch-next", "dispatch-next"
 	seeded.RecordWorkstationRequest(2, record, when.Add(time.Second))
 	seeded.RecordDispatchWorkerSessionAssociation(2, "dispatch-next", "worker-next", "turn-next", when.Add(time.Second))
@@ -68,6 +51,29 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 	}
 	if _, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected"); err != nil {
 		t.Fatalf("cancellation poisoned next read: %v", err)
+	}
+}
+
+func assertSeededWorkerSessionWorkFacts(t *testing.T, seeded *FactoryEventHistory, dispatchID string, responseSequence int) {
+	t.Helper()
+	before := seeded.CanonicalHistoryReadStats()
+	facts, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
+	if err != nil || !facts.KnownWork || len(facts.Associations) != 1 || facts.Associations["dispatch-selected"].WorkerSessionID != "worker-selected" {
+		t.Fatalf("seeded selected facts = %+v, %v", facts, err)
+	}
+	if facts.StreamGenerationID != seeded.StreamGenerationID() || facts.StateCursors["dispatch-selected"].StreamGenerationID != facts.StreamGenerationID {
+		t.Fatal("selected facts lost the generation fence")
+	}
+	if cursor := facts.ResponseCursors[dispatchID]; cursor.StreamGenerationID != facts.StreamGenerationID || int(cursor.Sequence) != responseSequence {
+		t.Fatalf("seeded response cursor = %+v", cursor)
+	}
+	if seeded.CanonicalHistoryReadStats() != before {
+		t.Fatal("selected projection read canonical history")
+	}
+	*facts.Associations["dispatch-selected"].Model = "poisoned"
+	again, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
+	if err != nil || *again.Associations["dispatch-selected"].Model != "model-one" {
+		t.Fatalf("seeded facts were not detached: %+v, %v", again, err)
 	}
 }
 
@@ -160,4 +166,59 @@ func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_IgnoresIncom
 func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_NilHistoryDoesNotPanic(t *testing.T) {
 	var history *FactoryEventHistory
 	history.RecordDispatchWorkerSessionAssociation(4, "dispatch-1", "worker-session-1", "turn-1", time.Now())
+}
+
+func TestFactoryEventHistory_WorkerSessionWorkReadMetricsCountActualVisits(t *testing.T) {
+	t.Parallel()
+	when := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return when })
+	request := func(id, workID string) {
+		history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{DispatchID: id, Dispatch: work.WorkDispatch{
+			DispatchID: id, TransitionID: "station",
+			InputTokens: workers.InputTokens(workers.Token{ID: "token-" + id, Color: workers.Color{WorkID: workID}}),
+		}}, when)
+	}
+	request("selected", "work-selected")
+	request("unassociated", "work-selected")
+	request("sibling", "work-sibling")
+	history.RecordDispatchWorkerSessionAssociation(1, "selected", "worker-selected", "turn-selected", when)
+	var metrics []recordings.RuntimeReadMetric
+	history.SetRuntimeReadMetricsRecorder(func(metric recordings.RuntimeReadMetric) {
+		metrics = append(metrics, metric)
+		if len(metrics) == 1 {
+			// The callback may acquire the write barrier. This commit must appear
+			// on the next read without changing the completed read's visit count.
+			request("next", "work-selected")
+		}
+	})
+	for index, tc := range []struct {
+		workID string
+		visits string
+	}{
+		{"work-selected", "2"}, {"work-selected", "3"}, {"missing", "0"},
+	} {
+		facts, err := history.CurrentWorkerSessionWorkFacts(t.Context(), tc.workID)
+		if err != nil || len(metrics) != index+1 {
+			t.Fatalf("selected read = %+v, %v, metrics=%+v", facts, err, metrics)
+		}
+		metric := metrics[index]
+		if metric.Name != "worker_sessions.read.selected_dispatches" || metric.Labels["dispatch_visits"] != tc.visits {
+			t.Fatalf("metric=%+v, want dispatch visits=%s", metric, tc.visits)
+		}
+	}
+	prefix := history.CanonicalEvents()
+	metric := metrics[len(metrics)-1]
+	if metric.Name != "factory_runtime.read.canonical_history" || metric.Labels["canonical_events_copied"] != strconv.Itoa(len(prefix)) {
+		t.Fatalf("full read did not report actual copied events: %+v", metric)
+	}
+	history.RecordCanonicalHistoryReduction()
+	if metrics[len(metrics)-1].Name != "factory_runtime.read.full_history_reduction" {
+		t.Fatalf("full reduction was not observed: %+v", metrics)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	before := len(metrics)
+	if _, err := history.CurrentWorkerSessionWorkFacts(ctx, "work-selected"); !errors.Is(err, context.Canceled) || len(metrics) != before {
+		t.Fatalf("canceled read=%v, metrics before=%d after=%d", err, before, len(metrics))
+	}
 }

@@ -500,7 +500,7 @@ func (index *workerSessionWorkIndex) updateMembership(dispatchID string, state i
 
 // WorkerSessionWorkFacts selects from the exact Work index. The ledger holds
 // its read lock across selection and supplies the generation fence.
-func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) sessionprojectionfacts.WorkerSessionWorkFacts {
+func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) (sessionprojectionfacts.WorkerSessionWorkFacts, int) {
 	facts := sessionprojectionfacts.WorkerSessionWorkFacts{
 		Associations:    make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
 		Requests:        make(map[string]interfaces.FactoryWorldDispatch),
@@ -511,14 +511,16 @@ func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID st
 		World:           interfaces.FactoryWorldState{ActiveDispatches: make(map[string]interfaces.FactoryWorldDispatch)},
 	}
 	if projection == nil || projection.reducer == nil || projection.workerWork == nil {
-		return facts
+		return facts, 0
 	}
 	index, state := projection.workerWork, projection.reducer.stateValue
 	_, facts.KnownWork = index.known[workID]
 	if item, ok := state.WorkItemsByID[workID]; ok {
 		facts.KnownWork, facts.WorkName = true, item.DisplayName
 	}
+	visits := 0
 	for dispatchID := range index.byWork[workID] {
+		visits++
 		association, ok := index.associations[dispatchID]
 		if !ok || association.WorkerSessionID == "" {
 			continue
@@ -536,11 +538,7 @@ func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID st
 		}
 		if interruption, ok := index.interruptions[dispatchID]; ok {
 			facts.Interruptions[dispatchID] = cloneWorkerFactInterruption(interruption)
-			if _, completed := index.completions[dispatchID]; !completed && len(index.interruptedWorkIDs[dispatchID]) > 0 {
-				request := facts.Requests[dispatchID]
-				request.WorkItemIDs = append([]string(nil), index.interruptedWorkIDs[dispatchID]...)
-				facts.Requests[dispatchID] = request
-			}
+			facts.Requests[dispatchID] = index.interruptedRequest(dispatchID, facts.Requests[dispatchID])
 		}
 		if active, ok := state.ActiveDispatches[dispatchID]; ok {
 			facts.World.ActiveDispatches[dispatchID] = cloneWorkerFactDispatch(active)
@@ -552,7 +550,14 @@ func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID st
 			facts.World.ProviderSessions = append(facts.World.ProviderSessions, interfaces.CloneFactoryWorldProviderSessionRecord(state.ProviderSessions[position]))
 		}
 	}
-	return facts
+	return facts, visits
+}
+
+func (index *workerSessionWorkIndex) interruptedRequest(dispatchID string, request interfaces.FactoryWorldDispatch) interfaces.FactoryWorldDispatch {
+	if _, completed := index.completions[dispatchID]; !completed && len(index.interruptedWorkIDs[dispatchID]) > 0 {
+		request.WorkItemIDs = append([]string(nil), index.interruptedWorkIDs[dispatchID]...)
+	}
+	return request
 }
 
 func cloneWorkerFactString(value *string) *string {

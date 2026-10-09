@@ -98,6 +98,39 @@ func observationMetadata() *observation {
 	}
 }
 
+func TestListObservationsCandidateVisitsCountDiscardedEntries(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	for _, id := range []string{"selected", "sibling", "removed"} {
+		metadata := observationMetadata()
+		metadata.factorySessionID = "owned"
+		if id == "sibling" {
+			metadata.workIDs = []string{"other-work"}
+		}
+		r.observations[id] = metadata
+		r.indexObservationBySessionWorkLocked(id, metadata)
+		if id != "removed" {
+			r.sessions[id] = observationSession(id, workersessions.StateRunning)
+		}
+	}
+	for _, tc := range []struct {
+		name, scope, work string
+		visits, rows      int
+	}{
+		{"selected", "owned", "work-1", 2, 1},
+		{"empty", "owned", "empty-work", 0, 0},
+		{"other-session", "other", "work-1", 0, 0},
+		{"unscoped", "", "work-1", 3, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ids, visits := r.observationCandidatesForWork(workersessions.ListObservationsRequest{FactorySessionID: tc.scope, WorkID: tc.work})
+			if visits != tc.visits || len(ids) != tc.rows {
+				t.Fatalf("visits=%d rows=%d, want visits=%d rows=%d", visits, len(ids), tc.visits, tc.rows)
+			}
+		})
+	}
+}
+
 type listUsageRecordingFake struct {
 	observationRecordingReaderStub
 	loads     int

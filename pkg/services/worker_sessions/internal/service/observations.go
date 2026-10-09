@@ -334,7 +334,8 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		return workersessions.ListObservationsResult{}, err
 	}
 
-	ids := r.observationCandidatesForWork(req)
+	ids, candidateVisits := r.observationCandidatesForWork(req)
+	r.logger.Debug("worker session observation candidate selection", "candidate_visits", candidateVisits, "candidate_count", len(ids))
 	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")

@@ -178,6 +178,7 @@ func (h *FactoryEventHistory) RecordCanonicalHistoryReduction() {
 		return
 	}
 	h.fullHistoryReductions.Add(1)
+	h.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{Name: "factory_runtime.read.full_history_reduction"})
 }
 
 // SeedCanonicalEvents restores an already-recorded event prefix before the
