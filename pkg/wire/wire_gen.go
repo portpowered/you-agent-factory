@@ -749,7 +749,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v199 := provideWorkerWorkAttributionReader(edges2, v129, v120, v182, v113)
 	workerOwnerRecoveryOperation := wire5.NewWorkerOwnerRecoveryOperation(v165, v199)
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(v182, serviceService, factorydefinitionsService, workService, modelsService, recordingsService, workflowPreviewOperation, promptTemplates, factoryStatusProjector, handler, contentPreparation, v187, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, workersessionsService, workerOwnerRecoveryOperation, v129, source, v143, v199)
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(v182, serviceService, factorydefinitionsService, workService, modelsService, recordingsService, workflowPreviewOperation, promptTemplates, factoryStatusProjector, handler, contentPreparation, v187, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, workersessionsService, workerOwnerRecoveryOperation, v129, source, v143, v199, logger)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -23,7 +24,7 @@ import (
 // tests that exercise individual generated operations with narrow fakes.
 // Production composition injects the service-owned adapter through NewServer.
 func newServerFromRoles(
-	runtime apisurface.RuntimeAPI,
+	runtime currentFactoryTestAPI,
 	factoryStatus apisurface.FactoryStatusAPI,
 	sessions apisurface.LiveSessionAPI,
 	workAPI apisurface.WorkAPI,
@@ -47,7 +48,7 @@ func newServerFromRoles(
 	logger *zap.Logger,
 ) *Server {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Runtime: runtime, FactoryStatus: factoryStatus,
+		CurrentFactory: currentFactoryTestReader{runtime}, FactoryStatus: factoryStatus,
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview: workflowPreview,
@@ -189,4 +190,16 @@ func (r *completeWorkTestRoot) PrepareInvocationInput(ctx context.Context, reque
 }
 func (*completeWorkTestRoot) ResolvePrimaryResult(context.Context, work.PrimaryResultSelectionInput) (work.PrimaryResultSelection, error) {
 	return work.PrimaryResultSelection{}, errWorkFixtureUnavailable
+}
+
+// Current Factory fixtures retain their existing public read method; the HTTP
+// adapter consumes only definition reads, without a runtime or event service.
+type currentFactoryTestAPI interface {
+	GetCurrentFactory(context.Context) (factoryapi.Factory, error)
+}
+
+type currentFactoryTestReader struct{ source currentFactoryTestAPI }
+
+func (reader currentFactoryTestReader) GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error) {
+	return reader.source.GetCurrentFactory(ctx)
 }

@@ -100,7 +100,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 }
 
 func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
-	namedFactory, err := s.runtime.GetCurrentFactory(r.Context())
+	namedFactory, err := s.currentFactory.GetCurrentNamedFactory(r.Context())
 	if err != nil {
 		switch {
 		case errors.Is(err, apisurface.ErrCurrentFactoryNotFound):

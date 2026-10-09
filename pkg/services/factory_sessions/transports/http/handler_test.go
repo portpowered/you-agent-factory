@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type liveSessionAPIFake struct {
@@ -331,4 +332,47 @@ func (reader *recordedListingDurableReader) ListSessions(_ context.Context, requ
 	reader.calls++
 	reader.request = request
 	return reader.result, nil
+}
+
+// Definition reads do not require a selected runtime or an event subscriber.
+type currentFactoryReadFake struct {
+	value factoryapi.Factory
+	err   error
+}
+
+func (fake currentFactoryReadFake) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error) {
+	return fake.value, fake.err
+}
+
+func TestHandlerCurrentFactoryUsesInjectedDefinitionReader(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		reader currentFactoryReadFake
+		status int
+		body   string
+	}{
+		{"definition", currentFactoryReadFake{value: factoryapi.Factory{Name: "selected-definition"}}, http.StatusOK, `"name":"selected-definition"`},
+		{"missing", currentFactoryReadFake{err: apisurface.ErrCurrentFactoryNotFound}, http.StatusNotFound, `"code":"NOT_FOUND"`},
+		{"read failure", currentFactoryReadFake{err: errors.New("definition unavailable")}, http.StatusInternalServerError, `"code":"INTERNAL_ERROR"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			core, logs := observer.New(zap.ErrorLevel)
+			handler := NewHandler(Dependencies{CurrentFactory: test.reader}, zap.New(core))
+			response := httptest.NewRecorder()
+			handler.GetCurrentFactory(response, httptest.NewRequest(http.MethodGet, "/factory/current", nil))
+			if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {
+				t.Fatalf("current definition = %d %s, want %d containing %s", response.Code, response.Body.String(), test.status, test.body)
+			}
+			if test.status == http.StatusInternalServerError {
+				entries := logs.FilterMessage("get current factory failed").All()
+				if len(entries) != 1 || entries[0].ContextMap()["error"] != test.reader.err.Error() {
+					t.Fatalf("definition failure diagnostics = %v, want one report through injected logger", entries)
+				}
+			} else if logs.Len() != 0 {
+				t.Fatalf("definition diagnostics = %v, want no internal failure report", logs.All())
+			}
+		})
+	}
 }

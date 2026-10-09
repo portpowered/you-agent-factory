@@ -43,7 +43,7 @@ func newAPITestServer(roles any) *api.Server {
 		)
 	}
 	return newAPIServerFromRoles(
-		apiTestRole[apisurface.RuntimeAPI](roles),
+		apiTestRole[currentFactoryTestAPI](roles),
 		nil,
 		apiTestRole[apisurface.LiveSessionAPI](roles),
 		apiTestRole[apisurface.WorkAPI](roles),

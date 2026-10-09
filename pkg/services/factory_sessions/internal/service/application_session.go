@@ -127,7 +127,6 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 // SessionPresentation exposes the presentation values for one selected live
 // session. HTTP peer services are injected directly by process composition.
 type SessionPresentation struct {
-	FactoryRuntime       factoryruntime.Service
 	ModelsScope          models.RuntimeScopeRef
 	WorkerSessions       workersessions.ObservationService
 	Logger               *zap.Logger
@@ -144,7 +143,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		return SessionPresentation{}, err
 	}
 	return SessionPresentation{
-		FactoryRuntime:       selectedRuntimeService(bound),
 		ModelsScope:          bound.ModelsScope,
 		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
