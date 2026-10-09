@@ -794,12 +794,15 @@ func assertConsumedTokenName(t *testing.T, tokens []workerexecution.Token, wantN
 	}
 }
 
-func TestResultWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
+func TestResultWhileAutomaticTicksPaused_CompletesBeforeResume(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	dispatchSub := &mockSubsystem{
 		group: subsystems.Dispatcher,
-		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if len(snapshot.DispatchHistory) > 0 {
+				return nil, nil
+			}
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
 					Dispatch: work.WorkDispatch{
@@ -849,12 +852,15 @@ func TestResultWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
 	if err := engine.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick while paused with buffered result: %v", err)
 	}
-	if len(engine.RunningDispatches()) != 1 {
-		t.Fatalf("running dispatches = %d, want 1 while paused", len(engine.RunningDispatches()))
+	if len(engine.RunningDispatches()) != 0 {
+		t.Fatalf("running dispatches = %d, want 0 after paused completion", len(engine.RunningDispatches()))
+	}
+	if dispatchSub.callCount != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1 before resume", dispatchSub.callCount)
 	}
 	snap := engine.GetRuntimeStateSnapshot()
-	if len(snap.DispatchHistory) != 0 {
-		t.Fatalf("dispatch history = %d, want 0 while paused", len(snap.DispatchHistory))
+	if len(snap.DispatchHistory) != 1 {
+		t.Fatalf("dispatch history = %d, want 1 while paused", len(snap.DispatchHistory))
 	}
 
 	paused = false
@@ -879,7 +885,10 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 	marking := petri.NewMarking("test-wf")
 	dispatchSub := &mockSubsystem{
 		group: subsystems.Dispatcher,
-		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if len(snapshot.DispatchHistory) > 0 {
+				return nil, nil
+			}
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
 					Dispatch: work.WorkDispatch{
@@ -926,8 +935,11 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 	if err := engine.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick while paused: %v", err)
 	}
-	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 0 {
-		t.Fatal("dispatch completed while paused")
+	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+		t.Fatal("dispatch did not complete while paused")
+	}
+	if dispatchSub.callCount != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1 before resume", dispatchSub.callCount)
 	}
 
 	paused = false
@@ -940,12 +952,15 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 	}
 }
 
-func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
+func TestDispatchResultHookWhileAutomaticTicksPaused_CompletesBeforeResume(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	dispatchSub := &mockSubsystem{
 		group: subsystems.Dispatcher,
-		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if len(snapshot.DispatchHistory) > 0 {
+				return nil, nil
+			}
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
 					Dispatch: work.WorkDispatch{
@@ -999,11 +1014,17 @@ func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testi
 	if err := engine.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick while paused with buffered hook result: %v", err)
 	}
-	if len(engine.RunningDispatches()) != 1 {
-		t.Fatalf("running dispatches = %d, want 1 while paused", len(engine.RunningDispatches()))
+	if len(engine.RunningDispatches()) != 0 {
+		t.Fatalf("running dispatches = %d, want 0 after paused completion", len(engine.RunningDispatches()))
 	}
-	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 0 {
-		t.Fatal("dispatch completed while paused")
+	if dispatchSub.callCount != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1 before resume", dispatchSub.callCount)
+	}
+	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+		t.Fatal("dispatch did not complete while paused")
+	}
+	if dispatchSub.callCount != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1 before resume", dispatchSub.callCount)
 	}
 
 	paused = false

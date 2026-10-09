@@ -17,6 +17,36 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestRestoredDispatchCompletesOnceFromRecordedResult(t *testing.T) {
+	t.Parallel()
+	marking := petri.NewMarking("restored")
+	eng := newTestFactoryEngine(buildTestNet(), marking, nil)
+	entry := interfaces.DispatchEntry{DispatchID: "accepted", TransitionID: "process", ConsumedTokens: []workerexecution.Token{{ID: "input", Color: workerexecution.Color{WorkID: "work"}}}}
+	if err := eng.SeedRestoredDispatch(entry); err != nil {
+		t.Fatal(err)
+	}
+	entry.ConsumedTokens[0].Color.WorkID = "mutated"
+	if eng.GetRuntimeStateSnapshot().Dispatches["accepted"].ConsumedTokens[0].Color.WorkID != "work" {
+		t.Fatal("restored claims alias caller-owned tokens")
+	}
+	if err := eng.SeedRestoredDispatch(entry); err == nil {
+		t.Fatal("duplicate restored claim was accepted")
+	}
+	result := workerexecution.WorkResult{DispatchID: "accepted", TransitionID: "process", Outcome: workerexecution.OutcomeAccepted}
+	eng.appendObservedResult(result)
+	eng.appendObservedResult(result)
+	if len(eng.runtimeState.Results) != 1 {
+		t.Fatal("duplicate delivery was observed twice in one tick")
+	}
+	eng.retireCompletedDispatches(eng.runtimeState.Results, nil)
+	eng.runtimeState.Results = nil
+	eng.appendObservedResult(result)
+	snapshot := eng.GetRuntimeStateSnapshot()
+	if len(eng.runtimeState.Results) != 0 || len(eng.runtimeState.DispatchHistory) != 1 || eng.runtimeState.InFlightCount != 0 {
+		t.Fatalf("duplicate after completion changed bookkeeping: %+v", snapshot)
+	}
+}
+
 func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *testing.T) {
 	original := interfaces.TokenMutationRecord{
 		DispatchID:   "dispatch-petri-1",

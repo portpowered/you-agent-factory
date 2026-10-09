@@ -29,11 +29,13 @@ to the addressed session id.
 
 When a session has a configured retained current-board Recording, a clean
 daemon restart restores that session's Work board before the session is ready.
-Process-bound dispatches that were active at stop are recorded as interrupted,
-their old Worker Sessions are not exposed as live `RUNNING`, and associated
-non-terminal Work is re-armed at its saved logical state for normal guards and
-scheduling. Work and session inspection therefore keep the original
-identities and interruption history without requiring an explicit resume.
+An active dispatch with a complete recorded accepted agent response completes
+from that output without running the agent again. Dispatches without a recorded
+agent response are recorded as interrupted, their old Worker Sessions are not
+exposed as live `RUNNING`, and associated non-terminal Work is re-armed at its
+saved logical state for normal guards and scheduling. Work and session
+inspection keep the original identities and interruption history without
+requiring an explicit resume.
 
 For the end-to-end agent playbook (read order, submission ingress, operator
 loop), see `you docs agents`. For submitted-work contracts
@@ -477,13 +479,13 @@ While a live Factory Session is paused:
 
 - `POST /factory-sessions/{session_id}/work` and `you submit` can still accept
   new work; accepted submissions stay buffered and are not applied until resume.
-- Completed worker results stay buffered and are not routed through result
-  handling until resume.
+- Results from dispatches already started are applied to Work while paused.
+  Their output Work is retained, and new dispatches wait for resume.
 - `GET /factory-sessions/{session_id}/status` and `you session show` report
   `factoryState: PAUSED` (or the equivalent lifecycle status on session reads)
-  without treating buffered work as already processed.
-- A wake signal observed while paused does not drop buffered submissions or
-  results; resume re-signals the runtime so that work can drain.
+  while showing the applied results.
+- A wake signal observed while paused does not drop submissions or results.
+  Resume re-signals the runtime so that pending dispatches can proceed.
 
 After a successful resume, inspect progress with `you session show`,
 `GET /factory-sessions/{session_id}`, or
