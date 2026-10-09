@@ -1,8 +1,12 @@
-"""Isolated diagnostics and authored mission-policy contract tests."""
+"""Checker units, controlled lint regressions, and authored mission-policy contracts."""
 
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
+import io
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'factory/scripts/lint-lane-prompts.py'
@@ -160,6 +164,31 @@ Do not invent gates that demand repeated or escalating proof; preserve independe
 
 
 class LanePromptPolicyTests(unittest.TestCase):
+    def test_changed_line_checker_accepts_retained_caps_and_explanations(self):
+        source = '''For oversized recovery, retain the independently mergeable PR slice with at
+most 2 stories, about 8 criteria total, and JSON below 20 KB (20,000 UTF-8 bytes)
+with status headroom.
+Do not impose a changed-line budget. Changed-line filtering explains the diff.
+The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60 seconds.
+'''
+        self.assertEqual(policy.check_changed_line_budgets({'lead/AGENTS.md': source}), [])
+
+    def test_changed_line_checker_rejects_original_and_wrapped_mixed_case(self):
+        source = 'most 2 stories, about 8 criteria total, about 2,000 changed lines (added plus deleted), and JSON below 20 KB.'
+        path = 'factory/workstations/project-lead/AGENTS.md'
+        for text in (source, source.upper().replace(' ', '\n\t')):
+            with self.subTest(text=text):
+                self.assertEqual(policy.check_changed_line_budgets({path: text}), [
+                    f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts'])
+
+    def test_changed_line_checker_rejects_representative_diff_budgets(self):
+        for source in ('PR under about 2,000 changed lines', 'changed-line budget of 1500',
+                       'diff limit: 2000 lines', 'at most 1,500 lines (added plus deleted)'):
+            for text in (source, source.upper().replace(' ', '\n')):
+                with self.subTest(text=text):
+                    self.assertEqual(policy.check_changed_line_budgets({'other/AGENTS.md': text}), [
+                        'other/AGENTS.md:changed-line-budget: remove changed-line budgets from lane-facing prompts'])
+
     def test_output_policy_accepts_compliant_and_wrapped_roles(self):
         for text in (OUTPUT_POLICY, OUTPUT_POLICY.replace(' ', '\n')):
             prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), text)
@@ -505,6 +534,83 @@ class LanePromptPolicyTests(unittest.TestCase):
                         prompts[owner] += '\n' + text
                         self.assertEqual(policy.check_recovery_policy(prompts),
                                          [f'{owner}:recovery-ceiling: conflicting recovery instruction; remove or reconcile it'])
+
+
+class LanePromptLintTests(unittest.TestCase):
+    """Observe lint status/streams and read-only behavior on isolated authored files."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        prompts = dict(RECOVERY)
+        prompts['plan'] += PLAN + MAILBOX + OWNER_PLAN + OUTPUT_POLICY
+        prompts['process'] += PROCESS + MAILBOX + OWNER_PROCESS + OUTPUT_POLICY
+        prompts['review'] += OWNER_REVIEW + OUTPUT_POLICY
+        prompts['project-lead'] += LEAD
+        for owner, rules in policy.LOOPBACK_RULES.items():
+            prompts[owner] = prompts.get(owner, '') + '\n' + '\n'.join(clause for _, clause in rules)
+        prompts['verify-mission'] = MISSION
+        for owner, text in prompts.items():
+            self.write(f'factory/workstations/{owner}/AGENTS.md', text)
+        self.write('factory/docs/standards/planning-standards.md', OUTPUT_POLICY)
+
+    def write(self, path, text):
+        target = self.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding='utf-8')
+        return target
+
+    def run_lint(self):
+        before = {path: path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = policy.main([str(self.root)])
+        self.assertEqual({path: path.read_bytes() for path in self.root.rglob('*') if path.is_file()}, before)
+        return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_clean_root_preserves_success_message(self):
+        self.assertEqual(self.run_lint(), (0, 'Lane prompt policy validation passed\n', ''))
+
+    def test_new_nested_role_and_lead_produce_ordered_path_diagnostics(self):
+        nested = 'factory/workstations/new-role/nested/AGENTS.md'
+        self.write(nested, 'diff limit: 2000 lines')
+        self.assertEqual(self.run_lint(), (1, '',
+            f'{nested}:changed-line-budget: remove changed-line budgets from lane-facing prompts\n'))
+        lead = 'factory/workstations/project-lead/AGENTS.md'
+        target = self.root / lead
+        target.write_text(target.read_text(encoding='utf-8') + '\nabout 2,000 changed lines (added plus deleted)', encoding='utf-8')
+        self.assertEqual(self.run_lint(), (1, '', ''.join(
+            f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts\n'
+            for path in (nested, lead))))
+
+    def test_missing_required_prompt_fails_with_read_error(self):
+        (self.root / 'factory/workstations/process/AGENTS.md').unlink()
+        status, stdout, stderr = self.run_lint()
+        self.assertEqual((status, stdout), (1, ''))
+        self.assertTrue(stderr.startswith('lane prompt policy: cannot read authored prompts:'), stderr)
+        self.assertIn('AGENTS.md', stderr)
+
+    def test_invalid_utf8_discovered_prompt_fails_with_read_error(self):
+        target = self.write('factory/workstations/new-role/nested/AGENTS.md', '')
+        target.write_bytes(b'\xff')
+        status, stdout, stderr = self.run_lint()
+        self.assertEqual((status, stdout), (1, ''))
+        self.assertTrue(stderr.startswith('lane prompt policy: cannot read authored prompts:'), stderr)
+        self.assertIn('decode', stderr)
+
+    def test_discovered_prompt_oserror_is_not_silently_skipped(self):
+        target = self.write('factory/workstations/new-role/nested/AGENTS.md', 'valid prompt')
+        read_text = Path.read_text
+
+        def controlled_read(path, *args, **kwargs):
+            if path == target:
+                raise OSError('controlled discovered prompt read failure')
+            return read_text(path, *args, **kwargs)
+
+        with patch.object(Path, 'read_text', controlled_read):
+            self.assertEqual(self.run_lint(), (1, '',
+                'lane prompt policy: cannot read authored prompts: controlled discovered prompt read failure\n'))
 
 
 class AuthoredMissionPolicyTests(unittest.TestCase):

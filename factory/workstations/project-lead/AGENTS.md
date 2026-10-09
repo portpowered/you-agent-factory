@@ -181,8 +181,8 @@ recovered lineage's identity and attempt across cascades.
 This existing-loopback exception does not authorize new speculative joins.
 
 For oversized recovery, retain the independently mergeable PR slice with at
-most 2 stories, about 8 criteria total, about 2,000 changed lines (added plus
-deleted), and JSON below 20 KB (20,000 UTF-8 bytes) with status headroom.
+most 2 stories, about 8 criteria total, and JSON below 20 KB (20,000 UTF-8 bytes)
+with status headroom.
 Preserve immutable criterion IDs, source-plan alignment and later proof gates.
 Preserve old oversized artifacts unchanged. Remaining slices are Markdown
 names/outcomes/requirements only; lead/operator admits them after retained
