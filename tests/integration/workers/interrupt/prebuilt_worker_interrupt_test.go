@@ -241,10 +241,16 @@ func setInterruptEnvironment(env []string, key, value string) []string {
 
 func startInterruptDaemon(t *testing.T, ctx context.Context, binaryPath, factoryDir, serverURL string, env []string) *interruptDaemon {
 	t.Helper()
-	command := exec.CommandContext(ctx, binaryPath,
+	return startInterruptDaemonWithOptions(t, ctx, binaryPath, factoryDir, serverURL, env)
+}
+
+func startInterruptDaemonWithOptions(t *testing.T, ctx context.Context, binaryPath, factoryDir, serverURL string, env []string, options ...string) *interruptDaemon {
+	t.Helper()
+	args := append([]string{
 		"run", "--dir", factoryDir, "--continuously", "--with-server",
 		"--listen", strings.TrimPrefix(serverURL, "http://"), "--no-record", "--quiet",
-	)
+	}, options...)
+	command := exec.CommandContext(ctx, binaryPath, args...)
 	command.Dir = factoryDir
 	command.Env = append([]string(nil), env...)
 	stdout := &bytes.Buffer{}

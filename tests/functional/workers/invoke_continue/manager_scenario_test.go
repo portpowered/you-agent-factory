@@ -270,6 +270,7 @@ type s8RemoteWorkerInvocation struct {
 	workID           string
 	message          string
 	envVars          map[string]string
+	reasoningEffort  string
 }
 
 func invokeS8RemoteWorker(
@@ -323,6 +324,7 @@ func s8ExecutionDocument(t *testing.T, invocation s8RemoteWorkerInvocation) stri
 			ExecutorProvider         string            `json:"executorProvider"`
 			ModelProvider            string            `json:"modelProvider"`
 			Model                    string            `json:"model"`
+			ReasoningEffort          string            `json:"reasoningEffort,omitempty"`
 			WorkingDirectory         string            `json:"workingDirectory"`
 			WorkingDirectoryAuthored bool              `json:"workingDirectoryAuthored"`
 			UserMessage              string            `json:"userMessage"`
@@ -340,6 +342,7 @@ func s8ExecutionDocument(t *testing.T, invocation s8RemoteWorkerInvocation) stri
 	document.Execution.ExecutorProvider = "codex"
 	document.Execution.ModelProvider = "codex"
 	document.Execution.Model = "functional-model"
+	document.Execution.ReasoningEffort = invocation.reasoningEffort
 	document.Execution.WorkingDirectory = invocation.repository
 	document.Execution.WorkingDirectoryAuthored = true
 	document.Execution.UserMessage = invocation.message

@@ -20,7 +20,7 @@ import (
 func TestInterruptExplicitModes(t *testing.T) {
 	t.Parallel()
 	for _, cell := range []struct{ name, mode string }{
-		{"provider", "provider"}, {"recorded", "recorded"}, {"empty", "recorded"}, {"bounded", "recorded"},
+		{"provider", "provider"}, {"recorded", "recorded"}, {"empty", "recorded"}, {"bounded", "recorded"}, {"missing-provider", "provider"},
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
@@ -36,7 +36,7 @@ func runInterruptExplicitMode(t *testing.T, name, mode string) {
 	scenario := newS8InterruptScenario(t, ctx, "interrupt-mode-"+name)
 	t.Cleanup(scenario.runner.releaseAll)
 	initial := scenario.runner.callFor(scenario.repositoryA.path, s8InterruptCallAInitial)
-	if name == "empty" {
+	if name == "empty" || name == "missing-provider" {
 		initial.omitInitialObservation = true
 	}
 	if name == "bounded" {
@@ -52,8 +52,13 @@ func runInterruptExplicitMode(t *testing.T, name, mode string) {
 	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
 		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
 		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+		reasoningEffort: "high",
 	})
 	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	if name == "missing-provider" {
+		assertInterruptDefaultWithoutIdentity(t, ctx, scenario)
+		return
+	}
 	if initial.initialContext != "" {
 		minimumBytes := 1
 		if name == "bounded" {
@@ -105,11 +110,33 @@ func assertInterruptModeExecution(t *testing.T, scenario s8InterruptScenario, na
 	if !strings.Contains(input, s8ReplacementMessage) || requests[1].WorkDir != scenario.repositoryA.path {
 		t.Fatalf("lost input/settings: args=%s input=%s directory=%s", arguments, input, requests[1].WorkDir)
 	}
+	if !strings.Contains(arguments, "functional-model") || !strings.Contains(arguments, `model_reasoning_effort="high"`) {
+		t.Fatalf("successor lost nonmock model/reasoning: %s", arguments)
+	}
 	if mode == "recorded" {
 		assertRecordedInterruptInput(t, name, arguments, input, initialContext)
 	} else if !strings.Contains(arguments, s8InterruptProviderSessionA) || !strings.Contains(arguments, "resume") {
 		t.Fatalf("native continuation = %s", input)
 	}
+}
+
+func assertInterruptDefaultWithoutIdentity(t *testing.T, ctx context.Context, scenario s8InterruptScenario) {
+	t.Helper()
+	ids := scenario.ids
+	// Omit the field, exercising the existing provider default.
+	status, body, _, err := sendS8InterruptHTTP(ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	if err != nil || status != http.StatusConflict || !strings.Contains(body, "WORKER_SESSION_INTERRUPT_CONFLICT") || !strings.Contains(body, `"phase":"VALIDATION"`) {
+		t.Fatalf("default mode without identity = %d %s, %v", status, body, err)
+	}
+	if scenario.runner.CallCount() != 1 || scenario.runner.cancellationCount(s8InterruptCallAInitial) != 0 {
+		t.Fatal("missing provider identity stopped source or selected recorded fallback")
+	}
+	source := showS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, ids.workerA)
+	if source.State != "RUNNING" || source.SuccessorWorkerSessionID != nil {
+		t.Fatalf("default refusal affected source: %+v", source)
+	}
+	scenario.runner.releaseAll()
+	scenario.close(t)
 }
 
 func assertRecordedInterruptInput(t *testing.T, name, arguments, input, initialContext string) {
