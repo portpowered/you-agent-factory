@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -44,14 +43,11 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 	environment := builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t))
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Env:  environment,
-		Args: []string{"--with-mock-workers", mockPath},
+		Env:                   environment,
+		Args:                  []string{"--with-mock-workers", mockPath},
+		DeniedProcessAttempts: &nativeCalls,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: denied, ScriptCommandRunner: denied,
-			PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
-				nativeCalls.Add(1)
-				return &exec.Cmd{}
-			},
 			ProvidersStdioPipeFactory: func() (platformprocess.StdioChannel, error) {
 				nativeCalls.Add(1)
 				return nil, errors.New("ACP pipe creation denied for published mock example")

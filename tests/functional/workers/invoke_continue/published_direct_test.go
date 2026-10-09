@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
 
 // Only fixture identities, the host-visible directory and explicit Factory
@@ -35,11 +36,7 @@ func TestPublishedWorkerSessionDirectJourney(t *testing.T) {
 		t.Fatalf("canonical admission = %#v", admitted)
 	}
 	t19AwaitSignal(t, ctx, runner.started, "published provider startup")
-	command := runner.Requests()[0]
-	args := strings.Join(command.Args, " ")
-	if command.Command != "codex" || command.WorkDir != scenario.workingDirectory || string(command.Stdin) != "Reply with DIRECT_EXAMPLE_OK." || !strings.Contains(args, "--model gpt-5") || !strings.Contains(args, `model_reasoning_effort="high"`) || !strings.Contains(args, `developer_instructions="Return the requested short reply."`) {
-		t.Fatalf("published provider parameters differ: command=%q args=%q directory=%q", command.Command, command.Args, command.WorkDir)
-	}
+	assertPublishedProviderParameters(t, runner.Requests()[0], scenario.workingDirectory)
 	show := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "show", "--worker-session-id", admitted.WorkerSessionID)
 	if err := fixture.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), `"state":"RUNNING"`) {
 		t.Fatalf("published live show: %v %s", err, show.Stdout())
@@ -58,8 +55,22 @@ func TestPublishedWorkerSessionDirectJourney(t *testing.T) {
 		t.Fatalf("published terminal show: %v %s", err, ended.Stdout())
 	}
 	terminal := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", "logs")
-	if err := fixture.process.Execute(terminal.Input); err != nil || !strings.Contains(terminal.Stdout(), "T7 detached attempt completed") || !strings.Contains(terminal.Stdout(), `"health":"COMPLETE"`) || runner.CallCount() != 1 {
-		t.Fatalf("published captured result: %v %s calls=%d", err, terminal.Stdout(), runner.CallCount())
+	err := fixture.process.Execute(terminal.Input)
+	assertPublishedCapturedResult(t, err, terminal.Stdout(), runner.CallCount())
+}
+
+func assertPublishedProviderParameters(t *testing.T, command platformprocess.CommandRequest, directory string) {
+	t.Helper()
+	args := strings.Join(command.Args, " ")
+	if command.Command != "codex" || command.WorkDir != directory || string(command.Stdin) != "Reply with DIRECT_EXAMPLE_OK." || !strings.Contains(args, "--model gpt-5") || !strings.Contains(args, `model_reasoning_effort="high"`) || !strings.Contains(args, `developer_instructions="Return the requested short reply."`) {
+		t.Fatalf("published provider parameters differ: command=%q args=%q directory=%q", command.Command, command.Args, command.WorkDir)
+	}
+}
+
+func assertPublishedCapturedResult(t *testing.T, err error, body string, calls int) {
+	t.Helper()
+	if err != nil || !strings.Contains(body, "T7 detached attempt completed") || !strings.Contains(body, `"health":"COMPLETE"`) || calls != 1 {
+		t.Fatalf("published captured result: %v %s calls=%d", err, body, calls)
 	}
 }
 

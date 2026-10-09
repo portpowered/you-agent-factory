@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -55,6 +57,10 @@ type FunctionalAPIServerConfig struct {
 	Env                []string
 	ProviderOverride   providers.Service
 	Edges              serviceedges.Edges
+	// DeniedProcessAttempts replaces the subprocess command factory with a
+	// counted inert command when non-nil. Scenarios can assert zero attempts
+	// without importing OS execution types or allowing a process to start.
+	DeniedProcessAttempts *atomic.Int32
 	// BeforeStart prepares scenario-owned durable state through the same
 	// root-built process that will host the server. The callback runs after
 	// invocation-local environment setup and before the server command starts.
@@ -89,6 +95,12 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	t.Helper()
 
 	edges := cfg.Edges
+	if cfg.DeniedProcessAttempts != nil {
+		edges.PlatformProcessCommandFactory = func(string, ...string) *exec.Cmd {
+			cfg.DeniedProcessAttempts.Add(1)
+			return &exec.Cmd{}
+		}
+	}
 	if cfg.ProviderOverride != nil {
 		edges.ProviderOverride = cfg.ProviderOverride
 	}
