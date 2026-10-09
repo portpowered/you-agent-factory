@@ -100,19 +100,26 @@ func (r *Root) openRuntimeWithOptions(
 		products.engine = opening.activation.Service
 		rootRuntime := completed.SessionRuntime.(factoryruntime.Service)
 		products.bindRuntime = runtimeBindingForSession(rootRuntime, opening.sessionID)
-		products.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
-		products.currentBoardRecordPath = opening.configured.Recordings.RecordPath
-		if recovery := opening.startupRecovery; recovery != nil {
-			products.startupRecovery = &factorysessions.StartupRecovery{
-				Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
-				Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
-			}
-		}
-		products.operatorSettingsPath = opening.operatorSettingsPath
-		products.workerSettings = opening.durableExecution.WorkerSettings
-		products.replayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
+		opening.bindSelectedState(completed.State)
 	}
 	return products, err
+}
+
+// bindSelectedState retains opening facts on the exact record selected by
+// completion. Start must not transport them or select another record later.
+func (opening *sessionRuntimeOpening) bindSelectedState(state *runtimebinding.SessionState) {
+	state.CurrentBoardRecordPath = opening.configured.Recordings.RecordPath
+	state.OperatorSettingsPath = opening.operatorSettingsPath
+	state.SkippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
+	state.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
+	state.StartupRecovery = nil
+	if recovery := opening.startupRecovery; recovery != nil {
+		state.StartupRecovery = &factorysessions.StartupRecovery{
+			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
+			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
+		}
+	}
+	state.SetWorkerSettings(opening.durableExecution.WorkerSettings)
 }
 
 // sessionRuntimeOpening retains one opening's selections and partial results.

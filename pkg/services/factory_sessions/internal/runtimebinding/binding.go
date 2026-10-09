@@ -365,6 +365,16 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	}
 	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Activation: activation, Process: process, Diagnostics: diagnostics}
 	handle.inheritApplicationValues(previous)
+	// Initial lifecycle registration replaces the provisional opening record.
+	// Carry its startup observations only for that handoff; runtime replacement
+	// keeps its existing metadata policy.
+	if previous != nil && previous.Handle == nil {
+		handle.SkippedBoardRecordings = append([]string(nil), previous.SkippedBoardRecordings...)
+		if previous.StartupRecovery != nil {
+			recovery := *previous.StartupRecovery
+			handle.StartupRecovery = &recovery
+		}
+	}
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,

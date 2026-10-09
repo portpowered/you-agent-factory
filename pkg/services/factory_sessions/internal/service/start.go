@@ -204,7 +204,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	result := liveStartResult(session)
-	result.StartupRecovery = products.startupRecovery
+	result.StartupRecovery = runtimebinding.SessionStateFrom(session).StartupRecovery
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
 	}
@@ -255,7 +255,6 @@ func (r *Root) bindStartedSession(ctx context.Context, selectedID string, select
 	bindSessionProducts(bound, products, activation, requestID, previousControl)
 	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
 	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
-	bound.SetWorkerSettings(products.workerSettings)
 	return session, nil
 }
 
@@ -398,11 +397,6 @@ func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferC
 
 func bindSessionProducts(bound *runtimebinding.SessionState, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
 	bound.Activation = activation
-	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
-	bound.StartupRecovery = products.startupRecovery
-	bound.OperatorSettingsPath = products.operatorSettingsPath
-	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
-	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
 	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
 	bound.SetStartRequestID(strings.TrimSpace(requestID))
 	bound.InheritTerminalControl(previousControl)

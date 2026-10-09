@@ -488,6 +488,39 @@ func (replacementFactory) Observe(context.Context, factory.ObserveRequest) (fact
 	}, nil
 }
 
+func TestRegisterRetainsStartupFactsOnlyFromProvisionalOpening(t *testing.T) {
+	for _, provisional := range []bool{true, false} {
+		t.Run(map[bool]string{true: "initial startup", false: "already running"}[provisional], func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			instance := &hostedInstanceFake{}
+			recovery := &factorysessions.StartupRecovery{Code: "DURABLE_STATE_QUARANTINED", File: "board", Cause: "CORRUPT_STATE"}
+			prior := &runtimebinding.SessionState{Instance: instance, StartupRecovery: recovery, SkippedBoardRecordings: []string{"legacy.jsonl"}}
+			if !provisional {
+				prior.Handle = newHostedHandleFake(instance)
+			}
+			sessions.Register(sessionruntime.Registration{SessionID: "selected", Handle: prior})
+			runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "selected", Handle: newHostedHandleFake(instance)})
+			bound := runtimebinding.SessionStateFrom(sessions.Resolve("selected"))
+			if !provisional {
+				if bound.StartupRecovery != nil || len(bound.SkippedBoardRecordings) != 0 {
+					t.Fatal("runtime re-registration inherited initial-only observations")
+				}
+				return
+			}
+			if bound.StartupRecovery == nil || *bound.StartupRecovery != *recovery || bound.StartupRecovery == recovery ||
+				len(bound.SkippedBoardRecordings) != 1 || bound.SkippedBoardRecordings[0] != "legacy.jsonl" {
+				t.Fatalf("registered startup facts = %+v", bound)
+			}
+			recovery.Cause = "changed"
+			prior.SkippedBoardRecordings[0] = "changed"
+			if bound.StartupRecovery.Cause != "CORRUPT_STATE" || bound.SkippedBoardRecordings[0] != "legacy.jsonl" {
+				t.Fatal("registration aliases provisional startup observations")
+			}
+		})
+	}
+}
+
 func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	oldInstance := &hostedInstanceFake{}

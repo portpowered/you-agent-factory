@@ -14,8 +14,58 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRuntimeOpeningRetainsSelectedFactsWithoutAliasing(t *testing.T) {
+	for _, name := range []string{"session-a", "session-b", "session-c", "session-d"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			settings := &factoryruntime.JavaScriptWorkerSettings{DefaultModel: name}
+			recovery := &currentBoardStartupRecovery{file: name, quarantinedFile: name + ".quarantined", cause: "CORRUPT_STATE"}
+			warning := recordings.MetadataMismatchWarning{Key: name, Artifact: "recorded", Current: "authored"}
+			opening := &sessionRuntimeOpening{
+				configured:           preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: name + ".recording"}},
+				operatorSettingsPath: name + ".operator", skippedBoardRecordings: []string{name + ".skipped"},
+				startupRecovery: recovery, durableExecution: DurableExecution{WorkerSettings: settings},
+				load: RuntimeLoad{ReplayMetadataWarnings: []recordings.MetadataMismatchWarning{warning}},
+			}
+			selected := &runtimebinding.SessionState{}
+			opening.bindSelectedState(selected)
+			if selected.CurrentBoardRecordPath != name+".recording" || selected.OperatorSettingsPath != name+".operator" ||
+				len(selected.SkippedBoardRecordings) != 1 || selected.SkippedBoardRecordings[0] != name+".skipped" ||
+				len(selected.ReplayMetadataWarnings) != 1 || selected.ReplayMetadataWarnings[0] != warning {
+				t.Fatalf("selected opening facts = %+v", selected)
+			}
+			if selected.StartupRecovery == nil || *selected.StartupRecovery != (factorysessions.StartupRecovery{
+				Code: "DURABLE_STATE_QUARANTINED", File: name, QuarantinedFile: name + ".quarantined", Cause: "CORRUPT_STATE",
+			}) {
+				t.Fatalf("selected recovery = %+v", selected.StartupRecovery)
+			}
+			settings.DefaultModel = "changed"
+			recovery.cause = "changed"
+			opening.skippedBoardRecordings[0] = "changed"
+			opening.load.ReplayMetadataWarnings[0].Key = "changed"
+			if selected.WorkerSettingsSnapshot().DefaultModel != name || selected.StartupRecovery.Cause != "CORRUPT_STATE" ||
+				selected.SkippedBoardRecordings[0] != name+".skipped" || selected.ReplayMetadataWarnings[0] != warning {
+				t.Fatal("later opening mutation changed retained session facts")
+			}
+			peer := &runtimebinding.SessionState{}
+			(&sessionRuntimeOpening{}).bindSelectedState(peer)
+			if peer.StartupRecovery != nil || peer.WorkerSettingsSnapshot() != nil || len(peer.ReplayMetadataWarnings) != 0 ||
+				selected.WorkerSettingsSnapshot().DefaultModel != name {
+				t.Fatal("empty peer opening inherited or changed selected facts")
+			}
+			(&sessionRuntimeOpening{}).bindSelectedState(selected)
+			if selected.StartupRecovery != nil || selected.WorkerSettingsSnapshot() != nil ||
+				selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" ||
+				len(selected.SkippedBoardRecordings) != 0 || len(selected.ReplayMetadataWarnings) != 0 {
+				t.Fatal("empty opening retained stale facts")
+			}
+		})
+	}
+}
 
 func TestStartRejectsInvalidLiveRequestsBeforeOpening(t *testing.T) {
 	root, err := newRootForTest(livechange.NewCoordinator())
@@ -195,8 +245,8 @@ func TestStartHelpersKeepSessionSelectionAndBindingDetached(t *testing.T) {
 	if result.Live == nil || result.Live.Session == nil || result.Live.Session.Target.Name != "reviews" || result.SessionID != "canonical-1" {
 		t.Fatalf("live start result = %+v", result)
 	}
-	bound := &runtimebinding.SessionState{}
-	bindSessionProducts(bound, runtimeProducts{operatorSettingsPath: "/project/operator.yaml", closeArtifacts: func() error { return nil }}, &sessionActivation{}, " request ", nil)
+	bound := &runtimebinding.SessionState{OperatorSettingsPath: "/project/operator.yaml"}
+	bindSessionProducts(bound, runtimeProducts{}, &sessionActivation{}, " request ", nil)
 	if bound.StartRequestID() != "request" || bound.OperatorSettingsPath != "/project/operator.yaml" || bound.Activation == nil {
 		t.Fatalf("bound state = %+v", bound)
 	}
