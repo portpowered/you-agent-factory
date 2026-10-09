@@ -97,12 +97,13 @@ func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan
 // source attempt. A replay already reserved in this host needs no storage read.
 func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
-	source, exists := r.sessions[req.SourceWorkerSessionID]
-	metadata := r.observations[req.SourceWorkerSessionID]
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	source, exists := r.sessions[address]
+	metadata := r.observations[address]
 	_, replay := r.continueReplays[req.RequestID]
 	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
 	factorySessionID := ""
-	if supervision := r.supervisions[req.SourceWorkerSessionID]; supervision != nil {
+	if supervision := r.supervisions[address]; supervision != nil {
 		supervision.mu.Lock()
 		factorySessionID = supervision.execution.Execution.FactorySessionID
 		supervision.mu.Unlock()

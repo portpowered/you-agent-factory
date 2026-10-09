@@ -459,6 +459,8 @@ type StartResult struct {
 // is visible before provider execution begins and can never be confused with
 // the source identity.
 type ContinueRequest struct {
+	// FactorySessionID selects the exact source owner; empty requires a unique ID.
+	FactorySessionID         string
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -469,6 +471,7 @@ type ContinueRequest struct {
 // idempotent replay. User input is preserved byte-for-byte after the required
 // non-empty check; only identity fields discard surrounding whitespace.
 func (req ContinueRequest) Normalize() ContinueRequest {
+	req.FactorySessionID = strings.TrimSpace(req.FactorySessionID)
 	req.RequestID = strings.TrimSpace(req.RequestID)
 	req.SourceWorkerSessionID = strings.TrimSpace(req.SourceWorkerSessionID)
 	req.SuccessorWorkerSessionID = strings.TrimSpace(req.SuccessorWorkerSessionID)

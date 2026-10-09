@@ -380,6 +380,7 @@ func TestControlRecordPayload_ValidateCoversRequestAndOutcomeContract(t *testing
 
 func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
 	valid := workersessions.ContinueRequest{
+		FactorySessionID:         " factory-a ",
 		RequestID:                " request-1 ",
 		SourceWorkerSessionID:    " source-1 ",
 		SuccessorWorkerSessionID: " successor-1 ",
@@ -389,7 +390,7 @@ func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
 		t.Fatalf("valid ContinueRequest.Validate() = %v, want nil", err)
 	}
 	normalized := valid.Normalize()
-	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+	if normalized.FactorySessionID != "factory-a" || normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
 		t.Fatalf("Normalize() identities = %#v, want trimmed identities", normalized)
 	}
 	if normalized.FollowUpInput != valid.FollowUpInput {

@@ -31,7 +31,7 @@ func (r *registry) persistContinuationInput(plan continuePlan) error {
 	if plan.interrupt || !plan.direct || r.logs == nil {
 		return nil
 	}
-	pub := r.publicationFor(plan.request.SourceWorkerSessionID)
+	pub := r.publicationFor(plan.sourceAddressOrID())
 	if pub == nil || plan.lineage == nil {
 		return workersessions.ErrContinuationExecutionUnavailable
 	}
@@ -151,8 +151,12 @@ func decodeContinuationInput(payload []byte, req workersessions.ContinueRequest,
 	if !validContinuationInput(input) || input.Target != target {
 		return durableContinuationInput{}, recordings.ErrWorkerRecordingPersistence
 	}
+	if req.FactorySessionID != "" && req.Normalize().FactorySessionID != target.FactorySessionID {
+		return durableContinuationInput{}, workersessions.ErrContinuationRequestIDConflict
+	}
 	accepted := workersessions.ContinueRequest{
-		RequestID: input.RequestID, SourceWorkerSessionID: input.Target.WorkerSessionID,
+		FactorySessionID: req.Normalize().FactorySessionID,
+		RequestID:        input.RequestID, SourceWorkerSessionID: input.Target.WorkerSessionID,
 		SuccessorWorkerSessionID: input.SuccessorWorkerSessionID, FollowUpInput: input.FollowUpInput,
 	}
 	if req.Validate() != nil || accepted != req.Normalize() {
