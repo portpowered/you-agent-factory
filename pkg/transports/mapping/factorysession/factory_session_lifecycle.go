@@ -332,7 +332,7 @@ func failureReasonToAPI(reason string) factoryapi.WorkFailureType {
 		factoryapi.WorkFailureTypeMissingExecutable,
 		factoryapi.WorkFailureTypeCommandLineTooLong,
 		factoryapi.WorkFailureTypeStructuredOutputSchemaViolation,
-		factoryapi.WorkFailureTypeExpectedArtifactsUnsatisfied:
+		factoryapi.WorkFailureTypeExpectedArtifactsUnsatisfied, factoryapi.WorkFailureTypeWorkerDeclaredFailure:
 		return candidate
 	default:
 		return factoryapi.WorkFailureTypeUnknown
