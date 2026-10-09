@@ -520,11 +520,9 @@ func provideProcessRuntimeFactory(
 }
 
 func provideFactoryVisualizationFactory(
-	root *factorysessionwire.Root,
-	recordingsService recordings.Service,
+	openSource func(string) factoryvisualization.Source,
+	openScope factoryvisualizationwire.ScopeOpening,
 ) factoryvisualization.RuntimeFactory {
-	openSource := factoryvisualizationwire.NewRuntimeSourceOpening(root)
-	openScope := factoryvisualizationwire.NewScopeOpening(recordingsService)
 	return func(
 		sessionID string,
 		clock factoryvisualization.Clock,

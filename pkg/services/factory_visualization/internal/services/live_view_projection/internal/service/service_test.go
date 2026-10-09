@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,7 +58,7 @@ func TestLiveViewProjectionConformance(t *testing.T) {
 	}
 	rendered := make(chan liveviewprojection.View, 2)
 	var svc liveviewprojection.Service
-	impl, err := projectionservice.New(
+	impl, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: now},
@@ -150,20 +151,39 @@ func (c fixedClock) Now() time.Time { return c.now }
 
 func TestSharedProjectionOwnerKeepsScopedObservationsIndependent(t *testing.T) {
 	t.Parallel()
-	owner := projectionservice.NewOwner(newProjectionStub())
+	owner := projectionservice.NewOwner(&recordingsstub.Service{
+		ReconstructWorldStateFn: func(request recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+			for _, retained := range request.Events {
+				if !strings.HasPrefix(string(retained.ID), fmt.Sprintf("scope-%d/", request.SelectedTick-1)) {
+					t.Errorf("tick %d received peer event %q", request.SelectedTick, retained.ID)
+				}
+			}
+			return recordings.ReconstructWorldStateResult{WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1, Payload: `{"topology":{}}`,
+			}}, nil
+		},
+	})
 	for index := range 2 {
 		t.Run(fmt.Sprintf("scope-%d", index), func(t *testing.T) {
 			t.Parallel()
 			clock := fixedClock{now: time.Unix(int64(index+1), 0)}
-			handle := owner.Open(&sourceStub{snapshot: &liveviewprojection.RuntimeSnapshotFacts{
+			history := []factorydefinitions.FactoryEvent{event(fmt.Sprintf("scope-%d/1", index), index+1)}
+			handle := owner.Open(func() []factorydefinitions.FactoryEvent { return history }, &sourceStub{snapshot: &liveviewprojection.RuntimeSnapshotFacts{
 				RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: index + 1},
 			}}, clock, liveviewprojection.SinkFunc(func(liveviewprojection.View) { t.Error("Observe must not emit presentation") }), nil)
 			observed, err := handle.Observe(context.Background(), liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveModeRetainedThenLive})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if observed.View.TickCount != index+1 || !observed.View.ObservedAt.Equal(clock.now) {
+			if observed.View.TickCount != index+1 || !observed.View.ObservedAt.Equal(clock.now) || observed.View.RetainedEventCount != 1 {
 				t.Fatalf("scope observation = %#v", observed.View)
+			}
+			// Observe reads the selected activation's current retained history;
+			// opening neither snapshots it nor starts a projection subscription.
+			history = append(history, event(fmt.Sprintf("scope-%d/2", index), index+2))
+			updated, err := handle.Observe(context.Background(), liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveModeRetainedThenLive})
+			if err != nil || updated.View.RetainedEventCount != 2 {
+				t.Fatalf("updated retained observation = %#v, %v", updated, err)
 			}
 		})
 	}

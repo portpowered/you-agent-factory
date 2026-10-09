@@ -77,7 +77,7 @@ func TestStartEmitsSanitizedVisualizationOwnedView(t *testing.T) {
 	}
 	projections := newProjectionStubWithDashboard(renderData)
 	rendered := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: now},
@@ -122,7 +122,7 @@ func TestObserveSnapshotUnavailableDoesNotEmitView(t *testing.T) {
 		snapshotErr: errors.New("snapshot unavailable"),
 	}
 	presented := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},
@@ -166,7 +166,7 @@ func TestObserveReconstructionFailedDoesNotReturnSuccessView(t *testing.T) {
 		snapshot: snapshotFacts(3),
 	}
 	projections := newFailingProjectionStub(reconstructErr)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: time.Unix(1, 0)},
@@ -214,7 +214,7 @@ func TestProjectionFailureDrainsSelectedSubscriptionAndLeavesPeerPresenting(t *t
 			}
 			errorsReported := make(chan error, 3)
 			selectedViews := make(chan liveviewprojection.View, 1)
-			selected, err := projectionservice.New(selectedSource, projections, fixedClock{now: time.Unix(1, 0)},
+			selected, err := projectionservice.New(nil, selectedSource, projections, fixedClock{now: time.Unix(1, 0)},
 				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { selectedViews <- view }),
 				func(err error) { errorsReported <- err })
 			if err != nil {
@@ -222,7 +222,7 @@ func TestProjectionFailureDrainsSelectedSubscriptionAndLeavesPeerPresenting(t *t
 			}
 			peerEvents := make(chan factorydefinitions.FactoryEvent)
 			peerViews := make(chan liveviewprojection.View, 3)
-			peer, err := projectionservice.New(&sourceStub{
+			peer, err := projectionservice.New(nil, &sourceStub{
 				stream: &factorydefinitions.FactoryEventStream{Events: peerEvents}, snapshot: snapshotFacts(8),
 			}, newProjectionStub(), fixedClock{now: time.Unix(2, 0)},
 				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { peerViews <- view }), nil)

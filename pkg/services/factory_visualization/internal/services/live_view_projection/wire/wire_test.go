@@ -35,15 +35,15 @@ func (fixedClock) Now() time.Time { return time.Unix(1, 0) }
 func TestNewServiceConstructsSingularLiveViewProjectionService(t *testing.T) {
 	t.Parallel()
 
-	svc, err := NewService(nil, nil, nil, nil, nil)
+	svc, err := NewService(nil, nil, nil, nil, nil, nil)
 	if err == nil {
-		t.Fatal("NewService() error = nil, want missing dependency failure")
+		t.Fatal("NewService(nil, ) error = nil, want missing dependency failure")
 	}
 	if svc != nil {
-		t.Fatal("NewService() returned service with missing dependencies")
+		t.Fatal("NewService(nil, ) returned service with missing dependencies")
 	}
 
-	svc, err = NewService(
+	svc, err = NewService(nil,
 		stubSource{},
 		&recordingsstub.Service{},
 		fixedClock{},
@@ -51,10 +51,10 @@ func TestNewServiceConstructsSingularLiveViewProjectionService(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewService(nil, ) error = %v", err)
 	}
 	if svc == nil {
-		t.Fatal("NewService() returned nil")
+		t.Fatal("NewService(nil, ) returned nil")
 	}
 	var _ liveviewprojection.Service = svc
 }

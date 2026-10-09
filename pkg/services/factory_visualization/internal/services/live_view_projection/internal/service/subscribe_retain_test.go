@@ -30,7 +30,7 @@ func TestStartAppliesRetainedHistoryBeforeFirstLiveDelta(t *testing.T) {
 	projected := make(chan []factorydefinitions.FactoryEvent, 1)
 	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: now},
@@ -93,7 +93,7 @@ func TestStartRetainsVisualizationOwnedCursorAndEventsAfterSubscribe(t *testing.
 		},
 		snapshot: snapshotFacts(7),
 	}
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		newProjectionStub(),
 		fixedClock{now: now},
@@ -169,7 +169,7 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			presented := make(chan liveviewprojection.View, 1)
-			svc, err := projectionservice.New(
+			svc, err := projectionservice.New(nil,
 				test.source,
 				newProjectionStub(),
 				fixedClock{now: time.Unix(1, 0)},
@@ -219,7 +219,7 @@ func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 		snapshot:      snapshotFacts(1),
 		subscribeHook: func() { subscribeCalls++ },
 	}
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},

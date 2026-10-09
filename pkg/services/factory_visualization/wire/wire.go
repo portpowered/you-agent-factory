@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"sync"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -102,6 +104,7 @@ func NewRoot(
 		return nil, err
 	}
 	projection, err := liveviewprojectionwire.NewService(
+		activation.RetainedEvents,
 		source,
 		peer,
 		clock,
@@ -154,13 +157,29 @@ func NewResponsePresentation() factoryvisualization.ResponsePresentation {
 	return responseeventpresentationwire.NewService()
 }
 
-// NewScopeOpening preconstructs the reusable Visualization owners. Its returned
-// operation allocates only scoped subscription/projection/presentation handles.
-func NewScopeOpening(peer recordings.Service) func(factoryvisualization.Source, factoryvisualization.Clock, factoryvisualization.Sink, factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
-	activation := activationlifecyclewire.NewOwner(peer)
-	projection := liveviewprojectionwire.NewOwner(peer)
-	presentation := responseeventpresentationwire.NewService()
-	owner := internalservice.NewScopeOwner(activation.Open, projection.Open, presentation, peer)
+// ActivationOpening allocates subscription state over the fixed activation owner.
+type ActivationOpening = func(activationlifecycle.EventSource, activationlifecycle.Clock, activationlifecycle.ViewSink, activationlifecycle.ErrorReporter) activationlifecycle.Service
+
+// ProjectionOpening allocates observation state with its scoped retained history.
+type ProjectionOpening = func(func() []factorydefinitions.FactoryEvent, liveviewprojection.Source, liveviewprojection.Clock, liveviewprojection.Sink, liveviewprojection.ErrorReporter) liveviewprojection.Service
+
+// ScopeOpening allocates a lifecycle handle over prebuilt Visualization owners.
+type ScopeOpening func(factoryvisualization.Source, factoryvisualization.Clock, factoryvisualization.Sink, factoryvisualization.ErrorReporter) (factoryvisualization.Service, error)
+
+// NewActivationOpening captures only the fixed activation behavior.
+func NewActivationOpening(peer recordings.Service) ActivationOpening {
+	return activationlifecyclewire.NewOwner(peer).Open
+}
+
+// NewProjectionOpening captures only the fixed projection behavior.
+func NewProjectionOpening(peer recordings.Service) ProjectionOpening {
+	return liveviewprojectionwire.NewOwner(peer).Open
+}
+
+// NewScopeOpening receives each already constructed owner directly. Opening
+// allocates scoped state without constructing another dependency graph.
+func NewScopeOpening(activation ActivationOpening, projection ProjectionOpening, presentation factoryvisualization.ResponsePresentation, peer recordings.Service) ScopeOpening {
+	owner := internalservice.NewScopeOwner(activation, projection, presentation, peer)
 	return func(source factoryvisualization.Source, clock factoryvisualization.Clock, sink factoryvisualization.Sink, reportError factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
 		return owner.Open(source, clock, sink, reportError)
 	}

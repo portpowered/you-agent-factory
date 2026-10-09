@@ -100,6 +100,7 @@ func newComposedService(
 		return nil, err
 	}
 	projection, err := liveviewprojectionwire.NewService(
+		activation.RetainedEvents,
 		source,
 		recordingsPeer,
 		clock,

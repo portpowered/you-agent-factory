@@ -10,26 +10,18 @@ import (
 
 // NewService constructs the private live_view_projection capability.
 func NewService(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
 	source liveviewprojection.Source,
 	recordingsPeer recordings.Service,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
 ) (liveviewprojection.Service, error) {
-	svc, err := projectionservice.New(source, recordingsPeer, clock, sink, reportError)
+	svc, err := projectionservice.New(retainedEvents, source, recordingsPeer, clock, sink, reportError)
 	if err != nil {
 		return nil, err
 	}
 	return svc, nil
-}
-
-// BindRetainedEventsSupplier forwards activation-owned retained history into the
-// private owner for root Observe calls that occur before projection Start.
-func BindRetainedEventsSupplier(
-	svc liveviewprojection.Service,
-	supplier func() []factorydefinitions.FactoryEvent,
-) {
-	projectionservice.BindRetainedEventsSupplier(svc, supplier)
 }
 
 // Owner is the private behavior owner retained by Visualization composition.

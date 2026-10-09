@@ -6,7 +6,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -39,9 +38,6 @@ func assembleRoot(
 	case sink == nil:
 		return nil, errors.New("assemble Factory visualization root: presentation sink is required")
 	}
-	liveviewprojectionwire.BindRetainedEventsSupplier(projection, func() []factorydefinitions.FactoryEvent {
-		return activation.RetainedEvents()
-	})
 	return &Service{
 		activation:        activation,
 		projection:        projection,
@@ -58,7 +54,7 @@ func assembleRoot(
 // Each Open creates independent lifecycle and presentation state.
 type ScopeOwner struct {
 	activationOpening func(activationlifecycle.EventSource, activationlifecycle.Clock, activationlifecycle.ViewSink, activationlifecycle.ErrorReporter) activationlifecycle.Service
-	projectionOpening func(liveviewprojection.Source, liveviewprojection.Clock, liveviewprojection.Sink, liveviewprojection.ErrorReporter) liveviewprojection.Service
+	projectionOpening func(func() []factorydefinitions.FactoryEvent, liveviewprojection.Source, liveviewprojection.Clock, liveviewprojection.Sink, liveviewprojection.ErrorReporter) liveviewprojection.Service
 	presentation      responseeventpresentation.Service
 	recordings        recordings.Service
 }
@@ -66,7 +62,7 @@ type ScopeOwner struct {
 // NewScopeOwner constructs only fixed behavior; it does not select a runtime.
 func NewScopeOwner(
 	activationOpening func(activationlifecycle.EventSource, activationlifecycle.Clock, activationlifecycle.ViewSink, activationlifecycle.ErrorReporter) activationlifecycle.Service,
-	projectionOpening func(liveviewprojection.Source, liveviewprojection.Clock, liveviewprojection.Sink, liveviewprojection.ErrorReporter) liveviewprojection.Service,
+	projectionOpening func(func() []factorydefinitions.FactoryEvent, liveviewprojection.Source, liveviewprojection.Clock, liveviewprojection.Sink, liveviewprojection.ErrorReporter) liveviewprojection.Service,
 	presentation responseeventpresentation.Service,
 	peer recordings.Service,
 ) *ScopeOwner {
@@ -84,6 +80,6 @@ func (owner *ScopeOwner) Open(source Source, clock Clock, sink Sink, reportError
 		return nil, errors.New("construct Factory Visualization: presentation sink is required")
 	}
 	activation := owner.activationOpening(ActivationEventSourceAdapter{Source: source}, clock, ActivationViewSinkAdapter{Sink: sink}, activationlifecycle.ErrorReporter(reportError))
-	projection := owner.projectionOpening(source, clock, sink, reportError)
+	projection := owner.projectionOpening(activation.RetainedEvents, source, clock, sink, reportError)
 	return assembleRoot(activation, projection, owner.presentation, source, owner.recordings, clock, sink, reportError)
 }

@@ -52,6 +52,7 @@ var (
 
 // New constructs the private live_view_projection implementation.
 func New(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
 	source liveviewprojection.Source,
 	recordingsPeer recordings.Service,
 	clock liveviewprojection.Clock,
@@ -68,42 +69,30 @@ func New(
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization live view projection: presentation sink is required")
 	default:
-		return (&Owner{recordings: recordingsPeer}).open(source, clock, sink, reportError), nil
+		return (&Owner{recordings: recordingsPeer}).open(retainedEvents, source, clock, sink, reportError), nil
 	}
 }
 
 // Open allocates one scoped handle over this prebuilt owner. Source, clock and
 // sink are selected runtime resources; no peer service is supplied at opening.
 func (owner *Owner) Open(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
 	source liveviewprojection.Source,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
 ) liveviewprojection.Service {
-	return owner.open(source, clock, sink, reportError)
+	return owner.open(retainedEvents, source, clock, sink, reportError)
 }
 
 func (owner *Owner) open(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
 	source liveviewprojection.Source,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
 ) *Service {
-	return &Service{owner: owner, source: source, clock: clock, sink: sink, reportError: reportError}
-}
-
-// BindRetainedEventsSupplier lets the Visualization root supply activation-owned
-// retained history for Observe when this owner has not started its own subscription.
-func BindRetainedEventsSupplier(
-	svc liveviewprojection.Service,
-	supplier func() []factorydefinitions.FactoryEvent,
-) {
-	if svc == nil || supplier == nil {
-		return
-	}
-	if bindable, ok := svc.(*Service); ok {
-		bindable.retainedEventsSupplier = supplier
-	}
+	return &Service{owner: owner, source: source, clock: clock, sink: sink, reportError: reportError, retainedEventsSupplier: retainedEvents}
 }
 
 // renders the retained projection before returning and then observes deltas.

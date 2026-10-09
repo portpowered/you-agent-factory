@@ -71,7 +71,7 @@ func TestRetainedOnlyStartCursorPointsAtLastRetainedEvent(t *testing.T) {
 		},
 		snapshot: snapshotFacts(11),
 	}
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},
@@ -121,7 +121,7 @@ func TestRetainedThenOneLiveAdvanceContinuesSameCursorAuthority(t *testing.T) {
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
 	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 2)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: time.Unix(2, 0)},
@@ -188,7 +188,7 @@ func TestMultiLiveAdvanceAfterRetainedHistoryContinuesCursor(t *testing.T) {
 		snapshot: snapshotFacts(2),
 	}
 	rendered := make(chan liveviewprojection.View, 4)
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: time.Unix(3, 0)},
@@ -250,7 +250,7 @@ func TestLiveDeltasDoNotDuplicateRetainedReplay(t *testing.T) {
 	subscribeCalls := 0
 	source.subscribeHook = func() { subscribeCalls++ }
 
-	svc, err := projectionservice.New(
+	svc, err := projectionservice.New(nil,
 		source,
 		projections,
 		fixedClock{now: time.Unix(4, 0)},
