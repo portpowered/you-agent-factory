@@ -38,12 +38,12 @@ func newAPITestServer(roles any) *api.Server {
 			invoker = unavailableModelInvoker{}
 		}
 		modelsHandler = modelshttp.NewHandler(
-			modelshttp.NewSessionAdapter(modelsService, apiSessionModelInvoker{invoker}, apiModelContentPreparation{}, modelHTTPTestScope(), factorysessions.DefaultSessionID),
+			modelshttp.NewSessionAdapter(modelsService, apiSessionModelInvoker{invoker}, apiModelContentPreparation{}, func(context.Context) modelcontract.RuntimeScopeRef { return modelHTTPTestScope() }, func(context.Context) string { return factorysessions.DefaultSessionID }),
 			logger,
 		)
 	}
 	return newAPIServerFromRoles(
-		apiTestRole[apisurface.RuntimeAPI](roles),
+		apiTestRole[currentFactoryTestAPI](roles),
 		nil,
 		apiTestRole[apisurface.LiveSessionAPI](roles),
 		apiTestRole[apisurface.WorkAPI](roles),

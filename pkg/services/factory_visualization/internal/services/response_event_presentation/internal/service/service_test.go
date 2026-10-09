@@ -15,7 +15,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 	presentationservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service"
-	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 )
 
 type gatedPresentationWriter struct {
@@ -47,7 +46,7 @@ func (w *gatedPresentationWriter) String() string {
 
 func TestNewServiceIsInert(t *testing.T) {
 	before := runtime.NumGoroutine()
-	service := responseeventpresentationwire.NewService()
+	service := presentationservice.New()
 	if service == nil {
 		t.Fatal("NewService() returned nil")
 	}

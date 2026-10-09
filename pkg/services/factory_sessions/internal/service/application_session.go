@@ -7,19 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 // applicationSessionState resolves application lifecycle values from the
@@ -129,20 +121,14 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 	return bound.Diagnostics, nil
 }
 
-// SessionPresentation contains only values that vary with the selected live
-// session. Process-owned services are accessed directly from Root.
+// SessionPresentation exposes the presentation values for one selected live
+// session. HTTP peer services are injected directly by process composition.
 type SessionPresentation struct {
-	FactoryRuntime       factoryruntime.Service
 	ModelsScope          models.RuntimeScopeRef
-	ModelInvoker         workers.ModelInvoker
-	WorkerSessions       workersessions.ObservationService
-	Logger               *zap.Logger
-	Reader               roles.RuntimeReader
-	Projections          recordings.ProjectionService
-	Clock                factoryruntime.Clock
+	RuntimeID            string
+	GenerationID         string
 	MetricsRootDir       string
 	OperatorSettingsPath string
-	Recordings           recordings.Service
 }
 
 func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error) {
@@ -150,31 +136,24 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 	if err != nil {
 		return SessionPresentation{}, err
 	}
+	return sessionPresentation(bound, sessionID), nil
+}
+
+func sessionPresentation(bound *runtimebinding.SessionState, sessionID string) SessionPresentation {
+	facts := selectedModelFacts(bound, sessionID)
 	return SessionPresentation{
-		FactoryRuntime:       selectedRuntimeService(bound),
 		ModelsScope:          bound.ModelsScope,
-		ModelInvoker:         selectedModelInvocation{facts: selectedModelFacts(bound, sessionID), operation: r.modelInvocation},
-		WorkerSessions:       bound.WorkerSessionsObservation(),
-		Logger:               bound.Logger,
-		Reader:               r.factorySessionsRuntimeAssembly,
-		Projections:          r.recordingProjections,
-		Clock:                bound.Clock,
+		RuntimeID:            facts.RuntimeID,
+		GenerationID:         facts.GenerationID,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
-		Recordings:           r.recordingsService,
-	}, nil
+	}
 }
 
-// selectedModelInvocation adapts one live generation to the Models HTTP
-// invocation boundary. Captured facts keep a retained presentation scoped even
-// when the current session or its runtime generation changes.
-type selectedModelInvocation struct {
-	facts     modelinvocation.RuntimeModelInvocation
-	operation modelinvocation.RuntimeModelInvocationOperation
-}
-
-func (s selectedModelInvocation) InvokeModel(ctx context.Context, name string, request models.Request) (models.Result, error) {
-	return s.operation.InvokeRuntimeModel(ctx, s.facts, name, request)
+// WithRuntimeReadForSession exposes the canonical addressed observation owner;
+// consumers never recover that owner from presentation values.
+func (r *Root) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
+	return r.factorySessionsRuntimeAssembly.WithRuntimeReadForSession(sessionID, read)
 }
 
 func (r *Root) ApplicationReplayMetadataWarnings(sessionID string) ([]recordings.MetadataMismatchWarning, error) {
@@ -209,20 +188,6 @@ func (r *Root) StopApplicationOrderly(ctx context.Context, sessionID string) err
 		return nil
 	}
 	return bound.OrderlyStop(ctx)
-}
-
-func (r *Root) FactoryDefinitionsService() factorydefinitions.Service { return r.factoryDefinitions }
-func (r *Root) WorkService() work.Service                             { return r.workService }
-func (r *Root) ModelsService() models.Service                         { return r.modelService }
-func (r *Root) WorkersService() workers.Service                       { return r.workerService }
-func (r *Root) ProviderSessionsService() providersessions.Service     { return r.providerSessions }
-func (r *Root) RecordingsService() recordings.Service                 { return r.recordingsService }
-func (r *Root) WorkflowPreviewService() factoryruntime.WorkflowPreviewOperation {
-	return r.workflowPreview
-}
-func (r *Root) WorkerPromptsService() workers.PromptTemplates {
-	prompts, _ := r.workerService.(workers.PromptTemplates)
-	return prompts
 }
 
 // CurrentBoardRecordingArtifact addresses the configured host board for exactly

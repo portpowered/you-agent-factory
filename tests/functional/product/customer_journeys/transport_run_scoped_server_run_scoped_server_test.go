@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -101,6 +103,11 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 // The parent completes installation before parallel children open sessions.
 func newScopedHostFixture(t *testing.T) (support.Process, []string, string) {
 	t.Helper()
+	return newScopedHostFixtureWithProviderResult(t, `{"decision":"accepted","feedback":"","output":"mock worker accepted"}`)
+}
+
+func newScopedHostFixtureWithProviderResult(t *testing.T, result string) (support.Process, []string, string) {
+	t.Helper()
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDir, "models"))
@@ -111,6 +118,10 @@ func newScopedHostFixture(t *testing.T) (support.Process, []string, string) {
 				return fmt.Errorf("hosted invocation observation is required")
 			}
 			observation.starts.Add(1)
+			if observation.host != nil {
+				defer observation.stops.Add(1)
+				return observation.host(ctx, request)
+			}
 			if observation.assertHandler != nil {
 				observation.assertHandler(request.Handler)
 			}
@@ -127,7 +138,7 @@ func newScopedHostFixture(t *testing.T) (support.Process, []string, string) {
 			observation.browserCalls.Add(1)
 			return nil
 		},
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(`{"decision":"accepted","feedback":"","output":"mock worker accepted"}`),
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(result),
 	})
 	factoryDir := initializeGoalFactory(t, process, environment, t.TempDir(), homeDir)
 	return process, environment, factoryDir
@@ -140,6 +151,7 @@ type scopedHostObservationKey struct{}
 type scopedHostObservation struct {
 	starts, stops, browserCalls atomic.Int32
 	assertHandler               func(http.Handler)
+	host                        platformhttpserver.Starter
 }
 
 type scopedHostInvocation struct {
@@ -855,3 +867,129 @@ const remotePlacementFactoryJSON = `{
     }
   ]
 }`
+
+// Two explicit sessions share one process with immutable edges. Each invocation
+// owns its real loopback listener and cleanup; shutdown is an HTTP-owned contract.
+func TestRunScopedServerShutdownLeavesPeerUsable(t *testing.T) {
+	t.Parallel()
+	process, _, _ := newScopedHostFixtureWithProviderResult(t, "peer after selected shutdown COMPLETE")
+	selected := startSelectedShutdownHost(t, process)
+	peer := startSelectedShutdownHost(t, process)
+	requestSelectedHostShutdown(t, selected.url)
+	assertSelectedHostJoined(t, selected)
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Get(selected.url + "/health")
+	if err == nil {
+		response.Body.Close()
+		t.Fatal("selected listener still accepts requests after shutdown joined")
+	}
+	select {
+	case result := <-peer.done:
+		t.Fatalf("selected shutdown terminated peer: %v", result)
+	default:
+	}
+	admitted := support.SubmitSessionWorkAt(t, peer.url, peer.sessionID, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Payload: map[string]string{"title": "peer after selected shutdown"},
+	})
+	if admitted.WorkId == nil || *admitted.WorkId == "" {
+		t.Fatalf("peer admission = %+v, want Work identity", admitted)
+	}
+	status := support.WaitForSessionTerminalStatus(t, peer.url, peer.sessionID, 15*time.Second)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("peer terminal status = %+v, want one completed Work", status)
+	}
+	requestSelectedHostShutdown(t, peer.url)
+	assertSelectedHostJoined(t, peer)
+}
+
+type selectedShutdownHost struct {
+	url, sessionID string
+	done           chan error
+}
+
+func startSelectedShutdownHost(t *testing.T, process support.Process) selectedShutdownHost {
+	t.Helper()
+	factoryDir := support.ScaffoldSingleStepFactory(t, "selected-shutdown")
+	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "gpt-5-codex"))
+	home := t.TempDir()
+	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home,
+		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, "models"))
+	// Initialize mutable profile installation before releasing the invocation.
+	initializeGoalFactory(t, process, env, t.TempDir(), home)
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	observation := &scopedHostObservation{host: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		server := httptest.NewServer(request.Handler)
+		defer server.Close()
+		_, portText, err := net.SplitHostPort(server.Listener.Addr().String())
+		if err != nil {
+			return err
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil {
+			return err
+		}
+		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: port})
+		ready <- server.URL
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	sessionID := uuid.NewString()
+	go func() {
+		var stdout, stderr bytes.Buffer
+		err := (scopedHostInvocation{process: process, observation: observation}).Execute(root.Input{
+			Args: []string{"you", "run", "--session", sessionID, "--factory", filepath.Join(factoryDir, "factory.json"), "--continuously", "--with-server", "--no-record"},
+			Env:  env, Context: ctx, WorkingDirectory: factoryDir, Stdout: &stdout, Stderr: &stderr,
+		})
+		if err != nil && !errors.Is(err, context.Canceled) {
+			err = fmt.Errorf("run: %w; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+		}
+		done <- err
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		// Cancellation releases the owned listener; join its invocation before
+		// disposing test resources. The suite deadline bounds a broken join.
+		<-done
+	})
+	select {
+	case url := <-ready:
+		return selectedShutdownHost{url: url, sessionID: sessionID, done: done}
+	case err := <-done:
+		t.Fatalf("host exited before readiness: %v", err)
+	case <-time.After(15 * time.Second):
+		t.Fatal("host did not report listener readiness")
+	}
+	return selectedShutdownHost{}
+}
+
+func requestSelectedHostShutdown(t *testing.T, url string) {
+	t.Helper()
+	client := &http.Client{Timeout: 5 * time.Second}
+	response, err := client.Post(url+"/shutdown", "application/json", nil)
+	if err != nil {
+		t.Fatalf("shutdown selected host: %v", err)
+	}
+	defer response.Body.Close()
+	var accepted factoryapi.ShutdownAcceptedResponse
+	if err := json.NewDecoder(response.Body).Decode(&accepted); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusAccepted || accepted.Status != factoryapi.Accepted {
+		t.Fatalf("shutdown = %d, %+v", response.StatusCode, accepted)
+	}
+}
+
+func assertSelectedHostJoined(t *testing.T, host selectedShutdownHost) {
+	t.Helper()
+	select {
+	case err := <-host.done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("host completion: %v", err)
+		}
+	case <-t.Context().Done():
+		t.Fatal("test canceled before selected shutdown joined invocation and listener")
+	}
+}

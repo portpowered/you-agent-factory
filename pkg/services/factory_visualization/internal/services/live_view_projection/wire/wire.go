@@ -2,32 +2,14 @@
 package wire
 
 import (
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// NewService constructs the private live_view_projection capability.
-func NewService(
-	source liveviewprojection.Source,
-	recordingsPeer recordings.Service,
-	clock liveviewprojection.Clock,
-	sink liveviewprojection.Sink,
-	reportError liveviewprojection.ErrorReporter,
-) (liveviewprojection.Service, error) {
-	svc, err := projectionservice.New(source, recordingsPeer, clock, sink, reportError)
-	if err != nil {
-		return nil, err
-	}
-	return svc, nil
-}
+// Owner is the private behavior owner retained by Visualization composition.
+type Owner = projectionservice.Owner
 
-// BindRetainedEventsSupplier forwards activation-owned retained history into the
-// private owner for root Observe calls that occur before projection Start.
-func BindRetainedEventsSupplier(
-	svc liveviewprojection.Service,
-	supplier func() []factorydefinitions.FactoryEvent,
-) {
-	projectionservice.BindRetainedEventsSupplier(svc, supplier)
+// NewOwner constructs the fixed behavior once, before any runtime opening.
+func NewOwner(peer recordings.Service) *Owner {
+	return projectionservice.NewOwner(peer)
 }

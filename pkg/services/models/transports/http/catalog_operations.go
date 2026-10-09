@@ -13,10 +13,10 @@ func (a *Adapter) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	if a == nil || a.models == nil {
 		return factoryapi.ListModelsResponse{}, errModelsServiceRequired
 	}
-	if a.scope.IsZero() {
+	if a.scope(ctx).IsZero() {
 		return factoryapi.ListModelsResponse{}, models.ErrRuntimeScopeInvalid
 	}
-	request := listModelsRequestFromHTTP(a.scope)
+	request := listModelsRequestFromHTTP(a.scope(ctx))
 	scoped, err := a.models.ListCatalog(ctx, request)
 	if err != nil {
 		return factoryapi.ListModelsResponse{}, err
@@ -30,10 +30,10 @@ func (a *Adapter) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	if a == nil || a.models == nil {
 		return factoryapi.ModelDetail{}, errModelsServiceRequired
 	}
-	if a.scope.IsZero() {
+	if a.scope(ctx).IsZero() {
 		return factoryapi.ModelDetail{}, models.ErrRuntimeScopeInvalid
 	}
-	request, err := getModelRequestFromHTTP(modelName, a.scope)
+	request, err := getModelRequestFromHTTP(modelName, a.scope(ctx))
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}

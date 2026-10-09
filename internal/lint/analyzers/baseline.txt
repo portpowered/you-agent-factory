@@ -94,8 +94,6 @@ mapping-filesystem-behavior-test|pkg/transports/mapping/factoryconfig/authored|o
 mapping-filesystem-behavior-test|pkg/transports/mapping/factoryconfig/openapitests|os.ReadFile
 mapping-filesystem-behavior-test|pkg/transports/mapping/factorysession_test|os.ReadFile
 platform-services|pkg/platform/contentstaging|pkg/services/work
-service-subpackage-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire
-service-subpackage-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire
 service-subpackage-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire
@@ -107,8 +105,6 @@ service-subpackage|tests/functional/internal/support|pkg/services/operator_setti
 service-construction-test|pkg/services/factory_sessions/internal/invocation|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_sessions/internal/service|pkg/services/factory_runtime.NewSessionResultProjectionOperation
 service-construction-test|pkg/services/factory_sessions_test|pkg/services/work.NewInvocationPolicyService
-service-construction-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire.NewProjectionService
-service-construction-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire.NewProjectionService
 service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire.NewService
@@ -1789,7 +1785,6 @@ testsleep-deadline-test|pkg/services/factory_visualization/transports/http_test|
 testsleep-deadline-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_CanceledDuringRootCallCompletesWithoutHang::deadline::1
 testsleep-deadline-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_DeadlineExceededReturnsGatewayTimeout::deadline::1
 testsleep-deadline-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_DeadlineExceededReturnsGatewayTimeout::deadline::2
-testsleep-deadline-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootActivatesAndObservesThroughComposedOwners::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/asr_protocol_test.go::TestPinnedASRBackendHonorsCancellationAndStagingErrors::deadline::1
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/asr_protocol_test.go::TestPinnedASRBackendHonorsCancellationAndStagingErrors::deadline::2
 testsleep-deadline-test|pkg/services/models/internal/backends/localai|pkg/services/models/internal/backends/localai/grpc_embed_live_test.go::awaitLiveEmbedHealth::deadline::1
@@ -2184,14 +2179,11 @@ testsleep-sleep-test|pkg/services/factory_sessions/transports/http|pkg/services/
 testsleep-sleep-test|pkg/services/factory_sessions/wire|pkg/services/factory_sessions/wire/wire_test.go::TestNewServiceFromAssemblyConstructsInertRoot::sleep::1
 testsleep-sleep-test|pkg/services/factory_sessions/wire|pkg/services/factory_sessions/wire/wire_test.go::TestNewServiceFromAssemblyConstructsInertRoot::sleep::2
 testsleep-sleep-test|pkg/services/factory_visualization_test|pkg/services/factory_visualization/response_presentation_test.go::TestNewResponsePresentationIsInert::sleep::1
-testsleep-sleep-test|pkg/services/factory_visualization/internal/service|pkg/services/factory_visualization/internal/service/presentation_test_helpers_test.go::waitForPresentationWriteAttempt::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/internal/services/live_view_projection/internal/service_test|pkg/services/factory_visualization/internal/services/live_view_projection/internal/service/cursor_continuity_test.go::TestLiveDeltasDoNotDuplicateRetainedReplay::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service_test|pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service/service_test.go::TestNewServiceIsInert::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service_test|pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service/service_test.go::waitForPresentationWriteAttempt::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleActivateLifecycle_CanceledDuringRootCallCompletesWithoutHang::sleep::1
 testsleep-sleep-test|pkg/services/factory_visualization/transports/http_test|pkg/services/factory_visualization/transports/http/request_context_test.go::TestHandleObserve_CanceledDuringRootCallCompletesWithoutHang::sleep::1
-testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::1
-testsleep-sleep-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go::TestNewRootConstructsInertRoot::sleep::2
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::1
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric::sleep::2
 testsleep-sleep-test|pkg/services/models/internal/services/runtime_host/internal/service_test|pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go::TestEnsureModelHostPostStartCrashSurfacesFailedReadinessOnInspect::sleep::1
@@ -2897,8 +2889,6 @@ service-cycle-weight|internal/lint/analyzers|13
 construction-recorded-site-test|pkg/services/factory_sessions/internal/invocation|pkg/services/factory_sessions/internal/invocation/owner_fixture_test.go#service-construction-test#pkg/services/work.NewInvocationPolicyService::count=1
 construction-recorded-site-test|pkg/services/factory_sessions/internal/service|pkg/services/factory_sessions/internal/service/root_test.go#service-construction-test#pkg/services/factory_runtime.NewSessionResultProjectionOperation::count=1
 construction-recorded-site-test|pkg/services/factory_sessions_test|pkg/services/factory_sessions/work_invocation_boundary_test.go#service-construction-test#pkg/services/work.NewInvocationPolicyService::count=1
-construction-recorded-site-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go#service-construction-test#pkg/services/recordings/wire.NewProjectionService::count=1
-construction-recorded-site-test|pkg/services/factory_visualization/wire|pkg/services/factory_visualization/wire/recordings_peer_test.go#service-construction-test#pkg/services/recordings/wire.NewProjectionService::count=1
 construction-recorded-site-test|pkg/services/worker_sessions/internal/service_test|pkg/services/worker_sessions/internal/service/fakes_test.go#service-construction-test#pkg/services/events/wire.NewService::count=1
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/events/wire.NewService::count=1
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/worker_sessions/wire.NewService::count=1
@@ -2934,8 +2924,6 @@ recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/service
 recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/services/factory_sessions/internal/runtimebinding/live_change_events.go#liveChangeEventLog.LiveChangeEvents#CanonicalEvents::count=1
 recording-read|pkg/services/factory_sessions/internal/service|pkg/services/factory_sessions/internal/service/open.go#lastCanonicalCursor#CanonicalEvents::count=1
 recording-read|pkg/services/factory_sessions/internal/sessionservice|pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go#annotateRuntimeWorkStateSequences#CanonicalEvents::count=1
-recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/canonical_projection.go#ReconstructWorldStateFromProjection#ReconstructFactoryWorldState::count=1
-recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/canonical_projection.go#ValidateReconnectReplayFromProjection#ValidateReconnectReplay::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#QuerySimpleDashboard#QuerySimpleDashboard::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ReconstructWorldState#ReconstructWorldState::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ValidateReconnectReplay#ValidateReconnectReplayFrom::count=1

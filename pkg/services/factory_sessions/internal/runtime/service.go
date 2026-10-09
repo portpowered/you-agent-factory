@@ -153,6 +153,28 @@ func (s *Service) WithRuntimeRead(fn func(*factorysessions.LiveRuntime) error) e
 	return fn(runtime)
 }
 
+// WithRuntimeReadForSession observes only the addressed live generation while
+// holding the same lock used by definition activation and generation updates.
+func (s *Service) WithRuntimeReadForSession(sessionID string, fn func(*factorysessions.LiveRuntime) error) error {
+	if s == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	s.activation.RLock()
+	defer s.activation.RUnlock()
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return factorysessions.ErrSessionNotFound
+	}
+	session := s.Resolve(sessionID)
+	if session == nil {
+		return factorysessions.ErrSessionNotFound
+	}
+	if session.Runtime == nil || session.Runtime.Factory == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return fn(session.Runtime)
+}
+
 // UpdateRuntimeGeneration publishes only to the captured opening generation.
 // A replacement admitted while activation completes must keep its own binding.
 func (s *Service) UpdateRuntimeGeneration(session *livesession.LiveSession, update func(*factorysessions.LiveRuntime) error) error {

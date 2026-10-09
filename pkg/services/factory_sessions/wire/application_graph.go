@@ -26,11 +26,8 @@ import (
 	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	webhooks "github.com/portpowered/infinite-you/pkg/services/webhooks"
-	work "github.com/portpowered/infinite-you/pkg/services/work"
-	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -170,17 +167,13 @@ func NewRoot(
 	start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error),
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
-	definitions factorydefinitions.Service, workService work.Service,
-	modelService models.Service, recordingsService recordings.Service,
-	workerService workers.Service, providerSessions providersessions.Service,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	recordingProjections recordings.ProjectionService,
+	definitions factorydefinitions.Service,
+	recordingsService recordings.Service,
 	modelInvocation RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
 	return service.NewRoot(assembly, durable, start, liveChangeCoordinator, inspectHistorical,
-		definitions, workService, modelService, recordingsService, workerService, providerSessions,
-		workflowPreview, recordingProjections, modelInvocation, generateSessionID)
+		definitions, recordingsService, modelInvocation, generateSessionID)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
@@ -301,4 +294,5 @@ func NewRuntimeOpeningBinding(gateway OpeningSessionIdentity, recordingsService 
 // RuntimeOpeningBindingSet exposes exact roles of the one canonical gateway instance.
 var RuntimeOpeningBindingSet = wire.NewSet(NewGateway, NewRuntimeOpeningBinding,
 	wire.Bind(new(OpeningSessionIdentity), new(*sessionservice.Service)),
+	wire.Bind(new(factorysessions.SessionInspectionService), new(*sessionservice.Service)),
 	wire.Bind(new(roles.SessionGateway), new(*sessionservice.Service)))

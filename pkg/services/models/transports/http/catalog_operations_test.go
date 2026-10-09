@@ -275,3 +275,35 @@ func assertCatalogHTTPError(
 		t.Fatalf("message leaks internal package path: %q", response.Message)
 	}
 }
+
+func TestCatalogAdapterUsesEachHostingScopeWithSharedOwners(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{listCatalog: func(ctx context.Context, request models.ListModelsRequest) (models.ListModelsResult, error) {
+		id := SessionID(ctx)
+		expected, err := (models.RuntimeScopeRef{}).Parse("factory-session:" + id)
+		if err != nil || request.Scope != expected || id == "" {
+			t.Errorf("catalog scope=%#v session=%q error=%v", request.Scope, id, err)
+		}
+		return models.ListModelsResult{Models: []models.Summary{{Name: id + "-model"}}}, nil
+	}}
+	adapter := NewSessionAdapter(root, addressedModelInvokerFake{}, noopContentPreparation{}, ModelsScope, SessionID)
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:" + id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := adapter.ListModels(WithRuntimeSelection(context.Background(), id, scope))
+			if err != nil || len(result.Results) != 1 || result.Results[0].Name != id+"-model" {
+				t.Fatalf("catalog=%#v error=%v", result, err)
+			}
+		})
+	}
+	t.Run("missing scope", func(t *testing.T) {
+		t.Parallel()
+		if _, err := adapter.ListModels(context.Background()); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+			t.Fatalf("missing host scope error=%v", err)
+		}
+	})
+}

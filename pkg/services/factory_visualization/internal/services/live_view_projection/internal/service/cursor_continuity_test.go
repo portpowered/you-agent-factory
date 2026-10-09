@@ -71,16 +71,8 @@ func TestRetainedOnlyStartCursorPointsAtLastRetainedEvent(t *testing.T) {
 		},
 		snapshot: snapshotFacts(11),
 	}
-	svc, err := projectionservice.New(
-		source,
-		newProjectionStub(),
-		fixedClock{now: time.Unix(1, 0)},
-		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(newProjectionStub())
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(liveviewprojection.View) {}), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -121,16 +113,8 @@ func TestRetainedThenOneLiveAdvanceContinuesSameCursorAuthority(t *testing.T) {
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
 	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 2)
-	svc, err := projectionservice.New(
-		source,
-		projections,
-		fixedClock{now: time.Unix(2, 0)},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(2, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -188,16 +172,8 @@ func TestMultiLiveAdvanceAfterRetainedHistoryContinuesCursor(t *testing.T) {
 		snapshot: snapshotFacts(2),
 	}
 	rendered := make(chan liveviewprojection.View, 4)
-	svc, err := projectionservice.New(
-		source,
-		projections,
-		fixedClock{now: time.Unix(3, 0)},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(3, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -250,16 +226,9 @@ func TestLiveDeltasDoNotDuplicateRetainedReplay(t *testing.T) {
 	subscribeCalls := 0
 	source.subscribeHook = func() { subscribeCalls++ }
 
-	svc, err := projectionservice.New(
-		source,
-		projections,
-		fixedClock{now: time.Unix(4, 0)},
-		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(4, 0)}, liveviewprojection.SinkFunc(func(liveviewprojection.View) {}), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

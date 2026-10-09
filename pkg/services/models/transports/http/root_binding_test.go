@@ -351,7 +351,7 @@ func NewAdapter(
 	if len(scopes) > 0 {
 		scope = scopes[0]
 	}
-	return &Adapter{models: service, scope: scope, sessionInvoker: testSessionModelInvoker{invoker}, content: content}
+	return &Adapter{models: service, scope: func(context.Context) models.RuntimeScopeRef { return scope }, sessionID: func(context.Context) string { return "" }, sessionInvoker: testSessionModelInvoker{invoker}, content: content}
 }
 
 type testSessionModelInvoker struct {

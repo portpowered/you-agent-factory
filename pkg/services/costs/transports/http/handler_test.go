@@ -36,7 +36,7 @@ func TestHandlerReturnsAPIReportWithoutPartialOutput(t *testing.T) {
 			FactorySessions: []costs.Rollup{},
 		}, nil
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/metrics/costs?session_id=session-a", nil)
 	handler.GetMetricsCosts(recorder, request, factoryapi.GetMetricsCostsParams{SessionId: stringPointer("session-a")})
@@ -58,7 +58,7 @@ func TestHandlerMapsInvalidCostsRequestToBadRequest(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{}, &costs.QueryError{Kind: costs.QueryErrorInvalidInput, Message: "metrics root is required"}
 	})
-	handler := NewHandler(NewAdapter(query, "", "", identityScopeResolver()), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, staticRuntimePaths("", ""), identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 
@@ -84,7 +84,7 @@ func TestHandlerMapsUnknownSelectorToTypedNotFound(t *testing.T) {
 	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
 		return factorysessions.RuntimeMetricsScope{}, factorysessions.ErrSessionNotFound
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings", resolver), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetricsCosts(
 		recorder,
@@ -111,7 +111,7 @@ func TestHandlerMapsCostsFailureToInternalError(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{}, &costs.QueryError{Kind: costs.QueryErrorMetricsFailed, Message: "runtime metrics query failed", Cause: errors.New("fixture")}
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop())
+	handler := NewHandler(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 
@@ -148,7 +148,7 @@ func runTimedOutCostsRequests(t *testing.T, requestCount int) {
 		<-ctx.Done()
 		return costs.Report{}, ctx.Err()
 	})
-	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop(), queryTimeout)
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), zap.NewNop(), queryTimeout)
 	results := make(chan timedCostsResult, requestCount)
 	for i := 0; i < requestCount; i++ {
 		go func() {
@@ -228,7 +228,7 @@ func TestHandlerMapsCanceledCostsQueryToRequestTimeout(t *testing.T) {
 		<-ctx.Done()
 		return costs.Report{}, ctx.Err()
 	})
-	handler := NewHandlerWithQueryTimeout(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop(), time.Second)
+	handler := NewHandlerWithQueryTimeout(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), zap.NewNop(), time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	request := httptest.NewRequest(http.MethodGet, "/metrics/costs", nil).WithContext(ctx)
@@ -271,7 +271,7 @@ func TestHandlerLogsEncodingFailureThroughInjectedLogger(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{Status: costs.StatusNoUsage}, nil
 	})
-	handler := NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), logger)
+	handler := NewHandler(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), logger)
 	writer := &failedCostsWriter{ResponseRecorder: httptest.NewRecorder()}
 	handler.GetMetricsCosts(writer, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 	entries := logs.All()

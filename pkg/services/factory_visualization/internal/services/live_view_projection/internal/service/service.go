@@ -12,11 +12,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// Service owns retained event projection, reconnect cursor, and live
-// subscription lifecycle for one Factory visualization.
+// Owner retains the fixed Recordings operations shared by scoped handles.
+type Owner struct {
+	recordings recordings.Service
+}
+
+// NewOwner captures the fixed Recordings dependency once during composition.
+func NewOwner(peer recordings.Service) *Owner {
+	return &Owner{recordings: peer}
+}
+
+// Service retains subscription and projection state for one opening.
 type Service struct {
+	owner       *Owner
 	source      liveviewprojection.Source
-	recordings  recordings.Service
 	clock       liveviewprojection.Clock
 	sink        liveviewprojection.Sink
 	reportError liveviewprojection.ErrorReporter
@@ -41,43 +50,26 @@ var (
 	errNotStarted     = liveviewprojection.ErrLiveViewProjectionNotStarted
 )
 
-// New constructs the private live_view_projection implementation.
-func New(
+// Open allocates one scoped handle over this prebuilt owner. Source, clock and
+// sink are selected runtime resources; no peer service is supplied at opening.
+func (owner *Owner) Open(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
 	source liveviewprojection.Source,
-	recordingsPeer recordings.Service,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
-) (*Service, error) {
-	switch {
-	case source == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: event source is required")
-	case recordingsPeer == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: recordings service is required")
-	case clock == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: clock is required")
-	case sink == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: presentation sink is required")
-	default:
-		return &Service{
-			source: source, recordings: recordingsPeer, clock: clock,
-			sink: sink, reportError: reportError,
-		}, nil
-	}
+) liveviewprojection.Service {
+	return owner.open(retainedEvents, source, clock, sink, reportError)
 }
 
-// BindRetainedEventsSupplier lets the Visualization root supply activation-owned
-// retained history for Observe when this owner has not started its own subscription.
-func BindRetainedEventsSupplier(
-	svc liveviewprojection.Service,
-	supplier func() []factorydefinitions.FactoryEvent,
-) {
-	if svc == nil || supplier == nil {
-		return
-	}
-	if bindable, ok := svc.(*Service); ok {
-		bindable.retainedEventsSupplier = supplier
-	}
+func (owner *Owner) open(
+	retainedEvents func() []factorydefinitions.FactoryEvent,
+	source liveviewprojection.Source,
+	clock liveviewprojection.Clock,
+	sink liveviewprojection.Sink,
+	reportError liveviewprojection.ErrorReporter,
+) *Service {
+	return &Service{owner: owner, source: source, clock: clock, sink: sink, reportError: reportError, retainedEventsSupplier: retainedEvents}
 }
 
 // renders the retained projection before returning and then observes deltas.
@@ -246,7 +238,7 @@ func (s *Service) Observe(
 			AfterSequence: req.Reconnect.AfterSequence,
 		}
 		if err := recordingsqueries.ValidateReconnectReplay(
-			s.recordings,
+			s.owner.recordings,
 			events,
 			cursor,
 			factorydefinitions.FactoryEventReconnectScope{},
@@ -259,7 +251,7 @@ func (s *Service) Observe(
 		}
 	}
 
-	if _, err := recordingsqueries.ReconstructWorldState(s.recordings, events, snapshot.TickCount); err != nil {
+	if _, err := recordingsqueries.ReconstructWorldState(s.owner.recordings, events, snapshot.TickCount); err != nil {
 		return liveviewprojection.ObserveResult{}, &liveviewprojection.ProjectionError{
 			Kind:    liveviewprojection.ProjectionErrorReconstructionFailed,
 			Message: "observe Factory visualization live view projection: projection reconstruction failed",
@@ -335,12 +327,12 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
 	s.mu.Unlock()
-	worldView, err := recordingsqueries.ReconstructWorldState(s.recordings, events, snapshot.TickCount)
+	worldView, err := recordingsqueries.ReconstructWorldState(s.owner.recordings, events, snapshot.TickCount)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization: %w", err))
 		return
 	}
-	renderData, err := recordingsqueries.QuerySimpleDashboard(s.recordings, worldView)
+	renderData, err := recordingsqueries.QuerySimpleDashboard(s.owner.recordings, worldView)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization dashboard: %w", err))
 		return

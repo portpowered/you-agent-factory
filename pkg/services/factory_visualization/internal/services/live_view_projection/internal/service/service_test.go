@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,16 +58,8 @@ func TestLiveViewProjectionConformance(t *testing.T) {
 	}
 	rendered := make(chan liveviewprojection.View, 2)
 	var svc liveviewprojection.Service
-	impl, err := projectionservice.New(
-		source,
-		projections,
-		fixedClock{now: now},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	implBehavior := projectionservice.NewOwner(projections)
+	impl := implBehavior.Open(nil, source, fixedClock{now: now}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 	svc = impl
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -146,3 +140,89 @@ func (s *sourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojecti
 type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }
+
+func TestSharedProjectionOwnerKeepsScopedObservationsIndependent(t *testing.T) {
+	t.Parallel()
+	owner := projectionservice.NewOwner(&recordingsstub.Service{
+		ReconstructWorldStateFn: func(request recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+			for _, retained := range request.Events {
+				if !strings.HasPrefix(string(retained.ID), fmt.Sprintf("scope-%d/", request.SelectedTick-1)) {
+					t.Errorf("tick %d received peer event %q", request.SelectedTick, retained.ID)
+				}
+			}
+			return recordings.ReconstructWorldStateResult{WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1, Payload: `{"topology":{}}`,
+			}}, nil
+		},
+	})
+	for index := range 2 {
+		t.Run(fmt.Sprintf("scope-%d", index), func(t *testing.T) {
+			t.Parallel()
+			clock := fixedClock{now: time.Unix(int64(index+1), 0)}
+			history := []factorydefinitions.FactoryEvent{event(fmt.Sprintf("scope-%d/1", index), index+1)}
+			handle := owner.Open(func() []factorydefinitions.FactoryEvent { return history }, &sourceStub{snapshot: &liveviewprojection.RuntimeSnapshotFacts{
+				RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: index + 1},
+			}}, clock, liveviewprojection.SinkFunc(func(liveviewprojection.View) { t.Error("Observe must not emit presentation") }), nil)
+			observed, err := handle.Observe(context.Background(), liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveModeRetainedThenLive})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if observed.View.TickCount != index+1 || !observed.View.ObservedAt.Equal(clock.now) || observed.View.RetainedEventCount != 1 {
+				t.Fatalf("scope observation = %#v", observed.View)
+			}
+			// Observe reads the selected activation's current retained history;
+			// opening neither snapshots it nor starts a projection subscription.
+			history = append(history, event(fmt.Sprintf("scope-%d/2", index), index+2))
+			updated, err := handle.Observe(context.Background(), liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveModeRetainedThenLive})
+			if err != nil || updated.View.RetainedEventCount != 2 {
+				t.Fatalf("updated retained observation = %#v, %v", updated, err)
+			}
+		})
+	}
+}
+
+type openingSourceStub struct {
+	reads *int
+}
+
+func (s openingSourceStub) SubscribeFactoryEvents(
+	context.Context,
+	*factorydefinitions.FactoryEventReconnectCursor,
+	factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	(*s.reads)++
+	return nil, nil
+}
+
+func (s openingSourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+	(*s.reads)++
+	return nil, nil
+}
+
+type openingSinkStub struct{}
+
+func (openingSinkStub) PresentFactoryView(liveviewprojection.View) {}
+
+type openingClock struct{}
+
+func (openingClock) Now() time.Time { return time.Unix(1, 0) }
+
+func TestOwnerOpeningIsInert(t *testing.T) {
+	t.Parallel()
+
+	reads := 0
+	behavior := projectionservice.NewOwner(&recordingsstub.Service{})
+	svc := behavior.Open(nil, openingSourceStub{reads: &reads}, openingClock{}, openingSinkStub{}, nil)
+	if svc == nil {
+		t.Fatal("Open() returned nil")
+	}
+	if reads != 0 {
+		t.Fatalf("opening read the source %d times, want inert opening", reads)
+	}
+	if err := svc.Wait(context.Background()); err == nil {
+		t.Fatal("Wait before Start returned no error")
+	}
+	if reads != 0 {
+		t.Fatalf("Wait before Start read the source %d times", reads)
+	}
+}

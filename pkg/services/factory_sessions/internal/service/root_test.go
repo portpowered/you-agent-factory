@@ -378,14 +378,6 @@ type rootTestClock struct{}
 
 func (rootTestClock) Now() time.Time { return time.Unix(0, 0) }
 
-// This boundary deliberately holds selected values rather than a session
-// resolver: a retained HTTP presentation must never follow current selection.
-type selectedModelOperation func(context.Context, modelinvocation.RuntimeModelInvocation, string, models.Request) (models.Result, error)
-
-func (f selectedModelOperation) InvokeRuntimeModel(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
-	return f(ctx, facts, name, request)
-}
-
 type selectedModelRecord struct {
 	runtimebinding.RuntimeInstance
 	generation string
@@ -395,7 +387,7 @@ type selectedModelRecord struct {
 func (r selectedModelRecord) StreamGeneration() string { return r.generation }
 func (r selectedModelRecord) Directory() string        { return r.directory }
 
-func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T) {
+func TestSelectedModelFactsKeepCapturedGeneration(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"first", "second", "third", "fourth"} {
 		t.Run(id, func(t *testing.T) {
@@ -412,20 +404,11 @@ func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T)
 				FactorySessionID: id, Scope: scope, RuntimeID: "runtime-" + id,
 				GenerationID: "generation-" + id, FactoryDirectory: "/" + id, WorkingDirectory: "/" + id,
 			}
-			cause := models.ErrRuntimeScopeStale
-			wantResult := models.Result{ModelName: "selected-model", Worker: id, Operation: "invoke"}
-			call := 0
-			adapter := selectedModelInvocation{facts: selectedModelFacts(bound, id), operation: selectedModelOperation(func(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
-				if facts != expected || name != "selected-model" || request.Operation != "invoke" || ctx != t.Context() {
-					t.Fatalf("invocation lost selected facts or request: %+v, %s, %+v", facts, name, request)
-				}
-				call++
-				if call == 2 {
-					return models.Result{}, cause
-				}
-				return wantResult, nil
-			})}
-			// Later registration changes do not retarget the retained adapter. A fresh
+			captured := selectedModelFacts(bound, id)
+			if captured != expected {
+				t.Fatalf("selected facts = %+v, want %+v", captured, expected)
+			}
+			// Later registration changes do not mutate captured facts. A fresh
 			// presentation reads the replacement generation from its acquired instance.
 			bound.Instance = selectedModelRecord{generation: "replacement", directory: "/replacement"}
 			bound.ModelInvocation.FactorySessionID = "other"
@@ -433,12 +416,8 @@ func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T)
 			if replacement.GenerationID != "replacement" || replacement.FactoryDirectory != "/replacement" || replacement.FactorySessionID != id {
 				t.Fatalf("replacement facts = %+v", replacement)
 			}
-			result, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"})
-			if err != nil || !reflect.DeepEqual(result, wantResult) {
-				t.Fatalf("result = %+v, %v", result, err)
-			}
-			if _, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"}); !errors.Is(err, cause) {
-				t.Fatalf("typed failure = %v", err)
+			if captured != expected {
+				t.Fatalf("captured facts changed after replacement: %+v", captured)
 			}
 		})
 	}
@@ -480,7 +459,7 @@ func TestStartUsesInjectedOperationsAndPreservesTypedFailure(t *testing.T) {
 				return inspectionResult, true, outcomeErr
 			}
 			root, err := NewRoot(&legacyservice.Assembly{}, nil, start, livechange.NewCoordinator(), inspect,
-				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+				nil, nil, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -517,7 +496,7 @@ func TestStartUsesInjectedDurableOwner(t *testing.T) {
 	t.Parallel()
 	owner := &rootDurableStartStub{failure: &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}}
 	root, err := NewRoot(&legacyservice.Assembly{}, owner, nil, livechange.NewCoordinator(), nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -635,5 +614,36 @@ func assertDurableOpeningRetryAndValidation(t *testing.T, opening *RuntimeOpenin
 	var invalid *factorysessions.DetachedRequestError
 	if _, err := opening.Start(t.Context(), request); !errors.As(err, &invalid) || invalid.Field != "wait.timeoutMillis" || owner.calls != 3 {
 		t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
+	}
+}
+
+func TestSessionPresentationContainsSelectedScopeFacts(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("models-" + id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bound := &runtimebinding.SessionState{
+				ModelsScope:          scope,
+				ModelInvocation:      modelinvocation.RuntimeModelInvocation{RuntimeID: "runtime-" + id},
+				Instance:             selectedModelRecord{generation: "generation-" + id},
+				Diagnostics:          factoryruntime.RuntimeLogDiagnostics{MetricsRootDir: "/metrics/" + id},
+				OperatorSettingsPath: "/settings/" + id,
+			}
+			want := SessionPresentation{ModelsScope: scope, RuntimeID: "runtime-" + id,
+				GenerationID: "generation-" + id, MetricsRootDir: "/metrics/" + id,
+				OperatorSettingsPath: "/settings/" + id}
+			captured := sessionPresentation(bound, id)
+			if captured != want {
+				t.Fatalf("presentation = %+v, want %+v", captured, want)
+			}
+			bound.Instance = selectedModelRecord{generation: "replacement-" + id}
+			if next := sessionPresentation(bound, id); next.GenerationID != "replacement-"+id || captured != want {
+				t.Fatalf("replacement facts = %+v; captured = %+v", next, captured)
+			}
+		})
 	}
 }

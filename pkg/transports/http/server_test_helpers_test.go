@@ -793,7 +793,7 @@ func TestServerRoutesMetricsCostsThroughInjectedOwnerHandler(t *testing.T) {
 			FactorySessions: []costs.Rollup{},
 		}, nil
 	})
-	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(query, "metrics", "settings", costsTestScopeResolver{}), zap.NewNop())
+	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(query, func(context.Context) (string, string) { return "metrics", "settings" }, costsTestScopeResolver{}), zap.NewNop())
 	server := NewServerWithRecordingsAndCosts(nil, nil, nil, nil, nil, nil, zap.NewNop(), costsHandler)
 
 	recorder := httptest.NewRecorder()

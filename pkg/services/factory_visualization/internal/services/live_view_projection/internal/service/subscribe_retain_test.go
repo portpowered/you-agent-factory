@@ -30,16 +30,8 @@ func TestStartAppliesRetainedHistoryBeforeFirstLiveDelta(t *testing.T) {
 	projected := make(chan []factorydefinitions.FactoryEvent, 1)
 	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(
-		source,
-		projections,
-		fixedClock{now: now},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+	svc := svcBehavior.Open(nil, source, fixedClock{now: now}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,16 +85,8 @@ func TestStartRetainsVisualizationOwnedCursorAndEventsAfterSubscribe(t *testing.
 		},
 		snapshot: snapshotFacts(7),
 	}
-	svc, err := projectionservice.New(
-		source,
-		newProjectionStub(),
-		fixedClock{now: now},
-		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(newProjectionStub())
+	svc := svcBehavior.Open(nil, source, fixedClock{now: now}, liveviewprojection.SinkFunc(func(liveviewprojection.View) {}), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -169,18 +153,10 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			presented := make(chan liveviewprojection.View, 1)
-			svc, err := projectionservice.New(
-				test.source,
-				newProjectionStub(),
-				fixedClock{now: time.Unix(1, 0)},
-				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }),
-				nil,
-			)
-			if err != nil {
-				t.Fatalf("New() error = %v", err)
-			}
+			svcBehavior := projectionservice.NewOwner(newProjectionStub())
+			svc := svcBehavior.Open(nil, test.source, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }), nil)
 
-			err = svc.Start(context.Background())
+			err := svc.Start(context.Background())
 			var projErr *liveviewprojection.ProjectionError
 			if !errors.As(err, &projErr) || projErr.Kind != liveviewprojection.ProjectionErrorInvalidInput {
 				t.Fatalf("Start() error = %v, want InvalidInput ProjectionError", err)
@@ -219,16 +195,8 @@ func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 		snapshot:      snapshotFacts(1),
 		subscribeHook: func() { subscribeCalls++ },
 	}
-	svc, err := projectionservice.New(
-		source,
-		newProjectionStub(),
-		fixedClock{now: time.Unix(1, 0)},
-		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(newProjectionStub())
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(liveviewprojection.View) {}), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

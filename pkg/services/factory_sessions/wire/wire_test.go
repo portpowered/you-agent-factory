@@ -708,5 +708,5 @@ func TestOwnerGatewayPreservesUnavailableRequiredCollaborators(t *testing.T) {
 // newRootWithAssembly exercises the production constructor with only the roles
 // these root publication tests observe; no opening operation runs in this fixture.
 func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveChangeCoordinator) (*Root, error) {
-	return NewRoot(assembly, nil, nil, liveChangeCoordinator, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	return NewRoot(assembly, nil, nil, liveChangeCoordinator, nil, nil, nil, nil, nil)
 }

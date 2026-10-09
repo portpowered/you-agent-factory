@@ -17,11 +17,20 @@ var (
 	errNotStarted     = errors.New("wait for Factory visualization: not started")
 )
 
-// Service owns retained event projection, reconnect cursor, and live
-// subscription lifecycle for Factory visualization activation.
+// Owner retains the fixed Recordings operations shared by scoped handles.
+type Owner struct {
+	recordings recordings.Service
+}
+
+// NewOwner captures the fixed Recordings dependency once during composition.
+func NewOwner(peer recordings.Service) *Owner {
+	return &Owner{recordings: peer}
+}
+
+// Service retains subscription and projection state for one opening.
 type Service struct {
+	owner       *Owner
 	source      activationlifecycle.EventSource
-	recordings  recordings.Service
 	clock       activationlifecycle.Clock
 	sink        activationlifecycle.ViewSink
 	reportError activationlifecycle.ErrorReporter
@@ -39,29 +48,24 @@ type Service struct {
 
 var _ activationlifecycle.Service = (*Service)(nil)
 
-// New constructs an inert activation lifecycle owner.
-func New(
+// Open allocates one scoped handle over this prebuilt owner. Source, clock and
+// sink are selected runtime resources; no peer service is supplied at opening.
+func (owner *Owner) Open(
 	source activationlifecycle.EventSource,
-	recordingsPeer recordings.Service,
 	clock activationlifecycle.Clock,
 	sink activationlifecycle.ViewSink,
 	reportError activationlifecycle.ErrorReporter,
-) (*Service, error) {
-	switch {
-	case source == nil:
-		return nil, errors.New("initialize Factory visualization activation: event source is required")
-	case recordingsPeer == nil:
-		return nil, errors.New("initialize Factory visualization activation: recordings service is required")
-	case clock == nil:
-		return nil, errors.New("initialize Factory visualization activation: clock is required")
-	case sink == nil:
-		return nil, errors.New("initialize Factory visualization activation: presentation sink is required")
-	default:
-		return &Service{
-			source: source, recordings: recordingsPeer, clock: clock,
-			sink: sink, reportError: reportError,
-		}, nil
-	}
+) activationlifecycle.Service {
+	return owner.open(source, clock, sink, reportError)
+}
+
+func (owner *Owner) open(
+	source activationlifecycle.EventSource,
+	clock activationlifecycle.Clock,
+	sink activationlifecycle.ViewSink,
+	reportError activationlifecycle.ErrorReporter,
+) *Service {
+	return &Service{owner: owner, source: source, clock: clock, sink: sink, reportError: reportError}
 }
 
 // Start subscribes once to retained-then-live canonical Factory events.
@@ -286,12 +290,12 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
 	s.mu.Unlock()
-	worldView, err := recordingsqueries.ReconstructWorldState(s.recordings, events, observation.TickCount)
+	worldView, err := recordingsqueries.ReconstructWorldState(s.owner.recordings, events, observation.TickCount)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization: %w", err))
 		return
 	}
-	renderData, err := recordingsqueries.QuerySimpleDashboard(s.recordings, worldView)
+	renderData, err := recordingsqueries.QuerySimpleDashboard(s.owner.recordings, worldView)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization dashboard: %w", err))
 		return

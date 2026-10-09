@@ -203,7 +203,7 @@ func TestActivationLifecycleStartStopWaitCleanup(t *testing.T) {
 func mustNewActivationLifecycleOwner(
 	t *testing.T,
 	stream *factorydefinitions.FactoryEventStream,
-) *lifecycleservice.Service {
+) activationlifecycle.Service {
 	t.Helper()
 	source := &lifecycleSourceStub{
 		stream:   stream,
@@ -215,17 +215,9 @@ func mustNewActivationLifecycleOwner(
 func mustNewActivationLifecycleOwnerWithSource(
 	t *testing.T,
 	source *lifecycleSourceStub,
-) *lifecycleservice.Service {
+) activationlifecycle.Service {
 	t.Helper()
-	owner, err := lifecycleservice.New(
-		source,
-		&recordingsstub.Service{},
-		fixedLifecycleClock{now: time.Unix(1, 0)},
-		lifecycleSinkFunc(func(activationlifecycle.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	ownerBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	owner := ownerBehavior.Open(source, fixedLifecycleClock{now: time.Unix(1, 0)}, lifecycleSinkFunc(func(activationlifecycle.View) {}), nil)
 	return owner
 }

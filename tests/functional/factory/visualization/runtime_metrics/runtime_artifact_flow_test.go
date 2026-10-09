@@ -10,11 +10,14 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -36,28 +39,54 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 	writeFunctionalFile(t, outsidePath, "outside")
 	writeFunctionalFile(t, filepath.Join(metricsRoot, "keep.txt"), "unrelated")
 	symlinkPath := createFunctionalMetricsSymlink(t, metricsRoot, outsidePath)
+	sessionID := uuid.NewString()
+	var viewsMu sync.Mutex
+	var views []factoryvisualization.View
+	var visualization factoryvisualization.Service
+	activationErrors := make(chan error, 1)
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Args: []string{
+			"--session", sessionID,
 			"--runtime-metrics-dir", metricsRoot,
 			"--runtime-metrics-max-size-mb", "1",
 			"--runtime-metrics-max-age-days", "1",
 		},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("runtime artifact COMPLETE"),
+			FactoryVisualizationSink: factoryvisualization.SinkFunc(func(view factoryvisualization.View) {
+				viewsMu.Lock()
+				defer viewsMu.Unlock()
+				views = append(views, view)
+			}),
+			FactoryVisualizationRootObserver: func(root factoryvisualization.Root) {
+				visualization = root
+				_, err := root.Activate(t.Context(), factoryvisualization.ActivateRequest{Mode: factoryvisualization.ActivateModeRetainedThenLive})
+				activationErrors <- err
+			},
 		},
 	})
 
-	support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
+	select {
+	case err := <-activationErrors:
+		if err != nil {
+			t.Fatalf("activate selected visualization: %v", err)
+		}
+	case <-time.After(support.ScaledTimeout(15 * time.Second)):
+		t.Fatal("selected visualization was not opened")
+	}
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 30*time.Second)
 	livePaths := functionalMetricArtifactPaths(t, metricsRoot)
 	if len(livePaths) != 1 {
 		t.Fatalf("live metrics artifacts = %#v, want exactly one regular active artifact", livePaths)
 	}
 	assertFunctionalMetricPath(t, metricsRoot, livePaths[0])
 
+	assertVisualizationDrained(t, visualization, &viewsMu, &views)
 	server.Stop(t)
+	assertVisualizationDrained(t, visualization, &viewsMu, &views)
 	if _, err := os.Stat(expiredPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("expired artifact stat error = %v, want startup retention to remove %q", err, expiredPath)
 	}
@@ -69,6 +98,37 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 		}
 	}
 	assertFunctionalRuntimeMetricsRecords(t, livePaths[0])
+}
+
+func assertVisualizationDrained(t *testing.T, visualization factoryvisualization.Service, mu *sync.Mutex, views *[]factoryvisualization.View) {
+	t.Helper()
+	ctx := t.Context()
+	if drained, err := visualization.StopDrain(ctx, factoryvisualization.StopDrainRequest{}); err != nil || drained.State != factoryvisualization.LifecycleStateStopped {
+		t.Fatalf("drain = %+v, %v", drained, err)
+	}
+	joined, err := visualization.Join(ctx, factoryvisualization.JoinRequest{})
+	if err != nil || joined.State != factoryvisualization.LifecycleStateStarted {
+		t.Fatalf("visualization Join = %+v, %v, want drained lifecycle", joined, err)
+	}
+	mu.Lock()
+	count := len(*views)
+	var projected bool
+	for _, view := range *views {
+		projected = projected || view.Runtime.TickCount > 0
+	}
+	mu.Unlock()
+	if count == 0 || !projected {
+		t.Fatalf("selected visualization emitted %d views without runtime progress", count)
+	}
+	// Repeated drain after host completion must remain idempotent and emit no view.
+	if drained, err := visualization.StopDrain(ctx, factoryvisualization.StopDrainRequest{}); err != nil || drained.State != factoryvisualization.LifecycleStateStopped {
+		t.Fatalf("repeat drain = %+v, %v", drained, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(*views) != count {
+		t.Fatalf("visualization emitted after completed drain: %d -> %d", count, len(*views))
+	}
 }
 
 func assertFunctionalRuntimeMetricsRecords(t *testing.T, path string) {

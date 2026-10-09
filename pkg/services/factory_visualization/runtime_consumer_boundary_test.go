@@ -12,20 +12,13 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	. "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
-	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
 )
 
-// TestVisualizationConsumerObservationExercisesRuntimeRoot proves CUT-VIS-RUN story 004:
-// leased session-bound activation and detached Observe paths reach Factory Runtime
-// only through root Service.Observe, mapping returned observation facts into
-// activation/view outcomes reviewers can verify.
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
+// Selected runtime source retains its event stream and maps captured owner facts.
+func TestRuntimeSourcePreservesSelectedObservationAndRetainedStream(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, time.July, 28, 7, 55, 0, 0, time.UTC)
 	uptime := 17 * time.Second
 	history := event("retained", 1)
 	runtimeFactory := &sessionBoundRuntimeFactory{
@@ -52,49 +45,12 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 			})
 		},
 	}
-	emitted := make([]View, 0, 2)
-	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
-		&recordingsstub.Service{},
-		fixedClock{now: now},
-		SinkFunc(func(view View) {
-			emitted = append(emitted, view)
-		}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() with session-bound runtime source: %v", err)
+	source := internalservice.NewRuntimeSourceOpening(reader)("selected-session")
+	stream, err := source.SubscribeFactoryEvents(t.Context(), nil, factorydefinitions.FactoryEventReconnectScope{})
+	if err != nil || stream != runtimeFactory.stream || len(stream.History) != 1 || stream.History[0].Id != history.Id {
+		t.Fatalf("selected stream=(%+v,%v)", stream, err)
 	}
-	var root Root = service
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if _, err := root.Activate(ctx, ActivateRequest{Mode: ActivateModeRetainedThenLive}); err != nil {
-		t.Fatalf("Activate through session-bound runtime: %v", err)
-	}
-
-	result, err := root.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
-	if err != nil {
-		t.Fatalf("Observe after Activate: %v", err)
-	}
-	if len(runtimeFactory.observeRequests) == 0 {
-		t.Fatal("detached Observe did not exercise root Service.Observe")
-	}
-	lastObserve := runtimeFactory.observeRequests[len(runtimeFactory.observeRequests)-1]
-	if lastObserve.Scope != factoryruntime.ObservationScopeFull {
-		t.Fatalf("observe scope = %q, want %q", lastObserve.Scope, factoryruntime.ObservationScopeFull)
-	}
-	if result.View.TickCount != 13 {
-		t.Fatalf("Observe TickCount = %d, want 13 from root observation facts", result.View.TickCount)
-	}
-	if result.View.RetainedEventCount != 1 {
-		t.Fatalf("Observe RetainedEventCount = %d, want 1", result.View.RetainedEventCount)
-	}
-	if !result.View.ObservedAt.Equal(now) {
-		t.Fatalf("Observe ObservedAt = %v, want %v", result.View.ObservedAt, now)
-	}
-
-	facts, err := factoryvisualizationwire.NewCurrentRuntimeSource(reader).GetRuntimeSnapshotFacts(context.Background())
+	facts, err := internalservice.NewRuntimeSourceOpening(reader)("selected-session").GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
 		t.Fatalf("GetRuntimeSnapshotFacts after Observe: %v", err)
 	}
@@ -108,15 +64,11 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 		t.Fatalf("snapshot uptime = %v, want %v", facts.Uptime, uptime)
 	}
 
-	foundActivationTick := false
-	for _, view := range emitted {
-		if view.Runtime.TickCount == 13 {
-			foundActivationTick = true
-			break
-		}
+	if facts.TickCount != 13 {
+		t.Fatalf("snapshot tick=%d, want 13", facts.TickCount)
 	}
-	if !foundActivationTick {
-		t.Fatalf("activation views = %#v, want tick count from root observation facts", emitted)
+	if len(runtimeFactory.observeRequests) != 1 || runtimeFactory.observeRequests[0].Scope != factoryruntime.ObservationScopeFull {
+		t.Fatalf("observe requests=%+v", runtimeFactory.observeRequests)
 	}
 }
 
@@ -143,7 +95,7 @@ func TestVisualizationConsumerObservationFailsClosedWithoutPetriSnapshot(t *test
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+	source := internalservice.NewRuntimeSourceOpening(reader)("selected-session")
 
 	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
@@ -163,10 +115,8 @@ func TestVisualizationConsumerObservationFailsClosedWithoutPetriSnapshot(t *test
 	}
 }
 
-// TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure proves typed
-// Runtime observation failures propagate through detached Observe as
-// Visualization-owned projection failures with the root cause attached.
-func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *testing.T) {
+// The source preserves observation failures from its injected runtime.
+func TestRuntimeSourcePropagatesObserveFailure(t *testing.T) {
 	t.Parallel()
 
 	wantErr := factoryruntime.ErrNotRunning
@@ -181,24 +131,10 @@ func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *tes
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	service, err := factoryvisualizationwire.NewRoot(
-		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
-		&recordingsstub.Service{},
-		fixedClock{now: time.Unix(1, 0)},
-		SinkFunc(func(View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() with failing runtime observe: %v", err)
-	}
-
-	_, err = service.Observe(context.Background(), ObserveRequest{Mode: ObserveModeRetainedThenLive})
-	var projErr *ProjectionError
-	if !errors.As(err, &projErr) || projErr.Kind != ProjectionErrorSnapshotUnavailable {
-		t.Fatalf("Observe error = %v, want ProjectionErrorSnapshotUnavailable", err)
-	}
-	if !errors.Is(projErr.Cause, wantErr) {
-		t.Fatalf("Observe cause = %v, want %v", projErr.Cause, wantErr)
+	source := internalservice.NewRuntimeSourceOpening(reader)("selected-session")
+	_, err := source.GetRuntimeSnapshotFacts(t.Context())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("snapshot error=%v, want %v", err, wantErr)
 	}
 }
 

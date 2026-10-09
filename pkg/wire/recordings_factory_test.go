@@ -56,7 +56,7 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 
-	if _, err := provideHTTPRuntimeBindingWithMetrics(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
+	if _, err := provideHTTPRuntimeBindingWithMetrics(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("provideHTTPRuntimeBindingWithMetrics(nil roles) error = nil, want required-owner validation")
 	}
 }
@@ -64,7 +64,7 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 func TestHTTPRuntimeBindingRejectsMissingRoot(t *testing.T) {
 	t.Parallel()
 
-	_, err := newHTTPRuntimeHandlerWithMetrics(nil, "session-1", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := newHTTPRuntimeHandlerWithMetrics(nil, nil, nil, nil, nil, "session-1", nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Sessions root is required") {
 		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing root", err)
 	}
@@ -73,7 +73,7 @@ func TestHTTPRuntimeBindingRejectsMissingRoot(t *testing.T) {
 func TestHTTPRuntimeBindingRejectsUnknownSession(t *testing.T) {
 	t.Parallel()
 
-	_, err := newHTTPRuntimeHandlerWithMetrics(&factorysessionwire.Root{}, "session-1", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := newHTTPRuntimeHandlerWithMetrics(&factorysessionwire.Root{}, nil, nil, nil, nil, "session-1", nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "process root is required") {
 		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want unavailable session", err)
 	}
@@ -82,10 +82,10 @@ func TestHTTPRuntimeBindingRejectsUnknownSession(t *testing.T) {
 func TestDirectJavaScriptHTTPCompositionRejectsMissingRoles(t *testing.T) {
 	t.Parallel()
 
-	if _, err := provideDirectJavaScriptHostAdapter(nil, nil, nil, nil, nil, nil, nil); err == nil {
+	if _, err := provideDirectJavaScriptHostAdapter(nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("provideDirectJavaScriptHostAdapter(nil roles) error = nil, want required-role validation")
 	}
-	if _, err := newDurableExecutionHTTPHandler(nil, nil, nil, nil, nil, nil); err == nil {
+	if _, err := newDurableExecutionHTTPHandler(nil, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("newDurableExecutionHTTPHandler(nil roles) error = nil, want required-role validation")
 	}
 }

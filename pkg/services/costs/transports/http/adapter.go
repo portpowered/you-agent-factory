@@ -16,30 +16,25 @@ import (
 type Adapter struct {
 	query    costs.CostsQuery
 	resolver factorysessions.RuntimeMetricsScopeResolver
-	request  costs.QueryRequest
+	paths    func(context.Context) (string, string)
 }
 
-// NewAdapter constructs the Costs HTTP adapter for one opened runtime.
+// NewAdapter constructs the fixed Costs HTTP adapter. The path reader consumes
+// request-scoped facts and never resolves services.
 // The resolver is supplied by Factory Sessions to preserve retained scopes.
 func NewAdapter(
 	query costs.CostsQuery,
-	metricsRoot, operatorSettingsPath string,
+	paths func(context.Context) (string, string),
 	resolver factorysessions.RuntimeMetricsScopeResolver,
 ) *Adapter {
-	return &Adapter{
-		query:    query,
-		resolver: resolver,
-		request: costs.QueryRequest{
-			MetricsRoot:          strings.TrimSpace(metricsRoot),
-			OperatorSettingsPath: strings.TrimSpace(operatorSettingsPath),
-		},
-	}
+	return &Adapter{query: query, resolver: resolver, paths: paths}
 }
 
 // GetMetricsCosts invokes the stateless Costs operation for the requested
 // optional Factory Session scope and maps its exact result to the API model.
 func (a *Adapter) GetMetricsCosts(ctx context.Context, sessionID string) (factoryapi.CostsReport, error) {
-	request := a.request
+	metricsRoot, settingsPath := a.paths(ctx)
+	request := costs.QueryRequest{MetricsRoot: strings.TrimSpace(metricsRoot), OperatorSettingsPath: strings.TrimSpace(settingsPath)}
 	requestedID := strings.TrimSpace(sessionID)
 	request.FactorySessionID = requestedID
 	request.RetainedFactorySessionIDs = nil
@@ -97,4 +92,18 @@ func containsFactorySessionID(values []string, wanted string) bool {
 		}
 	}
 	return false
+}
+
+// WithRuntimePaths attaches the selected host's artifact paths to a request.
+// No reusable collaborator is stored in the context.
+func WithRuntimePaths(ctx context.Context, metricsRoot, settingsPath string) context.Context {
+	return context.WithValue(ctx, runtimePathsKey{}, [2]string{metricsRoot, settingsPath})
+}
+
+type runtimePathsKey struct{}
+
+// RuntimePaths reads the host facts supplied by the HTTP route shell.
+func RuntimePaths(ctx context.Context) (string, string) {
+	paths, _ := ctx.Value(runtimePathsKey{}).([2]string)
+	return paths[0], paths[1]
 }

@@ -19,6 +19,7 @@ import (
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
@@ -43,6 +44,7 @@ var apiSet = wire.NewSet(
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
 	provideHTTPRuntimeBindingWithMetrics,
+	provideHTTPWorkerPrompts,
 )
 
 var servicesSet = wire.NewSet(
@@ -115,7 +117,12 @@ var servicesSet = wire.NewSet(
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
 	factorysessionwire.NewLifecyclePlanOperation,
-	provideFactoryVisualizationFactory,
+	wire.Bind(new(factoryvisualization.RuntimeReader), new(*factorysessionwire.Root)),
+	factoryvisualizationwire.NewRuntimeSourceOpening,
+	factoryvisualizationwire.NewActivationOpening,
+	factoryvisualizationwire.NewProjectionOpening,
+	factoryvisualizationwire.NewScopeOpening,
+	provideFactoryVisualizationOpening,
 	provideResponsePresentation,
 	factoryvisualizationwire.NewRuntimeSinkOwner,
 	factorysessionwire.NewOpeningPresentationOwner,

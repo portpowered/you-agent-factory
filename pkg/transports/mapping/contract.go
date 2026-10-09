@@ -26,11 +26,9 @@ type FactorySaveAPI interface {
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
-// RuntimeAPI owns the compatibility unscoped runtime reads retained by the
-// HTTP routes. Work admission is owned by the Work transport and root.
-type RuntimeAPI interface {
-	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
-	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
+// CurrentFactoryReader supplies the durable current Factory definition.
+type CurrentFactoryReader interface {
+	GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error)
 }
 
 // FactoryStatusAPI is the exact detached Factory Runtime status read used by

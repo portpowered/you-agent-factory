@@ -22,7 +22,6 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -43,11 +42,8 @@ func TestBindWorkerScopeRejectsMissingRequiredBinder(t *testing.T) {
 
 // runtimeOpeningFixture supplies controlled direct collaborators to the opening owner.
 type runtimeOpeningFixture struct {
-	RecordingProjections         recordings.ProjectionService
 	LiveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
-	ProviderSessions             providersessions.Service
 	Logger                       *zap.Logger
-	WorkflowPreview              factoryruntime.WorkflowPreviewOperation
 	RuntimeRoot                  FactoryRuntimeRoot
 	ResolveClock                 factoryruntime.ClockResolver
 	NewSessionLogger             factoryruntime.SessionLoggerFactory
@@ -68,12 +64,10 @@ type runtimeOpeningFixture struct {
 	GenerateRuntimeInstanceID    factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                  factorysessions.HomeDirectoryResolver
 	ProviderIdentities           factorysessions.ProviderIdentityResolver
-	WorkService                  work.Service
 	WebhooksService              webhooks.Service
 	ModelService                 models.Service
 	RecordingsService            recordings.Service
 	RecordingsRuntime            recordings.RuntimeScopeService
-	WorkerService                workers.Service
 	ProviderCommandRunner        ProviderCommandRunner
 	EnsureBackendScope           operatorsettings.BackendScopeEnsurer
 	InitialActivation            factoryruntime.InitialRuntimeActivationOperation
@@ -96,9 +90,8 @@ func (fixture runtimeOpeningFixture) newFactory() (*runtimeOpeningTestRoot, erro
 		fixture.ProviderOverride, nil, fixture.Logger, fixture.Clock, fixture.ResolveClock, fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID, fixture.ResolveHome, fixture.Definitions, inventory)
 	root, err := NewRoot(fixture.Assembly, durable, opening.Start, fixture.LiveChangeCoordinator,
-		opening.InspectHistoricalApplication, fixture.Definitions, fixture.WorkService, fixture.ModelService,
-		fixture.RecordingsService, fixture.WorkerService, fixture.ProviderSessions, fixture.WorkflowPreview,
-		fixture.RecordingProjections, nil, fixture.GenerateSessionID)
+		opening.InspectHistoricalApplication, fixture.Definitions, fixture.RecordingsService,
+		nil, fixture.GenerateSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,22 +101,12 @@ func TestNewFactoryRemainsInert(t *testing.T) {
 	t.Parallel()
 	calls := 0
 	dependencies := validRuntimeOpeningCollaborators(&calls)
-	materializer := &selectedOpeningMaterializer{}
-	dependencies.WorkService = work.MaterializationService(materializer)
 	factory, err := dependencies.newFactory()
 	if err != nil || factory == nil {
 		t.Fatalf("NewRoot() = (%v, %v)", factory, err)
 	}
 	if calls != 0 {
 		t.Fatalf("construction invoked %d collaborator functions", calls)
-	}
-	path, cleanup, err := factory.workService.MaterializeContentURL(t.Context(), "file:///identity.png")
-	if err != nil || path != "/tmp/identity.png" || cleanup == nil {
-		t.Fatalf("selected Work materialization = (%q, %v, %v)", path, cleanup, err)
-	}
-	cleanup()
-	if materializer.calls != 1 || materializer.input != "file:///identity.png" {
-		t.Fatalf("selected materializer calls = %d with %q", materializer.calls, materializer.input)
 	}
 }
 
@@ -180,9 +163,7 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 	return runtimeOpeningFixture{
 		LiveChangeCoordinator:        livechange.NewCoordinator(),
 		InitialActivation:            inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
-		ProviderSessions:             providerSessionsConstructionStub{},
 		Logger:                       zap.NewNop(),
-		WorkflowPreview:              workflowPreviewConstructionStub{},
 		ResolveClock:                 inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
 		NewSessionLogger:             inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
 		Clock:                        openingCoordinatorClock{},
@@ -201,13 +182,10 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		GenerateRuntimeInstanceID:    inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
 		ResolveHome:                  inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 		ProviderIdentities:           inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
-		WorkService:                  work.MaterializationService(constructionMaterializer{calls: calls}),
 		ModelService:                 &modelsConstructionStub{},
 		RecordingsService:            &recordingsRootConstructionStub{},
 		RecordingsRuntime:            &recordingsRootConstructionStub{},
-		RecordingProjections:         &openingCoordinatorProjection{},
 		WebhooksService:              webhooksConstructionStub{},
-		WorkerService:                &workersConstructionStub{},
 		ProviderCommandRunner:        workersRootBindingProbeRunner{tag: "provider"},
 		EnsureBackendScope:           inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
 	}
@@ -226,10 +204,6 @@ func inertRuntimeOpeningFunction[T any](calls *int) T {
 	return function.Interface().(T)
 }
 
-type providerSessionsConstructionStub struct{ providersessions.Service }
-type workflowPreviewConstructionStub struct {
-	factoryruntime.WorkflowPreviewOperation
-}
 type validatorConstructionStub struct{ factorydefinitions.Validator }
 type namedPathsConstructionStub struct {
 	factorydefinitions.NamedPathResolver
@@ -247,7 +221,6 @@ type recordingsRootConstructionStub struct {
 }
 
 type webhooksConstructionStub struct{ webhooks.Service }
-type workersConstructionStub struct{ workers.Service }
 
 type workersRootBindingProbeRunner struct{ tag string }
 
@@ -292,17 +265,6 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 
 var _ recordings.Service = (*recordingsRootConstructionStub)(nil)
 var _ recordings.RuntimeScopeService = (*recordingsRootConstructionStub)(nil)
-
-type selectedOpeningMaterializer struct {
-	calls int
-	input string
-}
-
-func (materializer *selectedOpeningMaterializer) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
-	materializer.calls++
-	materializer.input = rawURL
-	return "/tmp/identity.png", func() {}, nil
-}
 
 // durableOpeningFixture controls the configuration and acquisition effects of
 // the fixed opening owner used by live and replay component fixtures.

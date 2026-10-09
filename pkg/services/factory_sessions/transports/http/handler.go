@@ -28,7 +28,7 @@ type Adapter struct {
 	sessionsRoot       factorysessions.Service
 	liveControl        factorysessions.LiveControlService
 	sessionDeletion    factorysessions.LiveDeletionService
-	runtime            apisurface.RuntimeAPI
+	currentFactory     apisurface.CurrentFactoryReader
 	factoryStatus      apisurface.FactoryStatusAPI
 	sessions           apisurface.LiveSessionAPI
 	invocation         apisurface.InvocationAPI
@@ -44,12 +44,12 @@ type Adapter struct {
 }
 
 // Dependencies are the exact injected roles used by the Factory Sessions HTTP
-// adapter. They are supplied by the already-opened runtime composition.
+// adapter. They are supplied by canonical Wire before session activation.
 type Dependencies struct {
 	SessionsRoot       factorysessions.Service
 	LiveControl        factorysessions.LiveControlService
 	SessionDeletion    factorysessions.LiveDeletionService
-	Runtime            apisurface.RuntimeAPI
+	CurrentFactory     apisurface.CurrentFactoryReader
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
 	Invocation         apisurface.InvocationAPI
@@ -76,13 +76,10 @@ type RequestPreparation interface {
 
 // NewHandler constructs an inert Factory Sessions HTTP adapter.
 func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	return &Adapter{
 		sessionsRoot: deps.SessionsRoot, liveControl: deps.LiveControl,
 		sessionDeletion: deps.SessionDeletion,
-		runtime:         deps.Runtime, factoryStatus: deps.FactoryStatus,
+		currentFactory:  deps.CurrentFactory, factoryStatus: deps.FactoryStatus,
 		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
