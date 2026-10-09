@@ -104,6 +104,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.DurableOpening,
 		fixture.resourceAcquisition(),
 		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
+		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner),
 		fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,

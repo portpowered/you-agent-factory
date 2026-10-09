@@ -282,9 +282,8 @@ Missing proof status remains unproved. Story passes reports retained process
 completion only, never review proof. Process never marks review-owned criteria
 true; unproved review-owned criteria remain false at handoff.
 
-Count only process-owned criteria toward the criterion cap, once by criterion ID.
-Review-owned obligations remain mapped and unproved; story/criterion caps
-still apply. Do not drop immutable requirements to fit any cap.
+Review-owned obligations remain mapped and unproved. There is no story or
+criterion cap; do not drop immutable requirements.
 
 ## 8. Failure modes and operational readiness
 

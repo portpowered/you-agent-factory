@@ -191,9 +191,8 @@ flowchart LR
 <Assign every project/story criterion an explicit process or review owner and
 stable ID, status and evidence/later gate. Hosted/terminal CI, merge, independent
 or post-merge validation and reviewer judgment are review-owned; direct
-implementation proof and implementation delivery are process-owned. Count only
-unique process IDs toward the criterion cap. Preserve immutable requirements,
-other caps and later gates. Missing owner in legacy packets defaults to process,
+implementation proof and implementation delivery are process-owned. There is
+no story or criterion cap. Preserve immutable requirements and later gates. Missing owner in legacy packets defaults to process,
 including strings; invalid explicit owners cannot bypass blockers. Process
 handoff leaves unproved review criteria false, lists their IDs/gates as owned by
 review, and still requires all delivery prerequisites. Story passes claims only

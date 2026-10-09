@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -259,10 +260,26 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 		factorySessionID = firstNonEmpty(metadata.sourceFactorySessionID, factorySessionID)
 	}
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
+		WorkName:    dispatchedWorkName(req.Execution.Execution.Dispatch),
 		RecordingID: recordingID, FactorySessionID: factorySessionID,
 		OriginatingArtifact: req.Execution.Execution.OriginatingArtifact,
 		WorkerSessionID:     publicWorkerID(req.ID), Topic: r.observationTopic(req.ID),
 	})
+}
+
+// The opening associates its first Work ID. Optional name metadata must match
+// that exact Work, even when resource inputs or secondary Works come first.
+func dispatchedWorkName(dispatch work.WorkDispatch) string {
+	if len(dispatch.Execution.WorkIDs) == 0 {
+		return ""
+	}
+	primary := dispatch.Execution.WorkIDs[0]
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.Color.DataType == workers.DataTypeWork && token.Color.WorkID == primary {
+			return token.Color.Name
+		}
+	}
+	return ""
 }
 
 // Start establishes or replays one Worker Session and returns at the exact

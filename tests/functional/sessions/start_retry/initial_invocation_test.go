@@ -869,10 +869,12 @@ func assertBindingChildResponses(t *testing.T, ctx context.Context, sessions fac
 		t.Fatal(err)
 	}
 	completed := map[string]bool{}
+	var lastSequence int64
 	for _, event := range events {
-		if event.FactorySessionID != id {
+		if event.FactorySessionID != id || event.Sequence <= lastSequence || event.DispatchID == "" {
 			t.Fatalf("crossed child progress: %+v", event)
 		}
+		lastSequence = event.Sequence
 		if event.Phase == factorysessions.ResponseEventPhaseCompleted && event.Provenance.NativeEventType == "STREAM_COMPLETED" {
 			completed[event.DispatchID] = true
 		}

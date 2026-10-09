@@ -60,18 +60,17 @@ true; unproved review-owned criteria remain false at handoff.
 
 ## Behavior slice and evidence policy
 
-Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 unique process-owned criteria total.
-For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
+Plan each lane as ONE independently mergeable PR that delivers the whole ask.
+There is no story, criterion, line or file cap; a large ask is one large plan.
+Split only when parts ship separately or one part must merge before another can be built; then list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
 Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates.
-Never evade behavior/criterion caps with compound scope or weakened acceptance. No runtime/routing change or invented approval.
+Never weaken acceptance. No runtime/routing change or invented approval.
 
 Each named successor must depend on this lane's merge before lead/operator
 admission; do not create successor Work or implement it in this lane.
-Count only process-owned criteria toward the criterion cap, once by criterion ID,
-including process quality and delivery. Review-owned criteria stay visible and
-mapped to later gates; story/criterion caps and immutable requirements remain intact.
+Review-owned criteria stay visible and mapped to later gates; immutable
+requirements remain intact.
 Do not prescribe arbitrary output-size requirements unless the customer explicitly asks
 for them.
 Measurements, timings, calibration runs and evidence belong in the PR body or a PR

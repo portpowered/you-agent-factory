@@ -10,10 +10,9 @@ import sys
 # Required clauses are deliberately explicit: diagnostics identify the policy
 # to restore. Normalize whitespace only; semantic slice quality needs review.
 PLAN_RULES = (
-    ('slice', 'Plan at most ONE independently mergeable slice per lane.'),
-    ('stories', 'at most 2 stories'),
-    ('criteria', 'about 8 unique process-owned criteria total'),
-    ('first-slice', 'retain the first correct slice'),
+    ('slice', 'Plan each lane as ONE independently mergeable PR that delivers the whole ask.'),
+    ('no-scope-cap', 'There is no story, criterion, line or file cap'),
+    ('split', 'Split only when parts ship separately or one part must merge before another can be built'),
     ('successors', 'remaining names/outcomes/requirements and merge gates'),
     ('successor-section', 'Named successor slices — not admitted'),
     ('empty-successors', 'State "None" if empty'),
@@ -21,7 +20,7 @@ PLAN_RULES = (
     ('admission', 'only lead/operator admits them through existing routes'),
     ('merge-gate', "Each named successor must depend on this lane's merge before lead/operator admission"),
     ('immutable', 'Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates'),
-    ('no-evasion', 'Never evade behavior/criterion caps with compound scope or weakened acceptance'),
+    ('no-weakening', 'Never weaken acceptance'),
     ('no-routing', 'No runtime/routing change or invented approval'),
 )
 PROCESS_RULES = (
@@ -83,7 +82,7 @@ OUTPUT_CONFLICTS = (
 
 
 def check_changed_line_budgets(prompts):
-    """Reject numeric diff budgets in supplied path/text pairs, without I/O."""
+    """Reject numeric diff and scope caps in supplied path/text pairs, without I/O."""
     number = r'\d[\d,]*(?:[-–]\d[\d,]*)?'
     pattern = (
         rf'\b{number} changed[- ]lines?\b'
@@ -91,11 +90,15 @@ def check_changed_line_budgets(prompts):
         rf'|\bdiff (?:limit|budget|cap)(?: is| of|:)? {number} lines?\b'
         rf'|\b{number} lines? \(added plus deleted\)'
     )
-    return [
-        f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts'
-        for path, source in sorted(prompts.items())
-        if re.search(pattern, ' '.join(source.split()), re.IGNORECASE)
-    ]
+    scope = rf'\bat most {number} stories\b|\babout {number} (?:unique )?(?:process-owned )?criteria total\b'
+    diagnostics = []
+    for path, source in sorted(prompts.items()):
+        normalized = ' '.join(source.split())
+        if re.search(pattern, normalized, re.IGNORECASE):
+            diagnostics.append(f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts')
+        if re.search(scope, normalized, re.IGNORECASE):
+            diagnostics.append(f'{path}:scope-cap: remove story and criterion caps from lane-facing prompts')
+    return diagnostics
 
 
 def check_output_policy(prompts):
@@ -224,7 +227,6 @@ OWNERSHIP_RULES = {
         ('composite', 'A composite immutable criterion requiring review evidence is review-owned as a whole; retain its implementation work and later gates'),
         ('default', 'Missing owner defaults to process, including legacy string criteria'),
         ('invalid', 'Invalid explicit owners (unknown, null or non-string) are malformed metadata and never bypass a blocker'),
-        ('cap', 'Count only process-owned criteria toward the criterion cap, once by criterion ID'),
     ),
     'process': (
         ('gate', 'Set `decision` to `ACCEPTED` only when every retained process-owned criterion is passes:true'),
@@ -253,9 +255,6 @@ OWNERSHIP_RULES = {
 # Reject known contradictory gates even when the correct clause also appears.
 # This is a bounded text diagnostic, not a semantic classifier or PRD evaluator.
 OWNERSHIP_CONFLICTS = {
-    'plan': (
-        ('all-criteria-cap', r'about 8 criteria total'),
-    ),
     'process': (
         ('all-criteria-gate', r'(?:all|every)(?: other)? retained (?:current-slice items|(?:story and )?acceptance criteri(?:a|on)|criteri(?:a|on))(?: in the PRD)? (?:have been marked as passes:true|(?:is |are )?pass(?:ing|es|es:true)|must (?:pass|be (?:true|satisfied)))'),
         ('all-criteria-gate', r'Every retained criterion and blocker still requires completion'),

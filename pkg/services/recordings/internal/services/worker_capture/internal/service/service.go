@@ -275,6 +275,7 @@ func (capture *capture) accept(record events.Record) error {
 		return err
 	}
 	if err := capture.writer.PersistWorkerRecord(capture.runCtx, recordings.WorkerRecordingRecord{
+		WorkName:            capture.request.WorkName,
 		RecordingID:         capture.request.RecordingID,
 		OriginatingArtifact: capture.request.OriginatingArtifact,
 		FactorySessionID:    capture.request.FactorySessionID,

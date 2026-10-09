@@ -57,6 +57,7 @@ type Root struct {
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	openingCompletion              *RuntimeOpeningCompletion
+	openingBinding                 *RuntimeOpeningBinding
 	resourceAcquisition            *RuntimeResourceAcquisition
 	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
@@ -108,6 +109,7 @@ func NewRoot(
 	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
 	openingCompletion *RuntimeOpeningCompletion,
+	openingBinding *RuntimeOpeningBinding,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -154,6 +156,7 @@ func NewRoot(
 		baseLogger:                     logger,
 		runtimeLogs:                    runtimeLogs,
 		openingCompletion:              openingCompletion,
+		openingBinding:                 openingBinding,
 		generateSessionID:              generateSessionID,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
