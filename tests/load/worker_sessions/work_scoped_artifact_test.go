@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttp "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -107,25 +108,29 @@ func seedRetainedArtifact(t *testing.T, ctx context.Context, f *scopedLatencyFix
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = process.Close(context.Background()) })
-	server := startScopedLatencyHost(t, ctx, process, *f, ready, "--record", record)
+	// Retain a concrete source scope in canonical events. The delivered runtime
+	// binds this history to its own default scope; a historical literal ~default
+	// cannot identify the original capture owner after that binding changes.
+	f.sessionID = uuid.NewString()
+	server := startScopedLatencyHost(t, ctx, process, *f, ready, "--session", f.sessionID, "--record", record)
 	var session factoryapi.FactorySession
-	raw, _, _ := scopedLatencyHTTP(t, ctx, server.URL+"/factory-sessions/~default")
+	raw, _, _ := scopedLatencyHTTP(t, ctx, server.URL+"/factory-sessions/"+f.sessionID)
 	if err := json.Unmarshal(raw, &session); err != nil || session.Id == "" {
 		t.Fatalf("seed session: %v %s", err, raw)
 	}
 	f.sessionID = session.Id
-	f.workID = submitRetainedWork(t, server.Config.Handler, "~default", "target")
+	f.workID = submitRetainedWork(t, server.Config.Handler, f.sessionID, "target")
 	var pending []string
 	pending = append(pending, f.workID)
 	for range 550 {
-		pending = append(pending, submitRetainedWork(t, server.Config.Handler, "~default", "task"))
+		pending = append(pending, submitRetainedWork(t, server.Config.Handler, f.sessionID, "task"))
 	}
 	// Two known empty Works complete the representative board without adding
 	// attempts. Neither readiness nor inventory warms the measured list.
 	for range 2 {
-		submitRetainedWork(t, server.Config.Handler, "~default", "idle")
+		submitRetainedWork(t, server.Config.Handler, f.sessionID, "idle")
 	}
-	waitRetainedWorks(t, ctx, server.Config.Handler, "~default", pending)
+	waitRetainedWorks(t, ctx, server.Config.Handler, f.sessionID, pending)
 	assertRetainedInventory(t, ctx, store, f.sessionID, 3304)
 }
 

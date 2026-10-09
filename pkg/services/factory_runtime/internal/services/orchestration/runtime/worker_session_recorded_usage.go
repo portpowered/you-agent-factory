@@ -1037,18 +1037,32 @@ func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent)
 		replayEvents:         cloneAndSortFactoryEvents(replay),
 		restoredEventPrefix:  cloneFactoryEventsInOrder(prefix),
 		restoredSessionIDs:   make(map[string]struct{}),
-		restoredWorkerScopes: make(map[string]string),
+		restoredWorkerScopes: prepareCapturedWorkerScopes(replay, prefix),
 	}
 	for _, event := range history.restoredEventPrefix {
 		if id := strings.TrimSpace(stringPointerValue(event.Context.SessionID)); id != "" {
 			history.restoredSessionIDs[id] = struct{}{}
-			if event.Type == interfaces.FactoryEventTypeDispatchWorkerSessionAssoc {
-				var association interfaces.DispatchWorkerSessionAssociationEventPayload
-				if event.DecodePayload(&association) == nil && association.WorkerSessionID != "" {
-					history.restoredWorkerScopes[association.WorkerSessionID] = id
-				}
-			}
+
 		}
 	}
 	return history
+}
+
+// Resume may bind replay events without a restored world checkpoint. Both
+// activation sources carry original physical capture membership.
+func prepareCapturedWorkerScopes(sources ...[]interfaces.FactoryEvent) map[string]string {
+	scopes := make(map[string]string)
+	for _, events := range sources {
+		for _, event := range events {
+			if event.Type != interfaces.FactoryEventTypeDispatchWorkerSessionAssoc {
+				continue
+			}
+			scope := strings.TrimSpace(stringPointerValue(event.Context.SessionID))
+			var association interfaces.DispatchWorkerSessionAssociationEventPayload
+			if scope != "" && event.DecodePayload(&association) == nil && association.WorkerSessionID != "" {
+				scopes[association.WorkerSessionID] = scope
+			}
+		}
+	}
+	return scopes
 }

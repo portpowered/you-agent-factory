@@ -672,7 +672,7 @@ func TestScopedWorkRestoredCaptureRetainsOriginalScope(t *testing.T) {
 			prefix := []interfaces.FactoryEvent{{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 				Context: interfaces.FactoryEventContext{SessionID: &original},
 				Payload: []byte(fmt.Sprintf(`{"workerSessionId":%q}`, fixture.workerSessionID))}}
-			history := prepareRecordedObservationHistory(nil, prefix)
+			history := prepareRecordedObservationHistory(prefix, nil)
 			service.restoredWorkerScopes = history.restoredWorkerScopes
 			prefix[0].Payload = nil
 			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
