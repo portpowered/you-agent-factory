@@ -19,9 +19,9 @@ flowchart TB
   subgraph execution["Execution"]
     s_services_models["models<br/>38225 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>1043 LOC · 0 subservices"]
-    s_services_providers["providers<br/>15235 LOC · 3 subservices"]
-    s_services_worker_sessions["worker sessions<br/>25783 LOC · 0 subservices"]
-    s_services_workers["workers<br/>21774 LOC · 2 subservices"]
+    s_services_providers["providers<br/>15321 LOC · 3 subservices"]
+    s_services_worker_sessions["worker sessions<br/>25781 LOC · 0 subservices"]
+    s_services_workers["workers<br/>21784 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1998 LOC · 0 subservices"]
@@ -133,7 +133,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (738 LOC)<br/>(subservice) resolution (302 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | — |
-| [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5823 LOC) |
+| [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5906 LOC) |
 | [`recordings`](services/recordings.md) | (subservice) artifacts export (596 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (746 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (352 LOC)<br/>(subservice) recording lifecycle (905 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (5528 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |
 | [`webhooks`](services/webhooks.md) | — |
