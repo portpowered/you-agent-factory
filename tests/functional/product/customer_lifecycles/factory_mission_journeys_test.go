@@ -125,6 +125,7 @@ func submitMissionThroughCLI(t *testing.T, scenario *reviewFailureScenario, id, 
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "--server", scenario.fixture.baseURL, "--json", "submit", "batch", "--session", scenario.sessionID, path,
 	})
+	inputs.Input.Env = isolatedHomeEnvironment(filepath.Join(scenario.rootDir, "home"))
 	if err := scenario.fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("submit mission: %v; %s", err, inputs.Stderr())
 	}
@@ -184,15 +185,7 @@ func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureComm
 func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario, id, payload, first string, mission, corrected bool) {
 	t.Helper()
 	work := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID, "/work/"+id))
-	var expectedPayload any
-	if err := json.Unmarshal([]byte(payload), &expectedPayload); err != nil {
-		t.Fatal(err)
-	}
-	actualPayload, _ := json.Marshal(work.Payload)
-	var retainedPayload any
-	if err := json.Unmarshal(actualPayload, &retainedPayload); err != nil || !reflect.DeepEqual(retainedPayload, expectedPayload) {
-		t.Fatalf("retained payload=%s, want %s (%v)", actualPayload, payload, err)
-	}
+	assertMissionRetainedPayload(t, work, payload)
 	assertPayloadHasSentinel(t, "original tag", work.Tags, "retained-tag")
 	requests := reviewFailureProviderRequests(scenario.fixture.router.requestsFor(scenario.factoryDir))
 	for _, request := range requests {
@@ -211,21 +204,7 @@ func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario,
 		}
 	}
 	if corrected {
-		if len(requests) != 2 {
-			t.Fatalf("correction provider requests=%d, want 2", len(requests))
-		}
-		const reason = "mission-output-invalid: output.precondition must name the unmet precondition"
-		diagnostic, _ := json.Marshal(map[string]string{"invalidReply": first})
-		prompt := providerCommandPrompt(requests[1])
-		for _, value := range []string{
-			"Correction feedback (verbatim checker reason): " + reason,
-			"Previous output: " + string(diagnostic),
-			"On correction, fix the field named in the checker reason above.",
-		} {
-			if !strings.Contains(prompt, value) {
-				t.Errorf("correction prompt missing %q", value)
-			}
-		}
+		assertMissionCorrectionPrompt(t, requests, first)
 	}
 	dispatches := reviewFailureDispatches(t, scenario)
 	if len(dispatchesWithTransition(dispatches, "route-thoughts")) != 1 {
@@ -235,6 +214,38 @@ func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario,
 		t.Error("mission consumed supervisor workstation")
 	}
 	assertNoIncompleteReviewFailureDispatches(t, dispatches)
+}
+
+func assertMissionRetainedPayload(t *testing.T, work factoryapi.Work, payload string) {
+	t.Helper()
+	var expectedPayload any
+	if err := json.Unmarshal([]byte(payload), &expectedPayload); err != nil {
+		t.Fatal(err)
+	}
+	actualPayload, _ := json.Marshal(work.Payload)
+	var retainedPayload any
+	if err := json.Unmarshal(actualPayload, &retainedPayload); err != nil || !reflect.DeepEqual(retainedPayload, expectedPayload) {
+		t.Fatalf("retained payload=%s, want %s (%v)", actualPayload, payload, err)
+	}
+}
+
+func assertMissionCorrectionPrompt(t *testing.T, requests []platformprocess.CommandRequest, first string) {
+	t.Helper()
+	if len(requests) != 2 {
+		t.Fatalf("correction provider requests=%d, want 2", len(requests))
+	}
+	const reason = "mission-output-invalid: output.precondition must name the unmet precondition"
+	diagnostic, _ := json.Marshal(map[string]string{"invalidReply": first})
+	prompt := providerCommandPrompt(requests[1])
+	for _, value := range []string{
+		"Correction feedback (verbatim checker reason): " + reason,
+		"Previous output: " + string(diagnostic),
+		"On correction, fix the field named in the checker reason above.",
+	} {
+		if !strings.Contains(prompt, value) {
+			t.Errorf("correction prompt missing %q", value)
+		}
+	}
 }
 
 func assertMissionDispatchContract(t *testing.T, scenario *reviewFailureScenario, id string, mission, corrected, exhausted bool) {
