@@ -3018,7 +3018,7 @@ recording-read|pkg/services/recordings/internal/services/worker_capture/internal
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.WorkerRecordingProjection#LoadWorkerRecording::count=1
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.fail#ReduceWorkerRecording::count=1
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.setExecutionTerminal#ReduceWorkerRecording::count=1
-recording-read|pkg/services/recordings/internal/worker_work_attribution|pkg/services/recordings/internal/worker_work_attribution/service.go#attributionQuery.loadProjection#ReadWorkerFactoryHistory::count=1
+recording-read|pkg/services/recordings/internal/worker_work_attribution|pkg/services/recordings/internal/worker_work_attribution/preparation.go#attributionQuery.loadProjection#ReadWorkerFactoryHistory::count=1
 recording-read|pkg/services/recordings/internal/worker_work_attribution|pkg/services/recordings/internal/worker_work_attribution/service.go#attributionQuery.capture#ReadWorkerCapturedActivity::count=1
 recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal/core.go#combinedService.QuerySimpleDashboardScope#QuerySimpleDashboard::count=1
 recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal/core.go#combinedService.QuerySimpleDashboardScope#ReconstructRecordingScope::count=1
