@@ -49,39 +49,41 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	session := request
 	selection := runtimeSelectionForStart(request)
-	products, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	opening, err := r.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
-	if products.historicalReplay == nil {
-		if products.closeArtifacts != nil {
-			_ = products.closeArtifacts()
-		}
+	if opening.load.HistoricalReplay == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
+	replay, closeReplay, err := r.openHistoricalSessionRuntime(ctx, opening)
+	if err != nil {
+		return HistoricalApplicationInspection{}, false, err
+	}
+	inspection := replay.Inspection()
 	release := func() {}
-	if products.historicalReplay.Checkpoint != nil {
+	if inspection.Checkpoint != nil {
 		binder, ok := r.SessionGateway.(interface {
 			BindHistoricalExecution(string, durableexecution.Service) func()
 		})
 		if !ok {
-			if products.closeArtifacts != nil {
-				_ = products.closeArtifacts()
+			if closeReplay != nil {
+				_ = closeReplay()
 			}
 			return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay Sessions routing is unavailable")
 		}
-		release = binder.BindHistoricalExecution(products.historicalReplay.Session.SessionID, products.replayExecution)
+		release = binder.BindHistoricalExecution(inspection.Session.SessionID, replay)
 	}
 	closeInspection := func() error {
 		defer release()
-		if products.closeArtifacts != nil {
-			return products.closeArtifacts()
+		if closeReplay != nil {
+			return closeReplay()
 		}
 		return nil
 	}
 	return HistoricalApplicationInspection{
-		Replay:                 products.historicalReplay,
-		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...),
+		Replay:                 &inspection,
+		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...),
 		Close:                  closeInspection,
 	}, true, nil
 }

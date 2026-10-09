@@ -6,12 +6,9 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -27,12 +24,10 @@ func recoveryRecordingID(recordingID string) string {
 // runtimeProducts is the invocation-local output of Factory Runtime assembly.
 // It is consumed by canonical Start and never stored as another session graph.
 type runtimeProducts struct {
-	lifecycle              roles.LifecycleRuntime
-	replayExecution        *recordingreplay.Scope
-	closeArtifacts         func() error
-	historicalReplay       *factorysessions.HistoricalReplayInspection
-	replayMetadataWarnings []recordings.MetadataMismatchWarning
-	bindRuntime            func(factoryruntime.RuntimeBinding) error
+	lifecycle       roles.LifecycleRuntime
+	replayExecution *recordingreplay.Scope
+	closeArtifacts  func() error
+	bindRuntime     func(factoryruntime.RuntimeBinding) error
 }
 
 type workerSessionsObservationProvider interface {
@@ -41,23 +36,6 @@ type workerSessionsObservationProvider interface {
 
 type workerSessionsObservationForSessionProvider interface {
 	WorkerSessionsObservationForSession(string) workersessions.ObservationService
-}
-
-func (r *Root) historicalReplayRuntimeProducts(
-	projection recordingreplay.RecordingReplayProjection,
-	liveOwner durableexecution.Service,
-	closeResources func() error,
-) runtimeProducts {
-	if closeResources == nil {
-		closeResources = func() error { return nil }
-	}
-	replay := r.replayBehavior.Acquire(projection, liveOwner)
-	inspection := replay.Inspection()
-	return runtimeProducts{
-		historicalReplay: &inspection,
-		closeArtifacts:   closeResources,
-		replayExecution:  replay,
-	}
 }
 
 func runtimeBindingForSession(

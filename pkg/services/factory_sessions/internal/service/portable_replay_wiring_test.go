@@ -213,12 +213,11 @@ func testPortableReplayResumeInterruptedSession(t *testing.T) {
 			Outcome:   "PAUSED",
 		},
 	}
-	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+	execution := recordingreplay.NewBehavior().Acquire(
 		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
-		}, owner, nil)
-	var execution factorysessions.DurableExecutionService = opened.replayExecution
+		}, owner)
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.ResumeInterruptedSession(
@@ -252,12 +251,11 @@ func testPortableReplayResume(t *testing.T) {
 			Outcome:   "RESUMED",
 		},
 	}
-	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+	execution := recordingreplay.NewBehavior().Acquire(
 		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
-		}, owner, nil)
-	var execution factorysessions.DurableExecutionService = opened.replayExecution
+		}, owner)
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.Resume(
@@ -285,12 +283,11 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 		Message:   "checkpoint state is unavailable",
 	}
 	owner := &portableReplayRuntimeOwner{probeErr: want}
-	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+	execution := recordingreplay.NewBehavior().Acquire(
 		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
-		}, owner, nil)
-	var execution factorysessions.DurableExecutionService = opened.replayExecution
+		}, owner)
 
 	_, err := execution.ResumeInterruptedSession(
 		t.Context(),
@@ -308,12 +305,11 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 
 func testPortableReplayWithoutRestorableState(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{}
-	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
+	execution := recordingreplay.NewBehavior().Acquire(
 		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
-		}, owner, nil)
-	var execution factorysessions.DurableExecutionService = opened.replayExecution
+		}, owner)
 
 	_, err := execution.ResumeInterruptedSession(
 		t.Context(),

@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -50,8 +51,8 @@ func (r *Root) openRuntimeWithOptions(
 		return runtimeProducts{}, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		historical, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
-		return historical, nil, historicalErr
+		replay, closeReplay, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
+		return runtimeProducts{replayExecution: replay, closeArtifacts: closeReplay}, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	defer func() {
@@ -260,7 +261,7 @@ func applyRuntimeWorkerReasoningEffort(configured preparedRuntime, load RuntimeL
 	return nil
 }
 
-func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (runtimeProducts, error) {
+func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (*recordingreplay.Scope, func() error, error) {
 	var err error
 	var liveOwner durableexecution.Service
 	var replayClose func() error
@@ -277,22 +278,13 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 		if err != nil {
 			if replayClose != nil {
 				if cleanupErr := replayClose(); cleanupErr != nil {
-					return runtimeProducts{closeArtifacts: replayClose}, errors.Join(err, cleanupErr)
+					return nil, replayClose, errors.Join(err, cleanupErr)
 				}
 			}
-			return runtimeProducts{}, err
+			return nil, nil, err
 		}
 	}
-	historicalProducts := r.historicalReplayRuntimeProducts(
-		*opening.load.HistoricalReplay,
-		liveOwner,
-		replayClose,
-	)
-	historicalProducts.replayMetadataWarnings = append(
-		[]recordings.MetadataMismatchWarning(nil),
-		opening.load.ReplayMetadataWarnings...,
-	)
-	return historicalProducts, nil
+	return r.replayBehavior.Acquire(*opening.load.HistoricalReplay, liveOwner), replayClose, nil
 }
 
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
