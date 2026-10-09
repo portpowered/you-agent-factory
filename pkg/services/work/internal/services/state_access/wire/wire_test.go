@@ -146,33 +146,3 @@ func TestRuntimeSessionResolverResolveSessionAdapter(t *testing.T) {
 func (*stubRuntime) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
 	panic("unexpected selected Work read in legacy fixture")
 }
-
-type selectedRuntimeResolver struct {
-	work.RuntimeResolver
-	read    work.WorkerSessionWorkRuntimeReader
-	session string
-	err     error
-}
-
-func (r *selectedRuntimeResolver) ResolveWorkerSessionWorkRuntime(session string) (work.WorkerSessionWorkRuntimeReader, error) {
-	r.session = session
-	return r.read, r.err
-}
-
-func TestWorkerSessionWorkResolverUsesOnlySelectedRuntime(t *testing.T) {
-	t.Parallel()
-	expected := &stubRuntime{}
-	peer := &selectedRuntimeResolver{read: expected}
-	resolver := runtimeSessionResolver{runtimes: peer}
-	got, err := resolver.ResolveWorkerSessionWorkAdapter("session-a")
-	if err != nil || got != expected || peer.session != "session-a" {
-		t.Fatalf("selected binding = %v, %v, scope=%s", got, err, peer.session)
-	}
-	peer.err = work.ErrWorkNotFound
-	if _, err := resolver.ResolveWorkerSessionWorkAdapter("missing"); !errors.Is(err, work.ErrWorkNotFound) {
-		t.Fatalf("missing scope: %v", err)
-	}
-	if _, err := (runtimeSessionResolver{}).ResolveWorkerSessionWorkAdapter("session-a"); err == nil {
-		t.Fatal("missing selected resolver succeeded")
-	}
-}

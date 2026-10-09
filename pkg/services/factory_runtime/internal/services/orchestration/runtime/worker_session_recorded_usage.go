@@ -1032,7 +1032,7 @@ type preparedWorkerSessionHistory struct {
 	restoredWorkerScopes map[string]string
 }
 
-func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent) preparedWorkerSessionHistory {
+func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent, readers ...recordings.WorkerRecordingReader) preparedWorkerSessionHistory {
 	history := preparedWorkerSessionHistory{
 		replayEvents:         cloneAndSortFactoryEvents(replay),
 		restoredEventPrefix:  cloneFactoryEventsInOrder(prefix),
@@ -1044,6 +1044,9 @@ func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent)
 			history.restoredSessionIDs[id] = struct{}{}
 
 		}
+	}
+	for _, reader := range readers {
+		prepareCapturedWorkerAliasScopes(history.restoredWorkerScopes, reader, replay, prefix)
 	}
 	return history
 }

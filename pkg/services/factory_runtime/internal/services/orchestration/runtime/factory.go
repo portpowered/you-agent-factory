@@ -567,7 +567,7 @@ func newFactoryImpl(
 		dispatchFlow:                dispatchFlow,
 		dispatchPlan:                dispatchPlan,
 		eventHistory:                eventHistory,
-		observationHistory:          prepareRecordedObservationHistory(cfg.replayEvents, cfg.restoredEventPrefix),
+		observationHistory:          prepareRecordedObservationHistory(cfg.replayEvents, cfg.restoredEventPrefix, workerCaptureReader(cfg.workerSessions)),
 		state:                       interfaces.FactoryStateIdle,
 		clock:                       cfg.clock,
 		completeCh:                  make(chan struct{}),

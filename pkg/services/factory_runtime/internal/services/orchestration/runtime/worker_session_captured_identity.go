@@ -5,14 +5,65 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func workerCaptureReader(service workersessions.Service) recordings.WorkerRecordingReader {
+	reader, _ := service.(recordings.WorkerRecordingReader)
+	return reader
+}
+
+// A historical default selector is not a physical owner. Resolve it once at
+// activation from the validated opening of the canonically associated attempt,
+// then pin that concrete owner for subsequent selected reads. Never resolve an
+// explicit scope this way, or accept an opening for a different dispatch.
+func prepareCapturedWorkerAliasScopes(scopes map[string]string, reader recordings.WorkerRecordingReader, sources ...[]recordings.FactoryEvent) {
+	summaries, ok := reader.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return
+	}
+	for _, source := range sources {
+		for _, event := range source {
+			if event.Type != recordings.FactoryEventTypeDispatchWorkerSessionAssoc {
+				continue
+			}
+			var association interfaces.DispatchWorkerSessionAssociationEventPayload
+			if event.DecodePayload(&association) != nil || scopes[association.WorkerSessionID] != "~default" {
+				continue
+			}
+			summary, err := summaries.LookupWorkerSessionSummary(context.Background(), association.WorkerSessionID)
+			if err != nil {
+				continue // Retain unresolved provenance; the selected read fails closed.
+			}
+			if owner := capturedWorkerAliasOwner(summary.Capture, association.WorkerSessionID, stringPointerValue(event.Context.DispatchID)); owner != "" {
+				scopes[association.WorkerSessionID] = owner
+			}
+		}
+	}
+}
+
+func capturedWorkerAliasOwner(item recordings.WorkerCapturedCatalogItem, workerID, dispatchID string) string {
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(item.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil {
+		return ""
+	}
+	owner := strings.TrimSpace(item.Catalog.FactorySessionID)
+	if owner == "" || owner == "~default" || opening.FactorySessionID != owner ||
+		item.Catalog.WorkerSessionID != workerID || opening.WorkerSessionID != workerID ||
+		opening.DispatchID == "" || opening.DispatchID != dispatchID {
+		return ""
+	}
+	return owner
+}
 
 // Scoped lists select only matching capture health from the activated store.
 // An empty selection still checks the selected recording's prepared health.
