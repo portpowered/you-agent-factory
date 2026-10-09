@@ -2,12 +2,14 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/tests/internal/directexample"
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 // Only fixture identities, the host-visible directory and explicit Factory
@@ -63,7 +65,7 @@ func TestPublishedWorkerSessionDirectJourney(t *testing.T) {
 
 func publishedDirectExecution(t *testing.T, scenario *invokeContinueScenario, id string) string {
 	t.Helper()
-	document := directexample.Document(t)
+	document := publishedExecutionDocument(t)
 	document["requestId"], document["workerSessionId"] = id+"-request", id
 	execution := document["execution"].(map[string]any)
 	execution["workingDirectory"] = scenario.workingDirectory
@@ -74,4 +76,30 @@ func publishedDirectExecution(t *testing.T, scenario *invokeContinueScenario, id
 	path := filepath.Join(scenario.workingDirectory, "execution.json")
 	writeInvokeContinueJSON(t, path, document)
 	return path
+}
+
+// Keep this docs fixture in the test compilation rather than the production graph.
+func publishedExecutionDocument(t testing.TB) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(testutil.MustRepoPath(t, "docs/reference/operations.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, ok := strings.Cut(strings.ReplaceAll(string(data), "\r\n", "\n"), "Save this complete request as `execution.json`:")
+	if !ok {
+		t.Fatal("published execution request is missing")
+	}
+	_, block, ok := strings.Cut(section, "```json\n")
+	if !ok {
+		t.Fatal("published execution JSON is missing")
+	}
+	block, _, ok = strings.Cut(block, "\n```")
+	if !ok {
+		t.Fatal("published execution JSON is incomplete")
+	}
+	var document map[string]any
+	if err := json.Unmarshal([]byte(block), &document); err != nil {
+		t.Fatalf("published execution JSON: %v", err)
+	}
+	return document
 }
