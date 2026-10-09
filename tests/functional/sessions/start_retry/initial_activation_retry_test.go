@@ -106,6 +106,13 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	durable := newInitialOpeningScenario(t)
 	child := newInitialOpeningChildScenario(t)
+	bindingChildren := []initialOpeningScenario{newBindingChildScenario(t), newBindingChildScenario(t)}
+	bindingGate := &bindingChildGate{entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{}),
+		selected: make(map[string]string), active: make(map[string]int), maximum: make(map[string]int)}
+	for _, scenario := range bindingChildren {
+		bindingGate.selected[scenario.candidateDir] = scenario.candidateID
+	}
+	t.Cleanup(bindingGate.unblock)
 	checkout := newInitialOpeningWorktreeScenario(t)
 	// An authored input directory makes initial activation emit its scoped
 	// diagnostic, so selected backend propagation has an observable witness.
@@ -134,7 +141,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Port == completionFailurePort {
@@ -184,6 +191,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("selected managed model endpoints and operator overlays stay isolated", func(t *testing.T) {
 		t.Parallel()
 		testSelectedModelsAcquisition(t, sessions, selectedModels)
+	})
+	t.Run("overlapping child sessions preserve capacity and attributed observations", func(t *testing.T) {
+		t.Parallel()
+		testBindingChildOverlap(t, process, sessions, bindingChildren, bindingGate, api.WaitForURL(t))
 	})
 	t.Run("remote CLI child uses the explicitly opened session", func(t *testing.T) {
 		t.Parallel()
@@ -509,6 +520,7 @@ type initialOpeningProviderRunner struct {
 	selected *selectedProviderGate
 	canceled *selectedProviderGate
 	host     *selectedProviderGate
+	binding  *bindingChildGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -516,6 +528,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.binding != nil && runner.binding.selected[request.WorkDir] != "" {
+		return runner.binding.run(ctx, request)
+	}
 	if runner.selected != nil && runner.selected.paths[request.WorkDir] != "" {
 		return runner.selected.run(ctx, request)
 	}

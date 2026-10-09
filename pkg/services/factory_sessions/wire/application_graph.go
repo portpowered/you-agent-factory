@@ -145,8 +145,7 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerCommandRunner ProviderCommandRunner,
-	scriptCommandRunner ScriptCommandRunner,
+	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation RuntimeModelInvocationOperation,
 	replayBehavior *HistoricalReplayBehavior,
@@ -184,8 +183,7 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		providerCommandRunner,
-		scriptCommandRunner,
+		executionBinding,
 		initialEngine,
 		modelInvocation,
 		replayBehavior,
@@ -295,4 +293,11 @@ func NewRuntimeInitialEngine(selection *RuntimeSnapshotSelection,
 func NewRuntimeOpeningCompletion(assembly RuntimeAssembly, routing *factorysessions.DefinitionRuntimeRouter,
 	webhooksService webhooks.Service, host ProcessRuntimeFactory) *RuntimeOpeningCompletion {
 	return service.NewRuntimeOpeningCompletion(assembly, routing, webhooksService, host)
+}
+
+// ExecutionBinding is the focused capability registration operation for live and replay opening.
+type ExecutionBinding = service.ExecutionBinding
+
+func NewExecutionBinding(providerOverride ProviderOverrideService, commandRunner ProviderCommandRunner) *ExecutionBinding {
+	return service.NewExecutionBinding(providerOverride, commandRunner)
 }
