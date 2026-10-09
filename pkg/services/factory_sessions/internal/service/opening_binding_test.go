@@ -14,8 +14,10 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // The final operation receives controlled acquired handles; no graph is assembled.
@@ -141,22 +143,51 @@ func TestRuntimeOpeningBindingObservationCapabilities(t *testing.T) {
 	}
 }
 
-func TestRuntimeOpeningBindingConsumesAcquiredServiceWithoutLifecyclePeer(t *testing.T) {
+// This acquired handle deliberately has no configuration or lifecycle API.
+type bindingObservations struct {
+	service    factoryruntime.Service
+	logger     *zap.Logger
+	generation string
+}
+
+func (record bindingObservations) RuntimeService() factoryruntime.Service { return record.service }
+func (record bindingObservations) StreamGeneration() string               { return record.generation }
+func (record bindingObservations) RuntimeLogger() *zap.Logger             { return record.logger }
+func (bindingObservations) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics {
+	return factoryruntime.RuntimeLogDiagnostics{}
+}
+func (bindingObservations) RecordingLedger() recordings.Ledger { return nil }
+
+func TestRuntimeOpeningBindingConsumesAcquiredObservationsWithoutConfigurationOrLifecycle(t *testing.T) {
 	t.Parallel()
 	observation := &bindingObservation{}
 	selected := bindingLegacyRuntime{observation: observation}
 	state := &runtimebinding.SessionState{}
 	cleanup := &runtimeOpeningCleanup{}
 	clock := openingCoordinatorClock{}
+	startup := bindingObservations{service: selected, logger: zap.NewNop(), generation: "selected-generation"}
+	bound := false
+	execution := &bindingExecution{bind: func(id, runtimeID, generation string, _ providers.Service, _ platformprocess.CommandRunner,
+		progress workers.ProgressPublisher, starter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)) (func(), error) {
+		if id != "selected" || runtimeID != "selected-runtime" || generation != startup.generation || progress != nil || starter != nil {
+			t.Fatal("binding substituted acquired observations or absent optional capabilities")
+		}
+		bound = true
+		return func() { bound = false }, nil
+	}}
 	err := NewRuntimeOpeningBinding(nil, nil, nil, nil).Bind(t.Context(),
 		RuntimeOpeningBindingRequest{Facts: roles.SessionOpeningFacts{
 			FactorySessionID: "selected", RuntimeID: "selected-runtime", Directory: "/selected",
-		}}, state, clock, inertHostedInstance{}, selected, nil, &bindingExecution{}, nil, cleanup)
+		}}, state, clock, startup, selected, nil, execution, nil, cleanup)
 	if err != nil || state.WorkerSessionsObservation() != observation || state.Clock != clock ||
-		state.ModelInvocation.FactorySessionID != "selected" || state.ModelInvocation.RuntimeID != "selected-runtime" {
+		state.ModelInvocation.FactorySessionID != "selected" || state.ModelInvocation.RuntimeID != "selected-runtime" ||
+		state.ModelInvocation.GenerationID != startup.generation || state.Logger != startup.logger || !bound {
 		t.Fatalf("selected service binding = %+v, %v", state, err)
 	}
 	closeBindingFixture(t, cleanup)
+	if bound {
+		t.Fatal("owned observation binding was not released")
+	}
 }
 
 func TestRuntimeOpeningBindingFailureAndSameIdentityRetry(t *testing.T) {

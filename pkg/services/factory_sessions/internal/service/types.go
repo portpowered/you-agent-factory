@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -29,7 +28,7 @@ type workerSessionsObservationForSessionProvider interface {
 
 func openedWorkerSessionsObservation(
 	factoryRuntime factoryruntime.Service,
-	startup runtimeports.RuntimeInstance,
+	startup interface{ RuntimeService() factoryruntime.Service },
 	effectiveFactorySessionID string,
 ) workersessions.ObservationService {
 	// The process Factory Sessions root resolves its current selected runtime,

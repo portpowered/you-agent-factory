@@ -796,7 +796,7 @@ type runtimeProgressPublisherProvider interface {
 	RuntimeProgressPublisher() workers.ProgressPublisher
 }
 
-func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.ProgressPublisher {
+func runtimeProgressPublisher(runtime interface{ RuntimeService() factoryruntime.Service }) workers.ProgressPublisher {
 	if runtime == nil {
 		return nil
 	}
@@ -819,7 +819,7 @@ type runtimeWorkerAttemptStarterProvider interface {
 }
 
 func runtimeWorkerAttemptStarter(
-	runtime runtimeports.RuntimeInstance,
+	runtime interface{ RuntimeService() factoryruntime.Service },
 ) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if runtime == nil {
 		return nil

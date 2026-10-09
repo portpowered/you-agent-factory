@@ -10,11 +10,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // OpeningSessionIdentity reads only the effective identity of the requested session.
@@ -43,8 +43,18 @@ type RuntimeOpeningBindingRequest struct {
 	MockWorkers *workers.MockWorkersConfig
 }
 
+// Final binding consumes observations from the acquired record, without its
+// configuration, replacement builder, or lifecycle capabilities.
+type openingRuntimeObservations = interface {
+	RuntimeService() factoryruntime.Service
+	StreamGeneration() string
+	RuntimeLogger() *zap.Logger
+	RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics
+	RecordingLedger() recordings.Ledger
+}
+
 func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request RuntimeOpeningBindingRequest,
-	state *runtimebinding.SessionState, selectedClock factoryruntime.Clock, startup runtimeports.RuntimeInstance,
+	state *runtimebinding.SessionState, selectedClock factoryruntime.Clock, startup openingRuntimeObservations,
 	rootRuntime factoryruntime.Service, processRuntime roles.ProcessRuntime,
 	execution durableexecution.Service,
 	publishCurrentBoard func(context.Context) error, cleanup interface {
@@ -88,7 +98,7 @@ func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request Runtim
 
 //nolint:contextcheck // Preserve detached callers' nil-context compatibility.
 func (operation *RuntimeOpeningBinding) bindState(ctx context.Context, state *runtimebinding.SessionState,
-	facts roles.SessionOpeningFacts, rootRuntime factoryruntime.Service, startup runtimeports.RuntimeInstance,
+	facts roles.SessionOpeningFacts, rootRuntime factoryruntime.Service, startup openingRuntimeObservations,
 	processRuntime roles.ProcessRuntime,
 ) {
 	if ctx == nil {
