@@ -94,8 +94,6 @@ mapping-filesystem-behavior-test|pkg/transports/mapping/factoryconfig/authored|o
 mapping-filesystem-behavior-test|pkg/transports/mapping/factoryconfig/openapitests|os.ReadFile
 mapping-filesystem-behavior-test|pkg/transports/mapping/factorysession_test|os.ReadFile
 platform-services|pkg/platform/contentstaging|pkg/services/work
-service-subpackage-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire
-service-subpackage-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire
 service-subpackage-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire
 service-subpackage-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire
@@ -107,8 +105,6 @@ service-subpackage|tests/functional/internal/support|pkg/services/operator_setti
 service-construction-test|pkg/services/factory_sessions/internal/invocation|pkg/services/work.NewInvocationPolicyService
 service-construction-test|pkg/services/factory_sessions/internal/service|pkg/services/factory_runtime.NewSessionResultProjectionOperation
 service-construction-test|pkg/services/factory_sessions_test|pkg/services/work.NewInvocationPolicyService
-service-construction-test|pkg/services/factory_visualization/wire_test|pkg/services/recordings/wire.NewProjectionService
-service-construction-test|pkg/services/factory_visualization/wire|pkg/services/recordings/wire.NewProjectionService
 service-construction-test|pkg/services/worker_sessions/internal/service_test|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/events/wire.NewService
 service-construction-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/worker_sessions/wire.NewService
@@ -2897,8 +2893,6 @@ service-cycle-weight|internal/lint/analyzers|13
 construction-recorded-site-test|pkg/services/factory_sessions/internal/invocation|pkg/services/factory_sessions/internal/invocation/owner_fixture_test.go#service-construction-test#pkg/services/work.NewInvocationPolicyService::count=1
 construction-recorded-site-test|pkg/services/factory_sessions/internal/service|pkg/services/factory_sessions/internal/service/root_test.go#service-construction-test#pkg/services/factory_runtime.NewSessionResultProjectionOperation::count=1
 construction-recorded-site-test|pkg/services/factory_sessions_test|pkg/services/factory_sessions/work_invocation_boundary_test.go#service-construction-test#pkg/services/work.NewInvocationPolicyService::count=1
-construction-recorded-site-test|pkg/services/factory_visualization/wire_test|pkg/services/factory_visualization/wire/wire_test.go#service-construction-test#pkg/services/recordings/wire.NewProjectionService::count=1
-construction-recorded-site-test|pkg/services/factory_visualization/wire|pkg/services/factory_visualization/wire/recordings_peer_test.go#service-construction-test#pkg/services/recordings/wire.NewProjectionService::count=1
 construction-recorded-site-test|pkg/services/worker_sessions/internal/service_test|pkg/services/worker_sessions/internal/service/fakes_test.go#service-construction-test#pkg/services/events/wire.NewService::count=1
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/events/wire.NewService::count=1
 construction-recorded-site-test|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service|pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_session_integration_test.go#service-construction-test#pkg/services/worker_sessions/wire.NewService::count=1

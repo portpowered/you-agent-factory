@@ -48,28 +48,6 @@ type Service struct {
 
 var _ activationlifecycle.Service = (*Service)(nil)
 
-// New constructs an inert activation lifecycle owner.
-func New(
-	source activationlifecycle.EventSource,
-	recordingsPeer recordings.Service,
-	clock activationlifecycle.Clock,
-	sink activationlifecycle.ViewSink,
-	reportError activationlifecycle.ErrorReporter,
-) (*Service, error) {
-	switch {
-	case source == nil:
-		return nil, errors.New("initialize Factory visualization activation: event source is required")
-	case recordingsPeer == nil:
-		return nil, errors.New("initialize Factory visualization activation: recordings service is required")
-	case clock == nil:
-		return nil, errors.New("initialize Factory visualization activation: clock is required")
-	case sink == nil:
-		return nil, errors.New("initialize Factory visualization activation: presentation sink is required")
-	default:
-		return (&Owner{recordings: recordingsPeer}).open(source, clock, sink, reportError), nil
-	}
-}
-
 // Open allocates one scoped handle over this prebuilt owner. Source, clock and
 // sink are selected runtime resources; no peer service is supplied at opening.
 func (owner *Owner) Open(

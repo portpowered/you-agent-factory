@@ -19,18 +19,10 @@ func TestActivationLifecycleExplicitRequestActivation(t *testing.T) {
 		stream: newLifecycleEventStream(),
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
-	owner, err := lifecycleservice.New(
-		source,
-		&recordingsstub.Service{},
-		fixedLifecycleClock{now: time.Unix(1, 0)},
-		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	ownerBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	owner := ownerBehavior.Open(source, fixedLifecycleClock{now: time.Unix(1, 0)}, lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
 
-	_, err = owner.Activate(context.Background(), activationlifecycle.ActivateRequest{})
+	_, err := owner.Activate(context.Background(), activationlifecycle.ActivateRequest{})
 	requireActivationLifecycleError(t, err, activationlifecycle.LifecycleErrorMissingParameters, "zero-value Activate")
 	assertActivationLifecycleInert(t, subscribeCalls, presentCalls, "zero-value Activate")
 

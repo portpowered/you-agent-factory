@@ -50,29 +50,6 @@ var (
 	errNotStarted     = liveviewprojection.ErrLiveViewProjectionNotStarted
 )
 
-// New constructs the private live_view_projection implementation.
-func New(
-	retainedEvents func() []factorydefinitions.FactoryEvent,
-	source liveviewprojection.Source,
-	recordingsPeer recordings.Service,
-	clock liveviewprojection.Clock,
-	sink liveviewprojection.Sink,
-	reportError liveviewprojection.ErrorReporter,
-) (*Service, error) {
-	switch {
-	case source == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: event source is required")
-	case recordingsPeer == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: recordings service is required")
-	case clock == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: clock is required")
-	case sink == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: presentation sink is required")
-	default:
-		return (&Owner{recordings: recordingsPeer}).open(retainedEvents, source, clock, sink, reportError), nil
-	}
-}
-
 // Open allocates one scoped handle over this prebuilt owner. Source, clock and
 // sink are selected runtime resources; no peer service is supplied at opening.
 func (owner *Owner) Open(

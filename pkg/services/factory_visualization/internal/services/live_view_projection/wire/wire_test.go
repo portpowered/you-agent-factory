@@ -10,17 +10,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
-type stubSource struct{}
+type stubSource struct {
+	reads *int
+}
 
-func (stubSource) SubscribeFactoryEvents(
+func (s stubSource) SubscribeFactoryEvents(
 	context.Context,
 	*factorydefinitions.FactoryEventReconnectCursor,
 	factorydefinitions.FactoryEventReconnectScope,
 ) (*factorydefinitions.FactoryEventStream, error) {
+	(*s.reads)++
 	return nil, nil
 }
 
-func (stubSource) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+func (s stubSource) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+	(*s.reads)++
 	return nil, nil
 }
 
@@ -32,29 +36,22 @@ type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Unix(1, 0) }
 
-func TestNewServiceConstructsSingularLiveViewProjectionService(t *testing.T) {
+func TestOwnerOpeningIsInert(t *testing.T) {
 	t.Parallel()
 
-	svc, err := NewService(nil, nil, nil, nil, nil, nil)
-	if err == nil {
-		t.Fatal("NewService(nil, ) error = nil, want missing dependency failure")
-	}
-	if svc != nil {
-		t.Fatal("NewService(nil, ) returned service with missing dependencies")
-	}
-
-	svc, err = NewService(nil,
-		stubSource{},
-		&recordingsstub.Service{},
-		fixedClock{},
-		stubSink{},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewService(nil, ) error = %v", err)
-	}
+	reads := 0
+	behavior := NewOwner(&recordingsstub.Service{})
+	svc := behavior.Open(nil, stubSource{reads: &reads}, fixedClock{}, stubSink{}, nil)
 	if svc == nil {
-		t.Fatal("NewService(nil, ) returned nil")
+		t.Fatal("Open() returned nil")
 	}
-	var _ liveviewprojection.Service = svc
+	if reads != 0 {
+		t.Fatalf("opening read the source %d times, want inert opening", reads)
+	}
+	if err := svc.Wait(context.Background()); err == nil {
+		t.Fatal("Wait before Start returned no error")
+	}
+	if reads != 0 {
+		t.Fatalf("Wait before Start read the source %d times", reads)
+	}
 }

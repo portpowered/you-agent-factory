@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -10,46 +9,6 @@ import (
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
-
-func TestNewRejectsMissingActivationLifecycleDependencies(t *testing.T) {
-	t.Parallel()
-
-	clock := fixedLifecycleClock{now: time.Unix(1, 0)}
-	sink := lifecycleSinkFunc(func(activationlifecycle.View) {})
-	projections := &recordingsstub.Service{}
-	source := &lifecycleSourceStub{}
-	tests := []struct {
-		name string
-		new  func() (*lifecycleservice.Service, error)
-		want string
-	}{
-		{"source", func() (*lifecycleservice.Service, error) {
-			return lifecycleservice.New(nil, projections, clock, sink, nil)
-		}, "event source"},
-		{"projections", func() (*lifecycleservice.Service, error) {
-			return lifecycleservice.New(source, nil, clock, sink, nil)
-		}, "recordings service"},
-		{"clock", func() (*lifecycleservice.Service, error) {
-			return lifecycleservice.New(source, projections, nil, sink, nil)
-		}, "clock"},
-		{"sink", func() (*lifecycleservice.Service, error) {
-			return lifecycleservice.New(source, projections, clock, nil, nil)
-		}, "presentation sink"},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			service, err := test.new()
-			if service != nil {
-				t.Fatal("New() returned a usable activation lifecycle owner without required collaborators")
-			}
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("New() error = %v, want %q", err, test.want)
-			}
-		})
-	}
-}
 
 func TestActivationLifecycleDefaultInertConstruction(t *testing.T) {
 	t.Parallel()
@@ -60,19 +19,11 @@ func TestActivationLifecycleDefaultInertConstruction(t *testing.T) {
 		stream: newLifecycleEventStream(),
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
-	owner, err := lifecycleservice.New(
-		source,
-		&recordingsstub.Service{},
-		fixedLifecycleClock{now: time.Unix(1, 0)},
-		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	ownerBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	owner := ownerBehavior.Open(source, fixedLifecycleClock{now: time.Unix(1, 0)}, lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
 	assertActivationLifecycleInert(t, subscribeCalls, presentCalls, "construction")
 
-	_, err = owner.Join(context.Background(), activationlifecycle.JoinRequest{})
+	_, err := owner.Join(context.Background(), activationlifecycle.JoinRequest{})
 	requireActivationLifecycleError(t, err, activationlifecycle.LifecycleErrorNotActivated, "Join before Activate")
 	assertActivationLifecycleInert(t, subscribeCalls, presentCalls, "Join before Activate")
 

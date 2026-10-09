@@ -36,31 +36,22 @@ type wireClock struct{}
 
 func (wireClock) Now() time.Time { return time.Unix(1, 0) }
 
-func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
+func TestOwnerOpeningIsInert(t *testing.T) {
 	t.Parallel()
 
 	subscribeCalls := 0
 	presentCalls := 0
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
-	service, err := activationlifecyclewire.NewService(
-		source,
-		&recordingsstub.Service{},
-		wireClock{},
-		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	serviceBehavior := activationlifecyclewire.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
 	if service == nil {
-		t.Fatal("NewService() returned nil")
+		t.Fatal("Open() returned nil")
 	}
-	var _ activationlifecycle.Service = service
 	if subscribeCalls != 0 || presentCalls != 0 {
-		t.Fatalf("NewService() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
+		t.Fatalf("Open() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
 	}
 
-	_, err = service.Join(context.Background(), activationlifecycle.JoinRequest{})
+	_, err := service.Join(context.Background(), activationlifecycle.JoinRequest{})
 	if err == nil {
 		t.Fatal("Join before Activate: error = nil, want not-activated failure")
 	}
@@ -69,24 +60,16 @@ func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
 	}
 }
 
-func TestNewServiceExplicitRequestActivation(t *testing.T) {
+func TestOwnerOpeningExplicitRequestActivation(t *testing.T) {
 	t.Parallel()
 
 	subscribeCalls := 0
 	presentCalls := 0
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
-	service, err := activationlifecyclewire.NewService(
-		source,
-		&recordingsstub.Service{},
-		wireClock{},
-		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	serviceBehavior := activationlifecyclewire.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
 
-	_, err = service.Activate(context.Background(), activationlifecycle.ActivateRequest{})
+	_, err := service.Activate(context.Background(), activationlifecycle.ActivateRequest{})
 	if err == nil {
 		t.Fatal("zero-value Activate: error = nil, want missing-parameters failure")
 	}
@@ -122,21 +105,13 @@ func TestNewServiceExplicitRequestActivation(t *testing.T) {
 	}
 }
 
-func TestNewServiceStopWaitCleanup(t *testing.T) {
+func TestOwnerOpeningStopWaitCleanup(t *testing.T) {
 	t.Parallel()
 
 	subscribeCalls := 0
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
-	service, err := activationlifecyclewire.NewService(
-		source,
-		&recordingsstub.Service{},
-		wireClock{},
-		wireSinkFunc(func(activationlifecycle.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	serviceBehavior := activationlifecyclewire.NewOwner(&recordingsstub.Service{})
+	service := serviceBehavior.Open(source, wireClock{}, wireSinkFunc(func(activationlifecycle.View) {}), nil)
 
 	if err := service.Wait(context.Background()); err == nil {
 		t.Fatal("Wait before Activate: error = nil, want not-started failure")

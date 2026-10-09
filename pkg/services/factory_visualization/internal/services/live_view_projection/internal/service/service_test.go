@@ -58,16 +58,8 @@ func TestLiveViewProjectionConformance(t *testing.T) {
 	}
 	rendered := make(chan liveviewprojection.View, 2)
 	var svc liveviewprojection.Service
-	impl, err := projectionservice.New(nil,
-		source,
-		projections,
-		fixedClock{now: now},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	implBehavior := projectionservice.NewOwner(projections)
+	impl := implBehavior.Open(nil, source, fixedClock{now: now}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 	svc = impl
 
 	ctx, cancel := context.WithCancel(context.Background())

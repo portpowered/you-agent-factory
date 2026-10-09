@@ -77,16 +77,8 @@ func TestStartEmitsSanitizedVisualizationOwnedView(t *testing.T) {
 	}
 	projections := newProjectionStubWithDashboard(renderData)
 	rendered := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(nil,
-		source,
-		projections,
-		fixedClock{now: now},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+	svc := svcBehavior.Open(nil, source, fixedClock{now: now}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { rendered <- view }), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -122,16 +114,8 @@ func TestObserveSnapshotUnavailableDoesNotEmitView(t *testing.T) {
 		snapshotErr: errors.New("snapshot unavailable"),
 	}
 	presented := make(chan liveviewprojection.View, 1)
-	svc, err := projectionservice.New(nil,
-		source,
-		newProjectionStub(),
-		fixedClock{now: time.Unix(1, 0)},
-		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(newProjectionStub())
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -144,7 +128,7 @@ func TestObserveSnapshotUnavailableDoesNotEmitView(t *testing.T) {
 	default:
 	}
 
-	_, err = svc.Observe(context.Background(), liveviewprojection.ObserveRequest{
+	_, err := svc.Observe(context.Background(), liveviewprojection.ObserveRequest{
 		Mode: liveviewprojection.ObserveModeRetainedThenLive,
 	})
 	var projErr *liveviewprojection.ProjectionError
@@ -166,16 +150,8 @@ func TestObserveReconstructionFailedDoesNotReturnSuccessView(t *testing.T) {
 		snapshot: snapshotFacts(3),
 	}
 	projections := newFailingProjectionStub(reconstructErr)
-	svc, err := projectionservice.New(nil,
-		source,
-		projections,
-		fixedClock{now: time.Unix(1, 0)},
-		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	svcBehavior := projectionservice.NewOwner(projections)
+	svc := svcBehavior.Open(nil, source, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(liveviewprojection.View) {}), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -183,7 +159,7 @@ func TestObserveReconstructionFailedDoesNotReturnSuccessView(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	_, err = svc.Observe(context.Background(), liveviewprojection.ObserveRequest{
+	_, err := svc.Observe(context.Background(), liveviewprojection.ObserveRequest{
 		Mode: liveviewprojection.ObserveModeRetainedThenLive,
 	})
 	var projErr *liveviewprojection.ProjectionError
@@ -214,21 +190,14 @@ func TestProjectionFailureDrainsSelectedSubscriptionAndLeavesPeerPresenting(t *t
 			}
 			errorsReported := make(chan error, 3)
 			selectedViews := make(chan liveviewprojection.View, 1)
-			selected, err := projectionservice.New(nil, selectedSource, projections, fixedClock{now: time.Unix(1, 0)},
-				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { selectedViews <- view }),
-				func(err error) { errorsReported <- err })
-			if err != nil {
-				t.Fatal(err)
-			}
+			selectedBehavior := projectionservice.NewOwner(projections)
+			selected := selectedBehavior.Open(nil, selectedSource, fixedClock{now: time.Unix(1, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { selectedViews <- view }), func(err error) { errorsReported <- err })
 			peerEvents := make(chan factorydefinitions.FactoryEvent)
 			peerViews := make(chan liveviewprojection.View, 3)
-			peer, err := projectionservice.New(nil, &sourceStub{
+			peerBehavior := projectionservice.NewOwner(newProjectionStub())
+			peer := peerBehavior.Open(nil, &sourceStub{
 				stream: &factorydefinitions.FactoryEventStream{Events: peerEvents}, snapshot: snapshotFacts(8),
-			}, newProjectionStub(), fixedClock{now: time.Unix(2, 0)},
-				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { peerViews <- view }), nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			}, fixedClock{now: time.Unix(2, 0)}, liveviewprojection.SinkFunc(func(view liveviewprojection.View) { peerViews <- view }), nil)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			t.Cleanup(func() { _ = selected.Stop(ctx); _ = peer.Stop(ctx) })

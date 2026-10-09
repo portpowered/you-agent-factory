@@ -22,22 +22,14 @@ func TestActivationLifecycleOwnerBacksRootLifecycleSlice(t *testing.T) {
 	}
 	source.subscribeHook = func() { subscribeCalls++ }
 	presentCalls := 0
-	owner, err := lifecycleservice.New(
-		source,
-		&recordingsstub.Service{},
-		fixedLifecycleClock{now: time.Unix(1, 0)},
-		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	ownerBehavior := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	owner := ownerBehavior.Open(source, fixedLifecycleClock{now: time.Unix(1, 0)}, lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }), nil)
 	var lifecycle activationlifecycle.Service = owner
 	if subscribeCalls != 0 || presentCalls != 0 {
 		t.Fatalf("construction side effects: subscribe=%d present=%d, want inert", subscribeCalls, presentCalls)
 	}
 
-	_, err = lifecycle.Join(context.Background(), activationlifecycle.JoinRequest{})
+	_, err := lifecycle.Join(context.Background(), activationlifecycle.JoinRequest{})
 	requireActivationLifecycleError(t, err, activationlifecycle.LifecycleErrorNotActivated, "Join before Activate")
 
 	_, err = lifecycle.Activate(context.Background(), activationlifecycle.ActivateRequest{})
