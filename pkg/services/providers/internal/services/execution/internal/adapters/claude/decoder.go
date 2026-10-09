@@ -609,7 +609,7 @@ func classifyResultFailure(envelope nativeEnvelope) providers.ExecuteFailure {
 	message := strings.ToLower(strings.TrimSpace(envelope.Result))
 	kind := explicitHTTPFailureKind(message)
 	if kind != providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+		return declaredProviderFailure(kind, claudeDeclaredFailureMessage(kind))
 	}
 	switch subtype {
 	case "authentication_error", "permission_error":
@@ -634,10 +634,7 @@ func classifyResultFailure(envelope nativeEnvelope) providers.ExecuteFailure {
 			kind = providers.ExecuteFailureKindDependency
 		}
 	}
-	return providers.ExecuteFailure{
-		Kind:    kind,
-		Message: claudeDeclaredFailureMessage(kind),
-	}
+	return declaredProviderFailure(kind, claudeDeclaredFailureMessage(kind))
 }
 
 func claudeDeclaredFailureMessage(kind providers.ExecuteFailureKind) string {

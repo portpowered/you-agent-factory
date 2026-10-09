@@ -22,7 +22,7 @@ type apiErrorRecord struct {
 
 func exitFailureFromCommandResult(result providerservice.CommandResult) error {
 	if kind := explicitHTTPFailureKind(formatCombinedCommandOutput(result)); kind != providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+		return declaredProviderFailure(kind, claudeDeclaredFailureMessage(kind))
 	}
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
@@ -30,19 +30,19 @@ func exitFailureFromCommandResult(result providerservice.CommandResult) error {
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
 	case containsAny(normalized, "no conversation found", "no session found"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
+		return declaredProviderFailure(providers.ExecuteFailureKindSessionNotFound, claudeDeclaredFailureMessage(providers.ExecuteFailureKindSessionNotFound))
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
+		return declaredProviderFailure(providers.ExecuteFailureKindAuthentication, claudeDeclaredFailureMessage(providers.ExecuteFailureKindAuthentication))
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
+		return declaredProviderFailure(providers.ExecuteFailureKindInvalidRequest, claudeDeclaredFailureMessage(providers.ExecuteFailureKindInvalidRequest))
 	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "429", "overloaded"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindThrottled)}
+		return declaredProviderFailure(providers.ExecuteFailureKindThrottled, claudeDeclaredFailureMessage(providers.ExecuteFailureKindThrottled))
 	case containsAny(normalized, "internal server error", "api_error", "server_error"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency)}
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency))
 	case result.ExitCode == 124 || containsAny(normalized, "deadline exceeded", "timed out", "timeout", "request timed out"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindTimeout, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindTimeout)}
+		return declaredProviderFailure(providers.ExecuteFailureKindTimeout, claudeDeclaredFailureMessage(providers.ExecuteFailureKindTimeout))
 	case containsAny(normalized, "service unavailable", "please try again"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency)}
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency))
 	}
 	return fmt.Errorf("claude exited with code %d", result.ExitCode)
 }
@@ -78,7 +78,7 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 	message := strings.TrimSpace(record.Message)
 	kind := explicitHTTPFailureKind(message)
 	if kind != providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+		return declaredProviderFailure(kind, claudeDeclaredFailureMessage(kind))
 	}
 	switch subtype {
 	case "authentication_error", "permission_error":
@@ -94,12 +94,12 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 		kind = providers.ExecuteFailureKindDependency
 	}
 	if kind == providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: message}
+		return declaredProviderFailure(kind, message)
 	}
 	if message == "" {
 		message = claudeDeclaredFailureMessage(kind)
 	}
-	return providers.ExecuteFailure{Kind: kind, Message: message}
+	return declaredProviderFailure(kind, message)
 }
 
 func markUnrecognizedProviderRefusal(failure *providers.ExecuteFailure) {
@@ -157,3 +157,13 @@ func explicitHTTPFailureKind(message string) providers.ExecuteFailureKind {
 }
 
 var providerHTTPStatus = regexp.MustCompile(`\b(?:unexpected status|http(?: status)?)\s+([45][0-9]{2})\b`)
+
+func declaredProviderFailure(kind providers.ExecuteFailureKind, message string) providers.ExecuteFailure {
+	failure := providers.ExecuteFailure{Kind: kind, Message: message}
+	if kind == providers.ExecuteFailureKindDependency {
+		failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			providers.ExecuteDiagnosticMetadataUpstreamOutage: "true",
+		}}
+	}
+	return failure
+}

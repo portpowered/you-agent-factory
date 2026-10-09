@@ -562,6 +562,7 @@ func TestExecuteProviderWithRetryNonThrottleFailuresKeepShortBudget(t *testing.T
 	clock := newThrottleClock()
 	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
 	providerErr := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary", nil)
+	providerErr.ProviderFailureKind = providers.ExecuteFailureKindDependency
 	attempts := 0
 	_, err := service.executeProviderWithRetry(
 		context.Background(),
@@ -733,5 +734,8 @@ func TestExecuteProviderWithRetryDependencyWaitHonorsCancellation(t *testing.T) 
 func dependencyProviderError() error {
 	err := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary server outage", nil)
 	err.ProviderFailureKind = providers.ExecuteFailureKindDependency
+	err.Diagnostics = &workers.WorkDiagnostics{Provider: &workers.ProviderDiagnostic{
+		ResponseMetadata: map[string]string{providers.ExecuteDiagnosticMetadataUpstreamOutage: "true"},
+	}}
 	return err
 }

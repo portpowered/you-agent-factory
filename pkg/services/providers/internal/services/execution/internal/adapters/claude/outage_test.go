@@ -84,4 +84,12 @@ func assertOutageKind(t *testing.T, err error, want providers.ExecuteFailureKind
 	if !errors.As(err, &failure) || failure.Kind != want {
 		t.Fatalf("failure = %#v (%v), want %s", failure, err, want)
 	}
+	if want == providers.ExecuteFailureKindDependency &&
+		(failure.Diagnostics == nil || failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUpstreamOutage] != "true") {
+		t.Fatalf("upstream outage lost evidence: %+v", failure)
+	}
+	if want != providers.ExecuteFailureKindDependency && failure.Diagnostics != nil &&
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUpstreamOutage] == "true" {
+		t.Fatalf("non-outage failure marked upstream: %+v", failure)
+	}
 }

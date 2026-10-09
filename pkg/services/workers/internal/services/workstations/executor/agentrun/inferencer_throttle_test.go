@@ -124,6 +124,9 @@ func TestRunnerInferencer_PersistentDependencyStopsAtWindow(t *testing.T) {
 func dependencyOutageErrors(count int) ([]error, error) {
 	outage := workerexecution.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider outage", nil)
 	outage.ProviderFailureKind = providers.ExecuteFailureKindDependency
+	outage.Diagnostics = &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+		ResponseMetadata: map[string]string{providers.ExecuteDiagnosticMetadataUpstreamOutage: "true"},
+	}}
 	errs := make([]error, count)
 	for i := range errs {
 		errs[i] = outage

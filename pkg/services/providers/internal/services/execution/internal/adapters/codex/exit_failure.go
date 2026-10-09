@@ -20,7 +20,7 @@ const (
 
 func exitFailureFromCommandResult(result providerservice.CommandResult, workingDirectory string) error {
 	if kind := explicitHTTPFailureKind(formatCombinedCommandOutput(result)); kind != providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: declaredFailureMessage(kind)}
+		return declaredProviderFailure(kind, declaredFailureMessage(kind))
 	}
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
@@ -28,23 +28,23 @@ func exitFailureFromCommandResult(result providerservice.CommandResult, workingD
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
 	case containsAny(normalized, "no rollout found", "no conversation found", "no thread found", "thread not found"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
+		return declaredProviderFailure(providers.ExecuteFailureKindSessionNotFound, declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound))
 	case result.ExitCode == codexUntrustedWorkingDirectoryExit &&
 		containsAny(normalized, codexUntrustedWorkingDirectoryNeedle) &&
 		strings.Contains(normalized, codexSkipGitRepoCheckNeedle):
 		return untrustedWorkingDirectoryFailure(workingDirectory)
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: declaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
+		return declaredProviderFailure(providers.ExecuteFailureKindAuthentication, declaredFailureMessage(providers.ExecuteFailureKindAuthentication))
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
+		return declaredProviderFailure(providers.ExecuteFailureKindInvalidRequest, declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest))
 	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "server_overloaded", "429"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: declaredFailureMessage(providers.ExecuteFailureKindThrottled)}
+		return declaredProviderFailure(providers.ExecuteFailureKindThrottled, declaredFailureMessage(providers.ExecuteFailureKindThrottled))
 	case containsAny(normalized, "internal server error"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, declaredFailureMessage(providers.ExecuteFailureKindDependency))
 	case result.ExitCode == 124 || containsAny(normalized, "deadline exceeded", "timed out", "timeout", "request timed out"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindTimeout, Message: declaredFailureMessage(providers.ExecuteFailureKindTimeout)}
+		return declaredProviderFailure(providers.ExecuteFailureKindTimeout, declaredFailureMessage(providers.ExecuteFailureKindTimeout))
 	case containsAny(normalized, "service unavailable", "please try again"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, declaredFailureMessage(providers.ExecuteFailureKindDependency))
 	}
 	return fmt.Errorf("codex exited with code %d", result.ExitCode)
 }
@@ -190,3 +190,13 @@ func explicitHTTPFailureKind(message string) providers.ExecuteFailureKind {
 }
 
 var providerHTTPStatus = regexp.MustCompile(`\b(?:unexpected status|http(?: status)?)\s+([45][0-9]{2})\b`)
+
+func declaredProviderFailure(kind providers.ExecuteFailureKind, message string) providers.ExecuteFailure {
+	failure := providers.ExecuteFailure{Kind: kind, Message: message}
+	if kind == providers.ExecuteFailureKindDependency {
+		failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			providers.ExecuteDiagnosticMetadataUpstreamOutage: "true",
+		}}
+	}
+	return failure
+}

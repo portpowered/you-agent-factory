@@ -325,16 +325,23 @@ func TestProviderDependencyUsesBackpressureWithoutRescuingTerminalFailures(t *te
 	for _, tc := range []struct {
 		kind            providers.ExecuteFailureKind
 		typ             WorkFailureType
+		upstream        bool
 		pause, terminal bool
 	}{
-		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, true, false},
-		{"", WorkFailureTypeInternalServerError, false, false},
-		{providers.ExecuteFailureKindThrottled, WorkFailureTypeThrottled, true, false},
-		{providers.ExecuteFailureKindDependency, WorkFailureTypeAuthFailure, false, true},
-		{providers.ExecuteFailureKindDependency, WorkFailureTypePermanentBadRequest, false, true},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, true, true, false},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, false, false, false},
+		{"", WorkFailureTypeInternalServerError, true, false, false},
+		{providers.ExecuteFailureKindThrottled, WorkFailureTypeThrottled, false, true, false},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeAuthFailure, true, false, true},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypePermanentBadRequest, true, false, true},
 	} {
 		err := NewProviderError(tc.typ, "safe", nil)
 		err.ProviderFailureKind = tc.kind
+		if tc.upstream {
+			err.Diagnostics = &WorkDiagnostics{Provider: &ProviderDiagnostic{
+				ResponseMetadata: map[string]string{providers.ExecuteDiagnosticMetadataUpstreamOutage: "true"},
+			}}
+		}
 		metadata := WorkFailureMetadataFromProviderError(err)
 		decision := WorkFailureDecisionFromProviderError(err)
 		if metadata.Type != tc.typ || decision.TriggersThrottlePause != tc.pause || decision.Terminal != tc.terminal || decision.Retryable == tc.terminal {

@@ -572,7 +572,7 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 		kind = providers.ExecuteFailureKindDependency
 	}
 	if kind != providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind, Message: declaredFailureMessage(kind)}
+		return declaredProviderFailure(kind, declaredFailureMessage(kind))
 	}
 	switch {
 	case nativeType == "authentication_error",
@@ -599,10 +599,7 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 		nativeType == "server_error":
 		kind = providers.ExecuteFailureKindDependency
 	}
-	return providers.ExecuteFailure{
-		Kind:    kind,
-		Message: declaredFailureMessage(kind),
-	}
+	return declaredProviderFailure(kind, declaredFailureMessage(kind))
 }
 
 // isCapacityOverload reports whether Codex declared a provider-side model
