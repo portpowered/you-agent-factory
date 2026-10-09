@@ -129,6 +129,12 @@ func provideRecordedSessionInventory(
 	return recordingswire.NewRecordedSessionInventory(readDir, replayInputs, logger)
 }
 
-func provideWorkerWorkAttributionReader(writer recordings.WorkerRecordingWriter, history recordingswire.HistoricalQueryOwner, root *factorysessionwire.Root, readFile recordings.RecordingReadFile) recordings.WorkerWorkAttributionReader {
-	return recordingswire.NewWorkerWorkAttributionReader(writer, history, root.CurrentBoardRecordingArtifact, readFile)
+func provideWorkerWorkAttributionReader(edges serviceedges.Edges, writer recordings.WorkerRecordingWriter, history recordingswire.HistoricalQueryOwner, root *factorysessionwire.Root, readFile recordings.RecordingReadFile) recordings.WorkerWorkAttributionReader {
+	// A replaced read edge may represent a remote/in-memory source or inject a
+	// transient fault. Local file metadata cannot establish its revision.
+	var revision func(string) (string, error)
+	if edges.RecordingReadFile == nil {
+		revision = platformfilesystem.Local{}.ReadRevision
+	}
+	return recordingswire.NewWorkerWorkAttributionReader(writer, history, root.CurrentBoardRecordingArtifact, readFile, revision)
 }

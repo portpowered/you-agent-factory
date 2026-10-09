@@ -26,6 +26,7 @@ type ArtifactHistoryReader struct {
 	query        CanonicalHistoryQuery
 	currentBoard CurrentBoardArtifact
 	readFile     recordings.RecordingReadFile
+	revision     func(string) (string, error)
 	mu           sync.Mutex
 	names        map[historyIdentity]cachedNames
 	decodes      map[nameDecodeKey]*nameDecode
@@ -33,8 +34,8 @@ type ArtifactHistoryReader struct {
 	nameUse      uint64
 }
 
-func NewArtifactHistoryReader(query CanonicalHistoryQuery, currentBoard CurrentBoardArtifact, readFile recordings.RecordingReadFile) *ArtifactHistoryReader {
-	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, names: make(map[historyIdentity]cachedNames), decodes: make(map[nameDecodeKey]*nameDecode), reads: make(map[historyIdentity]*artifactRead)}
+func NewArtifactHistoryReader(revision func(string) (string, error), query CanonicalHistoryQuery, currentBoard CurrentBoardArtifact, readFile recordings.RecordingReadFile) *ArtifactHistoryReader {
+	return &ArtifactHistoryReader{query: query, currentBoard: currentBoard, readFile: readFile, revision: revision, names: make(map[historyIdentity]cachedNames), decodes: make(map[nameDecodeKey]*nameDecode), reads: make(map[historyIdentity]*artifactRead)}
 }
 
 func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, page recordings.WorkerCapturedActivityPage) (recordings.HistoricalRecordingQueryResult, error) {
@@ -64,14 +65,15 @@ func (r *ArtifactHistoryReader) ReadWorkerFactoryHistory(ctx context.Context, pa
 
 // Retain only names and associations, never events, worlds or source bytes.
 // A content digest deliberately catches same-size, same-timestamp replacement.
-// The bounded cache still reads bytes for freshness; startup-maintained source
-// revisions are a separate prerequisite for eliminating that remaining IO.
+// A supported filesystem revision avoids rereading unchanged sources. Without
+// a reliable revision edge, reads still establish freshness through the digest.
 const maxNameArtifacts = 64
 
 type cachedNames struct {
 	digest     [sha256.Size]byte
 	projection nameProjection
 	lastUse    uint64
+	revision   string
 }
 
 type nameDecodeKey struct {
@@ -105,7 +107,16 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 		return nameProjection{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: identity.RecordingID}
 	}
 	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, string(artifact)}
-	read, err := r.sharedArtifact(ctx, key)
+	revision, err := r.sourceRevision(key)
+	if err == nil && revision != "" {
+		if projection, ok := r.revisionProjection(key, revision); ok {
+			return projection, ctx.Err()
+		}
+	}
+	var read *artifactRead
+	if err == nil {
+		read, err = r.sharedArtifact(ctx, key)
+	}
 	if err != nil {
 		if canceled := ctx.Err(); canceled != nil {
 			return nameProjection{}, canceled
@@ -116,7 +127,14 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 		}
 		return nameProjection{}, &recordings.HistoricalRecordingQueryError{Kind: kind, RecordingID: identity.RecordingID, Cause: err}
 	}
-	return r.sharedNames(ctx, nameDecodeKey{key, read.digest}, identity, read.payload)
+	projection, err := r.sharedNames(ctx, nameDecodeKey{key, read.digest}, identity, read.payload)
+	if err == nil && revision != "" {
+		r.retainSourceRevision(key, read.digest, revision)
+	}
+	if canceled := ctx.Err(); canceled != nil {
+		return nameProjection{}, canceled
+	}
+	return projection, err
 }
 
 // Resolve legacy selection before request-local sharing. The caller keeps the

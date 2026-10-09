@@ -39,7 +39,7 @@ func TestWorkerWorkAttributionExactAndLegacyArtifact(t *testing.T) {
 			t.Parallel()
 			query := &canonicalQueryFake{result: recordings.HistoricalRecordingQueryResult{Recording: recordings.HistoricalRecordingIdentity{RecordingID: "capture"}}}
 			var scopes []string
-			reader := NewArtifactHistoryReader(query, func(_ context.Context, scope string) (recordings.RecordingArtifactReference, error) {
+			reader := NewArtifactHistoryReader(nil, query, func(_ context.Context, scope string) (recordings.RecordingArtifactReference, error) {
 				scopes = append(scopes, scope)
 				return "/current/scope.json", nil
 			}, nil)
@@ -86,7 +86,7 @@ func TestWorkerWorkAttributionArtifactFailuresAndCancellation(t *testing.T) {
 				query.cancel = cancel
 				want = context.Canceled
 			}
-			reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return "", fallbackErr }, nil)
+			reader := NewArtifactHistoryReader(nil, query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return "", fallbackErr }, nil)
 			_, err := reader.ReadWorkerFactoryHistory(ctx, page)
 			if scenario == "missing-legacy" {
 				var typed *recordings.HistoricalRecordingQueryError
@@ -115,7 +115,7 @@ func TestRetainedNamesFreshnessAndRetry(t *testing.T) {
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
 	payload := []byte("first")
 	var readErr error
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return payload, readErr })
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) { return payload, readErr })
 	service := New(captures, reader)
 	request := []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work"}}
 	check := func(name string, unavailable bool) {
@@ -175,7 +175,7 @@ func TestRetainedNamesBatchSharesArtifactAcrossAttemptGenerations(t *testing.T) 
 	reads := 0
 	payload := []byte("first")
 	var readErr error
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		reads++
 		return payload, readErr
 	})
@@ -242,7 +242,7 @@ func TestRetainedNamesLegacyBatchSharesOnlyResolvedSource(t *testing.T) {
 	query := &canonicalQueryFake{result: history}
 	selected := 0
 	var reads []string
-	reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) {
+	reader := NewArtifactHistoryReader(nil, query, func(context.Context, string) (recordings.RecordingArtifactReference, error) {
 		selected++
 		if selected%3 == 0 {
 			return "second.json", nil
@@ -287,7 +287,7 @@ func TestRetainedNamesLegacySelectionAndScope(t *testing.T) {
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
 	artifact := recordings.RecordingArtifactReference("first.json")
 	var selected []string
-	reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return artifact, nil }, func(path string) ([]byte, error) { selected = append(selected, path); return []byte("same"), nil })
+	reader := NewArtifactHistoryReader(nil, query, func(context.Context, string) (recordings.RecordingArtifactReference, error) { return artifact, nil }, func(path string) ([]byte, error) { selected = append(selected, path); return []byte("same"), nil })
 	if _, err := reader.readWorkerFactoryNames(t.Context(), page); err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestRetainedNamesFreshGenerationsReuseValidatedSource(t *testing.T) {
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
 	payload := []byte("first")
 	var reads int
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		reads++
 		return payload, nil
 	})
@@ -344,7 +344,7 @@ func TestRetainedNamesEvictionPreservesRecentlyUsedSource(t *testing.T) {
 	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
 	page.Catalog.OriginatingArtifact = "frequent.json"
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
 	read := func(candidate recordings.WorkerCapturedActivityPage) {
 		t.Helper()
 		got, err := reader.readWorkerFactoryNames(t.Context(), candidate)
@@ -379,7 +379,7 @@ func TestRetainedNamesCanceledDecodeIsRetryable(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha"), cancel: cancel}
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
 	if _, err := reader.readWorkerFactoryNames(ctx, page); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel = %v", err)
 	}
@@ -395,7 +395,7 @@ func TestRetainedNamesConcurrentReadsAndEviction(t *testing.T) {
 	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
 	page.Catalog.OriginatingArtifact = "exact.json"
 	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) { return []byte("same"), nil })
 	// Parallel consumers share only immutable projections. No lock spans artifact IO.
 	var readers sync.WaitGroup
 	for range 32 {
@@ -460,7 +460,7 @@ func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
 	unblock := func() { release.Do(func() { close(query.release) }) }
 	t.Cleanup(unblock)
 	read := make(chan struct{}, 3)
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		read <- struct{}{}
 		return []byte("same"), nil
 	})
@@ -522,7 +522,7 @@ func TestRetainedNamesSurvivesCanceledLeader(t *testing.T) {
 	unblock := func() { release.Do(func() { close(query.release) }) }
 	t.Cleanup(unblock)
 	read := make(chan struct{}, 3)
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		read <- struct{}{}
 		return []byte("same"), nil
 	})
@@ -617,7 +617,7 @@ func TestRetainedNamesSharesArtifactReadWithIndependentCancellation(t *testing.T
 			unblock := func() { once.Do(func() { close(release) }) }
 			t.Cleanup(unblock)
 			var reads atomic.Int32
-			reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+			reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 				if reads.Add(1) == 1 {
 					close(entered)
 					<-release
@@ -677,7 +677,7 @@ func TestRetainedNamesSharedUnavailableReadRetries(t *testing.T) {
 	unblock := func() { once.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
 	var reads atomic.Int32
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		if reads.Add(1) == 1 {
 			close(entered)
 			<-release
@@ -722,7 +722,7 @@ func TestRetainedNamesInFlightReadKeepsProvenanceSeparate(t *testing.T) {
 	unblock := func() { once.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
 	var reads atomic.Int32
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		if reads.Add(1) == 1 {
 			close(entered)
 			<-release
@@ -781,7 +781,7 @@ func TestRetainedNamesFreshReadDuringOlderDecodeObservesReplacement(t *testing.T
 	unblock := func() { once.Do(func() { close(query.release) }) }
 	t.Cleanup(unblock)
 	var reads atomic.Int32
-	reader := NewArtifactHistoryReader(query, nil, func(string) ([]byte, error) {
+	reader := NewArtifactHistoryReader(nil, query, nil, func(string) ([]byte, error) {
 		if reads.Add(1) == 1 {
 			return []byte("first"), nil
 		}
@@ -797,5 +797,127 @@ func TestRetainedNamesFreshReadDuringOlderDecodeObservesReplacement(t *testing.T
 	awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Beta", nil)
 	if reads.Load() != 3 {
 		t.Fatalf("fresh source reads = %d", reads.Load())
+	}
+}
+
+// Component-owned controlled revision/read/decode edges prove bounded IO and
+// freshness; native revision behavior belongs to the filesystem owner's tests.
+func TestRetainedNamesUsesOnlyStableReadableSourceRevisions(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	sourceRevision := "first"
+	payload := []byte("first")
+	var revisionErr error
+	reads := 0
+	reader := NewArtifactHistoryReader(func(string) (string, error) { return sourceRevision, revisionErr }, query, nil, func(string) ([]byte, error) {
+		reads++
+		return payload, nil
+	})
+	captures := &captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": page}}
+	service := New(captures, reader)
+	request := []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work"}}
+	check := func(name string, unavailable bool) {
+		t.Helper()
+		got, err := service.ResolveWorkerWorkAttribution(t.Context(), request)
+		if err != nil || len(got) != 1 || got[0].WorkName != name || got[0].HistoryUnavailable != unavailable {
+			t.Fatalf("names = %+v, %v", got, err)
+		}
+	}
+	check("Alpha", false)
+	check("Alpha", false)
+	if reads != 1 || len(query.requests) != 1 {
+		t.Fatalf("unchanged source read/decode = %d/%d", reads, len(query.requests))
+	}
+	sourceRevision, payload = "second", []byte("other")
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Beta")
+	check("Beta", false)
+	if reads != 2 || len(query.requests) != 2 {
+		t.Fatal("changed source was reused")
+	}
+	revisionErr = os.ErrNotExist
+	check("", true)
+	revisionErr = nil
+	check("Beta", false)
+	if reads != 3 {
+		t.Fatal("restored source was not reread after unavailability")
+	}
+	sourceRevision = "" // A source without reliable revisions always reads bytes.
+	check("Beta", false)
+	check("Beta", false)
+	if reads != 5 {
+		t.Fatal("unsupported revisions skipped source freshness reads")
+	}
+}
+
+func TestRetainedNamesDoesNotPublishRevisionChangedDuringDecode(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	revisions := 0
+	reads := 0
+	reader := NewArtifactHistoryReader(func(string) (string, error) {
+		revisions++
+		if revisions == 1 {
+			return "first", nil
+		}
+		return "second", nil
+	}, query, nil, func(string) ([]byte, error) {
+		reads++
+		if reads == 1 {
+			return []byte("first"), nil
+		}
+		return []byte("other"), nil
+	})
+	first, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || first.names["work"] != "Alpha" {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	query.result = namedHistory(t, "scope", "worker", "dispatch", "work", "Beta")
+	second, err := reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || second.names["work"] != "Beta" || reads != 2 {
+		t.Fatalf("second = %+v, %v; reads=%d", second, err, reads)
+	}
+	_, err = reader.readWorkerFactoryNames(t.Context(), page)
+	if err != nil || reads != 2 {
+		t.Fatalf("stable source = %v; reads=%d", err, reads)
+	}
+}
+
+func TestRetainedNamesRevisionCheckCancellationAndConcurrentReuse(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	query := &canonicalQueryFake{result: namedHistory(t, "scope", "worker", "dispatch", "work", "Alpha")}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var revisionChecks atomic.Int32
+	var reads atomic.Int32
+	reader := NewArtifactHistoryReader(func(string) (string, error) {
+		if revisionChecks.Add(1) == 2 {
+			cancel()
+		} // Cancel during post-decode source validation.
+		return "stable", nil
+	}, query, nil, func(string) ([]byte, error) {
+		reads.Add(1)
+		return []byte("first"), nil
+	})
+	if _, err := reader.readWorkerFactoryNames(ctx, page); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled source validation = %v", err)
+	}
+	var wait sync.WaitGroup
+	for range 16 {
+		wait.Go(func() {
+			got, err := reader.readWorkerFactoryNames(t.Context(), page)
+			if err != nil || got.names["work"] != "Alpha" {
+				t.Errorf("surviving query = %+v, %v", got, err)
+			}
+		})
+	}
+	wait.Wait()
+	if reads.Load() != 1 || len(query.requests) != 1 {
+		t.Fatalf("stable concurrent reads/decode = %d/%d", reads.Load(), len(query.requests))
 	}
 }
