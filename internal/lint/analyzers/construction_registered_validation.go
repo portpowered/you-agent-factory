@@ -217,3 +217,84 @@ func invalidRegisteredAllowance(a ConstructionAllowance, constructors map[Constr
 		strings.ContainsAny(a.FilePath, "*?\\:") || strings.HasPrefix(a.FilePath, "../") ||
 		strings.TrimSpace(a.OwnerTask) == "" || strings.TrimSpace(a.Reason) == ""
 }
+
+// A classified result stays governed when an owner adds another constructor.
+// Inspect compiler objects in the selected source, never dependency source or
+// a second repository inventory. Explicit signatures remain authoritative.
+func registeredUnlistedConstructors(pass *analysis.Pass, registry ConstructionRegistry) ConstructionRegistry {
+	registry.Constructors = slices.Clone(registry.Constructors)
+	seen := map[ConstructionSymbol]bool{}
+	for _, constructor := range registry.Constructors {
+		seen[constructor.Symbol] = true
+	}
+	for _, file := range pass.Files {
+		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
+			continue
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			id, ok := node.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			fn, ok := pass.TypesInfo.ObjectOf(id).(*types.Func)
+			if !ok || !serviceConstructorName(fn.Name()) {
+				return true
+			}
+			fn = fn.Origin()
+			symbol := registeredConstructionSymbol(fn)
+			if seen[symbol] {
+				return true
+			}
+			seen[symbol] = true
+			if constructor, ok := registeredResultConstructor(fn, registry); ok {
+				registry.Constructors = append(registry.Constructors, constructor)
+			}
+			return true
+		})
+	}
+	return registry
+}
+
+func registeredResultConstructor(fn *types.Func, registry ConstructionRegistry) (ConstructionConstructor, bool) {
+	constructor := ConstructionConstructor{Symbol: registeredConstructionSymbol(fn)}
+	enforced := map[string]bool{}
+	for _, set := range registry.CapabilitySets {
+		enforced[set.Name] = set.Mode == ConstructionEnforce
+	}
+	sig := fn.Type().(*types.Signature)
+	for i := 0; i < sig.Results().Len(); i++ {
+		if typ, ok := registeredClassifiedType(sig.Results().At(i).Type(), registry.Types); ok &&
+			(typ.Kind == ConstructionBehavior || typ.Kind == ConstructionEffect) {
+			if constructor.CapabilitySet == "" || enforced[typ.CapabilitySet] {
+				constructor.CapabilitySet = typ.CapabilitySet
+			}
+			constructor.Results = append(constructor.Results, typ.Symbol)
+		}
+	}
+	for i := 0; i < sig.Params().Len(); i++ {
+		param := sig.Params().At(i)
+		if typ, ok := registeredClassifiedType(param.Type(), registry.Types); ok &&
+			(typ.Kind == ConstructionBehavior || typ.Kind == ConstructionEffect) {
+			constructor.RequiredParameters = append(constructor.RequiredParameters, ConstructionParameter{
+				Index: i, TypeExpr: types.TypeString(param.Type(), func(pkg *types.Package) string { return pkg.Path() }),
+			})
+		}
+	}
+	return constructor, constructor.CapabilitySet != ""
+}
+
+func registeredClassifiedType(typ types.Type, classified []ConstructionType) (ConstructionType, bool) {
+	typ = types.Unalias(typ)
+	if pointer, ok := typ.(*types.Pointer); ok {
+		typ = types.Unalias(pointer.Elem())
+	}
+	if named, ok := typ.(*types.Named); ok {
+		symbol := registeredConstructionSymbol(named.Origin().Obj())
+		for _, entry := range classified {
+			if entry.Symbol == symbol {
+				return entry, true
+			}
+		}
+	}
+	return ConstructionType{}, false
+}

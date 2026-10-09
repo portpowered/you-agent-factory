@@ -47,6 +47,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		pass.Reportf(pass.Files[0].Package, "construction-metadata: %s", err)
 		return findings, nil
 	}
+	registry = registeredUnlistedConstructors(pass, registry)
 	values := registeredConstructionValues(pass)
 	var blocking []violation
 	add := func(caller, callee ConstructionSymbol, constructor ConstructionConstructor, rule string, pos token.Pos) {

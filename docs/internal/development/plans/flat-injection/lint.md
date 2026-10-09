@@ -51,6 +51,19 @@ The inspected checkers use Go AST parsing, import maps, symbol inventories, and 
 
 ## 4. Detection rules and limits
 
+The maintained typed analyzer now recognizes unlisted constructor declarations
+and references with the existing `New`/`Build`/`Create`/`Ensure`/`Open`/`Provide`
+vocabulary when their compiler signature returns an exact classified named
+behavior/effect. Same-owner calls remain subject to the construction rule.
+Generic origins and aliases preserve classification; mixed results inherit an
+enforced set if any result is enforced. Requiredness inference covers exact
+classified named parameters only. Arbitrarily named factories, erased or
+structural results, distinct defined-type ancestry, callable variables, opaque
+cross-package dispatch, inactive tags and native platform bodies remain unproved
+edges. This increment neither supplies missing owner classifications nor proves
+final repository coverage; report-only metadata and provider allowances still
+require T29 completion. These limits permit no allowance or baseline growth.
+
 The constructor inventory names qualified service constructors, effects, their required parameters, returned service interfaces, and approved focused provider operations. It is enforcement metadata with exact semantic meaning, not a broad exception list. Validate references against source and reject stale entries. Derive provider references from authored Wire sets where possible and resolve exported aliases in owner Wire packages. Go internal visibility still applies: canonical composition consumes focused owner exports rather than importing private implementation packages.
 
 Required rules:
