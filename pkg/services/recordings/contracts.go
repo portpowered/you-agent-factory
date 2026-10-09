@@ -5,10 +5,10 @@ package recordings
 import (
 	"context"
 	"errors"
-	"time"
-)
 
-import recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
+)
 
 type (
 	ActiveThrottlePause                                        = recordingcontracts.ActiveThrottlePause
@@ -670,28 +670,11 @@ type WorkerSessionWorkProjectionReader interface {
 	CurrentWorkerSessionWorkFacts(context.Context, string) (WorkerSessionWorkFacts, error)
 }
 
-// WorkerSessionWorkFacts contains only selected Work and physical dispatch
-// facts. Values are detached from the append-maintained projection.
-type WorkerSessionWorkFacts struct {
-	KnownWork          bool
-	WorkName           string
-	StreamGenerationID string
-	World              FactoryWorldState
-	Associations       map[string]WorkerSessionAssociationFacts
-	Requests           map[string]FactoryWorldDispatch
-	StateCursors       map[string]CanonicalEventCursor
-	ResponseTimes      map[string]time.Time
-	ResponseCursors    map[string]CanonicalEventCursor
-	Interruptions      map[string]DispatchInterruptedEventPayload
-}
+// WorkerSessionWorkFacts contains detached, selected Work and dispatch facts.
+// The dependency-neutral vocabulary is shared by the ledger and projection.
+type WorkerSessionWorkFacts = sessionprojectionfacts.WorkerSessionWorkFacts
 
-type WorkerSessionAssociationFacts struct {
-	WorkerSessionID string
-	TurnID          string
-	Model           *string
-	ReasoningEffort *string
-	AssociatedAt    time.Time
-}
+type WorkerSessionAssociationFacts = sessionprojectionfacts.WorkerSessionAssociationFacts
 
 // CanonicalHistoryReadStats is a detached snapshot of canonical-history work
 // observed by one runtime ledger.

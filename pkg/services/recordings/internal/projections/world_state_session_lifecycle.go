@@ -5,7 +5,6 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	sessionprojectionfacts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -379,13 +378,13 @@ type workerSessionWorkIndex struct {
 	known              map[string]struct{}
 	byWork             map[string]map[string]struct{}
 	workByDispatch     map[string][]string
-	associations       map[string]recordings.WorkerSessionAssociationFacts
+	associations       map[string]sessionprojectionfacts.WorkerSessionAssociationFacts
 	requests           map[string]interfaces.FactoryWorldDispatch
 	completions        map[string]int
 	providers          map[string]int
-	cursors            map[string]recordings.CanonicalEventCursor
+	cursors            map[string]sessionprojectionfacts.CanonicalEventCursor
 	responseTimes      map[string]time.Time
-	responseCursors    map[string]recordings.CanonicalEventCursor
+	responseCursors    map[string]sessionprojectionfacts.CanonicalEventCursor
 	interruptions      map[string]interfaces.DispatchInterruptedEventPayload
 	interruptedWorkIDs map[string][]string
 }
@@ -394,12 +393,12 @@ func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
 	return &workerSessionWorkIndex{
 		known: make(map[string]struct{}), byWork: make(map[string]map[string]struct{}),
 		workByDispatch: make(map[string][]string),
-		associations:   make(map[string]recordings.WorkerSessionAssociationFacts),
+		associations:   make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
 		requests:       make(map[string]interfaces.FactoryWorldDispatch),
 		completions:    make(map[string]int), providers: make(map[string]int),
-		cursors:            make(map[string]recordings.CanonicalEventCursor),
+		cursors:            make(map[string]sessionprojectionfacts.CanonicalEventCursor),
 		responseTimes:      make(map[string]time.Time),
-		responseCursors:    make(map[string]recordings.CanonicalEventCursor),
+		responseCursors:    make(map[string]sessionprojectionfacts.CanonicalEventCursor),
 		interruptions:      make(map[string]interfaces.DispatchInterruptedEventPayload),
 		interruptedWorkIDs: make(map[string][]string),
 	}
@@ -435,7 +434,7 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 		if payload.WorkerSessionID == "" {
 			return nil
 		}
-		index.associations[dispatchID] = recordings.WorkerSessionAssociationFacts{
+		index.associations[dispatchID] = sessionprojectionfacts.WorkerSessionAssociationFacts{
 			WorkerSessionID: payload.WorkerSessionID, TurnID: stringValue(event.Context.RequestID),
 			Model: optionalWorkerFactString(payload.Model), ReasoningEffort: optionalWorkerFactString(payload.ReasoningEffort),
 			AssociatedAt: event.Context.EventTime.UTC(),
@@ -444,7 +443,7 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 		index.requests[dispatchID] = state.ActiveDispatches[dispatchID]
 	case interfaces.FactoryEventTypeDispatchResponse:
 		index.responseTimes[dispatchID] = event.Context.EventTime.UTC()
-		index.responseCursors[dispatchID] = recordings.CanonicalEventCursor{Sequence: recordings.CanonicalEventSequence(event.Context.Sequence)}
+		index.responseCursors[dispatchID] = sessionprojectionfacts.CanonicalEventCursor{Sequence: sessionprojectionfacts.CanonicalEventSequence(event.Context.Sequence)}
 	case interfaces.FactoryEventTypeDispatchInterrupted:
 		var payload interfaces.DispatchInterruptedEventPayload
 		if err := event.DecodePayload(&payload); err != nil {
@@ -460,7 +459,7 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 	case interfaces.FactoryEventTypeDispatchRequest, interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 		interfaces.FactoryEventTypeDispatchResponse, interfaces.FactoryEventTypeDispatchInterrupted,
 		interfaces.FactoryEventTypeDispatchQueued, interfaces.FactoryEventTypeDispatchReconciled:
-		index.cursors[dispatchID] = recordings.CanonicalEventCursor{Sequence: recordings.CanonicalEventSequence(event.Context.Sequence)}
+		index.cursors[dispatchID] = sessionprojectionfacts.CanonicalEventCursor{Sequence: sessionprojectionfacts.CanonicalEventSequence(event.Context.Sequence)}
 	}
 	index.updateMembership(dispatchID, state)
 	return nil
@@ -501,13 +500,13 @@ func (index *workerSessionWorkIndex) updateMembership(dispatchID string, state i
 
 // WorkerSessionWorkFacts selects from the exact Work index. The ledger holds
 // its read lock across selection and supplies the generation fence.
-func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) recordings.WorkerSessionWorkFacts {
-	facts := recordings.WorkerSessionWorkFacts{
-		Associations:    make(map[string]recordings.WorkerSessionAssociationFacts),
+func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) sessionprojectionfacts.WorkerSessionWorkFacts {
+	facts := sessionprojectionfacts.WorkerSessionWorkFacts{
+		Associations:    make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
 		Requests:        make(map[string]interfaces.FactoryWorldDispatch),
-		StateCursors:    make(map[string]recordings.CanonicalEventCursor),
+		StateCursors:    make(map[string]sessionprojectionfacts.CanonicalEventCursor),
 		ResponseTimes:   make(map[string]time.Time),
-		ResponseCursors: make(map[string]recordings.CanonicalEventCursor),
+		ResponseCursors: make(map[string]sessionprojectionfacts.CanonicalEventCursor),
 		Interruptions:   make(map[string]interfaces.DispatchInterruptedEventPayload),
 		World:           interfaces.FactoryWorldState{ActiveDispatches: make(map[string]interfaces.FactoryWorldDispatch)},
 	}

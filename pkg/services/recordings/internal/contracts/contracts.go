@@ -296,11 +296,7 @@ type Root interface {
 // event.
 type CanonicalEventID string
 
-// CanonicalEventSequence is the Recordings-assigned global position of one
-// event in canonical Factory-event order. A session-scoped selection can
-// therefore contain increasing, non-contiguous values where other sessions'
-// events occupy the intervening positions.
-type CanonicalEventSequence int64
+type CanonicalEventSequence = sessionprojectionfacts.CanonicalEventSequence
 
 // CanonicalEventKind identifies the detached payload vocabulary without
 // exposing a producer, reducer, or transport enum.
@@ -312,14 +308,7 @@ type CanonicalEventScope struct {
 	FactorySessionID string
 }
 
-// CanonicalEventCursor is a portable reconnect position in global canonical
-// order. StreamGenerationID distinguishes histories whose numeric sequences
-// may overlap; SubscribeRequest.Scope selects which event at that position may
-// be acknowledged.
-type CanonicalEventCursor struct {
-	StreamGenerationID string
-	Sequence           CanonicalEventSequence
-}
+type CanonicalEventCursor = sessionprojectionfacts.CanonicalEventCursor
 
 // CanonicalEvent is a detached, Recordings-owned canonical fact. Its fields
 // contain only value data: Payload is immutable JSON text rather than a shared
