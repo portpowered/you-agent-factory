@@ -346,6 +346,9 @@ func reconcileRestoredDispatches(cfg *runtimeConfig, eventHistory recordings.Run
 	sort.Strings(activeDispatchIDs)
 
 	existingEvents := eventHistory.CanonicalEvents()
+	if err := validateRestoredAcceptedResponses(cfg, existingEvents); err != nil {
+		return err
+	}
 	for _, dispatchID := range activeDispatchIDs {
 		dispatch := cfg.restoredWorldState.ActiveDispatches[dispatchID]
 		if restoredDispatchHasTerminalEvent(existingEvents, dispatchID) {
