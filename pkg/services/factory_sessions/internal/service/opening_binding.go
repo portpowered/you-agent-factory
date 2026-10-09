@@ -45,7 +45,7 @@ type RuntimeOpeningBindingRequest struct {
 
 func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request RuntimeOpeningBindingRequest,
 	state *runtimebinding.SessionState, selectedClock factoryruntime.Clock, startup runtimeports.RuntimeInstance,
-	sessionRuntime roles.ApplicationRuntime, processRuntime roles.ProcessRuntime,
+	rootRuntime factoryruntime.Service, processRuntime roles.ProcessRuntime,
 	execution durableexecution.Service,
 	publishCurrentBoard func(context.Context) error, cleanup interface {
 		Add(func() error)
@@ -58,8 +58,7 @@ func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request Runtim
 	if recording, ok := startup.(recordings.RuntimeRecordingStartup); ok {
 		recording.DeferRecordingPublication()
 	}
-	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
-	if !ok {
+	if rootRuntime == nil {
 		return fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
 	}
 	admission, _ := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission)

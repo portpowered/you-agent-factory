@@ -21,7 +21,7 @@ import (
 // The final operation receives controlled acquired handles; no graph is assembled.
 func bindOpeningStateFixture(t *testing.T, ctx context.Context, gateway roles.SessionGateway,
 	runtime factoryruntime.Service, scope models.RuntimeScopeRef, startup runtimeports.RuntimeInstance,
-	lifecycle roles.LifecycleRuntime, process roles.ProcessRuntime, directory, runtimeID, backendID string,
+	_ roles.LifecycleRuntime, process roles.ProcessRuntime, directory, runtimeID, backendID string,
 	closeResources func() error, ids ...string) (*runtimebinding.SessionState, func() error) {
 	t.Helper()
 	id := ""
@@ -30,16 +30,16 @@ func bindOpeningStateFixture(t *testing.T, ctx context.Context, gateway roles.Se
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	cleanup.Add(closeResources)
-	var session roles.ApplicationRuntime = bindingSessionRuntime{ApplicationRuntime: lifecycle, Service: runtime}
-	if selected, ok := runtime.(roles.ApplicationRuntime); ok {
-		session = selected
+	// Fact-only cases use an inert acquired service, without a lifecycle peer.
+	if runtime == nil {
+		runtime = bindingLegacyRuntime{}
 	}
 	opened := &runtimebinding.SessionState{ProjectionBackendScope: backendID}
 	err := NewRuntimeOpeningBinding(bindingIdentityReader(gateway), nil, nil, nil).Bind(ctx,
 		RuntimeOpeningBindingRequest{Facts: roles.SessionOpeningFacts{
 			FactorySessionID: id, RuntimeID: runtimeID, BackendScopeID: backendID,
 			Directory: directory, ModelsScope: scope,
-		}}, opened, openingCoordinatorClock{}, startup, session, process,
+		}}, opened, openingCoordinatorClock{}, startup, runtime, process,
 		&bindingExecution{}, func(context.Context) error { return nil }, cleanup)
 	if err != nil {
 		t.Fatal(err)
@@ -139,6 +139,24 @@ func TestRuntimeOpeningBindingObservationCapabilities(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRuntimeOpeningBindingConsumesAcquiredServiceWithoutLifecyclePeer(t *testing.T) {
+	t.Parallel()
+	observation := &bindingObservation{}
+	selected := bindingLegacyRuntime{observation: observation}
+	state := &runtimebinding.SessionState{}
+	cleanup := &runtimeOpeningCleanup{}
+	clock := openingCoordinatorClock{}
+	err := NewRuntimeOpeningBinding(nil, nil, nil, nil).Bind(t.Context(),
+		RuntimeOpeningBindingRequest{Facts: roles.SessionOpeningFacts{
+			FactorySessionID: "selected", RuntimeID: "selected-runtime", Directory: "/selected",
+		}}, state, clock, inertHostedInstance{}, selected, nil, &bindingExecution{}, nil, cleanup)
+	if err != nil || state.WorkerSessionsObservation() != observation || state.Clock != clock ||
+		state.ModelInvocation.FactorySessionID != "selected" || state.ModelInvocation.RuntimeID != "selected-runtime" {
+		t.Fatalf("selected service binding = %+v, %v", state, err)
+	}
+	closeBindingFixture(t, cleanup)
 }
 
 func TestRuntimeOpeningBindingFailureAndSameIdentityRetry(t *testing.T) {
@@ -321,9 +339,9 @@ func TestRuntimeOpeningBindingUnavailableCapabilitiesDeferPublication(t *testing
 		t.Run(missing, func(t *testing.T) {
 			t.Parallel()
 			startup := &bindingRecordingStartup{}
-			var session roles.ApplicationRuntime = bindingSessionRuntime{}
+			var session factoryruntime.Service = bindingSessionRuntime{}
 			if missing == "runtime" {
-				session = &completionSession{}
+				session = nil
 			}
 			cleanup := &runtimeOpeningCleanup{}
 			opened := &runtimebinding.SessionState{}

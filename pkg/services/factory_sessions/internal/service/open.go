@@ -153,11 +153,12 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
+	selectedService, _ := completed.SessionRuntime.(factoryruntime.Service)
 	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
 		RecordPath:  opening.configured.Recordings.RecordPath,
 		MockWorkers: opening.configured.Workers.MockWorkers,
-	}, completed.State, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
+	}, completed.State, opening.clock, opening.startupRuntime, selectedService, completed.ProcessRuntime,
 		opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
 		lifecycle = completed.Lifecycle
