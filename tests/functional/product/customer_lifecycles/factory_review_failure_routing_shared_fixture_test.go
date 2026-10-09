@@ -46,6 +46,8 @@ func initializeFactoryreviewfailureroutingFixture(t *testing.T) {
 				}
 			}
 		}
+		// All fixture users have joined; the next -count iteration can open it anew.
+		resetfactoryreviewfailurerouting7State()
 		if code != 0 {
 			t.Error("customer fixture cleanup failed; see preceding diagnostic")
 		}

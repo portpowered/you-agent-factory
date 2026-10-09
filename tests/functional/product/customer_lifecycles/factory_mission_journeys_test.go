@@ -16,6 +16,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const invalidMissionPrecondition = `{"decision":"FAILED","feedback":"required read failed","output":{"precondition":{"reason":"read unavailable"}}}`
+const correctedFailedMissionReply = `{"decision":"FAILED","feedback":"required recording read unavailable","output":{"precondition":"required recording read unavailable; pending Work observed: 0","measurements":[{"name":"pending","value":0,"source":"fixture"},{"name":"available","value":false,"source":"fixture"},{"name":"missing","value":null,"source":"fixture"}],"reads":[{"required":true,"attempts":2,"available":false}]}}`
+
 const measuredMissionReply = `{"decision":"ACCEPTED","feedback":"measured","output":{"measurements":[{"name":"pending","value":0,"source":"local fixture"},{"name":"ready","value":false,"source":"read fixture"}]}}`
 
 // One immutable process is shared with the retained proposal journeys. Each
@@ -33,8 +36,9 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 		{"F02 whitespace", `{"mission":"  "}`, `{"decision":"ACCEPTED","feedback":"supervised","output":"hold"}`, "", "complete", false, false},
 		{"F02 ordinary cron", `{"origin":"cron"}`, `{"decision":"ACCEPTED","feedback":"supervised","output":"hold"}`, "", "complete", false, false},
 		{"F03 cron mission", `{"mission":"measure pending and ready","origin":"cron"}`, measuredMissionReply, "", "complete", false, false},
-		{"F04 corrected", `{"mission":"measure pending and ready"}`, `{"decision":"ACCEPTED","feedback":"hold","output":"hold"}`, measuredMissionReply, "complete", true, false},
-		{"F05 twice invalid", `{"mission":"measure pending and ready"}`, `{"decision":"ACCEPTED","feedback":"hold","output":{"measurements":[]}}`, "", "failed", true, false},
+		{"F04 corrected", `{"mission":"measure pending and ready","reads":["recording"],"budget":{"paid":0}}`, invalidMissionPrecondition, measuredMissionReply, "complete", true, false},
+		{"F04 corrected FAILED", `{"mission":"measure required recording café","required":true}`, invalidMissionPrecondition, correctedFailedMissionReply, "failed", true, false},
+		{"F05 twice invalid", `{"mission":"measure pending and ready","evidence":"two-visit ceiling"}`, invalidMissionPrecondition, "", "failed", true, false},
 		{"F06 precondition", `{"mission":"measure pending and ready"}`, `{"decision":"ACCEPTED","feedback":"blocked","output":{"precondition":"required fixture unavailable","measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "complete", false, false},
 		{"F07 optional gap", `{"mission":"measure pending; optional GitHub read"}`, `{"decision":"ACCEPTED","feedback":"optional read exhausted","output":{"measurements":[{"name":"pending","value":0,"source":"fixture"}],"reads":[{"available":false,"required":false,"attempts":2}]}}`, "", "complete", false, false},
 		{"F08 required gap", `{"mission":"measure pending; required GitHub read"}`, `{"decision":"FAILED","feedback":"required GitHub read unavailable","output":{"precondition":"required GitHub read unavailable","measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "failed", false, false},
@@ -43,13 +47,14 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var providers, checks atomic.Int32
+			first := tc.first
 			scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
 				provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
 					call := providers.Add(1)
 					if tc.providerFailure {
 						return platformprocess.CommandResult{}, errors.New("controlled mission provider failure")
 					}
-					reply := tc.first
+					reply := first
 					if call > 1 && tc.final != "" {
 						reply = tc.final
 					}
@@ -59,10 +64,12 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 			})
 			stream := scenario.eventStream(t)
 			id := scenario.marker + "-mission"
+			first = strings.ReplaceAll(first, "required read failed", "required read failed "+id)
 			dependency := id + "-completed-fix"
 			scenario.submit(t, dependency+"-request", reviewFailureSeed{Name: dependency, WorkID: dependency, WorkType: "task", State: "complete", TraceID: dependency + "-trace"})
 			tags := map[string]string{"evidence": "retained-tag"}
-			scenario.submit(t, id+"-request", reviewFailureSeed{Name: id, WorkID: id, WorkType: "thoughts", State: "init", TraceID: id + "-trace", Payload: tc.payload, Tags: tags, DependsOn: dependency, DependsOnState: "complete"})
+			payload := strings.ReplaceAll(tc.payload, "measure", "measure "+id)
+			submitMissionThroughCLI(t, scenario, id, dependency, payload, tags)
 			terminal := "report-thoughts-complete"
 			if tc.state == "failed" {
 				terminal = "report-thoughts-failure"
@@ -84,12 +91,48 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 			if checks.Load() != wantChecks {
 				t.Fatalf("checker calls=%d, want %d", checks.Load(), wantChecks)
 			}
-			assertMissionJourneyEvidence(t, scenario, id, tc.payload, mission, tc.correction)
-			assertMissionDispatchContract(t, scenario, id, mission, tc.correction, tc.state == "failed" && tc.correction)
-			assertMissionFinalReply(t, scenario, id, tc.first, tc.final, tc.correction, tc.providerFailure)
+			assertMissionJourneyEvidence(t, scenario, id, payload, first, mission, tc.correction)
+			assertMissionDispatchContract(t, scenario, id, mission, tc.correction, tc.state == "failed" && tc.correction && tc.final == "")
+			assertMissionFinalReply(t, scenario, id, first, tc.final, tc.correction, tc.providerFailure)
 		})
 	}
 	t.Run("F09-F11 gap handoff", testMissionGapHandoff)
+}
+
+func submitMissionThroughCLI(t *testing.T, scenario *reviewFailureScenario, id, dependency, payload string, tags map[string]string) {
+	t.Helper()
+	batch := map[string]any{
+		"type": "FACTORY_REQUEST_BATCH", "requestId": id + "-request",
+		"works": []map[string]any{{
+			"name": id, "workId": id, "workTypeName": "thoughts",
+			"state":   "init",
+			"traceId": id + "-trace", "currentChainingTraceId": id + "-trace",
+			"payload": payload, "tags": tags,
+		}},
+		"relations": []map[string]string{{
+			"type": "DEPENDS_ON", "sourceWorkName": id,
+			"targetWorkName": dependency, "requiredState": "complete",
+		}},
+	}
+	encoded, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(scenario.factoryDir, "mission-batch.json")
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "--server", scenario.fixture.baseURL, "--json", "submit", "batch", "--session", scenario.sessionID, path,
+	})
+	if err := scenario.fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("submit mission: %v; %s", err, inputs.Stderr())
+	}
+	for _, value := range []string{id + "-request", scenario.sessionID, id} {
+		if !strings.Contains(inputs.Stdout(), value) {
+			t.Errorf("mission receipt missing %q: %s", value, inputs.Stdout())
+		}
+	}
 }
 
 // The script edge supplies controlled branch responses; U1 proves the actual
@@ -109,20 +152,26 @@ func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureComm
 				return platformprocess.CommandResult{Stdout: []byte(label)}, nil
 			}
 			if strings.HasSuffix(arg, "check-mission-output.py") {
-				checks.Add(1)
+				visit := checks.Add(1)
 				if index+2 >= len(request.Args) {
 					t.Error("checker argv absent")
 					return platformprocess.CommandResult{}, errors.New("checker argv absent")
 				}
 				raw, feedback := request.Args[index+1], request.Args[index+2]
+				if visit > 2 {
+					t.Error("mission checker received a third visit")
+				}
+				if visit == 2 && feedback != "mission-output-invalid: output.precondition must name the unmet precondition" {
+					t.Errorf("checker lost correction marker/reason: %q", feedback)
+				}
 				var reply map[string]any
 				_ = json.Unmarshal([]byte(raw), &reply)
-				if strings.Contains(raw, `"output":"hold"`) || strings.Contains(raw, `"measurements":[]`) {
+				if strings.Contains(raw, `"precondition":{"reason":"read unavailable"}`) {
 					decision := "REJECTED"
 					if strings.Contains(feedback, "mission-output-invalid:") {
 						decision = "FAILED"
 					}
-					reply = map[string]any{"decision": decision, "feedback": "mission-output-invalid: output requires non-empty measurements", "output": map[string]string{"invalidReply": raw}}
+					reply = map[string]any{"decision": decision, "feedback": "mission-output-invalid: output.precondition must name the unmet precondition", "output": map[string]string{"invalidReply": raw}}
 				}
 				encoded, _ := json.Marshal(reply)
 				return platformprocess.CommandResult{Stdout: encoded}, nil
@@ -132,16 +181,24 @@ func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureComm
 	}
 }
 
-func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario, id, payload string, mission, corrected bool) {
+func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario, id, payload, first string, mission, corrected bool) {
 	t.Helper()
 	work := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID, "/work/"+id))
-	assertPayloadHasSentinel(t, "original payload", work.Payload, payload)
+	var expectedPayload any
+	if err := json.Unmarshal([]byte(payload), &expectedPayload); err != nil {
+		t.Fatal(err)
+	}
+	actualPayload, _ := json.Marshal(work.Payload)
+	var retainedPayload any
+	if err := json.Unmarshal(actualPayload, &retainedPayload); err != nil || !reflect.DeepEqual(retainedPayload, expectedPayload) {
+		t.Fatalf("retained payload=%s, want %s (%v)", actualPayload, payload, err)
+	}
 	assertPayloadHasSentinel(t, "original tag", work.Tags, "retained-tag")
 	requests := reviewFailureProviderRequests(scenario.fixture.router.requestsFor(scenario.factoryDir))
 	for _, request := range requests {
 		prompt := providerCommandPrompt(request)
 		if mission {
-			for _, value := range []string{"Bound mission verification", id, scenario.sessionID, "retained-tag", "measure"} {
+			for _, value := range []string{"Bound mission verification", id, scenario.sessionID, "retained-tag", "Payload: " + payload} {
 				if !strings.Contains(prompt, value) {
 					t.Errorf("mission prompt missing %q", value)
 				}
@@ -153,8 +210,22 @@ func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario,
 			t.Error("ordinary thoughts did not dispatch to supervisor")
 		}
 	}
-	if corrected && !strings.Contains(providerCommandPrompt(requests[1]), "mission-output-invalid:") {
-		t.Error("correction feedback did not reach same worker")
+	if corrected {
+		if len(requests) != 2 {
+			t.Fatalf("correction provider requests=%d, want 2", len(requests))
+		}
+		const reason = "mission-output-invalid: output.precondition must name the unmet precondition"
+		diagnostic, _ := json.Marshal(map[string]string{"invalidReply": first})
+		prompt := providerCommandPrompt(requests[1])
+		for _, value := range []string{
+			"Correction feedback (verbatim checker reason): " + reason,
+			"Previous output: " + string(diagnostic),
+			"On correction, fix the field named in the checker reason above.",
+		} {
+			if !strings.Contains(prompt, value) {
+				t.Errorf("correction prompt missing %q", value)
+			}
+		}
 	}
 	dispatches := reviewFailureDispatches(t, scenario)
 	if len(dispatchesWithTransition(dispatches, "route-thoughts")) != 1 {
@@ -324,16 +395,32 @@ func assertMissionOutput(t *testing.T, work factoryapi.Work, expected string) {
 
 func assertMissionFinalReply(t *testing.T, scenario *reviewFailureScenario, id, first, final string, corrected, providerFailure bool) {
 	t.Helper()
-	if providerFailure || (corrected && final == "") {
+	if providerFailure {
 		return
 	}
 	work := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID, "/work/"+id))
+	if corrected && final == "" {
+		diagnostic, _ := json.Marshal(map[string]string{"invalidReply": first})
+		assertMissionOutput(t, work, string(diagnostic))
+		return
+	}
 	if final == "" {
 		final = first
 	}
 	var reply map[string]any
 	if err := json.Unmarshal([]byte(final), &reply); err != nil {
 		t.Fatal(err)
+	}
+	for _, dispatch := range reviewFailureDispatches(t, scenario) {
+		if dispatch.Request.TransitionId != "check-mission-output" || dispatch.Response == nil {
+			continue
+		}
+		response := dispatch.Response
+		if reply["decision"] == "FAILED" && response.Outcome == factoryapi.WorkOutcomeFailed {
+			if response.Error == nil || *response.Error != reply["feedback"] {
+				t.Fatalf("worker failure reason=%v, want %v", response.Error, reply["feedback"])
+			}
+		}
 	}
 	output, _ := json.Marshal(reply["output"])
 	assertMissionOutput(t, work, string(output))
@@ -357,7 +444,7 @@ func assertMissionWorkerDispatch(t *testing.T, request factoryapi.DispatchReques
 
 func assertMissionCheckerResponse(t *testing.T, response factoryapi.DispatchResponseEventPayload, exhausted bool) int {
 	t.Helper()
-	const reason = "mission-output-invalid: output requires non-empty measurements"
+	const reason = "mission-output-invalid: output.precondition must name the unmet precondition"
 	if response.Outcome == factoryapi.WorkOutcomeRejected {
 		if response.Feedback == nil || *response.Feedback != reason {
 			t.Fatalf("correction reason=%v", response.Feedback)

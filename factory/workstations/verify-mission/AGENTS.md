@@ -1,10 +1,15 @@
 # Bound mission verification
 
-Payload: {{ (index .Inputs 0).Payload }}
-Work ID: {{ (index .Inputs 0).WorkID }}
+{{range .Inputs}}{{if eq .DataType "work"}}
+Payload: {{.Payload}}
+Work ID: {{.WorkID}}
+Tags: {{.Tags}}
+Previous output: {{.PreviousOutput}}
+Correction feedback (verbatim checker reason): {{.RejectionFeedback}}
+{{end}}{{end}}
 Factory Session: {{.Context.SessionID}}
-Tags: {{ (index .Inputs 0).Tags }}
-Correction feedback: {{ (index .Inputs 0).RejectionFeedback }}
+On correction, fix the field named in the checker reason above.
+Keep the full bound mission and available evidence.
 
 Execute only the bound mission, including cron-origin missions. Run every named
 command/read and report every named value, unit and source; never invent evidence.
@@ -39,9 +44,14 @@ Write/dry-run/admission failures return FAILED with exact reason and any saved p
 Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.
 
 Return only decision, feedback and output. decision is ACCEPTED or FAILED,
-feedback is a string, and output is a native JSON object containing non-empty
-measurements [{"name":"value name","value":0,"source":"command or evidence"}]
+feedback is a string, and output is a native JSON object containing non-empty measurements
 or a non-empty precondition naming the unmet requirement with available values.
+Use the exact key output.precondition with a non-blank string for an unmet precondition.
 Every supplied measurements list must be non-empty; name/source must be non-blank.
+Each measurement requires value. Zero, false and null are valid values.
 Keep optional read records, units, corrective receipt and proposal path in output.
 A path or receipt alone cannot complete a mission.
+Measurements example:
+{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
+Unmet precondition example:
+{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
