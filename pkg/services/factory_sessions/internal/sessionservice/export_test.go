@@ -126,7 +126,7 @@ func TestRegisterOpeningFailureCancellationAndRetryPreservePeer(t *testing.T) {
 			}
 			facts := roles.SessionOpeningFacts{FactorySessionID: "candidate"}
 			initial := &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}
-			_, _, _, release, err := assembly.RegisterOpening(ctx, facts, initial, platformclock.Real{}, zap.NewNop())
+			_, _, _, release, err := assembly.RegisterOpening(ctx, facts, initial.Record, initial.Completion, initial.ReplacementBuilder, initial.Lifecycle, initial.Sidecars, platformclock.Real{}, zap.NewNop())
 			expected := map[string]error{"failure": cause, "partial": cause, "cancel": context.Canceled}[mode]
 			if !errors.Is(err, expected) || state.Resolve("candidate") != nil || state.Current() != peer {
 				t.Fatalf("failed registration = %v; candidate or selection changed", err)
@@ -148,7 +148,7 @@ func TestRegisterOpeningFailureCancellationAndRetryPreservePeer(t *testing.T) {
 
 func assertRegistrationRetryPreservesPeer(t *testing.T, assembly *Assembly, facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening, peer *livesession.LiveSession) {
 	t.Helper()
-	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, initial, platformclock.Real{}, zap.NewNop())
+	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, initial.Record, initial.Completion, initial.ReplacementBuilder, initial.Lifecycle, initial.Sidecars, platformclock.Real{}, zap.NewNop())
 	if err != nil || assembly.state.Resolve("candidate") == nil || assembly.state.Resolve("peer") != peer {
 		t.Fatalf("same-ID retry = %v", err)
 	}
@@ -177,7 +177,7 @@ func TestRegisterOpeningReleaseRetriesAndPreservesReplacementHistory(t *testing.
 		}},
 	}
 	facts := roles.SessionOpeningFacts{FactorySessionID: "candidate", RuntimeID: "runtime", GenerationID: "reused-generation"}
-	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}, platformclock.Real{}, zap.NewNop())
+	_, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, registrationRuntimeRecord{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, platformclock.Real{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestRegisterOpeningPublishesSessionWithFixedInputResolver(t *testing.T) {
 			}
 		}},
 	}
-	_, _, _, _, err := assembly.RegisterOpening(context.Background(), roles.SessionOpeningFacts{FactorySessionID: "session", FactoryRootDir: "/factory", Directory: "/factory", ExecutionBaseDir: "/factory", BackendScopeID: "backend"}, &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}, platformclock.Real{}, zap.NewNop())
+	_, _, _, _, err := assembly.RegisterOpening(context.Background(), roles.SessionOpeningFacts{FactorySessionID: "session", FactoryRootDir: "/factory", Directory: "/factory", ExecutionBaseDir: "/factory", BackendScopeID: "backend"}, registrationRuntimeRecord{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, platformclock.Real{}, zap.NewNop())
 	if err != nil || publications != 1 {
 		t.Fatalf("RegisterOpening = %v, publications = %d", err, publications)
 	}

@@ -20,12 +20,12 @@ import (
 )
 
 type completionRegistration struct {
-	register func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error)
+	register func(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error)
 	sessions map[string]*livesession.LiveSession
 }
 
-func (fake *completionRegistration) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening, clock factoryruntime.Clock, logger *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
-	return fake.register(ctx, facts, initial, clock, logger)
+func (fake *completionRegistration) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts, record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, lifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, clock factoryruntime.Clock, logger *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+	return fake.register(ctx, facts, record, completion, replacement, lifecycle, sidecars, clock, logger)
 }
 func (fake *completionRegistration) Resolve(id string) *livesession.LiveSession {
 	return fake.sessions[id]
@@ -37,7 +37,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRecordAcrossRegistryChange(t *te
 	selected := &runtimebinding.SessionState{Owner: session}
 	newer := &runtimebinding.SessionState{Owner: &completionSession{}}
 	registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
-	registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+	registration.register = func(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
 		registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: selected}
 		return session, nil, nil, nil, nil
 	}
@@ -51,7 +51,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRecordAcrossRegistryChange(t *te
 	cleanup := &runtimeOpeningCleanup{}
 	result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
 		RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
-		&factoryruntime.RuntimeInitialOpening{}, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+		nil, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 	if err != nil || result.State != selected || result.Lifecycle != session ||
 		runtimebinding.SessionStateFrom(registration.Resolve("selected")) != newer {
 		t.Fatalf("completion retargeted its acquired record: %+v, %v", result, err)
@@ -115,7 +115,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRuntimeCapabilities(t *testing.T
 				session = selected
 			}
 			registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
-			registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+			registration.register = func(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
 				registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{Owner: session.(runtimebinding.SessionProjectionOwner)}}
 				return session, nil, nil, nil, nil
 			}
@@ -129,7 +129,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRuntimeCapabilities(t *testing.T
 			cleanup := &runtimeOpeningCleanup{}
 			result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
 				RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
-				&factoryruntime.RuntimeInitialOpening{}, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+				nil, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 			if err != nil || calls != 0 {
 				t.Fatalf("completion activated publication: %v calls=%d", err, calls)
 			}
@@ -249,11 +249,22 @@ func (fixture completionSelectionFixture) open(t *testing.T, id string) (Runtime
 	if err != nil {
 		t.Fatal(err)
 	}
-	initial := &factoryruntime.RuntimeInitialOpening{}
+	initial := &factoryruntime.RuntimeInitialOpening{
+		Record:     &struct{ factoryruntime.RuntimeRecord }{},
+		Completion: factoryruntime.RuntimeInitialCompletion{SessionID: id, MetricsSessionID: id + "-metrics", CanonicalSessionIDGenerated: true, ResumeSourceCanonicalSessionID: id + "-source"},
+		ReplacementBuilder: &struct {
+			factoryruntime.RuntimeReplacementBuilder
+		}{},
+		Lifecycle: &struct {
+			factoryruntime.RuntimeLifecycle
+		}{},
+		Sidecars:   &struct{ factoryruntime.RuntimeSidecars }{},
+		Activation: &factoryruntime.RuntimeActivation{Close: func(context.Context) error { t.Fatal("completion consumed activation cleanup"); return nil }},
+	}
 	session := &completionSession{}
 	facts := roles.SessionOpeningFacts{FactorySessionID: id, RuntimeID: id + "-runtime", GenerationID: id + "-generation", ModelsScope: scope, BackendScopeID: id + "-backend"}
-	fixture.registration.register = func(_ context.Context, got roles.SessionOpeningFacts, gotInitial *factoryruntime.RuntimeInitialOpening, gotClock factoryruntime.Clock, gotLogger *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
-		if got != facts || gotInitial != initial || gotClock != fixture.clock || gotLogger != fixture.logger {
+	fixture.registration.register = func(_ context.Context, got roles.SessionOpeningFacts, gotRecord factoryruntime.RuntimeRecord, gotCompletion factoryruntime.RuntimeInitialCompletion, gotReplacement factoryruntime.RuntimeReplacementBuilder, gotLifecycle factoryruntime.RuntimeLifecycle, gotSidecars factoryruntime.RuntimeSidecars, gotClock factoryruntime.Clock, gotLogger *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+		if got != facts || gotRecord != initial.Record || gotCompletion != initial.Completion || gotReplacement != initial.ReplacementBuilder || gotLifecycle != initial.Lifecycle || gotSidecars != initial.Sidecars || gotClock != fixture.clock || gotLogger != fixture.logger {
 			t.Fatal("registration selections substituted")
 		}
 		fixture.registration.sessions[id] = &livesession.LiveSession{ID: id, Handle: &runtimebinding.SessionState{Owner: session}}
@@ -282,7 +293,7 @@ func (fixture completionSelectionFixture) open(t *testing.T, id string) (Runtime
 		*fixture.calls = append(*fixture.calls, id+":models")
 		return nil
 	}}
-	result, err := fixture.operation.Complete(t.Context(), request, initial, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, fixture.clock, fixture.logger, cleanup)
+	result, err := fixture.operation.Complete(t.Context(), request, initial.Record, initial.Completion, initial.ReplacementBuilder, initial.Lifecycle, initial.Sidecars, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, fixture.clock, fixture.logger, cleanup)
 	if err != nil || result.Lifecycle.(*successorBoardStartup).LifecycleRuntime != session || result.ProcessRuntime != fixture.process {
 		t.Fatalf("completion: %#v %v", result, err)
 	}
@@ -339,7 +350,7 @@ func TestRuntimeOpeningCompletionFailureRetainsTypedCauseAndRetryableCleanup(t *
 			releaseCalls, hookClose, routeClose := 0, 0, 0
 			registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
 			session := &completionSession{}
-			registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+			registration.register = func(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
 				var err error
 				if stage == "registration" {
 					err = cause
@@ -389,7 +400,7 @@ func TestRuntimeOpeningCompletionFailureRetainsTypedCauseAndRetryableCleanup(t *
 			cancel()
 			cleanup := &runtimeOpeningCleanup{}
 			request := RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}, ActivateWebhooks: true, LoadedFactory: completionLoaded{config: &factorydefinitions.FactoryConfig{Webhooks: []factorydefinitions.FactoryWebhookConfig{{Enabled: true}}}}}
-			result, err := NewRuntimeOpeningCompletion(registration, routing, hooks, host).Complete(ctx, request, &factoryruntime.RuntimeInitialOpening{}, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+			result, err := NewRuntimeOpeningCompletion(registration, routing, hooks, host).Complete(ctx, request, nil, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 			assertCompletionFailureCleanup(t, stage, cause, releaseCause, result, err, cleanup, &releaseCalls, &hookClose, &routeClose)
 		})
 	}
@@ -401,7 +412,7 @@ func TestRuntimeOpeningCompletionStaleAndRepeatedReleasePreserveNewerAndPeer(t *
 	old, newer, peer := &completionSession{}, &completionSession{}, &completionSession{}
 	registration.sessions["candidate"] = &livesession.LiveSession{Handle: &runtimebinding.SessionState{Owner: old}}
 	registration.sessions["peer"] = &livesession.LiveSession{Handle: &runtimebinding.SessionState{Owner: peer}}
-	registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+	registration.register = func(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
 		return old, nil, nil, nil, nil
 	}
 	unbound := []string{}
@@ -412,7 +423,7 @@ func TestRuntimeOpeningCompletionStaleAndRepeatedReleasePreserveNewerAndPeer(t *
 		return nil, nil
 	})
 	cleanup := &completionCapturedCleanup{}
-	_, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(), RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}}, &factoryruntime.RuntimeInitialOpening{}, nil, func(models.RuntimeScopeRef) error { return nil }, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+	_, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(), RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}}, nil, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, nil, func(models.RuntimeScopeRef) error { return nil }, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 	if err != nil {
 		t.Fatal(err)
 	}

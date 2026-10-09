@@ -148,7 +148,7 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	}
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
-		opening.initial, opening.startupRuntime.RecordingLedger(), openedModelsScopeBinding(opening.startupRuntime),
+		opening.initial.Record, opening.initial.Completion, opening.initial.ReplacementBuilder, opening.initial.Lifecycle, opening.initial.Sidecars, opening.startupRuntime.RecordingLedger(), openedModelsScopeBinding(opening.startupRuntime),
 		opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -546,7 +546,7 @@ type RuntimeOpeningCompletion struct {
 }
 
 type openingRegistration interface {
-	RegisterOpening(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
+	RegisterOpening(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars,
 		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost,
 		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 	Resolve(string) *livesession.LiveSession
@@ -616,7 +616,7 @@ func openedModelsScopeBinding(runtime runtimeports.RuntimeInstance) func(models.
 }
 
 func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request RuntimeCompletionRequest,
-	initial *factoryruntime.RuntimeInitialOpening, ledger recordings.Ledger,
+	record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, runtimeLifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, ledger recordings.Ledger,
 	bindModelsScope func(models.RuntimeScopeRef) error, clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
 	logger.Debug("completing Factory Session opening", zap.String("session_id", request.Facts.FactorySessionID),
 		zap.String("runtime_id", request.Facts.RuntimeID), zap.String("generation_id", request.Facts.GenerationID))
@@ -633,7 +633,7 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 		cleanup.Add(func() error { return subscription(context.WithoutCancel(ctx)) })
 	}
 	session, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
-		request.Facts, initial, clock, logger)
+		request.Facts, record, completion, replacement, runtimeLifecycle, sidecars, clock, logger)
 	if release != nil {
 		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
 	}

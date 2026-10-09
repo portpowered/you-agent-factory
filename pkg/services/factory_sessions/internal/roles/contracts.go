@@ -191,7 +191,7 @@ type RuntimeAssembly interface {
 	work.RuntimeResolver
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 	DispatchCompletionObserverFactory() func(string) func(string)
-	RegisterOpening(context.Context, SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
+	RegisterOpening(context.Context, SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars,
 		factoryruntime.Clock, *zap.Logger) (ApplicationRuntime, factorydefinitions.SessionHost,
 		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 }

@@ -342,16 +342,16 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 // RegisterOpening publishes scoped state through the fixed owner. Acquisition
 // remains owned by the caller; release retires only this registration.
 func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts,
-	initial *factoryruntime.RuntimeInitialOpening, clock factoryruntime.Clock, logger *zap.Logger,
+	record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, lifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, clock factoryruntime.Clock, logger *zap.Logger,
 ) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, nil, err
 	}
-	if initial == nil || initial.Record == nil {
+	if record == nil {
 		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
-	session, err := a.prepareOpeningSession(facts, initial, clock)
-	startupRuntime := initial.Record
+	session, err := a.prepareOpeningSession(facts, record, completion, clock)
+	startupRuntime := record
 	if session == nil {
 		return nil, nil, nil, nil, err
 	}
@@ -361,7 +361,7 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 		runtimeMode: facts.RuntimeMode, backendScopeID: facts.BackendScopeID,
 		workFile: facts.WorkFile, workflowID: facts.WorkflowID, modelsScope: facts.ModelsScope,
 		clock: clock, logger: logger,
-		runtimeBuild: initial.ReplacementBuilder, runtimeLifecycle: initial.Lifecycle, runtimeSidecars: initial.Sidecars,
+		runtimeBuild: replacement, runtimeLifecycle: lifecycle, runtimeSidecars: sidecars,
 		startupSessionID: session.ID, runtimeID: facts.RuntimeID, generationID: facts.GenerationID,
 	}
 	release := func(releaseCtx context.Context) error { return a.releaseOpening(releaseCtx, runtime, session) }
@@ -387,10 +387,10 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
 }
 
-func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening,
+func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion,
 	clock factoryruntime.Clock,
 ) (*livesession.LiveSession, error) {
-	startupRuntime, completion := initial.Record, initial.Completion
+	startupRuntime := record
 	identity := selectCompletionSessionIdentity(facts.FactorySessionID, completion)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
