@@ -10271,6 +10271,12 @@ type ListWorkerSessionsParamsScope string
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
 
+// GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
+type GetWorkerSessionObservationByWorkerSessionIdParams struct {
+	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
+	FactorySessionId *string `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+}
+
 // StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
@@ -19155,7 +19161,7 @@ type ServerInterface interface {
 	StartWorkerSession(w http.ResponseWriter, r *http.Request)
 	// Show one top-level Worker Session observation
 	// (GET /worker-sessions/{worker_session_id})
-	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params GetWorkerSessionObservationByWorkerSessionIdParams)
 	// Cancel one Worker Session
 	// (POST /worker-sessions/{worker_session_id}/cancel)
 	CancelWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
@@ -21276,8 +21282,19 @@ func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetWorkerSessionObservationByWorkerSessionIdParams
+
+	// ------------- Optional query parameter "factorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "factorySessionId", r.URL.Query(), &params.FactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factorySessionId", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionId)
+		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

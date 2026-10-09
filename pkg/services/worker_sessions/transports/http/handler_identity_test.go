@@ -561,7 +561,7 @@ func TestTopLevelWorkerSessionIdentityRoutesResolveWithoutProviderTuple(t *testi
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 
 	detailRecorder := httptest.NewRecorder()
-	handler.GetWorkerSessionObservationByWorkerSessionId(detailRecorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/direct-1", nil), factoryapi.WorkerSessionID("direct-1"))
+	handler.GetWorkerSessionObservationByWorkerSessionId(detailRecorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/direct-1", nil), factoryapi.WorkerSessionID("direct-1"), factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{})
 	if detailRecorder.Code != http.StatusOK || !strings.Contains(detailRecorder.Body.String(), `"direct":true`) || service.getWorkerSessionID != "direct-1" {
 		t.Fatalf("detail status/body/request = %d/%s/%q, want identity-only direct lookup", detailRecorder.Code, detailRecorder.Body.String(), service.getWorkerSessionID)
 	}

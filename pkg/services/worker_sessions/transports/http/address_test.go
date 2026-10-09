@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"testing"
 
+	"go.uber.org/zap"
+
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -55,4 +57,54 @@ func TestWorkerSessionAddressErrorHTTP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkerSessionAddressShowScopeHTTP(t *testing.T) {
+	for _, scope := range []string{"factory-left", "factory-right"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{getByWorkerResult: workersessions.Observation{
+				WorkerSessionID: "legacy", FactorySessionID: scope, State: workersessions.StateCompleted,
+			}}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.GetWorkerSessionObservationByWorkerSessionId(recorder,
+				httptest.NewRequest(http.MethodGet, "/worker-sessions/legacy?factorySessionId="+scope, nil),
+				factoryapi.WorkerSessionID("legacy"), factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{FactorySessionId: &scope})
+			if recorder.Code != http.StatusOK || service.getWorkerSessionID != "legacy" || service.getWorkerFactorySessionID != scope {
+				t.Fatalf("status=%d worker=%q scope=%q body=%s", recorder.Code, service.getWorkerSessionID, service.getWorkerFactorySessionID, recorder.Body.String())
+			}
+			var response factoryapi.WorkerSessionObservation
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.FactorySessionId == nil || *response.FactorySessionId != scope {
+				t.Fatalf("selected observation = %#v", response)
+			}
+		})
+	}
+	t.Run("unknown owner", func(t *testing.T) {
+		t.Parallel()
+		scope := "unrelated"
+		service := &fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}
+		handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+		recorder := httptest.NewRecorder()
+		handler.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), "legacy",
+			factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{FactorySessionId: &scope})
+		if recorder.Code != http.StatusNotFound || service.getWorkerFactorySessionID != scope {
+			t.Fatalf("status=%d scope=%q body=%s", recorder.Code, service.getWorkerFactorySessionID, recorder.Body.String())
+		}
+	})
+	t.Run("empty owner", func(t *testing.T) {
+		t.Parallel()
+		scope := " "
+		service := &fakeObservationService{}
+		handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+		recorder := httptest.NewRecorder()
+		handler.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), "legacy",
+			factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{FactorySessionId: &scope})
+		if recorder.Code != http.StatusBadRequest || service.getByWorkerCalled {
+			t.Fatalf("status=%d lookup=%v", recorder.Code, service.getByWorkerCalled)
+		}
+	})
 }

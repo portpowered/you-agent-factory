@@ -170,6 +170,7 @@ func TestWorkerSessionObservationHTTPExposesConfirmationAlongsideRecordingHealth
 		showRecorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions/worker-confirmed", nil),
 		factoryapi.WorkerSessionID("worker-confirmed"),
+		factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{},
 	)
 	if showRecorder.Code != http.StatusOK {
 		t.Fatalf("show status = %d, want 200; body=%s", showRecorder.Code, showRecorder.Body.String())
@@ -421,7 +422,7 @@ func TestSelectedWorkAttributionMatchesList(t *testing.T) {
 			}
 			reader := &fleetWorkReader{reads: make(map[string]int)}
 			adapter := NewAdapter(service, reader)
-			selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker")
+			selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -492,7 +493,7 @@ func TestArchivedWorkAttributionSharesSelectedAndBatchReads(t *testing.T) {
 		t.Fatalf("batch = %+v, requests=%+v", listed, recorded.requests)
 	}
 	assertArchivedAttributionRows(t, listed.Sessions)
-	selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker-a")
+	selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker-a", "")
 	if err != nil || selected.WorkName == nil || *selected.WorkName != "scope-a/recorded" {
 		t.Fatalf("selected = %+v, %v", selected, err)
 	}

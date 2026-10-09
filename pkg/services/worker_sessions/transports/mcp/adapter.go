@@ -20,7 +20,7 @@ const (
 // HostClient is the exact generated-client boundary consumed by the adapter.
 type HostClient interface {
 	ListWorkerSessions(context.Context, *client.ListWorkerSessionsParams, ...client.RequestEditorFn) (*http.Response, error)
-	GetWorkerSessionObservationByWorkerSessionId(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
+	GetWorkerSessionObservationByWorkerSessionId(context.Context, client.WorkerSessionID, *client.GetWorkerSessionObservationByWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
 	ReadWorkerSessionTranscriptByWorkerSessionId(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)
 	ReadWorkerSessionLogs(context.Context, client.WorkerSessionID, *client.ReadWorkerSessionLogsParams, ...client.RequestEditorFn) (*http.Response, error)
 	StreamWorkerSessionEventsByTopLevelWorkerSessionId(context.Context, client.WorkerSessionID, *client.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
@@ -101,7 +101,7 @@ func (a *Adapter) list(ctx context.Context, input listInput) (any, *toolError) {
 }
 
 func (a *Adapter) read(ctx context.Context, input readInput) (any, *toolError) {
-	response, err := a.host.GetWorkerSessionObservationByWorkerSessionId(ctx, input.WorkerSessionID)
+	response, err := a.host.GetWorkerSessionObservationByWorkerSessionId(ctx, input.WorkerSessionID, nil)
 	if response != nil && response.Body != nil {
 		defer func() { _ = response.Body.Close() }()
 	}

@@ -471,6 +471,21 @@ you --server http://localhost:7437 worker-sessions read --worker-session-id <wor
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
 
+A legacy or replayed Worker Session ID can belong to more than one Factory
+Session. An unscoped `show` then returns `WORKER_SESSION_AMBIGUOUS` (HTTP 409)
+with `details.candidates`: each candidate includes `workerSessionId`,
+`factorySessionId`, nullable primary `workId`, and `state`. Select the exact
+Factory Session from that diagnostic:
+
+```bash
+you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id> --session <factory-session-id> --output json
+```
+
+HTTP callers can select the same owner with
+`GET /worker-sessions/{worker_session_id}?factorySessionId=<factory-session-id>`
+or the existing `GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}`.
+A scope that does not own the ID returns not-found without falling back to a peer.
+
 Use `worker-sessions list --history active` to discover owned nonterminal Worker Sessions.
 Use `--history archived` for retained ended or owner-lost sessions after a host restart.
 Use `--history all` to combine both views. Omission preserves the process-local compatibility view.

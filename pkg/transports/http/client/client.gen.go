@@ -10094,6 +10094,12 @@ type ListWorkerSessionsParamsScope string
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
 
+// GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
+type GetWorkerSessionObservationByWorkerSessionIdParams struct {
+	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
+	FactorySessionId *string `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+}
+
 // StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
 	// ReplayOnly Drain retained history without registering a live follower.
@@ -18814,7 +18820,7 @@ type ClientInterface interface {
 	ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetWorkerSessionObservationByWorkerSessionId request
-	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CancelWorkerSession request
 	CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -18935,8 +18941,8 @@ func (c *Client) ListWorkerSessions(ctx context.Context, params *ListWorkerSessi
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, workerSessionId)
+func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, workerSessionId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19596,7 +19602,7 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 }
 
 // NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
-func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
+func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19619,6 +19625,28 @@ func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, worke
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.FactorySessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "factorySessionId", runtime.ParamLocationQuery, *params.FactorySessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -20051,7 +20079,7 @@ type ClientWithResponsesInterface interface {
 	ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error)
 
 	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
-	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
+	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
 
 	// CancelWorkerSessionWithResponse request
 	CancelWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*CancelWorkerSessionClientResponse, error)
@@ -20529,8 +20557,8 @@ func (c *ClientWithResponses) ListWorkerSessionsWithResponse(ctx context.Context
 }
 
 // GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
-func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
-	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, workerSessionId, reqEditors...)
+func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
+	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, workerSessionId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

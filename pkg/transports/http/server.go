@@ -342,12 +342,13 @@ func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams,
 ) {
 	if s.workerSessionsHTTP == nil {
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionID)
+	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionID, params)
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionId forwards top-level transcript

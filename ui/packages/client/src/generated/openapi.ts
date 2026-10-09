@@ -83,7 +83,7 @@ export interface paths {
     };
     /**
      * Show one top-level Worker Session observation
-     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple. A retained ID with multiple owners returns 409 WORKER_SESSION_AMBIGUOUS with exact details.candidates.
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple. A retained ID with multiple owners returns 409 WORKER_SESSION_AMBIGUOUS with exact details.candidates. Select an exact Factory Session owner with the optional factorySessionId query. A scope that does not own the ID returns 404 without peer fallback.
      */
     get: operations["getWorkerSessionObservationByWorkerSessionId"];
     put?: never;
@@ -8390,7 +8390,10 @@ export interface operations {
   };
   getWorkerSessionObservationByWorkerSessionId: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Exact Factory Session owner of the retained Worker Session ID. */
+        factorySessionId?: string;
+      };
       header?: never;
       path: {
         /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
