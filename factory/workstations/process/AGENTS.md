@@ -22,7 +22,11 @@ review.
 
 1. Read the PRD at `prd.json` (in the current working directory), unless the
    Corrected successor recovery section below selects a new-name packet.
-2. Read the progress log at `progress.txt`
+2. Read the progress log at `progress.txt`.
+   An absent or empty `progress.txt` on a first visit is normal.
+   Start it with a `# Codebase Patterns` header, then continue the task.
+   Never block or escalate solely because the first-visit progress log is absent or empty.
+   Preserve existing non-empty progress and retained history.
 2.1. If `prd.json` contains an `operatorAmendment`, treat it as the newest
 operator-authorized scope and history decision. Finish only the retained lane,
 do not implement work explicitly listed as forked/delegated, and do not claim a
@@ -165,7 +169,8 @@ owns its independent checks, terminal CI, conflicts, merge and later validation.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
   tracks them from an old base, `git rm` them during your next rebase.
-- Read the Codebase Patterns section in progress.txt before starting
+- Read the Codebase Patterns section in progress.txt before starting.
+  For an absent or empty first-visit log, initialize it as described in step 2 and continue.
 - When adding or revising tests, prefer observable runtime, API, CLI, UI, or
   emitted-event assertions.
 - Enforce the factory test layers: component-isolated unit tests; parallel,
