@@ -213,35 +213,12 @@ func TestRecordedListReusesListedFactsAndRefreshesNextRequest(t *testing.T) {
 		}
 	}
 	read(12)
-	if owner.gets != 1 || tokens != 12 {
-		t.Fatalf("gets=%d tokens=%d; want historical fallback only and detached results", owner.gets, tokens)
+	if owner.gets != 0 || tokens != 12 {
+		t.Fatalf("gets=%d tokens=%d; want no provider lookup and detached results", owner.gets, tokens)
 	}
 	tokens = 99
 	read(99)
-	if owner.gets != 2 {
-		t.Fatalf("gets=%d, want one historical fallback per request", owner.gets)
-	}
-}
-
-func TestListedObservationRequiresExactIdentityAndAssociation(t *testing.T) {
-	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider"}
-	row := workersessions.Observation{WorkerSessionID: "worker", ProviderSessionAvailable: true, ProviderSession: ref}
-	index := listedObservationIndex([]workersessions.Observation{row})
-	if !listedObservationMatches(row, ref, index) {
-		t.Fatal("matching listed row not reused")
-	}
-	for _, change := range []string{"identity", "association", "unavailable"} {
-		other := row
-		switch change {
-		case "identity":
-			other.WorkerSessionID = "sibling"
-		case "association":
-			other.ProviderSession.ID = "other"
-		case "unavailable":
-			other.ProviderSessionAvailable = false
-		}
-		if listedObservationMatches(row, ref, listedObservationIndex([]workersessions.Observation{other})) {
-			t.Fatalf("reused %s mismatch", change)
-		}
+	if owner.gets != 0 {
+		t.Fatalf("gets=%d, want no provider lookup", owner.gets)
 	}
 }

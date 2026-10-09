@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -21,6 +23,174 @@ type selectedWorkFactsLedger struct {
 	err    error
 	workID string
 	reads  int
+}
+
+type selectedCapturedIdentityReader struct {
+	recordings.WorkerRecordingReader
+	summary recordings.WorkerCapturedSummary
+	err     error
+	ids     []string
+}
+
+type selectedCapturedTranscriptService struct {
+	workersessions.Service
+	read func(context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error)
+}
+
+func (service selectedCapturedTranscriptService) ReadTranscriptByWorkerSessionID(ctx context.Context, request workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
+	return service.read(ctx, request)
+}
+
+func TestScopedWorkHistoricalTranscriptBudgetAndCancellation(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"available", "missing", "failed", "budget", "caller", "source canceled", "source deadline", "foreign", "expired"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			optionalCtx, cancelOptional := context.WithCancel(ctx)
+			defer cancelOptional()
+			row := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "rebound", AttemptID: "attempt", State: workersessions.StateCompleted, ProviderSessionAvailable: true}
+			calls := 0
+			service := &recordedWorkerSessionObservation{executionFactorySessionID: "original", Service: selectedCapturedTranscriptService{read: func(actual context.Context, request workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
+				calls++
+				if actual != optionalCtx || request.WorkerSessionID != row.WorkerSessionID || request.FactorySessionID != "original" {
+					t.Fatalf("optional selection = %v, %+v", actual, request)
+				}
+				return selectedTranscriptScenario(name, row, cancel, cancelOptional)
+			}}}
+			if name == "expired" {
+				cancelOptional()
+			}
+			got, err := service.withSelectedCapturedTranscript(ctx, optionalCtx, row)
+			if name == "caller" || name == "source canceled" || name == "source deadline" {
+				if !errors.Is(err, workersessions.ErrObservationCanceled) || got.WorkerSessionID != "" {
+					t.Fatalf("caller cancellation returned partial row: %+v, %v", got, err)
+				}
+				return
+			}
+			if err != nil || got.WorkerSessionID != row.WorkerSessionID || (got.Transcript == workersessions.TranscriptAvailabilityAvailable) != (name == "available") || (calls == 0) != (name == "expired") {
+				t.Fatalf("optional transcript = %+v, %v, calls=%d", got, err, calls)
+			}
+		})
+	}
+}
+
+func selectedTranscriptScenario(name string, row workersessions.Observation, cancel, cancelOptional context.CancelFunc) (workersessions.ReadTranscriptResult, error) {
+	result := workersessions.ReadTranscriptResult{WorkerSessionID: row.WorkerSessionID, AttemptID: row.AttemptID, ProviderSession: row.ProviderSession, State: row.State}
+	switch name {
+	case "missing":
+		return result, os.ErrNotExist
+	case "failed":
+		return result, errors.New("optional failure")
+	case "budget":
+		cancelOptional()
+		return result, context.Canceled
+	case "caller":
+		cancel()
+		return result, context.Canceled
+	case "source canceled":
+		return result, workersessions.ErrObservationCanceled
+	case "source deadline":
+		return result, context.DeadlineExceeded
+	case "foreign":
+		result.WorkerSessionID = "foreign"
+	}
+	return result, nil
+}
+
+func (reader *selectedCapturedIdentityReader) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	reader.ids = append(reader.ids, id)
+	return reader.summary, reader.err
+}
+
+func (*selectedCapturedIdentityReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	panic("historical scoped list loaded full capture")
+}
+
+func (*selectedCapturedIdentityReader) CurrentWorkerRecordingHealth(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{RecordingID: "owned"}, nil
+}
+
+func selectedCapturedUsageSummary(id string, usage int) recordings.WorkerCapturedSummary {
+	return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{
+		Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id, RecordingID: "owned", CommittedPosition: 2},
+		MetadataRecords: []events.Record{
+			{ID: events.RecordID{Position: 2}, Payload: []byte(fmt.Sprintf(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"outputTokens":%d}}`, usage))},
+			{ID: events.RecordID{Position: 3}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"outputTokens":999}}`)},
+		},
+	}}
+}
+
+func TestScopedWorkHistoricalListSelectsCommittedCaptureWithoutProviderReads(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+	service.recordingID, service.recordingReader = "owned", reader
+	service.providerSessions = forbiddenCapturedProviderProjection{}
+	read := func(want int) workersessions.Observation {
+		t.Helper()
+		result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
+		if err != nil || len(result.Observations) != 1 {
+			t.Fatalf("historical list = %+v, %v", result, err)
+		}
+		row := result.Observations[0]
+		if row.WorkerSessionID != fixture.workerSessionID || row.State != workersessions.StateCompleted || row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 0 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != want || row.TokenUsage.TotalTokens != nil {
+			t.Fatalf("committed selected usage = %+v", row)
+		}
+		return row
+	}
+	first := read(4)
+	*first.TokenUsage.OutputTokens = -1
+	read(4)
+	reader.summary = selectedCapturedUsageSummary(fixture.workerSessionID, 7)
+	read(7)
+	if len(reader.ids) != 3 {
+		t.Fatalf("summary selections = %v; want one per historical row/request", reader.ids)
+	}
+	for _, id := range reader.ids {
+		if id != fixture.workerSessionID {
+			t.Fatalf("unrelated capture selected: %s", id)
+		}
+	}
+}
+
+func TestScopedWorkHistoricalCaptureErrorsDoNotReturnPartialRows(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		err     error
+		foreign bool
+		want    error
+	}{
+		{name: "caller canceled", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "deadline", err: context.DeadlineExceeded, want: workersessions.ErrObservationCanceled},
+		{name: "corrupt", err: recordings.ErrWorkerRecordingReplay, want: workersessions.ErrObservationRecordingCorrupt},
+		{name: "unavailable", err: errors.New("unavailable"), want: workersessions.ErrObservationRecordingUnavailable},
+		{name: "foreign", foreign: true, want: workersessions.ErrObservationRecordingCorrupt},
+		{name: "optional missing", err: os.ErrNotExist},
+		{name: "optional incomplete", err: recordings.ErrWorkerRecordingIncomplete},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRecordedExactObservationFixture(t)
+			service := fixture.service.(*recordedWorkerSessionObservation)
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4), err: test.err}
+			if test.foreign {
+				reader.summary.Capture.Catalog.RecordingID = "foreign"
+			}
+			service.recordingID, service.recordingReader = "owned", reader
+			result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
+			if !errors.Is(err, test.want) || (test.want != nil && len(result.Observations) != 0) || (test.want == nil && (len(result.Observations) != 1 || result.Observations[0].TokenUsage != nil)) {
+				t.Fatalf("selected capture failure = %+v, %v; want %v", result, err, test.want)
+			}
+			reader.err, reader.summary = nil, selectedCapturedUsageSummary(fixture.workerSessionID, 4)
+			if result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID}); err != nil || len(result.Observations) != 1 || result.Observations[0].TokenUsage == nil {
+				t.Fatalf("subsequent independent read = %+v, %v", result, err)
+			}
+		})
+	}
 }
 
 func (ledger *selectedWorkFactsLedger) CurrentWorkerSessionWorkFacts(_ context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
@@ -189,21 +359,21 @@ func TestRecordedListWorkerSessionWorkUsesPreparedFacts(t *testing.T) {
 	service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
 		panic("scoped list rebuilt the world")
 	}
-	rows, known, _, err := service.projectListedWorkSnapshot(t.Context(), fixture.workID, nil)
+	rows, known, _, err := service.projectListedWorkSnapshot(t.Context(), t.Context(), fixture.workID, nil)
 	if err != nil || !known || len(rows) != 1 || rows[0].WorkerSessionID != "worker-selected" || rows[0].State != workersessions.StateRunning || rows[0].StateSequence != 7 || rows[0].StreamGenerationID != "selected-generation" || ledger.workID != fixture.workID {
 		t.Fatalf("selected list = %+v, known=%v, err=%v, selector=%q", rows, known, err, ledger.workID)
 	}
 	ledger.facts.Associations = nil
-	rows, known, _, err = service.projectListedWorkSnapshot(t.Context(), fixture.workID, nil)
+	rows, known, _, err = service.projectListedWorkSnapshot(t.Context(), t.Context(), fixture.workID, nil)
 	if err != nil || !known || len(rows) != 0 {
 		t.Fatalf("known empty Work = %+v, %v, %v", rows, known, err)
 	}
 	ledger.err = context.Canceled
-	if _, _, _, err := service.projectListedWorkSnapshot(t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationCanceled) {
+	if _, _, _, err := service.projectListedWorkSnapshot(t.Context(), t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("selected cancellation = %v", err)
 	}
 	ledger.err = errors.New("selected projection unavailable")
-	if _, _, _, err := service.projectListedWorkSnapshot(t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+	if _, _, _, err := service.projectListedWorkSnapshot(t.Context(), t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("selected read error = %v", err)
 	}
 }

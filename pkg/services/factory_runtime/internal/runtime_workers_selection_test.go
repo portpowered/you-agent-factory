@@ -212,8 +212,35 @@ func TestRuntimeWorkerSessionBoundaryPreservesRecordingReader(t *testing.T) {
 
 type selectedWorkerRecordingReader struct {
 	workersessions.Service
-	load   func(context.Context, string) (recordings.WorkerRecordingSnapshot, error)
-	health func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+	load    func(context.Context, string) (recordings.WorkerRecordingSnapshot, error)
+	health  func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+	summary func(context.Context, string) (recordings.WorkerCapturedSummary, error)
+}
+
+func (reader *selectedWorkerRecordingReader) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return reader.summary(ctx, id)
+}
+
+func TestRuntimeWorkerSessionBoundaryPreservesSelectedSummary(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	for _, want := range []error{nil, recordings.ErrWorkerRecordingReplay, context.Canceled} {
+		calls := 0
+		source := &selectedWorkerRecordingReader{summary: func(actual context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+			calls++
+			if actual != ctx || id != "worker" {
+				t.Fatalf("selected summary correlation = %v, %s", actual, id)
+			}
+			return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id}}}, want
+		}}
+		result, err := (runtimeWorkerSessionBoundary{Service: source}).LookupWorkerSessionSummary(ctx, "worker")
+		if !errors.Is(err, want) || calls != 1 || result.Capture.Catalog.WorkerSessionID != "worker" {
+			t.Fatalf("selected summary = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	if _, err := (runtimeWorkerSessionBoundary{}).LookupWorkerSessionSummary(ctx, "worker"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("unsupported selected summary = %v", err)
+	}
 }
 
 func (reader *selectedWorkerRecordingReader) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {

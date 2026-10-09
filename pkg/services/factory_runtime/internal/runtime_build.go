@@ -364,6 +364,16 @@ func (boundary runtimeWorkerSessionBoundary) CurrentWorkerRecordingHealth(ctx co
 	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
 }
 
+// LookupWorkerSessionSummary preserves selected committed metadata from the
+// same Worker Sessions binding used for live observations and capture health.
+func (boundary runtimeWorkerSessionBoundary) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	reader, ok := boundary.Service.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LookupWorkerSessionSummary(ctx, id)
+}
+
 // artifactWorkerAttempts binds capture provenance at the Runtime admission
 // boundary, where the exact originating Factory artifact is known. This
 // persistence adapter carries Runtime-owned selection into Recordings capture

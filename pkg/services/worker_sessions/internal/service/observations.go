@@ -322,7 +322,7 @@ func projectObservationEvent(record events.Record, workerSessionIDArgs ...string
 
 // One budget covers optional transcript checks for the complete scoped list.
 // An unavailable capture must not hold authoritative rows until the client deadline.
-const scopedListTranscriptBudget = 250 * time.Millisecond
+const scopedListTranscriptBudget = workersessions.WorkScopedListTranscriptBudget
 
 func (r *registry) ListObservations(ctx context.Context, req workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
 	listStartedAt := r.clock.Now()

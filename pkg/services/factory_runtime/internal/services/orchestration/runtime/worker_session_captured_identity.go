@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -46,6 +47,88 @@ func (s *recordedWorkerSessionObservation) selectedRecordingHealth(ctx context.C
 		}
 	}
 	return workerRecordingHealthMap(snapshot, s.recordingID)
+}
+
+// Canonical associations establish physical membership, including restored
+// attempts rebound to the current Factory Session. Capture is selected by that
+// identity and recording, and contributes only committed usage/kill facts.
+// Health and confirmation retain their request-owned samples in ListObservations.
+func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
+	observation.TokenUsage = nil
+	if s.factorySessionID != "" {
+		observation.FactorySessionID = s.factorySessionID
+	}
+	if observation.State == workersessions.StateCanceled && s.Service != nil {
+		archived, found, err := s.selectedCapturedCancellation(ctx, observation)
+		if err != nil || found {
+			return archived, err
+		}
+	}
+	if s.recordingReader == nil || s.recordingID == "" {
+		return observation, nil
+	}
+	reader, ok := s.recordingReader.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, observation.WorkerSessionID)
+	if failure := observationContextError(ctx); failure != nil {
+		return workersessions.Observation{}, failure
+	}
+	if err != nil {
+		if failure := recordingHealthLoadError(err); failure != nil {
+			return workersessions.Observation{}, failure
+		}
+		return observation, nil
+	}
+	item := summary.Capture
+	if item.Catalog.WorkerSessionID != observation.WorkerSessionID || item.Catalog.RecordingID != s.recordingID {
+		return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
+	}
+	observation.TokenUsage = capturedWorkerUsageRecords(item.MetadataRecords, item.Catalog.CommittedPosition)
+	return observation, nil
+}
+
+func (s *recordedWorkerSessionObservation) selectedCapturedCancellation(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, bool, error) {
+	archived, found, err := archivedFactoryWorker(ctx, s.Service, observation.FactorySessionID, observation.WorkerSessionID)
+	if failure := observationContextError(ctx); failure != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return workersessions.Observation{}, false, workersessions.ErrObservationCanceled
+	}
+	if err != nil || !found {
+		return workersessions.Observation{}, false, err
+	}
+	observation.TokenUsage = cloneRecordedTokenUsage(archived.TokenUsage)
+	if archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
+		return archived, true, nil
+	}
+	return observation, true, nil
+}
+
+// Optional activity reads use exact physical identity and the same list budget.
+// Missing, failed or slow transcript capture leaves committed facts intact.
+func (s *recordedWorkerSessionObservation) withSelectedCapturedTranscript(ctx, optionalCtx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
+	if s.Service == nil || !observation.State.Terminal() || !observation.ProviderSessionAvailable || optionalCtx.Err() != nil {
+		return observation, observationContextError(ctx)
+	}
+	scope := s.executionFactorySessionID
+	if scope == "" {
+		scope = observation.FactorySessionID
+	}
+	transcript, err := s.ReadTranscriptByWorkerSessionID(optionalCtx, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: scope})
+	if failure := observationContextError(ctx); failure != nil {
+		return workersessions.Observation{}, failure
+	}
+	if optionalCtx.Err() == nil && (errors.Is(err, workersessions.ErrObservationCanceled) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return workersessions.Observation{}, workersessions.ErrObservationCanceled
+	}
+	if err == nil && optionalCtx.Err() == nil && selectedCapturedTranscriptMatches(transcript, observation) {
+		observation.Transcript = workersessions.TranscriptAvailabilityAvailable
+	}
+	return observation, nil
+}
+
+func selectedCapturedTranscriptMatches(transcript workersessions.ReadTranscriptResult, observation workersessions.Observation) bool {
+	return transcript.WorkerSessionID == observation.WorkerSessionID && transcript.ProviderSession == observation.ProviderSession && transcript.AttemptID == observation.AttemptID && transcript.State == observation.State
 }
 
 // Canonical-ID summaries retain Factory lifecycle facts, but usage must come
@@ -91,24 +174,30 @@ func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx contex
 }
 
 func capturedFactoryWorkerUsage(snapshot recordings.WorkerRecordingSnapshot, id string) *workersessions.TokenUsage {
-	var usage *workersessions.TokenUsage
 	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID != id {
+		if session.WorkerSessionID == id {
+			return capturedWorkerUsageRecords(session.Records, ^uint64(0))
+		}
+	}
+	return nil
+}
+
+func capturedWorkerUsageRecords(records []events.Record, head uint64) *workersessions.TokenUsage {
+	var usage *workersessions.TokenUsage
+	for _, record := range records {
+		if uint64(record.ID.Position) > head || (head != ^uint64(0) && record.ID.Position < 1) {
 			continue
 		}
-		for _, record := range session.Records {
-			var draft workers.Draft
-			if json.Unmarshal(record.Payload, &draft) != nil || draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated {
-				continue
-			}
-			var captured workersessions.TokenUsage
-			if json.Unmarshal(draft.Payload, &captured) != nil ||
-				(captured.InputTokens == nil && captured.CachedInputTokens == nil && captured.OutputTokens == nil && captured.ReasoningOutputTokens == nil && captured.TotalTokens == nil) {
-				continue
-			}
-			usage = &captured
+		var draft workers.Draft
+		if json.Unmarshal(record.Payload, &draft) != nil || draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated {
+			continue
 		}
-		break
+		var captured workersessions.TokenUsage
+		if json.Unmarshal(draft.Payload, &captured) != nil ||
+			(captured.InputTokens == nil && captured.CachedInputTokens == nil && captured.OutputTokens == nil && captured.ReasoningOutputTokens == nil && captured.TotalTokens == nil) {
+			continue
+		}
+		usage = &captured
 	}
 	return usage
 }

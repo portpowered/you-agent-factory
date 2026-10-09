@@ -14,7 +14,36 @@ import (
 
 type selectedHealthRecordingFake struct {
 	recordings.WorkerSessionRecordingService
-	read func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+	read    func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+	summary func(context.Context, string) (recordings.WorkerCapturedSummary, error)
+}
+
+func (fake *selectedHealthRecordingFake) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return fake.summary(ctx, id)
+}
+
+func TestCapturedSummaryForwardsExactMetadataSelection(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	for _, want := range []error{nil, recordings.ErrWorkerRecordingReplay, context.Canceled} {
+		calls := 0
+		fake := &selectedHealthRecordingFake{summary: func(actual context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+			calls++
+			if actual != ctx || id != "worker" {
+				t.Fatalf("selected summary correlation = %v, %s", actual, id)
+			}
+			return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id}}}, want
+		}}
+		result, err := (&registry{recording: fake}).LookupWorkerSessionSummary(ctx, "worker")
+		if !errors.Is(err, want) || calls != 1 || result.Capture.Catalog.WorkerSessionID != "worker" {
+			t.Fatalf("selected summary = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	for _, registry := range []*registry{nil, {}, {recording: &observationRecordingServiceStub{}}} {
+		if _, err := registry.LookupWorkerSessionSummary(ctx, "worker"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+			t.Fatalf("missing selected summary = %v", err)
+		}
+	}
 }
 
 func (fake *selectedHealthRecordingFake) CurrentWorkerRecordingHealth(ctx context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {

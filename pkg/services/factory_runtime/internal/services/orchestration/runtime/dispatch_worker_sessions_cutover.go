@@ -413,11 +413,13 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return result, err
 	}
 
+	optionalCtx, cancelOptional := context.WithTimeout(ctx, workersessions.WorkScopedListTranscriptBudget)
+	defer cancelOptional()
 	live, liveErr := s.listLive(ctx, req)
 	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
 		return workersessions.ListObservationsResult{}, liveErr
 	}
-	recorded, knownWork, facts, err := s.projectListedWorkSnapshot(ctx, req.WorkID, listedObservationIndex(live.Observations))
+	recorded, knownWork, facts, err := s.projectListedWorkSnapshot(ctx, optionalCtx, req.WorkID, listedObservationIndex(live.Observations))
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
@@ -448,7 +450,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 
 // One request retains one detached selected snapshot for both row projection
 // and terminal confirmation. A concurrent append is visible on the next read.
-func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
 	facts, err := s.readSelectedWorkFacts(ctx, workID)
 	if err != nil {
 		return nil, false, nil, err
@@ -480,14 +482,14 @@ func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context
 		fact := s.annotateRecordedFact(recordedDispatchFact(id, recordedDispatchAssociation{workerSessionID: association.WorkerSessionID, turnID: association.TurnID, model: association.Model, reasoningEffort: association.ReasoningEffort, eventTime: association.AssociatedAt}, requests, completed, selectedProvider, facts.World.ActiveDispatches, index))
 		fact.streamGenerationID = facts.StreamGenerationID
 		observation := recordedObservationFromFact(fact, s.clock)
-		if observation.State == workersessions.StateCanceled {
-			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+		// Live rows already selected committed usage. Historical rows use the
+		// same bounded capture source, never provider-native transcripts.
+		if _, owned := live[observation.WorkerSessionID]; !owned {
+			observation, err = s.withSelectedCapturedIdentity(ctx, observation)
 			if err != nil {
 				return nil, false, nil, err
 			}
-		}
-		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
-			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+			observation, err = s.withSelectedCapturedTranscript(ctx, optionalCtx, observation)
 			if err != nil {
 				return nil, false, nil, err
 			}
