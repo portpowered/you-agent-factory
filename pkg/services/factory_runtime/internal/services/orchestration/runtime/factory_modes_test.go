@@ -936,6 +936,56 @@ func TestRestoredWorkTokenPreservesTextPayload(t *testing.T) {
 	}
 }
 
+func TestRestoredWorkTokenPreservesSubmittedPayload(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, payload, want string
+		content             []work.WorkContentPart
+	}{
+		{name: "object mission", payload: `{"title":"own mission","mission":"inspect café"}`, want: `{"title":"own mission","mission":"inspect café"}`},
+		{name: "JSON string", payload: `"plain mission"`, want: "plain mission"},
+		{name: "explicit content", payload: `{"mission":"original"}`, content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "replacement"}}, want: "replacement"},
+		{name: "explicit empty content", payload: `{"mission":"original"}`, content: []work.WorkContentPart{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := work.FactoryWorkItem{ID: "thoughts-own", Payload: []byte(tc.payload), Content: tc.content}
+			token := restoredWorkToken(item, "thoughts:init", "request", nil, time.Unix(0, 0).UTC())
+			if string(token.Color.Payload) != tc.want {
+				t.Fatalf("restored payload = %q, want %q", token.Color.Payload, tc.want)
+			}
+			if len(token.Color.Payload) > 0 {
+				token.Color.Payload[0] = 'x'
+				if string(item.Payload) != tc.payload {
+					t.Fatal("restored payload aliases saved payload")
+				}
+			}
+		})
+	}
+}
+
+func TestRestoredWorkTokenPreservesMatchingAdmissionPayload(t *testing.T) {
+	t.Parallel()
+	own := work.FactoryWorkItem{ID: "thoughts-own", Payload: []byte(`{"mission":"own café"}`)}
+	other := work.FactoryWorkItem{ID: "idea-other", Payload: []byte(`{"mission":"other"}`)}
+	world := &interfaces.FactoryWorldState{WorkItemsByID: map[string]work.FactoryWorkItem{
+		own.ID: {ID: own.ID}, other.ID: {ID: other.ID},
+	}}
+	world.WorkRequestsByID = map[string]interfaces.WorkRequestPayload{
+		"batch-own":   {WorkItems: []work.FactoryWorkItem{own}},
+		"batch-other": {WorkItems: []work.FactoryWorkItem{other}},
+	}
+	items := restoredWorkItems(world)
+	token := restoredWorkToken(items[own.ID], "thoughts:init", "batch-own", nil, time.Unix(0, 0).UTC())
+	if string(token.Color.Payload) != string(own.Payload) {
+		t.Fatalf("restored payload = %q, want matching admission %q", token.Color.Payload, own.Payload)
+	}
+	items[own.ID].Payload[0] = 'x'
+	if string(world.WorkRequestsByID["batch-own"].WorkItems[0].Payload) != string(own.Payload) {
+		t.Fatal("restored payload aliases admission history")
+	}
+}
+
 func TestRestoredWorkPlacementHandlesApprovalAndTokenIdentityCollisions(t *testing.T) {
 	net := buildSimpleNet()
 	net.Transitions["t-approval"] = &petri.Transition{ID: "t-approval", Type: petri.TransitionHumanApproval}

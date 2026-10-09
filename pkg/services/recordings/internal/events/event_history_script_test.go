@@ -161,6 +161,56 @@ func TestFactoryEventHistory_RecordScriptEvent_IgnoresNonScriptEvents(t *testing
 	}
 }
 
+func TestFactoryEventHistory_RecordScriptEvent_PreservesStdinFingerprint(t *testing.T) {
+	t.Parallel()
+	for _, present := range []bool{false, true} {
+		t.Run(map[bool]string{false: "historical unknown", true: "empty stdin known"}[present], func(t *testing.T) {
+			t.Parallel()
+			payload := &workerexecution.ScriptRequestEventPayload{ScriptRequestID: "request", DispatchID: "dispatch", Attempt: 1, Command: "python", Args: []string{}}
+			length := int64(0)
+			digest := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+			if present {
+				payload.StdinByteLength, payload.StdinSha256 = &length, &digest
+			}
+			history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+			history.RecordScriptEvent(workerexecution.ScriptEvent{ID: "request-event", DispatchID: "dispatch", Kind: workerexecution.ScriptEventKindRequest, Request: payload})
+			encoded, err := json.Marshal(history.CanonicalEvents())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var events []interfaces.FactoryEvent
+			if err := json.Unmarshal(encoded, &events); err != nil {
+				t.Fatal(err)
+			}
+			var decoded workerexecution.ScriptRequestEventPayload
+			if len(events) != 1 {
+				t.Fatalf("canonical events = %d, want one", len(events))
+			}
+			if err := json.Unmarshal(events[0].Payload, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			public, err := generatedHistoryEvents(t, history)[0].Payload.AsScriptRequestEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (decoded.StdinByteLength != nil) != present || (decoded.StdinSha256 != nil) != present ||
+				(public.StdinByteLength != nil) != present || (public.StdinSha256 != nil) != present {
+				t.Fatalf("fingerprint presence changed: canonical=%#v public=%#v", decoded, public)
+			}
+			if present && (*decoded.StdinByteLength != length || *public.StdinByteLength != length || *decoded.StdinSha256 != digest || *public.StdinSha256 != digest) {
+				t.Fatal("fingerprint changed across canonical/public serialization")
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(events[0].Payload, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if _, exists := fields["stdin"]; exists {
+				t.Fatal("raw stdin exposed")
+			}
+		})
+	}
+}
+
 func recordScriptBoundaryEvents(history *FactoryEventHistory, eventTime time.Time, scriptRequestID string) {
 	base := workerexecution.ScriptEvent{
 		EventTime:  eventTime,

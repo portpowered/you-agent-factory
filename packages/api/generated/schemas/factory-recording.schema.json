@@ -4910,6 +4910,17 @@
           "description": "Stable identifier correlating this script request with its response.",
           "type": "string"
         },
+        "stdinByteLength": {
+          "description": "Byte length of rendered stdin passed to the command runner, including zero for empty stdin.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stdinSha256": {
+          "description": "Lowercase SHA-256 digest of rendered stdin bytes passed to the command runner.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
         "transitionId": {
           "type": "string"
         }

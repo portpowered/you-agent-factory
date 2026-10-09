@@ -2,7 +2,9 @@ package script
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -926,18 +928,26 @@ func TestScriptStdinTemplatesAndOmission(t *testing.T) {
 	for _, tc := range []struct {
 		name, stdin, want string
 		fail              bool
+		exitCode          int
 	}{
 		{name: "payload", stdin: `{{ (index .Inputs 0).Payload }}`, want: "payload-value"},
 		{name: "omitted"},
 		{name: "literal", stdin: "café $() \n", want: "café $() \n"},
+		{name: "command failure", stdin: "café", want: "café", exitCode: 2},
 		{name: "parse failure", stdin: "{{", fail: true},
 		{name: "render failure", stdin: `{{ (index .Inputs 9).Payload }}`, fail: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			edge := &captureCommandRunner{}
+			edge := &captureCommandRunner{result: workerprocess.CommandResult{ExitCode: tc.exitCode}}
 			events := 0
-			runner := New(Config{Command: "python", Stdin: tc.stdin}, edge, emptyDocs, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) { events++ })
+			var recorded *workers.ScriptRequestEventPayload
+			runner := New(Config{Command: "python", Stdin: tc.stdin}, edge, emptyDocs, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(event workers.ScriptEvent) {
+				events++
+				if event.Request != nil {
+					recorded = event.Request
+				}
+			})
 			_, err := runner.Execute(t.Context(), validRequest())
 			if tc.fail {
 				if err == nil || events != 0 || edge.Request().Command != "" {
@@ -945,11 +955,16 @@ func TestScriptStdinTemplatesAndOmission(t *testing.T) {
 				}
 				return
 			}
-			if err != nil {
+			if (err != nil) != (tc.exitCode != 0) {
 				t.Fatal(err)
 			}
 			if got := edge.Request(); string(got.Stdin) != tc.want || len(got.Args) != 0 {
 				t.Fatalf("stdin/args=%q/%q, want %q/empty", got.Stdin, got.Args, tc.want)
+			}
+			stdin := edge.Request().Stdin
+			if recorded == nil || recorded.StdinByteLength == nil || recorded.StdinSha256 == nil ||
+				*recorded.StdinByteLength != int64(len(stdin)) || *recorded.StdinSha256 != fmt.Sprintf("%x", sha256.Sum256(stdin)) {
+				t.Fatalf("request fingerprint = %#v, want exact runner stdin %q", recorded, stdin)
 			}
 		})
 	}
