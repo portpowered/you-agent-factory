@@ -134,6 +134,18 @@ revertability—not a line-count target. A task is too large when it contains
 multiple primary behaviors, cannot be reviewed in one focused pass, or depends
 on later work to become correct.
 
+Do not prescribe arbitrary output-size requirements unless the customer explicitly asks
+for them.
+Measurements, timings, calibration runs and evidence belong in the PR body or a PR
+comment; CI evidence belongs only in PR comments.
+Committed tests protect customer behavior and ship with the change.
+Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof
+files.
+Each observable process outcome names one measurement or test and can close in one visit
+once the behavior and witness exist.
+Do not invent gates that demand repeated or escalating proof; preserve independent
+review, CI and merge obligations.
+
 ## 5. Sequencing structural and replacement work
 
 When existing behavioral coverage is insufficient, the tests that protect
@@ -271,8 +283,8 @@ completion only, never review proof. Process never marks review-owned criteria
 true; unproved review-owned criteria remain false at handoff.
 
 Count only process-owned criteria toward the criterion cap, once by criterion ID.
-Review-owned obligations remain mapped and unproved; story, JSON-byte and PR-line
-caps still apply. Do not drop immutable requirements to fit any cap.
+Review-owned obligations remain mapped and unproved; story/criterion caps
+still apply. Do not drop immutable requirements to fit any cap.
 
 ## 8. Failure modes and operational readiness
 

@@ -12,21 +12,20 @@ spec.loader.exec_module(policy)
 
 PLAN = '''
 Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 unique process-owned criteria total, and a PR under about 2,000 changed lines (added plus deleted).
-Keep JSON below 20 KB (20,000 UTF-8 bytes), including status updates.
+Use at most 2 stories, about 8 unique process-owned criteria total.
 For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
 Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates.
-Never evade caps with compound scope or weakened acceptance; escalate indivisible scope. No runtime/routing change or invented approval.
+Never evade behavior/criterion caps with compound scope or weakened acceptance. No runtime/routing change or invented approval.
 Each named successor must depend on this lane's merge before lead/operator admission.
 '''
 PROCESS = '''
-Keep new prd.json below 20 KB (20,000 UTF-8 bytes); update minimal status/passes/blockers only.
-Preserve requirements/amendments; never falsely pass unproved/delegated criteria; escalate if minimal status cannot fit.
-Add at most one short four-line progress.txt entry per visit (visit/story, changed, blocker, next), even blocked/interrupted.
+Update minimal status/passes/blockers only.
+Preserve requirements/amendments; never falsely pass unproved/delegated criteria.
+Keep concise visit/story, changed, blocker and next records, even blocked/interrupted.
 Include concise patterns/browser status/deferred handoffs there; put deferred handoffs in the PR body too.
-Evidence/transcripts/audits/CI references go only in PR comments; retain in session before a PR exists.
-Never commit scaffolding/verification records. Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive; only new entries follow these rules.
+Retain observations in session before a PR exists.
+Never commit scaffolding/verification records. Preserve existing artifacts without retroactive rewrite/truncation/compaction/archive.
 Push at most once per visit, at its end, after focused tests/lint, when the visit changed code.
 If previous-head CI is still running, push anyway; the superseding push cancels it.
 Never spend a visit only waiting for CI or return CONTINUE solely because CI is running.
@@ -121,8 +120,7 @@ RECOVERY = {
 positive integer with no ceiling; reconcile with the same request ID.
 tags.recovery-worktree uses a normalized repo-relative managed path.
 Bind replacements by targetWorkId within the evidenced failed DEPENDS_ON closure.
-operatorOverride repair remain forbidden even after operator answers.
-Keep about 2,000 changed lines (added plus deleted).''',
+operatorOverride repair remain forbidden even after operator answers.''',
     'project-lead-wake': '''Apply the lead's Corrected successor recovery procedure.
 positive integer with no ceiling; targetWorkId; reconcile with the same request ID.''',
     'project-lead-checkin': '''Apply the lead's Corrected successor recovery procedure.
@@ -139,7 +137,76 @@ Preserve positive integer attempt, with no ceiling.''',
 }
 
 
+OUTPUT_POLICY = """
+Do not prescribe arbitrary output-size requirements unless the customer explicitly asks for them.
+Measurements, timings, calibration runs and evidence belong in the PR body or a PR comment; CI evidence belongs only in PR comments.
+Committed tests protect customer behavior and ship with the change.
+Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof files.
+Each observable process outcome names one measurement or test and can close in one visit once the behavior and witness exist.
+Do not invent gates that demand repeated or escalating proof; preserve independent review, CI and merge obligations.
+"""
+
+
 class LanePromptPolicyTests(unittest.TestCase):
+    def test_output_policy_accepts_compliant_and_wrapped_roles(self):
+        for text in (OUTPUT_POLICY, OUTPUT_POLICY.replace(' ', '\n')):
+            prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), text)
+            self.assertEqual(policy.check_output_policy(prompts), [])
+
+    def test_missing_output_policy_names_role_and_rule(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        for owner in prompts:
+            for name, clause in policy.OUTPUT_RULES:
+                with self.subTest(owner=owner, rule=name):
+                    changed = dict(prompts)
+                    changed[owner] = changed[owner].replace(clause, '')
+                    self.assertEqual(policy.check_output_policy(changed), [
+                        f'{owner}:{name}: missing policy clause: {clause}'])
+
+    def test_output_budgets_are_rejected_beside_correct_policy(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        cases = (
+            'Use a PR under about 2,000 changed lines (added plus deleted).',
+            'Keep JSON below 20 KB (20,000 UTF-8 bytes).',
+            'Use at most 12 files.',
+            'Add a maximum of 40 tests.',
+            'The diff target is 1500 lines.',
+            'Set a file-count budget of 20.',
+            'Set a test-count cap: 30.',
+            'Keep the packet budget 20000 bytes.',
+            'Keep output below 300 lines.',
+            'Escalate indivisible scope.',
+            'Add at most one short four-line progress.txt entry per visit.',
+        )
+        for owner in prompts:
+            for instruction in cases:
+                for text in (instruction, instruction.replace(' ', '\n')):
+                    with self.subTest(owner=owner, instruction=text):
+                        changed = dict(prompts)
+                        changed[owner] += text
+                        self.assertEqual(policy.check_output_policy(changed), [
+                            f'{owner}:output-size: conflicting output policy; remove arbitrary output budgets or committed proof instructions'])
+
+    def test_committed_proof_requests_are_rejected(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        for owner in prompts:
+            for instruction in ('You must commit proof.',
+                                'Always commit a calibration harness.',
+                                'Add an evidence document to the PR.'):
+                with self.subTest(owner=owner, instruction=instruction):
+                    changed = dict(prompts)
+                    changed[owner] += instruction
+                    self.assertEqual(policy.check_output_policy(changed), [
+                        f'{owner}:committed-proof: conflicting output policy; remove arbitrary output budgets or committed proof instructions'])
+
+    def test_runtime_resource_limits_and_slice_caps_are_preserved(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'),
+                               OUTPUT_POLICY + 'Use at most 2 stories and about 8 unique process-owned criteria total. '
+                               'Bound paid validation to 5 calls, 60 seconds and 10 dollars. '
+                               'The customer explicitly requests output-size requirements. '
+                               'Preserve the customer requirement verbatim in its criterion.')
+        self.assertEqual(policy.check_output_policy(prompts), [])
+
     def test_mission_compliant_and_wrapped_policy(self):
         self.assertEqual(policy.check_mission_policy(MISSION), [])
         self.assertEqual(policy.check_mission_policy(MISSION.replace(' ', '\n')), [
@@ -347,20 +414,16 @@ class LanePromptPolicyTests(unittest.TestCase):
         self.assertEqual(policy.check_policy(PLAN, PROCESS), [])
         self.assertEqual(policy.check_policy(PLAN.replace(' ', '\n'), PROCESS.replace(' ', '\n')), [])
 
-    def test_missing_budgets_and_authority_have_specific_diagnostics(self):
+    def test_missing_slice_and_authority_rules_have_specific_diagnostics(self):
         cases = (
             ('plan', 'at most 2 stories', 'stories'),
             ('plan', 'about 8 unique process-owned criteria total', 'criteria'),
-            ('plan', 'about 2,000 changed lines (added plus deleted)', 'lines'),
-            ('plan', '20,000 UTF-8 bytes', 'bytes'),
             ('plan', 'only lead/operator admits them through existing routes', 'admission'),
             ('plan', 'Preserve immutable criteria/IDs', 'immutable'),
             ('plan', "Each named successor must depend on this lane's merge", 'merge-gate'),
-            ('process', 'escalate if minimal status cannot fit', 'overflow'),
             ('process', 'Never claim evidence was published when it was not', 'comment-failure'),
-            ('process', 'at most one short four-line progress.txt entry per visit', 'entry'),
-            ('process', 'no retroactive rewrite/truncation/compaction/archive', 'legacy'),
-            ('process', 'go only in PR comments', 'evidence'),
+            ('process', 'Keep concise visit/story, changed, blocker and next records', 'entry'),
+            ('process', 'without retroactive rewrite/truncation/compaction/archive', 'legacy'),
             ('process', 'never falsely pass unproved/delegated criteria', 'false-pass'),
             ('process', 'review owns terminal CI/conflicts/merge', 'review'),
             ('process', 'the superseding push cancels it', 'running-ci'),
