@@ -103,9 +103,10 @@ func completedContinuationIdentityMatches(opening workers.SessionPayload, input 
 // Drain the committed capture so replay preserves the original failure rather
 // than synthesizing success from admission lineage. This creates no live owner.
 func (r *registry) readContinuationTerminalResult(ctx context.Context, page recordings.WorkerCapturedActivityPage, input durableContinuationInput) (*workersessions.TerminalResult, error) {
-	stream := &continuationCaptureStream{reader: r.logs.reader,
+	stream := &capturedReplayStream{reader: r.logs.reader,
 		request: recordings.WorkerCapturedActivityRequest{WorkerSessionID: input.SuccessorWorkerSessionID, Limit: 1},
-		page:    page, catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status}
+		page:    page, catalog: page.Catalog, terminal: uint64(page.Terminal.Position), state: page.Terminal.Status,
+		head: uint64(page.Terminal.Position), health: recordings.WorkerRecordingStatusComplete, topic: page.Opening.ID.Topic}
 	defer stream.Close()
 	for {
 		delivery := stream.Next(ctx)

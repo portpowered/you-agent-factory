@@ -74,7 +74,11 @@ func TestWorkerSessionCapturedLogsCLIHTTPParity(t *testing.T) {
 		t.Fatalf("archived captured identity lost facts: %+v", archived)
 	}
 	assertArchivedCapturedTiming(t, restarted, archived, recovered)
+	assertCapturedReplayTimes(t, restarted.URL(), recovered)
+	assertArchivedCapturedCLIReplay(t, restarted, recovered, true)
+	assertArchivedCapturedMCPReplay(t, restarted, recovered, true)
 	restarted.Close(t)
+	assertIncompleteCapturedFollow(t, config, ended)
 	assertOversizedCapturedPayload(t, config, ended)
 	assertDamagedCapturedRecovery(t, config, ended)
 	assertUnreadableCapturedRecovery(t, config, ended)
@@ -370,4 +374,56 @@ func readCapturedFiniteFactoryReplay(t *testing.T, response *http.Response, term
 		t.Fatalf("Factory HTTP replay completion/count: frames=%d summary=%+v", len(frames), summary)
 	}
 	return frames
+}
+
+func assertArchivedCapturedCLIReplay(t *testing.T, server *support.FunctionalAPIServer, logs factoryapi.WorkerSessionLogPage, complete bool) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--json", "worker-sessions", "stream", "--worker-session-id", logs.WorkerSessionId, "--replay-only"})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("archived CLI replay: %v, %s", err, inputs.Stderr())
+	}
+	scanner := bufio.NewScanner(strings.NewReader(inputs.Stdout()))
+	var frames []factoryapi.WorkerSessionEvent
+	var summary *factoryapi.WorkerSessionReplaySummary
+	for scanner.Scan() {
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Delivery == "" {
+			var standalone factoryapi.WorkerSessionReplaySummary
+			if err := json.Unmarshal(scanner.Bytes(), &standalone); err != nil || standalone.Kind != "replay-summary" {
+				t.Fatalf("unknown CLI replay output: %s", scanner.Bytes())
+			}
+			summary = &standalone
+			continue
+		}
+		frames = append(frames, frame)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) > 0 && frames[len(frames)-1].Delivery == "REPLAY_SUMMARY" {
+		summary = frames[len(frames)-1].ReplaySummary
+		frames = frames[:len(frames)-1]
+	}
+	if len(frames) != len(logs.Events) {
+		t.Fatalf("CLI replay records=%d logs=%d", len(frames), len(logs.Events))
+	}
+	for i, frame := range frames {
+		// CLI v1 stream exposes source records; commit times/cursors are on
+		// logs and HTTP/MCP frames. Preserve that existing CLI shape.
+		want := logs.Events[i].Event
+		want.CapturedAt, want.Cursor = nil, factoryapi.WorkerSessionEventCursor{}
+		if frame.WorkerSessionId != logs.WorkerSessionId || !reflect.DeepEqual(frame.Event, want) {
+			t.Fatalf("CLI replay record %d differs from logs: %+v %+v", i, frame, logs.Events[i])
+		}
+	}
+	last := frames[len(frames)-1]
+	if summary == nil {
+		summary = last.ReplaySummary
+	}
+	if summary == nil || summary.Complete != complete || summary.EventsEmitted != int64(len(frames)) {
+		t.Fatalf("archive did not finish completely: %+v", last)
+	}
 }

@@ -27,6 +27,9 @@ func assertIncompleteCapturedFollow(t *testing.T, config support.FunctionalAPISe
 	if page.Health != factoryapi.INCOMPLETE || page.NextToken == nil || len(page.Events) != 1 {
 		t.Fatalf("owner-lost prefix not truthfully resumable: %+v", page)
 	}
+	assertArchivedCapturedCLIReplay(t, server, page, false)
+	assertArchivedCapturedMCPReplay(t, server, page, false)
+	assertIncompleteCapturedReplay(t, server, page)
 	assertCapturedFollowFailure(t, server, current.WorkerSessionId, "", "WORKER_SESSION_LOGS_GAP", page.Events)
 	assertCapturedFollowFailure(t, server, current.WorkerSessionId, *page.NextToken, "WORKER_SESSION_LOGS_GAP", nil)
 }

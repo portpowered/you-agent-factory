@@ -246,6 +246,7 @@ func readHistorySnapshot(t *testing.T, ctx context.Context, binary, project stri
 	}
 	page := readHistoryLogs(t, ctx, binary, project, env, server, observation.WorkerSessionId)
 	assertHistoryMCP(t, ctx, binary, project, env, server, observation, page)
+	assertHistoryReplay(t, ctx, binary, project, env, server, page)
 	return historySnapshot{Observation: observation, Logs: page}
 }
 
@@ -295,15 +296,15 @@ func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string,
 			t.Errorf("MCP close: %v", err)
 		}
 	}()
-	for _, action := range []string{"LIST", "READ", "logs"} {
+	for _, action := range []string{"LIST", "READ", "logs", "events"} {
 		args := map[string]any{"action": action}
 		if action == "LIST" {
 			args["history"] = "archived"
 		} else {
 			args["workerSessionId"] = observation.WorkerSessionId
 		}
-		if action == "logs" {
-			args["action"], args["view"], args["limit"] = "READ", "logs", 1000
+		if action == "logs" || action == "events" {
+			args["action"], args["view"], args["limit"] = "READ", action, 1000
 		}
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
 		if err != nil || result.IsError || len(result.Content) != 1 {
@@ -324,10 +325,21 @@ func assertHistoryMCPResult(t *testing.T, action, payload string, observation ap
 			Sessions []api.WorkerSessionObservation `json:"sessions"`
 			Session  api.WorkerSessionObservation   `json:"session"`
 			Logs     api.WorkerSessionLogPage       `json:"logs"`
+			Events   struct {
+				Events    []api.WorkerSessionEvent `json:"events"`
+				Truncated bool                     `json:"truncated"`
+			} `json:"events"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
 		t.Fatal(err)
+	}
+	if action == "events" {
+		if envelope.Result.Events.Truncated {
+			t.Fatal("MCP replay unexpectedly truncated")
+		}
+		assertHistoryReplayFrames(t, envelope.Result.Events.Events, logs)
+		return
 	}
 	if action == "logs" {
 		if !reflect.DeepEqual(logs, envelope.Result.Logs) {
