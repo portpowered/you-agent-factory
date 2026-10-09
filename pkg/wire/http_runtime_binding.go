@@ -96,12 +96,12 @@ func newMetricsCLIHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Transport: transport, Timeout: metricsCLIHTTPTimeout}
 }
 
-// httpRuntimeBinding constructs HTTP adapters for one canonical live session.
+// httpRuntimeBinding selects one canonical live session and host cancellation.
 type httpRuntimeBinding func(string, initializer.InvocationCancellation) (http.Handler, error)
 
 // provideHTTPRuntimeBindingWithMetrics is the production Wire-owned live HTTP
-// composition path. It builds each owner adapter for the opened runtime and
-// hands the generated route shell only those prebuilt adapters.
+// composition path. Session-independent adapters are constructed once; the
+// returned operation selects host facts and cancellation for the route shell.
 func provideHTTPRuntimeBindingWithMetrics(
 	root *factorysessionwire.Root,
 	inspection factorysessions.SessionInspectionService,
@@ -129,28 +129,41 @@ func provideHTTPRuntimeBindingWithMetrics(
 	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || snapshots == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
+	definitionMapping := factorydefinitionmapping.New(definitions)
+	definitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
+	recordingsAdapter := recordingshttp.NewAdapterWithSessions(recordingsService, root, inspection)
+	workHandler := workhttpAdapter(root, workService, definitionsAPI, invocationWorkType)
+	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
+	statusAPI := factorysessionshttp.NewFactoryStatusAPI(root, factoryStatusProjector)
+	liveAPI := factorysessionmapping.NewLiveAPI(root, root)
+	invocationAPI := factorysessionmapping.NewInvocationAPI(root)
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
 				return nil, err
 			}
 		}
-		return newHTTPRuntimeHandlerWithMetrics(root, inspection, definitions, workService, modelService, recordingsService, workflowPreview, workerPrompts, sessionID, cancellation, factoryStatusProjector, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs, writer, clock, snapshots, attribution)
+		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, definitionMapping, definitionsAPI, workHandler, metricsScopeResolver, statusAPI, liveAPI, invocationAPI, definitions, workService, modelService, workflowPreview, workerPrompts, sessionID, cancellation, providerSessionsHTTP, modelsContent, validation, invocationWorkType, sessionRequests, metricsQuery, costsQuery, logs, writer, clock, snapshots, attribution)
 	}, nil
 }
 
 func newHTTPRuntimeHandlerWithMetrics(
 	root *factorysessionwire.Root,
-	inspection factorysessions.SessionInspectionService,
+	recordingsAdapter *recordingshttp.Adapter,
+	definitionMapping *factorydefinitionmapping.Service,
+	definitionsAPI *factorydefinitionmapping.API,
+	workHandler *workhttp.Adapter,
+	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
+	statusAPI apisurface.FactoryStatusAPI,
+	liveAPI *factorysessionmapping.LiveAPI,
+	invocationAPI *factorysessionmapping.InvocationAPI,
 	definitions factorydefinitions.Service,
 	workService work.Service,
 	modelService models.Service,
-	recordingsService recordings.Service,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	workerPrompts workers.PromptTemplates,
 	sessionID string,
 	cancellation initializer.InvocationCancellation,
-	factoryStatusProjector factoryruntime.FactoryStatusProjector,
 	providerSessionsHTTP *providersessionshttp.Handler,
 	modelsContent work.ContentPreparation,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
@@ -178,20 +191,15 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err != nil {
 		return nil, err
 	}
-	runtimeAPI, definitionMapping, err := newHTTPRuntimeDefinitionAPIs(definitions, presentation)
+	runtimeAPI, err := newHTTPRuntimeAPI(definitionMapping, presentation)
 	if err != nil {
 		return nil, err
 	}
-	sessionsHandler, definitionsAPI, err := newHTTPSessionsHandler(
-		root, presentation, factoryStatusProjector, runtimeAPI, definitionMapping,
+	sessionsHandler := newHTTPSessionsHandler(
+		root, presentation, runtimeAPI, definitionsAPI, statusAPI, liveAPI, invocationAPI,
 		validation, invocationWorkType, sessionRequests, workflowPreview, workerPrompts,
 	)
-	if err != nil {
-		return nil, err
-	}
-	recordingsAdapter := newHTTPRecordingsAdapter(root, recordingsService, inspection)
 	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, presentation, logs, writer, clock, snapshots, attribution)
-	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
 	if metricsScopeResolver == nil {
 		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
 	}
@@ -199,7 +207,6 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err != nil {
 		return nil, err
 	}
-	workHandler := workhttpAdapter(root, workService, definitionsAPI, invocationWorkType)
 	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
 		definitions,
 		factorydefinitionshttp.NewTopologyValidation(definitions),
@@ -234,11 +241,10 @@ func newHTTPModelsHandler(
 	return modelsHandler, nil
 }
 
-func newHTTPRuntimeDefinitionAPIs(
-	definitions factorydefinitions.Service,
+func newHTTPRuntimeAPI(
+	definitionMapping *factorydefinitionmapping.Service,
 	presentation factorysessionwire.SessionPresentation,
-) (apisurface.RuntimeAPI, *factorydefinitionmapping.Service, error) {
-	definitionMapping := factorydefinitionmapping.New(definitions)
+) (apisurface.RuntimeAPI, error) {
 	runtimeAPI := apisurface.NewRuntimeAPI(presentation.FactoryRuntime, definitionMapping)
 	if _, ok := presentation.FactoryRuntime.(interface {
 		SubscribeFactoryEvents(
@@ -247,39 +253,28 @@ func newHTTPRuntimeDefinitionAPIs(
 			factorydefinitions.FactoryEventReconnectScope,
 		) (*factorydefinitions.FactoryEventStream, error)
 	}); !ok {
-		return nil, nil, errors.New("bind HTTP mappings: Factory Runtime event subscription is required")
+		return nil, errors.New("bind HTTP mappings: Factory Runtime event subscription is required")
 	}
-	return runtimeAPI, definitionMapping, nil
+	return runtimeAPI, nil
 }
 
 func newHTTPSessionsHandler(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
-	factoryStatusProjector factoryruntime.FactoryStatusProjector,
 	runtimeAPI apisurface.RuntimeAPI,
-	definitionMapping *factorydefinitionmapping.Service,
+	definitionsAPI *factorydefinitionmapping.API,
+	statusAPI apisurface.FactoryStatusAPI,
+	liveAPI *factorysessionmapping.LiveAPI,
+	invocationAPI *factorysessionmapping.InvocationAPI,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	workerPrompts workers.PromptTemplates,
-) (*factorysessionshttp.Handler, *factorydefinitionmapping.API, error) {
-	statusSessions, ok := any(root).(factorysessionshttp.FactoryStatusSessionReader)
-	if !ok {
-		return nil, nil, errors.New("bind HTTP mappings: Factory Sessions session-scoped status observation is required")
-	}
-	liveGateway, ok := any(root).(factorysessionmapping.LiveGateway)
-	if !ok {
-		return nil, nil, errors.New("bind HTTP mappings: Factory Sessions live result gateway is required")
-	}
-	statusAPI := factorysessionshttp.NewFactoryStatusAPI(statusSessions, factoryStatusProjector)
-	definitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
-	liveAPI := factorysessionmapping.NewLiveAPI(root, liveGateway)
-	deletion, _ := any(root).(factorysessions.LiveDeletionService)
-	invocationAPI := factorysessionmapping.NewInvocationAPI(root)
+) *factorysessionshttp.Handler {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: root, LiveControl: root,
-		SessionDeletion: deletion,
+		SessionDeletion: root,
 		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: workflowPreview,
@@ -288,17 +283,7 @@ func newHTTPSessionsHandler(
 		WorkerPrompts:     workerPrompts, InvocationWorkType: invocationWorkType,
 		SessionRequests: sessionRequests,
 	}, presentation.Logger)
-	return handler, definitionsAPI, nil
-}
-
-func newHTTPRecordingsAdapter(
-	root *factorysessionwire.Root,
-	recordingsService recordings.Service,
-	inspection factorysessions.SessionInspectionService,
-) *recordingshttp.Adapter {
-	return recordingshttp.NewAdapterWithSessions(
-		recordingsService, root, inspection,
-	)
+	return handler
 }
 
 func newHTTPWorkerSessionsHandler(
