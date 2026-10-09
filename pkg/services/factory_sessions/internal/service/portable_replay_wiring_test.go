@@ -496,8 +496,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	dependencies.GenerateRuntimeInstanceID = func() string {
 		return "portable-replay-runtime"
 	}
-	dependencies.WorkerService = &portableReplayWorkerService{}
-	owner.workerExecution = dependencies.WorkerService
+	owner.workerExecution = &portableReplayWorkerService{}
 	dependencies.DurableOpening = durableOpeningFixture(owner, func(context.Context, durableexecution.ScopeFacts, factoryruntime.Clock, *zap.Logger) (durableexecution.Service, func(context.Context) error, error) {
 		return nil, func(context.Context) error { return owner.Close() }, nil
 	})

@@ -4,19 +4,14 @@ import (
 	"context"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // WorkerCommandRunnerAdapter is a composition-only identity adapter for the
@@ -52,14 +47,9 @@ type Root struct {
 	*legacyservice.Assembly
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
-	workerService                  workers.Service
-	modelService                   models.Service
 	recordingsService              recordings.Service
 	recordingProjections           recordings.ProjectionService
 	factoryDefinitions             factorydefinitions.Service
-	workService                    work.Service
-	providerSessions               providersessions.Service
-	workflowPreview                factoryruntime.WorkflowPreviewOperation
 	generateSessionID              factorysessions.SessionIDGenerator
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly
 }
@@ -71,12 +61,7 @@ func NewRoot(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
 	definitions factorydefinitions.Service,
-	workService work.Service,
-	modelService models.Service,
 	recordingsService recordings.Service,
-	workerService workers.Service,
-	providerSessions providersessions.Service,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	recordingProjections recordings.ProjectionService,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
@@ -90,15 +75,10 @@ func NewRoot(
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		modelInvocation:                modelInvocation,
-		workerService:                  workerService,
-		modelService:                   modelService,
 		factorySessionsRuntimeAssembly: assembly,
 		recordingsService:              recordingsService,
 		recordingProjections:           recordingProjections,
 		factoryDefinitions:             definitions,
-		workService:                    workService,
-		providerSessions:               providerSessions,
-		workflowPreview:                workflowPreview,
 		generateSessionID:              generateSessionID,
 	}
 	return root, nil

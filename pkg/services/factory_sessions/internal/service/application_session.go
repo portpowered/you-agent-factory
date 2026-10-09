@@ -7,16 +7,13 @@ import (
 	"net/http"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -129,8 +126,8 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 	return bound.Diagnostics, nil
 }
 
-// SessionPresentation contains only values that vary with the selected live
-// session. Process-owned services are accessed directly from Root.
+// SessionPresentation exposes the presentation values for one selected live
+// session. HTTP peer services are injected directly by process composition.
 type SessionPresentation struct {
 	FactoryRuntime       factoryruntime.Service
 	ModelsScope          models.RuntimeScopeRef
@@ -142,7 +139,6 @@ type SessionPresentation struct {
 	Clock                factoryruntime.Clock
 	MetricsRootDir       string
 	OperatorSettingsPath string
-	Recordings           recordings.Service
 }
 
 func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error) {
@@ -161,7 +157,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		Clock:                bound.Clock,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
-		Recordings:           r.recordingsService,
 	}, nil
 }
 
@@ -209,20 +204,6 @@ func (r *Root) StopApplicationOrderly(ctx context.Context, sessionID string) err
 		return nil
 	}
 	return bound.OrderlyStop(ctx)
-}
-
-func (r *Root) FactoryDefinitionsService() factorydefinitions.Service { return r.factoryDefinitions }
-func (r *Root) WorkService() work.Service                             { return r.workService }
-func (r *Root) ModelsService() models.Service                         { return r.modelService }
-func (r *Root) WorkersService() workers.Service                       { return r.workerService }
-func (r *Root) ProviderSessionsService() providersessions.Service     { return r.providerSessions }
-func (r *Root) RecordingsService() recordings.Service                 { return r.recordingsService }
-func (r *Root) WorkflowPreviewService() factoryruntime.WorkflowPreviewOperation {
-	return r.workflowPreview
-}
-func (r *Root) WorkerPromptsService() workers.PromptTemplates {
-	prompts, _ := r.workerService.(workers.PromptTemplates)
-	return prompts
 }
 
 // CurrentBoardRecordingArtifact addresses the configured host board for exactly

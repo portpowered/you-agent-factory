@@ -620,11 +620,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v176 := wire3.NewRuntimeOpening(v107, v76, v124, v125, v128, v127, v167, v170, v171, v173, v174, recordingsService, v122, v175, v73, factoryRuntimeLogOwner, logger, source, clockResolver, v13, runtimeInstanceIDGenerator, homeDirectoryResolver, factorydefinitionsService, recordedSessionInventory)
 	v177 := wire3.RuntimeOpeningStart(v176)
 	v178 := wire3.RuntimeOpeningHistoricalInspection(v176)
-	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	v179 := provideRuntimeModelFactoryConfigReader(v106)
 	v180 := provideRuntimeModelWorkerExecution(workersService)
 	v181 := wire3.NewRuntimeModelInvocation(modelsService, v179, v180)
-	v182, err := wire3.NewRoot(v106, v76, v177, liveChangeCoordinator, v178, factorydefinitionsService, workService, modelsService, recordingsService, workersService, providersessionsService, workflowPreviewOperation, v19, v181, v13)
+	v182, err := wire3.NewRoot(v106, v76, v177, liveChangeCoordinator, v178, factorydefinitionsService, recordingsService, v19, v181, v13)
 	if err != nil {
 		return nil, err
 	}
@@ -727,6 +726,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	runtimeFactory := provideFactoryVisualizationFactory()
 	v198 := wire10.NewRuntimeSinkOwner()
+	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
+	promptTemplates, err := provideHTTPWorkerPrompts(workersService)
+	if err != nil {
+		return nil, err
+	}
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	httpAdapter := http.NewAdapter(providersessionsService)
 	handler := http.NewHandler(httpAdapter, logger)
@@ -745,7 +749,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v199 := provideWorkerWorkAttributionReader(edges2, v129, v120, v182, v113)
 	workerOwnerRecoveryOperation := wire5.NewWorkerOwnerRecoveryOperation(v165, v199)
-	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(factoryStatusProjector, handler, contentPreparation, v187, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, workersessionsService, workerOwnerRecoveryOperation, v129, source, v143, v199)
+	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(v182, serviceService, factorydefinitionsService, workService, modelsService, recordingsService, workflowPreviewOperation, promptTemplates, factoryStatusProjector, handler, contentPreparation, v187, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, workersessionsService, workerOwnerRecoveryOperation, v129, source, v143, v199)
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +760,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	v201 := provideResponsePresentation()
-	directJavaScriptHost, err := provideDirectJavaScriptHostAdapter(v187, invocationWorkTypeService, requestPreparation, starter, runnerFactory, logger, workerOwnerRecoveryOperation)
+	directJavaScriptHost, err := provideDirectJavaScriptHostAdapter(serviceService, v187, invocationWorkTypeService, requestPreparation, starter, runnerFactory, logger, workerOwnerRecoveryOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -936,7 +940,9 @@ var platformSet = wire11.NewSet(
 	provideProcessLogger, wire11.FieldsOf(new(edges.Edges), "Clock"),
 )
 
-var apiSet = wire11.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics)
+var apiSet = wire11.NewSet(http.NewAdapter, http.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics,
+	provideHTTPWorkerPrompts,
+)
 
 var servicesSet = wire11.NewSet(
 	provideProvidersService,

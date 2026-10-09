@@ -43,6 +43,7 @@ var apiSet = wire.NewSet(
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
 	provideHTTPRuntimeBindingWithMetrics,
+	provideHTTPWorkerPrompts,
 )
 
 var servicesSet = wire.NewSet(

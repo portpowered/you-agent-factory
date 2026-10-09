@@ -264,7 +264,7 @@ func buildCanonicalRunSession(
 	process := newRunSessionProcess(root, request)
 	visualizationComponent := newRunVisualizationComponent(process, sinkID, root, edges, visualizationFactory, visualizationSinks)
 	transport := newRunner(func(ctx context.Context) error {
-		handler, err := httpBinding(root, process.ID(), cancellation)
+		handler, err := httpBinding(process.ID(), cancellation)
 		if err != nil {
 			return err
 		}

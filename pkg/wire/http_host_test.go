@@ -500,7 +500,7 @@ type markerHandler struct{}
 func (*markerHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 
 func boundHandlerAdapter(handler http.Handler) httpRuntimeBinding {
-	return func(*factorysessionwire.Root, string, initializer.InvocationCancellation) (http.Handler, error) {
+	return func(string, initializer.InvocationCancellation) (http.Handler, error) {
 		return handler, nil
 	}
 }
