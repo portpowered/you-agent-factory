@@ -57,18 +57,6 @@ func (opening *sessionRuntimeOpening) publishCurrentBoardWriter(ctx context.Cont
 	return store.SaveCurrentBoard(ctx, directory, path)
 }
 
-func (opening *sessionRuntimeOpening) orderlyCurrentBoardStop(flush func(context.Context) error) func(context.Context) error {
-	if flush == nil {
-		return nil
-	}
-	return func(ctx context.Context) error {
-		if err := flush(ctx); err != nil {
-			return err
-		}
-		return opening.publishCurrentBoardWriter(ctx)
-	}
-}
-
 // The reference scopes selection, but is not authority for the bytes at its
 // target. Validate the canonical recording's own repository identity before
 // any runtime or writer opens it.

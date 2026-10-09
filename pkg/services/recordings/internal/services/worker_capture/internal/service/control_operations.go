@@ -269,7 +269,14 @@ func (entry *recordingEntry) acceptControl(record recordings.WorkerControlOperat
 	if entry.operations == nil {
 		entry.operations = make(map[string][]recordings.WorkerControlOperationRecord)
 	}
-	entry.operations[record.Operation.RequestID] = append(entry.operations[record.Operation.RequestID], record.Detached())
+	// Both indexes reference the same immutable admitted snapshot. Readers
+	// detach it at the boundary, so indexing does not duplicate result payloads.
+	record = record.Detached()
+	entry.operations[record.Operation.RequestID] = append(entry.operations[record.Operation.RequestID], record)
+	if entry.summaryOperations == nil {
+		entry.summaryOperations = make(map[recordings.WorkerControlTarget][]recordings.WorkerControlOperationRecord)
+	}
+	entry.summaryOperations[record.Target] = append(entry.summaryOperations[record.Target], record)
 }
 
 func (delta workerJournalEntry) validateControlEnvelope(id string) error {

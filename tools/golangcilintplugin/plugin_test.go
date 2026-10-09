@@ -12,6 +12,46 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+func TestPluginRecordingReadDiagnostic(t *testing.T) {
+	instance, err := New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := instance.BuildAnalyzers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "request.go", "package sample\nfunc Request() { reader.LoadWorkerRecording() }", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}}
+	owner := types.NewPackage("github.com/portpowered/infinite-you/pkg/services/recordings", "recordings")
+	fn := types.NewFunc(token.NoPos, owner, "LoadWorkerRecording", types.NewSignatureType(nil, nil, nil, nil, nil, false))
+	ast.Inspect(file, func(node ast.Node) bool {
+		if id, ok := node.(*ast.Ident); ok && id.Name == fn.Name() {
+			info.Uses[id] = fn
+		}
+		return true
+	})
+	var diagnostics []analysis.Diagnostic
+	for _, rule := range rules {
+		if rule.Name != "recordingreads" {
+			continue
+		}
+		_, err = rule.Run(&analysis.Pass{Analyzer: rule, Fset: fset, Files: []*ast.File{file}, TypesInfo: info,
+			Pkg:    types.NewPackage("github.com/portpowered/infinite-you/pkg/sample", "sample"),
+			Report: func(d analysis.Diagnostic) { diagnostics = append(diagnostics, d) }})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0].Message, "Request#LoadWorkerRecording") {
+		t.Fatalf("plugin lost typed recording-read diagnostic: %v", diagnostics)
+	}
+}
+
 func TestPluginPackagedFactorySourceDiagnostic(t *testing.T) {
 	instance, err := New(nil)
 	if err != nil {

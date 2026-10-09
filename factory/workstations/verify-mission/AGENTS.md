@@ -19,8 +19,8 @@ Fetch missing merge objects before ancestry checks; unavailable objects are not 
 Use the read helper for these operations, retrying once; do not retry fetch, reads or checks beyond its budget.
 Use python factory/scripts/mission-read.py [--required] -- <read-command> [args...] for authorized reads, including GitHub reads. Mark --required only when the mission requires that read. Each failed read retries once; retain both attempts and available output. Optional exhaustion is a recorded gap, not alone FAILED.
 Never retry mutations through the helper or add an agent retry after exhaustion.
-Required read/command failures return FAILED with the exact reason and available values. If a precondition cannot be satisfied here, report exactly what is missing in output.precondition with available values.
-This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.
+Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values. If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.
+This includes exhausted required reads and a daemon not yet restarted onto the fix; file no corrective Work or proposal for it.
 Do not restart the daemon or mutate product state to satisfy a precondition.
 On correction feedback, correct the output shape while retaining the mission, measurements and original failure evidence; do not reset the rejection marker.
 
@@ -55,4 +55,4 @@ A path or receipt alone cannot complete a mission.
 Measurements example:
 {"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
 Unmet precondition example:
-{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
+{"decision":"ACCEPTED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}

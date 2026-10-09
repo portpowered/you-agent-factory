@@ -42,9 +42,9 @@ func TestOrderlyRecordingFlushSkipsUnboundRecording(t *testing.T) {
 	for name, test := range tests {
 		name, test := name, test
 		t.Run(name, func(t *testing.T) {
-			operation := newOrderlyRecordingFlush(test.service, test.recordingID, test.recordPath)
+			operation := (&RuntimeOpeningBinding{recordings: test.service}).recordingFlush(test.recordingID, test.recordPath)
 			if operation != nil {
-				t.Fatal("newOrderlyRecordingFlush returned an operation for an unbound recording")
+				t.Fatal("recordingFlush returned an operation for an unbound recording")
 			}
 		})
 	}
@@ -55,9 +55,9 @@ func TestOrderlyRecordingFlushSkipsUnboundRecording(t *testing.T) {
 
 func TestOrderlyRecordingFlushDelegatesSynchronously(t *testing.T) {
 	service := &orderlyRecordingService{}
-	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
+	operation := (&RuntimeOpeningBinding{recordings: service}).recordingFlush("recording-1", "recording.json")
 	if operation == nil {
-		t.Fatal("newOrderlyRecordingFlush returned nil for a live recording")
+		t.Fatal("recordingFlush returned nil for a live recording")
 	}
 	if err := operation(context.Background()); err != nil {
 		t.Fatalf("orderly recording flush: %v", err)
@@ -70,7 +70,7 @@ func TestOrderlyRecordingFlushDelegatesSynchronously(t *testing.T) {
 func TestOrderlyRecordingFlushPreservesFailure(t *testing.T) {
 	want := errors.New("recording write failed")
 	service := &orderlyRecordingService{err: want}
-	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
+	operation := (&RuntimeOpeningBinding{recordings: service}).recordingFlush("recording-1", "recording.json")
 	err := operation(context.Background())
 	if !errors.Is(err, want) || !strings.Contains(err.Error(), "orderly shutdown") {
 		t.Fatalf("orderly recording flush error = %v, want wrapped recording failure", err)
@@ -79,7 +79,7 @@ func TestOrderlyRecordingFlushPreservesFailure(t *testing.T) {
 
 func TestOrderlyRecordingFlushHonorsCanceledContext(t *testing.T) {
 	service := &orderlyRecordingService{}
-	operation := newOrderlyRecordingFlush(service, "recording-1", "recording.json")
+	operation := (&RuntimeOpeningBinding{recordings: service}).recordingFlush("recording-1", "recording.json")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := operation(ctx); !errors.Is(err, context.Canceled) {
@@ -128,7 +128,7 @@ func TestOrderlyRecordingPublishesCurrentBoardOnlyAfterFlush(t *testing.T) {
 			want := errors.New("controlled failure")
 			wantSave, wantError := configureOrderlyBoardPublicationCase(name, directory, opening, owner, want)
 			flushed := false
-			operation := opening.orderlyCurrentBoardStop(func(ctx context.Context) error {
+			operation := (&RuntimeOpeningBinding{}).afterFlush(func(ctx context.Context) error {
 				if owner.saves != 0 || owner.loads != 0 {
 					t.Fatal("publication preceded flush")
 				}
@@ -140,7 +140,7 @@ func TestOrderlyRecordingPublishesCurrentBoardOnlyAfterFlush(t *testing.T) {
 				}
 				flushed = true
 				return nil
-			})
+			}, opening.publishCurrentBoardWriter)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if name == "canceled" {
@@ -188,4 +188,68 @@ func configureOrderlyBoardPublicationCase(name, directory string, opening *sessi
 // otherwise surfaces as teardown hangs and cross-test interference.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+func TestRuntimeOpeningBindingOrderlyStopFlushesBeforePublication(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"success", "flush failure", "publication failure", "canceled", "unbound"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("controlled orderly failure")
+			service := &orderlyRecordingService{}
+			operation := NewRuntimeOpeningBinding(nil, service, nil, nil)
+			path := "recording.json"
+			if name == "unbound" {
+				path = ""
+			}
+			if name == "flush failure" {
+				service.err = cause
+			}
+			publications := 0
+			stop := operation.orderlyStop("selected-runtime", path, func(context.Context) error {
+				if service.calls != 1 || service.id != "selected-runtime" {
+					t.Fatal("publication preceded selected flush")
+				}
+				publications++
+				if name == "publication failure" {
+					return cause
+				}
+				return nil
+			})
+			if name == "unbound" {
+				if stop != nil || service.calls != 0 {
+					t.Fatal("unbound recording has orderly effects")
+				}
+				return
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if name == "canceled" {
+				cancel()
+			}
+			err := stop(ctx)
+			assertBindingOrderlyOutcome(t, name, err, cause, service, publications)
+		})
+	}
+}
+
+func assertBindingOrderlyOutcome(t *testing.T, name string, err, cause error, service *orderlyRecordingService, publications int) {
+	t.Helper()
+	switch name {
+	case "canceled":
+		if !errors.Is(err, context.Canceled) || service.calls != 0 || publications != 0 {
+			t.Fatalf("canceled stop = %v", err)
+		}
+	case "success":
+		if err != nil || publications != 1 {
+			t.Fatalf("stop = %v, publications=%d", err, publications)
+		}
+	default:
+		if !errors.Is(err, cause) {
+			t.Fatalf("stop lost cause = %v", err)
+		}
+		if (name == "flush failure" && publications != 0) || (name == "publication failure" && publications != 1) {
+			t.Fatal("publication ordering changed")
+		}
+	}
 }

@@ -15,12 +15,12 @@ policy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(policy)
 
 PLAN = '''
-Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 unique process-owned criteria total.
-For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
+Plan each lane as ONE independently mergeable PR that delivers the whole ask.
+There is no story, criterion, line or file cap; a large ask is one large plan.
+Split only when parts ship separately or one part must merge before another can be built; then list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
 Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates.
-Never evade behavior/criterion caps with compound scope or weakened acceptance. No runtime/routing change or invented approval.
+Never weaken acceptance. No runtime/routing change or invented approval.
 Each named successor must depend on this lane's merge before lead/operator admission.
 '''
 PROCESS = '''
@@ -76,7 +76,6 @@ A composite immutable criterion requiring review evidence is review-owned as a w
 retain its implementation work and later gates.
 Missing owner defaults to process, including legacy string criteria.
 Invalid explicit owners (unknown, null or non-string) are malformed metadata and never bypass a blocker.
-Count only process-owned criteria toward the criterion cap, once by criterion ID.
 '''
 OWNER_PROCESS = '''
 Set `decision` to `ACCEPTED` only when every retained process-owned criterion is passes:true.
@@ -116,7 +115,8 @@ On correction, fix the field named in the checker reason above.
 Run every named command/read and report every named value, unit and source.
 Each failed read retries once; retain both attempts and available output.
 Optional exhaustion is a recorded gap, not alone FAILED.
-Required read/command failures return FAILED with the exact reason and available values.
+Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values.
+If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.
 For gaps, prepare a narrow corrective batch plus its own dependent loopback.
 For untagged Work, use a stable request ID, dry-run, idempotent submission and verified receipt.
 Dry-run only in the bound Factory Session; submit no Project children.
@@ -127,7 +127,7 @@ do not reset the rejection marker.
 Use the exact key output.precondition with a non-blank string for an unmet precondition.
 Each measurement requires value. Zero, false and null are valid values.
 {"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
-{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
+{"decision":"ACCEPTED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
 """
 
 
@@ -164,22 +164,30 @@ Do not invent gates that demand repeated or escalating proof; preserve independe
 
 
 class LanePromptPolicyTests(unittest.TestCase):
-    def test_changed_line_checker_accepts_retained_caps_and_explanations(self):
-        source = '''For oversized recovery, retain the independently mergeable PR slice with at
-most 2 stories, about 8 criteria total, and JSON below 20 KB (20,000 UTF-8 bytes)
-with status headroom.
+    def test_changed_line_checker_accepts_retained_limits_and_explanations(self):
+        source = '''For recovery, retain the independently mergeable PR slice with JSON below
+20 KB (20,000 UTF-8 bytes) with status headroom.
 Do not impose a changed-line budget. Changed-line filtering explains the diff.
 The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60 seconds.
 '''
         self.assertEqual(policy.check_changed_line_budgets({'lead/AGENTS.md': source}), [])
 
     def test_changed_line_checker_rejects_original_and_wrapped_mixed_case(self):
-        source = 'most 2 stories, about 8 criteria total, about 2,000 changed lines (added plus deleted), and JSON below 20 KB.'
+        source = 'about 2,000 changed lines (added plus deleted), and JSON below 20 KB.'
         path = 'factory/workstations/project-lead/AGENTS.md'
         for text in (source, source.upper().replace(' ', '\n\t')):
             with self.subTest(text=text):
                 self.assertEqual(policy.check_changed_line_budgets({path: text}), [
                     f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts'])
+
+    def test_scope_checker_rejects_story_and_criterion_caps(self):
+        path = 'factory/workstations/plan/AGENTS.md'
+        for source in ('Use at most 2 stories, about 8 unique process-owned criteria total.',
+                       'retain the slice with at most 2 stories', 'about 8 criteria total'):
+            for text in (source, source.upper().replace(' ', '\n')):
+                with self.subTest(text=text):
+                    self.assertEqual(policy.check_changed_line_budgets({path: text}), [
+                        f'{path}:scope-cap: remove story and criterion caps from lane-facing prompts'])
 
     def test_changed_line_checker_rejects_representative_diff_budgets(self):
         for source in ('PR under about 2,000 changed lines', 'changed-line budget of 1500',
@@ -240,10 +248,9 @@ The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60
                     self.assertEqual(policy.check_output_policy(changed), [
                         f'{owner}:committed-proof: conflicting output policy; remove arbitrary output budgets or committed proof instructions'])
 
-    def test_runtime_resource_limits_and_slice_caps_are_preserved(self):
+    def test_runtime_resource_limits_are_preserved(self):
         prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'),
-                               OUTPUT_POLICY + 'Use at most 2 stories and about 8 unique process-owned criteria total. '
-                               'Bound paid validation to 5 calls, 60 seconds and 10 dollars. '
+                               OUTPUT_POLICY +                                'Bound paid validation to 5 calls, 60 seconds and 10 dollars. '
                                'The customer explicitly requests output-size requirements. '
                                'Preserve the customer requirement verbatim in its criterion.')
         self.assertEqual(policy.check_output_policy(prompts), [])
@@ -361,10 +368,6 @@ The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60
             OWNER_PLAN.replace(' ', '\n'), OWNER_PROCESS.replace(' ', '\n'),
             OWNER_REVIEW.replace(' ', '\n')), [])
 
-    def test_p8_process_cap_rejects_legacy_universal_cap(self):
-        results = policy.check_ownership_policy(OWNER_PLAN + 'about 8 criteria total', OWNER_PROCESS, OWNER_REVIEW)
-        self.assertEqual(results, ['plan:owner-all-criteria-cap: conflicting ownership instruction; remove or reconcile it'])
-
     def test_mailbox_answer_forward_and_wrapped_policy(self):
         self.assertEqual(policy.check_mailbox_policy(MAILBOX, MAILBOX, LEAD), [])
         self.assertEqual(policy.check_mailbox_policy(MAILBOX.replace(' ', '\n'), MAILBOX, LEAD), [])
@@ -457,8 +460,8 @@ The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60
 
     def test_missing_slice_and_authority_rules_have_specific_diagnostics(self):
         cases = (
-            ('plan', 'at most 2 stories', 'stories'),
-            ('plan', 'about 8 unique process-owned criteria total', 'criteria'),
+            ('plan', 'There is no story, criterion, line or file cap', 'no-scope-cap'),
+            ('plan', 'Split only when parts ship separately', 'split'),
             ('plan', 'only lead/operator admits them through existing routes', 'admission'),
             ('plan', 'Preserve immutable criteria/IDs', 'immutable'),
             ('plan', "Each named successor must depend on this lane's merge", 'merge-gate'),
@@ -637,9 +640,9 @@ class AuthoredMissionPolicyTests(unittest.TestCase):
 
     def test_unsatisfied_preconditions_name_missing_values_without_filing(self):
         clauses = (
-            'Required read/command failures return FAILED with the exact reason and available values.',
-            'If a precondition cannot be satisfied here, report exactly what is missing in output.precondition with available values.',
-            'This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.',
+            'Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values.',
+            'If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.',
+            'This includes exhausted required reads and a daemon not yet restarted onto the fix; file no corrective Work or proposal for it.',
             'Do not restart the daemon or mutate product state to satisfy a precondition.',
             'Use the exact key output.precondition with a non-blank string for an unmet precondition.',
         )

@@ -527,7 +527,7 @@ func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 	}
 }
 
-func TestAssembleRuntimeProductsCarriesModelsScopeIntoOpenedRuntime(t *testing.T) {
+func TestRuntimeOpeningBindingCarriesModelsScopeIntoOpenedRuntime(t *testing.T) {
 	t.Parallel()
 
 	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:assembled")
@@ -535,7 +535,7 @@ func TestAssembleRuntimeProductsCarriesModelsScopeIntoOpenedRuntime(t *testing.T
 		t.Fatalf("parse Models scope: %v", err)
 	}
 
-	opened := assembleRuntimeProducts(
+	opened := bindOpeningProductsFixture(t,
 		context.Background(),
 		nil,
 		nil,
@@ -554,7 +554,7 @@ func TestAssembleRuntimeProductsCarriesModelsScopeIntoOpenedRuntime(t *testing.T
 	}
 }
 
-func TestAssembleRuntimeProductsRetainsEffectiveSessionFacts(t *testing.T) {
+func TestRuntimeOpeningBindingRetainsEffectiveSessionFacts(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name, requested, resolved, want string
@@ -579,7 +579,7 @@ func TestAssembleRuntimeProductsRetainsEffectiveSessionFacts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			opened := assembleRuntimeProducts(t.Context(), gateway, nil, scope, inertHostedInstance{}, nil, nil,
+			opened := bindOpeningProductsFixture(t, t.Context(), gateway, nil, scope, inertHostedInstance{}, nil, nil,
 				"/factory", "runtime-1", "backend-1", nil, test.requested)
 			facts := opened.modelInvocation
 			if facts.FactorySessionID != test.want || facts.Scope != scope || facts.RuntimeID != "runtime-1" ||
@@ -607,10 +607,10 @@ func (instance t17hRuntimeFacts) RuntimeDiagnostics() factoryruntime.RuntimeLogD
 	return factoryruntime.RuntimeLogDiagnostics{Path: "/selected/log", StartTimeUTC: time.Unix(17, 0)}
 }
 
-func TestT17HAssemblyKeepsGenerationAndDiagnostics(t *testing.T) {
+func TestRuntimeOpeningBindingKeepsGenerationAndDiagnostics(t *testing.T) {
 	t.Parallel()
 	logger := zap.NewNop()
-	opened := assembleRuntimeProducts(t.Context(), nil, nil, models.RuntimeScopeRef{}, t17hRuntimeFacts{logger: logger},
+	opened := bindOpeningProductsFixture(t, t.Context(), nil, nil, models.RuntimeScopeRef{}, t17hRuntimeFacts{logger: logger},
 		nil, nil, "/selected", "runtime-selected", "backend-selected", nil, "session-selected")
 	if opened.modelInvocation.GenerationID != "generation-selected" || opened.logger != logger ||
 		opened.diagnostics.Path != "/selected/log" || !opened.diagnostics.StartTimeUTC.Equal(time.Unix(17, 0)) {
@@ -632,7 +632,7 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 		return nil
 	})
 
-	opened := assembleRuntimeProducts(
+	opened := bindOpeningProductsFixture(t,
 		context.Background(),
 		nil,
 		nil,

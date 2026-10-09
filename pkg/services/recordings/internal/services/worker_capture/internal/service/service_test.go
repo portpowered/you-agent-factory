@@ -48,6 +48,7 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := recordings.WorkerSessionRecordingRequest{
+		WorkName:            "Build API",
 		RecordingID:         "recording-1",
 		OriginatingArtifact: "selected-factory.jsonl",
 		FactorySessionID:    "factory-session-1",
@@ -101,6 +102,9 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assertPersistedWorkerHistory(t, persisted, request.FactorySessionID)
+	if persisted[0].WorkName != request.WorkName {
+		t.Fatalf("opening capture lost dispatched name: %q", persisted[0].WorkName)
+	}
 	if persisted[0].OriginatingArtifact != request.OriginatingArtifact {
 		t.Fatalf("opening capture lost originating artifact: %q", persisted[0].OriginatingArtifact)
 	}

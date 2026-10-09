@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,7 +50,8 @@ func TestArchivedWorkAttributionJourneys(t *testing.T) {
 		{"reused Work identity", runArchivedWorkAttributionReusedWorkID},
 		{"profile isolation", runArchivedWorkAttributionProfileIsolation},
 		{"named close", runArchivedWorkAttributionNamedCloseJourneys},
-		{"canceled history read", runArchivedWorkAttributionCanceledRead},
+		{"startup materialization and explicit replay", runArchivedWorkAttributionStartup},
+		{"parallel reads never open recordings", runArchivedWorkAttributionNoRead},
 		{"provider completion preserves frozen history", runArchivedWorkAttributionCompleted},
 		{"many retained histories within latency bound", runArchivedWorkAttributionManyHistories},
 	} {
@@ -71,145 +72,50 @@ func runArchivedWorkAttributionEmptyAndLegacy(t *testing.T, process support.Proc
 	runCapturedMetadataRecovery(t, process)
 }
 
-// F-07 owns a real recorded scope and gates only its artifact-read effect.
-// The host and real decoder/store are shared by canceled, surviving and fresh
-// requests; no source scan or private cache state is part of the observer.
-func runArchivedWorkAttributionCanceledRead(t *testing.T, process support.Process) {
+// Each scenario owns its recording edge and profile. After closing, parallel
+// public list/show calls must remain independent without entering that edge.
+func runArchivedWorkAttributionNoRead(t *testing.T, process support.Process) {
 	t.Parallel()
-	gate := &attributionReadGate{}
-	host, sessions, runner, dir := startRecordedAttributionReadHost(t, gate.read)
+	var forbidden atomic.Bool
+	var reads atomic.Int64
+	host, sessions, runner, dir := startRecordedAttributionReadHost(t, func(path string) ([]byte, error) {
+		if forbidden.Load() {
+			reads.Add(1)
+			return nil, errors.New("request-time Factory recording read forbidden")
+		}
+		return os.ReadFile(path)
+	})
 	session, ctx := startMCP(t, process, host.URL())
-	scopeID := admitRecordedAttributionWork(t, ctx, sessions, host, runner, dir, "canceled-history")
+	scopeID := admitRecordedAttributionWork(t, ctx, sessions, host, runner, dir, "no-read")
 	live := historyParityPage(t, ctx, session, host, "active", "factory", "")["sessions"].([]any)
 	if len(live) != 1 {
-		t.Fatalf("cancellation fixture membership: %v", live)
+		t.Fatalf("fixture membership=%v", live)
 	}
 	row := live[0].(map[string]any)
 	id := row["workerSessionId"].(string)
+	forbidden.Store(true)
+	assertFactoryCLIParity(t, host, id, getHost(t, host.URL()+"/worker-sessions/"+id))
+	historyParityPage(t, ctx, session, host, "active", "factory", "")
+	forbidden.Store(false)
 	postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+scopeID+"/pause", map[string]any{}, http.StatusOK)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": id, "operation": "CANCEL"})
 	support.CloseFactorySessionAt(t, host.URL(), scopeID)
-	// Both cancellation attempts own the same retained scope and read gate.
-	// Serialize this observation window while reusing one root-built host.
+	forbidden.Store(true)
 	for _, view := range []string{"archived", "all"} {
 		t.Run(view, func(t *testing.T) {
-			entered, release := gate.arm(filepath.Join(dir, "canceled-history.json"))
-			t.Cleanup(release)
-			assertCanceledAttributionList(t, ctx, session, host, view, id, row, entered, release)
+			t.Parallel()
+			page := historyParityPage(t, ctx, session, host, view, "factory", "")
+			assertArchivedAttributionRow(t, page, id, row, true)
+			selected := getHost(t, host.URL()+"/worker-sessions/"+id)
+			assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+			assertFactoryCLIParity(t, host, id, selected)
 		})
 	}
-}
-
-func assertCanceledAttributionList(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, view, id string, row map[string]any, entered <-chan struct{}, release func()) {
-	t.Helper()
-	bounded, done := context.WithTimeout(ctx, 30*time.Second)
-	defer done()
-	var requests sync.WaitGroup
-	t.Cleanup(func() { release(); requests.Wait() })
-	canceled, cancel := context.WithCancel(bounded)
-	defer cancel()
-	endpoint := host.URL() + "/worker-sessions?history=" + view + "&scope=factory"
-	first := beginAttributionList(canceled, endpoint, &requests)
-	select {
-	case <-entered:
-	case <-bounded.Done():
-		t.Fatalf("history read did not reach scenario gate: %v", bounded.Err())
-	}
-	cancel()
-	select {
-	case result := <-first:
-		if !errors.Is(result.err, context.Canceled) {
-			t.Fatalf("canceled list error = %v, want context.Canceled", result.err)
+	t.Cleanup(func() {
+		if reads.Load() != 0 {
+			t.Errorf("list/show read Factory recordings %d times", reads.Load())
 		}
-	case <-bounded.Done():
-		t.Fatal("canceled caller did not leave blocked history read")
-	}
-	// Independent active reads must remain usable while history IO is
-	// blocked. A surviving archived/all request owns a separate context.
-	active := historyParityPage(t, bounded, session, host, "active", "factory", "")
-	if len(active["sessions"].([]any)) != 0 {
-		t.Fatalf("closed owner returned as active: %v", active)
-	}
-	survivor := beginAttributionList(bounded, endpoint, &requests)
-	release()
-	select {
-	case result := <-survivor:
-		if result.err != nil {
-			t.Fatalf("independent history list: %v", result.err)
-		}
-		if len(result.page["sessions"].([]any)) != 1 {
-			t.Fatalf("independent list lost or duplicated retained row: %v", result.page)
-		}
-		assertArchivedAttributionRow(t, result.page, id, row, true)
-	case <-bounded.Done():
-		t.Fatal("surviving history request did not complete")
-	}
-	assertRetainedAttributionViews(t, bounded, session, host, id, row, true)
-}
-
-type attributionReadGate struct {
-	mu      sync.Mutex
-	path    string
-	entered chan struct{}
-	release chan struct{}
-}
-
-func (g *attributionReadGate) arm(path string) (<-chan struct{}, func()) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.path = path
-	g.entered, g.release = make(chan struct{}), make(chan struct{})
-	release := g.release
-	return g.entered, sync.OnceFunc(func() { close(release) })
-}
-
-func (g *attributionReadGate) read(path string) ([]byte, error) {
-	g.mu.Lock()
-	blocked := g.path != "" && filepath.Clean(path) == filepath.Clean(g.path)
-	release := g.release
-	if blocked {
-		g.path = ""
-		close(g.entered)
-	}
-	g.mu.Unlock()
-	if blocked {
-		<-release
-	}
-	return os.ReadFile(path)
-}
-
-type attributionListResult struct {
-	page map[string]any
-	err  error
-}
-
-func beginAttributionList(ctx context.Context, endpoint string, requests *sync.WaitGroup) <-chan attributionListResult {
-	result := make(chan attributionListResult, 1)
-	requests.Add(1)
-	go func() {
-		defer requests.Done()
-		page, err := readAttributionList(ctx, endpoint)
-		result <- attributionListResult{page, err}
-	}()
-	return result
-}
-
-func readAttributionList(ctx context.Context, endpoint string) (map[string]any, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("history list status %d", response.StatusCode)
-	}
-	var page map[string]any
-	err = json.NewDecoder(response.Body).Decode(&page)
-	return page, err
+	})
 }
 
 func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Process) {
@@ -235,46 +141,23 @@ func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Proc
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Prime both views before removing/replacing the joined writer's
-			// artifact. A cached name must not hide the unavailable source.
+			// Factory artifacts are unrelated to already-materialized presentation.
 			retained := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
 			if damage == "missing" {
 				if err := os.Remove(artifact); err != nil {
 					t.Fatal(err)
 				}
-				closed := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), false)
-				if closed["workName"] != nil {
-					t.Fatalf("missing history fabricated a Work name: %v", closed)
-				}
-				selected := getHost(t, endpoint)
-				assertJSONEqual(t, closed, selected)
-				assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
-				assertFactoryCLIParity(t, host, id, selected)
 			} else {
-				// The scope's writer is joined before corrupting its own board.
 				replacement := []byte("not a recording")
 				if damage == "conflicting association" {
-					// The identical repeated association is accepted by the same
-					// decoder, proving the appended frame itself is valid.
-					if err := os.WriteFile(artifact, appendedAttributionAssociation(t, original, false), 0o600); err != nil {
-						t.Fatal(err)
-					}
-					assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
-					// F-06: a valid event frame contradicts the accepted dispatch's
-					// Worker association after both retained views have been cached.
-					// Observe safe customer errors, never an arbitrary cached name.
 					replacement = appendedAttributionAssociation(t, original, true)
 				}
 				if err := os.WriteFile(artifact, replacement, 0o600); err != nil {
 					t.Fatal(err)
 				}
-				assertHistoryReadFailure(t, host, id, http.StatusInternalServerError, "INTERNAL_ERROR")
-				assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id}), "worker_session.internal_error", false)
-				for _, view := range []string{"archived", "all"} {
-					assertAttributionListFailure(t, ctx, host, view)
-					assertToolError(t, callAction(t, ctx, session, "LIST", map[string]any{"history": view, "scope": "factory"}), "worker_session.internal_error", false)
-				}
 			}
+			unchanged := assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
+			assertJSONEqual(t, retained, unchanged)
 			// Restoration is observed on this same process, without restarting
 			// or changing capture identity, through fresh CLI/HTTP/MCP lists.
 			if err := os.WriteFile(artifact, original, 0o600); err != nil {
@@ -344,33 +227,6 @@ func assertRetainedAttributionViews(t *testing.T, ctx context.Context, session *
 	return archived
 }
 
-func assertAttributionListFailure(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer, view string) {
-	t.Helper()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/worker-sessions?history="+view+"&scope=factory", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	var diagnostic factoryapi.ErrorResponse
-	if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != http.StatusInternalServerError || diagnostic.Code != "INTERNAL_ERROR" {
-		t.Fatalf("corrupt history list: %d %+v", response.StatusCode, diagnostic)
-	}
-	inputs := support.FakeInputs(ctx, []string{"you", "--server", host.URL(), "worker-sessions", "list", "--history", view, "--json"})
-	if err := host.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" || !strings.Contains(inputs.Stderr(), "INTERNAL_ERROR") {
-		t.Fatalf("corrupt history CLI list: %v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-}
-
-// HTTP Open has no recording selector. The public session Start contract admits
-// two distinct recorded scopes on one root-built host; all observations remain
-// CLI/HTTP/MCP customer reads. Their reused Work ID is deliberately identical.
 func runArchivedWorkAttributionReusedWorkID(t *testing.T, process support.Process) {
 	t.Parallel()
 	host, sessions, runner, dir := startRecordedAttributionHost(t)
@@ -626,16 +482,16 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 		return
 	}
 	archived := historyParityPage(t, ctx, session, host, "archived", "factory", "")
-	closed := assertArchivedAttributionRow(t, archived, id, live, recorded)
+	closed := assertArchivedAttributionRow(t, archived, id, live, true)
 	all := historyParityPage(t, ctx, session, host, "all", "factory", "")
-	allRow := assertArchivedAttributionRow(t, all, id, live, recorded)
+	allRow := assertArchivedAttributionRow(t, all, id, live, true)
 	assertJSONEqual(t, closed, allRow)
 	selected := getHost(t, endpoint)
 	assertJSONEqual(t, closed, selected)
 	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 	assertFactoryCLIParity(t, host, id, selected)
 	assertJSONEqual(t, logs, getHost(t, endpoint+"/logs"))
-	assertArchivedAttributionTable(t, ctx, host, name, recorded)
+	assertArchivedAttributionTable(t, ctx, host, name, true)
 }
 
 func admitNamedAttributionWork(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer, runner controlHostRunner, scopeID, name string) <-chan struct{} {
@@ -795,4 +651,158 @@ func assertArchivedAttributionRow(t *testing.T, archived map[string]any, id stri
 		t.Fatalf("closed capture cause/health: %v", closed)
 	}
 	return closed
+}
+
+func readAttributionList(ctx context.Context, endpoint string) (map[string]any, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("history list status %d", response.StatusCode)
+	}
+	var page map[string]any
+	err = json.NewDecoder(response.Body).Decode(&page)
+	return page, err
+}
+
+// F-03/F-04/F-05/F-12: reconstruction is the reason for this fresh graph.
+// Downgrade only test-owned opening envelopes to legacy absence at the file
+// edge, then observe startup warming and optional absence through public reads.
+func runArchivedWorkAttributionStartup(t *testing.T, process support.Process) {
+	t.Parallel()
+	host, sessions, runner, dir := startRecordedAttributionHost(t)
+	connection, ctx := startMCP(t, process, host.URL())
+	expected := make(map[string]map[string]any)
+	for _, name := range []string{"captured", "warmed", "absent", "damaged"} {
+		scope := admitRecordedAttributionWork(t, ctx, sessions, host, runner, dir, name)
+		rows := historyParityPage(t, ctx, connection, host, "active", "factory", "")["sessions"].([]any)
+		if len(rows) != 1 {
+			t.Fatalf("startup fixture membership=%v", rows)
+		}
+		row := rows[0].(map[string]any)
+		id := row["workerSessionId"].(string)
+		postHostJSON(t, ctx, host.URL()+"/factory-sessions/"+scope+"/pause", map[string]any{}, http.StatusOK)
+		callWorker(t, ctx, connection, "control", map[string]any{"workerSessionId": id, "operation": "CANCEL"})
+		support.CloseFactorySessionAt(t, host.URL(), scope)
+		expected[name] = row
+	}
+	host.Close(t)
+	prepareLegacyAttributionFixtures(t, dir, expected)
+	var forbidden atomic.Bool
+	var reads, replayReads atomic.Int64
+	read := func(path string) ([]byte, error) {
+		if forbidden.Load() {
+			reads.Add(1)
+			return nil, errors.New("presentation recording IO forbidden")
+		}
+		return os.ReadFile(path)
+	}
+	reopened := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), RecordingReadFile: read},
+	})
+	connection, ctx = startMCP(t, process, reopened.URL())
+	forbidden.Store(true)
+	// F-10: malformed capture still fails with the existing safe typed error.
+	damagedID := expected["damaged"]["workerSessionId"].(string)
+	assertHistoryReadFailure(t, reopened, damagedID, http.StatusInternalServerError, "PROJECTION_UNAVAILABLE")
+	assertToolError(t, callAction(t, ctx, connection, "READ", map[string]any{"workerSessionId": damagedID}), "worker_session.internal_error", false)
+	delete(expected, "damaged")
+	assertStartupAttribution(t, ctx, connection, reopened, expected)
+	if reads.Load() != 0 {
+		t.Fatalf("startup presentation recording reads=%d", reads.Load())
+	}
+	// Explicit replay uses its own public recording-read port; it is still allowed.
+	input := support.FakeInputs(ctx, []string{"you", "run", "--dir", dir, "--replay", filepath.Join(dir, "captured.json"), "--quiet", "--no-record"})
+	// Replay has a distinct immutable execution shape: its local ~default
+	// runtime cannot share the server's already-bound live runtime.
+	replay := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: rejectLocalProvider{t: t},
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			replayReads.Add(1)
+			return os.ReadFile(path)
+		},
+	})
+	if err := replay.Execute(input.Input); err != nil {
+		t.Fatalf("explicit replay=%v stdout=%s stderr=%s", err, input.Stdout(), input.Stderr())
+	}
+	if replayReads.Load() == 0 {
+		t.Fatal("explicit replay skipped recording read")
+	}
+	historyParityPage(t, ctx, connection, reopened, "archived", "factory", "")
+	if reads.Load() != 0 {
+		t.Fatalf("post-replay presentation recording reads=%d", reads.Load())
+	}
+}
+
+func prepareLegacyAttributionFixtures(t *testing.T, dir string, expected map[string]map[string]any) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(dir, ".you-agent-factory", "worker-recordings", "*.worker.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := bytes.Split(bytes.TrimSuffix(data, []byte{'\n'}), []byte{'\n'})
+		var opening map[string]json.RawMessage
+		if err := json.Unmarshal(lines[0], &opening); err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		if err := json.Unmarshal(opening["workerSessionId"], &id); err != nil {
+			t.Fatal(err)
+		}
+		if id == expected["damaged"]["workerSessionId"] {
+			if err := os.WriteFile(path, append(data, []byte("not a capture\n")...), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if id != expected["warmed"]["workerSessionId"] && id != expected["absent"]["workerSessionId"] {
+			continue
+		}
+		delete(opening, "workName")
+		lines[0], err = json.Marshal(opening)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append(bytes.Join(lines, []byte{'\n'}), '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(filepath.Join(dir, "absent.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertStartupAttribution(t *testing.T, ctx context.Context, connection *mcp.ClientSession, reopened *support.FunctionalAPIServer, expected map[string]map[string]any) {
+	t.Helper()
+	for name, row := range expected {
+		id := row["workerSessionId"].(string)
+		selected := getHost(t, reopened.URL()+"/worker-sessions/"+id).(map[string]any)
+		wantName := any(name)
+		if name == "absent" {
+			wantName = nil
+		}
+		if selected["workName"] != wantName || selected["workId"] != row["workId"] || selected["provider"] != row["provider"] || selected["recordingHealth"] != "COMPLETE" {
+			t.Fatalf("startup %s attribution=%v", name, selected)
+		}
+		assertRuntimeObservationParity(t, selected, callWorker(t, ctx, connection, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+		assertFactoryCLIParity(t, reopened, id, selected)
+	}
+	for _, view := range []string{"archived", "all"} {
+		page := historyParityPage(t, ctx, connection, reopened, view, "factory", "")
+		if len(page["sessions"].([]any)) != 3 {
+			t.Fatalf("startup fleet membership=%v", page)
+		}
+	}
 }

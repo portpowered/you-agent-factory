@@ -976,15 +976,33 @@ func newCompletedRoot(newID factoryruntime.IDGenerator, workflows factoryruntime
 func TestNewAssemblyRetainsSelectedBundleOpening(t *testing.T) {
 	opening := &BundleOpening{}
 	sidecars := NewSidecarOpening(nil, platformclock.Real{})
-	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, &assemblyWorldStateOpening{}, nil, nil, nil)
+	assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, &assemblyWorldStateOpening{}, nil, nil, nil, nil)
 	if err != nil || assembly.bundleOpening == nil {
 		t.Fatalf("NewAssembly = %#v, %v; want selected opening", assembly, err)
 	}
-	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(opening.Open, sidecars, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without recordings = %#v, %v; want required dependency failure", assembly, err)
 	}
-	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
+	if assembly, err := NewAssembly(nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || assembly != nil {
 		t.Fatalf("NewAssembly without opening = %#v, %v; want required dependency failure", assembly, err)
+	}
+}
+
+func TestAssemblyRejectsCapturePreparationFailureBeforeOpening(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{errors.New("capture storage unavailable"), context.Canceled} {
+		t.Run(failure.Error(), func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			assembly := &Assembly{recoverOwners: func(ctx context.Context) error {
+				calls++
+				return failure
+			}}
+			opening, err := assembly.AssembleInitial(t.Context(), factoryruntime.RuntimeActivationRequest{}, nil, nil, nil, nil)
+			if opening != nil || !errors.Is(err, failure) || calls != 1 {
+				t.Fatalf("capture preparation: opening=%v error=%v calls=%d", opening, err, calls)
+			}
+		})
 	}
 }
 

@@ -29,6 +29,7 @@ var _ Service = WorkerRecordingCodec{}
 // must capture. Topic is explicit so a caller cannot accidentally subscribe to
 // a sibling or provider-owned stream.
 type WorkerSessionRecordingRequest struct {
+	WorkName            string
 	RecordingID         string
 	OriginatingArtifact string
 	FactorySessionID    string
@@ -57,6 +58,7 @@ func (request WorkerSessionRecordingRequest) Validate() error {
 // The writer receives the Events record unchanged, including its aggregate
 // position and complete source idempotency identity.
 type WorkerRecordingRecord struct {
+	WorkName            string
 	RecordingID         string
 	OriginatingArtifact string
 	FactorySessionID    string

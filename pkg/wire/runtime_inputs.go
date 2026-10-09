@@ -60,6 +60,7 @@ func provideFactoryRuntimeAssembly(
 	recordingsRuntime recordings.RuntimeScopeService,
 	automationService automations.Service,
 	streams factorysessionwire.RuntimeAssembly,
+	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*factoryruntimewire.Assembly, error) {
 	return factoryruntimewire.NewAssembly(runtimeFactory, workerAttemptScheduler, workerService, workerSessions,
 		workerAttempts, requestResolver, initialFactorySnapshot,
@@ -68,7 +69,7 @@ func provideFactoryRuntimeAssembly(
 		preparation,
 		recordingsRuntime,
 		automationService,
-		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory())
+		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory(), recoverOwners)
 }
 
 func provideInitialRuntimeActivation(assembly *factoryruntimewire.Assembly, clock factoryruntime.Clock,

@@ -228,7 +228,7 @@ func NewGateway(
 	invoker InvocationService,
 	activate NamedFactoryActivator,
 	activationGateway factorydefinitions.DefinitionActivationGateway,
-) roles.SessionGateway {
+) *sessionservice.Service {
 	gateway := sessionservice.NewWithLiveChangeCoordinator(
 		host, streams, reconnects, results, responses, liveChange, history,
 		durable, invoker, activate, activationGateway,

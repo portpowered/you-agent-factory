@@ -165,8 +165,9 @@ func loadBaselineHistory(readGit func(...string) (string, error), readHead func(
 }
 
 // CompareBaselineGrowth allows the first seed of a rule absent from base.
-// Established rules allow count-neutral key replacements. Interface allowances
-// additionally preserve their package-local member count.
+// Established rules allow count-neutral key replacements, except recording
+// reads, which permit only deletion or a same-site occurrence-count reduction.
+// Interface allowances additionally preserve their package-local member count.
 func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	if err := compareServiceCycleCeilings(baseText, headText); err != nil {
 		return nil, err
@@ -175,6 +176,12 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	rules := map[string]bool{}
 	for key := range base {
 		rules[strings.SplitN(key, "|", 2)[0]] = true
+	}
+	if strings.Contains(baseText, recordingReadMigration) {
+		if !strings.Contains(headText, recordingReadMigration) {
+			return nil, fmt.Errorf("preserve the recording-read migration marker even after all debt is removed")
+		}
+		rules[recordingReadRule] = true
 	}
 	removed := map[string]int{}
 	for key := range base {
@@ -189,6 +196,9 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 			continue
 		}
 		if isInterfaceMemberReplacement(key, base, head) {
+			continue
+		}
+		if isRecordingReadReduction(key, base) {
 			continue
 		}
 		rule := strings.SplitN(key, "|", 2)[0]
@@ -208,7 +218,7 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	var growth []string
 	for _, key := range added {
 		rule := strings.SplitN(key, "|", 2)[0]
-		if rule != "service-root-interface-count" && removed[rule] > 0 {
+		if rule != "service-root-interface-count" && rule != recordingReadRule && removed[rule] > 0 {
 			removed[rule]--
 			continue
 		}
@@ -224,6 +234,32 @@ func CompareBaselineGrowth(baseText, headText string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// Reducing the count at the same declaration/operation is deletion, not a new
+// allowance. Removing another declaration can never pay for a new read site.
+func isRecordingReadReduction(key string, base map[string]struct{}) bool {
+	if !strings.HasPrefix(key, recordingReadRule+"|") {
+		return false
+	}
+	site, count, ok := strings.Cut(key, "::count=")
+	if !ok {
+		return false
+	}
+	var current int
+	if _, err := fmt.Sscanf(count, "%d", &current); err != nil || current < 1 {
+		return false
+	}
+	for old := range base {
+		previousSite, previousCount, _ := strings.Cut(old, "::count=")
+		var previous int
+		if previousSite == site {
+			if _, err := fmt.Sscanf(previousCount, "%d", &previous); err == nil && current < previous {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isInterfaceMemberReplacement(key string, base, head map[string]struct{}) bool {
