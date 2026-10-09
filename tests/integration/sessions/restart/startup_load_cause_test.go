@@ -14,7 +14,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -23,7 +22,7 @@ func TestPackagedInstallOwnerGoneAllowsStartup(t *testing.T) {
 	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		t.Skip("native incarnation queries require Windows or Linux")
 	}
-	if _, err := (platformprocess.IncarnationProbe{}).LookupProcess(2147483647); !errors.Is(err, platformprocess.ErrProcessGone) {
+	if _, err := (platformprocess.IncarnationProbe{ReadFile: os.ReadFile}).LookupProcess(2147483647); !errors.Is(err, platformprocess.ErrProcessGone) {
 		t.Fatalf("absence prerequisite: %v", err)
 	}
 	binary := requireRestartCLIArtifact(t)
@@ -48,7 +47,7 @@ func TestPackagedInstallLiveForeignOwnerBlocksStartup(t *testing.T) {
 	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		t.Skip("native incarnation queries require Windows or Linux")
 	}
-	identity, err := (platformprocess.IncarnationProbe{}).CurrentProcess()
+	identity, err := (platformprocess.IncarnationProbe{ReadFile: os.ReadFile}).CurrentProcess()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +57,7 @@ func TestPackagedInstallLiveForeignOwnerBlocksStartup(t *testing.T) {
 	}
 	binary := requireRestartCLIArtifact(t)
 	home, factory, metadata := packagedOwnerStartupFixture(t, owner)
-	target := filepath.Join(factorydefinitions.NamedFactoriesRoot(home), "@you", "deep-research", "factory.json")
+	target := filepath.Join(home, ".you-agent-factory", "factories", "@you", "deep-research", "factory.json")
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +88,7 @@ func packagedOwnerStartupFixture(t *testing.T, owner []byte) (home, factory, met
 		t.Fatal(err)
 	}
 	writeBoardPersistenceAgentConfig(t, factory, "restart-blocker", "---\ntype: SCRIPT_WORKER\ncommand: unused-idle-worker\n---\n")
-	metadata = filepath.Join(factorydefinitions.NamedFactoriesRoot(home), ".you--deep-research.staging-owner", ".owner.json")
+	metadata = filepath.Join(home, ".you-agent-factory", "factories", ".you--deep-research.staging-owner", ".owner.json")
 	if err := os.MkdirAll(filepath.Dir(metadata), 0700); err != nil {
 		t.Fatal(err)
 	}

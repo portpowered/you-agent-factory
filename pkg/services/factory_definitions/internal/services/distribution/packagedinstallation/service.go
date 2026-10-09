@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -57,17 +56,15 @@ type ownerProbe interface {
 	Classify(ownerRecord) ownerLiveness
 }
 
-type incarnationLookup interface {
-	LookupProcess(int) (platformprocess.Incarnation, error)
+type localOwnerProbe struct {
+	incarnations factorydefinitions.PackagedInstallationProcessProbe
 }
-
-type localOwnerProbe struct{ incarnations incarnationLookup }
 
 func (probe localOwnerProbe) lookup(pid int) (platformprocess.Incarnation, error) {
 	if probe.incarnations != nil {
-		return probe.incarnations.LookupProcess(pid)
+		return probe.incarnations(pid)
 	}
-	return (platformprocess.IncarnationProbe{}).LookupProcess(pid)
+	return platformprocess.Incarnation{}, fmt.Errorf("packaged installation process probe is required")
 }
 
 func (probe localOwnerProbe) Current() (ownerRecord, error) {
@@ -95,11 +92,6 @@ func (probe localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
 	case errors.Is(err, fs.ErrPermission):
 		return ownerLivenessPermissionDenied
 	case err != nil:
-		// Native PID probing preserves legacy support on platforms without
-		// incarnation queries. Generic lookup failures never prove identity reuse.
-		if probe.incarnations == nil && runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-			return probeOwnerPID(owner.PID)
-		}
 		return ownerLivenessIndeterminate
 	default:
 		return probe.classifyLiveOwner(owner, identity)
@@ -108,7 +100,9 @@ func (probe localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
 
 func (localOwnerProbe) classifyLiveOwner(owner ownerRecord, identity platformprocess.Incarnation) ownerLiveness {
 	switch {
-	case identity.PID != owner.PID || identity.Host == "" || identity.Start == "":
+	case identity.PID != owner.PID || identity.Host == "":
+		return ownerLivenessIndeterminate
+	case identity.Start == "" && owner.Start != "":
 		return ownerLivenessIndeterminate
 	case owner.Host != "" && identity.Host != owner.Host:
 		return ownerLivenessIndeterminate
@@ -123,13 +117,14 @@ func New(
 	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	processProbe factorydefinitions.PackagedInstallationProcessProbe,
 	logger logging.Logger,
 ) *Service {
 	return &Service{
 		persistence:      persistence,
 		fileSystem:       fileSystem,
 		directoryCreator: directoryCreator,
-		ownerProbe:       localOwnerProbe{},
+		ownerProbe:       localOwnerProbe{incarnations: processProbe},
 		logger:           logger,
 	}
 }
@@ -141,7 +136,7 @@ func newWithOwnerProbe(
 	probe ownerProbe,
 	logger logging.Logger,
 ) *Service {
-	service := New(persistence, fileSystem, directoryCreator, logger)
+	service := New(persistence, fileSystem, directoryCreator, nil, logger)
 	if probe != nil {
 		service.ownerProbe = probe
 	}

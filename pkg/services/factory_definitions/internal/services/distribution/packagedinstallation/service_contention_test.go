@@ -28,7 +28,7 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 		t.Fatalf("create retained staging resource: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
+	_, err := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -75,8 +75,8 @@ func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) 
 		allowPrepare:   make(chan struct{}),
 	}
 	winnerLogger, loserLogger := &packagedInstallationLogger{}, &packagedInstallationLogger{}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, winnerLogger)
-	contender := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, loserLogger)
+	installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, winnerLogger)
+	contender := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, loserLogger)
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		BackendScopeID:     "local-live-scope",
@@ -145,7 +145,7 @@ func TestInstallPackagedFactory_MalformedOwnerMetadataFailsClosed(t *testing.T) 
 		t.Fatalf("write malformed owner metadata: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
+	_, err := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -184,7 +184,7 @@ func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T
 		prepareStarted: make(chan struct{}),
 		allowPrepare:   make(chan struct{}),
 	}
-	installer := New(persistence, fileSystem, fileSystem.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(persistence, fileSystem, fileSystem.Mkdir, logging.NoopLogger{})
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		Definition: factorydefinitions.PackagedDefinition{

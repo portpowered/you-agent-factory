@@ -17,12 +17,6 @@ import (
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 )
 
-type incarnationLookupFunc func(int) (platformprocess.Incarnation, error)
-
-func (lookup incarnationLookupFunc) LookupProcess(pid int) (platformprocess.Incarnation, error) {
-	return lookup(pid)
-}
-
 func TestStagingLeaseIdentityChangePreservesOwner(t *testing.T) {
 	t.Parallel()
 	for _, phase := range []string{"revalidate", "release"} {
@@ -60,7 +54,7 @@ func TestStagingLeaseIdentityChangePreservesOwner(t *testing.T) {
 
 func TestLocalOwnerPublicationFallsBackOnUnavailableIdentity(t *testing.T) {
 	t.Parallel()
-	probe := localOwnerProbe{incarnations: incarnationLookupFunc(func(int) (platformprocess.Incarnation, error) {
+	probe := localOwnerProbe{incarnations: factorydefinitions.PackagedInstallationProcessProbe(func(int) (platformprocess.Incarnation, error) {
 		return platformprocess.Incarnation{}, errors.New("unsupported")
 	})}
 	owner, err := probe.Current()
@@ -86,6 +80,8 @@ func TestInstallPackagedFactory_IncarnationOwnership(t *testing.T) {
 		{"reused", full, nil, "new", ownerLivenessOrphaned},
 		{"matching", full, nil, "old", ownerLivenessActive},
 		{"legacy live", `{"pid":42}`, nil, "new", ownerLivenessActive},
+		{"legacy PID-only live", `{"pid":42}`, nil, "", ownerLivenessActive},
+		{"full identity cannot use PID-only observation", full, nil, "", ownerLivenessIndeterminate},
 		{"denied", full, fs.ErrPermission, "", ownerLivenessPermissionDenied},
 		{"unknown", full, errors.New("query unavailable"), "", ownerLivenessIndeterminate},
 		{"foreign host gone", `{"pid":42,"host":"foreign-fixture-host","start":"old"}`, platformprocess.ErrProcessGone, "", ownerLivenessIndeterminate},
@@ -108,7 +104,7 @@ func TestInstallPackagedFactory_IncarnationOwnership(t *testing.T) {
 			if err := os.WriteFile(metadata, []byte(cell.record), 0600); err != nil {
 				t.Fatal(err)
 			}
-			probe := localOwnerProbe{incarnations: incarnationLookupFunc(func(pid int) (platformprocess.Incarnation, error) {
+			probe := localOwnerProbe{incarnations: factorydefinitions.PackagedInstallationProcessProbe(func(pid int) (platformprocess.Incarnation, error) {
 				if pid == os.Getpid() {
 					return platformprocess.Incarnation{PID: pid, Host: host, Start: "self"}, nil
 				}
@@ -344,7 +340,7 @@ func TestInstallPackagedFactory_StagingInspectionErrorsAreReported(t *testing.T)
 			root := t.TempDir()
 			fileSystem := &failingPackagedInstallationFileSystem{}
 			test.configure(fileSystem, root)
-			_, err := New(packagedInstallationTestPersistence(), fileSystem, fileSystem.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
+			_, err := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, fileSystem.Mkdir, logging.NoopLogger{}).InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
 					NamedFactoriesRoot: root,

@@ -30,8 +30,8 @@ func TestInstallPackagedFactory_PublishedStagingLeaseAlwaysNamesItsOwner(t *test
 	name := "@test/lease-identity"
 	gate := newStagingLeaseGate()
 	seam := &yieldingPackagedInstallationFileSystem{gate: gate}
-	installer := New(&successfulPackagedInstallationPersistence{}, seam, seam.Mkdir, logging.NoopLogger{})
-	observer := New(&successfulPackagedInstallationPersistence{}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(&successfulPackagedInstallationPersistence{}, seam, seam.Mkdir, logging.NoopLogger{})
+	observer := newNativeTestInstaller(&successfulPackagedInstallationPersistence{}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		BackendScopeID:     "lease-identity-scope",
@@ -205,7 +205,7 @@ func TestPrivateStagingLeasePathsAreNotDiscoverableStagingResources(t *testing.T
 // some platforms and a directory-not-empty or access error on others.
 func TestPublishStagingLeaseTreatsAnOccupiedDestinationAsALostRace(t *testing.T) {
 	root := t.TempDir()
-	service := New(&successfulPackagedInstallationPersistence{}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	service := newNativeTestInstaller(&successfulPackagedInstallationPersistence{}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	leasePath := stagingOwnershipPath(root, "@test/occupied")
 	if err := os.MkdirAll(leasePath, 0o755); err != nil {
 		t.Fatalf("create winner lease: %v", err)
@@ -243,7 +243,7 @@ func TestPublishStagingLeaseTreatsAnOccupiedDestinationAsALostRace(t *testing.T)
 func TestPublishStagingLeaseReportsAFailureWhenTheDestinationIsAbsent(t *testing.T) {
 	root := t.TempDir()
 	fileSystem := &failingPackagedInstallationFileSystem{}
-	service := New(&successfulPackagedInstallationPersistence{}, fileSystem, fileSystem.Mkdir, logging.NoopLogger{})
+	service := newNativeTestInstaller(&successfulPackagedInstallationPersistence{}, fileSystem, fileSystem.Mkdir, logging.NoopLogger{})
 	pendingPath := filepath.Join(root, "pending-lease")
 	if err := os.MkdirAll(pendingPath, 0o755); err != nil {
 		t.Fatalf("create pending lease: %v", err)
