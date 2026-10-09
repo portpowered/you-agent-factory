@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
 // Host exposes composition-root seams required by the session gateway.
@@ -79,15 +78,3 @@ func (h keyedSessionHost) JavaScriptCheckpointStore(session *livesession.LiveSes
 }
 
 var _ Host = keyedSessionHost{}
-
-// legacyControlHost retains the durable getter accepted by compatibility
-// constructors until their T17 retirement.
-type legacyControlHost interface {
-	Host
-	controlplane.DurableLifecycleHost
-}
-
-type legacyHost interface {
-	legacyControlHost
-	stream.Host
-}

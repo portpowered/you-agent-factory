@@ -158,14 +158,21 @@ func TestHistoricalExecutionRoutePreservesPeerAndReplacementOwnership(t *testing
 	replacement := &routingExecution{}
 	host := &unifiedLifecycleGatewayHost{execution: processOwner}
 	gateway := newServiceTestGateway(host)
-	releaseFirst := gateway.BindHistoricalExecution("recorded", first)
+	assembly := &factorysessionservice.Assembly{SessionGateway: gateway}
+	releaseFirst, err := assembly.BindHistoricalOpening("recorded", first)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := gateway.ResumeInterruptedSession(t.Context(), "peer", factorysessions.ResumeSessionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	releaseReplacement := gateway.BindHistoricalExecution("recorded", replacement)
+	releaseReplacement, err := assembly.BindHistoricalOpening("recorded", replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
 	releaseFirst()
 	releaseFirst()
 	if _, err := gateway.ResumeInterruptedSession(t.Context(), "recorded", factorysessions.ResumeSessionRequest{}); err != nil {
@@ -181,5 +188,13 @@ func TestHistoricalExecutionRoutePreservesPeerAndReplacementOwnership(t *testing
 	}
 	if processOwner.resumeCalls != 2 || replacement.resumeCalls != 1 {
 		t.Fatal("released inspection retained execution ownership")
+	}
+}
+
+func TestHistoricalOpeningWithoutRoutingCapability(t *testing.T) {
+	t.Parallel()
+	release, err := (&factorysessionservice.Assembly{}).BindHistoricalOpening("recorded", &routingExecution{})
+	if release != nil || err == nil || err.Error() != "historical replay Sessions routing is unavailable" {
+		t.Fatalf("unsupported historical opening = %v, release available = %v", err, release != nil)
 	}
 }

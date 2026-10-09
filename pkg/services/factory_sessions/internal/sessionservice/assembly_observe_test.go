@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -13,9 +15,16 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -588,4 +597,386 @@ func assertScopedControlCompletion(t *testing.T, completed scopedControlCompleti
 	if completed.err != nil || completed.result.SessionID != id || completed.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
 		t.Fatalf("session %s cancel = %#v, %v", id, completed.result, completed.err)
 	}
+}
+
+// The operator-authorized F04 compound observation belongs at the cleanup
+// owner: controlled Runtime effects hold Work while real registration and
+// release code exercise the reused-generation fence. Public replacement and
+// response-cursor journeys remain in the functional suite.
+func TestRegisterOpeningRepeatedStaleReleaseDuringReplacementAndPeerWork(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	state := newWorkResolverSessionState()
+	clock := projectionClockStub{now: time.Unix(1234, 0)}
+	stores := map[string]*responseeventstore.SessionResponseEventStore{}
+	for _, id := range []string{"candidate", "peer"} {
+		stores[id] = responseeventstore.NewSessionResponseEventStore(id, clock, func() string { return "event" })
+	}
+	assembly := &Assembly{state: state, registry: state.Registry(), scopeActivation: NewScopeActivation(state),
+		sessionIDs: func() string { return "generated" }, eventIDs: func() string { return "event" },
+		responseStreams: staleReleaseResponseStreams{stores: stores},
+	}
+	old, _, release := registerStaleReleaseWork(t, assembly, "candidate", "old", nil, clock)
+	oldResult, err := old.SubmitWorkRequestForSession(ctx, "candidate", work.WorkRequest{RequestID: "old-work", Works: []work.Work{{WorkID: "old-work"}}})
+	if err != nil || oldResult.RequestID != "old-work" || oldResult.WorkID != "old-work" || oldResult.TraceID != "old" {
+		t.Fatalf("old Work = %+v, %v", oldResult, err)
+	}
+	proceed := make(chan struct{})
+	var unblock sync.Once
+	newRuntime, newEffect, _ := registerStaleReleaseWork(t, assembly, "candidate", "new", proceed, clock)
+	peerRuntime, peerEffect, _ := registerStaleReleaseWork(t, assembly, "peer", "peer", proceed, clock)
+	var joined sync.WaitGroup
+	// Unblock before joining even when an assertion exits early.
+	defer func() {
+		cancel()
+		unblock.Do(func() { close(proceed) })
+		joined.Wait()
+	}()
+	results := make(chan staleReleaseWorkResult, 2)
+	startStaleReleaseWork(ctx, &joined, results, newRuntime, "candidate", "new-work")
+	startStaleReleaseWork(ctx, &joined, results, peerRuntime, "peer", "peer-work")
+	for _, effect := range []*staleReleaseWorkEffect{newEffect, peerEffect} {
+		select {
+		case <-effect.entered:
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+	}
+	for sequence := int64(1); sequence <= 2; sequence++ {
+		if err := release(ctx); err != nil {
+			t.Fatal(err)
+		}
+		assertStaleReleaseObservations(t, ctx, assembly, stores, clock, sequence)
+	}
+	unblock.Do(func() { close(proceed) })
+	joined.Wait()
+	close(results)
+	assertStaleReleaseWorkResults(t, results)
+	assertStaleReleaseObservations(t, ctx, assembly, stores, clock, 3)
+}
+
+func assertStaleReleaseWorkResults(t *testing.T, results <-chan staleReleaseWorkResult) {
+	t.Helper()
+	count := 0
+	for outcome := range results {
+		count++
+		if outcome.err != nil || !outcome.result.Accepted || outcome.result.RequestID != outcome.requestID ||
+			outcome.result.WorkID != outcome.requestID ||
+			outcome.result.TraceID != map[string]string{"new-work": "new", "peer-work": "peer"}[outcome.requestID] {
+			t.Fatalf("continuing Work = %+v", outcome)
+		}
+	}
+	if count != 2 {
+		t.Fatalf("completed Work requests = %d, want replacement and peer", count)
+	}
+}
+
+type staleReleaseResponseStreams struct {
+	responsestreamservice.Service
+	stores map[string]*responseeventstore.SessionResponseEventStore
+}
+
+func (streams staleReleaseResponseStreams) NewEventStore(id string, _ factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	return streams.stores[id], nil
+}
+func (streams staleReleaseResponseStreams) Complete(store *responseeventstore.SessionResponseEventStore) {
+	store.Complete()
+}
+
+type staleReleaseWorkRecord struct {
+	registrationRuntimeRecord
+	effect *staleReleaseWorkEffect
+}
+
+func (record staleReleaseWorkRecord) RuntimeService() factoryruntime.Service { return record.effect }
+
+type staleReleaseWorkEffect struct {
+	submitWorkFactory
+	name    string
+	entered chan struct{}
+	proceed <-chan struct{}
+}
+
+func (effect *staleReleaseWorkEffect) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	if len(request.Works) != 1 || request.Works[0].WorkID != request.RequestID {
+		return work.WorkRequestSubmitResult{}, errors.New("one identified Work is required")
+	}
+	if effect.proceed != nil {
+		close(effect.entered)
+		select {
+		case <-effect.proceed:
+		case <-ctx.Done():
+			return work.WorkRequestSubmitResult{}, ctx.Err()
+		}
+	}
+	return work.WorkRequestSubmitResult{RequestID: request.RequestID, WorkID: request.Works[0].WorkID, TraceID: effect.name, Accepted: true}, nil
+}
+func (effect *staleReleaseWorkEffect) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{Observation: factoryruntime.Observation{Health: factoryruntime.ObservationHealth{FactoryState: effect.name}}}, nil
+}
+
+func registerStaleReleaseWork(t *testing.T, assembly *Assembly, id, name string, proceed <-chan struct{}, clock factoryruntime.Clock) (*SessionRuntime, *staleReleaseWorkEffect, func(context.Context) error) {
+	t.Helper()
+	effect := &staleReleaseWorkEffect{name: name, entered: make(chan struct{}), proceed: proceed}
+	facts := roles.SessionOpeningFacts{FactorySessionID: id, RuntimeID: name, GenerationID: "reused-generation"}
+	record := staleReleaseWorkRecord{effect: effect}
+	runtime, selected, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, record, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, clock, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A controlled acquired run supplies the same handle boundary as startup.
+	runtimebinding.SessionStateFrom(selected).Handle = invocationQueryRun{record: record}
+	if err := runtime.(*SessionRuntime).BindRuntime(id, factoryruntime.RuntimeBinding{}.New(name, effect)); err != nil {
+		t.Fatal(err)
+	}
+	return runtime.(*SessionRuntime), effect, release
+}
+
+type staleReleaseWorkResult struct {
+	requestID string
+	result    work.WorkRequestSubmitResult
+	err       error
+}
+
+func startStaleReleaseWork(ctx context.Context, joined *sync.WaitGroup, results chan<- staleReleaseWorkResult, runtime *SessionRuntime, id, requestID string) {
+	joined.Add(1)
+	go func() {
+		defer joined.Done()
+		result, err := runtime.SubmitWorkRequestForSession(ctx, id, work.WorkRequest{RequestID: requestID, Works: []work.Work{{WorkID: requestID}}})
+		results <- staleReleaseWorkResult{requestID: requestID, result: result, err: err}
+	}()
+}
+
+func assertStaleReleaseObservations(t *testing.T, ctx context.Context, assembly *Assembly, stores map[string]*responseeventstore.SessionResponseEventStore, clock factoryruntime.Clock, sequence int64) {
+	t.Helper()
+	for id, name := range map[string]string{"candidate": "new", "peer": "peer"} {
+		observation, err := assembly.ObserveForSession(ctx, id, factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeHealth})
+		if err != nil || observation.Observation.Health.FactoryState != name {
+			t.Fatalf("%s observation = %+v, %v", id, observation, err)
+		}
+		selected := assembly.Resolve(id)
+		if selected == nil || selected.ResponseEvents != stores[id] {
+			t.Fatalf("%s lost selected response history", id)
+		}
+		event, err := selected.ResponseEvents.Publish(responseevents.FactoryResponseEvent{
+			RunID: name, Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+			Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"continuing"}`),
+		})
+		if err != nil || event.FactorySessionID != id || event.Sequence != sequence || !event.RecordedAt.Equal(clock.Now()) {
+			t.Fatalf("%s continuing response = %+v, %v", id, event, err)
+		}
+	}
+}
+
+type registrationRuntimeConfig struct {
+	interfaces.LoadedFactorySource
+}
+
+func (registrationRuntimeConfig) RuntimeBaseDir() string { return "/factory" }
+
+type registrationRuntimeRecord struct{ factoryruntime.RuntimeRecord }
+
+func (registrationRuntimeRecord) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
+	return registrationRuntimeConfig{}
+}
+func (registrationRuntimeRecord) Directory() string                                      { return "/factory" }
+func (registrationRuntimeRecord) FolderDirectory() string                                { return "/factory" }
+func (registrationRuntimeRecord) BackendScope() string                                   { return "backend" }
+func (registrationRuntimeRecord) RuntimeService() factoryruntime.Service                 { return nil }
+func (registrationRuntimeRecord) RuntimeLogger() *zap.Logger                             { return nil }
+func (registrationRuntimeRecord) RecordingLedger() recordings.Ledger                     { return nil }
+func (registrationRuntimeRecord) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {}
+
+type registrationResponseStreams struct {
+	responsestreamservice.Service
+	open     func() (*responseeventstore.SessionResponseEventStore, error)
+	complete func(*responseeventstore.SessionResponseEventStore)
+}
+
+func (streams registrationResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	if streams.open != nil {
+		return streams.open()
+	}
+	return nil, nil
+}
+
+func (streams registrationResponseStreams) Complete(store *responseeventstore.SessionResponseEventStore) {
+	if streams.complete != nil {
+		streams.complete(store)
+	}
+}
+
+type registrationActivation struct {
+	SessionScopeActivation
+	retire func(context.Context, SessionScope) error
+}
+
+func (activation registrationActivation) Retire(ctx context.Context, scope SessionScope) error {
+	return activation.retire(ctx, scope)
+}
+
+func TestRegisterOpeningFailureCancellationAndRetryPreservePeer(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"failure", "partial", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			state := newWorkResolverSessionState()
+			peer := &livesession.LiveSession{ID: "peer"}
+			state.Registry().Upsert(peer, true)
+			cause := errors.New("response registration failed")
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			failed := true
+			completions := 0
+			store := &responseeventstore.SessionResponseEventStore{}
+			assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
+				sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
+				responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) {
+					if failed && mode == "failure" {
+						return nil, cause
+					}
+					if failed && mode == "partial" {
+						return store, cause
+					}
+					if failed {
+						cancel()
+					}
+					return store, nil
+				}, complete: func(got *responseeventstore.SessionResponseEventStore) {
+					if got != store {
+						t.Fatal("released peer response store")
+					}
+					completions++
+				}},
+				scopeActivation: registrationActivation{retire: func(_ context.Context, scope SessionScope) error {
+					state.UnregisterGeneration(scope.Session)
+					return nil
+				}},
+			}
+			facts := roles.SessionOpeningFacts{FactorySessionID: "candidate"}
+			initial := &factoryruntime.RuntimeInitialOpening{Record: registrationRuntimeRecord{}}
+			_, _, _, _, release, err := assembly.RegisterOpening(ctx, facts, initial.Record, initial.Completion, initial.ReplacementBuilder, initial.Lifecycle, initial.Sidecars, platformclock.Real{}, zap.NewNop())
+			expected := map[string]error{"failure": cause, "partial": cause, "cancel": context.Canceled}[mode]
+			if !errors.Is(err, expected) || state.Resolve("candidate") != nil || state.Current() != peer {
+				t.Fatalf("failed registration = %v; candidate or selection changed", err)
+			}
+			if release != nil {
+				if err := release(context.WithoutCancel(ctx)); err != nil {
+					t.Fatal(err)
+				}
+				if err := release(context.WithoutCancel(ctx)); err != nil || completions != 1 {
+					t.Fatalf("repeated release = %v, completions = %d", err, completions)
+				}
+			}
+			failed = false
+			assertRegistrationRetryPreservesPeer(t, assembly, facts, initial, peer)
+
+		})
+	}
+}
+
+func assertRegistrationRetryPreservesPeer(t *testing.T, assembly *Assembly, facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening, peer *livesession.LiveSession) {
+	t.Helper()
+	_, selected, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, initial.Record, initial.Completion, initial.ReplacementBuilder, initial.Lifecycle, initial.Sidecars, platformclock.Real{}, zap.NewNop())
+	if err != nil || selected == nil || assembly.state.Resolve("candidate") != selected || assembly.state.Resolve("peer") != peer {
+		t.Fatalf("same-ID retry = %v", err)
+	}
+	if err := release(context.Background()); err != nil || assembly.state.Resolve("candidate") != nil || assembly.state.Resolve("peer") != peer {
+		t.Fatalf("retry release = %v", err)
+	}
+}
+
+func TestRegisterOpeningReleaseRetriesAndPreservesReplacementHistory(t *testing.T) {
+	t.Parallel()
+	state := newWorkResolverSessionState()
+	store := &responseeventstore.SessionResponseEventStore{}
+	cause := errors.New("registration retirement failed")
+	retireErr := cause
+	completions := 0
+	assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
+		sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
+		responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) { return store, nil },
+			complete: func(*responseeventstore.SessionResponseEventStore) { completions++ }},
+		scopeActivation: registrationActivation{retire: func(_ context.Context, scope SessionScope) error {
+			if retireErr != nil {
+				return retireErr
+			}
+			state.UnregisterGeneration(scope.Session)
+			return nil
+		}},
+	}
+	facts := roles.SessionOpeningFacts{FactorySessionID: "candidate", RuntimeID: "runtime", GenerationID: "reused-generation"}
+	_, _, _, _, release, err := assembly.RegisterOpening(context.Background(), facts, registrationRuntimeRecord{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, platformclock.Real{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := state.Resolve("candidate")
+	if err := release(context.Background()); !errors.Is(err, cause) || state.Resolve("candidate") != previous || completions != 0 {
+		t.Fatalf("failed release = %v", err)
+	}
+	replacement := &livesession.LiveSession{ID: previous.ID, ResponseEvents: store}
+	state.Registry().Upsert(replacement, true)
+	retireErr = nil
+	if err := release(context.Background()); err != nil || state.Resolve("candidate") != replacement || completions != 0 {
+		t.Fatalf("stale release = %v, completions = %d", err, completions)
+	}
+	if err := release(context.Background()); err != nil || completions != 0 {
+		t.Fatalf("repeated stale release = %v", err)
+	}
+}
+
+type registrationInvoker struct {
+	roles.InvocationService
+	result factorysessions.ResolvedInvocationInput
+	err    error
+}
+
+func (r registrationInvoker) ResolveInvocationInput(_ *interfaces.FactoryConfig, _ factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
+	return r.result, r.err
+}
+
+type registrationObserver struct {
+	sessionregistry.Service
+	publish func(*livesession.LiveSession)
+}
+
+func (r registrationObserver) Upsert(session *livesession.LiveSession, _ bool) { r.publish(session) }
+
+func TestRegisterOpeningPublishesSessionWithFixedInputResolver(t *testing.T) {
+	t.Parallel()
+	publications := 0
+	var assembly *Assembly
+	assembly = &Assembly{
+		state: &sessionruntime.Service{}, invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
+		responseStreams: registrationResponseStreams{},
+		sessionIDs:      func() string { return "session" }, eventIDs: func() string { return "event" },
+		resolveHome:         func() (string, error) { return "/home", nil },
+		directoryInspection: scaffoldDirectories{}, namedPaths: scaffoldNamedPaths{},
+		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		sessionResultProjection: &canonicalInspectionResultProjectionFake{}, identity: scopedIdentityStub{},
+		registry: registrationObserver{publish: func(session *livesession.LiveSession) {
+			publications++
+			bound := runtimebinding.SessionStateFrom(session)
+			if bound == nil {
+				t.Fatal("session published without its scoped runtime state")
+			}
+			got, err := assembly.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
+			if err != nil || got.Source != "registered" {
+				t.Fatalf("published input = %+v, %v", got, err)
+			}
+		}},
+	}
+	_, _, _, _, _, err := assembly.RegisterOpening(context.Background(), roles.SessionOpeningFacts{FactorySessionID: "session", FactoryRootDir: "/factory", Directory: "/factory", ExecutionBaseDir: "/factory", BackendScopeID: "backend"}, registrationRuntimeRecord{}, factoryruntime.RuntimeInitialCompletion{}, nil, nil, nil, platformclock.Real{}, zap.NewNop())
+	if err != nil || publications != 1 {
+		t.Fatalf("RegisterOpening = %v, publications = %d", err, publications)
+	}
+}
+
+type scaffoldNamedPaths struct {
+	interfaces.NamedPathResolver
+}
+
+func (scaffoldNamedPaths) ResolveCurrentDir(root string) (string, error) {
+	return filepath.Join(root, "current"), nil
 }

@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -25,11 +26,77 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
+
+// openingAssembly contains only operations consumed by opening and inspection.
+type openingAssembly = interface {
+	Resolve(string) *livesession.LiveSession
+	PrepareNewFactoryScaffold(string) (string, error)
+	CloseSession(context.Context, string) error
+	ListLiveSessionIDs() []string
+	BindHistoricalOpening(string, durableexecution.Service) (func(), error)
+}
+
+// RuntimeOpening owns fixed preparation, activation, live binding and historical acquisition behavior.
+// It retains selected collaborators directly and never retains the Sessions Root.
+type RuntimeOpening struct {
+	assembly                  openingAssembly
+	durable                   durableexecution.Service
+	startFlights              singleflight.Group
+	factoryDefinitions        factorydefinitions.Service
+	resolveHome               factorysessions.HomeDirectoryResolver
+	runtimeRoot               FactoryRuntimeRoot
+	snapshotSelection         *RuntimeSnapshotSelection
+	baseLogger                *zap.Logger
+	resourceAcquisition       *RuntimeResourceAcquisition
+	openingCompletion         *RuntimeOpeningCompletion
+	openingBinding            *RuntimeOpeningBinding
+	generateSessionID         factorysessions.SessionIDGenerator
+	recordedInventory         recordings.RecordedSessionInventory
+	preparation               *RuntimePreparation
+	durableOpening            *DurableOpening
+	initialEngine             *RuntimeInitialEngine
+	executionBinding          *ExecutionBinding
+	replayBehavior            *recordingreplay.Behavior
+	recordingsService         recordings.Service
+	recordingsRuntime         recordings.RuntimeScopeService
+	clock                     factoryruntime.Clock
+	resolveClock              factoryruntime.ClockResolver
+	providerOverride          providers.Service
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator
+	runtimeLogs               factoryruntime.RuntimeLogOwner
+}
+
+// NewRuntimeOpening constructs inert behavior; acquisition happens only on a request.
+func NewRuntimeOpening(assembly openingAssembly, durable durableexecution.Service,
+	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
+	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
+	binding *RuntimeOpeningBinding, runtimeRoot FactoryRuntimeRoot,
+	replayBehavior *recordingreplay.Behavior, recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService, executionBinding *ExecutionBinding,
+	providerOverride ProviderOverrideService, runtimeLogs factoryruntime.RuntimeLogOwner,
+	logger *zap.Logger, clock factoryruntime.Clock, resolveClock factoryruntime.ClockResolver,
+	generateSessionID factorysessions.SessionIDGenerator,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	definitions factorydefinitions.Service, inventory recordings.RecordedSessionInventory,
+) *RuntimeOpening {
+	return &RuntimeOpening{
+		assembly: assembly, durable: durable, factoryDefinitions: definitions, resolveHome: resolveHome,
+		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger,
+		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
+		initialEngine: initialEngine, executionBinding: executionBinding,
+		replayBehavior: replayBehavior, recordingsService: recordingsService,
+		recordingsRuntime: recordingsRuntime, clock: clock, resolveClock: resolveClock,
+		providerOverride: providerOverride, generateRuntimeInstanceID: generateRuntimeInstanceID,
+		runtimeLogs: runtimeLogs}
+}
 
 // openRuntimeWithOptions opens session-owned state using the collaborators already
 // injected into this owner. Only invocation selections cross this boundary.
-func (r *Root) openRuntimeWithOptions(
+func (r *RuntimeOpening) openRuntimeWithOptions(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeSelection,
 	runtime factoryruntime.RuntimeSelection,
@@ -42,27 +109,32 @@ func (r *Root) openRuntimeWithOptions(
 	baseLogger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
-) (products runtimeProducts, err error) {
+) (lifecycle roles.LifecycleRuntime, replay *recordingreplay.Scope, closeArtifacts func() error, activation *factoryruntime.RuntimeActivation, bindRuntime func(string, factoryruntime.RuntimeBinding) error, err error) {
 	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		return r.openHistoricalSessionRuntime(ctx, opening)
+		replay, closeReplay, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
+		return nil, replay, closeReplay, nil, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	defer func() {
-		if err != nil {
+		// A native publication result transfers cleanup to Runtime Root, including
+		// validation failures. Earlier acquisition failures unwind here.
+		if err != nil && activation == nil {
 			if cleanupErr := cleanup.Close(); cleanupErr != nil {
 				err = errors.Join(err, cleanupErr)
-				products.closeArtifacts = cleanup.Close
+				closeArtifacts = cleanup.Close
+				activation, _ = newRuntimeActivation(nil, cleanup.Close)
 			}
 			if opening.initial == nil {
 				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
 					err = errors.Join(err, logErr)
-					products.closeArtifacts = cleanup.Close
+					closeArtifacts = cleanup.Close
+					activation, _ = newRuntimeActivation(nil, cleanup.Close)
 				}
 			}
 		}
@@ -72,42 +144,60 @@ func (r *Root) openRuntimeWithOptions(
 		ModelsRuntime: modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg),
 	}, opening.clock, opening.logger, cleanup)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	opening.operatorSettingsPath = resources.OperatorSettingsPath
 	opening.durableExecution = resources.DurableExecution
 	opening.observations = resources.Observations
 	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
-		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
+		opening.initial.Record, opening.initial.Completion, opening.initial.ReplacementBuilder, opening.initial.Lifecycle, opening.initial.Sidecars, opening.startupRuntime.RecordingLedger(), openedModelsScopeBinding(opening.startupRuntime),
+		opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
-	products, err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
+	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
 		RecordPath:  opening.configured.Recordings.RecordPath,
 		MockWorkers: opening.configured.Workers.MockWorkers,
-	}, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
-		opening.activation, opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
+	}, completed.State, opening.clock, opening.startupRuntime, completed.RuntimeService, completed.ProcessRuntime,
+		opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
-		products.lifecycle = completed.Lifecycle
-		products.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
-		products.currentBoardRecordPath = opening.configured.Recordings.RecordPath
-		if recovery := opening.startupRecovery; recovery != nil {
-			products.startupRecovery = &factorysessions.StartupRecovery{
-				Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
-				Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
-			}
-		}
-		products.operatorSettingsPath = opening.operatorSettingsPath
-		products.workerSettings = opening.durableExecution.WorkerSettings
-		products.replayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
+		lifecycle = completed.Lifecycle
+		closeArtifacts = cleanup.Close
+		bindRuntime = completed.BindRuntime
+		opening.bindSelectedState(completed.State)
+		activation, err = newRuntimeActivation(opening.activation, cleanup.Close)
 	}
-	return products, err
+	return lifecycle, replay, closeArtifacts, activation, bindRuntime, err
+}
+
+// bindSelectedState retains opening facts on the exact record selected by
+// completion. Start must not transport them or select another record later.
+func (opening *sessionRuntimeOpening) bindSelectedState(state runtimebinding.OpeningState) {
+	metadata := runtimebinding.OpeningMetadata{
+		CurrentBoardRecordPath: opening.configured.Recordings.RecordPath,
+		OperatorSettingsPath:   opening.operatorSettingsPath,
+		SkippedBoardRecordings: opening.skippedBoardRecordings,
+		ReplayMetadataWarnings: opening.load.ReplayMetadataWarnings,
+	}
+	if opening.resumeInput != nil {
+		resume := opening.resumeInput.RecoveryMetadata
+		resume.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
+		metadata.ResumeRecoveryMetadata = &resume
+	}
+	if recovery := opening.startupRecovery; recovery != nil {
+		metadata.StartupRecovery = &factorysessions.StartupRecovery{
+			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
+			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
+		}
+	}
+	state.SetOpeningMetadata(metadata)
+	state.SetWorkerSettings(opening.durableExecution.WorkerSettings)
 }
 
 // sessionRuntimeOpening retains one opening's selections and partial results.
@@ -142,7 +232,7 @@ type sessionRuntimeOpening struct {
 	recordingTargetValidator    recordings.RecordingTargetValidator
 }
 
-func (r *Root) prepareRuntimeOpening(
+func (r *RuntimeOpening) prepareRuntimeOpening(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeSelection,
 	runtime factoryruntime.RuntimeSelection,
@@ -238,7 +328,7 @@ func applyRuntimeWorkerReasoningEffort(configured preparedRuntime, load RuntimeL
 	return nil
 }
 
-func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (runtimeProducts, error) {
+func (r *RuntimeOpening) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (*recordingreplay.Scope, func() error, error) {
 	var err error
 	var liveOwner durableexecution.Service
 	var replayClose func() error
@@ -255,26 +345,16 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 		if err != nil {
 			if replayClose != nil {
 				if cleanupErr := replayClose(); cleanupErr != nil {
-					return runtimeProducts{closeArtifacts: replayClose}, errors.Join(err, cleanupErr)
+					return nil, replayClose, errors.Join(err, cleanupErr)
 				}
 			}
-			return runtimeProducts{}, err
+			return nil, nil, err
 		}
 	}
-	historicalProducts := r.historicalReplayRuntimeProducts(
-		opening.logger,
-		*opening.load.HistoricalReplay,
-		liveOwner,
-		replayClose,
-	)
-	historicalProducts.replayMetadataWarnings = append(
-		[]recordings.MetadataMismatchWarning(nil),
-		opening.load.ReplayMetadataWarnings...,
-	)
-	return historicalProducts, nil
+	return r.replayBehavior.Acquire(*opening.load.HistoricalReplay, liveOwner), replayClose, nil
 }
 
-func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
+func (r *RuntimeOpening) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
 	if opening.emptyCurrentBoard {
 		return nil
@@ -303,40 +383,46 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 				return err
 			}
 		}
-		var restoredBoard *currentBoardHistory
-		restoredBoard, err = restoreCurrentBoardHistory(
-			r.recordingsService,
-			opening.configured.Recordings.RecordPath,
-			opening.sessionID,
-			opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
-		)
-		if err != nil {
-			if opening.usesImplicitCurrentBoard() {
-				return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
-			}
-			logCurrentBoardHistoryFailure(
-				opening.logger,
-				opening.sessionID,
-				factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
-				err,
-			)
-			return err
-		}
-		if restoredBoard != nil {
-			if opening.hasCurrentBoardReference {
-				if err := validateCurrentBoardFactoryDirectory(restoredBoard.events, opening.load.LoadedFactoryCfg.FactoryDir()); err != nil {
-					return currentBoardHistoryFailure(opening.configured.Recordings.RecordPath, opening.sessionID,
-						"CORRUPT_HISTORY: selected recording does not match this repository; preserve the recording and reference", err)
-				}
-			}
-			opening.restoredWorldState = restoredBoard.state
-			opening.restoredEventHistory = restoredBoard.events
-		}
+		return r.restoreSelectedBoardHistory(ctx, opening)
 	}
 	return nil
 }
 
-func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) restoreSelectedBoardHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
+	var err error
+	var restoredBoard *currentBoardHistory
+	restoredBoard, err = restoreCurrentBoardHistory(
+		r.recordingsService,
+		opening.configured.Recordings.RecordPath,
+		opening.sessionID,
+		opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
+	)
+	if err != nil {
+		if opening.usesImplicitCurrentBoard() {
+			return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
+		}
+		logCurrentBoardHistoryFailure(
+			opening.logger,
+			opening.sessionID,
+			factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
+			err,
+		)
+		return err
+	}
+	if restoredBoard != nil {
+		if opening.hasCurrentBoardReference {
+			if err := validateCurrentBoardFactoryDirectory(restoredBoard.events, opening.load.LoadedFactoryCfg.FactoryDir()); err != nil {
+				return currentBoardHistoryFailure(opening.configured.Recordings.RecordPath, opening.sessionID,
+					"CORRUPT_HISTORY: selected recording does not match this repository; preserve the recording and reference", err)
+			}
+		}
+		opening.restoredWorldState = restoredBoard.state
+		opening.restoredEventHistory = restoredBoard.events
+	}
+	return nil
+}
+
+func (r *RuntimeOpening) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
 		return err
 	}
@@ -361,6 +447,10 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		}
 	}
 
+	return r.openSelectedSessionEngine(ctx, opening, cleanup)
+}
+
+func (r *RuntimeOpening) openSelectedSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	initial, err := r.initialEngine.OpenLive(ctx, opening.initialEngineRequest(), opening.observations)
 	if initial != nil {
 		opening.initial = initial
@@ -401,7 +491,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 	return nil
 }
 
-func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	path := strings.TrimSpace(opening.configured.Recordings.RecordPath)
 	if path == "" {
 		return nil
@@ -474,8 +564,8 @@ type RuntimeOpeningCompletion struct {
 }
 
 type openingRegistration interface {
-	RegisterOpening(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
-		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost,
+	RegisterOpening(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars,
+		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, *livesession.LiveSession, factorysessions.DefinitionHost,
 		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 	Resolve(string) *livesession.LiveSession
 }
@@ -492,7 +582,7 @@ func NewRuntimeOpeningCompletion(registration openingRegistration, routing openi
 
 type RuntimeCompletionRequest struct {
 	Facts               roles.SessionOpeningFacts
-	LoadedFactory       factorydefinitions.MutableLoadedFactorySource
+	LoadedFactory       factorydefinitions.LoadedFactorySource
 	ActivateWebhooks    bool
 	MockWorkers         *workers.MockWorkersConfig
 	Host                factorysessions.RuntimeHostRequest
@@ -500,7 +590,9 @@ type RuntimeCompletionRequest struct {
 }
 
 type RuntimeCompletionResult struct {
-	SessionRuntime roles.ApplicationRuntime
+	RuntimeService factoryruntime.Service
+	BindRuntime    func(string, factoryruntime.RuntimeBinding) error
+	State          runtimebinding.OpeningState
 	Lifecycle      roles.LifecycleRuntime
 	ProcessRuntime roles.ProcessRuntime
 }
@@ -530,16 +622,27 @@ func (opening *sessionRuntimeOpening) completionRequest() RuntimeCompletionReque
 	return request
 }
 
+// openedModelsScopeBinding selects the optional capability from the acquired
+// record once. Completion does not retain or resolve the full runtime record.
+func openedModelsScopeBinding(runtime runtimeports.RuntimeInstance) func(models.RuntimeScopeRef) error {
+	if binder, ok := runtime.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	}); ok {
+		return binder.BindModelsRuntimeScope
+	}
+	return nil
+}
+
 func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request RuntimeCompletionRequest,
-	initial *factoryruntime.RuntimeInitialOpening, runtime runtimeports.RuntimeInstance,
-	clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
+	record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, runtimeLifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, ledger recordings.Ledger,
+	bindModelsScope func(models.RuntimeScopeRef) error, clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
 	logger.Debug("completing Factory Session opening", zap.String("session_id", request.Facts.FactorySessionID),
 		zap.String("runtime_id", request.Facts.RuntimeID), zap.String("generation_id", request.Facts.GenerationID))
 	defer func() {
 		logger.Debug("Factory Session opening completion finished", zap.String("session_id", request.Facts.FactorySessionID),
 			zap.Bool("completed", err == nil), zap.String("cause", logging.SafeErrorCause(err)))
 	}()
-	subscription, err := startFactoryWebhookSubscription(ctx, operation.webhooks, runtime.RecordingLedger(),
+	subscription, err := startFactoryWebhookSubscription(ctx, operation.webhooks, ledger,
 		request.LoadedFactory, request.ActivateWebhooks, request.Facts.FactorySessionID)
 	if err != nil {
 		return RuntimeCompletionResult{}, err
@@ -547,21 +650,20 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if subscription != nil {
 		cleanup.Add(func() error { return subscription(context.WithoutCancel(ctx)) })
 	}
-	session, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
-		request.Facts, initial, clock, logger)
+	session, selected, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
+		request.Facts, record, completion, replacement, runtimeLifecycle, sidecars, clock, logger)
 	if release != nil {
 		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
 	}
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	if bound := runtimebinding.SessionStateFrom(operation.registration.Resolve(request.Facts.FactorySessionID)); bound != nil {
-		bound.SetMockWorkers(request.MockWorkers)
+	state := runtimebinding.SessionStateFrom(selected)
+	if state != nil {
+		state.SetMockWorkers(request.MockWorkers)
 	}
-	if binder, ok := runtime.(interface {
-		BindModelsRuntimeScope(models.RuntimeScopeRef) error
-	}); ok {
-		if err := binder.BindModelsRuntimeScope(request.Facts.ModelsScope); err != nil {
+	if bindModelsScope != nil {
+		if err := bindModelsScope(request.Facts.ModelsScope); err != nil {
 			return RuntimeCompletionResult{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
 		}
 	}
@@ -576,7 +678,21 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	return RuntimeCompletionResult{SessionRuntime: session, Lifecycle: lifecycle, ProcessRuntime: process}, nil
+	service, _ := session.(factoryruntime.Service)
+	var bindRuntime func(string, factoryruntime.RuntimeBinding) error
+	if selected, ok := session.(interface {
+		BindRuntime(string, factoryruntime.RuntimeBinding) error
+	}); ok {
+		bindRuntime = selected.BindRuntime
+	}
+	return RuntimeCompletionResult{RuntimeService: service, BindRuntime: bindRuntime, State: openingState(state), Lifecycle: lifecycle, ProcessRuntime: process}, nil
+}
+
+func openingState(state *runtimebinding.SessionState) runtimebinding.OpeningState {
+	if state == nil {
+		return nil
+	}
+	return state
 }
 
 func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session roles.ApplicationRuntime,
@@ -600,7 +716,7 @@ func startFactoryWebhookSubscription(
 	ctx context.Context,
 	webhooksService webhooks.Service,
 	ledger recordings.Ledger,
-	loaded factorydefinitions.MutableLoadedFactorySource,
+	loaded factorydefinitions.LoadedFactorySource,
 	active bool,
 	sessionID string,
 ) (webhooks.Subscription, error) {
@@ -708,7 +824,7 @@ type runtimeProgressPublisherProvider interface {
 	RuntimeProgressPublisher() workers.ProgressPublisher
 }
 
-func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.ProgressPublisher {
+func runtimeProgressPublisher(runtime interface{ RuntimeService() factoryruntime.Service }) workers.ProgressPublisher {
 	if runtime == nil {
 		return nil
 	}
@@ -731,7 +847,7 @@ type runtimeWorkerAttemptStarterProvider interface {
 }
 
 func runtimeWorkerAttemptStarter(
-	runtime runtimeports.RuntimeInstance,
+	runtime interface{ RuntimeService() factoryruntime.Service },
 ) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if runtime == nil {
 		return nil
@@ -754,7 +870,7 @@ type historicalRecordingReader interface {
 // A history read can fail before Factory Runtime has opened its sinks. Retain
 // that failed opening's diagnostic through the same injected log owner, without
 // constructing a runtime or binding a recording merely to report its failure.
-func (r *Root) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
 	if opening.configured.Runtime.FileLoggingPolicy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil
 	}
@@ -785,4 +901,66 @@ func (r *Root) logFailedSessionOpening(opening *sessionRuntimeOpening, cause err
 		cleanup.Add(sink.Close)
 	}
 	return errors.Join(openErr, closeErr)
+}
+
+func (r *RuntimeOpening) openForRequest(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
+	if strings.TrimSpace(request.FolderPath) == "" {
+		return nil, nil, nil, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
+	}
+	selection := runtimeSelectionForStart(request)
+	recording := recordingRequestForStart(request)
+	open := func(replayInput *recordings.LoadReplayInputResult) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
+		session := request
+		lifecycle, replay, closeArtifacts, _, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+		return lifecycle, replay, closeArtifacts, err
+	}
+	// Historical replay, whether portable or legacy, is an inspection-only
+	// product and must select its detached projection before live Factory
+	// Runtime assembly. Resume remains an explicit live successor path below.
+	if recording.ReplayPath != "" {
+		if r.runtimeRoot == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: Factory Runtime root is required for replay")
+		}
+		if r.snapshotSelection == nil || r.snapshotSelection.replayInputs == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: replay input capability is required for replay")
+		}
+		input, err := r.snapshotSelection.loadReplayInputForActivation(recording.ReplayPath, nil)
+		if err != nil {
+			// The loader has already classified and safely detached the
+			// replay input. Propagating that result preserves the one-read
+			// runtime-opening contract; routing the error through openRuntime
+			// would ask the same loader to read the artifact again.
+			return nil, nil, nil, err
+		}
+		// Offline replay is a detached historical inspection. A caller that
+		// explicitly requested a hosted process still owns the established
+		// ordinary replay contract, which exposes the replay through its live
+		// API and metrics surfaces. Keeping that distinction here prevents the
+		// inspection-only product from being wrapped in host-readiness or live
+		// transport lifecycle requirements.
+		if replayRequestsHistoricalInspection(selection.Host) && selectsHistoricalReplayInspection(input) {
+			return open(&input)
+		}
+		// Hosted replay and legacy V1 JSON retain the ordinary activated runtime
+		// path. Keep intentionally incomplete synthetic inputs used by narrow
+		// compatibility callers on that same path; the real Recordings loader
+		// reports the format before this branch.
+		return r.openActivatedRuntimeWithReplayInput(ctx, request, &input)
+	}
+	if strings.TrimSpace(recording.ResumePath) != "" {
+		if r.recordingsRuntime == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: Recordings resume input capability is required")
+		}
+		input, err := r.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
+			Path: recording.ResumePath,
+		})
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: load resume input: %w", err)
+		}
+		return r.openActivatedRuntimeWithResumeInput(ctx, request, &input)
+	}
+	return r.openActivatedRuntime(ctx, request)
 }

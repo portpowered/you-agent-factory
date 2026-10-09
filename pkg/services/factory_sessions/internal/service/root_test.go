@@ -3,8 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"net/http"
+	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,17 +25,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -190,7 +198,7 @@ func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.
 	}
 }
 
-func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*Root, error) {
+func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*runtimeOpeningTestRoot, error) {
 	return validRootInputs(coordinator).call()
 }
 
@@ -235,7 +243,7 @@ func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) 
 	}
 }
 
-func (in rootTestInputs) call() (*Root, error) {
+func (in rootTestInputs) call() (*runtimeOpeningTestRoot, error) {
 	assembly, err := in.callAssembly()
 	if err != nil {
 		return nil, err
@@ -369,3 +377,263 @@ var _ responsestreamservice.Service = rootTestResponseStreams{}
 type rootTestClock struct{}
 
 func (rootTestClock) Now() time.Time { return time.Unix(0, 0) }
+
+// This boundary deliberately holds selected values rather than a session
+// resolver: a retained HTTP presentation must never follow current selection.
+type selectedModelOperation func(context.Context, modelinvocation.RuntimeModelInvocation, string, models.Request) (models.Result, error)
+
+func (f selectedModelOperation) InvokeRuntimeModel(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
+	return f(ctx, facts, name, request)
+}
+
+type selectedModelRecord struct {
+	runtimebinding.RuntimeInstance
+	generation string
+	directory  string
+}
+
+func (r selectedModelRecord) StreamGeneration() string { return r.generation }
+func (r selectedModelRecord) Directory() string        { return r.directory }
+
+func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"first", "second", "third", "fourth"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("scope-" + id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bound := &runtimebinding.SessionState{ModelsScope: scope,
+				ModelInvocation: modelinvocation.RuntimeModelInvocation{RuntimeID: "runtime-" + id},
+				Instance:        selectedModelRecord{generation: "generation-" + id, directory: "/" + id},
+			}
+			expected := modelinvocation.RuntimeModelInvocation{
+				FactorySessionID: id, Scope: scope, RuntimeID: "runtime-" + id,
+				GenerationID: "generation-" + id, FactoryDirectory: "/" + id, WorkingDirectory: "/" + id,
+			}
+			cause := models.ErrRuntimeScopeStale
+			wantResult := models.Result{ModelName: "selected-model", Worker: id, Operation: "invoke"}
+			call := 0
+			adapter := selectedModelInvocation{facts: selectedModelFacts(bound, id), operation: selectedModelOperation(func(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
+				if facts != expected || name != "selected-model" || request.Operation != "invoke" || ctx != t.Context() {
+					t.Fatalf("invocation lost selected facts or request: %+v, %s, %+v", facts, name, request)
+				}
+				call++
+				if call == 2 {
+					return models.Result{}, cause
+				}
+				return wantResult, nil
+			})}
+			// Later registration changes do not retarget the retained adapter. A fresh
+			// presentation reads the replacement generation from its acquired instance.
+			bound.Instance = selectedModelRecord{generation: "replacement", directory: "/replacement"}
+			bound.ModelInvocation.FactorySessionID = "other"
+			replacement := selectedModelFacts(bound, id)
+			if replacement.GenerationID != "replacement" || replacement.FactoryDirectory != "/replacement" || replacement.FactorySessionID != id {
+				t.Fatalf("replacement facts = %+v", replacement)
+			}
+			result, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"})
+			if err != nil || !reflect.DeepEqual(result, wantResult) {
+				t.Fatalf("result = %+v, %v", result, err)
+			}
+			if _, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"}); !errors.Is(err, cause) {
+				t.Fatalf("typed failure = %v", err)
+			}
+		})
+	}
+}
+
+// These isolated Root witnesses inject operations and a durable owner directly;
+// no RuntimeOpening or composed process participates in their forwarding proof.
+func TestStartUsesInjectedOperationsAndPreservesTypedFailure(t *testing.T) {
+	for _, failing := range []bool{false, true} {
+		name := "success"
+		if failing {
+			name = "typed failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := factorysessions.SessionStartRequest{FolderPath: "/selected", Correlation: factorysessions.SessionOperationCorrelation{RequestID: "selected-request"}}
+			cause := &os.PathError{Op: "open", Path: "/selected", Err: os.ErrPermission}
+			var outcomeErr error
+			if failing {
+				outcomeErr = cause
+			}
+			ctx := t.Context()
+			calls := 0
+			startResult := factorysessions.SessionStartResult{SessionID: "opened-selected"}
+			replay := &factorysessions.HistoricalReplayInspection{}
+			inspectionResult := HistoricalApplicationInspection{Replay: replay}
+			start := func(gotCtx context.Context, got factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+				calls++
+				if gotCtx != ctx || !reflect.DeepEqual(got, request) {
+					t.Fatal("start changed selected context/request")
+				}
+				return startResult, outcomeErr
+			}
+			inspect := func(gotCtx context.Context, got factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+				calls++
+				if gotCtx != ctx || !reflect.DeepEqual(got, request) {
+					t.Fatal("inspection changed selected context/request")
+				}
+				return inspectionResult, true, outcomeErr
+			}
+			root, err := NewRoot(&legacyservice.Assembly{}, nil, start, livechange.NewCoordinator(), inspect,
+				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 0 {
+				t.Fatal("construction invoked opening operations")
+			}
+			assertInjectedOpeningOutcomes(t, root, ctx, request, startResult, replay, outcomeErr, cause, failing)
+			if calls != 2 {
+				t.Fatalf("operation calls = %d, want 2", calls)
+			}
+		})
+	}
+}
+
+type rootDurableStartStub struct {
+	durableexecution.Service
+	request               factorysessions.StartRequest
+	ctx                   context.Context
+	failure               error
+	syncCalls, asyncCalls int
+}
+
+func (s *rootDurableStartStub) StartSync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	s.ctx, s.request = ctx, request
+	s.syncCalls++
+	return factorysessions.SyncStartResult{AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "sync-selected"}}, s.failure
+}
+func (s *rootDurableStartStub) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	s.ctx, s.request = ctx, request
+	s.asyncCalls++
+	return factorysessions.AsyncStartResult{SessionID: "async-selected"}, s.failure
+}
+func TestStartUsesInjectedDurableOwner(t *testing.T) {
+	t.Parallel()
+	owner := &rootDurableStartStub{failure: &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}}
+	root, err := NewRoot(&legacyservice.Assembly{}, owner, nil, livechange.NewCoordinator(), nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := factorysessions.StartRequest{WorkerSettings: &factoryruntime.JavaScriptWorkerSettings{}}
+	ctx := t.Context()
+	syncResult, err := root.StartSync(ctx, request)
+	if !errors.Is(err, owner.failure) || syncResult.SessionID != "sync-selected" {
+		t.Fatalf("sync = (%+v, %v)", syncResult, err)
+	}
+	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
+		t.Fatal("sync changed selected request/context")
+	}
+	asyncResult, err := root.StartAsync(ctx, request)
+	if !errors.Is(err, owner.failure) || asyncResult.SessionID != "async-selected" {
+		t.Fatalf("async = (%+v, %v)", asyncResult, err)
+	}
+	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
+		t.Fatal("async changed selected request/context")
+	}
+	if owner.syncCalls != 1 || owner.asyncCalls != 1 {
+		t.Fatalf("durable calls = %d/%d", owner.syncCalls, owner.asyncCalls)
+	}
+}
+
+type openingCanonicalDurableOwner interface {
+	canonicaldurable.Service
+}
+
+type openingDurableStartStub struct {
+	durableexecution.Service
+	openingCanonicalDurableOwner
+	request     factorysessions.StartRequest
+	ctx         context.Context
+	synchronous bool
+	calls       int
+	failure     error
+}
+
+func (s *openingDurableStartStub) StartCanonical(ctx context.Context, request factorysessions.StartRequest, synchronous bool) (durableexecution.CanonicalStartResult, error) {
+	s.ctx, s.request, s.synchronous = ctx, request, synchronous
+	s.calls++
+	if s.failure != nil {
+		return durableexecution.CanonicalStartResult{}, s.failure
+	}
+	async := factorysessions.AsyncStartResult{SessionID: request.RequestID, Status: "running"}
+	if synchronous {
+		return durableexecution.CanonicalStartResult{Sync: &factorysessions.SyncStartResult{AsyncStartResult: async}}, nil
+	}
+	return durableexecution.CanonicalStartResult{Async: &async}, nil
+}
+
+func TestRuntimeOpeningUsesInjectedDurableStartOwner(t *testing.T) {
+	t.Parallel()
+	for _, synchronous := range []bool{false, true} {
+		t.Run(fmt.Sprint(synchronous), func(t *testing.T) {
+			t.Parallel()
+			owner := &openingDurableStartStub{}
+			// An Assembly without a gateway cannot supply a replacement durable owner.
+			opening := &RuntimeOpening{assembly: &legacyservice.Assembly{}, durable: owner}
+			request := factorysessions.SessionStartRequest{
+				Mode: factorysessions.SessionOperationModeDurable, FolderPath: " /selected ",
+				Correlation: factorysessions.SessionOperationCorrelation{RequestID: " selected-request "},
+				Synchronous: synchronous, Args: map[string]any{"selected": "original"},
+				WorkerSettings: &factoryruntime.JavaScriptWorkerSettings{},
+			}
+			result, err := opening.Start(t.Context(), request)
+			if err != nil || result.SessionID != "selected-request" || result.Status != "running" || result.Mode != request.Mode {
+				t.Fatalf("start = (%+v, %v)", result, err)
+			}
+			if owner.calls != 1 || owner.ctx != t.Context() || owner.synchronous != synchronous || owner.request.ProjectRoot != "/selected" {
+				t.Fatalf("durable request = %+v, calls = %d", owner.request, owner.calls)
+			}
+			if (result.Sync != nil) != synchronous || (result.Async != nil) == synchronous {
+				t.Fatalf("mode result = %+v", result)
+			}
+			owner.request.Args["selected"] = "changed"
+			if request.Args["selected"] != "original" || owner.request.WorkerSettings == request.WorkerSettings {
+				t.Fatal("durable owner retained mutable caller selections")
+			}
+			assertDurableOpeningRetryAndValidation(t, opening, owner, request)
+		})
+	}
+}
+
+func assertInjectedOpeningOutcomes(t *testing.T, root *Root, ctx context.Context, request factorysessions.SessionStartRequest, startResult factorysessions.SessionStartResult, replay *factorysessions.HistoricalReplayInspection, outcomeErr error, cause *os.PathError, failing bool) {
+	t.Helper()
+	got, err := root.Start(ctx, request)
+	if !reflect.DeepEqual(got, startResult) || !errors.Is(err, outcomeErr) {
+		t.Fatalf("start = (%+v, %v)", got, err)
+	}
+	if failing {
+		var typed *os.PathError
+		if !errors.As(err, &typed) || typed != cause {
+			t.Fatalf("lost typed cause: %v", err)
+		}
+	}
+	inspected, historical, err := root.InspectHistoricalApplication(ctx, request)
+	if inspected.Replay != replay || !historical || !errors.Is(err, outcomeErr) {
+		t.Fatalf("inspection = (%+v, %v, %v)", inspected, historical, err)
+	}
+}
+
+func assertDurableOpeningRetryAndValidation(t *testing.T, opening *RuntimeOpening, owner *openingDurableStartStub, request factorysessions.SessionStartRequest) {
+	t.Helper()
+	cause := &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}
+	owner.failure = cause
+	if _, err := opening.Start(t.Context(), request); !errors.Is(err, cause) {
+		t.Fatalf("typed cause = %v", err)
+	}
+	owner.failure = nil
+	if _, err := opening.Start(t.Context(), request); err != nil || owner.calls != 3 {
+		t.Fatalf("corrected retry = %v, calls = %d", err, owner.calls)
+	}
+	request.Wait.TimeoutMillis = -1
+	var invalid *factorysessions.DetachedRequestError
+	if _, err := opening.Start(t.Context(), request); !errors.As(err, &invalid) || invalid.Field != "wait.timeoutMillis" || owner.calls != 3 {
+		t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
+	}
+}

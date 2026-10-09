@@ -156,7 +156,7 @@ func TestBindModelsRuntimeScopeRetainsFailedOpeningForCleanupRetry(t *testing.T)
 			cancel()
 			cleanup := &runtimeOpeningCleanup{}
 			cleanup.OwnModelsScope(context.WithoutCancel(ctx), bind)
-			activation, validationErr := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+			activation, validationErr := newRuntimeActivation(nil, cleanup.Close)
 			if validationErr == nil || activation.Service != nil {
 				t.Fatal("failed opening published a runnable activation")
 			}
@@ -535,7 +535,7 @@ func TestRuntimeOpeningBindingCarriesModelsScopeIntoOpenedRuntime(t *testing.T) 
 		t.Fatalf("parse Models scope: %v", err)
 	}
 
-	opened := bindOpeningProductsFixture(t,
+	opened, _ := bindOpeningStateFixture(t,
 		context.Background(),
 		nil,
 		nil,
@@ -549,8 +549,8 @@ func TestRuntimeOpeningBindingCarriesModelsScopeIntoOpenedRuntime(t *testing.T) 
 		func() error { return nil },
 	)
 
-	if opened.modelsScope != scope {
-		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope, scope)
+	if opened.ModelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.ModelsScope, scope)
 	}
 }
 
@@ -568,7 +568,7 @@ func TestRuntimeOpeningBindingRetainsEffectiveSessionFacts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			calls := 0
-			gateway := &runtimeProductsSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
+			gateway := &openingSessionsRole{readLiveSession: func(id string) (factorysessions.LiveControlSnapshot, error) {
 				calls++
 				if id != "selected" {
 					t.Fatalf("lookup ID = %q", id)
@@ -579,18 +579,15 @@ func TestRuntimeOpeningBindingRetainsEffectiveSessionFacts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			opened := bindOpeningProductsFixture(t, t.Context(), gateway, nil, scope, inertHostedInstance{}, nil, nil,
+			opened, _ := bindOpeningStateFixture(t, t.Context(), gateway, nil, scope, inertHostedInstance{}, nil, nil,
 				"/factory", "runtime-1", "backend-1", nil, test.requested)
-			facts := opened.modelInvocation
+			facts := opened.ModelInvocation
 			if facts.FactorySessionID != test.want || facts.Scope != scope || facts.RuntimeID != "runtime-1" ||
-				facts.FactoryDirectory != "/factory" || facts.WorkingDirectory != "/factory" || opened.backendScopeID != "backend-1" {
-				t.Fatalf("opened facts = %+v, backend = %q", facts, opened.backendScopeID)
+				facts.FactoryDirectory != "/factory" || facts.WorkingDirectory != "/factory" || opened.ProjectionBackendScope != "backend-1" {
+				t.Fatalf("opened facts = %+v, backend = %q", facts, opened.ProjectionBackendScope)
 			}
 			if (test.requested == "" && calls != 0) || (test.requested != "" && calls != 1) {
 				t.Fatalf("ID lookup calls = %d", calls)
-			}
-			if opened.replayExecution != nil {
-				t.Fatal("live opening acquired historical execution")
 			}
 		})
 	}
@@ -610,11 +607,11 @@ func (instance t17hRuntimeFacts) RuntimeDiagnostics() factoryruntime.RuntimeLogD
 func TestRuntimeOpeningBindingKeepsGenerationAndDiagnostics(t *testing.T) {
 	t.Parallel()
 	logger := zap.NewNop()
-	opened := bindOpeningProductsFixture(t, t.Context(), nil, nil, models.RuntimeScopeRef{}, t17hRuntimeFacts{logger: logger},
+	opened, _ := bindOpeningStateFixture(t, t.Context(), nil, nil, models.RuntimeScopeRef{}, t17hRuntimeFacts{logger: logger},
 		nil, nil, "/selected", "runtime-selected", "backend-selected", nil, "session-selected")
-	if opened.modelInvocation.GenerationID != "generation-selected" || opened.logger != logger ||
-		opened.diagnostics.Path != "/selected/log" || !opened.diagnostics.StartTimeUTC.Equal(time.Unix(17, 0)) {
-		t.Fatalf("runtime generation/diagnostics drifted: %+v %+v", opened.modelInvocation, opened.diagnostics)
+	if opened.ModelInvocation.GenerationID != "generation-selected" || opened.Logger != logger ||
+		opened.Diagnostics.Path != "/selected/log" || !opened.Diagnostics.StartTimeUTC.Equal(time.Unix(17, 0)) {
+		t.Fatalf("runtime generation/diagnostics drifted: %+v %+v", opened.ModelInvocation, opened.Diagnostics)
 	}
 }
 
@@ -632,7 +629,7 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 		return nil
 	})
 
-	opened := bindOpeningProductsFixture(t,
+	_, closeResources := bindOpeningStateFixture(t,
 		context.Background(),
 		nil,
 		nil,
@@ -645,13 +642,13 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 		"backend-1",
 		cleanup.Close,
 	)
-	if err := opened.closeArtifacts(); err != nil {
+	if err := closeResources(); err != nil {
 		t.Fatalf("opened runtime resource Close() error = %v, want nil", err)
 	}
 	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
 		t.Fatalf("runtime close events = %v, want reverse acquisition order", events)
 	}
-	if err := opened.closeArtifacts(); err != nil {
+	if err := closeResources(); err != nil {
 		t.Fatalf("second opened runtime resource Close() error = %v, want nil", err)
 	}
 	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
@@ -793,7 +790,7 @@ func TestRuntimeOpeningCleanupRetainsOwnershipAddedDuringClose(t *testing.T) {
 		})
 		return nil
 	})
-	activation, err := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+	activation, err := newRuntimeActivation(nil, cleanup.Close)
 	if err == nil || activation == nil || activation.Service != nil {
 		t.Fatalf("partial activation = %v, %v, want cleanup without a live service", activation, err)
 	}
@@ -866,7 +863,7 @@ func TestRuntimeOpeningCleanupRetainsDependenciesWhenModelsReleaseAddsConsumer(t
 				registering.failure = releaseErr
 			}
 			cleanup.OwnModelsScope(t.Context(), modelsRuntimeBind{Root: registering, Scope: scope})
-			activation, _ := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+			activation, _ := newRuntimeActivation(nil, cleanup.Close)
 			closeErr := activation.Close(t.Context())
 			if releaseFails && !errors.Is(closeErr, releaseErr) {
 				t.Fatalf("cleanup = %v, want original release failure", closeErr)
@@ -959,12 +956,12 @@ func TestRuntimeOpeningCleanupRetainsModelsAcrossConsumerAndDependencyFailures(t
 	assertOnlyOwnedModelsScopeClosed(t, modelService.closeRequests, bind.Scope)
 }
 
-type runtimeProductsSessionsRole struct {
+type openingSessionsRole struct {
 	roles.SessionGateway
 	readLiveSession func(string) (factorysessions.LiveControlSnapshot, error)
 }
 
-func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
+func (role *openingSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
 	return role.readLiveSession(sessionID)
 }
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 
@@ -21,15 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// historicalReplayProcessRuntime completes the process lifecycle for an
-// inspection-only portable recording. It intentionally starts neither a live
-// Factory runtime nor worker sidecars nor an HTTP host.
-type historicalReplayProcessRuntime struct{}
-
-func (historicalReplayProcessRuntime) RunTransport(context.Context, http.Handler) error { return nil }
-
-func (historicalReplayProcessRuntime) Stop(context.Context) error { return nil }
 
 type portableReplayDurableOwner struct {
 	durableexecution.Service
@@ -170,7 +160,7 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 // owner for a checkpoint-bearing replay. Runtime assembly is deferred until
 // HasRestorableState confirms that the durable owner can actually resume; a
 // public checkpoint summary alone must remain inspection-only.
-func (r *Root) openPortableReplayDurableOwner(
+func (r *RuntimeOpening) openPortableReplayDurableOwner(
 	ctx context.Context,
 	configured preparedRuntime,
 	root RuntimeRoot,
@@ -225,7 +215,7 @@ func (r *Root) openPortableReplayDurableOwner(
 	return owner, cleanup.Close, nil
 }
 
-func (r *Root) preparePortableReplayRuntime(
+func (r *RuntimeOpening) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
 	durableOwner durableexecution.Service,

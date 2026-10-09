@@ -1066,13 +1066,7 @@ pkg/services/factory_sessions/internal/responsestream/ndjsoncontract/contract.go
 pkg/services/factory_sessions/internal/responsestream/stream_set.go: unreachable func: NewStreamSet
 pkg/services/factory_sessions/internal/runtime/service.go: unreachable func: New
 pkg/services/factory_sessions/internal/runtime/service.go: unreachable func: NewWithResponseStreams
-pkg/services/factory_sessions/internal/runtimebinding/binding.go: unreachable func: LegacyInvocationSourcesForService
 pkg/services/factory_sessions/internal/scopedlisting/listing.go: unreachable func: ProjectLiveSessions
-pkg/services/factory_sessions/internal/service/runtime_activation.go: unreachable func: Root.activationRequest
-pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: New
-pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithReconnectValidation
-pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithResponseStreams
-pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithStreamDependencies
 pkg/services/factory_sessions/internal/stream/manager.go: unreachable func: NewManager
 pkg/services/factory_sessions/internal/stream/manager.go: unreachable func: NewManagerWithDependencies
 pkg/services/factory_sessions/internal/stream/manager.go: unreachable func: NewManagerWithRegistry

@@ -488,6 +488,39 @@ func (replacementFactory) Observe(context.Context, factory.ObserveRequest) (fact
 	}, nil
 }
 
+func TestRegisterRetainsStartupFactsOnlyFromProvisionalOpening(t *testing.T) {
+	for _, provisional := range []bool{true, false} {
+		t.Run(map[bool]string{true: "initial startup", false: "already running"}[provisional], func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			instance := &hostedInstanceFake{}
+			recovery := &factorysessions.StartupRecovery{Code: "DURABLE_STATE_QUARANTINED", File: "board", Cause: "CORRUPT_STATE"}
+			prior := &runtimebinding.SessionState{Instance: instance, StartupRecovery: recovery, SkippedBoardRecordings: []string{"legacy.jsonl"}}
+			if !provisional {
+				prior.Handle = newHostedHandleFake(instance)
+			}
+			sessions.Register(sessionruntime.Registration{SessionID: "selected", Handle: prior})
+			runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "selected", Handle: newHostedHandleFake(instance)})
+			bound := runtimebinding.SessionStateFrom(sessions.Resolve("selected"))
+			if !provisional {
+				if bound.StartupRecovery != nil || len(bound.SkippedBoardRecordings) != 0 {
+					t.Fatal("runtime re-registration inherited initial-only observations")
+				}
+				return
+			}
+			if bound.StartupRecovery == nil || *bound.StartupRecovery != *recovery || bound.StartupRecovery == recovery ||
+				len(bound.SkippedBoardRecordings) != 1 || bound.SkippedBoardRecordings[0] != "legacy.jsonl" {
+				t.Fatalf("registered startup facts = %+v", bound)
+			}
+			recovery.Cause = "changed"
+			prior.SkippedBoardRecordings[0] = "changed"
+			if bound.StartupRecovery.Cause != "CORRUPT_STATE" || bound.SkippedBoardRecordings[0] != "legacy.jsonl" {
+				t.Fatal("registration aliases provisional startup observations")
+			}
+		})
+	}
+}
+
 func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	oldInstance := &hostedInstanceFake{}
@@ -605,120 +638,6 @@ func assertActiveReplacement(
 	}
 }
 
-func TestStartInitialRegistersAndSelectsCanonicalDefaultSession(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	var runtimeState runtimebinding.State
-	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
-	runtimeState.SetStartup(bundle)
-
-	handle, err := runtimebinding.StartInitial(
-		context.Background(),
-		context.Background(),
-		sessions,
-		&runtimeState,
-		factorysessions.DefaultSessionID,
-		"/factory",
-		bundle,
-		factorysessions.Target{
-			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		},
-		interfaces.RuntimeModeBatch,
-		lifecycleFake{},
-		nil,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("StartInitial: %v", err)
-	}
-	session := sessions.Resolve(factorysessions.DefaultSessionID)
-	if session == nil || runtimebinding.HandleFromSession(session) != handle {
-		t.Fatalf("default session = %#v, want started handle", session)
-	}
-	if active := runtimeState.Active(); active == nil || active.SessionID != session.ID || active.Handle != handle {
-		t.Fatalf("active runtime = %#v, want registered default session", active)
-	}
-	if runtimeState.Startup() != nil {
-		t.Fatal("startup bundle was not released after default start")
-	}
-	handle.CancelRun()
-	<-handle.RunDoneCh()
-}
-
-func TestStartInitialPreservesCancellationAfterStartupCleanup(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	var runtimeState runtimebinding.State
-	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
-	readinessCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	handle, err := runtimebinding.StartInitial(
-		readinessCtx, context.Background(), sessions, &runtimeState,
-		factorysessions.DefaultSessionID, "/factory", bundle,
-		factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}},
-		interfaces.RuntimeModeBatch, canceledReadinessLifecycle{},
-		func(handle factory.RuntimeRun) error { handle.CancelRun(); return nil }, nil,
-	)
-	if handle != nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("StartInitial after canceled readiness = (%#v, %v), want nil handle and cancellation", handle, err)
-	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.ActiveHandle() != nil {
-		t.Fatal("canceled startup retained an active Factory Session")
-	}
-}
-
-func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
-	t.Parallel()
-
-	const sessionID = "session-explicit"
-	sessions := newRuntimeBindingState()
-	var runtimeState runtimebinding.State
-	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
-	const sourceSessionID = "recorded-source-session"
-	sessions.Register(sessionruntime.Registration{
-		SessionID: sessionID, RuntimeFactorySessionID: sessionID,
-		RuntimeEventSessionID: sourceSessionID,
-		Handle:                &runtimebinding.SessionState{Instance: bundle},
-	})
-	runtimeState.SetStartup(bundle)
-	target := factorysessions.Target{
-		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "factory-a"},
-		FactoryDir: "/factory",
-		FolderPath: "/workspace",
-		Project:    "project-a",
-	}
-
-	handle, err := runtimebinding.StartInitial(
-		context.Background(), context.Background(), sessions, &runtimeState,
-		sessionID, "/factory", bundle, target, interfaces.RuntimeModeBatch,
-		lifecycleFake{}, nil, nil,
-	)
-	if err != nil {
-		t.Fatalf("StartInitial: %v", err)
-	}
-	t.Cleanup(func() {
-		handle.CancelRun()
-		<-handle.RunDoneCh()
-	})
-
-	session := sessions.Resolve(sessionID)
-	if session == nil || runtimebinding.HandleFromSession(session) != handle {
-		t.Fatalf("explicit session = %#v, want started handle", session)
-	}
-	if session.RuntimeEventSessionID != sourceSessionID || session.RuntimeFactorySessionID != sessionID {
-		t.Fatalf("running successor lost prepared identity: runtime=%q events=%q", session.RuntimeFactorySessionID, session.RuntimeEventSessionID)
-	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil {
-		t.Fatal("explicit startup also registered the compatibility default session")
-	}
-	if session.Target != target.Ref || session.FactoryDir != target.FactoryDir ||
-		session.FolderPath != target.FolderPath || session.Project != target.Project {
-		t.Fatalf("explicit session target = %#v, want %#v", session, target)
-	}
-	if active := runtimeState.Active(); active == nil || active.SessionID != sessionID || active.Handle != handle {
-		t.Fatalf("active runtime = %#v, want explicit session %q", active, sessionID)
-	}
-}
-
 func TestCurrentBundleIgnoresPreparedDefaultWithoutLiveHandle(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	prepared := &hostedInstanceFake{dir: "/prepared"}
@@ -759,76 +678,6 @@ func TestCurrentBundlePrefersInvocationStartupOverLiveProcessDefault(t *testing.
 
 	if got := runtimebinding.CurrentBundle(sessions, &runtimeState); got != startup {
 		t.Fatalf("CurrentBundle = %p, want invocation startup %p instead of process default", got, startup)
-	}
-}
-
-func TestHandleStartFailureTreatsClosedServiceSessionAsExpected(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	var runtimeState runtimebinding.State
-	handle := newHostedHandleFake(&hostedInstanceFake{})
-	runtimeState.SetActive(context.Background(), factorysessions.DefaultSessionID, handle)
-	var stopped bool
-	var removed string
-
-	err := runtimebinding.HandleStartFailure(
-		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
-		handle, func(factory.RuntimeRun) error {
-			stopped = true
-			return nil
-		},
-		errors.New("startup failed"), interfaces.RuntimeModeService,
-		func(sessionID string) { removed = sessionID },
-	)
-	if err != nil {
-		t.Fatalf("HandleStartFailure: %v", err)
-	}
-	if !stopped || runtimeState.Active() != nil {
-		t.Fatalf("cleanup = (stopped %v, active %#v)", stopped, runtimeState.Active())
-	}
-	if removed != factorysessions.DefaultSessionID {
-		t.Fatalf("removed session = %q, want default session", removed)
-	}
-}
-
-func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	session := registerTestSession(sessions, factorysessions.DefaultSessionID)
-	var runtimeState runtimebinding.State
-	runtimeState.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
-	startErr := errors.New("startup failed")
-
-	err := runtimebinding.HandleStartFailure(
-		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
-		runtimebinding.HandleFromSession(session), func(factory.RuntimeRun) error { return nil },
-		startErr, interfaces.RuntimeModeBatch, nil,
-	)
-	if !errors.Is(err, startErr) {
-		t.Fatalf("HandleStartFailure error = %v, want startup failure", err)
-	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
-		t.Fatal("failed batch session remains active")
-	}
-}
-
-func TestHandleStartFailureIgnoresAlreadyStoppedCleanupAfterCancellation(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	session := registerTestSession(sessions, factorysessions.DefaultSessionID)
-	var runtimeState runtimebinding.State
-	runtimeState.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	err := runtimebinding.HandleStartFailure(
-		ctx, sessions, &runtimeState, factorysessions.DefaultSessionID,
-		runtimebinding.HandleFromSession(session),
-		func(factory.RuntimeRun) error { return factory.ErrAlreadyStopped },
-		context.Canceled, interfaces.RuntimeModeBatch, nil,
-	)
-	if err != nil {
-		t.Fatalf("HandleStartFailure: %v, want canceled startup cleanup to be idempotent", err)
-	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
-		t.Fatal("canceled startup session remains active")
 	}
 }
 
@@ -1022,15 +871,6 @@ func TestLegacyObservationHelpersResolveMigrationCapabilities(t *testing.T) {
 		t.Fatalf("LegacyEventSourceForService = (%v, %v), want source", source, err)
 	}
 
-	combined := struct {
-		factory.Service
-		legacySnapshotService
-		legacyEventService
-	}{Service: replacementFactory{}}
-	snapshotProvider, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(combined)
-	if err != nil || snapshotProvider == nil || eventSource == nil {
-		t.Fatalf("LegacyInvocationSourcesForService = (%v, %v, %v)", snapshotProvider, eventSource, err)
-	}
 }
 
 func assertShutdownCapturedGenerations(t *testing.T, state *sessionruntime.Service, keep, replacement *livesession.LiveSession, firstRun, laterRun, keepRun factory.RuntimeRun, phase string, err, stopErr error) {
@@ -1069,5 +909,34 @@ func assertNextShutdownRetiresReplacement(t *testing.T, state *sessionruntime.Se
 	}
 	if state.Resolve(replacement.ID) != nil || !runtimebinding.HandleFromSession(replacement).Completed() || state.Resolve(keep.ID) != keep {
 		t.Fatal("next shutdown did not retire only its owned replacement")
+	}
+}
+
+func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
+	t.Parallel()
+	selected, peer := &runtimebinding.SessionState{}, &runtimebinding.SessionState{}
+	resume := &recordings.ResumeRecoveryMetadata{SourceRecordingID: "source"}
+	recovery := &factorysessions.StartupRecovery{Cause: "quarantined"}
+	metadata := runtimebinding.OpeningMetadata{
+		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator",
+		SkippedBoardRecordings: []string{"selected.skipped"},
+		ReplayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "selected"}},
+		ResumeRecoveryMetadata: resume, StartupRecovery: recovery,
+	}
+	var opening runtimebinding.OpeningState = selected
+	opening.SetOpeningMetadata(metadata)
+	peer.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
+	metadata.SkippedBoardRecordings[0] = "changed"
+	metadata.ReplayMetadataWarnings[0].Key = "changed"
+	resume.SourceRecordingID, recovery.Cause = "changed", "changed"
+	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" ||
+		selected.SkippedBoardRecordings[0] != "selected.skipped" || selected.ReplayMetadataWarnings[0].Key != "selected" ||
+		selected.ResumeRecoveryMetadata.SourceRecordingID != "source" || selected.StartupRecovery.Cause != "quarantined" || peer.ResumeRecoveryMetadata != nil {
+		t.Fatal("opening metadata aliases caller or peer state")
+	}
+	opening.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
+	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.SkippedBoardRecordings != nil ||
+		selected.ReplayMetadataWarnings != nil || selected.ResumeRecoveryMetadata != nil || selected.StartupRecovery != nil {
+		t.Fatal("absent opening metadata retained previous facts")
 	}
 }

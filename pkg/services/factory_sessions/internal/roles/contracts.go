@@ -12,7 +12,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -89,6 +88,13 @@ type RuntimePersistenceFileSystem = factorysessions.RuntimePersistenceFileSystem
 
 type RuntimePersistenceStoreFactory func(string) (RuntimePersistenceStore, error)
 
+// RuntimeObservations exposes only diagnostics of the currently selected record.
+// The dynamic record retains its optional capabilities at their existing owners.
+type RuntimeObservations = interface {
+	RuntimeLogger() *zap.Logger
+	RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics
+}
+
 type LifecycleRuntime interface {
 	StartLifecycle(context.Context, context.Context) error
 	StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error)
@@ -96,7 +102,7 @@ type LifecycleRuntime interface {
 	WaitForRuntime(context.Context) error
 	StopLifecycle(context.Context) error
 	FailStartup(error) error
-	CurrentRuntimeBundle() runtimeports.RuntimeInstance
+	CurrentRuntimeBundle() RuntimeObservations
 }
 
 type ProcessRuntime interface {
@@ -185,8 +191,8 @@ type RuntimeAssembly interface {
 	work.RuntimeResolver
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 	DispatchCompletionObserverFactory() func(string) func(string)
-	RegisterOpening(context.Context, SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
-		factoryruntime.Clock, *zap.Logger) (ApplicationRuntime, factorydefinitions.SessionHost,
+	RegisterOpening(context.Context, SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars,
+		factoryruntime.Clock, *zap.Logger) (ApplicationRuntime, *livesession.LiveSession, factorydefinitions.SessionHost,
 		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 }
 

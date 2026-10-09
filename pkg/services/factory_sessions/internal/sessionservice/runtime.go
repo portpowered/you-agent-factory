@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
@@ -320,7 +321,7 @@ func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {
 	return a.scopeCurrentRuntimeBundle(fs)
 }
 
-func (fs *SessionRuntime) CurrentRuntimeBundle() runtimeports.RuntimeInstance {
+func (fs *SessionRuntime) CurrentRuntimeBundle() roles.RuntimeObservations {
 	var a *Assembly
 	if fs != nil {
 		a = fs.owner

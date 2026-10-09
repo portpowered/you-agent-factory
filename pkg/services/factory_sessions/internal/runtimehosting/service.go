@@ -16,7 +16,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"go.uber.org/zap"
 )
 
@@ -178,7 +177,7 @@ func (service *Service) waitForStartupReadability(
 
 func logStartup(
 	logger *zap.Logger,
-	runtime runtimeports.RuntimeInstance,
+	runtime roles.RuntimeObservations,
 	request factorysessions.RuntimeHostRequest,
 ) {
 	if logger == nil || runtime == nil {

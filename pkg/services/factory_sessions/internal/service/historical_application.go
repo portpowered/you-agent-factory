@@ -7,7 +7,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -22,13 +22,21 @@ type HistoricalApplicationInspection struct {
 	Close                  func() error
 }
 
+// InspectHistoricalApplication delegates replay inspection to the fixed opening owner.
+func (r *Root) InspectHistoricalApplication(ctx context.Context, request factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+	if r == nil {
+		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay input service is required")
+	}
+	return r.inspectHistorical(ctx, request)
+}
+
 // InspectHistoricalApplication classifies a replay input before live session
 // activation. Hosted or legacy V1 replays continue through canonical Start.
-func (r *Root) InspectHistoricalApplication(
+func (r *RuntimeOpening) InspectHistoricalApplication(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 ) (HistoricalApplicationInspection, bool, error) {
-	if r == nil || r.replayInputs == nil {
+	if r == nil || r.snapshotSelection == nil || r.snapshotSelection.replayInputs == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay input service is required")
 	}
 	if request.RuntimeSelection == nil || strings.TrimSpace(request.RuntimeSelection.Recording.ReplayPath) == "" ||
@@ -38,9 +46,7 @@ func (r *Root) InspectHistoricalApplication(
 	if strings.TrimSpace(request.FolderPath) == "" {
 		return HistoricalApplicationInspection{}, false, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
 	}
-	input, err := r.replayInputs.LoadReplayInput(recordings.LoadReplayInputRequest{
-		Path: request.RuntimeSelection.Recording.ReplayPath,
-	})
+	input, err := r.snapshotSelection.loadReplayInputForActivation(request.RuntimeSelection.Recording.ReplayPath, nil)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
@@ -49,41 +55,47 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	session := request
 	selection := runtimeSelectionForStart(request)
-	products, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	opening, err := r.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
-	if products.historicalReplay == nil {
-		if products.closeArtifacts != nil {
-			_ = products.closeArtifacts()
-		}
+	if opening.load.HistoricalReplay == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
+	replay, closeReplay, err := r.openHistoricalSessionRuntime(ctx, opening)
+	if err != nil {
+		return HistoricalApplicationInspection{}, false, err
+	}
+	inspection := replay.Inspection()
+	closeInspection, err := r.historicalInspectionCloser(inspection, replay, closeReplay)
+	if err != nil {
+		return HistoricalApplicationInspection{}, false, err
+	}
+	return HistoricalApplicationInspection{
+		Replay:                 &inspection,
+		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...),
+		Close:                  closeInspection,
+	}, true, nil
+}
+
+func (r *RuntimeOpening) historicalInspectionCloser(inspection factorysessions.HistoricalReplayInspection, replay *recordingreplay.Scope, closeReplay func() error) (func() error, error) {
+	var err error
 	release := func() {}
-	if products.historicalReplay.Checkpoint != nil {
-		binder, ok := r.SessionGateway.(interface {
-			BindHistoricalExecution(string, durableexecution.Service) func()
-		})
-		if !ok {
-			if products.closeArtifacts != nil {
-				_ = products.closeArtifacts()
+	if inspection.Checkpoint != nil {
+		release, err = r.assembly.BindHistoricalOpening(inspection.Session.SessionID, replay)
+		if err != nil {
+			if closeReplay != nil {
+				_ = closeReplay()
 			}
-			return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay Sessions routing is unavailable")
+			return nil, err
 		}
-		release = binder.BindHistoricalExecution(products.historicalReplay.Session.SessionID, products.replayExecution)
 	}
 	closeInspection := func() error {
 		defer release()
-		if products.closeArtifacts != nil {
-			return products.closeArtifacts()
+		if closeReplay != nil {
+			return closeReplay()
 		}
 		return nil
 	}
-	return HistoricalApplicationInspection{
-		Replay:                 products.historicalReplay,
-		Diagnostics:            products.diagnostics,
-		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...),
-		ResumeRecoveryMetadata: products.resumeRecoveryMetadata,
-		Close:                  closeInspection,
-	}, true, nil
+	return closeInspection, nil
 }

@@ -9,11 +9,12 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // OpeningSessionIdentity reads only the effective identity of the requested session.
@@ -42,32 +43,44 @@ type RuntimeOpeningBindingRequest struct {
 	MockWorkers *workers.MockWorkersConfig
 }
 
+// Final binding consumes observations from the acquired record, without its
+// configuration, replacement builder, or lifecycle capabilities.
+type openingRuntimeObservations = interface {
+	RuntimeService() factoryruntime.Service
+	StreamGeneration() string
+	RuntimeLogger() *zap.Logger
+	RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics
+	RecordingLedger() recordings.Ledger
+}
+
 func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request RuntimeOpeningBindingRequest,
-	selectedClock factoryruntime.Clock, startup runtimeports.RuntimeInstance,
-	sessionRuntime roles.ApplicationRuntime, processRuntime roles.ProcessRuntime,
-	activation *factoryruntime.RuntimeActivation, execution durableexecution.Service,
+	state runtimebinding.OpeningState, selectedClock factoryruntime.Clock, startup openingRuntimeObservations,
+	rootRuntime factoryruntime.Service, processRuntime roles.ProcessRuntime,
+	execution durableexecution.Service,
 	publishCurrentBoard func(context.Context) error, cleanup interface {
 		Add(func() error)
 		Close() error
 	},
-) (runtimeProducts, error) {
+) error {
+	if state == nil {
+		return fmt.Errorf("construct runtime scope: completed session state is unavailable")
+	}
 	if recording, ok := startup.(recordings.RuntimeRecordingStartup); ok {
 		recording.DeferRecordingPublication()
 	}
-	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
+	if rootRuntime == nil {
+		return fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
 	}
 	admission, _ := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission)
 	binder, ok := execution.(workerScopeBinder)
 	if !ok {
-		return runtimeProducts{}, fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(request.Facts.FactorySessionID))
+		return fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(request.Facts.FactorySessionID))
 	}
 	release, err := binder.BindWorkerScope(request.Facts.FactorySessionID, admission,
 		request.Facts.RuntimeID, startup.StreamGeneration(), operation.providerOverride,
 		request.MockWorkers, operation.commandRunner, runtimeProgressPublisher(startup), runtimeWorkerAttemptStarter(startup))
 	if err != nil {
-		return runtimeProducts{}, fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(request.Facts.FactorySessionID), err)
+		return fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(request.Facts.FactorySessionID), err)
 	}
 	releaseLiveChange := bindLiveChangeScope(request.Facts.FactorySessionID, execution, rootRuntime)
 	releaseDurability := bindDispatchDurability(request.Facts.FactorySessionID, execution, startup.RecordingLedger(), startup.StreamGeneration())
@@ -77,38 +90,31 @@ func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request Runtim
 		releaseLiveChange()
 		return nil
 	})
-	opened := operation.products(ctx, request.Facts, rootRuntime, startup, sessionRuntime, processRuntime, cleanup.Close)
-	opened.engine = activation.Service
-	opened.activation = activation
-	opened.clock = selectedClock
-	opened.orderlyStop = operation.orderlyStop(request.Facts.RuntimeID, request.RecordPath, publishCurrentBoard)
-	return opened, nil
+	operation.bindState(ctx, state, request.Facts, rootRuntime, startup, processRuntime)
+	state.SetOpeningClock(selectedClock)
+	state.SetOpeningOrderlyStop(operation.orderlyStop(request.Facts.RuntimeID, request.RecordPath, publishCurrentBoard))
+	return nil
 }
 
-//nolint:contextcheck // Preserve the former assembler's nil-context compatibility for detached callers.
-func (operation *RuntimeOpeningBinding) products(ctx context.Context, facts roles.SessionOpeningFacts,
-	rootRuntime factoryruntime.Service, startup runtimeports.RuntimeInstance,
-	sessionRuntime roles.ApplicationRuntime, processRuntime roles.ProcessRuntime, closeResources func() error,
-) runtimeProducts {
+//nolint:contextcheck // Preserve detached callers' nil-context compatibility.
+func (operation *RuntimeOpeningBinding) bindState(ctx context.Context, state runtimebinding.OpeningState,
+	facts roles.SessionOpeningFacts, rootRuntime factoryruntime.Service, startup openingRuntimeObservations,
+	processRuntime roles.ProcessRuntime,
+) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	requestedID := strings.TrimSpace(facts.FactorySessionID)
-	effectiveID := operation.resolveOpenedFactorySessionID(ctx, requestedID)
-	return runtimeProducts{
-		bindRuntime: runtimeBindingForSession(rootRuntime, requestedID),
-		process:     processRuntime, lifecycle: sessionRuntime,
-		modelInvocation: modelinvocation.RuntimeModelInvocation{
-			FactorySessionID: effectiveID, Scope: facts.ModelsScope,
-			RuntimeID: facts.RuntimeID, GenerationID: startup.StreamGeneration(),
-			FactoryDirectory: facts.Directory, WorkingDirectory: facts.Directory,
-		},
-		factoryRuntime: rootRuntime, modelsScope: facts.ModelsScope,
-		workerSessions: openedWorkerSessionsObservation(rootRuntime, startup, effectiveID),
-		logger:         startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
-		directory: facts.Directory, runtimeInstanceID: facts.RuntimeID, backendScopeID: facts.BackendScopeID,
-		closeArtifacts: closeResources,
-	}
+	effectiveID := operation.resolveOpenedFactorySessionID(ctx, strings.TrimSpace(facts.FactorySessionID))
+	state.SetOpeningProcess(processRuntime)
+	state.SetOpeningModelInvocation(modelinvocation.RuntimeModelInvocation{
+		FactorySessionID: effectiveID, Scope: facts.ModelsScope,
+		RuntimeID: facts.RuntimeID, GenerationID: startup.StreamGeneration(),
+		FactoryDirectory: facts.Directory, WorkingDirectory: facts.Directory,
+	})
+	state.SetOpeningModelsScope(facts.ModelsScope)
+	state.SetWorkerSessions(openedWorkerSessionsObservation(rootRuntime, startup, effectiveID))
+	state.SetOpeningLogger(startup.RuntimeLogger())
+	state.SetOpeningDiagnostics(startup.RuntimeDiagnostics())
 }
 
 func (operation *RuntimeOpeningBinding) orderlyStop(runtimeID, recordPath string,
@@ -171,4 +177,15 @@ func (operation *RuntimeOpeningBinding) recordingFlush(
 		}
 		return nil
 	}
+}
+
+// PublishRuntime binds the acquired scoped owner after Runtime Root publishes its
+// opaque activation capability. It never selects a current or replacement owner.
+func (*RuntimeOpeningBinding) PublishRuntime(bindRuntime func(string, factoryruntime.RuntimeBinding) error,
+	sessionID string, binding factoryruntime.RuntimeBinding,
+) error {
+	if strings.TrimSpace(sessionID) == "" || bindRuntime == nil {
+		return nil
+	}
+	return bindRuntime(sessionID, binding)
 }

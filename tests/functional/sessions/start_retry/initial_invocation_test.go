@@ -56,6 +56,205 @@ func newInitialOpeningChildScenario(t *testing.T) initialOpeningScenario {
 	return scenario
 }
 
+func newOpeningPolicyScenario(t *testing.T) initialOpeningScenario {
+	t.Helper()
+	scenario := newInitialOpeningProviderScenario(t)
+	path := filepath.Join(scenario.candidateDir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["invocationSignature"] = map[string]any{"parameters": []any{
+		map[string]any{"name": "prompt", "required": true,
+			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}}},
+		map[string]any{"name": "secret", "required": true, "sensitive": true,
+			"bindings": []any{map[string]any{"kind": "NAMED"}}},
+	}}
+	support.WriteWorkstationConfig(t, scenario.candidateDir, "process", "---\ntype: MODEL_WORKSTATION\n---\nselected-control-"+scenario.candidateID+" secret=${secret} {{ (index .Inputs 0).Payload }}\n")
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(scenario.candidateDir, factorydefinitions.InputsDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return scenario
+}
+
+func openingPolicySecret(scenario initialOpeningScenario) string {
+	return "private-policy-" + scenario.candidateID
+}
+
+// Both command invocations reach their selected provider before current
+// selection moves. Captured streams are read only after their command joins.
+func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenarios []initialOpeningScenario, gate *selectedProviderGate, serverURL string, logs *observer.ObservedLogs) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	defer gate.unblock()
+	inputs := make([]*support.CapturedInputs, len(scenarios))
+	done := make([]chan error, len(scenarios))
+	for i, scenario := range scenarios {
+		request := scenario.request()
+		request.RuntimeSelection.Verbose = i == 1
+		startInitialOpeningSession(t, sessions, request)
+		mode := "--quiet"
+		if i == 1 {
+			mode = "--verbose"
+		}
+		args := []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
+			"run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--no-record", mode, "--secret", openingPolicySecret(scenario), "selected policy Work"}
+		if i == 1 {
+			args = append(args, "--json", "--output", "primary")
+		}
+		inputs[i] = support.FakeInputs(ctx, args)
+		inputs[i].Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+		inputs[i].Input.WorkingDirectory = scenario.candidateDir
+		done[i] = make(chan error, 1)
+		go func(i int) { done[i] <- process.Execute(inputs[i].Input); close(done[i]) }(i)
+		t.Cleanup(func() {
+			cancel()
+			gate.unblock()
+			select {
+			case <-done[i]:
+			case <-time.After(30 * time.Second):
+				t.Error("owned policy command did not join")
+			}
+		})
+	}
+	awaitOpeningPolicyProviders(t, ctx, gate, inputs, done)
+	// Opening selects this peer as current through the public boundary while
+	// the explicit invocations retain their already-acquired handles.
+	peerHistory := scenarios[0].startPeer(t, sessions)
+	for _, scenario := range scenarios {
+		initialOpeningHistory(t, sessions, scenario.candidateID)
+		assertInitialOpeningDiagnostics(t, logs, scenario.candidateID, scenario.candidateDir)
+	}
+	gate.unblock()
+	for i, scenario := range scenarios {
+		select {
+		case err := <-done[i]:
+			if err != nil {
+				t.Fatalf("policy command: %v stdout=%s stderr=%s", err, inputs[i].Stdout(), inputs[i].Stderr())
+			}
+		case <-ctx.Done():
+			t.Fatal("policy command did not complete")
+		}
+		assertOpeningPolicyOutput(t, sessions, scenario, inputs[i], logs, i == 0)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenarios[0].peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenarios[0].peerID)
+}
+
+func awaitOpeningPolicyProviders(t *testing.T, ctx context.Context, gate *selectedProviderGate, inputs []*support.CapturedInputs, done []chan error) {
+	t.Helper()
+	seen := map[string]bool{}
+	for range inputs {
+		select {
+		case request := <-gate.entered:
+			id := gate.paths[request.WorkDir]
+			prompt := string(request.Stdin) + strings.Join(request.Args, " ")
+			if id == "" || seen[id] || !strings.Contains(prompt, "selected-control-"+id) || !strings.Contains(prompt, "private-policy-"+id) {
+				t.Fatalf("policy provider lost selected prompt: dir=%s prompt=%q", request.WorkDir, prompt)
+			}
+			seen[id] = true
+		case <-ctx.Done():
+			for i := range inputs {
+				select {
+				case err := <-done[i]:
+					t.Fatalf("policy %d ended before provider overlap: %v stdout=%s stderr=%s", i, err, inputs[i].Stdout(), inputs[i].Stderr())
+				default:
+				}
+			}
+			t.Fatal("quiet and verbose providers did not overlap")
+		}
+	}
+}
+
+func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, inputs *support.CapturedInputs, logs *observer.ObservedLogs, quiet bool) {
+	t.Helper()
+	if quiet {
+		if inputs.Stdout() != scenario.candidateID+" COMPLETE" || inputs.Stderr() != "" {
+			t.Fatalf("quiet result framing: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+		}
+	} else {
+		var response factoryapi.InvocationResponse
+		if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
+			t.Fatalf("single JSON framing: %v stdout=%q", err, inputs.Stdout())
+		}
+		if response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+			t.Fatalf("selected policy result = %+v", response)
+		}
+		content, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+		if err != nil || content.Text != scenario.candidateID+" COMPLETE" {
+			t.Fatalf("selected policy content = %+v, %v", content, err)
+		}
+		if *response.SessionId != scenario.candidateID {
+			t.Fatalf("policy result session = %s, want %s", *response.SessionId, scenario.candidateID)
+		}
+	}
+	secret := openingPolicySecret(scenario)
+	if strings.Contains(inputs.Stdout()+inputs.Stderr(), secret) {
+		t.Fatal("terminal policy exposed declared secret")
+	}
+	for _, entry := range logs.All() {
+		if strings.Contains(fmt.Sprint(entry.Message, entry.ContextMap()), secret) {
+			t.Fatal("selected logger exposed declared secret")
+		}
+	}
+	initialOpeningHistory(t, sessions, scenario.candidateID)
+	assertOpeningPolicyResponseCorrelation(t, sessions, scenario.candidateID, logs)
+}
+
+func assertOpeningPolicyResponseCorrelation(t *testing.T, sessions factorysessions.Service, id string, logs *observer.ObservedLogs) {
+	t.Helper()
+	subscription, err := sessions.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Cursor.Detach()
+	events, err := subscription.Cursor.Next(t.Context())
+	if err != nil || len(events) == 0 {
+		t.Fatalf("selected policy responses = %+v, %v", events, err)
+	}
+	accepted := openingPolicyDiagnosticPositions(t, id, logs)
+	var last int64
+	for _, event := range events {
+		if event.FactorySessionID != id || event.Sequence <= last || accepted[event.EventID] != uint64(event.Sequence) || !event.RecordedAt.Equal((initialOpeningClock{}).Now()) {
+			t.Fatalf("selected policy response crossed identity, logger or clock: %+v", event)
+		}
+		last = event.Sequence
+	}
+}
+
+func openingPolicyDiagnosticPositions(t *testing.T, id string, logs *observer.ObservedLogs) map[string]uint64 {
+	t.Helper()
+	accepted := map[string]uint64{}
+	for _, entry := range logs.FilterMessage("events append outcome").All() {
+		fields := entry.ContextMap()
+		if fields["topic"] != "factory-session/"+id+"/response-events" || fields["outcome"] != "accepted" {
+			continue
+		}
+		if fields["selected_backend"] != "initial-opening" || fields["source_id"] != id {
+			t.Fatalf("selected response logger lost correlation: %+v", fields)
+		}
+		eventID, ok := fields["source_event_id"].(string)
+		position, positionOK := fields["position"].(uint64)
+		if !ok || !positionOK {
+			t.Fatalf("response diagnostic omitted identity: %+v", fields)
+		}
+		accepted[eventID] = position
+	}
+	return accepted
+}
+
 func testInitialOpeningChildInvocation(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, serverURL string) {
 	t.Helper()
 	peerHistory := scenario.startPeer(t, sessions)

@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -400,34 +400,40 @@ func (stub *historicalBoardReaderStub) QueryHistoricalRecording(
 	return stub.result, stub.err
 }
 
-func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
+func TestRuntimeActivationKeepsSelectedHandlesForDetachedHandoff(t *testing.T) {
 	t.Parallel()
 
-	proxy := &activationServiceFake{}
 	engine := &activationServiceFake{}
-	products := runtimeProducts{
-		factoryRuntime: proxy,
-		engine:         engine,
+	ingress := &activationServiceFake{}
+	opened := &factoryruntime.RuntimeActivation{
+		Service: engine, WorkAndEventIngress: ingress,
 	}
 
-	if got := runtimeEngineService(products); got != engine {
-		t.Fatalf("runtimeEngineService() = %T, want concrete engine %T", got, engine)
-	}
-	activation, err := newRuntimeActivation(products)
+	activation, err := newRuntimeActivation(opened, nil)
 	if err != nil {
 		t.Fatalf("newRuntimeActivation() error = %v", err)
 	}
-	if activation.WorkAndEventIngress != factoryruntime.APIFactory(engine) {
-		t.Fatalf("published ingress = %T, want concrete engine %T", activation.WorkAndEventIngress, engine)
+	if activation.WorkAndEventIngress != factoryruntime.APIFactory(ingress) {
+		t.Fatalf("published ingress = %T, want declared ingress %T", activation.WorkAndEventIngress, ingress)
 	}
+	// Later changes to the acquisition value must not retarget retained handles.
+	peer := &activationServiceFake{}
+	opened.Service = peer
+	opened.WorkAndEventIngress = peer
 	if _, err := activation.WorkAndEventIngress.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
 		t.Fatalf("SubmitWorkRequest() error = %v", err)
 	}
-	if got := engine.submitCalls.Load(); got != 1 {
-		t.Fatalf("engine SubmitWorkRequest calls = %d, want 1", got)
+	if got := ingress.submitCalls.Load(); got != 1 {
+		t.Fatalf("declared ingress SubmitWorkRequest calls = %d, want 1", got)
 	}
-	if got := proxy.submitCalls.Load(); got != 0 {
-		t.Fatalf("session proxy SubmitWorkRequest calls = %d, want 0", got)
+	if engine.submitCalls.Load() != 0 || peer.submitCalls.Load() != 0 {
+		t.Fatal("Work was routed through the engine or a later selection")
+	}
+	if _, err := activation.WorkAndEventIngress.SubscribeFactoryEvents(t.Context(), nil, factorydefinitions.FactoryEventReconnectScope{}); err != nil {
+		t.Fatalf("SubscribeFactoryEvents() error = %v", err)
+	}
+	if ingress.subscribeCalls.Load() != 1 || engine.subscribeCalls.Load() != 0 || peer.subscribeCalls.Load() != 0 {
+		t.Fatal("event subscription did not use the retained declared ingress")
 	}
 	if activation.Service != engine {
 		t.Fatalf("published activation service = %T, want concrete engine %T", activation.Service, engine)
@@ -437,8 +443,8 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *testing.T) {
 	t.Parallel()
 
-	products := runtimeProducts{engine: controlOnlyEngineFake{}}
-	if _, err := newRuntimeActivation(products); err == nil {
+	opened := &factoryruntime.RuntimeActivation{Service: controlOnlyEngineFake{}}
+	if _, err := newRuntimeActivation(opened, nil); err == nil {
 		t.Fatal("newRuntimeActivation() error = nil, want a missing-ingress failure")
 	}
 }
@@ -458,9 +464,7 @@ func TestRuntimeActivationConsumesDeclaredOpeningAndKeepsSessionCleanup(t *testi
 	cleanup := &runtimeOpeningCleanup{}
 	cleanup.Add(func() error { return initial.Close(t.Context()) })
 	cleanup.Add(func() error { releases = append(releases, "session"); return nil })
-	activation, err := newRuntimeActivation(runtimeProducts{
-		activation: initial, closeArtifacts: cleanup.Close,
-	})
+	activation, err := newRuntimeActivation(initial, cleanup.Close)
 	if err != nil || activation.Service != service {
 		t.Fatalf("declared activation = %#v, %v; want selected service", activation, err)
 	}
@@ -484,10 +488,11 @@ func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name   string
-		engine factoryruntime.Service
+		opened *factoryruntime.RuntimeActivation
 	}{
-		{name: "missing engine"},
-		{name: "missing ingress", engine: controlOnlyEngineFake{}},
+		{name: "partial acquisition without activation"},
+		{name: "missing engine", opened: &factoryruntime.RuntimeActivation{}},
+		{name: "missing ingress", opened: &factoryruntime.RuntimeActivation{Service: controlOnlyEngineFake{}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -501,9 +506,7 @@ func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 				}
 				return nil
 			})
-			activation, err := newRuntimeActivation(runtimeProducts{
-				engine: test.engine, closeArtifacts: cleanup.Close,
-			})
+			activation, err := newRuntimeActivation(test.opened, cleanup.Close)
 			if err == nil || activation == nil || activation.Close == nil {
 				t.Fatalf("validation = (%v, %v), want failed activation with owned cleanup", activation, err)
 			}
@@ -537,49 +540,6 @@ func TestRuntimeBindingPublicationErrorPreservesPrimaryAndCleanupFailures(t *tes
 	err := runtimeBindingPublicationError(bindErr, cleanupErr)
 	if !errors.Is(err, bindErr) || !errors.Is(err, cleanupErr) {
 		t.Fatalf("runtimeBindingPublicationError() = %v, want both causes", err)
-	}
-}
-
-func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
-	t.Parallel()
-
-	service := &activationServiceFake{}
-	var calls atomic.Int32
-	binding := factoryruntime.RuntimeBinding{}.New(
-		"runtime-1",
-		service,
-		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
-			calls.Add(1)
-			return factoryruntime.RuntimeDeactivationResult{}, nil
-		},
-	)
-	closer := (&Root{}).activationCloser(binding, "runtime-1")
-
-	const callers = 16
-	var wait sync.WaitGroup
-	wait.Add(callers)
-	errs := make(chan error, callers)
-	for range callers {
-		go func() {
-			defer wait.Done()
-			errs <- closer()
-		}()
-	}
-	wait.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Fatalf("activation closer error = %v, want nil", err)
-		}
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("deactivation calls = %d, want exactly once", got)
-	}
-	if err := closer(); err != nil {
-		t.Fatalf("second activation closer call = %v, want nil", err)
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("deactivation calls after second close = %d, want exactly once", got)
 	}
 }
 
@@ -627,11 +587,11 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 			InvocationSkipPermissionsOverride: &skipPermissions,
 		},
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), request.startRequest())
+	activation, err := factory.activationRequestWithInputs(context.Background(), request.startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -726,11 +686,11 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 			},
 		},
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), request.startRequest())
+	activation, err := factory.activationRequestWithInputs(context.Background(), request.startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -754,16 +714,16 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 	t.Parallel()
 
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	activation, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		FactorySession: sessionOwnerFixture{
 			FactorySessionID: "session-1",
 		},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -776,16 +736,16 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 	t.Parallel()
 
 	sourcePath := filepath.Join(t.TempDir(), factorydefinitions.FactoryConfigFile)
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: factorydefinitions.RuntimeSnapshot{
 			EffectiveFactory:  factorydefinitions.FactoryConfig{Name: "source-only"},
 			DefinitionVersion: &factorydefinitions.FactoryVersion{Logical: 1},
 		}}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	activation, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{SourcePath: sourcePath},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -804,14 +764,14 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 		},
 		Cause: factorydefinitions.ErrInvalidRuntimeSnapshotDefinition,
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{err: want}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 		generateSessionID:         func() string { return "" },
 	}
-	_, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
+	_, err := factory.activationRequestWithInputs(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
-	}).startRequest())
+	}).startRequest(), nil, nil)
 	if !errors.Is(err, factorydefinitions.ErrInvalidRuntimeSnapshotDefinition) {
 		t.Fatalf("activationRequest() error = %v, want typed Definitions failure", err)
 	}
@@ -861,15 +821,14 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 
 	root := &replayRoutingRoot{}
 	replayInputs := &legacyReplayInputsStub{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
-		replayInputs:              replayInputs,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
 			return replayRuntimeConfigStub{}, nil
-		}, nil, nil, nil),
+		}, replayInputs, nil, nil),
 	}
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings:        recordings.RuntimeSelection{ReplayPath: "legacy.json"},
 	}).startRequest())
@@ -893,16 +852,48 @@ func TestOpenForRequestReplayRequiresRuntimeRootAndReplayInputs(t *testing.T) {
 	}).startRequest()
 	for _, test := range []struct {
 		name    string
-		factory *Root
+		factory *RuntimeOpening
 		want    string
 	}{
-		{"runtime root", &Root{}, "Factory Runtime root is required for replay"},
-		{"replay inputs", &Root{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
+		{"runtime root", &RuntimeOpening{}, "Factory Runtime root is required for replay"},
+		{"replay inputs", &RuntimeOpening{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := test.factory.openForRequest(t.Context(), request)
+			_, _, _, err := test.factory.openForRequest(t.Context(), request)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("openForRequest() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestSelectedReplayReadFailurePreservesExactCauseBeforeActivation(t *testing.T) {
+	t.Parallel()
+	for _, historical := range []bool{false, true} {
+		t.Run(fmt.Sprintf("historical=%t", historical), func(t *testing.T) {
+			t.Parallel()
+			cause := &recordings.ReplayInputError{Cause: errors.New("selected replay unavailable")}
+			calls := 0
+			loader := runtimeInputReplayFunc(func(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+				calls++
+				if request.Path != "selected.recording.json" {
+					t.Fatalf("replay path = %q", request.Path)
+				}
+				return recordings.LoadReplayInputResult{}, cause
+			})
+			root := &replayRoutingRoot{}
+			opening := &RuntimeOpening{runtimeRoot: root,
+				snapshotSelection: NewRuntimeSnapshotSelection(nil, nil, loader, nil, nil)}
+			request := (runtimeOwnerFixture{FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+				Recordings: recordings.RuntimeSelection{ReplayPath: "selected.recording.json"}}).startRequest()
+			var err error
+			if historical {
+				_, _, err = opening.InspectHistoricalApplication(t.Context(), request)
+			} else {
+				_, _, _, err = opening.openForRequest(t.Context(), request)
+			}
+			if !errors.Is(err, cause) || calls != 1 || root.activations != 0 {
+				t.Fatalf("error=%v reads=%d activations=%d; want exact cause, one read and no activation", err, calls, root.activations)
 			}
 		})
 	}
@@ -921,13 +912,13 @@ func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t 
 		Cause: errors.New("invalid source bytes"),
 	}
 	resumeRuntime := &resumeInputRuntime{err: inputErr}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
 
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings:        recordings.RuntimeSelection{ResumePath: "source.recording.json"},
 	}).startRequest())
@@ -1064,10 +1055,24 @@ func (stub *legacyReplayInputsStub) LoadReplayInput(
 	}, nil
 }
 
-// TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation pins the
-// P6-B successor behavior for Sessions runtime opening: opening resolves
-// Definitions values, calls Runtime.Activate, and routes every opened role's
-// cleanup edge through the Runtime deactivation operation rather than through a
-// retained hosted-instance, replacement-builder, lifecycle, or sidecar handle.
-// All three role cleanup edges must resolve to the single Runtime-owned closer,
-// so draining them cannot deactivate the Runtime more than once.
+// Cancellation before activation admission acquires no state or handles and
+// must not allocate a canonical identity through the fixed opening owner.
+func TestRuntimeOpeningActivationCancellationStopsBeforeAcquisition(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"selected-a", "selected-b"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			opening := &RuntimeOpening{generateSessionID: func() string { calls++; return id }}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			lifecycle, replay, closeArtifacts, activation, selected, err := opening.activateRuntime(ctx, factoryruntime.RuntimeActivationRequest{FactorySessionID: id})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("activation error = %v, want cancellation", err)
+			}
+			if lifecycle != nil || replay != nil || closeArtifacts != nil || activation != nil || selected != nil || calls != 0 {
+				t.Fatalf("cancelled activation acquired handles or allocated identity: lifecycle=%v replay=%v cleanup=%v activation=%v publication=%v identities=%d", lifecycle, replay, closeArtifacts != nil, activation, selected != nil, calls)
+			}
+		})
+	}
+}

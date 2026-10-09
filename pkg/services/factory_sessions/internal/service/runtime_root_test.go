@@ -160,7 +160,7 @@ func TestCurrentBoardReferenceSelectionAndPublication(t *testing.T) {
 				configured:       preparedRuntime{Recordings: recordings.RuntimeSelection{RecordPath: "fresh.json"}},
 			}
 			bypass, wantError := configureBoardReferenceCase(name, owner, opening)
-			err := (&Root{}).selectCurrentBoardReference(t.Context(), opening)
+			err := (&RuntimeOpening{}).selectCurrentBoardReference(t.Context(), opening)
 			if (err != nil) != wantError {
 				t.Fatalf("selection error = %v, want error %v", err, wantError)
 			}
@@ -238,7 +238,7 @@ func TestFreshCurrentBoardReservationPreservesSelectionAndFailure(t *testing.T) 
 				planner.target = recordings.LiveRecordingTarget{}
 				wantError, wantPath = true, ""
 			}
-			root := &Root{recordingsRuntime: planner}
+			root := &RuntimeOpening{recordingsRuntime: planner}
 			err := root.reserveFreshCurrentBoard(ctx, opening)
 			if (err != nil) != wantError || planner.calls != wantCalls {
 				t.Fatalf("reservation error/calls = %v/%d, want error=%v calls=%d", err, planner.calls, wantError, wantCalls)
@@ -383,7 +383,7 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
 	var canonicalCalls atomic.Int32
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateSessionID: func() string {
 			canonicalCalls.Add(1)
 			return canonicalID
@@ -391,9 +391,9 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
-	activation, err := factory.activationRequest(context.Background(), factorysessions.SessionStartRequest{
+	activation, err := factory.activationRequestWithInputs(context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/factory",
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -413,7 +413,7 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
 	var canonicalCalls atomic.Int32
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateSessionID: func() string {
 			canonicalCalls.Add(1)
 			return canonicalID
@@ -441,7 +441,7 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
 	runtimeSelection := factoryruntime.RuntimeSelection{}
@@ -544,13 +544,13 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 	t.Parallel()
 
 	root := &cleanupRoutingRoot{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
 
-	products, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{
+	_, _, closeArtifacts, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/factory",
 	})
 	if err != nil {
@@ -564,9 +564,9 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		name  string
 		close func() error
 	}{
-		{name: "application", close: products.closeArtifacts},
-		{name: "invocation", close: products.closeArtifacts},
-		{name: "execution", close: products.closeArtifacts},
+		{name: "application", close: closeArtifacts},
+		{name: "invocation", close: closeArtifacts},
+		{name: "execution", close: closeArtifacts},
 	}
 	for _, role := range roleCleanups {
 		if role.close == nil {
@@ -589,21 +589,13 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		)
 	}
 
-	// Opening publishes the Runtime root itself; it does not hand callers a
-	// Sessions-retained runtime handle recovered from the opening products.
-	if products.factoryRuntime != factoryruntime.Service(root) {
-		t.Fatalf(
-			"opened application FactoryRuntime = %T, want the Runtime root %T",
-			products.factoryRuntime,
-			root,
-		)
-	}
 }
 
 type cleanupRoutingRoot struct {
 	factoryruntime.Service
 	activations   int
 	deactivations int
+	deactivate    func(context.Context, factoryruntime.RuntimeDeactivationRequest) error
 }
 
 func (root *cleanupRoutingRoot) Activate(
@@ -622,11 +614,67 @@ func (root *cleanupRoutingRoot) Activate(
 }
 
 func (root *cleanupRoutingRoot) Deactivate(
-	context.Context,
-	factoryruntime.RuntimeDeactivationRequest,
+	ctx context.Context,
+	request factoryruntime.RuntimeDeactivationRequest,
 ) (factoryruntime.RuntimeDeactivationResult, error) {
 	root.deactivations++
+	if root.deactivate != nil {
+		return factoryruntime.RuntimeDeactivationResult{}, root.deactivate(ctx, request)
+	}
 	return factoryruntime.RuntimeDeactivationResult{}, nil
+}
+
+func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCancellation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		firstError error
+		wantCalls  int
+	}{
+		{name: "failed close retries", firstError: errors.New("selected runtime close failed"), wantCalls: 2},
+		{name: "already inactive closes once", firstError: factoryruntime.ErrRuntimeNotActive, wantCalls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			caller, cancel := context.WithCancel(t.Context())
+			cancel()
+			root := &cleanupRoutingRoot{}
+			root.deactivate = func(ctx context.Context, request factoryruntime.RuntimeDeactivationRequest) error {
+				if caller.Err() == nil || ctx.Err() != nil {
+					t.Fatalf("cleanup cancellation: caller=%v cleanup=%v", caller.Err(), ctx.Err())
+				}
+				if request.RuntimeID != "selected-generation" {
+					t.Fatalf("cleanup selected runtime = %q", request.RuntimeID)
+				}
+				if root.deactivations == 1 {
+					return test.firstError
+				}
+				return nil
+			}
+			factory := &RuntimeOpening{runtimeRoot: root}
+			closeRuntime := activationCloser(context.WithoutCancel(caller), factory.runtimeRoot, factoryruntime.RuntimeBinding{}, "selected-generation")
+			peer := &cleanupRoutingRoot{}
+			factory.runtimeRoot = peer
+			firstErr := closeRuntime()
+			if test.wantCalls == 2 && !errors.Is(firstErr, test.firstError) {
+				t.Fatalf("first cleanup error = %v, want original close cause", firstErr)
+			}
+			if test.wantCalls == 1 && firstErr != nil {
+				t.Fatalf("already inactive cleanup error = %v", firstErr)
+			}
+			for range 2 {
+				if err := closeRuntime(); err != nil {
+					t.Fatalf("cleanup retry = %v", err)
+				}
+			}
+			if root.deactivations != test.wantCalls {
+				t.Fatalf("cleanup attempts = %d, want %d", root.deactivations, test.wantCalls)
+			}
+			if peer.deactivations != 0 {
+				t.Fatalf("replacement owner cleanup attempts = %d, want zero", peer.deactivations)
+			}
+		})
+	}
 }
 
 func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.T) {
@@ -1013,7 +1061,7 @@ func assertCurrentBoardPublication(t *testing.T, name string, owner *boardRefere
 		if !opening.emptyCurrentBoard {
 			t.Fatal("missing snapshot did not select empty startup")
 		}
-		if err := (&Root{recordingsRuntime: planner}).reserveFreshCurrentBoard(t.Context(), opening); err != nil {
+		if err := (&RuntimeOpening{recordingsRuntime: planner}).reserveFreshCurrentBoard(t.Context(), opening); err != nil {
 			t.Fatal(err)
 		}
 		wantPath = "fresh.json"
@@ -1042,10 +1090,10 @@ func TestCurrentBoardMissingSnapshotSkipsStaleHistory(t *testing.T) {
 			}
 			// No history reader is injected: missing state must never replay the
 			// stale reference, even if its target is unreadable or absent.
-			if err := (&Root{}).selectCurrentBoardReference(t.Context(), opening); err != nil {
+			if err := (&RuntimeOpening{}).selectCurrentBoardReference(t.Context(), opening); err != nil {
 				t.Fatal(err)
 			}
-			if err := (&Root{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
+			if err := (&RuntimeOpening{}).restoreSessionOpeningHistory(t.Context(), opening); err != nil {
 				t.Fatal(err)
 			}
 			if !opening.emptyCurrentBoard || opening.hasCurrentBoardReference ||

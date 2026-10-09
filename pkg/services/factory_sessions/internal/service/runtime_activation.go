@@ -11,6 +11,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -18,16 +20,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func (r *Root) activateRuntime(
+func (r *RuntimeOpening) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, *factoryruntime.RuntimeActivation, func(string, factoryruntime.RuntimeBinding) error, error) {
 	if err := ctx.Err(); err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	definition, err := definitionRequestFromActivation(request)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	session := sessionRequestFromActivation(request)
 	worker := workerRequestFromActivation(request.Inputs.Workers)
@@ -39,7 +41,7 @@ func (r *Root) activateRuntime(
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
 	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, nil, nil, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
 		strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
@@ -54,51 +56,32 @@ func (r *Root) activateRuntime(
 	if canonicalSessionIDGenerated && ctx.Err() != nil {
 		openingContext = context.WithoutCancel(ctx)
 	}
-	products, err := r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
-	return products, err
+	return r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
 }
 
-// newRuntimeActivation publishes the opened engine as the Runtime activation.
-// It resolves the migration-only Work and event ingress once here, at
-// construction, and hands it to the Runtime root as a declared activation
-// value so no later Work submission or event subscription has to recover a
-// legacy owner from the published service.
-func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActivation, error) {
+// newRuntimeActivation retains the acquired activation's declared handles and
+// replaces its cleanup with the session acquisition owner's cleanup. It never
+// rediscovers Work/event ingress from the engine or a current-session resolver.
+func newRuntimeActivation(opened *factoryruntime.RuntimeActivation, closeArtifacts func() error) (*factoryruntime.RuntimeActivation, error) {
 	activation := &factoryruntime.RuntimeActivation{
 		Close: func(context.Context) error {
-			if products.closeArtifacts == nil {
+			if closeArtifacts == nil {
 				return nil
 			}
-			return products.closeArtifacts()
+			return closeArtifacts()
 		},
 	}
-	if products.activation != nil {
-		activation.Service = products.activation.Service
-		activation.WorkAndEventIngress = products.activation.WorkAndEventIngress
-		return activation, nil
-	}
-	service := runtimeEngineService(products)
-	if service == nil {
+	if opened == nil || opened.Service == nil {
 		return activation, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
 	}
-	ingress, ok := service.(factoryruntime.APIFactory)
-	if !ok {
+	if opened.WorkAndEventIngress == nil {
 		return activation, fmt.Errorf(
 			"activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration",
 		)
 	}
-	activation.Service = service
-	activation.WorkAndEventIngress = ingress
+	activation.Service = opened.Service
+	activation.WorkAndEventIngress = opened.WorkAndEventIngress
 	return activation, nil
-}
-
-// runtimeEngineService returns the live engine the opening resolved from the
-// Runtime instance. The application HTTP view is intentionally not used here:
-// during the migration it is allowed to be a Factory Sessions resolver proxy,
-// and publishing that proxy as the binding would re-enter the same session
-// lookup for every Work or Worker operation.
-func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
-	return products.engine
 }
 
 func definitionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) (factorydefinitions.RuntimeSelection, error) {
@@ -254,81 +237,74 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 	return config
 }
 
-func (r *Root) openActivatedRuntime(
+func (r *RuntimeOpening) openActivatedRuntime(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
-func (r *Root) openActivatedRuntimeWithReplayInput(
+func (r *RuntimeOpening) openActivatedRuntimeWithReplayInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
 }
 
-func (r *Root) openActivatedRuntimeWithResumeInput(
+func (r *RuntimeOpening) openActivatedRuntimeWithResumeInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	resumeInput *recordings.LoadResumeInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
 }
 
-func (r *Root) openActivatedRuntimeWithInputs(
+func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
-) (runtimeProducts, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	if r == nil || r.runtimeRoot == nil {
-		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Runtime root is required")
+		return nil, nil, nil, fmt.Errorf("open Factory Runtime: Runtime root is required")
 	}
 	activationRequest, err := r.activationRequestWithInputs(ctx, request, preloadedReplayInput, resumeInput)
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, err
 	}
-	var products runtimeProducts
+	var lifecycle roles.LifecycleRuntime
+	var replay *recordingreplay.Scope
+	var bindRuntime func(string, factoryruntime.RuntimeBinding) error
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
-		opened, openErr := r.activateRuntime(activationCtx, activation)
+		openedLifecycle, openedReplay, _, published, selected, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
-			partial, _ := newRuntimeActivation(opened)
-			return partial, openErr
+			return published, openErr
 		}
-		products = opened
-		published, activationErr := newRuntimeActivation(opened)
-		return published, activationErr
+		lifecycle = openedLifecycle
+		replay = openedReplay
+		bindRuntime = selected
+		return published, nil
 	})
 	if err != nil {
-		return runtimeProducts{}, err
+		return nil, nil, nil, err
 	}
 	binding := result.Binding
 	if binding.IsZero() {
 		binding = result.Runtime.Binding
 	}
-	if resumeInput != nil {
-		metadata := resumeInput.RecoveryMetadata
-		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)
-		products.resumeRecoveryMetadata = &metadata
-	}
-	closeRuntime := r.activationCloser(binding, result.RuntimeID)
-	if !binding.IsZero() && products.bindRuntime != nil {
-		if err := products.bindRuntime(binding); err != nil {
-			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
+	closeRuntime := activationCloser(context.WithoutCancel(ctx), r.runtimeRoot, binding, result.RuntimeID)
+	if !binding.IsZero() {
+		if err := r.openingBinding.PublishRuntime(bindRuntime, activationRequest.FactorySessionID, binding); err != nil {
+			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
-	if binding.Service() != nil {
-		products.factoryRuntime = binding.Service()
-	} else {
-		products.factoryRuntime = r.runtimeRoot
-	}
-	products.closeArtifacts = closeRuntime
-	return products, nil
+	return lifecycle, replay, closeRuntime, nil
 }
 
-func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
+// activationCloser retains the selected Runtime owner and opaque binding. A
+// later Root selection must not retarget cleanup of this acquisition.
+func activationCloser(cleanupCtx context.Context, runtimeRoot FactoryRuntimeRoot, binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
 	var mu sync.Mutex
 	closed := false
 	return func() error {
@@ -339,10 +315,10 @@ func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID
 		}
 		var err error
 		if !binding.IsZero() {
-			_, err = binding.Deactivate(context.Background())
+			_, err = binding.Deactivate(cleanupCtx)
 		} else {
-			_, err = r.runtimeRoot.Deactivate(
-				context.Background(),
+			_, err = runtimeRoot.Deactivate(
+				cleanupCtx,
 				factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
 			)
 		}
@@ -366,14 +342,7 @@ func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
 	)
 }
 
-func (r *Root) activationRequest(
-	ctx context.Context,
-	request factorysessions.SessionStartRequest,
-) (factoryruntime.RuntimeActivationRequest, error) {
-	return r.activationRequestWithInputs(ctx, request, nil, nil)
-}
-
-func (r *Root) activationRequestWithInputs(
+func (r *RuntimeOpening) activationRequestWithInputs(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
@@ -444,7 +413,7 @@ type activationSnapshotResolution struct {
 	runtimeBaseDir string
 }
 
-func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
+func (r *RuntimeOpening) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
 	if runtime == nil {
 		return "", fmt.Errorf("activate Factory Runtime: runtime selection is required")
 	}
@@ -463,7 +432,7 @@ func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelectio
 	return runtimeID, nil
 }
 
-func (r *Root) canonicalSessionIDGenerator() func() string {
+func (r *RuntimeOpening) canonicalSessionIDGenerator() func() string {
 	if r == nil {
 		return nil
 	}

@@ -10,23 +10,33 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Start admits a live Factory Session through the process root's fixed
-// collaborators. The selected runtime is published to the same Assembly that
-// backs the root's session registry.
+// Start delegates admission and opening to the injected operation.
 func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
+	return r.start(ctx, request)
+}
+
+// Start admits a Factory Session through fixed opening collaborators.
+// The selected runtime is published to the canonical Assembly registry.
+func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	if r == nil || r.assembly == nil {
+		return factorysessions.SessionStartResult{}, fmt.Errorf("factory sessions opening owner is required")
+	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return r.Assembly.StartDurable(ctx, r.prepareDurableStartRequest(request))
+		return r.startDurable(ctx, r.prepareDurableStartRequest(request))
 	}
 	if request.Wait.TimeoutMillis < 0 {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "wait.timeoutMillis", Message: "timeout must not be negative"}
@@ -53,52 +63,67 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	return r.startLive(ctx, request)
 }
 
-func (r *Root) prepareDurableStartRequest(request factorysessions.SessionStartRequest) factorysessions.SessionStartRequest {
+func (r *RuntimeOpening) startDurable(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	if err := legacyservice.ValidateCanonicalDurableStartRequest(request); err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	execution, ok := r.durable.(canonicaldurable.Service)
+	if !ok || execution == nil {
+		return factorysessions.SessionStartResult{}, fmt.Errorf("%w: canonical durable start service is required", factorysessions.ErrExecutionServiceNotConfigured)
+	}
+	started, err := execution.StartCanonical(ctx, legacyservice.CanonicalDurableStartRequest(request), request.Synchronous)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	return legacyservice.CanonicalDurableStartResult(started)
+}
+
+func (r *RuntimeOpening) prepareDurableStartRequest(request factorysessions.SessionStartRequest) factorysessions.SessionStartRequest {
 	if request.Mode != factorysessions.SessionOperationModeDurable {
 		return request
 	}
 	if request.WorkerResourceAdmission == nil {
-		request.WorkerResourceAdmission = r.currentWorkerResourceAdmission()
+		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.assembly.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerAttemptStarter == nil {
-		request.WorkerAttemptStarter = r.currentWorkerAttemptStarter()
+		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.assembly.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerSettings == nil {
-		request.WorkerSettings = r.currentWorkerSettings()
+		request.WorkerSettings = currentWorkerSettings(r.assembly.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.RuntimeSelection == nil {
-		request = inheritCurrentMockWorkers(request, r.Resolve(factorysessions.DefaultSessionID))
+		request = inheritCurrentMockWorkers(request, r.assembly.Resolve(factorysessions.DefaultSessionID))
 	}
 	return request
 }
 
-func (r *Root) currentWorkerSettings() *factoryruntime.JavaScriptWorkerSettings {
-	if r == nil || r.Assembly == nil {
+func currentWorkerSettings(selected *livesession.LiveSession) *factoryruntime.JavaScriptWorkerSettings {
+	if selected == nil {
 		return nil
 	}
-	current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID))
+	current := runtimebinding.SessionStateFrom(selected)
 	if current == nil {
 		return nil
 	}
 	return current.WorkerSettingsSnapshot()
 }
 
-func (r *Root) currentWorkerAttemptStarter() factorysessions.WorkerAttemptStarter {
-	if r == nil || r.Assembly == nil {
+func currentWorkerAttemptStarter(selected *livesession.LiveSession) factorysessions.WorkerAttemptStarter {
+	if selected == nil {
 		return nil
 	}
-	return factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(runtimebinding.BundleFromSession(r.Resolve(factorysessions.DefaultSessionID))))
+	return factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(runtimebinding.BundleFromSession(selected)))
 }
 
-func (r *Root) currentWorkerResourceAdmission() factoryruntime.ResourceCapacityLeaseAdmission {
-	if r == nil || r.Assembly == nil {
+func currentWorkerResourceAdmission(selected *livesession.LiveSession) factoryruntime.ResourceCapacityLeaseAdmission {
+	if selected == nil {
 		return nil
 	}
-	current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID))
+	current := runtimebinding.SessionStateFrom(selected)
 	if current == nil {
 		return nil
 	}
-	instance := runtimebinding.BundleFromSession(r.Resolve(factorysessions.DefaultSessionID))
+	instance := runtimebinding.BundleFromSession(selected)
 	if instance == nil {
 		return nil
 	}
@@ -113,15 +138,15 @@ func (r *Root) StartSync(ctx context.Context, request factorysessions.StartReque
 		return factorysessions.SyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
 	if request.WorkerSettings == nil {
-		request.WorkerSettings = r.currentWorkerSettings()
+		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerAttemptStarter == nil {
-		request.WorkerAttemptStarter = r.currentWorkerAttemptStarter()
+		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerResourceAdmission == nil {
-		request.WorkerResourceAdmission = r.currentWorkerResourceAdmission()
+		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Resolve(factorysessions.DefaultSessionID))
 	}
-	return r.Assembly.StartSync(ctx, request)
+	return r.durable.StartSync(ctx, request)
 }
 
 func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
@@ -129,15 +154,15 @@ func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequ
 		return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
 	if request.WorkerSettings == nil {
-		request.WorkerSettings = r.currentWorkerSettings()
+		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerAttemptStarter == nil {
-		request.WorkerAttemptStarter = r.currentWorkerAttemptStarter()
+		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerResourceAdmission == nil {
-		request.WorkerResourceAdmission = r.currentWorkerResourceAdmission()
+		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Resolve(factorysessions.DefaultSessionID))
 	}
-	return r.Assembly.StartAsync(ctx, request)
+	return r.durable.StartAsync(ctx, request)
 }
 
 func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, current *livesession.LiveSession) factorysessions.SessionStartRequest {
@@ -158,9 +183,9 @@ func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, curr
 	return request
 }
 
-func (r *Root) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	if request.InitNewFactory {
-		factoryDir, err := r.PrepareNewFactoryScaffold(request.FolderPath)
+		factoryDir, err := r.assembly.PrepareNewFactoryScaffold(request.FolderPath)
 		if err != nil {
 			return factorysessions.SessionStartResult{}, err
 		}
@@ -190,21 +215,21 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	products, err := r.openForRequest(ctx, selected)
+	lifecycle, _, closeArtifacts, err := r.openForRequest(ctx, selected)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
-	activation, err := startSessionLifecycle(ctx, products, sessionRuntimeSelection(&selected).Host.Port > 0)
+	activation, err := startSessionLifecycle(ctx, lifecycle, closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	session, err := r.bindStartedSession(ctx, selectedID, selected, products, activation, request.Correlation.RequestID, previousControl)
+	session, err := r.bindStartedSession(ctx, selectedID, selected, activation, request.Correlation.RequestID, previousControl)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
 	result := liveStartResult(session)
-	result.StartupRecovery = products.startupRecovery
+	result.StartupRecovery = runtimebinding.SessionStateFrom(session).StartupRecovery
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
 	}
@@ -228,19 +253,19 @@ func validatedSessionResult(factoryDir string, selected factorysessions.SessionS
 	}
 }
 
-func (r *Root) setStartedSessionTarget(selectedID string, selected factorysessions.SessionStartRequest) {
+func (r *RuntimeOpening) setStartedSessionTarget(selectedID string, selected factorysessions.SessionStartRequest) {
 	if selected.Target == nil {
 		return
 	}
-	session := r.Resolve(selectedID)
+	session := r.assembly.Resolve(selectedID)
 	if session == nil {
 		return
 	}
 	session.ApplyStartedTarget(*selected.Target, selected.FolderPath)
 }
 
-func (r *Root) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
-	session := r.Resolve(selectedID)
+func (r *RuntimeOpening) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
+	session := r.assembly.Resolve(selectedID)
 	if session == nil {
 		_ = activation.Close(ctx)
 		_ = activation.lifecycle.StopLifecycle(ctx)
@@ -252,19 +277,17 @@ func (r *Root) bindStartedSession(ctx context.Context, selectedID string, select
 		_ = activation.lifecycle.StopLifecycle(ctx)
 		return nil, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
-	bindSessionProducts(bound, products, activation, requestID, previousControl)
-	bound.ModelInvoker = r
+	bindStartedSessionState(bound, activation, requestID, previousControl)
 	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
 	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
-	bound.SetWorkerSettings(products.workerSettings)
 	return session, nil
 }
 
-func (r *Root) closeReplacedSession(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (*runtimebinding.SessionState, error) {
+func (r *RuntimeOpening) closeReplacedSession(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (*runtimebinding.SessionState, error) {
 	if !request.ActivationOnly || strings.TrimSpace(request.SessionID) == "" {
 		return nil, nil
 	}
-	existing := r.Resolve(selectedID)
+	existing := r.assembly.Resolve(selectedID)
 	if existing == nil {
 		return nil, nil
 	}
@@ -272,16 +295,13 @@ func (r *Root) closeReplacedSession(ctx context.Context, request factorysessions
 	if bound == nil || !bound.CanReplaceTerminatedSession() {
 		return nil, fmt.Errorf("start Factory Session: session %q is already active", selectedID)
 	}
-	if _, err := r.Control(ctx, factorysessions.SessionControlRequest{
-		SessionID: selectedID, Mode: factorysessions.SessionOperationModeLive,
-		Operation: factorysessions.SessionControlClose,
-	}); err != nil {
+	if err := r.assembly.CloseSession(ctx, selectedID); err != nil {
 		return nil, fmt.Errorf("replace Factory Session %q: %w", selectedID, err)
 	}
 	return bound, nil
 }
 
-func (r *Root) prepareLiveStartRequest(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (factorysessions.SessionStartRequest, error) {
+func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (factorysessions.SessionStartRequest, error) {
 	selected := request
 	selected.SessionID = selectedID
 	runtimeSelection := factorysessions.SessionRuntimeSelection{}
@@ -317,11 +337,11 @@ func (r *Root) prepareLiveStartRequest(ctx context.Context, request factorysessi
 	return selected, nil
 }
 
-func (r *Root) inheritCurrentSelection(selectedID string, selection *factorysessions.SessionRuntimeSelection) {
+func (r *RuntimeOpening) inheritCurrentSelection(selectedID string, selection *factorysessions.SessionRuntimeSelection) {
 	if selectedID == factorysessions.DefaultSessionID {
 		return
 	}
-	current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID))
+	current := runtimebinding.SessionStateFrom(r.assembly.Resolve(factorysessions.DefaultSessionID))
 	if current == nil {
 		return
 	}
@@ -369,18 +389,18 @@ func selectStartTarget(request factorysessions.SessionStartRequest, selected *fa
 	return nil
 }
 
-func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferCompletion bool) (*sessionActivation, error) {
-	if products.lifecycle == nil {
-		if products.closeArtifacts != nil {
-			_ = products.closeArtifacts()
+func startSessionLifecycle(ctx context.Context, lifecycle roles.LifecycleRuntime, closeArtifacts func() error, deferCompletion bool) (*sessionActivation, error) {
+	if lifecycle == nil {
+		if closeArtifacts != nil {
+			_ = closeArtifacts()
 		}
 		return nil, fmt.Errorf("start Factory Session: lifecycle is unavailable")
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	activation := &sessionActivation{
-		lifecycle:      products.lifecycle,
+		lifecycle:      lifecycle,
 		cancel:         cancel,
-		closeArtifacts: products.closeArtifacts,
+		closeArtifacts: closeArtifacts,
 	}
 	err := activation.lifecycle.StartLifecycle(ctx, runContext)
 	if err == nil {
@@ -397,23 +417,8 @@ func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferC
 	return activation, nil
 }
 
-func bindSessionProducts(bound *runtimebinding.SessionState, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
+func bindStartedSessionState(bound *runtimebinding.SessionState, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
 	bound.Activation = activation
-	bound.Process = products.process
-	bound.Diagnostics = products.diagnostics
-	bound.ModelInvocation = products.modelInvocation
-	bound.FactoryRuntime = products.factoryRuntime
-	bound.ModelsScope = products.modelsScope
-	bound.SetWorkerSessions(products.workerSessions)
-	bound.Logger = products.logger
-	bound.Clock = products.clock
-	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
-	bound.StartupRecovery = products.startupRecovery
-	bound.OperatorSettingsPath = products.operatorSettingsPath
-	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
-	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
-	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
-	bound.OrderlyStop = products.orderlyStop
 	bound.SetStartRequestID(strings.TrimSpace(requestID))
 	bound.InheritTerminalControl(previousControl)
 }
@@ -433,9 +438,9 @@ func liveStartResult(session *livesession.LiveSession) factorysessions.SessionSt
 	}
 }
 
-func (r *Root) startedForRequestID(requestID string) (factorysessions.SessionStartResult, bool) {
-	for _, id := range r.ListLiveSessionIDs() {
-		session := r.Resolve(id)
+func (r *RuntimeOpening) startedForRequestID(requestID string) (factorysessions.SessionStartResult, bool) {
+	for _, id := range r.assembly.ListLiveSessionIDs() {
+		session := r.assembly.Resolve(id)
 		bound := runtimebinding.SessionStateFrom(session)
 		if bound == nil || bound.StartRequestID() != requestID || bound.Activation == nil {
 			continue
@@ -455,7 +460,7 @@ func (r *Root) startedForRequestID(requestID string) (factorysessions.SessionSta
 	return factorysessions.SessionStartResult{}, false
 }
 
-func (r *Root) sessionIDForStart(request factorysessions.SessionStartRequest) (string, error) {
+func (r *RuntimeOpening) sessionIDForStart(request factorysessions.SessionStartRequest) (string, error) {
 	if id := strings.TrimSpace(request.SessionID); id != "" {
 		return id, nil
 	}
@@ -472,7 +477,7 @@ func (r *Root) sessionIDForStart(request factorysessions.SessionStartRequest) (s
 	return id, nil
 }
 
-func (r *Root) resolveStartFolder(ctx context.Context, request factorysessions.SessionStartRequest, selection factorysessions.SessionRuntimeSelection) (string, error) {
+func (r *RuntimeOpening) resolveStartFolder(ctx context.Context, request factorysessions.SessionStartRequest, selection factorysessions.SessionRuntimeSelection) (string, error) {
 	name := strings.TrimSpace(request.Source.FactoryID)
 	if name == "" || request.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID ||
 		!strings.HasPrefix(name, "@") || strings.TrimSpace(selection.DefinitionSourcePath) != "" {

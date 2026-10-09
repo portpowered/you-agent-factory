@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"path/filepath"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -37,7 +40,7 @@ func TestCurrentBoardQuarantineDispositionRequiresSafeCauseAndPreservation(t *te
 				owner.onPreserve = cancel
 				wantSuccess = false
 			}
-			root := &Root{generateSessionID: func() string { return "identity" }}
+			root := &RuntimeOpening{generateSessionID: func() string { return "identity" }}
 			err := root.quarantineUnreadableCurrentBoard(ctx, opening, fmt.Errorf("probe: %w", failure))
 			if (err == nil) != wantSuccess || owner.calls != wantCalls {
 				t.Fatalf("error=%v, preservation calls=%d", err, owner.calls)
@@ -56,4 +59,45 @@ func assertCurrentBoardQuarantineDisposition(t *testing.T, opening *sessionRunti
 	} else if opening.emptyCurrentBoard || opening.startupRecovery != nil || opening.configured.Recordings.RecordPath != "retained-history" {
 		t.Fatal("failed preservation published fresh-board success")
 	}
+}
+
+func TestRuntimeOpeningLegacyInventoryUsesSelectedProfileAndPreservesFailure(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("selected inventory unavailable")
+	inventory := &openingInventoryFailure{cause: cause}
+	owner := &RuntimeOpening{recordedInventory: inventory}
+	opening := &sessionRuntimeOpening{
+		sessionID:        "selected-session",
+		sessionSelection: &factorysessions.SessionRuntimeSelection{SystemConfigHome: preparationPath("selected-profile")},
+		durableExecution: DurableExecution{Service: &openingBoardFacts{}},
+	}
+	_, err := owner.discoverLegacyCurrentBoard(t.Context(), opening)
+	if !errors.Is(err, cause) {
+		t.Fatalf("inventory cause lost: %v", err)
+	}
+	want := filepath.Join(opening.sessionSelection.SystemConfigHome, ".you-agent-factory", "recordings")
+	if inventory.request.RecordingRoot != want || inventory.calls != 1 {
+		t.Fatalf("inventory selection = %+v, calls=%d", inventory.request, inventory.calls)
+	}
+}
+
+type openingInventoryFailure struct {
+	request recordings.RecordedSessionInventoryRequest
+	cause   error
+	calls   int
+}
+
+func (inventory *openingInventoryFailure) ListRecordedSessions(request recordings.RecordedSessionInventoryRequest) (recordings.RecordedSessionInventoryResult, error) {
+	inventory.request = request
+	inventory.calls++
+	return recordings.RecordedSessionInventoryResult{}, inventory.cause
+}
+
+type openingBoardFacts struct{ quarantineOpeningOwner }
+
+func (*openingBoardFacts) LoadCurrentBoardFacts(context.Context, string) ([]factorydefinitions.FactoryEvent, error) {
+	return nil, nil
+}
+func (*openingBoardFacts) MatchCurrentBoardWork(context.Context, string, *factorydefinitions.FactoryWorldState) (bool, error) {
+	return false, nil
 }

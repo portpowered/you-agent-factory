@@ -19,6 +19,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -340,20 +341,21 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 }
 
 // RegisterOpening publishes scoped state through the fixed owner. Acquisition
-// remains owned by the caller; release retires only this registration.
+// remains owned by the caller; release retires only this registration. The
+// returned canonical record remains selected even if the registry key changes.
 func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts,
-	initial *factoryruntime.RuntimeInitialOpening, clock factoryruntime.Clock, logger *zap.Logger,
-) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
+	record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, lifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, clock factoryruntime.Clock, logger *zap.Logger,
+) (roles.ApplicationRuntime, *livesession.LiveSession, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	if initial == nil || initial.Record == nil {
-		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+	if record == nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
-	session, err := a.prepareOpeningSession(facts, initial, clock)
-	startupRuntime := initial.Record
+	session, err := a.prepareOpeningSession(facts, record, completion, clock)
+	startupRuntime := record
 	if session == nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	runtime := &SessionRuntime{
 		owner: a, openingSession: session,
@@ -361,7 +363,7 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 		runtimeMode: facts.RuntimeMode, backendScopeID: facts.BackendScopeID,
 		workFile: facts.WorkFile, workflowID: facts.WorkflowID, modelsScope: facts.ModelsScope,
 		clock: clock, logger: logger,
-		runtimeBuild: initial.ReplacementBuilder, runtimeLifecycle: initial.Lifecycle, runtimeSidecars: initial.Sidecars,
+		runtimeBuild: replacement, runtimeLifecycle: lifecycle, runtimeSidecars: sidecars,
 		startupSessionID: session.ID, runtimeID: facts.RuntimeID, generationID: facts.GenerationID,
 	}
 	release := func(releaseCtx context.Context) error { return a.releaseOpening(releaseCtx, runtime, session) }
@@ -369,7 +371,7 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 		if session.ResponseEvents == nil {
 			release = nil
 		}
-		return nil, nil, nil, release, err
+		return nil, session, nil, nil, release, err
 	}
 	runtime.runtimeState.SetStartup(startupRuntime)
 	bound := runtimebinding.SessionStateFrom(session)
@@ -377,22 +379,20 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 	bound.Clock = clock
 	bound.ProjectionBackendScope = facts.BackendScopeID
 	bound.Logger = logger
-	bound.Invoker = a.invoker
-	bound.InputResolver = a.invoker
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	if err := ctx.Err(); err != nil {
-		return nil, nil, nil, release, err
+		return nil, session, nil, nil, release, err
 	}
 	a.registry.Upsert(session, true)
 	logger.Debug("registered Factory Session opening", zap.String("session_id", facts.FactorySessionID),
 		zap.String("runtime_id", facts.RuntimeID), zap.String("generation_id", facts.GenerationID))
-	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
+	return runtime, session, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
 }
 
-func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, initial *factoryruntime.RuntimeInitialOpening,
+func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion,
 	clock factoryruntime.Clock,
 ) (*livesession.LiveSession, error) {
-	startupRuntime, completion := initial.Record, initial.Completion
+	startupRuntime := record
 	identity := selectCompletionSessionIdentity(facts.FactorySessionID, completion)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
@@ -610,10 +610,10 @@ func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, r
 		return factorysessions.InvocationResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
 	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil || bound.Invoker == nil {
+	if bound == nil {
 		return factorysessions.InvocationResult{}, fmt.Errorf("%w: session invocation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
-	result, err := bound.Invoker.Invoke(ctx, sessionID, request)
+	result, err := a.invoker.Invoke(ctx, sessionID, request)
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
@@ -707,4 +707,15 @@ func (a *Assembly) FactoryConfigForSession(ctx context.Context, sessionID string
 		return nil, err
 	}
 	return projection.Context.FactoryCfg, nil
+}
+
+// BindHistoricalOpening keeps optional historical routing at its existing owner.
+func (a *Assembly) BindHistoricalOpening(sessionID string, owner durableexecution.Service) (func(), error) {
+	binder, ok := a.SessionGateway.(interface {
+		BindHistoricalExecution(string, durableexecution.Service) func()
+	})
+	if !ok {
+		return nil, fmt.Errorf("historical replay Sessions routing is unavailable")
+	}
+	return binder.BindHistoricalExecution(sessionID, owner), nil
 }

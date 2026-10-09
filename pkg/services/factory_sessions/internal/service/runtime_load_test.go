@@ -670,7 +670,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		},
 	}
 	root := &resumeRoutingRoot{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
@@ -679,7 +679,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		}, nil, nil, nil),
 	}
 
-	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{
 			Directory:        "/authored-b",
 			SourcePath:       "/authored-b/factory.json",

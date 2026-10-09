@@ -1,9 +1,9 @@
 package wire
 
 import (
+	"context"
 	"github.com/google/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -81,6 +82,7 @@ type (
 
 	ProviderOverrideService      = service.ProviderOverrideService
 	RuntimeResourceAcquisition   = service.RuntimeResourceAcquisition
+	RuntimeOpening               = service.RuntimeOpening
 	RuntimeOpeningCompletion     = service.RuntimeOpeningCompletion
 	RuntimeOpeningBinding        = service.RuntimeOpeningBinding
 	OpeningSessionIdentity       = service.OpeningSessionIdentity
@@ -118,84 +120,67 @@ var (
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 )
 
-func NewRoot(
-	providerSessions providersessions.Service,
-	logger *zap.Logger,
-	runtimeLogs factoryruntime.RuntimeLogOwner,
-	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	runtimeRoot FactoryRuntimeRoot,
-	resolveClock factoryruntime.ClockResolver,
+// OpeningAssembly projects the existing owner onto the opening operations.
+type OpeningAssembly = interface {
+	Resolve(string) *livesession.LiveSession
+	PrepareNewFactoryScaffold(string) (string, error)
+	CloseSession(context.Context, string) error
+	ListLiveSessionIDs() []string
+	BindHistoricalOpening(string, DurableExecutionService) (func(), error)
+}
 
-	clock factoryruntime.Clock,
-	providerOverride ProviderOverrideService,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
-	definitions factorydefinitions.Service,
+func RuntimeOpeningAssembly(assembly RuntimeAssembly) OpeningAssembly {
+	opening, _ := assembly.(OpeningAssembly)
+	return opening
+}
 
-	snapshotSelection *RuntimeSnapshotSelection,
-	preparation *RuntimePreparation,
-
-	assembly RuntimeAssembly,
-	durableOpening *DurableOpening,
-	resourceAcquisition *RuntimeResourceAcquisition,
-	openingCompletion *RuntimeOpeningCompletion,
-	openingBinding *RuntimeOpeningBinding,
+// NewRuntimeOpening keeps the private implementation behind the Sessions Wire boundary.
+func NewRuntimeOpening(assembly OpeningAssembly, durable DurableExecutionService,
+	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
+	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
+	binding *RuntimeOpeningBinding, runtimeRoot FactoryRuntimeRoot,
+	replayBehavior *HistoricalReplayBehavior, recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService, executionBinding *ExecutionBinding,
+	providerOverride ProviderOverrideService, runtimeLogs factoryruntime.RuntimeLogOwner,
+	logger *zap.Logger, clock factoryruntime.Clock, resolveClock factoryruntime.ClockResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	workService work.Service,
-	automationService automations.Service,
-	modelService models.Service,
-	recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeScopeService,
-	workerService workers.Service,
-	executionBinding *ExecutionBinding,
-	initialEngine *RuntimeInitialEngine,
-	modelInvocation RuntimeModelInvocationOperation,
-	replayBehavior *HistoricalReplayBehavior,
+	definitions factorydefinitions.Service, inventory recordings.RecordedSessionInventory,
+) *RuntimeOpening {
+	return service.NewRuntimeOpening(assembly, durable, preparation, snapshots, resources, durableOpening,
+		initialEngine, completion, binding, runtimeRoot, replayBehavior, recordingsService, recordingsRuntime,
+		executionBinding, providerOverride, runtimeLogs, logger, clock, resolveClock, generateSessionID,
+		generateRuntimeInstanceID, resolveHome, definitions, inventory)
+}
+
+// RuntimeOpeningStart selects the fixed opening operation without retaining Root.
+func RuntimeOpeningStart(opening *RuntimeOpening) func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return opening.Start
+}
+
+func RuntimeOpeningHistoricalInspection(opening *RuntimeOpening) func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+	return opening.InspectHistoricalApplication
+}
+
+func NewRoot(
+	assembly RuntimeAssembly,
+	durable DurableExecutionService,
+	start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error),
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
+	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
+	definitions factorydefinitions.Service, workService work.Service,
+	modelService models.Service, recordingsService recordings.Service,
+	workerService workers.Service, providerSessions providersessions.Service,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	recordingProjections recordings.ProjectionService,
+	modelInvocation RuntimeModelInvocationOperation,
+	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
-	return service.NewRoot(
-		providerSessions,
-		logger,
-		runtimeLogs,
-		factoryWorkflows,
-		workflowPreview,
-		runtimeRoot,
-		resolveClock,
-
-		clock,
-		providerOverride,
-		submissionRecorder,
-		dispatchRecorder,
-		definitions,
-
-		snapshotSelection,
-		preparation,
-
-		assembly,
-		durableOpening,
-		resourceAcquisition,
-		openingCompletion,
-		openingBinding,
-		generateSessionID,
-		generateRuntimeInstanceID,
-		resolveHome,
-		workService,
-		automationService,
-		modelService,
-		recordingsService,
-		recordingsRuntime,
-		workerService,
-		executionBinding,
-		initialEngine,
-		modelInvocation,
-		replayBehavior,
-		liveChangeCoordinator,
-		recordingProjections,
-	)
+	return service.NewRoot(assembly, durable, start, liveChangeCoordinator, inspectHistorical,
+		definitions, workService, modelService, recordingsService, workerService, providerSessions,
+		workflowPreview, recordingProjections, modelInvocation, generateSessionID)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {

@@ -149,6 +149,32 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 	return fallback
 }
 
+// OpeningState exposes only the mutations performed on the selected opening
+// record. Its private runtime and projection handles stay with SessionState.
+type OpeningState = interface {
+	SetOpeningProcess(roles.ProcessRuntime)
+	SetOpeningModelInvocation(modelinvocation.RuntimeModelInvocation)
+	SetOpeningModelsScope(models.RuntimeScopeRef)
+	SetWorkerSessions(workersessions.ObservationService)
+	SetOpeningLogger(*zap.Logger)
+	SetOpeningDiagnostics(factoryruntime.RuntimeLogDiagnostics)
+	SetOpeningClock(factoryruntime.Clock)
+	SetOpeningOrderlyStop(func(context.Context) error)
+	SetMockWorkers(*workers.MockWorkersConfig)
+	SetWorkerSettings(*factoryruntime.JavaScriptWorkerSettings)
+	SetOpeningMetadata(OpeningMetadata)
+}
+
+// OpeningMetadata contains detached observations from one completed opening.
+type OpeningMetadata struct {
+	CurrentBoardRecordPath string
+	OperatorSettingsPath   string
+	SkippedBoardRecordings []string
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
+	StartupRecovery        *factorysessions.StartupRecovery
+}
+
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
@@ -156,19 +182,15 @@ type SessionState struct {
 	Handle          RuntimeHandle
 	Spec            any
 	Owner           SessionProjectionOwner
-	Invoker         roles.CanonicalSessionInvoker
-	ModelInvoker    workers.ModelInvoker
 	ModelInvocation modelinvocation.RuntimeModelInvocation
-	InputResolver   roles.InvocationInputResolver
 	// Process and Diagnostics are application lifecycle values owned by this
 	// canonical session record. The process root routes transport commands by
 	// session ID instead of retaining another runtime-opening graph.
-	Process        roles.ProcessRuntime
-	Diagnostics    factoryruntime.RuntimeLogDiagnostics
-	FactoryRuntime factoryruntime.Service
-	ModelsScope    models.RuntimeScopeRef
-	Logger         *zap.Logger
-	Clock          factoryruntime.Clock
+	Process     roles.ProcessRuntime
+	Diagnostics factoryruntime.RuntimeLogDiagnostics
+	ModelsScope models.RuntimeScopeRef
+	Logger      *zap.Logger
+	Clock       factoryruntime.Clock
 	// ProjectionBackendScope retains the opening override as a keyed fact.
 	ProjectionBackendScope string
 	CurrentBoardRecordPath string
@@ -197,11 +219,39 @@ type SessionState struct {
 	lastControlResult  factorysessions.SessionControlResult
 }
 
+func (s *SessionState) SetOpeningProcess(process roles.ProcessRuntime) { s.Process = process }
+func (s *SessionState) SetOpeningModelInvocation(facts modelinvocation.RuntimeModelInvocation) {
+	s.ModelInvocation = facts
+}
+func (s *SessionState) SetOpeningModelsScope(scope models.RuntimeScopeRef) { s.ModelsScope = scope }
+func (s *SessionState) SetOpeningLogger(logger *zap.Logger)                { s.Logger = logger }
+func (s *SessionState) SetOpeningDiagnostics(diagnostics factoryruntime.RuntimeLogDiagnostics) {
+	s.Diagnostics = diagnostics
+}
+func (s *SessionState) SetOpeningClock(clock factoryruntime.Clock)             { s.Clock = clock }
+func (s *SessionState) SetOpeningOrderlyStop(stop func(context.Context) error) { s.OrderlyStop = stop }
+
+func (s *SessionState) SetOpeningMetadata(metadata OpeningMetadata) {
+	s.CurrentBoardRecordPath = metadata.CurrentBoardRecordPath
+	s.OperatorSettingsPath = metadata.OperatorSettingsPath
+	s.SkippedBoardRecordings = append([]string(nil), metadata.SkippedBoardRecordings...)
+	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), metadata.ReplayMetadataWarnings...)
+	s.ResumeRecoveryMetadata = nil
+	if metadata.ResumeRecoveryMetadata != nil {
+		copy := *metadata.ResumeRecoveryMetadata
+		s.ResumeRecoveryMetadata = &copy
+	}
+	s.StartupRecovery = nil
+	if metadata.StartupRecovery != nil {
+		copy := *metadata.StartupRecovery
+		s.StartupRecovery = &copy
+	}
+}
+
 func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	if s == nil || previous == nil {
 		return
 	}
-	s.FactoryRuntime = previous.FactoryRuntime
 	s.ModelsScope = previous.ModelsScope
 	s.ModelInvocation = previous.ModelInvocation
 	s.SetWorkerSessions(previous.WorkerSessionsObservation())

@@ -704,17 +704,17 @@ func TestAssemblyListsCanonicalRegistryAndProcessDurableSessions(t *testing.T) {
 func TestAssemblyInvokesOwnerOfSelectedCanonicalSession(t *testing.T) {
 	state := newWorkResolverSessionState()
 	assembly := &Assembly{state: state, registry: state.Registry()}
-	first := &canonicalSessionInvokerFake{result: factorydefinitions.FactoryInvocationResult{SessionID: "first"}}
 	second := &canonicalSessionInvokerFake{result: factorydefinitions.FactoryInvocationResult{SessionID: "second"}}
-	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{Invoker: first}}, true)
-	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: &runtimebinding.SessionState{Invoker: second}}, false)
+	assembly.invoker = second
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{}}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: &runtimebinding.SessionState{}}, false)
 	input := &work.PreparedInvocationInput{ResolvedInput: &work.ResolvedInput{Text: "hello"}}
 	result, err := assembly.Invoke(context.Background(), factorysessions.SessionInvokeRequest{SessionID: "second", Input: input})
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if result.SessionID != "second" || second.canonicalCalls != 1 || first.canonicalCalls != 0 || second.contentProvided {
-		t.Fatalf("invocation was not scoped to selected session: result=%#v first=%d second=%d content=%t", result, first.canonicalCalls, second.canonicalCalls, second.contentProvided)
+	if result.SessionID != "second" || second.sessionID != "second" || second.canonicalCalls != 1 || second.contentProvided {
+		t.Fatalf("invocation was not scoped to selected session: result=%#v selected=%s calls=%d content=%t", result, second.sessionID, second.canonicalCalls, second.contentProvided)
 	}
 	if _, err := assembly.Invoke(context.Background(), factorysessions.SessionInvokeRequest{SessionID: "missing"}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)

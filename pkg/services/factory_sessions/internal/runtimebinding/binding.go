@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -219,25 +218,19 @@ func registerReplacementSession(
 	}
 	state.RotateResponseStreams(session)
 	var projectionOwner SessionProjectionOwner
-	var invoker roles.CanonicalSessionInvoker
-	var modelInvoker workers.ModelInvoker
-	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
 	previous := SessionStateFrom(session)
 	if previous != nil {
 		projectionOwner = previous.Owner
-		invoker = previous.Invoker
-		modelInvoker = previous.ModelInvoker
-		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
 	handle := &SessionState{
 		Handle: replacementHandle, Instance: replacement,
-		Spec: preparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation,
+		Spec: preparedSpec, Owner: projectionOwner, Activation: activation,
 		Process: process, Diagnostics: diagnostics,
 	}
 	handle.inheritApplicationValues(previous)
@@ -360,9 +353,6 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		PreparedSpec: PreparedSpecFromSession(state.Resolve(input.SessionID)),
 	})
 	var projectionOwner SessionProjectionOwner
-	var invoker roles.CanonicalSessionInvoker
-	var modelInvoker workers.ModelInvoker
-	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
@@ -370,15 +360,22 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	previous := SessionStateFrom(previousSession)
 	if previous != nil {
 		projectionOwner = previous.Owner
-		invoker = previous.Invoker
-		modelInvoker = previous.ModelInvoker
-		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
-	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation, Process: process, Diagnostics: diagnostics}
+	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Activation: activation, Process: process, Diagnostics: diagnostics}
 	handle.inheritApplicationValues(previous)
+	// Initial lifecycle registration replaces the provisional opening record.
+	// Carry its startup observations only for that handoff; runtime replacement
+	// keeps its existing metadata policy.
+	if previous != nil && previous.Handle == nil {
+		handle.SkippedBoardRecordings = append([]string(nil), previous.SkippedBoardRecordings...)
+		if previous.StartupRecovery != nil {
+			recovery := *previous.StartupRecovery
+			handle.StartupRecovery = &recovery
+		}
+	}
 	// Opening already selected the canonical identity and the retained source
 	// event scope. Keep both when attaching the running handle, including named
 	// successors: their Work admission history still belongs to the source.
@@ -922,17 +919,6 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 		return nil, fmt.Errorf("legacy Factory Runtime event history is unavailable")
 	}
 	return source, nil
-}
-
-// LegacyInvocationSourcesForService resolves the paired compatibility
-// capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (legacysnapshot.Provider, LegacyEventSource, error) {
-	observation, err := LegacyObservationForService(runtime)
-	if err != nil {
-		return nil, nil, err
-	}
-	events, err := LegacyEventSourceForService(runtime)
-	return observation, events, err
 }
 
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {

@@ -101,7 +101,7 @@ func (opening *sessionRuntimeOpening) currentBoardReferenceStore() (currentBoard
 	return store, nil
 }
 
-func (r *Root) selectCurrentBoardReference(ctx context.Context, opening *sessionRuntimeOpening) error {
+func (r *RuntimeOpening) selectCurrentBoardReference(ctx context.Context, opening *sessionRuntimeOpening) error {
 	if !opening.usesImplicitCurrentBoard() {
 		return nil
 	}
@@ -153,7 +153,7 @@ type currentBoardStartupRecovery struct {
 	file, quarantinedFile, cause string
 }
 
-func (r *Root) quarantineUnreadableCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening, failure error) error {
+func (r *RuntimeOpening) quarantineUnreadableCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening, failure error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func equalCurrentBoardEvent(left, right factorydefinitions.FactoryEvent) bool {
 	return reflect.DeepEqual(left, right) && reflect.DeepEqual(a, b)
 }
 
-func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) (string, error) {
+func (r *RuntimeOpening) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) (string, error) {
 	reader, ok := opening.durableExecution.Service.(currentBoardFactsReader)
 	if !ok {
 		return "", fmt.Errorf("current board durable witness reader is unavailable")
@@ -256,7 +256,10 @@ func (r *Root) discoverLegacyCurrentBoard(ctx context.Context, opening *sessionR
 		return "", fmt.Errorf("current board recording profile is required")
 	}
 	root := filepath.Join(opening.sessionSelection.SystemConfigHome, ".you-agent-factory", "recordings")
-	listed, err := r.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+	if r.recordedInventory == nil {
+		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy recording inventory could not be read", fmt.Errorf("recorded session inventory is required"))
+	}
+	listed, err := r.recordedInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
 	if err != nil {
 		return "", currentBoardHistoryFailure("", opening.sessionID, "UNREADABLE_RECORDING: legacy recording inventory could not be read", err)
 	}
@@ -326,7 +329,7 @@ func (opening *sessionRuntimeOpening) restoresExplicitCurrentBoard() bool {
 		currentBoardHistoryBelongsToFactory(opening.restoredEventHistory, opening.load.LoadedFactoryCfg.FactoryDir())
 }
 
-func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) error {
+func (r *RuntimeOpening) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening) error {
 	// A selected history is recovery input, never the successor writer. Keep
 	// explicit --record policy with its owning lane; implicit adoption always
 	// reserves a fresh target before the runtime can open a recorder.
@@ -356,7 +359,7 @@ func (r *Root) reserveFreshCurrentBoard(ctx context.Context, opening *sessionRun
 	return nil
 }
 
-func (r *Root) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening, reader currentBoardFactsReader, root, artifact string, witness []factorydefinitions.FactoryEvent) (string, []factorydefinitions.FactoryEvent, error) {
+func (r *RuntimeOpening) matchLegacyCurrentBoard(ctx context.Context, opening *sessionRuntimeOpening, reader currentBoardFactsReader, root, artifact string, witness []factorydefinitions.FactoryEvent) (string, []factorydefinitions.FactoryEvent, error) {
 	relative := filepath.FromSlash(artifact)
 	if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(filepath.Clean(relative), ".."+string(filepath.Separator)) {
 		return "", nil, fmt.Errorf("legacy inventory returned a foreign artifact reference")
@@ -402,7 +405,7 @@ func currentBoardHistoryBelongsToFactory(events []factorydefinitions.FactoryEven
 	return validateCurrentBoardFactoryDirectory(events, directory) == nil
 }
 
-func (r *Root) quarantineCurrentBoardArtifact(ctx context.Context, opening *sessionRuntimeOpening, artifact, cause string) error {
+func (r *RuntimeOpening) quarantineCurrentBoardArtifact(ctx context.Context, opening *sessionRuntimeOpening, artifact, cause string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -427,7 +430,7 @@ func (r *Root) quarantineCurrentBoardArtifact(ctx context.Context, opening *sess
 // A corrupt recording can be selected without parsing its damaged body only
 // through a validated repository reference to this profile's recording tree.
 // Explicit and foreign paths retain their rejecting behavior.
-func (r *Root) quarantineSelectedCurrentBoardRecording(ctx context.Context, opening *sessionRuntimeOpening, failure error) error {
+func (r *RuntimeOpening) quarantineSelectedCurrentBoardRecording(ctx context.Context, opening *sessionRuntimeOpening, failure error) error {
 	if !opening.usesImplicitCurrentBoard() || !opening.hasCurrentBoardReference {
 		return failure
 	}

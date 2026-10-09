@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"go.uber.org/zap"
@@ -41,7 +40,7 @@ func (runtime *lifecycleRuntime) StopLifecycle(context.Context) error {
 
 func (*lifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
+func (*lifecycleRuntime) CurrentRuntimeBundle() roles.RuntimeObservations { return nil }
 
 type hostOperation struct {
 	events  *[]string

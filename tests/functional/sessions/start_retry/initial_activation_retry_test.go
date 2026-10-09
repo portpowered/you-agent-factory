@@ -88,11 +88,22 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	policies := []initialOpeningScenario{newOpeningPolicyScenario(t), newOpeningPolicyScenario(t)}
+	policyGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	for _, scenario := range policies {
+		policyGate.paths[scenario.candidateDir] = scenario.candidateID
+	}
+	t.Cleanup(policyGate.unblock)
 	overlap := newInitialOpeningProviderScenario(t)
-	canceledWork := newInitialOpeningProviderScenario(t)
-	canceledWorkGate := &selectedProviderGate{paths: map[string]string{
-		canceledWork.candidateDir: canceledWork.candidateID, canceledWork.peerDir: canceledWork.peerID,
-	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	canceledWork := []initialOpeningScenario{
+		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
+		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
+	}
+	canceledWorkGate := &selectedProviderGate{paths: make(map[string]string),
+		entered: make(chan platformprocess.CommandRequest, len(canceledWork)), release: make(chan struct{})}
+	for _, scenario := range canceledWork {
+		canceledWorkGate.paths[scenario.candidateDir] = scenario.candidateID
+	}
 	t.Cleanup(canceledWorkGate.unblock)
 	providerGate := &selectedProviderGate{paths: map[string]string{
 		overlap.candidateDir: overlap.candidateID, overlap.peerDir: overlap.peerID,
@@ -135,13 +146,17 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		// Preserve actual recording bytes and errors without the platform's
+		// Windows replacement retry loop on absent hydration files. OS file
+		// replacement races belong to the compiled integration lane.
+		RecordingReadFile:         os.ReadFile,
 		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
 		Clock:                     initialOpeningClock{},
 		FactoryRuntimeDirectories: files,
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate, policy: policyGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Port == completionFailurePort {
@@ -177,6 +192,9 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = hostDir
+	// First-run packaged Factory installation is fixture setup. Complete it
+	// through the same public process before the host readiness window begins.
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostDir)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	api.WaitForURL(t)
 	t.Cleanup(func() { command.Stop(t) })
@@ -249,7 +267,11 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
-	t.Run("closing one session preserves a peer with gated live Work", func(t *testing.T) {
+	t.Run("quiet and verbose invocations retain selected observations across current selection", func(t *testing.T) {
+		t.Parallel()
+		testOpeningPolicyOverlap(t, process, sessions, policies, policyGate, api.WaitForURL(t), logs)
+	})
+	t.Run("four explicit sessions overlap and closing one preserves three gated peers", func(t *testing.T) {
 		t.Parallel()
 		testSelectedProviderCancellation(t, sessions, canceledWork, canceledWorkGate, api.WaitForURL(t))
 	})
@@ -521,6 +543,7 @@ type initialOpeningProviderRunner struct {
 	canceled *selectedProviderGate
 	host     *selectedProviderGate
 	binding  *bindingChildGate
+	policy   *selectedProviderGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -528,6 +551,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.policy != nil && runner.policy.paths[request.WorkDir] != "" {
+		return runner.policy.run(ctx, request)
+	}
 	if runner.binding != nil && runner.binding.selected[request.WorkDir] != "" {
 		return runner.binding.run(ctx, request)
 	}
@@ -996,6 +1022,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		Clock: initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		// Hydration preserves real bytes/errors through the same read effect as
+		// the healthy matrix, without Windows replacement retries on absent files.
+		RecordingReadFile:  os.ReadFile,
 		RecordingWriteFile: fault.write, APIServerStarter: api.Start,
 	})
 	if err != nil {
@@ -1013,6 +1042,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", directory, "--continuously", "--with-server", "--quiet", "--no-record"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = directory
+	// Installation is fixture setup, outside the host readiness window. The
+	// recording fault applies only to the later selected session's directory.
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, directory)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	api.WaitForURL(t)
 	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
