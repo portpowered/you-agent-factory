@@ -16,7 +16,7 @@ import (
 // An archived capture has no live Events topic. Drain its
 // committed capture without registering a session or restoring supervision.
 // Cursor-based history remains owned by the public captured logs boundary.
-func (r *registry) capturedObservationStream(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
+func (r *registry) completedContinuationStream(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
 	if r.logs == nil || req.Cursor != nil {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
 	}
@@ -41,7 +41,7 @@ func (r *registry) capturedObservationStream(ctx context.Context, req workersess
 		(page.Terminal != nil && !workersessions.State(page.Terminal.Status).Terminal()) {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
 	}
-	s := &capturedReplayStream{reader: r.logs.reader, request: request, page: page,
+	s := &continuationCaptureStream{reader: r.logs.reader, request: request, page: page,
 		catalog: page.Catalog, head: uint64(page.Catalog.CommittedPosition), health: page.Health, topic: page.Opening.ID.Topic}
 	if page.Terminal != nil {
 		s.terminal, s.state = uint64(page.Terminal.Position), page.Terminal.Status
@@ -61,7 +61,7 @@ func capturedReplayOpening(payload json.RawMessage) (workers.SessionPayload, boo
 	return opening, true
 }
 
-type capturedReplayStream struct {
+type continuationCaptureStream struct {
 	mu       sync.Mutex
 	reader   recordings.WorkerCapturedActivityReader
 	request  recordings.WorkerCapturedActivityRequest
@@ -76,13 +76,13 @@ type capturedReplayStream struct {
 	closed   bool
 }
 
-func (s *capturedReplayStream) Close() {
+func (s *continuationCaptureStream) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
 }
 
-func (s *capturedReplayStream) Next(ctx context.Context) workersessions.ObservationDelivery {
+func (s *continuationCaptureStream) Next(ctx context.Context) workersessions.ObservationDelivery {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -124,7 +124,7 @@ func (s *capturedReplayStream) Next(ctx context.Context) workersessions.Observat
 	return delivery
 }
 
-func (s *capturedReplayStream) advance(ctx context.Context) bool {
+func (s *continuationCaptureStream) advance(ctx context.Context) bool {
 	if s.page.NextToken == "" {
 		return false
 	}
@@ -137,7 +137,7 @@ func (s *capturedReplayStream) advance(ctx context.Context) bool {
 	return true
 }
 
-func (s *capturedReplayStream) pageMetadataMatches(page recordings.WorkerCapturedActivityPage) bool {
+func (s *continuationCaptureStream) pageMetadataMatches(page recordings.WorkerCapturedActivityPage) bool {
 	if page.Health != s.health {
 		return false
 	}
