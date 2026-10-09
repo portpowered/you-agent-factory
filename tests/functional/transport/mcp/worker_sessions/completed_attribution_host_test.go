@@ -18,6 +18,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -77,6 +78,100 @@ func runArchivedWorkAttributionCompleted(t *testing.T, process support.Process) 
 	assertJSONEqual(t, frozen, historyParityPage(t, ctx, session, host, "all", "factory", token))
 	if active := historyParityPage(t, ctx, session, host, "active", "factory", ""); len(active["sessions"].([]any)) != 0 {
 		t.Fatalf("completed attempts remained active: %v", active)
+	}
+}
+
+// The declarative mock completes while business result processing fails.
+// Restart requires a fresh graph in the same private
+// profile; Worker completion must remain distinct from failed Work.
+func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
+	t.Parallel()
+	process := newSelectedHostClientProcess(t)
+	dir := support.ScaffoldSingleStepFactory(t, "completed-worker-failed-work")
+	support.WriteAgentConfig(t, dir, "processor", "---\ntype: AGENT_WORKER\nmodelProvider: CODEX\nmodel: gpt-5\nexecutorProvider: SCRIPT_WRAP\n---\nReturn a short reply.\n")
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: AGENT_RUN\nlimits:\n  maxExecutionTime: 1h\nstopWords:\n  - DONE\n---\nReturn DONE when the task is complete.\n")
+	mockPath := filepath.Join(dir, "mock.json")
+	if err := os.WriteFile(mockPath, []byte(`{"unmatchedDispatchPolicy":"accept","mockWorkers":[{"runType":"accept","usage":{"provider":"codex","model":"gpt-5","inputTokens":11,"outputTokens":7}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Args:  []string{"--record", filepath.Join(dir, "failed-work.json"), "--with-mock-workers", mockPath},
+		Edges: serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}, ScriptCommandRunner: rejectLocalProvider{t: t}, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	connection, ctx := startMCP(t, process, host.URL())
+	scope := support.GetDefaultSession(t, host.URL()).Id
+	name := "completed-worker"
+	support.SubmitSessionWorkAt(t, host.URL(), scope, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Name: &name, Payload: "complete the Worker before processing the Work result"})
+	status := support.WaitForSessionTerminalStatus(t, host.URL(), scope, 30*time.Second)
+	if status.Categories.Failed != 1 {
+		t.Fatalf("mock result did not fail business Work: %+v", status)
+	}
+	// Archive is capture-derived even while the original runtime remains open.
+	before := historyParityPage(t, ctx, connection, host, "archived", "factory", "")["sessions"].([]any)[0].(map[string]any)
+	id := before["workerSessionId"].(string)
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	assertCompletedFailedWorkCapture(t, before, scope, id)
+	workID := before["workId"].(string)
+	assertFailedAttributionWork(t, host, scope, workID)
+	logs := getHost(t, endpoint+"/logs")
+	encodedLogs, err := json.Marshal(logs)
+	if err != nil || !strings.Contains(string(encodedLogs), "mock worker accepted") {
+		t.Fatalf("capture lost completed output: %v %v", logs, err)
+	}
+	transcript := getHost(t, endpoint+"/transcript")
+	host.Close(t)
+	cfg.Args = []string{"--replay", filepath.Join(dir, "failed-work.json")}
+	host = support.StartFunctionalAPIServer(t, cfg)
+	connection, ctx = startMCP(t, process, host.URL())
+	assertFailedAttributionWork(t, host, support.GetDefaultSession(t, host.URL()).Id, workID)
+	endpoint = host.URL() + "/worker-sessions/" + url.PathEscape(id)
+	selected := getHost(t, endpoint).(map[string]any)
+	assertCompletedFailedWorkCapture(t, selected, scope, id)
+	for _, field := range []string{"attemptId", "startedAt", "endedAt", "durationMillis"} {
+		if selected[field] == nil || selected[field] != before[field] {
+			t.Fatalf("restart changed captured %s: before=%v after=%v", field, before, selected)
+		}
+	}
+	assertJSONEqual(t, selected, getHost(t, host.URL()+"/factory-sessions/"+scope+"/worker-sessions/"+id))
+	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, connection, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+	assertFactoryCLIParity(t, host, id, selected)
+	inputs := support.FakeInputs(ctx, []string{"you", "worker-sessions", "show", "--session", scope, "--worker-session-id", id, "--server", host.URL(), "--json"})
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("original scope CLI: %v stderr=%s", err, inputs.Stderr())
+	}
+	var scoped map[string]any
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &scoped); err != nil {
+		t.Fatal(err)
+	}
+	assertCompletedFailedWorkCapture(t, scoped, scope, id)
+	archived := historyParityPage(t, ctx, connection, host, "archived", "factory", "")["sessions"].([]any)
+	if len(archived) != 1 {
+		t.Fatalf("restart archive membership: %v", archived)
+	}
+	assertJSONEqual(t, selected, archived[0])
+	assertJSONEqual(t, logs, getHost(t, endpoint+"/logs"))
+	assertJSONEqual(t, transcript, getHost(t, endpoint+"/transcript"))
+}
+
+func assertFailedAttributionWork(t *testing.T, host *support.FunctionalAPIServer, scope, workID string) {
+	t.Helper()
+	row := getHost(t, host.URL()+"/factory-sessions/"+scope+"/work/"+url.PathEscape(workID)).(map[string]any)
+	state, ok := row["state"].(map[string]any)
+	if !ok || state["type"] != "FAILED" {
+		t.Fatalf("Worker summary repair hid business Work failure: %v", row)
+	}
+}
+
+func assertCompletedFailedWorkCapture(t *testing.T, row map[string]any, scope, id string) {
+	t.Helper()
+	if row["workerSessionId"] != id || row["factorySessionId"] != scope || row["state"] != "COMPLETED" || row["terminalCause"] != "COMPLETED" || row["recordingHealth"] != "COMPLETE" || row["provider"] != "codex" || row["model"] != "gpt-5" {
+		t.Fatalf("completed Worker facts replaced by business Work failure: %v", row)
+	}
+	usage, ok := row["tokenUsage"].(map[string]any)
+	if !ok || usage["inputTokens"] != float64(11) || usage["outputTokens"] != float64(7) || usage["totalTokens"] != float64(18) {
+		t.Fatalf("captured usage changed: %v", row)
 	}
 }
 

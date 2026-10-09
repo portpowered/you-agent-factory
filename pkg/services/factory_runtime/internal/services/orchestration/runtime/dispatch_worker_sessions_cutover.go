@@ -466,6 +466,10 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 // One request retains one detached selected snapshot for both row projection
 // and terminal confirmation. A concurrent append is visible on the next read.
 func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+	return s.projectSelectedWorkSnapshot(ctx, optionalCtx, workID, live, "")
+}
+
+func (s *recordedWorkerSessionObservation) projectSelectedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation, workerSessionID string) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
 	facts, err := s.readSelectedWorkFacts(ctx, workID)
 	if err != nil {
 		return nil, false, nil, err
@@ -490,6 +494,9 @@ func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, option
 	}
 	result := make([]workersessions.Observation, 0, len(facts.Associations))
 	for id, association := range facts.Associations {
+		if workerSessionID != "" && association.WorkerSessionID != workerSessionID {
+			continue
+		}
 		var selectedProvider []interfaces.FactoryWorldProviderSessionRecord
 		if provider, ok := providers[id]; ok {
 			selectedProvider = []interfaces.FactoryWorldProviderSessionRecord{provider}
@@ -840,6 +847,9 @@ func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
 	ctx context.Context,
 	workerSessionID string,
 ) (workersessions.Observation, bool, error) {
+	if observation, found, selected, err := s.readSelectedCapturedWorker(ctx, workerSessionID); selected {
+		return observation, found, err
+	}
 	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, workerSessionID)
 	if err != nil || !found {
 		return workersessions.Observation{}, found, err

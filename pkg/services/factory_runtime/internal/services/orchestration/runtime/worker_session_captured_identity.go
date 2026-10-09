@@ -226,6 +226,77 @@ func selectedCapturedTranscriptMatches(transcript workersessions.ReadTranscriptR
 	return transcript.WorkerSessionID == observation.WorkerSessionID && transcript.ProviderSession == observation.ProviderSession && transcript.AttemptID == observation.AttemptID && transcript.State == observation.State
 }
 
+// The committed opening supplies a Work selector, not authority. Membership
+// still comes from the selected canonical association in the owning ledger.
+// Older readers without materialized capture correlation retain their existing
+// fallback; a selected storage failure never falls back to canonical replay.
+func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx context.Context, workerID string) (workersessions.Observation, bool, bool, error) {
+	if s.recordingID == "" {
+		return workersessions.Observation{}, false, false, nil
+	}
+	reader, ok := s.recordingReader.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return workersessions.Observation{}, false, false, nil
+	}
+	if _, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader); !ok {
+		return workersessions.Observation{}, false, false, nil
+	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, workerID)
+	if failure := observationContextError(ctx); failure != nil {
+		return workersessions.Observation{}, false, true, failure
+	}
+	if err != nil {
+		if errors.Is(err, recordings.ErrWorkerRecordingReplay) && s.Service != nil {
+			// Preserve the capture owner's public failure classification rather
+			// than reclassifying a damaged unrelated archive as runtime history.
+			_, captureErr := s.Service.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
+			if captureErr != nil {
+				return workersessions.Observation{}, false, true, captureErr
+			}
+		}
+		if failure := recordingHealthLoadError(err); failure != nil {
+			return workersessions.Observation{}, false, true, failure
+		}
+		return workersessions.Observation{}, false, false, nil
+	}
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if len(summary.Capture.Opening.Payload) == 0 {
+		return workersessions.Observation{}, false, false, nil
+	}
+	if json.Unmarshal(summary.Capture.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil {
+		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	}
+	if len(opening.WorkIDs) == 0 {
+		return workersessions.Observation{}, false, false, nil
+	}
+	if opening.WorkerSessionID != workerID || summary.Capture.Catalog.WorkerSessionID != workerID {
+		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	}
+	// Exact summary reads do not need optional transcript enrichment.
+	optionalCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	rows, _, facts, err := s.projectSelectedWorkSnapshot(ctx, optionalCtx, opening.WorkIDs[0], nil, workerID)
+	if err != nil {
+		return workersessions.Observation{}, false, true, err
+	}
+	if len(rows) == 0 {
+		return workersessions.Observation{}, false, true, nil
+	}
+	if len(rows) != 1 || rows[0].AttemptID != opening.DispatchID {
+		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	}
+	health, err := s.selectedRecordingHealth(ctx, rows, nil)
+	if err != nil {
+		return workersessions.Observation{}, false, true, err
+	}
+	s.decorateRecordingHealth(rows, health)
+	if err := applySelectedWorkConfirmation(ctx, rows, *facts, s.sampleCompletedFlushWatermark()); err != nil {
+		return workersessions.Observation{}, false, true, err
+	}
+	return rows[0], true, true, nil
+}
+
 // Exact-ID runtime reads share the selected capture and health capabilities
 // used by scoped lists. Current-runtime attribution remains distinct from the
 // immutable captured owner exposed by archived inspection.

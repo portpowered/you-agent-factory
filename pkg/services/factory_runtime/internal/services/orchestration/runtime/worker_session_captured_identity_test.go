@@ -164,8 +164,55 @@ func TestCapturedFactoryIdentitySelectsSummaryWithoutRecordingLoad(t *testing.T)
 	service.recordingID, service.recordingReader = "owned", reader
 	service.providerSessions = forbiddenCapturedProviderProjection{}
 	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
-	if err != nil || got.TokenUsage == nil || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 4 || len(reader.ids) != 1 || reader.ids[0] != fixture.workerSessionID {
+	if err != nil || got.TokenUsage == nil || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 4 || len(reader.ids) != 2 || reader.ids[0] != fixture.workerSessionID {
 		t.Fatalf("selected exact-ID observation=%+v err=%v selected=%v", got, err, reader.ids)
+	}
+}
+
+func TestExactCapturedWorkerUsesSelectedCanonicalFacts(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"completed", "foreign capture", "foreign association", "projection unavailable", "projection canceled"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRecordedExactObservationFixture(t)
+			service := fixture.service.(*recordedWorkerSessionObservation)
+			facts := service.ledger.(*preparedScopedTestLedger).byWork[fixture.workID]
+			ledger := &selectedWorkFactsLedger{RuntimeLedger: service.ledger, facts: facts}
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+			reader.summary.Capture.Opening.Payload = []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q,"dispatchId":"dispatch-recorded-exact","workIds":[%q]}}`, fixture.workerSessionID, fixture.workID))
+			service.ledger, service.recordingReader, service.recordingID = ledger, reader, "owned"
+			service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+				panic("exact captured summary replayed canonical history")
+			}
+			var want error
+			switch scenario {
+			case "foreign capture":
+				reader.summary.Capture.Catalog.RecordingID = "foreign"
+				want = workersessions.ErrObservationRecordingCorrupt
+			case "foreign association":
+				ledger.facts.Associations = map[string]recordings.WorkerSessionAssociationFacts{"dispatch-recorded-exact": {WorkerSessionID: "sibling"}}
+				want = workersessions.ErrObservationSessionNotFound
+			case "projection unavailable":
+				ledger.err = errors.New("selected projection unavailable")
+				want = workersessions.ErrObservationProjectionUnavailable
+			case "projection canceled":
+				ledger.err = context.Canceled
+				want = workersessions.ErrObservationCanceled
+			}
+			got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+			if !errors.Is(err, want) {
+				t.Fatalf("selected summary = %+v, %v; want %v", got, err, want)
+			}
+			if want != nil {
+				if got.WorkerSessionID != "" {
+					t.Fatalf("failed selection disclosed observation: %+v", got)
+				}
+				return
+			}
+			if ledger.reads != 1 || ledger.workID != fixture.workID || got.WorkerSessionID != fixture.workerSessionID || got.State != workersessions.StateCompleted || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != 4 {
+				t.Fatalf("selected exact identity=%+v selector=%q reads=%d", got, ledger.workID, ledger.reads)
+			}
+		})
 	}
 }
 
@@ -440,7 +487,9 @@ func TestScopedWorkHealthRejectsForeignAndMalformedSelections(t *testing.T) {
 	if result, err := service.selectedRecordingHealth(t.Context(), nil, nil); err != nil || len(result) != 0 || len(reader.ids) != 0 {
 		t.Fatalf("empty selected health = %+v, %v, selectors=%v", result, err, reader.ids)
 	}
-	service.recordingReader = struct{ recordings.WorkerRecordingReader }{&scriptedWorkerRecordingReader{}}
+	service.recordingReader = struct {
+		recordings.WorkerRecordingReader
+	}{&scriptedWorkerRecordingReader{}}
 	if _, err := service.selectedRecordingHealth(t.Context(), nil, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("missing prepared-health capability = %v", err)
 	}
