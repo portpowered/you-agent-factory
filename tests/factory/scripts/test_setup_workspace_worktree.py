@@ -145,6 +145,38 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.module.run_git = tracking_run_git
         return recorded, original_run_git
 
+    def test_ordinary_setup_seeds_progress_and_preserves_lane_and_root_history(self):
+        init_local_repo(self.repo_path)
+        root_progress = self.repo_path / "progress.txt"
+        root_bytes = b"root history\x00\r\n"
+        root_progress.write_bytes(root_bytes)
+        with (self.repo_path / ".git/info/exclude").open("a") as excludes:
+            excludes.write("\nprogress.txt\n")
+        name = "progress-startup"
+        write_prd(self.repo_path, name)
+        first = run_setup_workspace(self.repo_path, name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        payload = json.loads(first.stdout)
+        self.assertEqual(set(payload), EXPECTED_RESULT_KEYS)
+        self.assertFalse(payload["reused"])
+        progress = Path(payload["worktree"]) / "progress.txt"
+        self.assertEqual(progress.read_bytes(), b"# Codebase Patterns\n")
+        for content in (b"lane history\x00\r\n", b"", None):
+            with self.subTest(content=content):
+                if content is None:
+                    progress.unlink()
+                else:
+                    progress.write_bytes(content)
+                result = run_setup_workspace(self.repo_path, name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                repeated = json.loads(result.stdout)
+                self.assertEqual(set(repeated), EXPECTED_RESULT_KEYS)
+                self.assertTrue(repeated["reused"])
+                self.assertEqual(repeated["worktree"], payload["worktree"])
+                self.assertEqual(repeated["branch"], name)
+                self.assertEqual(progress.read_bytes(), content if content is not None else b"# Codebase Patterns\n")
+                self.assertEqual(root_progress.read_bytes(), root_bytes)
+
     def test_prune_runs_after_sync_and_before_worktree_creation(self):
         init_local_repo(self.repo_path)
         prd_name = "prune-order-prd"
@@ -695,6 +727,66 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("refs/heads/other-branch", result.stderr)
         self.assertIn(f"refs/heads/{prd_name}", result.stderr)
+
+
+class ProgressLogInitializationTest(unittest.TestCase):
+    """Exclusive creation is one component's observable file contract."""
+
+    def setUp(self):
+        self.module = load_setup_workspace_module()
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.workspace = Path(self.directory.name)
+
+    def test_seeds_utf8_header_and_preserves_populated_empty_and_directory_paths(self):
+        progress = self.workspace / "progress.txt"
+        self.module.initialize_progress_log(self.workspace)
+        self.assertEqual(progress.read_bytes(), b"# Codebase Patterns\n")
+        for data in (b"history\x00\r\n", b""):
+            progress.write_bytes(data)
+            self.module.initialize_progress_log(self.workspace)
+            self.assertEqual(progress.read_bytes(), data)
+        progress.unlink()
+        progress.mkdir()
+        self.module.initialize_progress_log(self.workspace)
+        self.assertTrue(progress.is_dir())
+
+    def test_preserves_existing_link_and_its_target(self):
+        target = self.workspace / "history.txt"
+        target.write_bytes(b"linked history")
+        progress = self.workspace / "progress.txt"
+        try:
+            progress.symlink_to(target)
+        except OSError as error:
+            self.skipTest(f"file symlinks unavailable: {error}")
+        self.module.initialize_progress_log(self.workspace)
+        self.assertTrue(progress.is_symlink())
+        self.assertEqual(target.read_bytes(), b"linked history")
+        target.unlink()
+        self.module.initialize_progress_log(self.workspace)
+        self.assertTrue(progress.is_symlink())
+        self.assertFalse(target.exists())
+
+    def test_competing_creator_keeps_its_bytes(self):
+        progress = self.workspace / "progress.txt"
+        original_open = Path.open
+
+        # Use a byte write that does not re-enter the patched Path.open.
+        def competing_open(path, *args, **kwargs):
+            if path == progress:
+                with original_open(path, "wb") as stream:
+                    stream.write(b"competing history")
+                raise FileExistsError("another creator won")
+            return original_open(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", competing_open):
+            self.module.initialize_progress_log(self.workspace)
+        self.assertEqual(progress.read_bytes(), b"competing history")
+
+    def test_write_error_propagates(self):
+        with mock.patch.object(Path, "open", side_effect=PermissionError("write denied")):
+            with self.assertRaisesRegex(PermissionError, "write denied"):
+                self.module.initialize_progress_log(self.workspace)
 
 
 if __name__ == "__main__":

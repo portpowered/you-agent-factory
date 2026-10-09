@@ -601,7 +601,7 @@ func (r *Root) bindSessionOpeningProducts(
 	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	releaseScope, err := bindDurableExecutionCapabilities(
+	releaseScope, err := r.executionBinding.Bind(
 		opening.sessionID,
 		opening.durableExecution.Service,
 		rootRuntime,
@@ -609,9 +609,7 @@ func (r *Root) bindSessionOpeningProducts(
 		opening.configured.Runtime.RuntimeInstanceID,
 		opening.startupRuntime.StreamGeneration(),
 		opening.startupRuntime.RecordingLedger(),
-		r.providerOverride,
 		opening.configured.Workers.MockWorkers,
-		r.providerCommandRunner,
 		runtimeProgressPublisher(opening.startupRuntime),
 		runtimeWorkerAttemptStarter(opening.startupRuntime),
 	)
@@ -745,15 +743,13 @@ type workerScopeBinder interface {
 	) (func(), error)
 }
 
-func bindWorkerScope(
+func (operation *ExecutionBinding) bindWorkerScope(
 	sessionID string,
 	execution any,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
-	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunnerOverride platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) (func(), error) {
@@ -761,7 +757,7 @@ func bindWorkerScope(
 	if !ok {
 		return nil, fmt.Errorf("bind worker scope for Factory Session %q: live child scope binder is required", strings.TrimSpace(sessionID))
 	}
-	release, err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride, progressPublisher, attemptStarter)
+	release, err := binder.BindWorkerScope(sessionID, admission, runtimeID, generationID, operation.providerOverride, mockWorkers, operation.commandRunner, progressPublisher, attemptStarter)
 	if err != nil {
 		return nil, fmt.Errorf("bind worker scope for Factory Session %q: %w", strings.TrimSpace(sessionID), err)
 	}

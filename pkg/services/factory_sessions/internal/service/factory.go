@@ -84,8 +84,7 @@ type Root struct {
 	runtimeRoot                    FactoryRuntimeRoot
 	clock                          factoryruntime.Clock
 	providerOverride               providers.Service
-	providerCommandRunner          platformprocess.CommandRunner
-	scriptCommandRunner            platformprocess.CommandRunner
+	executionBinding               *ExecutionBinding
 	submissionRecorder             recordings.SubmissionRecorder
 	dispatchRecorder               recordings.DispatchRecorder
 }
@@ -118,8 +117,7 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	providerCommandRunner ProviderCommandRunner,
-	scriptCommandRunner ScriptCommandRunner,
+	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	replayBehavior *recordingreplay.Behavior,
@@ -161,8 +159,7 @@ func NewRoot(
 		resolveHome:                    resolveHome,
 		clock:                          clock,
 		providerOverride:               providerOverride,
-		providerCommandRunner:          providerCommandRunner,
-		scriptCommandRunner:            scriptCommandRunner,
+		executionBinding:               executionBinding,
 		submissionRecorder:             submissionRecorder,
 		dispatchRecorder:               dispatchRecorder,
 	}
