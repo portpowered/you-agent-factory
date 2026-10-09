@@ -2200,7 +2200,6 @@ testsleep-sleep-test|pkg/services/automations/wire_test|pkg/services/automations
 testsleep-sleep-test|pkg/services/automations/wire_test|pkg/services/automations/wire/wire_test.go::TestNewServiceConstructsInertRoot::sleep::2
 testsleep-sleep-test|pkg/services/events/internal/service|pkg/services/events/internal/service/subscribe_race_test.go::TestSubscribe_NoGoroutineLeakAcrossSubscribeNextAndClose::sleep::1
 testsleep-sleep-test|pkg/services/factory_runtime/internal/services/orchestration/engine|pkg/services/factory_runtime/internal/services/orchestration/engine/engine_test_helpers_test.go::waitForEngineRunLoopActive::sleep::1
-testsleep-sleep-test|pkg/services/factory_runtime/internal/services/orchestration/engine|pkg/services/factory_runtime/internal/services/orchestration/engine/engine_tick_test.go::TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake::sleep::1
 testsleep-sleep-test|pkg/services/factory_runtime/internal/services/orchestration/engine|pkg/services/factory_runtime/internal/services/orchestration/engine/engine_tick_test.go::waitForNoRunningDispatches::sleep::1
 testsleep-sleep-test|pkg/services/factory_runtime/internal/services/orchestration/engine|pkg/services/factory_runtime/internal/services/orchestration/engine/engine_tick_test.go::waitForRunningDispatch::sleep::1
 testsleep-sleep-test|pkg/services/factory_runtime/internal/services/orchestration/engine|pkg/services/factory_runtime/internal/services/orchestration/engine/work_move_test.go::TestMoveWork_WakesRunLoopWithoutBufferedInputs::sleep::1

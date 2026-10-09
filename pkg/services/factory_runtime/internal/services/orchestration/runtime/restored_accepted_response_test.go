@@ -148,6 +148,82 @@ func TestRecordedResponseValidCompleteFactsPassValidation(t *testing.T) {
 	}
 }
 
+func TestRecordedResponseExtractsCompleteContent(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []string{"model content", "inference response"} {
+		t.Run(shape, func(t *testing.T) {
+			t.Parallel()
+			events := acceptedResponseFixture(t)
+			content := []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: strings.Repeat("full output ", 400)},
+				{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"nested":{"result":"accepted"}}`)},
+			}
+			if shape == "model content" {
+				preview := "short preview"
+				events[2] = acceptedFixtureEvent(t, interfaces.FactoryEventTypeModelResponse, workers.ModelResponseEventPayload{
+					ModelRequestID: "model-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded,
+					OutputContent: &content, OutputPreview: &preview,
+				})
+			} else {
+				raw, err := json.Marshal(map[string]any{"content": content})
+				if err != nil {
+					t.Fatal(err)
+				}
+				response := string(raw)
+				events[1] = acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceRequest, workers.InferenceRequestEventPayload{InferenceRequestID: "inference-1", Attempt: 1})
+				events[2] = acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceResponse, workers.InferenceResponseEventPayload{
+					InferenceRequestID: "inference-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, Response: &response,
+				})
+			}
+			dispatch := acceptedResponseConfig().restoredWorldState.ActiveDispatches["dispatch-1"]
+			got, ok := restoredAcceptedOutput(events[:3], events[3].Context, dispatch)
+			if !ok || !reflect.DeepEqual(got, content) {
+				t.Fatalf("extracted content differs from the complete recorded output: available=%v", ok)
+			}
+			got[0].Text = "changed"
+			got[1].JSON[0] = '['
+			again, ok := restoredAcceptedOutput(events[:3], events[3].Context, dispatch)
+			if !ok || !reflect.DeepEqual(again, content) {
+				t.Fatal("mutating extracted output changed the source recording")
+			}
+		})
+	}
+}
+
+func TestRecordedResponseDoesNotRecoverEarlierInferenceOverIncompleteModel(t *testing.T) {
+	t.Parallel()
+	for _, boundary := range []string{"preview", "failed", "new request"} {
+		t.Run(boundary, func(t *testing.T) {
+			t.Parallel()
+			events := acceptedResponseFixture(t)
+			raw := "earlier successful inference"
+			inference := []interfaces.FactoryEvent{
+				acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceRequest, workers.InferenceRequestEventPayload{InferenceRequestID: "infer-1", Attempt: 1}),
+				acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceResponse, workers.InferenceResponseEventPayload{
+					InferenceRequestID: "infer-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, Response: &raw,
+				}),
+			}
+			if boundary == "new request" {
+				events = append(events[:3], events[1], events[3])
+			} else {
+				response := workers.ModelResponseEventPayload{ModelRequestID: "model-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, OutputPreview: &raw}
+				if boundary == "failed" {
+					response.Outcome = workers.InferenceOutcomeFailed
+				}
+				events[2] = acceptedFixtureEvent(t, interfaces.FactoryEventTypeModelResponse, response)
+			}
+			events = append(append(append([]interfaces.FactoryEvent(nil), events[:1]...), inference...), events[1:]...)
+			ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+			if err := reconcileRestoredDispatches(acceptedResponseConfig(), ledger); err == nil {
+				t.Fatal("earlier inference authorized an incomplete later model output")
+			}
+			if len(ledger.CallsSnapshot()) != 0 {
+				t.Fatal("incomplete accepted output was retried or reconciled")
+			}
+		})
+	}
+}
+
 func TestRecordedResponseProviderSuccessWithoutAcceptanceRetainsRestartRetry(t *testing.T) {
 	t.Parallel()
 	events := acceptedResponseFixture(t)[:3]

@@ -52,7 +52,7 @@ func validateRestoredAcceptedResponse(events []interfaces.FactoryEvent, dispatch
 		if sawOtherOutcome {
 			return restoredAcceptedResponseError(dispatch.DispatchID, "agent acceptance conflicts with a later agent response")
 		}
-		if !restoredAcceptedOutputAvailable(events[:index], event.Context, dispatch) {
+		if _, ok := restoredAcceptedOutput(events[:index], event.Context, dispatch); !ok {
 			return restoredAcceptedResponseError(dispatch.DispatchID, "complete output and matching request facts are unavailable or inconsistent")
 		}
 		return nil
@@ -64,11 +64,15 @@ func restoredAcceptedResponseError(dispatchID, reason string) error {
 	return fmt.Errorf("cannot recover accepted dispatch %q: %s. Preserve the source recording. Recover the complete response from an intact recording before reopening the Factory Session. The accepted turn will not be retried", dispatchID, reason)
 }
 
-func restoredAcceptedOutputAvailable(events []interfaces.FactoryEvent, context interfaces.FactoryEventContext, dispatch interfaces.FactoryWorldDispatch) bool {
+// Return detached executable content, rather than a preview or a transcript.
+// Model output is the normalized boundary when present; an earlier successful
+// inference cannot authorize recovery of a later failed or incomplete model run.
+func restoredAcceptedOutput(events []interfaces.FactoryEvent, context interfaces.FactoryEventContext, dispatch interfaces.FactoryWorldDispatch) ([]work.WorkContentPart, bool) {
 	modelRequests := make(map[string]workers.ModelRequestEventPayload)
 	inferenceRequests := make(map[string]workers.InferenceRequestEventPayload)
 	hasDispatchRequest := false
-	modelComplete, inferenceComplete := false, false
+	var modelOutput, inferenceOutput []work.WorkContentPart
+	sawModel := false
 	for _, event := range events {
 		if !sameRestoredResponseContext(event.Context, context) {
 			continue
@@ -78,45 +82,62 @@ func restoredAcceptedOutputAvailable(events []interfaces.FactoryEvent, context i
 			var request interfaces.DispatchRequestEventPayload
 			hasDispatchRequest = event.DecodePayload(&request) == nil && request.TransitionID == dispatch.TransitionID && request.TransitionID != ""
 		case interfaces.FactoryEventTypeModelRequest, interfaces.FactoryEventTypeModelResponse:
-			modelComplete = restoredModelOutputAvailability(event, modelRequests)
+			sawModel = true
+			modelOutput = restoredModelOutput(event, modelRequests)
 		case interfaces.FactoryEventTypeInferenceRequest, interfaces.FactoryEventTypeInferenceResponse:
-			inferenceComplete = restoredInferenceOutputAvailability(event, inferenceRequests)
+			inferenceOutput = restoredInferenceOutput(event, inferenceRequests)
 		}
 	}
-	return hasDispatchRequest && (modelComplete || inferenceComplete)
+	if !hasDispatchRequest {
+		return nil, false
+	}
+	if sawModel {
+		return modelOutput, len(modelOutput) > 0
+	}
+	return inferenceOutput, len(inferenceOutput) > 0
 }
 
-func restoredModelOutputAvailability(event interfaces.FactoryEvent, requests map[string]workers.ModelRequestEventPayload) bool {
+func restoredModelOutput(event interfaces.FactoryEvent, requests map[string]workers.ModelRequestEventPayload) []work.WorkContentPart {
 	if event.Type == interfaces.FactoryEventTypeModelRequest {
 		var request workers.ModelRequestEventPayload
 		if event.DecodePayload(&request) == nil && request.ModelRequestID != "" {
 			requests[request.ModelRequestID] = request
 		}
-		return false
+		return nil
 	}
 	var response workers.ModelResponseEventPayload
 	if event.DecodePayload(&response) != nil {
-		return false
+		return nil
 	}
 	request, exists := requests[response.ModelRequestID]
-	return exists && matchingRestoredModelResponse(request, response)
+	if !exists || !matchingRestoredModelResponse(request, response) {
+		return nil
+	}
+	return work.CloneWorkContentParts(*response.OutputContent)
 }
 
-func restoredInferenceOutputAvailability(event interfaces.FactoryEvent, requests map[string]workers.InferenceRequestEventPayload) bool {
+func restoredInferenceOutput(event interfaces.FactoryEvent, requests map[string]workers.InferenceRequestEventPayload) []work.WorkContentPart {
 	if event.Type == interfaces.FactoryEventTypeInferenceRequest {
 		var request workers.InferenceRequestEventPayload
 		if event.DecodePayload(&request) == nil && request.InferenceRequestID != "" {
 			requests[request.InferenceRequestID] = request
 		}
-		return false
+		return nil
 	}
 	var response workers.InferenceResponseEventPayload
 	if event.DecodePayload(&response) != nil {
-		return false
+		return nil
 	}
 	request, exists := requests[response.InferenceRequestID]
-	return exists && request.Attempt == response.Attempt &&
-		response.Outcome == workers.InferenceOutcomeSucceeded && completeRestoredInferenceOutput(response.Response)
+	if !exists || request.Attempt != response.Attempt ||
+		response.Outcome != workers.InferenceOutcomeSucceeded || !completeRestoredInferenceOutput(response.Response) {
+		return nil
+	}
+	content, err := work.ContentFromWorkerOutput(*response.Response)
+	if err != nil {
+		return nil
+	}
+	return work.CloneWorkContentParts(content)
 }
 
 func sameRestoredResponseContext(left, right interfaces.FactoryEventContext) bool {
