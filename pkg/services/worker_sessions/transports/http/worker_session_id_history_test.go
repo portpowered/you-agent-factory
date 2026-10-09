@@ -18,6 +18,130 @@ import (
 	"go.uber.org/zap"
 )
 
+type closedScopeCaptureStub struct {
+	workersessions.Service
+	observation workersessions.Observation
+	err         error
+	request     workersessions.GetObservationByWorkerSessionIDRequest
+	calls       int
+}
+
+func (s *closedScopeCaptureStub) GetCapturedObservation(_ context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	s.calls++
+	s.request = req
+	return s.observation.Clone(), s.err
+}
+
+func TestWorkerSessionSummaryClosedScopeUsesCapturedFacts(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 9, 16, 21, 55, 546392100, time.UTC)
+	end := start.Add(16626 * time.Millisecond)
+	duration := end.Sub(start)
+	model, cause := "gpt-5", "COMPLETED"
+	input, output, total := 11, 7, 18
+	capture := &closedScopeCaptureStub{observation: workersessions.Observation{
+		WorkerSessionID: "worker-original", FactorySessionID: "factory-original", AttemptID: "attempt-original",
+		WorkIDs: []string{"failed-work"}, Provider: "codex", Model: &model, State: workersessions.StateCompleted,
+		StartedAt: &start, EndedAt: &end, Duration: &duration, DurationBasis: workersessions.DurationBasisRecordedTimestamps,
+		RecordingHealth: recordings.WorkerRecordingStatusComplete, TerminalCause: &cause,
+		TokenUsage: &workersessions.TokenUsage{InputTokens: &input, OutputTokens: &output, TotalTokens: &total},
+	}}
+	live := &fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}
+	adapter := NewAdapter(live, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
+	got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), " factory-original ", " worker-original ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertClosedCaptureIdentity(t, got, model)
+	assertClosedCaptureTerminal(t, got, cause)
+	assertClosedCaptureTimingAndScope(t, got, start, end, live, capture)
+}
+
+func assertClosedCaptureIdentity(t *testing.T, got factoryapi.WorkerSessionObservation, model string) {
+	t.Helper()
+	if got.State != factoryapi.WorkerSessionObservationStateCompleted || got.FactorySessionId == nil || *got.FactorySessionId != "factory-original" || got.AttemptId != "attempt-original" || got.Provider == nil || *got.Provider != "codex" || got.Model == nil || *got.Model != model {
+		t.Fatalf("captured identity lost: %+v", got)
+	}
+}
+
+func assertClosedCaptureTerminal(t *testing.T, got factoryapi.WorkerSessionObservation, cause string) {
+	t.Helper()
+	if got.TokenUsage == nil || got.TokenUsage.InputTokens == nil || *got.TokenUsage.InputTokens != 11 || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 7 || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != 18 || got.RecordingHealth == nil || string(*got.RecordingHealth) != "COMPLETE" || got.TerminalCause == nil || string(*got.TerminalCause) != cause {
+		t.Fatalf("captured terminal facts lost: %+v", got)
+	}
+}
+
+func assertClosedCaptureTimingAndScope(t *testing.T, got factoryapi.WorkerSessionObservation, start, end time.Time, live *fakeObservationService, capture *closedScopeCaptureStub) {
+	t.Helper()
+	if got.StartedAt == nil || !got.StartedAt.Equal(start) || got.EndedAt == nil || !got.EndedAt.Equal(end) || live.getByWorkerCalled || capture.request.FactorySessionID != "factory-original" || capture.request.WorkerSessionID != "worker-original" {
+		t.Fatalf("closed capture timing/scope lost: %+v request=%+v", got, capture.request)
+	}
+}
+
+func TestWorkerSessionSummaryClosedScopePreservesFailures(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{workersessions.ErrObservationSessionNotFound, workersessions.ErrObservationRecordingCorrupt, workersessions.ErrObservationProjectionUnavailable, context.Canceled} {
+		t.Run(failure.Error(), func(t *testing.T) {
+			t.Parallel()
+			capture := &closedScopeCaptureStub{err: failure}
+			adapter := NewAdapter(&fakeObservationService{}, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
+			got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "foreign-or-original", "worker")
+			if !errors.Is(err, failure) || got.WorkerSessionId != "" || capture.request.FactorySessionID != "foreign-or-original" {
+				t.Fatalf("got=%+v err=%v request=%+v", got, err, capture.request)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionSummaryScopeDoesNotBypassResolverFailure(t *testing.T) {
+	t.Parallel()
+	capture := &closedScopeCaptureStub{}
+	adapter := NewAdapter(&fakeObservationService{}, workServiceStub{}, &sessionScopeResolverStub{err: context.DeadlineExceeded}).WithLogsService(capture)
+	if _, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "factory", "worker"); !errors.Is(err, context.DeadlineExceeded) || capture.calls != 0 {
+		t.Fatalf("err=%v capture calls=%d", err, capture.calls)
+	}
+}
+
+func TestWorkerSessionSummaryUnscopedTerminalPrefersCapture(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name        string
+		state       workersessions.State
+		direct      bool
+		selector    string
+		captureErr  error
+		wantCapture bool
+	}{
+		{name: "failed Work", state: workersessions.StateFailed, wantCapture: true},
+		{name: "current runtime", state: workersessions.StateFailed, selector: "~default"},
+		{name: "live", state: workersessions.StateRunning},
+		{name: "direct terminal", state: workersessions.StateTerminated, direct: true},
+		{name: "legacy absent capture", state: workersessions.StateCompleted, captureErr: workersessions.ErrObservationSessionNotFound, wantCapture: true},
+		{name: "corrupt capture", state: workersessions.StateFailed, captureErr: workersessions.ErrObservationRecordingCorrupt, wantCapture: true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			live := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "~default", State: cell.state, Direct: cell.direct}}
+			capture := &closedScopeCaptureStub{observation: workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "original", State: workersessions.StateCompleted}, err: cell.captureErr}
+			adapter := NewAdapter(live, workServiceStub{}).WithLogsService(capture)
+			got, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker", cell.selector)
+			if cell.captureErr != nil && !errors.Is(cell.captureErr, workersessions.ErrObservationSessionNotFound) {
+				if !errors.Is(err, cell.captureErr) || got.WorkerSessionId != "" {
+					t.Fatalf("corrupt capture returned success: %+v %v", got, err)
+				}
+				return
+			}
+			wantScope, wantState := "~default", cell.state
+			if cell.wantCapture && cell.captureErr == nil {
+				wantScope, wantState = "original", workersessions.StateCompleted
+			}
+			if err != nil || got.FactorySessionId == nil || *got.FactorySessionId != wantScope || string(got.State) != string(wantState) || (capture.calls > 0) != cell.wantCapture {
+				t.Fatalf("got=%+v err=%v capture calls=%d", got, err, capture.calls)
+			}
+		})
+	}
+}
+
 func TestGetWorkerSessionObservationByWorkerSessionIDProjectsProviderNeutralHistory(t *testing.T) {
 	service := &fakeObservationService{getByWorkerResult: workersessions.Observation{
 		WorkerSessionID:            "worker-no-provider",

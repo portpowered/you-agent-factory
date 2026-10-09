@@ -134,6 +134,17 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 	}
 	item := summary.Capture
 	restoredScope := s.restoredWorkerScopes[observation.WorkerSessionID]
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(item.Opening.Payload, &draft) == nil && json.Unmarshal(draft.Payload, &opening) == nil &&
+		opening.DispatchID != "" && opening.DispatchID != observation.AttemptID {
+		// Legacy IDs can collide across owners. This committed opening cannot
+		// enrich the canonical peer's different physical attempt.
+		return observation, nil
+	}
+	if s.captureHasAnotherPhysicalScope(observation.WorkerSessionID, item.Catalog) {
+		return observation, nil
+	}
 	if !s.selectedCaptureMatches(observation.WorkerSessionID, item.Catalog) {
 		return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
 	}
@@ -155,6 +166,14 @@ func (s *recordedWorkerSessionObservation) selectedCaptureMatches(workerID strin
 		return catalog.FactorySessionID == restoredScope
 	}
 	return catalog.RecordingID == s.recordingID
+}
+
+func (s *recordedWorkerSessionObservation) captureHasAnotherPhysicalScope(workerID string, catalog recordings.WorkerSessionCatalogEntry) bool {
+	scope := s.executionFactorySessionID
+	if restored := s.restoredWorkerScopes[workerID]; restored != "" {
+		return false // Restored membership requires this exact capture scope.
+	}
+	return scope != "" && catalog.FactorySessionID != "" && catalog.FactorySessionID != scope
 }
 
 // A restored canonical association authorizes this exact physical capture in
@@ -226,55 +245,99 @@ func selectedCapturedTranscriptMatches(transcript workersessions.ReadTranscriptR
 	return transcript.WorkerSessionID == observation.WorkerSessionID && transcript.ProviderSession == observation.ProviderSession && transcript.AttemptID == observation.AttemptID && transcript.State == observation.State
 }
 
-// Canonical-ID summaries retain Factory lifecycle facts, but usage must come
-// from the committed Worker capture rather than provider files or diagnostics.
-func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
-	observation.TokenUsage = nil
-	if s.factorySessionID != "" {
-		observation.FactorySessionID = s.factorySessionID
+// The committed opening supplies a Work selector, not authority. Membership
+// still comes from the selected canonical association in the owning ledger.
+// Missing capture correlation uses the ledger's prepared selector; a selected
+// storage failure never falls back to canonical replay.
+func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx context.Context, workerID string) (workersessions.Observation, bool, bool, error) {
+	if s.recordingID == "" {
+		return workersessions.Observation{}, false, false, nil
 	}
-	if observation.State == workersessions.StateCanceled && s.Service != nil {
-		archived, found, err := archivedFactoryWorker(ctx, s.Service, observation.FactorySessionID, observation.WorkerSessionID)
-		if err != nil {
-			return workersessions.Observation{}, err
-		}
-		if found && archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
-			observation = archived
-		}
+	reader, ok := s.recordingReader.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return workersessions.Observation{}, false, false, nil
 	}
-	if s.recordingReader == nil || s.recordingID == "" {
-		return observation, nil
+	if _, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader); !ok {
+		return workersessions.Observation{}, false, false, nil
 	}
-	snapshot, err := s.recordingReader.LoadWorkerRecording(ctx, s.recordingID)
+	summary, err := reader.LookupWorkerSessionSummary(ctx, workerID)
+	if failure := observationContextError(ctx); failure != nil {
+		return workersessions.Observation{}, false, true, failure
+	}
 	if err != nil {
-		if healthErr := recordingHealthLoadError(err); healthErr != nil {
-			return workersessions.Observation{}, healthErr
-		}
-		return observation, nil
+		failure := s.selectedCapturedLookupError(ctx, workerID, err)
+		return workersessions.Observation{}, false, failure != nil, failure
 	}
-	health, err := workerRecordingHealthMap(snapshot, s.recordingID)
-	if err != nil {
-		return workersessions.Observation{}, err
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if len(summary.Capture.Opening.Payload) == 0 {
+		return workersessions.Observation{}, false, false, nil
 	}
-	if current, ok := health[observation.WorkerSessionID]; ok {
-		observation.RecordingHealth = current.status
-		observation.RecordingHealthReason = current.reason
-		if current.startedAt != nil {
-			started := *current.startedAt
-			observation.StartedAt = &started
-		}
+	if s.captureHasAnotherPhysicalScope(workerID, summary.Capture.Catalog) {
+		return workersessions.Observation{}, false, false, nil
 	}
-	observation.TokenUsage = capturedFactoryWorkerUsage(snapshot, observation.WorkerSessionID)
-	return observation, nil
+	if json.Unmarshal(summary.Capture.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil {
+		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	}
+	if len(opening.WorkIDs) == 0 {
+		return workersessions.Observation{}, false, false, nil
+	}
+	if opening.WorkerSessionID != workerID || summary.Capture.Catalog.WorkerSessionID != workerID {
+		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	}
+	observation, found, err := s.readSelectedWorkerSummary(ctx, workerID, opening.WorkIDs[0], opening.DispatchID)
+	// A colliding capture can belong to a different physical owner. Absence
+	// from this Work selection is not absence from the selected canonical
+	// ledger; its prepared exact selector still resolves the legacy peer.
+	return observation, found, found || err != nil, err
 }
 
-func capturedFactoryWorkerUsage(snapshot recordings.WorkerRecordingSnapshot, id string) *workersessions.TokenUsage {
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID == id {
-			return capturedWorkerUsageRecords(session.Records, ^uint64(0))
+func (s *recordedWorkerSessionObservation) selectedCapturedLookupError(ctx context.Context, workerID string, err error) error {
+	if errors.Is(err, recordings.ErrWorkerRecordingReplay) && s.Service != nil {
+		// Preserve the capture owner's public failure classification rather
+		// than reclassifying a damaged unrelated archive as runtime history.
+		_, captureErr := s.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
+		if captureErr != nil {
+			return captureErr
 		}
 	}
-	return nil
+	return recordingHealthLoadError(err)
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkerSummary(ctx context.Context, workerID, workID, dispatchID string) (workersessions.Observation, bool, error) {
+	facts, err := s.readSelectedWorkFacts(ctx, workID)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	return s.readSelectedWorkerFactsSummary(ctx, workerID, dispatchID, facts)
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkerFactsSummary(ctx context.Context, workerID, dispatchID string, selected recordings.WorkerSessionWorkFacts) (workersessions.Observation, bool, error) {
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	// Exact summary reads do not need optional transcript enrichment.
+	optionalCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	rows, _, facts, err := s.projectWorkerSnapshotFacts(ctx, optionalCtx, selected, nil, workerID)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	if len(rows) == 0 {
+		return workersessions.Observation{}, false, nil
+	}
+	if len(rows) != 1 || (dispatchID != "" && rows[0].AttemptID != dispatchID) {
+		return workersessions.Observation{}, false, workersessions.ErrObservationRecordingCorrupt
+	}
+	health, err := s.selectedRecordingHealth(ctx, rows, nil)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	s.decorateRecordingHealth(rows, health)
+	if err := applySelectedWorkConfirmation(ctx, rows, *facts, s.sampleCompletedFlushWatermark()); err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	return rows[0], true, nil
 }
 
 func capturedWorkerUsageRecords(records []events.Record, head uint64) *workersessions.TokenUsage {

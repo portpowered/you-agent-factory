@@ -24,6 +24,12 @@ type WorkerSessionWorkProjectionReader interface {
 	CurrentWorkerSessionWorkFacts(context.Context, string) (sessionprojectionfacts.WorkerSessionWorkFacts, error)
 }
 
+// WorkerSessionProjectionReader selects prepared facts for one physical
+// Worker identity within the same ledger. It grants no authority.
+type WorkerSessionProjectionReader interface {
+	CurrentWorkerSessionFacts(context.Context, string) (sessionprojectionfacts.WorkerSessionWorkFacts, error)
+}
+
 // CompletedFlushWatermarkReader is the narrow durability capability exposed
 // by the recording lifecycle without widening the broad Recordings service
 // contract. Its cursor is comparable only within the requested stream

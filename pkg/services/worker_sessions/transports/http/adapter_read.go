@@ -76,6 +76,21 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	}
 	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
 	if err != nil {
+		// A closed runtime does not invalidate the original captured scope.
+		// The capture reader validates physical membership before returning facts.
+		if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+			observation, readErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+				WorkerSessionID: workerSessionID, FactorySessionID: strings.TrimSpace(sessionID),
+			})
+			if readErr != nil {
+				return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get captured Worker Session observation: %w", readErr)
+			}
+			observation, readErr = scopeWorkerSessionObservation(observation, workerSessionScope{effectiveID: strings.TrimSpace(sessionID)})
+			if readErr != nil {
+				return factoryapi.WorkerSessionObservation{}, readErr
+			}
+			return a.presentWorkerSessionObservation(ctx, observation)
+		}
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
 	observations := a.observationsForScope(scope)
@@ -320,9 +335,15 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID,
 	})
-	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+	// An unscoped terminal runtime row can describe business Work processing.
+	// Exact historical inspection instead reports the committed Worker capture;
+	// explicit current-runtime selectors retain their existing attribution.
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && factorySessionID == "" && !observation.Direct && observation.State.Terminal()) {
 		if a.logs != nil {
-			observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID})
+			captured, captureErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID})
+			if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) || err != nil {
+				observation, err = captured, captureErr
+			}
 		}
 	}
 	if err != nil {

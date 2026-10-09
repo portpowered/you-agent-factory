@@ -156,6 +156,144 @@ func TestScopedWorkHistoricalListSelectsCommittedCaptureWithoutProviderReads(t *
 	}
 }
 
+func TestCapturedFactoryIdentitySelectsSummaryWithoutRecordingLoad(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+	service.recordingID, service.recordingReader = "owned", reader
+	service.providerSessions = forbiddenCapturedProviderProjection{}
+	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+	if err != nil || got.TokenUsage == nil || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 4 || len(reader.ids) != 2 || reader.ids[0] != fixture.workerSessionID {
+		t.Fatalf("selected exact-ID observation=%+v err=%v selected=%v", got, err, reader.ids)
+	}
+}
+
+func TestExactCapturedWorkerUsesSelectedCanonicalFacts(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"completed", "foreign capture", "foreign association", "projection unavailable", "projection canceled"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRecordedExactObservationFixture(t)
+			service := fixture.service.(*recordedWorkerSessionObservation)
+			facts := service.ledger.(*preparedScopedTestLedger).byWork[fixture.workID]
+			ledger := &selectedWorkFactsLedger{RuntimeLedger: service.ledger, facts: facts}
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+			reader.summary.Capture.Opening.Payload = []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q,"dispatchId":"dispatch-recorded-exact","workIds":[%q]}}`, fixture.workerSessionID, fixture.workID))
+			service.ledger, service.recordingReader, service.recordingID = ledger, reader, "owned"
+			service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+				panic("exact captured summary replayed canonical history")
+			}
+			var want error
+			switch scenario {
+			case "foreign capture":
+				reader.summary.Capture.Catalog.RecordingID = "foreign"
+				want = workersessions.ErrObservationRecordingCorrupt
+			case "foreign association":
+				ledger.facts.Associations = map[string]recordings.WorkerSessionAssociationFacts{"dispatch-recorded-exact": {WorkerSessionID: "sibling"}}
+				want = workersessions.ErrObservationSessionNotFound
+			case "projection unavailable":
+				ledger.err = errors.New("selected projection unavailable")
+				want = workersessions.ErrObservationProjectionUnavailable
+			case "projection canceled":
+				ledger.err = context.Canceled
+				want = workersessions.ErrObservationCanceled
+			}
+			got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+			if !errors.Is(err, want) {
+				t.Fatalf("selected summary = %+v, %v; want %v", got, err, want)
+			}
+			if want != nil {
+				if got.WorkerSessionID != "" {
+					t.Fatalf("failed selection disclosed observation: %+v", got)
+				}
+				return
+			}
+			if ledger.reads != 1 || ledger.workID != fixture.workID || got.WorkerSessionID != fixture.workerSessionID || got.State != workersessions.StateCompleted || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != 4 {
+				t.Fatalf("selected exact identity=%+v selector=%q reads=%d", got, ledger.workID, ledger.reads)
+			}
+		})
+	}
+}
+
+func (ledger *selectedWorkFactsLedger) CurrentWorkerSessionFacts(ctx context.Context, workerID string) (recordings.WorkerSessionWorkFacts, error) {
+	ledger.reads++
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	for id, association := range ledger.facts.Associations {
+		if association.WorkerSessionID == workerID {
+			if ids := ledger.facts.Requests[id].WorkItemIDs; len(ids) > 0 {
+				ledger.workID = ids[0]
+			}
+			return ledger.facts, ledger.err
+		}
+	}
+	return recordings.WorkerSessionWorkFacts{}, ledger.err
+}
+
+func TestExactLegacyWorkerUsesPreparedSelectorWithoutHistoryReplay(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"legacy opening", "missing capture", "unknown worker", "projection unavailable", "projection canceled"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRecordedExactObservationFixture(t)
+			service := fixture.service.(*recordedWorkerSessionObservation)
+			facts := service.ledger.(*preparedScopedTestLedger).byWork[fixture.workID]
+			ledger := &selectedWorkFactsLedger{RuntimeLedger: service.ledger, facts: facts}
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+			service.ledger, service.recordingReader, service.recordingID = ledger, reader, "owned"
+			service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+				panic("legacy exact summary replayed canonical history")
+			}
+			workerID, want := configureLegacyWorkerScenario(scenario, fixture.workerSessionID, ledger, reader)
+			got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
+			if !errors.Is(err, want) || (want != nil && got.WorkerSessionID != "") {
+				t.Fatalf("prepared legacy summary = %+v, %v; want %v", got, err, want)
+			}
+			if want == nil && (got.WorkerSessionID != workerID || got.State != workersessions.StateCompleted || ledger.reads != 1 || ledger.workID != fixture.workID) {
+				t.Fatalf("legacy identity lost prepared facts: %+v, selector=%q reads=%d", got, ledger.workID, ledger.reads)
+			}
+			if scenario == "missing capture" && got.TokenUsage != nil {
+				t.Fatal("missing capture fabricated usage")
+			}
+		})
+	}
+}
+
+func configureLegacyWorkerScenario(scenario, workerID string, ledger *selectedWorkFactsLedger, reader *selectedCapturedIdentityReader) (string, error) {
+	var want error
+	switch scenario {
+	case "missing capture":
+		reader.err = os.ErrNotExist
+	case "unknown worker":
+		workerID, reader.err, want = "unknown", os.ErrNotExist, workersessions.ErrObservationSessionNotFound
+	case "projection unavailable":
+		ledger.err, want = errors.New("unavailable"), workersessions.ErrObservationProjectionUnavailable
+	case "projection canceled":
+		ledger.err, want = context.Canceled, workersessions.ErrObservationCanceled
+	}
+	return workerID, want
+}
+
+func TestExactLegacyWorkerSurvivesAnotherOwnersCaptureCorrelation(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+	reader.summary.Capture.Opening.Payload = []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q,"dispatchId":"other-attempt","workIds":["other-work"]}}`, fixture.workerSessionID))
+	reader.summary.Capture.Catalog.FactorySessionID = "other-owner"
+	service.restoredWorkerScopes = map[string]string{fixture.workerSessionID: "original-owner"}
+	service.recordingReader, service.recordingID = reader, "owned"
+	service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+		panic("colliding exact summary replayed canonical history")
+	}
+	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+	if err != nil || got.WorkerSessionID != fixture.workerSessionID || got.AttemptID != "dispatch-recorded-exact" || got.State != workersessions.StateCompleted || got.TokenUsage != nil {
+		t.Fatalf("colliding capture hid prepared legacy identity: %+v, %v", got, err)
+	}
+}
+
 func TestScopedWorkHistoricalCaptureErrorsDoNotReturnPartialRows(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -427,7 +565,9 @@ func TestScopedWorkHealthRejectsForeignAndMalformedSelections(t *testing.T) {
 	if result, err := service.selectedRecordingHealth(t.Context(), nil, nil); err != nil || len(result) != 0 || len(reader.ids) != 0 {
 		t.Fatalf("empty selected health = %+v, %v, selectors=%v", result, err, reader.ids)
 	}
-	service.recordingReader = &scriptedWorkerRecordingReader{}
+	service.recordingReader = struct {
+		recordings.WorkerRecordingReader
+	}{&scriptedWorkerRecordingReader{}}
 	if _, err := service.selectedRecordingHealth(t.Context(), nil, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("missing prepared-health capability = %v", err)
 	}
@@ -511,12 +651,12 @@ func TestCapturedFactoryIdentityUsesOnlyCommittedUsage(t *testing.T) {
 		RecordingID: service.recordingID,
 		Sessions: []recordings.WorkerSessionRecordingSnapshot{
 			{WorkerSessionID: "sibling", Status: recordings.WorkerRecordingStatusComplete,
-				Records: []events.Record{{Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"sibling"}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":999}}`)}}},
+				Records: []events.Record{{ID: events.RecordID{Position: 1}, Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"sibling"}}`)},
+					{ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":999}}`)}}},
 			{WorkerSessionID: fixture.workerSessionID, Status: recordings.WorkerRecordingStatusComplete,
-				Records: []events.Record{{Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-recorded-exact"}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"outputTokens":4,"cachedInputTokens":2,"reasoningOutputTokens":1}}`)},
-					{Payload: []byte(`{"kind":"USAGE","phase":"STARTED","payload":{"inputTokens":999}}`)}}},
+				Records: []events.Record{{ID: events.RecordID{Position: 1}, Payload: []byte(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-recorded-exact"}}`)},
+					{ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"inputTokens":0,"outputTokens":4,"cachedInputTokens":2,"reasoningOutputTokens":1}}`)},
+					{ID: events.RecordID{Position: 3}, Payload: []byte(`{"kind":"USAGE","phase":"STARTED","payload":{"inputTokens":999}}`)}}},
 		},
 	}}
 	service.recordingReader = reader

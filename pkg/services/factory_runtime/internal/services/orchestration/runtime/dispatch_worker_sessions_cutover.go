@@ -466,10 +466,19 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 // One request retains one detached selected snapshot for both row projection
 // and terminal confirmation. A concurrent append is visible on the next read.
 func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+	return s.projectSelectedWorkSnapshot(ctx, optionalCtx, workID, live, "")
+}
+
+func (s *recordedWorkerSessionObservation) projectSelectedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation, workerSessionID string) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
 	facts, err := s.readSelectedWorkFacts(ctx, workID)
 	if err != nil {
 		return nil, false, nil, err
 	}
+	return s.projectWorkerSnapshotFacts(ctx, optionalCtx, facts, live, workerSessionID)
+}
+
+func (s *recordedWorkerSessionObservation) projectWorkerSnapshotFacts(ctx, optionalCtx context.Context, facts recordings.WorkerSessionWorkFacts, live map[string]workersessions.Observation, workerSessionID string) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+	var err error
 	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
 	for id, request := range facts.Requests {
 		requests[id] = recordedDispatchRequest{workIDs: request.WorkItemIDs, startedAt: request.StartedAt}
@@ -490,6 +499,9 @@ func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, option
 	}
 	result := make([]workersessions.Observation, 0, len(facts.Associations))
 	for id, association := range facts.Associations {
+		if workerSessionID != "" && association.WorkerSessionID != workerSessionID {
+			continue
+		}
 		var selectedProvider []interfaces.FactoryWorldProviderSessionRecord
 		if provider, ok := providers[id]; ok {
 			selectedProvider = []interfaces.FactoryWorldProviderSessionRecord{provider}
@@ -840,16 +852,21 @@ func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
 	ctx context.Context,
 	workerSessionID string,
 ) (workersessions.Observation, bool, error) {
-	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, workerSessionID)
-	if err != nil || !found {
-		return workersessions.Observation{}, found, err
+	if observation, found, selected, err := s.readSelectedCapturedWorker(ctx, workerSessionID); selected {
+		return observation, found, err
 	}
-	observation := recordedObservationFromFact(fact, s.clock)
-	observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+	selector, ok := s.ledger.(recordings.WorkerSessionProjectionReader)
+	if !ok {
+		return workersessions.Observation{}, false, workersessions.ErrObservationProjectionUnavailable
+	}
+	facts, err := selector.CurrentWorkerSessionFacts(ctx, workerSessionID)
 	if err != nil {
-		return workersessions.Observation{}, false, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || observationContextError(ctx) != nil {
+			return workersessions.Observation{}, false, workersessions.ErrObservationCanceled
+		}
+		return workersessions.Observation{}, false, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.confirmedObservation(observation), true, nil
+	return s.readSelectedWorkerFactsSummary(ctx, workerSessionID, "", facts)
 }
 
 func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(

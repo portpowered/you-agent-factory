@@ -954,6 +954,7 @@ func TestRecordedWorkerSessionObservationReplayUsesWatermarkForConfirmation(t *t
 		platformclock.Real{}, nil, replayEvents, "", nil, nil, nil,
 	)
 
+	prepareScopedTestFacts(service)
 	show, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
 	if err != nil {
 		t.Fatalf("GetObservationByWorkerSessionID(replay) error = %v", err)

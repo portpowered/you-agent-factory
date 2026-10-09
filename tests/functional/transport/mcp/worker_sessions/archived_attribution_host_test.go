@@ -488,6 +488,9 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 	assertJSONEqual(t, closed, allRow)
 	selected := getHost(t, endpoint)
 	assertJSONEqual(t, closed, selected)
+	// The original captured Factory scope remains an exact read selector after
+	// its live runtime closes; the default runtime is a separate attribution.
+	assertJSONEqual(t, selected, getHost(t, host.URL()+"/factory-sessions/"+url.PathEscape(closed["factorySessionId"].(string))+"/worker-sessions/"+url.PathEscape(id)))
 	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
 	assertFactoryCLIParity(t, host, id, selected)
 	assertJSONEqual(t, logs, getHost(t, endpoint+"/logs"))
