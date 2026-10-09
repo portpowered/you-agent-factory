@@ -189,6 +189,11 @@ func (r *ArtifactHistoryReader) sharedArtifact(ctx context.Context, key historyI
 // a surviving waiter retries with its own context and already-read snapshot.
 // Different source digests never share results, even at the same artifact path.
 func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeKey, identity recordings.HistoricalRecordingIdentity, payload []byte) (nameProjection, error) {
+	// Attempts sharing one exact scoped Factory snapshot decode the same facts.
+	// Keep the capture generation for source reads, but not for this digest-keyed
+	// reduction. Every caller has read its own source and validates its opening
+	// and association separately before attributing a name.
+	key.identity.generation = ""
 	for {
 		if err := ctx.Err(); err != nil {
 			return nameProjection{}, err

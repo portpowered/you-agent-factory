@@ -468,17 +468,19 @@ func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
 	defer cancel()
 	waiter := &observedWaitContext{Context: ctx, waiting: make(chan struct{})}
 	result := make(chan error, 3)
-	invoke := func(ctx context.Context) {
-		got, err := reader.readWorkerFactoryNames(ctx, page)
+	invoke := func(ctx context.Context, candidate recordings.WorkerCapturedActivityPage) {
+		got, err := reader.readWorkerFactoryNames(ctx, candidate)
 		if err == nil && got.names["work"] != "Alpha" {
 			err = fmt.Errorf("name = %q", got.names["work"])
 		}
 		result <- err
 	}
-	go invoke(t.Context())
+	go invoke(t.Context(), page)
 	<-query.entered
 	<-read
-	go invoke(waiter)
+	otherAttempt := page
+	otherAttempt.Catalog.RecordingGenerationID = "another-attempt"
+	go invoke(waiter, otherAttempt)
 	<-read
 	select {
 	case <-waiter.waiting:
@@ -495,7 +497,7 @@ func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("canceled waiter waited for the unrelated decode")
 	}
-	go invoke(t.Context())
+	go invoke(t.Context(), otherAttempt)
 	<-read
 	unblock()
 	for range 2 {
@@ -535,8 +537,10 @@ func TestRetainedNamesSurvivesCanceledLeader(t *testing.T) {
 	<-read
 	survivor := make(chan error, 1)
 	waiter := &observedWaitContext{Context: t.Context(), waiting: make(chan struct{})}
+	otherAttempt := page
+	otherAttempt.Catalog.RecordingGenerationID = "another-attempt"
 	go func() {
-		got, err := reader.readWorkerFactoryNames(waiter, page)
+		got, err := reader.readWorkerFactoryNames(waiter, otherAttempt)
 		if err == nil && got.names["work"] != "Alpha" {
 			err = fmt.Errorf("surviving name = %q", got.names["work"])
 		}

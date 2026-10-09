@@ -19,6 +19,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -210,7 +211,7 @@ func readAttributionList(ctx context.Context, endpoint string) (map[string]any, 
 
 func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Process) {
 	t.Parallel()
-	for _, damage := range []string{"missing", "corrupt"} {
+	for _, damage := range []string{"missing", "corrupt", "conflicting association"} {
 		t.Run(damage, func(t *testing.T) {
 			t.Parallel()
 			host, sessions, runner, dir := startRecordedAttributionHost(t)
@@ -248,7 +249,20 @@ func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Proc
 				assertFactoryCLIParity(t, host, id, selected)
 			} else {
 				// The scope's writer is joined before corrupting its own board.
-				if err := os.WriteFile(artifact, []byte("not a recording"), 0o600); err != nil {
+				replacement := []byte("not a recording")
+				if damage == "conflicting association" {
+					// The identical repeated association is accepted by the same
+					// decoder, proving the appended frame itself is valid.
+					if err := os.WriteFile(artifact, appendedAttributionAssociation(t, original, false), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					assertRetainedAttributionViews(t, ctx, session, host, id, rows[0].(map[string]any), true)
+					// F-06: a valid event frame contradicts the accepted dispatch's
+					// Worker association after both retained views have been cached.
+					// Observe safe customer errors, never an arbitrary cached name.
+					replacement = appendedAttributionAssociation(t, original, true)
+				}
+				if err := os.WriteFile(artifact, replacement, 0o600); err != nil {
 					t.Fatal(err)
 				}
 				assertHistoryReadFailure(t, host, id, http.StatusInternalServerError, "INTERNAL_ERROR")
@@ -268,6 +282,44 @@ func runArchivedWorkAttributionDamagedHistory(t *testing.T, process support.Proc
 			assertJSONEqual(t, prefix, getHost(t, endpoint+"/logs"))
 		})
 	}
+}
+
+func appendedAttributionAssociation(t *testing.T, original []byte, conflicting bool) []byte {
+	t.Helper()
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(original, &document); err != nil {
+		t.Fatal(err)
+	}
+	var events []factorydefinitions.FactoryEvent
+	if err := json.Unmarshal(document["events"], &events); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type != factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc {
+			continue
+		}
+		last := events[len(events)-1]
+		event.Id = uuid.NewString()
+		event.Context.Sequence = len(events)
+		event.Context.Tick = last.Context.Tick + 1
+		event.Context.EventTime = last.Context.EventTime.Add(time.Millisecond)
+		if conflicting {
+			event.Payload = json.RawMessage(`{"workerSessionId":"conflicting-worker"}`)
+		}
+		events = append(events, event)
+		var err error
+		document["events"], err = json.Marshal(events)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replacement, err := json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return replacement
+	}
+	t.Fatal("recorded fixture has no dispatch association to contradict")
+	return nil
 }
 
 func assertRetainedAttributionViews(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string, live map[string]any, named bool) map[string]any {
