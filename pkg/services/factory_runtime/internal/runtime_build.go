@@ -33,6 +33,7 @@ type runtimeWorkersServiceWithProgress struct {
 	commandRunnerOverride             platformprocess.CommandRunner
 	replayCommandRunner               platformprocess.CommandRunner
 	modelInvocationOverride           any
+	mockWorkersConfig                 *workers.MockWorkersConfig
 	skipBuiltInPrerequisiteValidation bool
 	invocationSkipPermissionsOverride *bool
 	workstationResolver               runtime.WorkstationExecutionResolver
@@ -83,6 +84,11 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	// Live compatibility overrides only own legacy provider execution. Replay
 	// replaces native attempts too, without diverting live catalog providers.
 	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
+	// Resolved successors skip workstation lookup. Keep the selected runtime's
+	// mock policy on its retained executor, with a fresh value for each attempt.
+	if request.Input.MockWorkers == nil {
+		request.Input.MockWorkers = service.mockWorkersConfig.Clone()
+	}
 	if service.providerOverride != nil && (service.replayCommandRunner != nil ||
 		executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")) {
 		request.Input.ProviderOverride = service.providerOverride
@@ -241,6 +247,7 @@ func newRuntimeWorkersService(
 		commandRunnerOverride:             spec.CommandRunnerOverride,
 		replayCommandRunner:               spec.ReplayCommandRunner,
 		modelInvocationOverride:           spec.ModelInvocationOverride,
+		mockWorkersConfig:                 mockWorkersConfig.Clone(),
 		skipBuiltInPrerequisiteValidation: skipBuiltInPrerequisiteValidation,
 		invocationSkipPermissionsOverride: invocationOverride,
 		factorySessionID:                  canonicalSessionID,

@@ -23,7 +23,7 @@ func TestEnsurePackagedFactories_PreparationFailureDoesNotCommitTarget(t *testin
 		Name: "@test/invalid",
 		JSON: []byte(`{"id":"invalid","workers":[`),
 	}
-	_, err := New(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
+	_, err := newNativeTestInstaller(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
 		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition})
 	if err == nil || !strings.Contains(err.Error(), "install packaged factory") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
@@ -46,7 +46,7 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 		t.Fatal(err)
 	}
 	definition := factorydefinitions.PackagedDefinition{Name: "@test/invalid", JSON: []byte(`{`)}
-	if _, err := New(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
+	if _, err := newNativeTestInstaller(&installationPersistenceStub{prepareErr: errors.New("controlled preparation failure")}, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
 		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition}); err == nil {
 		t.Fatal("EnsurePackagedFactories() error = nil")
 	}
@@ -59,7 +59,7 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(packagedInstallationTestPersistence(), nil, os.Mkdir, logging.NoopLogger{}).EnsurePackagedFactories(
+	_, err := newNativeTestInstaller(packagedInstallationTestPersistence(), nil, os.Mkdir, logging.NoopLogger{}).EnsurePackagedFactories(
 		t.Context(),
 		t.TempDir(),
 		"",
@@ -74,7 +74,7 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 	t.Parallel()
 
 	definition := installationDefinitionFixture()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	result, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -117,7 +117,7 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 	t.Parallel()
 
 	definition := installationDefinitionFixture()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -157,7 +157,7 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 	t.Parallel()
 
 	definition := installationDefinitionFixture()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -199,7 +199,7 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 	t.Parallel()
 
 	definition := installationDefinitionFixture()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	if _, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -231,7 +231,7 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	root := t.TempDir()
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
+	_, err := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
 		InstallPackagedFactory(
 			ctx,
 			factorydefinitions.PackagedFactoryInstallParams{
@@ -257,7 +257,7 @@ func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing
 
 	definition := installationDefinitionFixture()
 	persistence := &installationPersistenceStub{}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),

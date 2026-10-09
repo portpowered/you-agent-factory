@@ -15,6 +15,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
@@ -101,7 +102,9 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksU
 
 	definition := assembledScriptPackageDefinition(t)
 	homeDir := t.TempDir()
-	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
+	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir, func(pid int) (platformprocess.Incarnation, error) {
+		return platformprocess.Incarnation{PID: pid, Host: "test-host", Start: "test-start"}, nil
+	}, logging.NoopLogger{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -128,7 +131,9 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksU
 	if err := os.Chmod(editedPath, 0o600); err != nil {
 		t.Fatalf("Chmod(operator-edited script): %v", err)
 	}
-	refreshed, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{}).
+	refreshed, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir, func(pid int) (platformprocess.Incarnation, error) {
+		return platformprocess.Incarnation{PID: pid, Host: "test-host", Start: "test-start"}, nil
+	}, logging.NoopLogger{}).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),

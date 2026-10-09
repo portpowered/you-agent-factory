@@ -25,11 +25,15 @@ func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPer
 
 type installationPersistenceStub struct {
 	factorydefinitions.PackagedFactoryPersistence
-	prepareErr    error
-	prepareCancel context.CancelFunc
+	prepareErr     error
+	prepareCancel  context.CancelFunc
+	prepareObserve func()
 }
 
 func (p *installationPersistenceStub) PreparePackagedFactoryLayout(ctx context.Context, _ string, payload []byte) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	if p.prepareObserve != nil {
+		p.prepareObserve()
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

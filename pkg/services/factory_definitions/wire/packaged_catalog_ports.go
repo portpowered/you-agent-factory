@@ -23,7 +23,7 @@ func NewPackagedFactoryInstaller(
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,
 ) factorydefinitions.PackagedFactoryInstaller {
-	return factorydefinitionsinternal.NewPackagedFactoryInstaller(persistence, fileSystem, directoryCreator, logger)
+	return factorydefinitionsinternal.NewPackagedFactoryInstaller(persistence, fileSystem, directoryCreator, packagedInstallationProcessProbe(fileSystem), logger)
 }
 
 // NewPackagedFactoryInstallationService constructs the private packaged
@@ -34,5 +34,5 @@ func NewPackagedFactoryInstallationService(
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,
 ) *distributionpackagedinstallation.Service {
-	return factorydefinitionsinternal.NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, logger)
+	return factorydefinitionsinternal.NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, packagedInstallationProcessProbe(fileSystem), logger)
 }

@@ -40,7 +40,7 @@ func TestInstallPackagedFactory_CreateAndReplaceUseExplicitPackagedPreparation(t
 	persistence := &recordingPackagedFactoryPersistence{
 		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	root := t.TempDir()
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
