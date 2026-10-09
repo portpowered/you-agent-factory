@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -58,6 +59,44 @@ func TestLegacyWorkerAddressing(t *testing.T) {
 			assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
 		})
 	}
+	// These legacy records have no live execution or provider association. Scope
+	// disambiguates the observation but must not make a replay controllable.
+	t.Run("selected replay without live execution has no control effects", func(t *testing.T) {
+		t.Parallel()
+		for _, owner := range f.owners {
+			for _, operation := range []string{"continue", "interrupt"} {
+				body, flags := controlInput(operation)
+				body["factorySessionId"] = owner.session
+				path := "/worker-sessions/" + f.worker + "/" + operation
+				status, raw := f.http(t, "POST", path, body)
+				assertNotFound(t, status, raw)
+				cli := f.cli(t, true, append(append([]string{operation, f.worker}, flags...), "--session", owner.session)...)
+				assertErrorCode(t, cli, "NOT_FOUND")
+				if operation == "interrupt" {
+					assertValidationPhase(t, raw)
+					assertValidationPhase(t, cli)
+				}
+				assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+			}
+		}
+	})
+	t.Run("empty explicit owner is invalid before ambiguous controls", func(t *testing.T) {
+		t.Parallel()
+		for _, scope := range []string{"", "   "} {
+			status, raw := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+strings.ReplaceAll(scope, " ", "%20"), nil)
+			assertBadRequest(t, status, raw)
+			for _, operation := range []string{"continue", "interrupt"} {
+				body, _ := controlInput(operation)
+				body["factorySessionId"] = scope
+				status, raw = f.http(t, "POST", "/worker-sessions/"+f.worker+"/"+operation, body)
+				assertBadRequest(t, status, raw)
+				if operation == "interrupt" {
+					assertValidationPhase(t, raw)
+				}
+				assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+			}
+		}
+	})
 	t.Run("F2-09 F2-10 foreign and unknown IDs", func(t *testing.T) {
 		t.Parallel()
 		for _, scoped := range []bool{false, true} {
@@ -89,6 +128,22 @@ func TestLegacyWorkerAddressing(t *testing.T) {
 			}
 		}
 	})
+}
+
+func assertBadRequest(t *testing.T, status int, raw []byte) {
+	t.Helper()
+	if status != http.StatusBadRequest {
+		t.Fatalf("invalid scope = %d: %s", status, raw)
+	}
+	assertErrorCode(t, raw, "BAD_REQUEST")
+}
+
+func assertValidationPhase(t *testing.T, raw []byte) {
+	t.Helper()
+	var response struct{ Phase string }
+	if err := json.Unmarshal(raw, &response); err != nil || response.Phase != "VALIDATION" {
+		t.Fatalf("want VALIDATION: %s (%v)", raw, err)
+	}
 }
 
 func controlInput(operation string) (map[string]any, []string) {
