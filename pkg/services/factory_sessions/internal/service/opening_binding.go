@@ -46,7 +46,7 @@ type RuntimeOpeningBindingRequest struct {
 func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request RuntimeOpeningBindingRequest,
 	state *runtimebinding.SessionState, selectedClock factoryruntime.Clock, startup runtimeports.RuntimeInstance,
 	sessionRuntime roles.ApplicationRuntime, processRuntime roles.ProcessRuntime,
-	activation *factoryruntime.RuntimeActivation, execution durableexecution.Service,
+	execution durableexecution.Service,
 	publishCurrentBoard func(context.Context) error, cleanup interface {
 		Add(func() error)
 		Close() error

@@ -40,7 +40,7 @@ func bindOpeningStateFixture(t *testing.T, ctx context.Context, gateway roles.Se
 			FactorySessionID: id, RuntimeID: runtimeID, BackendScopeID: backendID,
 			Directory: directory, ModelsScope: scope,
 		}}, opened, openingCoordinatorClock{}, startup, session, process,
-		&factoryruntime.RuntimeActivation{Service: runtime}, &bindingExecution{}, func(context.Context) error { return nil }, cleanup)
+		&bindingExecution{}, func(context.Context) error { return nil }, cleanup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestRuntimeOpeningBindingFailureAndSameIdentityRetry(t *testing.T) {
 	}}
 	opened := &runtimebinding.SessionState{}
 	err := operation.Bind(t.Context(), request, opened, clock, inertHostedInstance{}, session, nil,
-		&factoryruntime.RuntimeActivation{}, execution, nil, cleanup)
+		execution, nil, cleanup)
 	assertBindingTypedFailure(t, opened, err, cause, lookups)
 	if err := cleanup.Close(); !errors.Is(err, cleanupCause) {
 		t.Fatalf("close = %v", err)
@@ -186,7 +186,7 @@ func TestRuntimeOpeningBindingFailureAndSameIdentityRetry(t *testing.T) {
 		return func() { releases++ }, nil
 	}
 	err = operation.Bind(t.Context(), request, opened, clock, inertHostedInstance{}, session, nil,
-		&factoryruntime.RuntimeActivation{}, execution, nil, cleanup)
+		execution, nil, cleanup)
 	if err != nil || opened.Clock != clock || opened.ModelInvocation.FactorySessionID != "candidate" {
 		t.Fatalf("corrected retry = %+v, %v", opened, err)
 	}
@@ -238,7 +238,7 @@ func TestRuntimeOpeningBindingSelectedEffectsAndPeerRelease(t *testing.T) {
 		opened := &runtimebinding.SessionState{}
 		err := operation.Bind(t.Context(), RuntimeOpeningBindingRequest{Facts: roles.SessionOpeningFacts{
 			FactorySessionID: id, RuntimeID: "runtime-" + id,
-		}}, opened, openingCoordinatorClock{}, runtime, session, nil, &factoryruntime.RuntimeActivation{}, execution, nil, cleanup)
+		}}, opened, openingCoordinatorClock{}, runtime, session, nil, execution, nil, cleanup)
 		if err != nil || opened.ModelInvocation.GenerationID != generation || progress[key] != key {
 			t.Fatalf("scoped result/progress = %+v, %q, %v", opened.ModelInvocation, progress[key], err)
 		}
@@ -271,7 +271,7 @@ func TestRuntimeOpeningBindingFailurePreservesSelectedState(t *testing.T) {
 	err := NewRuntimeOpeningBinding(nil, nil, nil, nil).Bind(t.Context(), RuntimeOpeningBindingRequest{
 		Facts: roles.SessionOpeningFacts{FactorySessionID: "selected", RuntimeID: "candidate-runtime"},
 	}, selected, clock, inertHostedInstance{}, bindingSessionRuntime{}, nil,
-		&factoryruntime.RuntimeActivation{}, execution, nil, cleanup)
+		execution, nil, cleanup)
 	var typed *factorysessions.DetachedRequestError
 	if !errors.Is(err, cause) || !errors.As(err, &typed) || selected.ModelInvocation.RuntimeID != "prior-runtime" ||
 		selected.Clock != clock || selected.ProjectionBackendScope != "selected-backend" {
@@ -328,7 +328,7 @@ func TestRuntimeOpeningBindingUnavailableCapabilitiesDeferPublication(t *testing
 			cleanup := &runtimeOpeningCleanup{}
 			opened := &runtimebinding.SessionState{}
 			err := NewRuntimeOpeningBinding(nil, nil, nil, nil).Bind(t.Context(), RuntimeOpeningBindingRequest{},
-				opened, openingCoordinatorClock{}, startup, session, nil, &factoryruntime.RuntimeActivation{},
+				opened, openingCoordinatorClock{}, startup, session, nil,
 				nil, nil, cleanup)
 			if err == nil || !startup.deferred || opened.Clock != nil || opened.ModelInvocation.RuntimeID != "" || len(cleanup.actions) != 0 {
 				t.Fatalf("unavailable %s = %+v, %v, deferred=%v", missing, opened, err, startup.deferred)

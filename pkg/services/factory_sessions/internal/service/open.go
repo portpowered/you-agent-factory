@@ -148,7 +148,8 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	}
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
-		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
+		opening.initial, opening.startupRuntime.RecordingLedger(), openedModelsScopeBinding(opening.startupRuntime),
+		opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -157,7 +158,7 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 		RecordPath:  opening.configured.Recordings.RecordPath,
 		MockWorkers: opening.configured.Workers.MockWorkers,
 	}, completed.State, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
-		opening.activation, opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
+		opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
 		lifecycle = completed.Lifecycle
 		closeArtifacts = cleanup.Close
@@ -563,7 +564,7 @@ func NewRuntimeOpeningCompletion(registration openingRegistration, routing openi
 
 type RuntimeCompletionRequest struct {
 	Facts               roles.SessionOpeningFacts
-	LoadedFactory       factorydefinitions.MutableLoadedFactorySource
+	LoadedFactory       factorydefinitions.LoadedFactorySource
 	ActivateWebhooks    bool
 	MockWorkers         *workers.MockWorkersConfig
 	Host                factorysessions.RuntimeHostRequest
@@ -602,16 +603,27 @@ func (opening *sessionRuntimeOpening) completionRequest() RuntimeCompletionReque
 	return request
 }
 
+// openedModelsScopeBinding selects the optional capability from the acquired
+// record once. Completion does not retain or resolve the full runtime record.
+func openedModelsScopeBinding(runtime runtimeports.RuntimeInstance) func(models.RuntimeScopeRef) error {
+	if binder, ok := runtime.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	}); ok {
+		return binder.BindModelsRuntimeScope
+	}
+	return nil
+}
+
 func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request RuntimeCompletionRequest,
-	initial *factoryruntime.RuntimeInitialOpening, runtime runtimeports.RuntimeInstance,
-	clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
+	initial *factoryruntime.RuntimeInitialOpening, ledger recordings.Ledger,
+	bindModelsScope func(models.RuntimeScopeRef) error, clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
 	logger.Debug("completing Factory Session opening", zap.String("session_id", request.Facts.FactorySessionID),
 		zap.String("runtime_id", request.Facts.RuntimeID), zap.String("generation_id", request.Facts.GenerationID))
 	defer func() {
 		logger.Debug("Factory Session opening completion finished", zap.String("session_id", request.Facts.FactorySessionID),
 			zap.Bool("completed", err == nil), zap.String("cause", logging.SafeErrorCause(err)))
 	}()
-	subscription, err := startFactoryWebhookSubscription(ctx, operation.webhooks, runtime.RecordingLedger(),
+	subscription, err := startFactoryWebhookSubscription(ctx, operation.webhooks, ledger,
 		request.LoadedFactory, request.ActivateWebhooks, request.Facts.FactorySessionID)
 	if err != nil {
 		return RuntimeCompletionResult{}, err
@@ -631,10 +643,8 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if state != nil {
 		state.SetMockWorkers(request.MockWorkers)
 	}
-	if binder, ok := runtime.(interface {
-		BindModelsRuntimeScope(models.RuntimeScopeRef) error
-	}); ok {
-		if err := binder.BindModelsRuntimeScope(request.Facts.ModelsScope); err != nil {
+	if bindModelsScope != nil {
+		if err := bindModelsScope(request.Facts.ModelsScope); err != nil {
 			return RuntimeCompletionResult{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
 		}
 	}
@@ -673,7 +683,7 @@ func startFactoryWebhookSubscription(
 	ctx context.Context,
 	webhooksService webhooks.Service,
 	ledger recordings.Ledger,
-	loaded factorydefinitions.MutableLoadedFactorySource,
+	loaded factorydefinitions.LoadedFactorySource,
 	active bool,
 	sessionID string,
 ) (webhooks.Subscription, error) {

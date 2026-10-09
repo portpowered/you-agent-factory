@@ -50,7 +50,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRecordAcrossRegistryChange(t *te
 	cleanup := &runtimeOpeningCleanup{}
 	result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
 		RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
-		&factoryruntime.RuntimeInitialOpening{}, inertHostedInstance{}, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+		&factoryruntime.RuntimeInitialOpening{}, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 	if err != nil || result.State != selected || result.SessionRuntime != session ||
 		runtimebinding.SessionStateFrom(registration.Resolve("selected")) != newer {
 		t.Fatalf("completion retargeted its acquired record: %+v, %v", result, err)
@@ -97,7 +97,15 @@ func (fake completionRuntime) BindModelsRuntimeScope(scope models.RuntimeScopeRe
 	return fake.bind(scope)
 }
 
-type completionLoaded struct{ preparationSource }
+type completionLoaded struct {
+	factorydefinitions.LoadedFactorySource
+	config *factorydefinitions.FactoryConfig
+}
+
+func (source completionLoaded) FactoryConfig() *factorydefinitions.FactoryConfig {
+	return source.config
+}
+func (completionLoaded) FactoryDir() string { return "selected-factory" }
 
 func (completionLoaded) RuntimeBaseDir() string { return "selected-runtime" }
 
@@ -195,7 +203,7 @@ func (fixture completionSelectionFixture) open(t *testing.T, id string) (Runtime
 	}
 	mock := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: id, WorkerName: id}}}
 	request := RuntimeCompletionRequest{Facts: facts, ActivateWebhooks: true, MockWorkers: mock,
-		LoadedFactory:       completionLoaded{preparationSource{config: &factorydefinitions.FactoryConfig{Webhooks: []factorydefinitions.FactoryWebhookConfig{{Enabled: true}}}}},
+		LoadedFactory:       completionLoaded{config: &factorydefinitions.FactoryConfig{Webhooks: []factorydefinitions.FactoryWebhookConfig{{Enabled: true}}}},
 		Host:                factorysessions.RuntimeHostRequest{Host: "selected-" + id, WorkFile: id, MockWorkers: true},
 		PublishCurrentBoard: func(context.Context) error { *fixture.calls = append(*fixture.calls, id+":publish"); return nil },
 	}
@@ -208,7 +216,7 @@ func (fixture completionSelectionFixture) open(t *testing.T, id string) (Runtime
 		*fixture.calls = append(*fixture.calls, id+":models")
 		return nil
 	}}
-	result, err := fixture.operation.Complete(t.Context(), request, initial, runtime, fixture.clock, fixture.logger, cleanup)
+	result, err := fixture.operation.Complete(t.Context(), request, initial, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, fixture.clock, fixture.logger, cleanup)
 	if err != nil || result.SessionRuntime != session || result.ProcessRuntime != fixture.process {
 		t.Fatalf("completion: %#v %v", result, err)
 	}
@@ -314,8 +322,8 @@ func TestRuntimeOpeningCompletionFailureRetainsTypedCauseAndRetryableCleanup(t *
 			ctx, cancel := context.WithCancel(context.WithValue(t.Context(), completionOwnershipKey{}, "selected"))
 			cancel()
 			cleanup := &runtimeOpeningCleanup{}
-			request := RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}, ActivateWebhooks: true, LoadedFactory: completionLoaded{preparationSource{config: &factorydefinitions.FactoryConfig{Webhooks: []factorydefinitions.FactoryWebhookConfig{{Enabled: true}}}}}}
-			result, err := NewRuntimeOpeningCompletion(registration, routing, hooks, host).Complete(ctx, request, &factoryruntime.RuntimeInitialOpening{}, runtime, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+			request := RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}, ActivateWebhooks: true, LoadedFactory: completionLoaded{config: &factorydefinitions.FactoryConfig{Webhooks: []factorydefinitions.FactoryWebhookConfig{{Enabled: true}}}}}
+			result, err := NewRuntimeOpeningCompletion(registration, routing, hooks, host).Complete(ctx, request, &factoryruntime.RuntimeInitialOpening{}, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 			assertCompletionFailureCleanup(t, stage, cause, releaseCause, result, err, cleanup, &releaseCalls, &hookClose, &routeClose)
 		})
 	}
@@ -338,7 +346,7 @@ func TestRuntimeOpeningCompletionStaleAndRepeatedReleasePreserveNewerAndPeer(t *
 		return nil, nil
 	})
 	cleanup := &completionCapturedCleanup{}
-	_, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(), RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}}, &factoryruntime.RuntimeInitialOpening{}, completionRuntime{bind: func(models.RuntimeScopeRef) error { return nil }}, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+	_, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(), RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "candidate"}}, &factoryruntime.RuntimeInitialOpening{}, nil, func(models.RuntimeScopeRef) error { return nil }, openingCoordinatorClock{}, zap.NewNop(), cleanup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,5 +401,33 @@ func assertCompletionFailureCleanup(t *testing.T, stage string, cause, errorRele
 	}
 	if stage == "host" && *routeClose != 1 {
 		t.Fatal("host failure did not unbind owned route")
+	}
+}
+
+func TestRuntimeOpeningModelsBindingRetainsAcquiredCapability(t *testing.T) {
+	t.Parallel()
+	scope, err := (models.RuntimeScopeRef{}).Parse("selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cause := &factorysessions.DetachedRequestError{Message: "selected Models binding failed"}
+	calls := 0
+	runtime := completionRuntime{bind: func(got models.RuntimeScopeRef) error {
+		calls++
+		if got != scope {
+			t.Fatal("Models binding substituted the selected scope")
+		}
+		return cause
+	}}
+	bind := openedModelsScopeBinding(runtime)
+	runtime.bind = func(models.RuntimeScopeRef) error { t.Fatal("binding retargeted a later handle"); return nil }
+	if bind == nil || calls != 0 {
+		t.Fatal("capability selection activated Models binding")
+	}
+	if err := bind(scope); err != cause || calls != 1 {
+		t.Fatalf("selected binding: %v calls=%d", err, calls)
+	}
+	if openedModelsScopeBinding(inertHostedInstance{}) != nil {
+		t.Fatal("absent optional capability became a binding")
 	}
 }
