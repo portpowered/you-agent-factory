@@ -81,18 +81,20 @@ type continueTuple struct {
 }
 
 type continuePlan struct {
-	executor  workers.Service
-	clock     platformclock.Source
-	scheduler platformclock.TimerSource
-	request   workersessions.ContinueRequest
-	execution workers.WorkstationDispatchRequest
-	direct    bool
-	lineage   *workers.SessionLineage
-	archived  bool
-	interrupt bool
+	sourceAddress string
+	executor      workers.Service
+	clock         platformclock.Source
+	scheduler     platformclock.TimerSource
+	request       workersessions.ContinueRequest
+	execution     workers.WorkstationDispatchRequest
+	direct        bool
+	lineage       *workers.SessionLineage
+	archived      bool
+	interrupt     bool
 }
 
 type continuationSourceSnapshot struct {
+	address    string
 	executor   workers.Service
 	clock      platformclock.Source
 	scheduler  platformclock.TimerSource
@@ -134,7 +136,13 @@ func (r *registry) Continue(
 		return workersessions.ContinueResult{}, err
 	}
 	req = req.Normalize()
-	replay, owner, err := r.reserveContinuation(req)
+	r.mu.RLock()
+	_, addressErr := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	r.mu.RUnlock()
+	if addressErr != nil {
+		return workersessions.ContinueResult{}, addressErr
+	}
+	replay, owner, err := r.reserveContinuation(req, callerCtx)
 	if err != nil {
 		r.logContinuationRejected(req, continuationReservationOutcome(err))
 		return workersessions.ContinueResult{}, err
@@ -184,8 +192,9 @@ func (r *registry) Continue(
 // Workers/provider effect can occur.
 func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
+	callers ...context.Context,
 ) (*continueReplay, bool, error) {
-	captured, err := r.readContinuationRecipe(req)
+	captured, err := r.readContinuationRecipe(req, callers...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -198,14 +207,16 @@ func (r *registry) reserveContinuation(
 			return replay, false, err
 		}
 	}
-	tuple := continueTuple{
-		sourceID:    req.SourceWorkerSessionID,
-		successorID: req.SuccessorWorkerSessionID,
-		input:       req.FollowUpInput,
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	if address == "" {
+		address = req.SourceWorkerSessionID
+	}
+	tuple := continueTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}
 
 	if r.continueReplays == nil {
 		r.continueReplays = make(map[string]*continueReplay)
@@ -241,7 +252,7 @@ func (r *registry) reserveContinuation(
 	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
 	if archived != nil {
-		r.publications[req.SourceWorkerSessionID] = &publication{capture: archived.target}
+		r.publications[snapshot.address] = &publication{capture: archived.target}
 	}
 	return replay, true, nil
 }
@@ -266,7 +277,11 @@ func (r *registry) validateContinuationSupportLocked(reference providers.Session
 func (r *registry) snapshotContinuationSourceLocked(
 	req workersessions.ContinueRequest,
 ) (continuationSourceSnapshot, error) {
-	source, exists := r.sessions[req.SourceWorkerSessionID]
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	if err != nil {
+		return continuationSourceSnapshot{}, err
+	}
+	source, exists := r.sessions[address]
 	if !exists {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceNotFound
 	}
@@ -276,13 +291,13 @@ func (r *registry) snapshotContinuationSourceLocked(
 	if source.SuccessorWorkerSessionID != "" {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
 	}
-	if requestID := r.continuationSources[source.ID]; requestID != "" && requestID != req.RequestID {
+	if requestID := r.continuationSources[address]; requestID != "" && requestID != req.RequestID {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
 	}
 	if err := validateContinuationSourceAssociation(source); err != nil {
 		return continuationSourceSnapshot{}, err
 	}
-	supervision := r.supervisions[source.ID]
+	supervision := r.supervisions[address]
 	if supervision == nil {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationExecutionUnavailable
 	}
@@ -307,11 +322,11 @@ func (r *registry) snapshotContinuationSourceLocked(
 		return continuationSourceSnapshot{}, fmt.Errorf("%w: source attempt identity mismatch", workersessions.ErrContinuationProviderSessionInvalid)
 	}
 	direct := false
-	if metadata := r.observations[source.ID]; metadata != nil {
+	if metadata := r.observations[address]; metadata != nil {
 		direct = metadata.direct
 	}
 	return continuationSourceSnapshot{
-		executor: supervision.executor, clock: supervision.clock, scheduler: supervision.scheduler,
+		address: address, executor: supervision.executor, clock: supervision.clock, scheduler: supervision.scheduler,
 		session:    source,
 		execution:  execution,
 		dispatchID: dispatchID,
@@ -352,8 +367,9 @@ func (r *registry) storeContinuationReservationLocked(
 	continuation workers.WorkstationDispatchRequest,
 ) *continueReplay {
 	source := snapshot.session
+	address := firstNonEmpty(snapshot.address, source.ID)
 	if !snapshot.archived {
-		r.sessions[source.ID] = source
+		r.sessions[address] = source
 	}
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
@@ -363,7 +379,7 @@ func (r *registry) storeContinuationReservationLocked(
 	if r.continuationSources == nil {
 		r.continuationSources = make(map[string]string)
 	}
-	r.continuationSources[source.ID] = req.RequestID
+	r.continuationSources[address] = req.RequestID
 	r.publications[req.SuccessorWorkerSessionID] = &publication{}
 	if r.startsDone == nil {
 		r.startsDone = make(chan struct{})
@@ -376,7 +392,7 @@ func (r *registry) storeContinuationReservationLocked(
 	replay := &continueReplay{
 		tuple: tuple,
 		plan: continuePlan{
-			executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
+			sourceAddress: address, executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
 			request:   req,
 			execution: continuation,
 			direct:    snapshot.direct,
@@ -518,8 +534,8 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 // lineage evidence, so neither side is mutated into a durable relationship.
 func (r *registry) releaseContinuationReservation(plan continuePlan) {
 	r.mu.Lock()
-	if r.continuationSources[plan.request.SourceWorkerSessionID] == plan.request.RequestID {
-		delete(r.continuationSources, plan.request.SourceWorkerSessionID)
+	if r.continuationSources[plan.sourceAddressOrID()] == plan.request.RequestID {
+		delete(r.continuationSources, plan.sourceAddressOrID())
 	}
 	r.mu.Unlock()
 }
@@ -533,11 +549,14 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 	if plan.archived {
 		// The admitted successor opening carries durable predecessor evidence.
 		// An archived source has no live Events topic to append or supervise.
-		r.commitContinuationSessionLinks(plan, plan.request.SourceWorkerSessionID)
+		r.commitContinuationSessionLinks(plan, plan.sourceAddressOrID())
 		return
 	}
-	source, err := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
-	if err != nil {
+	r.mu.RLock()
+	source, exists := r.sessions[plan.sourceAddressOrID()]
+	source = cloneSession(source)
+	r.mu.RUnlock()
+	if !exists {
 		r.releaseContinuationReservation(plan)
 		return
 	}
@@ -561,7 +580,7 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 		SourceSequence: continuationLineageSourceSequence,
 		SourceEventID:  continuationLineageSourceEventID,
 	}
-	if err := r.publishSessionLineageRecord(context.Background(), source.ID, identity, payload, true); err != nil {
+	if err := r.publishSessionLineageRecord(context.Background(), plan.sourceAddressOrID(), identity, payload, true); err != nil {
 		r.logger.Info(
 			"worker session continuation lineage publication failed",
 			"sourceWorkerSessionID", source.ID,
@@ -570,7 +589,7 @@ func (r *registry) commitContinuationLineage(plan continuePlan) {
 		)
 	}
 
-	r.commitContinuationSessionLinks(plan, source.ID)
+	r.commitContinuationSessionLinks(plan, plan.sourceAddressOrID())
 }
 
 func (r *registry) commitContinuationSessionLinks(plan continuePlan, sourceID string) {
@@ -582,8 +601,8 @@ func (r *registry) commitContinuationSessionLinks(plan continuePlan, sourceID st
 		}
 	}
 	if current, exists := r.sessions[plan.request.SuccessorWorkerSessionID]; exists {
-		if current.PredecessorWorkerSessionID == "" || current.PredecessorWorkerSessionID == sourceID {
-			current.PredecessorWorkerSessionID = sourceID
+		if current.PredecessorWorkerSessionID == "" || current.PredecessorWorkerSessionID == publicWorkerID(sourceID) {
+			current.PredecessorWorkerSessionID = publicWorkerID(sourceID)
 			r.sessions[plan.request.SuccessorWorkerSessionID] = current
 		}
 	}
@@ -1055,4 +1074,9 @@ func (r *registry) registerInvocationSupervision(
 	supervision.continuing = options.continuation
 	supervision.mu.Unlock()
 	return invocationPreparation{supervision: supervision}, nil
+}
+
+// A reservation retains its selected owner across retries and terminal publication.
+func (plan continuePlan) sourceAddressOrID() string {
+	return firstNonEmpty(plan.sourceAddress, plan.request.SourceWorkerSessionID)
 }

@@ -61,7 +61,7 @@ func directRestartRecipeSafe(execution workers.WorkstationDispatchRequest) bool 
 // discovering an unusable recipe in Continue after the source has stopped.
 // Capture identity remains pinned by the existing interrupt fence.
 func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan, target recordings.WorkerControlTarget) (interruptPlan, error) {
-	_, metadata, exists := r.loadObservationState(plan.request.SourceWorkerSessionID)
+	_, metadata, exists := r.loadObservationState(plan.sourceAddressOrID())
 	if r.logs == nil || !exists || !metadata.direct {
 		// Component fixtures and legacy non-direct interruption have no direct
 		// recipe. Preserve those paths; they do not authorize captured restart.
@@ -95,18 +95,14 @@ func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan
 
 // Read outside the registry lock; reservation later rechecks the immutable
 // source attempt. A replay already reserved in this host needs no storage read.
-func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
+func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, callers ...context.Context) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
-	source, exists := r.sessions[req.SourceWorkerSessionID]
-	metadata := r.observations[req.SourceWorkerSessionID]
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	source, exists := r.sessions[address]
+	metadata := r.observations[address]
 	_, replay := r.continueReplays[req.RequestID]
 	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
-	factorySessionID := ""
-	if supervision := r.supervisions[req.SourceWorkerSessionID]; supervision != nil {
-		supervision.mu.Lock()
-		factorySessionID = supervision.execution.Execution.FactorySessionID
-		supervision.mu.Unlock()
-	}
+	factorySessionID, terminalPublished := r.continuationPublicationLocked(address)
 	source = cloneSession(source)
 	r.mu.RUnlock()
 	if !read {
@@ -116,6 +112,13 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 		return nil, err
 	}
 	ctx := r.serverOwnedContext()
+	waitCtx := ctx
+	if len(callers) != 0 && callers[0] != nil {
+		waitCtx = callers[0]
+	}
+	if err := waitContinuationPublication(waitCtx, terminalPublished); err != nil {
+		return nil, err
+	}
 	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
 	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
@@ -126,6 +129,35 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
 	}
 	return r.readCapturedContinuationRecipe(ctx, target, source)
+}
+
+// The caller holds r.mu while selecting the exact attempt's publication.
+func (r *registry) continuationPublicationLocked(address string) (string, <-chan struct{}) {
+	factorySessionID := ""
+	var terminalPublished <-chan struct{}
+	if supervision := r.supervisions[address]; supervision != nil {
+		supervision.mu.Lock()
+		factorySessionID = supervision.execution.Execution.FactorySessionID
+		if supervision.accepted {
+			terminalPublished = supervision.done
+		}
+		supervision.mu.Unlock()
+	}
+	return factorySessionID, terminalPublished
+}
+
+func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}) error {
+	// Terminal state is visible before capture finalization. Join the exact
+	// admitted attempt's publication, outside the registry lock, before reading
+	// the durable recipe. A peer's completion cannot release this barrier.
+	if terminalPublished != nil {
+		select {
+		case <-terminalPublished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {

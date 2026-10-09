@@ -1058,6 +1058,18 @@ func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx con
 	if !observation.Direct {
 		return scope, nil
 	}
+	// Retained history belongs to this adapter's owner. A shared direct ID
+	// must not redirect that owner's read to another Factory Session before
+	// the fleet can resolve candidate cardinality.
+	if s.ledger != nil && s.projector != nil {
+		_, found, historyErr := s.recordedObservationForWorkerSessionID(ctx, strings.TrimSpace(workerSessionID))
+		if historyErr != nil {
+			return "", historyErr
+		}
+		if found {
+			return scope, nil
+		}
+	}
 	actual := strings.TrimSpace(observation.FactorySessionID)
 	requested = strings.TrimSpace(requested)
 	if !s.directObservationScopeMatches(observation, requested, scope) {

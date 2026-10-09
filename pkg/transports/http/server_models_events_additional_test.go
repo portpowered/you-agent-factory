@@ -132,7 +132,7 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 		{
 			name: "top-level show",
 			call: func(recorder *httptest.ResponseRecorder) {
-				srv.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+				srv.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"), factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams{})
 			},
 		},
 		{

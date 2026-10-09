@@ -28,6 +28,8 @@ type ContinueConfig struct {
 	Server  string
 	Remote  bool
 
+	FactorySessionID         string
+	FactorySessionIDExplicit bool
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -103,6 +105,9 @@ func continueWorkerSession(config ContinueConfig) error {
 }
 
 func validateContinueConfig(config ContinueConfig) error {
+	if config.FactorySessionIDExplicit && strings.TrimSpace(config.FactorySessionID) == "" {
+		return newCLIError("WORKER_SESSION_CONTINUATION_INVALID", "--session requires a non-empty Factory Session identity", nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -139,6 +144,9 @@ func normalizeContinueRequest(config ContinueConfig) (normalizedContinueRequest,
 	}
 	apiRequest := factoryapi.WorkerSessionContinueRequest{
 		RequestId: requestID, SuccessorWorkerSessionId: successorID, FollowUpInput: followUp,
+	}
+	if scope := strings.TrimSpace(config.FactorySessionID); scope != "" {
+		apiRequest.FactorySessionId = &scope
 	}
 	serviceRequest, err := workersessionshttp.WorkerSessionContinueRequestFromAPI(config.SourceWorkerSessionID, apiRequest)
 	if err != nil {
@@ -318,12 +326,15 @@ func remoteContinueHTTPError(response *http.Response, status int) error {
 		if code == "" {
 			code = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 		}
-		return newCLIError(code, apiError.Message, nil)
+		return &CLIError{Code: code, Message: apiError.Message, Details: remoteAddressDetails(apiError)}
 	}
 	return newCLIError("WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", fmt.Sprintf("remote Worker Session continuation failed (%d)", status), nil)
 }
 
 func mapContinueServiceError(err error, _ bool) error {
+	if ambiguous := ambiguityCLIError(err, ""); ambiguous != nil {
+		return ambiguous
+	}
 	if errors.Is(err, context.Canceled) {
 		return newCLIError("WORKER_SESSION_CONTINUATION_INTERRUPTED", "Worker Session continuation was interrupted", context.Canceled)
 	}
@@ -404,9 +415,10 @@ func emitContinueCLIError(config ContinueConfig, jsonOutput bool, err error) err
 		}
 	}
 	if encodeErr := json.NewEncoder(output).Encode(struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}{Code: code, Message: message}); encodeErr != nil {
+		Code    string                                  `json:"code"`
+		Message string                                  `json:"message"`
+		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
+	}{Code: code, Message: message, Details: cliErrorDetails(err)}); encodeErr != nil {
 		return errors.Join(err, encodeErr)
 	}
 	if clidiag.CentralDiagnosticsEnabled(config.Context) {

@@ -301,6 +301,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	ctx context.Context,
 	workerSessionID string,
+	factorySessionID string,
 ) (factoryapi.WorkerSessionObservation, error) {
 	if a == nil || a.topLevel == nil {
 		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
@@ -315,12 +316,13 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, err
 	}
+	factorySessionID = strings.TrimSpace(factorySessionID)
 	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
-		WorkerSessionID: workerSessionID,
+		WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID,
 	})
 	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		if a.logs != nil {
-			observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+			observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID})
 		}
 	}
 	if err != nil {
@@ -379,7 +381,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
-	observation, err := a.GetTopLevelWorkerSessionObservation(ctx, workerSessionID)
+	observation, err := a.GetTopLevelWorkerSessionObservation(ctx, workerSessionID, "")
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}

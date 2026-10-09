@@ -35,6 +35,7 @@ properties:
       - WORKER_SESSION_EVENT_CURSOR_STALE
       - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
       - WORKER_SESSION_ADMISSION_FAILED
+      - WORKER_SESSION_AMBIGUOUS
       - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
       - WORKER_SESSION_CONTINUATION_CONFLICT
       - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
@@ -102,6 +103,7 @@ properties:
       - The Worker Session event cursor no longer names retained history.
       - The Worker Session event cursor's durable stream generation is unavailable.
       - Workers could not admit the Worker Session execution.
+      - Worker Session ID is retained by multiple Factory Sessions; select factorySessionId from details.candidates.
       - Worker Session continuation requestId was reused with different inputs.
       - The Worker Session continuation conflicts with source lifecycle or successor lineage.
       - The recorded Provider Session cannot be resumed for this Worker Session continuation.
@@ -151,3 +153,8 @@ properties:
   resourceCapacity:
     $ref: './FactorySessionResourceCapacityErrorDetails.yaml'
     description: Resource accounting for a rejected capacity reduction.
+  details:
+    description: >-
+      Optional error-specific JSON details, including legacy string values.
+      When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails
+      object containing exact candidate identities in candidates.

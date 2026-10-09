@@ -19,7 +19,7 @@ type archivedContinuationSource struct {
 // select this host's execution services only when reserving a new successor.
 func (r *registry) readArchivedContinuationSource(req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
 	r.mu.RLock()
-	_, exists := r.sessions[req.SourceWorkerSessionID]
+	_, exists := r.sessions[r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)]
 	_, replay := r.continueReplays[req.RequestID]
 	r.mu.RUnlock()
 	if exists || replay || r.logs == nil {
@@ -35,6 +35,9 @@ func (r *registry) readArchivedContinuationSource(req workersessions.ContinueReq
 	if err != nil || page.Catalog.WorkerSessionID != req.SourceWorkerSessionID ||
 		page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if req.FactorySessionID != "" && page.Catalog.FactorySessionID != req.FactorySessionID {
+		return nil, workersessions.ErrContinuationSourceNotFound
 	}
 	target, err := archivedContinuationTarget(page, req.SourceWorkerSessionID)
 	if err != nil {
@@ -88,14 +91,17 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 // The caller holds r.mu. Recheck live reservations after the detached read;
 // never install a historical supervision handle or grant source controls.
 func (r *registry) continuationSnapshotLocked(req workersessions.ContinueRequest, archived *archivedContinuationSource) (continuationSourceSnapshot, error) {
-	if _, exists := r.sessions[req.SourceWorkerSessionID]; exists || archived == nil {
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	if _, exists := r.sessions[address]; exists || archived == nil {
 		return r.snapshotContinuationSourceLocked(req)
 	}
+	address = firstNonEmpty(address, req.SourceWorkerSessionID)
 	if archived.snapshot.session.SuccessorWorkerSessionID != "" ||
-		(r.continuationSources[req.SourceWorkerSessionID] != "" && r.continuationSources[req.SourceWorkerSessionID] != req.RequestID) {
+		(r.continuationSources[address] != "" && r.continuationSources[address] != req.RequestID) {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
 	}
 	snapshot := archived.snapshot
+	snapshot.address = firstNonEmpty(address, req.SourceWorkerSessionID)
 	snapshot.executor, snapshot.clock, snapshot.scheduler = r.execution, r.clock, r.scheduler
 	return snapshot, nil
 }

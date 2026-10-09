@@ -25,6 +25,7 @@ func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T)
 	handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/continue", strings.NewReader(`{
+		"factorySessionId": " owner-1 ",
 		"requestId": " request-1 ",
 		"successorWorkerSessionId": " successor-1 ",
 		"followUpInput": "  continue the work  "
@@ -46,11 +47,59 @@ func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T)
 	if response.EventTopic != "worker-session/successor-1/events" {
 		t.Fatalf("event topic = %q, want deterministic successor topic", response.EventTopic)
 	}
-	if !service.continueCalled || service.continueRequest.RequestID != "request-1" ||
+	if !service.continueCalled || service.continueRequest.FactorySessionID != "owner-1" || service.continueRequest.RequestID != "request-1" ||
 		service.continueRequest.SourceWorkerSessionID != "source-1" ||
 		service.continueRequest.SuccessorWorkerSessionID != "successor-1" ||
 		service.continueRequest.FollowUpInput != "  continue the work  " {
 		t.Fatalf("continuation request = %#v, want normalized identities and preserved input", service.continueRequest)
+	}
+}
+
+func TestControlPreflightUsesFleetCandidatesBeforeBoundRegistry(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"continue", "interrupt"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			bound := &fakeObservationService{}
+			candidates := (workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{
+				{WorkerSessionID: "source", FactorySessionID: "owner-a", State: workersessions.StateCompleted},
+				{WorkerSessionID: "source", FactorySessionID: "owner-b", State: workersessions.StateCompleted},
+			}}).Clone()
+			fleet := &fakeObservationService{getByWorkerErr: candidates}
+			adapter := NewAdapterWithStartAndContinueAndInterrupt(bound, bound, bound, bound, workServiceStub{}).WithTopLevelObservationService(fleet)
+			var err error
+			if operation == "continue" {
+				_, err = adapter.ContinueWorkerSession(context.Background(), "source", factoryapi.WorkerSessionContinueRequest{
+					RequestId: "request", SuccessorWorkerSessionId: "successor", FollowUpInput: "follow up",
+				})
+			} else {
+				_, err = adapter.InterruptWorkerSession(context.Background(), "source", factoryapi.WorkerSessionInterruptRequest{
+					RequestId: "request", SuccessorWorkerSessionId: "successor", ReplacementMessage: "replacement",
+				})
+			}
+			if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || bound.continueCalled || bound.interruptCalled {
+				t.Fatalf("ambiguous fleet control = %v; bound Continue=%t Interrupt=%t", err, bound.continueCalled, bound.interruptCalled)
+			}
+		})
+	}
+}
+
+func TestControlPreflightFreezesSelectedFleetOwner(t *testing.T) {
+	t.Parallel()
+	bound := &fakeObservationService{}
+	fleet := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "source", FactorySessionID: "owner"}}
+	adapter := NewAdapterWithStartAndContinueAndInterrupt(bound, bound, bound, bound, workServiceStub{}).WithTopLevelObservationService(fleet)
+	_, err := adapter.ContinueWorkerSession(context.Background(), "source", factoryapi.WorkerSessionContinueRequest{
+		RequestId: "continue", SuccessorWorkerSessionId: "successor", FollowUpInput: "follow up",
+	})
+	if err != nil || bound.continueRequest.FactorySessionID != "owner" {
+		t.Fatalf("Continue owner = %q, %v", bound.continueRequest.FactorySessionID, err)
+	}
+	_, err = adapter.InterruptWorkerSession(context.Background(), "source", factoryapi.WorkerSessionInterruptRequest{
+		RequestId: "interrupt", SuccessorWorkerSessionId: "successor", ReplacementMessage: "replacement",
+	})
+	if err != nil || bound.interruptRequest.FactorySessionID != "owner" {
+		t.Fatalf("Interrupt owner = %q, %v", bound.interruptRequest.FactorySessionID, err)
 	}
 }
 
@@ -145,6 +194,7 @@ func TestInterruptWorkerSessionReturnsPhaseAwareSnapshotsAfterAdmission(t *testi
 	handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+		"factorySessionId": " factory-a ",
 		"requestId": " request-1 ",
 		"successorWorkerSessionId": " successor-1 ",
 		"replacementMessage": "  replace the work  "
@@ -164,7 +214,7 @@ func TestInterruptWorkerSessionReturnsPhaseAwareSnapshotsAfterAdmission(t *testi
 		response.Successor.WorkerSessionId != "successor-1" || response.Successor.State != factoryapi.WorkerSessionInterruptSnapshotStateRunning {
 		t.Fatalf("response = %#v, want phase-aware source/successor snapshots", response)
 	}
-	if !service.interruptCalled || service.interruptRequest.RequestID != "request-1" ||
+	if !service.interruptCalled || service.interruptRequest.FactorySessionID != "factory-a" || service.interruptRequest.RequestID != "request-1" ||
 		service.interruptRequest.SourceWorkerSessionID != "source-1" ||
 		service.interruptRequest.SuccessorWorkerSessionID != "successor-1" ||
 		service.interruptRequest.ReplacementMessage != "  replace the work  " {
@@ -455,4 +505,42 @@ func (f *controlHTTPServiceFake) Cancel(_ context.Context, request workersession
 
 func (f *controlHTTPServiceFake) Terminate(_ context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return f.control(workersessions.ControlActionTerminate, request)
+}
+
+func TestContinueWorkerSessionRejectsEmptyExplicitScopeBeforeService(t *testing.T) {
+	for _, scope := range []string{"", "   "} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{}
+			handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.NewNop())
+			body, err := json.Marshal(map[string]string{"factorySessionId": scope, "requestId": "request", "successorWorkerSessionId": "successor", "followUpInput": "next"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source/continue", strings.NewReader(string(body))), factoryapi.WorkerSessionID("source"))
+			if recorder.Code != http.StatusBadRequest || service.continueCalled || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
+				t.Fatalf("status=%d called=%t body=%s", recorder.Code, service.continueCalled, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestInterruptWorkerSessionRejectsEmptyExplicitScopeBeforeService(t *testing.T) {
+	for _, scope := range []string{"", "   "} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{}
+			handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
+			body, err := json.Marshal(map[string]string{"factorySessionId": scope, "requestId": "request", "successorWorkerSessionId": "successor", "replacementMessage": "next"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source/interrupt", strings.NewReader(string(body))), factoryapi.WorkerSessionID("source"))
+			if recorder.Code != http.StatusBadRequest || service.interruptCalled || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
+				t.Fatalf("status=%d called=%t body=%s", recorder.Code, service.interruptCalled, recorder.Body.String())
+			}
+		})
+	}
 }

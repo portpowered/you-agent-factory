@@ -573,6 +573,7 @@ type fakeObservationService struct {
 	getByWorkerErr             error
 	getByWorkerCalled          bool
 	getWorkerSessionID         string
+	getWorkerFactorySessionID  string
 	readResult                 workersessions.ReadTranscriptResult
 	readErr                    error
 	readCalled                 bool
@@ -623,6 +624,7 @@ func (f *fakeObservationService) GetObservation(_ context.Context, request worke
 func (f *fakeObservationService) GetObservationByWorkerSessionID(_ context.Context, request workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
 	f.getByWorkerCalled = true
 	f.getWorkerSessionID = request.WorkerSessionID
+	f.getWorkerFactorySessionID = request.FactorySessionID
 	return f.getByWorkerResult, f.getByWorkerErr
 }
 

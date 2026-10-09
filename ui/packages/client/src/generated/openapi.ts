@@ -83,7 +83,7 @@ export interface paths {
     };
     /**
      * Show one top-level Worker Session observation
-     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple. A retained ID with multiple owners returns 409 WORKER_SESSION_AMBIGUOUS with exact details.candidates. Select an exact Factory Session owner with the optional factorySessionId query. A scope that does not own the ID returns 404 without peer fallback.
      */
     get: operations["getWorkerSessionObservationByWorkerSessionId"];
     put?: never;
@@ -1573,8 +1573,10 @@ export interface components {
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
-    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS. */
     WorkerSessionContinueRequest: {
+      /** @description Exact source Factory Session; omit only when the Worker Session ID is unique. */
+      factorySessionId?: string;
       /** @description Required caller idempotency key for this continuation. */
       requestId: string;
       /** @description Distinct Worker Session identity to reserve for the successor. */
@@ -1599,8 +1601,10 @@ export interface components {
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
-    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. */
+    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS in VALIDATION before cancellation or successor admission. */
     WorkerSessionInterruptRequest: {
+      /** @description Exact source Factory Session; omit only when the Worker Session ID is unique. */
+      factorySessionId?: string;
       /** @description Required caller idempotency key for this interrupt. */
       requestId: string;
       /** @description Distinct Worker Session identity to reserve for the replacement. */
@@ -1657,6 +1661,8 @@ export interface components {
       successorWorkerSessionId?: string;
       source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
       successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      /** @description Exact candidate identities for WORKER_SESSION_AMBIGUOUS in VALIDATION. */
+      details?: components["schemas"]["WorkerSessionAddressDetails"];
     };
     /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
     WorkerSessionControlResponse: {
@@ -2713,6 +2719,8 @@ export interface components {
       targets?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Resource accounting for a rejected capacity reduction. */
       resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
+      /** @description Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates. */
+      details?: unknown;
     };
     ShutdownAcceptedResponse: {
       /** @enum {string} */
@@ -7459,6 +7467,18 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
+    WorkerSessionAddressCandidate: {
+      factorySessionId: string;
+      workerSessionId: string;
+      /** @description Primary Work ID, or null when unavailable. */
+      workId: string | null;
+      /** @enum {string} */
+      state: WorkerSessionAddressCandidateState;
+    };
+    WorkerSessionAddressDetails: {
+      /** @description Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included. */
+      candidates: components["schemas"]["WorkerSessionAddressCandidate"][];
+    };
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */
@@ -7974,7 +7994,7 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
-    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects. */
     WorkerSessionContinuationConflict: {
       headers: {
         [name: string]: unknown;
@@ -8010,7 +8030,7 @@ export interface components {
         "application/json": components["schemas"]["WorkerSessionInterruptError"];
       };
     };
-    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. */
+    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects. */
     WorkerSessionInterruptConflict: {
       headers: {
         [name: string]: unknown;
@@ -8381,7 +8401,10 @@ export interface operations {
   };
   getWorkerSessionObservationByWorkerSessionId: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Exact Factory Session owner of the retained Worker Session ID. */
+        factorySessionId?: string;
+      };
       header?: never;
       path: {
         /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
@@ -8402,6 +8425,15 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      /** @description The Worker Session ID has multiple retained Factory Session owners. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -10989,6 +11021,8 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session ID is retained by multiple Factory Sessions; select factorySessionId from details.candidates.
+  WORKER_SESSION_AMBIGUOUS: "WORKER_SESSION_AMBIGUOUS",
   // Worker Session continuation requestId was reused with different inputs.
   WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
     "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
@@ -12411,6 +12445,18 @@ export const RelationType = {
   RelationTypeSpawnedBy: "SPAWNED_BY",
 } as const;
 export type RelationType = (typeof RelationType)[keyof typeof RelationType];
+export const WorkerSessionAddressCandidateState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type WorkerSessionAddressCandidateState =
+  (typeof WorkerSessionAddressCandidateState)[keyof typeof WorkerSessionAddressCandidateState];
 export const WorkVideoContentPartType = {
   VIDEO: "VIDEO",
 } as const;

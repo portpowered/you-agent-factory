@@ -64,22 +64,64 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	var selected workersessions.Observation
+	var candidates []workersessions.AddressCandidate
 	for _, source := range sources {
 		if source == nil {
 			continue
 		}
 		observation, lookupErr := source.GetObservationByWorkerSessionID(ctx, req)
-		if lookupErr == nil {
-			return observation.Clone(), nil
+		matches, err := fleetAddressCandidates(req, observation, lookupErr)
+		if err != nil {
+			return workersessions.Observation{}, err
 		}
-		if !errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
-			return workersessions.Observation{}, lookupErr
+		if lookupErr == nil && selected.WorkerSessionID == "" {
+			selected = observation.Clone()
 		}
+		candidates = append(candidates, matches...)
 		if err := ctx.Err(); err != nil {
 			return workersessions.Observation{}, err
 		}
 	}
+	identities := (workersessions.AmbiguousAddressError{Candidates: candidates}).Clone()
+	if len(identities.Candidates) > 1 {
+		return workersessions.Observation{}, identities
+	}
+	if len(identities.Candidates) == 1 {
+		if selected.WorkerSessionID == "" {
+			return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+		}
+		return selected, nil
+	}
 	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
+// A failed source cannot be ignored merely because another source matched.
+// Successful and ambiguous results must prove membership in this exact query.
+func fleetAddressCandidates(req workersessions.GetObservationByWorkerSessionIDRequest, observation workersessions.Observation, lookupErr error) ([]workersessions.AddressCandidate, error) {
+	if lookupErr == nil {
+		if observation.WorkerSessionID != strings.TrimSpace(req.WorkerSessionID) ||
+			(req.FactorySessionID != "" && observation.FactorySessionID != strings.TrimSpace(req.FactorySessionID)) {
+			return nil, workersessions.ErrObservationProjectionUnavailable
+		}
+		return []workersessions.AddressCandidate{observation.AddressCandidate()}, nil
+	}
+	var ambiguous *workersessions.AmbiguousAddressError
+	if errors.As(lookupErr, &ambiguous) {
+		if req.FactorySessionID != "" || len(ambiguous.Candidates) < 2 {
+			return nil, workersessions.ErrObservationProjectionUnavailable
+		}
+		for _, candidate := range ambiguous.Candidates {
+			if candidate.WorkerSessionID != strings.TrimSpace(req.WorkerSessionID) {
+				return nil, workersessions.ErrObservationProjectionUnavailable
+			}
+		}
+		return ambiguous.Candidates, nil
+	}
+	if errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
+		return nil, nil
+	}
+	return nil, lookupErr
 }
 
 // ReadTranscriptByWorkerSessionID routes one Worker Session identity to the

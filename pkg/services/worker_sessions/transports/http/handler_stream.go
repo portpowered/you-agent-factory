@@ -198,6 +198,9 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 }
 
 func (h *Handler) writeMappedContinueError(w http.ResponseWriter, err error) {
+	if writeAmbiguousAddressError(w, err, "") {
+		return
+	}
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return
@@ -228,6 +231,9 @@ func (h *Handler) writeMappedContinueError(w http.ResponseWriter, err error) {
 }
 
 func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) {
+	if writeAmbiguousAddressError(w, err, "") {
+		return
+	}
 	switch {
 	case errors.Is(err, workersessions.ErrInvalidSessionID),
 		errors.Is(err, workersessions.ErrInvalidObservationIdentity):

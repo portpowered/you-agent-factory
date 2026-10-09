@@ -3367,7 +3367,7 @@ func testInterruptSourceIdentityGuards(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			r := newTestRegistry(t)
 			r.sessions = test.session
-			_, err := r.interruptSourceLocked(request)
+			_, err := r.interruptSourceLocked(request, request.SourceWorkerSessionID)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("interruptSourceLocked() error = %v, want %v", err, test.wantErr)
 			}
@@ -3399,7 +3399,7 @@ func testInterruptSupervisionReservationGuards(t *testing.T) {
 			}
 			plan, err := r.reserveInterruptSupervisionLocked(
 				workersessions.InterruptRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"},
-				workersessions.Session{ID: "source"}, test.association,
+				workersessions.Session{ID: "source"}, test.association, "source",
 			)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("reserveInterruptSupervisionLocked() error = %v, want %v", err, test.wantErr)
@@ -6383,6 +6383,8 @@ func TestInterruptControlHistoryAppendFailureIsNotSessionNotFound(t *testing.T) 
 		},
 	}
 	r.supervisions["worker-1"] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	r.supervisions["worker-1"].accepted = true
+	r.supervisions["worker-1"].installCancel(func() { t.Error("history failure canceled source") })
 	r.publications["worker-1"] = &publication{open: true}
 	appendErr := errors.New("interrupt control history append failed")
 	r.events = failingContinuationEventsAppender{err: appendErr}
@@ -6396,6 +6398,10 @@ func TestInterruptControlHistoryAppendFailureIsNotSessionNotFound(t *testing.T) 
 	if !errors.Is(err, appendErr) || result.Phase != workersessions.InterruptPhaseValidation || result.Accepted {
 		t.Fatalf("Interrupt(control history append failure) = %#v, %v, want validation failure with append error", result, err)
 	}
+	if r.activeStarts != 0 || r.supervisions["worker-1"].interrupting || r.supervisions["worker-1"].controlActive {
+		t.Fatal("history failure retained an active source claim")
+	}
+	assertNoSuccessor(t, r, "successor-1")
 }
 
 func TestResume_LineagePublicationFailureRestoresThePausedAttempt(t *testing.T) {

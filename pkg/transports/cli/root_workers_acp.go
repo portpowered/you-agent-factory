@@ -452,8 +452,9 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 		return err
 	}
 	return continueOperation(workersessionscli.ContinueConfig{
-		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
-		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
+		FactorySessionIDExplicit: cmd.Flags().Changed("session"),
+		Context:                  cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		FactorySessionID: inputs.factorySessionID, RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, FollowUpInput: inputs.userMessage,
 		Prompt: inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
 		Async: inputs.async, OutputFormat: inputs.outputFormat,
@@ -464,10 +465,10 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 }
 
 type generatedWorkerSessionsContinueInputs struct {
-	sourceWorkerSessionID, requestID, successorWorkerSessionID string
-	userMessage, outputFormat                                  string
-	followUpInput                                              []string
-	async                                                      bool
+	factorySessionID, sourceWorkerSessionID, requestID, successorWorkerSessionID string
+	userMessage, outputFormat                                                    string
+	followUpInput                                                                []string
+	async                                                                        bool
 }
 
 func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generatedWorkerSessionsContinueInputs, error) {
@@ -485,6 +486,7 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 		target *string
 	}{
 		{"you.worker-sessions.continue.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.continue.flag.session", &inputs.factorySessionID},
 		{"you.worker-sessions.continue.flag.request-id", &inputs.requestID},
 		{"you.worker-sessions.continue.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
 		{"you.worker-sessions.continue.flag.user-message", &inputs.userMessage},
@@ -525,7 +527,9 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 		return err
 	}
 	return interrupt(workersessionscli.InterruptConfig{
-		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		FactorySessionIDExplicit: cmd.Flags().Changed("session"),
+		FactorySessionID:         inputs.factorySessionID,
+		Context:                  cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage, ResumeMode: inputs.resumeMode,
 		Prompt: inputs.replacementInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
@@ -537,6 +541,7 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 }
 
 type generatedWorkerSessionsInterruptInputs struct {
+	factorySessionID                                           string
 	sourceWorkerSessionID, requestID, successorWorkerSessionID string
 	userMessage, outputFormat, resumeMode                      string
 	replacementInput                                           []string
@@ -558,6 +563,7 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		target *string
 	}{
 		{"you.worker-sessions.interrupt.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.interrupt.flag.session", &inputs.factorySessionID},
 		{"you.worker-sessions.interrupt.flag.request-id", &inputs.requestID},
 		{"you.worker-sessions.interrupt.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
 		{"you.worker-sessions.interrupt.flag.replacement-message", &inputs.userMessage},
@@ -758,7 +764,8 @@ func executeGeneratedWorkerSessionsShowWithValues(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return show(workersessionscli.ShowConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		SessionIDExplicit: cmd.Flags().Changed("session"),
+		Context:           cmd.Context(), Server: globals.server, SessionID: sessionID,
 		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,

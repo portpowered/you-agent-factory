@@ -390,8 +390,9 @@ type CLIError struct {
 	Message string
 	// Phase carries the typed interrupt boundary for interrupt-specific JSON
 	// diagnostics. Other Worker Sessions operations leave it empty.
-	Phase string
-	Cause error
+	Phase   string
+	Cause   error
+	Details *factoryapi.WorkerSessionAddressDetails
 }
 
 func (err *CLIError) Error() string {

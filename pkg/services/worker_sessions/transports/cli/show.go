@@ -21,20 +21,21 @@ import (
 
 // ShowConfig holds parameters for the Worker Sessions show command.
 type ShowConfig struct {
-	Context         context.Context
-	Server          string
-	SessionID       string
-	WorkerSessionID string
-	Provider        string
-	Kind            string
-	ID              string
-	OutputFormat    string
-	JSON            bool
-	Verbose         bool
-	Debug           bool
-	Output          io.Writer
-	Diagnostics     io.Writer
-	HTTP            clihttp.Protocol
+	Context           context.Context
+	Server            string
+	SessionID         string
+	SessionIDExplicit bool
+	WorkerSessionID   string
+	Provider          string
+	Kind              string
+	ID                string
+	OutputFormat      string
+	JSON              bool
+	Verbose           bool
+	Debug             bool
+	Output            io.Writer
+	Diagnostics       io.Writer
+	HTTP              clihttp.Protocol
 }
 
 // NewShow returns the composition-facing show operation bound to one HTTP
@@ -91,6 +92,9 @@ func show(config ShowConfig) error {
 }
 
 func validateShowConfig(config ShowConfig) error {
+	if config.SessionIDExplicit && strings.TrimSpace(config.SessionID) == "" {
+		return newCLIError("WORKER_SESSION_SHOW_INVALID", "--session requires a non-empty Factory Session identity", nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -167,7 +171,7 @@ func workerSessionShowHTTPError(response *http.Response, status int) error {
 		if code == "" {
 			code = "WORKER_SESSION_SHOW_FAILED"
 		}
-		return newCLIError(code, apiError.Message, nil)
+		return &CLIError{Code: code, Message: apiError.Message, Details: remoteAddressDetails(apiError)}
 	}
 	if status == http.StatusNotFound {
 		return newCLIError("WORKER_SESSION_NOT_FOUND", "worker session not found", nil)
@@ -188,9 +192,10 @@ func emitShowCLIError(config ShowConfig, jsonOutput bool, err error) error {
 		return err
 	}
 	payload := struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}{Code: cliErrorCodeWithFallback(err, "WORKER_SESSION_SHOW_FAILED"), Message: cliErrorMessage(err)}
+		Code    string                                  `json:"code"`
+		Message string                                  `json:"message"`
+		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
+	}{Code: cliErrorCodeWithFallback(err, "WORKER_SESSION_SHOW_FAILED"), Message: cliErrorMessage(err), Details: cliErrorDetails(err)}
 	if encodeErr := json.NewEncoder(output).Encode(payload); encodeErr != nil {
 		return errors.Join(err, encodeErr)
 	}

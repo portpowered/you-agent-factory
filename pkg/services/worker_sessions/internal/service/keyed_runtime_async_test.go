@@ -351,12 +351,11 @@ func TestKeyedRuntimeEqualWorkerIdentityAcrossFactorySessions(t *testing.T) {
 	if _, err := owner.service.Reserve(ctx, workersessions.ReserveRequest{ID: owner.request.ID}); !errors.Is(err, workersessions.ErrSessionAlreadyExists) {
 		t.Fatalf("unscoped duplicate reserve = %v", err)
 	}
-	if _, err := owner.service.Get(ctx, workersessions.GetRequest{ID: owner.request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+	if _, err := owner.service.Get(ctx, workersessions.GetRequest{ID: owner.request.ID}); !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) {
 		t.Fatalf("ambiguous unscoped Get = %v", err)
 	}
-	if _, err := owner.service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: owner.request.ID}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-		t.Fatalf("ambiguous unscoped observation = %v", err)
-	}
+	assertWorkerAddressCandidates(t, owner, replay)
+	assertAmbiguousWorkerControlsHaveNoEffects(t, owner, replay, sink)
 	cancelScopedWorker(t, replay)
 	assertScopedWorkerIdentity(t, owner, workersessions.StateRunning)
 	if err := owner.attempt.Complete(ctx, runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
@@ -364,6 +363,74 @@ func TestKeyedRuntimeEqualWorkerIdentityAcrossFactorySessions(t *testing.T) {
 	}
 	assertScopedWorkerIdentity(t, owner, workersessions.StateCompleted)
 	assertScopedWorkerIdentity(t, replay, workersessions.StateCanceled)
+}
+
+func assertAmbiguousWorkerControlsHaveNoEffects(t *testing.T, owner, peer *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture) {
+	t.Helper()
+	before := sink.requestsFor("")
+	ctx := context.Background()
+	continued, err := owner.service.Continue(ctx, workersessions.ContinueRequest{
+		RequestID: "ambiguous-continue", SourceWorkerSessionID: owner.request.ID,
+		SuccessorWorkerSessionID: "ambiguous-successor", FollowUpInput: "follow up",
+	})
+	if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || continued.Session.ID != "" {
+		t.Fatalf("ambiguous Continue = %+v, %v", continued, err)
+	}
+	for _, mode := range []string{"provider", "recorded"} {
+		interrupted, err := owner.service.Interrupt(ctx, workersessions.InterruptRequest{
+			RequestID: "ambiguous-interrupt-" + mode, SourceWorkerSessionID: owner.request.ID,
+			SuccessorWorkerSessionID: "ambiguous-successor", ReplacementMessage: "replace", ResumeMode: mode,
+		})
+		if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || !errors.Is(err, workersessions.ErrInterruptValidation) ||
+			interrupted.Phase != workersessions.InterruptPhaseValidation || interrupted.Accepted || interrupted.Source.ID != "" || interrupted.Successor.ID != "" {
+			t.Fatalf("ambiguous Interrupt(%s) = %+v, %v", mode, interrupted, err)
+		}
+	}
+	for _, fixture := range []*perRuntimeAttemptFixture{owner, peer} {
+		select {
+		case <-fixture.control.invoked:
+			t.Fatal("ambiguous control invoked a cancellation")
+		default:
+		}
+		assertScopedWorkerIdentity(t, fixture, workersessions.StateRunning)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("ambiguous control published history or an opening")
+	}
+	if _, err := owner.service.Get(ctx, workersessions.GetRequest{ID: "ambiguous-successor"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("ambiguous control admitted successor: %v", err)
+	}
+}
+
+func assertWorkerAddressCandidates(t *testing.T, owner, peer *perRuntimeAttemptFixture) {
+	t.Helper()
+	observation, err := owner.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: owner.request.ID})
+	var ambiguous *workersessions.AmbiguousAddressError
+	if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || !errors.As(err, &ambiguous) || observation.WorkerSessionID != "" {
+		t.Fatalf("ambiguous unscoped observation = %+v, %v", observation, err)
+	}
+	var want []workersessions.AddressCandidate
+	for _, fixture := range []*perRuntimeAttemptFixture{owner, peer} {
+		scoped, scopedErr := fixture.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: fixture.request.ID, FactorySessionID: fixture.request.Execution.Execution.FactorySessionID,
+		})
+		if scopedErr != nil {
+			t.Fatal(scopedErr)
+		}
+		want = append(want, scoped.AddressCandidate())
+	}
+	if !reflect.DeepEqual(ambiguous.Candidates, (workersessions.AmbiguousAddressError{Candidates: want}).Clone().Candidates) {
+		t.Fatalf("candidates = %+v, want %+v", ambiguous.Candidates, want)
+	}
+	if ambiguous.Candidates[0].WorkID != nil {
+		*ambiguous.Candidates[0].WorkID = "changed-by-caller"
+	}
+	ambiguous.Candidates[0].FactorySessionID = "changed-by-caller"
+	_, againErr := owner.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: owner.request.ID})
+	var again *workersessions.AmbiguousAddressError
+	if !errors.As(againErr, &again) || !reflect.DeepEqual(again.Candidates, (workersessions.AmbiguousAddressError{Candidates: want}).Clone().Candidates) {
+		t.Fatalf("caller mutated retained candidates: %+v, %v", again, againErr)
+	}
 }
 
 func assertScopedWorkerIdentity(t *testing.T, fixture *perRuntimeAttemptFixture, state workersessions.State) {

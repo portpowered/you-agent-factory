@@ -16,6 +16,7 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workeradapter "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -607,7 +608,7 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"--json", "--server", "http://factory.test:7437",
-		"worker-sessions", "continue", "source-1", "--request-id", "request-1",
+		"worker-sessions", "continue", "source-1", "--session", "owner-1", "--request-id", "request-1",
 		"--successor-worker-session-id", "successor-1", "--user-message", "hello",
 		"--async", "--output", "json", "follow", "up",
 	})
@@ -615,7 +616,7 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute worker-sessions continue: %v", err)
 	}
-	if got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
+	if got.FactorySessionID != "owner-1" || got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
 		got.SuccessorWorkerSessionID != "successor-1" || got.FollowUpInput != "hello" ||
 		got.Server != "http://factory.test:7437" || got.Remote || !got.Async || got.OutputFormat != "json" || !got.JSON {
 		t.Fatalf("continue config = %#v, want manifest values", got)
@@ -641,14 +642,14 @@ func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"--json", "--server", "http://factory.test:7437",
-		"worker-sessions", "interrupt", "source-1", "--request-id", "request-1",
+		"worker-sessions", "interrupt", "source-1", "--session", "factory-a", "--request-id", "request-1",
 		"--successor-worker-session-id", "successor-1", "--replacement-message", "hello",
 		"--async", "--output", "json", "replace", "input",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute worker-sessions interrupt: %v", err)
 	}
-	if interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
+	if interrupt.FactorySessionID != "factory-a" || interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
 		interrupt.SuccessorWorkerSessionID != "successor-1" || interrupt.ReplacementMessage != "hello" ||
 		interrupt.Server != "http://factory.test:7437" || interrupt.Remote || !interrupt.Async ||
 		interrupt.OutputFormat != "json" || !interrupt.JSON || len(interrupt.Prompt) != 2 {
@@ -774,6 +775,7 @@ func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T
 
 func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T) {
 	values := map[string]any{
+		"you.worker-sessions.interrupt.flag.session":                     "",
 		"you.worker-sessions.interrupt.arg.0":                            "source-1",
 		"you.worker-sessions.interrupt.flag.request-id":                  "request-1",
 		"you.worker-sessions.interrupt.flag.successor-worker-session-id": "successor-1",
@@ -784,6 +786,7 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 	}
 	for _, key := range []string{
 		"you.worker-sessions.interrupt.arg.0",
+		"you.worker-sessions.interrupt.flag.session",
 		"you.worker-sessions.interrupt.flag.request-id",
 		"you.worker-sessions.interrupt.flag.successor-worker-session-id",
 		"you.worker-sessions.interrupt.flag.replacement-message",
@@ -804,6 +807,59 @@ func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T)
 		t.Fatalf("readGeneratedWorkerSessionsInterruptInputs(missing optional prompt) error = %v", err)
 	} else if len(got.replacementInput) != 0 {
 		t.Fatalf("optional interrupt prompt = %#v, want empty", got.replacementInput)
+	}
+}
+
+func TestWorkerSessionCommandsRejectExplicitBlankScope(t *testing.T) {
+	for _, remote := range []bool{false, true} {
+		for _, scope := range []string{"", " \t "} {
+			for _, operation := range []string{"show", "continue", "interrupt"} {
+				t.Run(fmt.Sprintf("%s/remote=%t/scope=%q", operation, remote, scope), func(t *testing.T) {
+					factory := withTestInjectedPlatformRoles(CommandFactory{
+						factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+						sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+						ShowWorkerSession:        workeradapter.NewShow(nil),
+						ContinueWorkerSession:    workeradapter.BindContinue(nil, nil, nil),
+						InterruptWorkerSession:   workeradapter.BindInterrupt(nil, nil, nil),
+					})
+					root := factory.NewCommand(context.Background(), nil, nil, nil)
+					var stdout, stderr bytes.Buffer
+					root.SetOut(&stdout)
+					root.SetErr(&stderr)
+					args := []string{"worker-sessions", operation}
+					if operation == "show" {
+						args = append(args, "--worker-session-id", "missing")
+					} else {
+						args = append(args, "missing", "--request-id", "request", "--successor-worker-session-id", "successor")
+						if operation == "continue" {
+							args = append(args, "--user-message", "hello")
+						} else {
+							args = append(args, "--replacement-message", "hello")
+						}
+					}
+					args = append(args, "--session", scope, "--output", "json")
+					if remote {
+						args = append(args, "--server", "https://factory.example")
+					}
+					root.SetArgs(args)
+					err := root.Execute()
+					var typed *workersessionscli.CLIError
+					want := "WORKER_SESSION_SHOW_INVALID"
+					switch operation {
+					case "continue":
+						want = "WORKER_SESSION_CONTINUATION_INVALID"
+					case "interrupt":
+						want = "WORKER_SESSION_INTERRUPT_INVALID"
+					}
+					if !errors.As(err, &typed) || typed.Code != want || !strings.Contains(stderr.String(), want) {
+						t.Fatalf("blank scope = %v; diagnostics=%q, want %s before any boundary is required", err, stderr.String(), want)
+					}
+					if !strings.Contains(stdout.String(), want) || strings.Contains(stdout.String(), "accepted") {
+						t.Fatalf("blank scope output = %q, want validation diagnostic", stdout.String())
+					}
+				})
+			}
+		}
 	}
 }
 

@@ -80,7 +80,7 @@ func TestContinuationInputLostAcknowledgementRequiresExactReadback(t *testing.T)
 // cells prove reservation and refusal without an executor or application graph.
 func TestContinuationArchivedSourceReservation(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "incomplete", "wrong-scope", "wrong-attempt", "wrong-terminal", "missing-recipe", "unknown", "successor", "unsupported", "policy-error"} {
+	for _, cell := range []string{"captured", "selected-foreign-owner", "incomplete", "wrong-scope", "wrong-attempt", "wrong-terminal", "missing-recipe", "unknown", "successor", "unsupported", "policy-error"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -95,6 +95,10 @@ func TestContinuationArchivedSourceReservation(t *testing.T) {
 			r.logs = &LogReader{reader: reader}
 			store := &restartRecipeStore{execution: continuationValidExecution("dispatch-1"), reference: ref}
 			want := configureArchivedContinuationCell(cell, reader, store)
+			if cell == "selected-foreign-owner" {
+				req.FactorySessionID = "foreign-factory"
+				want = workersessions.ErrContinuationSourceNotFound
+			}
 			r.continuationSupport = archivedContinuationSupport(cell)
 			r.restart = &retainedContinuationStore{restartRecipeStore: *store, readErr: os.ErrNotExist}
 			replay, owner, err := r.reserveContinuation(req)
@@ -365,4 +369,125 @@ func assertContinuationTerminalResult(t *testing.T, cell string, state workerses
 	if cell == "failed" && (got.Cause.Kind != want.Cause.Kind || got.Cause.Detail != want.Cause.Detail) {
 		t.Fatalf("terminal failure lost: %+v", got)
 	}
+}
+
+// The continuation reservation component selects one immutable source before
+// opening a successor. Collaborators here are detached execution facts only.
+func TestContinuationScopedReservationPreservesOwnerAndPublicLineage(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	source := r.sessions[req.SourceWorkerSessionID]
+	delete(r.sessions, req.SourceWorkerSessionID)
+	for _, owner := range []string{"factory-a", "factory-b"} {
+		address := scopedWorkerAddress(source.ID, owner)
+		session := source.Clone()
+		session.ProviderSessionAssociation.Reference.ID = "provider-" + owner
+		r.sessions[address] = session
+		execution := continuationValidExecution("dispatch-1")
+		execution.Execution.FactorySessionID = owner
+		r.supervisions[address] = newSupervision("dispatch-1", "turn-1", execution)
+		r.observations[address] = &observation{factorySessionID: owner}
+	}
+	if _, err := r.Continue(t.Context(), req); !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) {
+		t.Fatalf("unscoped continuation = %v, want ambiguity", err)
+	}
+	if _, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SuccessorWorkerSessionID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("ambiguous continuation opened successor: %v", err)
+	}
+	req.FactorySessionID = "factory-missing"
+	if _, _, err := r.reserveContinuation(req); !errors.Is(err, workersessions.ErrContinuationSourceNotFound) {
+		t.Fatalf("foreign scope = %v, want source not found", err)
+	}
+	req.FactorySessionID = "factory-a"
+	replay, owner, err := r.reserveContinuation(req)
+	if err != nil || !owner {
+		t.Fatalf("selected reservation = %v, owner=%v", err, owner)
+	}
+	if replay.plan.execution.Execution.FactorySessionID != "factory-a" ||
+		replay.plan.execution.Execution.Continuation.ProviderSessionID != "provider-factory-a" {
+		t.Fatalf("selected execution uses peer identity: %+v", replay.plan.execution)
+	}
+	again, owner, err := r.reserveContinuation(req)
+	if err != nil || owner || again != replay {
+		t.Fatalf("identical reservation did not replay: owner=%v error=%v", owner, err)
+	}
+	foreign := req
+	foreign.FactorySessionID = "factory-b"
+	if _, _, err := r.reserveContinuation(foreign); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+		t.Fatalf("request ID reused across owners = %v, want conflict", err)
+	}
+	assertScopedContinuationLineage(t, r, req, replay.plan)
+	r.finishStart()
+}
+
+func assertScopedContinuationLineage(t *testing.T, r *registry, req workersessions.ContinueRequest, plan continuePlan) {
+	t.Helper()
+	r.commitContinuationSessionLinks(plan, plan.sourceAddressOrID())
+	selected, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SourceWorkerSessionID, FactorySessionID: "factory-a"})
+	if err != nil || selected.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+		t.Fatalf("selected source lineage = %+v, %v", selected, err)
+	}
+	peer, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SourceWorkerSessionID, FactorySessionID: "factory-b"})
+	if err != nil || peer.SuccessorWorkerSessionID != "" || peer.ProviderSessionAssociation.Reference.ID != "provider-factory-b" {
+		t.Fatalf("peer changed = %+v, %v", peer, err)
+	}
+	successor, err := r.Get(t.Context(), workersessions.GetRequest{ID: req.SuccessorWorkerSessionID})
+	if err != nil || successor.PredecessorWorkerSessionID != req.SourceWorkerSessionID {
+		t.Fatalf("public successor lineage = %+v, %v", successor, err)
+	}
+}
+
+func TestContinuationInputScopeMatchesPersistedTarget(t *testing.T) {
+	t.Parallel()
+	_, plan, target := retainedContinuationFixture(t)
+	target.FactorySessionID = "factory-a"
+	plan.execution.Execution.FactorySessionID = target.FactorySessionID
+	payload, err := encodeContinuationInput(plan, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []string{"", "factory-a", "factory-b"} {
+		req := plan.request
+		req.FactorySessionID = scope
+		_, err := decodeContinuationInput(payload, req, target)
+		if scope == "factory-b" {
+			if !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+				t.Fatalf("peer scope accepted persisted target: %v", err)
+			}
+		} else if err != nil {
+			t.Fatalf("matching scope %q rejected: %v", scope, err)
+		}
+	}
+}
+
+func TestContinuationLineageRetainsOwnerWhenPeerAppearsAfterReservation(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	source := r.sessions[req.SourceWorkerSessionID]
+	delete(r.sessions, req.SourceWorkerSessionID)
+	selectedAddress := scopedWorkerAddress(source.ID, "factory-a")
+	r.sessions[selectedAddress] = source
+	execution := continuationValidExecution("dispatch-1")
+	execution.Execution.FactorySessionID = "factory-a"
+	r.supervisions[selectedAddress] = newSupervision("dispatch-1", "turn-1", execution)
+	r.observations[selectedAddress] = &observation{factorySessionID: "factory-a"}
+	replay, owner, err := r.reserveContinuation(req)
+	if err != nil || !owner {
+		t.Fatalf("unique unscoped reservation = %v, owner=%v", err, owner)
+	}
+	peerAddress := scopedWorkerAddress(source.ID, "factory-b")
+	r.sessions[peerAddress] = source.Clone()
+	r.observations[peerAddress] = &observation{factorySessionID: "factory-b"}
+	r.commitContinuationLineage(replay.plan)
+	selected, err := r.Get(t.Context(), workersessions.GetRequest{ID: source.ID, FactorySessionID: "factory-a"})
+	if err != nil || selected.SuccessorWorkerSessionID != req.SuccessorWorkerSessionID {
+		t.Fatalf("frozen owner lost lineage: %+v, %v", selected, err)
+	}
+	peer, err := r.Get(t.Context(), workersessions.GetRequest{ID: source.ID, FactorySessionID: "factory-b"})
+	if err != nil || peer.SuccessorWorkerSessionID != "" {
+		t.Fatalf("late peer received lineage: %+v, %v", peer, err)
+	}
+	r.finishStart()
 }

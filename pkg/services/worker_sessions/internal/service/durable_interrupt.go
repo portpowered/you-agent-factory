@@ -22,14 +22,14 @@ func (r *registry) runDurableInterrupt(plan interruptPlan) (workersessions.Inter
 	if err != nil {
 		finishInterruptExecution(plan.supervision, false)
 		finishInterruptOperation(plan.supervision)
-		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false, plan.sourceAddressOrID())
 		return result, newInterruptError(result.Phase, result, err)
 	}
 	operation, err := r.beginInterruptIntent(ctx, plan)
 	if err != nil {
 		finishInterruptExecution(plan.supervision, false)
 		finishInterruptOperation(plan.supervision)
-		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false)
+		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseValidation, false, plan.sourceAddressOrID())
 		if operation != nil {
 			_ = r.commitInterruptResult(ctx, operation, result, err)
 		}
@@ -45,7 +45,7 @@ func (r *registry) runDurableInterrupt(plan interruptPlan) (workersessions.Inter
 }
 
 func (r *registry) beginInterruptIntent(ctx context.Context, plan interruptPlan) (*recordings.WorkerControlOperationRecord, error) {
-	target, err := r.freezeControlTarget(plan.request.SourceWorkerSessionID)
+	target, err := r.freezeControlTarget(plan.sourceAddressOrID())
 	if err != nil || target.supervision != plan.supervision || target.dispatchID != plan.dispatchID {
 		return nil, workersessions.ErrInterruptSourceConflict
 	}
@@ -137,14 +137,14 @@ func (r *registry) commitInterruptIntent(ctx context.Context, intent recordings.
 }
 
 func (r *registry) validateInterruptFence(plan interruptPlan, target frozenControlTarget) error {
-	unlock, err := r.lockFrozenCapture(plan.request.SourceWorkerSessionID, target)
+	unlock, err := r.lockFrozenCapture(plan.sourceAddressOrID(), target)
 	if err != nil {
 		return workersessions.ErrInterruptSourceConflict
 	}
 	defer unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.supervisions[plan.request.SourceWorkerSessionID] != plan.supervision || r.sessions[plan.request.SourceWorkerSessionID].State != workersessions.StateRunning {
+	if r.supervisions[plan.sourceAddressOrID()] != plan.supervision || r.sessions[plan.sourceAddressOrID()].State != workersessions.StateRunning {
 		return workersessions.ErrInterruptSourceConflict
 	}
 	plan.supervision.mu.Lock()

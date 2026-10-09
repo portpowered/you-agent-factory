@@ -11295,6 +11295,30 @@
         }
       },
       "flags": {
+        "you.worker-sessions.continue.flag.session": {
+          "id": "you.worker-sessions.continue.flag.session",
+          "long": "session",
+          "usage": "select the exact source Factory Session when the Worker Session ID is shared",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.continue.flag.request-id": {
           "id": "you.worker-sessions.continue.flag.request-id",
           "long": "request-id",
@@ -11597,6 +11621,30 @@
         }
       },
       "flags": {
+        "you.worker-sessions.interrupt.flag.session": {
+          "id": "you.worker-sessions.interrupt.flag.session",
+          "long": "session",
+          "usage": "select the exact source Factory Session when the Worker Session ID is shared",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.interrupt.flag.request-id": {
           "id": "you.worker-sessions.interrupt.flag.request-id",
           "long": "request-id",

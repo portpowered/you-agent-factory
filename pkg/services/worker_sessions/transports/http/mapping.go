@@ -382,6 +382,12 @@ func WorkerSessionContinueRequestFromAPI(
 		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
 		FollowUpInput:            request.FollowUpInput,
 	}
+	if request.FactorySessionId != nil {
+		continuation.FactorySessionID = strings.TrimSpace(*request.FactorySessionId)
+		if continuation.FactorySessionID == "" {
+			return workersessions.ContinueRequest{}, workersessions.ErrInvalidContinuationLineage
+		}
+	}
 	continuation = continuation.Normalize()
 	if err := continuation.Validate(); err != nil {
 		return workersessions.ContinueRequest{}, err
@@ -416,6 +422,12 @@ func WorkerSessionInterruptRequestFromAPI(
 		SourceWorkerSessionID:    strings.TrimSpace(sourceWorkerSessionID),
 		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
 		ReplacementMessage:       request.ReplacementMessage,
+	}
+	if request.FactorySessionId != nil {
+		interrupt.FactorySessionID = strings.TrimSpace(*request.FactorySessionId)
+		if interrupt.FactorySessionID == "" {
+			return workersessions.InterruptRequest{}, workersessions.ErrInvalidInterruptLineage
+		}
 	}
 	if request.ResumeMode != nil {
 		interrupt.ResumeMode = string(*request.ResumeMode)

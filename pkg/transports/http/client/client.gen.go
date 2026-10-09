@@ -174,6 +174,7 @@ const (
 	ErrorResponseCodeSHUTDOWNCONTROLUNAVAILABLE                     ErrorResponseCode = "SHUTDOWN_CONTROL_UNAVAILABLE"
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONAMBIGUOUS                         ErrorResponseCode = "WORKER_SESSION_AMBIGUOUS"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
@@ -687,10 +688,10 @@ const (
 
 // Defines values for FactoryStopKind.
 const (
-	BLOCKED     FactoryStopKind = "BLOCKED"
-	INTERRUPTED FactoryStopKind = "INTERRUPTED"
-	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
-	PAUSED      FactoryStopKind = "PAUSED"
+	FactoryStopKindBLOCKED     FactoryStopKind = "BLOCKED"
+	FactoryStopKindINTERRUPTED FactoryStopKind = "INTERRUPTED"
+	FactoryStopKindNEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	FactoryStopKindPAUSED      FactoryStopKind = "PAUSED"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -1438,6 +1439,18 @@ const (
 	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
 	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
+)
+
+// Defines values for WorkerSessionAddressCandidateState.
+const (
+	WorkerSessionAddressCandidateStateCANCELED   WorkerSessionAddressCandidateState = "CANCELED"
+	WorkerSessionAddressCandidateStateCOMPLETED  WorkerSessionAddressCandidateState = "COMPLETED"
+	WorkerSessionAddressCandidateStateFAILED     WorkerSessionAddressCandidateState = "FAILED"
+	WorkerSessionAddressCandidateStatePAUSED     WorkerSessionAddressCandidateState = "PAUSED"
+	WorkerSessionAddressCandidateStateRESERVED   WorkerSessionAddressCandidateState = "RESERVED"
+	WorkerSessionAddressCandidateStateRUNNING    WorkerSessionAddressCandidateState = "RUNNING"
+	WorkerSessionAddressCandidateStateSTARTING   WorkerSessionAddressCandidateState = "STARTING"
+	WorkerSessionAddressCandidateStateTERMINATED WorkerSessionAddressCandidateState = "TERMINATED"
 )
 
 // Defines values for WorkerSessionContinueResponseState.
@@ -2203,6 +2216,9 @@ type ErrorFamily string
 type ErrorResponse struct {
 	// Code Stable machine-readable error code.
 	Code ErrorResponseCode `json:"code"`
+
+	// Details Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates.
+	Details interface{} `json:"details,omitempty"`
 
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`
@@ -8911,8 +8927,30 @@ type WorkerModelProvider string
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
-// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+// WorkerSessionAddressCandidate defines model for WorkerSessionAddressCandidate.
+type WorkerSessionAddressCandidate struct {
+	FactorySessionId string                             `json:"factorySessionId"`
+	State            WorkerSessionAddressCandidateState `json:"state"`
+
+	// WorkId Primary Work ID, or null when unavailable.
+	WorkId          *string `json:"workId"`
+	WorkerSessionId string  `json:"workerSessionId"`
+}
+
+// WorkerSessionAddressCandidateState defines model for WorkerSessionAddressCandidate.State.
+type WorkerSessionAddressCandidateState string
+
+// WorkerSessionAddressDetails defines model for WorkerSessionAddressDetails.
+type WorkerSessionAddressDetails struct {
+	// Candidates Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included.
+	Candidates []WorkerSessionAddressCandidate `json:"candidates"`
+}
+
+// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS.
 type WorkerSessionContinueRequest struct {
+	// FactorySessionId Exact source Factory Session; omit only when the Worker Session ID is unique.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
 	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
 	FollowUpInput string `json:"followUpInput"`
 
@@ -9095,7 +9133,8 @@ type WorkerSessionFailure struct {
 // WorkerSessionInterruptError Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
 type WorkerSessionInterruptError struct {
 	// Code Stable machine-readable interrupt error code.
-	Code string `json:"code"`
+	Code    string                       `json:"code"`
+	Details *WorkerSessionAddressDetails `json:"details,omitempty"`
 
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`
@@ -9117,8 +9156,11 @@ type WorkerSessionInterruptError struct {
 // WorkerSessionInterruptErrorPhase Stable operation boundary or caller/transport phase.
 type WorkerSessionInterruptErrorPhase string
 
-// WorkerSessionInterruptRequest Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route.
+// WorkerSessionInterruptRequest Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS in VALIDATION before cancellation or successor admission.
 type WorkerSessionInterruptRequest struct {
+	// FactorySessionId Exact source Factory Session; omit only when the Worker Session ID is unique.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
 	// ReplacementMessage Non-empty replacement input delivered to the admitted successor.
 	ReplacementMessage string `json:"replacementMessage"`
 
@@ -10066,6 +10108,12 @@ type ListWorkerSessionsParamsScope string
 
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
+
+// GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
+type GetWorkerSessionObservationByWorkerSessionIdParams struct {
+	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
+	FactorySessionId *string `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+}
 
 // StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
@@ -18787,7 +18835,7 @@ type ClientInterface interface {
 	ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetWorkerSessionObservationByWorkerSessionId request
-	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CancelWorkerSession request
 	CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -18908,8 +18956,8 @@ func (c *Client) ListWorkerSessions(ctx context.Context, params *ListWorkerSessi
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, workerSessionId)
+func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, workerSessionId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19569,7 +19617,7 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 }
 
 // NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
-func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID) (*http.Request, error) {
+func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -19592,6 +19640,28 @@ func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, worke
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.FactorySessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "factorySessionId", runtime.ParamLocationQuery, *params.FactorySessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -20024,7 +20094,7 @@ type ClientWithResponsesInterface interface {
 	ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error)
 
 	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
-	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
+	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
 
 	// CancelWorkerSessionWithResponse request
 	CancelWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*CancelWorkerSessionClientResponse, error)
@@ -20253,6 +20323,7 @@ type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
 	JSON200      *WorkerSessionObservation
 	JSON400      *BadRequest
 	JSON404      *NotFound
+	JSON409      *ErrorResponse
 	JSON500      *InternalError
 }
 
@@ -20501,8 +20572,8 @@ func (c *ClientWithResponses) ListWorkerSessionsWithResponse(ctx context.Context
 }
 
 // GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
-func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
-	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, workerSessionId, reqEditors...)
+func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
+	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, workerSessionId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -20978,6 +21049,13 @@ func ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp *http.R
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

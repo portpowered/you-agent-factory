@@ -471,6 +471,21 @@ you --server http://localhost:7437 worker-sessions read --worker-session-id <wor
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id> --view logs --output json
 ```
 
+A legacy or replayed Worker Session ID can belong to more than one Factory
+Session. An unscoped `show` then returns `WORKER_SESSION_AMBIGUOUS` (HTTP 409)
+with `details.candidates`: each candidate includes `workerSessionId`,
+`factorySessionId`, nullable primary `workId`, and `state`. Select the exact
+Factory Session from that diagnostic:
+
+```bash
+you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id> --session <factory-session-id> --output json
+```
+
+HTTP callers can select the same owner with
+`GET /worker-sessions/{worker_session_id}?factorySessionId=<factory-session-id>`
+or the existing `GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}`.
+A scope that does not own the ID returns not-found without falling back to a peer.
+
 Use `worker-sessions list --history active` to discover owned nonterminal Worker Sessions.
 Use `--history archived` for retained ended or owner-lost sessions after a host restart.
 Use `--history all` to combine both views. Omission preserves the process-local compatibility view.
@@ -649,6 +664,13 @@ Input at the limit is accepted. Larger input fails before Worker Session
 admission. Use `--execution FILE`, `--user-message`, or
 `--replacement-message` when the selected command supports those alternatives.
 
+When a continuation source ID is shared, select its Factory Session with
+`you worker-sessions continue <id> --session <factory-session-id> --user-message "follow up"`.
+The HTTP continuation body accepts the same selection as `factorySessionId`.
+Omitting scope for a shared ID returns `WORKER_SESSION_AMBIGUOUS` before
+opening a successor. Scope selects the source; existing continuation support
+rules still apply.
+
 To resume a terminal direct Worker Session, continue it through the server-owned
 Provider Session association. The command reserves a distinct successor and
 returns its lineage after admission; use `--async` to return before terminal
@@ -688,8 +710,12 @@ successor. Exact retries of previously admitted requests retain their original
 outcome.
 
 To replace an active direct Worker Session, interrupt its admitted dispatch and
-provide a distinct successor identity and replacement input. The server first
-records the source as canceled, then admits the successor against the same
+provide a distinct successor identity and replacement input.
+If the source ID is shared, add `--session <factory-session-id>` to select its owner.
+HTTP callers supply `factorySessionId` in the interrupt request body.
+An unscoped shared ID returns `WORKER_SESSION_AMBIGUOUS` before cancellation or successor admission.
+
+The server first records the source as canceled, then admits the successor against the same
 Provider Session association. Use `--async` to return after those admission
 barriers, or omit it to wait for the successor terminal output:
 

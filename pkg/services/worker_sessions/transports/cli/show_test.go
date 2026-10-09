@@ -317,3 +317,30 @@ func TestShowRejectsUnsupportedIdentityBeforeHTTP(t *testing.T) {
 }
 
 func stringPtrForTest(value string) *string { return &value }
+
+func TestWorkerSessionAddressShowScopeCLI(t *testing.T) {
+	t.Parallel()
+	scope := "factory-left"
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{WorkerSessionId: "legacy", FactorySessionId: &scope})
+	}))
+	defer server.Close()
+	var output bytes.Buffer
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: t.Context(), Server: server.URL,
+		WorkerSessionID: "legacy", SessionID: scope, OutputFormat: "json", Output: &output})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/factory-sessions/factory-left/worker-sessions/legacy" {
+		t.Fatalf("selected endpoint = %q", path)
+	}
+	var observation generated.WorkerSessionObservation
+	if err := json.Unmarshal(output.Bytes(), &observation); err != nil {
+		t.Fatal(err)
+	}
+	if observation.WorkerSessionId != "legacy" || observation.FactorySessionId == nil || *observation.FactorySessionId != scope {
+		t.Fatalf("selected observation = %#v", observation)
+	}
+}

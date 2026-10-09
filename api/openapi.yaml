@@ -179,9 +179,16 @@ paths:
         - Worker Sessions
       operationId: getWorkerSessionObservationByWorkerSessionId
       summary: Show one top-level Worker Session observation
-      description: Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+      description: Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple. A retained ID with multiple owners returns 409 WORKER_SESSION_AMBIGUOUS with exact details.candidates. Select an exact Factory Session owner with the optional factorySessionId query. A scope that does not own the ID returns 404 without peer fallback.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
+        - name: factorySessionId
+          in: query
+          required: false
+          description: Exact Factory Session owner of the retained Worker Session ID.
+          schema:
+            type: string
+            minLength: 1
       responses:
         '200':
           description: One top-level Worker Session observation.
@@ -193,6 +200,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session ID has multiple retained Factory Session owners.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /worker-sessions/{worker_session_id}/continue:
@@ -2687,7 +2700,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     WorkerSessionContinuationConflict:
-      description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation.
+      description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects.
       content:
         application/json:
           schema:
@@ -2711,7 +2724,7 @@ components:
           schema:
             $ref: '#/components/schemas/WorkerSessionInterruptError'
     WorkerSessionInterruptConflict:
-      description: The Worker Session interrupt conflicts with source, lineage, or idempotency state.
+      description: The Worker Session interrupt conflicts with source, lineage, or idempotency state. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects.
       content:
         application/json:
           schema:
@@ -3390,8 +3403,12 @@ components:
         - requestId
         - successorWorkerSessionId
         - followUpInput
-      description: Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+      description: Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS.
       properties:
+        factorySessionId:
+          type: string
+          minLength: 1
+          description: Exact source Factory Session; omit only when the Worker Session ID is unique.
         requestId:
           type: string
           minLength: 1
@@ -3462,8 +3479,12 @@ components:
         - requestId
         - successorWorkerSessionId
         - replacementMessage
-      description: Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route.
+      description: Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS in VALIDATION before cancellation or successor admission.
       properties:
+        factorySessionId:
+          type: string
+          minLength: 1
+          description: Exact source Factory Session; omit only when the Worker Session ID is unique.
         requestId:
           type: string
           minLength: 1
@@ -3598,6 +3619,9 @@ components:
           $ref: '#/components/schemas/WorkerSessionInterruptSnapshot'
         successor:
           $ref: '#/components/schemas/WorkerSessionInterruptSnapshot'
+        details:
+          $ref: '#/components/schemas/WorkerSessionAddressDetails'
+          description: Exact candidate identities for WORKER_SESSION_AMBIGUOUS in VALIDATION.
     WorkerSessionControlResponse:
       type: object
       additionalProperties: false
@@ -5875,6 +5899,7 @@ components:
             - WORKER_SESSION_EVENT_CURSOR_STALE
             - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
             - WORKER_SESSION_ADMISSION_FAILED
+            - WORKER_SESSION_AMBIGUOUS
             - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
             - WORKER_SESSION_CONTINUATION_CONFLICT
             - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
@@ -5942,6 +5967,7 @@ components:
             - The Worker Session event cursor no longer names retained history.
             - The Worker Session event cursor's durable stream generation is unavailable.
             - Workers could not admit the Worker Session execution.
+            - Worker Session ID is retained by multiple Factory Sessions; select factorySessionId from details.candidates.
             - Worker Session continuation requestId was reused with different inputs.
             - The Worker Session continuation conflicts with source lifecycle or successor lineage.
             - The recorded Provider Session cannot be resumed for this Worker Session continuation.
@@ -5991,6 +6017,8 @@ components:
         resourceCapacity:
           $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
           description: Resource accounting for a rejected capacity reduction.
+        details:
+          description: Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates.
     ShutdownAcceptedResponse:
       type: object
       additionalProperties: false
@@ -15237,6 +15265,46 @@ components:
         - Source work cannot proceed until the target work reaches the required state.
         - Target work is a child of the source work.
         - Target work was generated by a workstation handling the source work.
+    WorkerSessionAddressCandidate:
+      type: object
+      additionalProperties: false
+      required:
+        - factorySessionId
+        - workerSessionId
+        - workId
+        - state
+      properties:
+        factorySessionId:
+          type: string
+        workerSessionId:
+          type: string
+        workId:
+          type: string
+          nullable: true
+          description: Primary Work ID, or null when unavailable.
+        state:
+          type: string
+          enum:
+            - RESERVED
+            - STARTING
+            - RUNNING
+            - PAUSED
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+    WorkerSessionAddressDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - candidates
+      properties:
+        candidates:
+          type: array
+          minItems: 2
+          description: Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included.
+          items:
+            $ref: '#/components/schemas/WorkerSessionAddressCandidate'
     WorkContentURLProperty:
       type: string
       minLength: 1

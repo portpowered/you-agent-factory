@@ -24,7 +24,7 @@ func TestContinueLocalAsyncReturnsLineageAfterAdmissionWithoutStreaming(t *testi
 	err := BindContinue(nil, boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
-		FollowUpInput: "continue the work",
+		FactorySessionID: " owner-1 ", FollowUpInput: "continue the work",
 	})
 	if err != nil {
 		t.Fatalf("local async continue error = %v", err)
@@ -36,7 +36,7 @@ func TestContinueLocalAsyncReturnsLineageAfterAdmissionWithoutStreaming(t *testi
 		t.Fatalf("continuation request count = %d, want 1", len(boundary.continueRequests))
 	}
 	request := boundary.continueRequests[0]
-	if request.RequestID != "continue-request" || request.SourceWorkerSessionID != "source-session" ||
+	if request.FactorySessionID != "owner-1" || request.RequestID != "continue-request" || request.SourceWorkerSessionID != "source-session" ||
 		request.SuccessorWorkerSessionID != "successor-session" || request.FollowUpInput != "continue the work" {
 		t.Fatalf("continuation request = %#v, want exact lineage and input", request)
 	}
@@ -87,7 +87,7 @@ func TestContinueRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	var output bytes.Buffer
 	err := BindContinue(testHTTPProtocol(t), boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
-		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote follow up",
+		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FactorySessionID: " owner-2 ", FollowUpInput: "remote follow up",
 	})
 	if err != nil {
 		t.Fatalf("remote async continue error = %v", err)
@@ -95,7 +95,7 @@ func TestContinueRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	if postCount != 1 || getCount != 0 || len(boundary.continueRequests) != 0 {
 		t.Fatalf("remote/local calls = POST:%d GET:%d local:%d, want POST:1 GET:0 local:0", postCount, getCount, len(boundary.continueRequests))
 	}
-	if received.RequestId != "continue-request" || received.SuccessorWorkerSessionId != "successor-session" || received.FollowUpInput != "remote follow up" {
+	if received.FactorySessionId == nil || *received.FactorySessionId != "owner-2" || received.RequestId != "continue-request" || received.SuccessorWorkerSessionId != "successor-session" || received.FollowUpInput != "remote follow up" {
 		t.Fatalf("remote request = %#v, want supplied continuation tuple", received)
 	}
 	var result continueResult
@@ -202,7 +202,7 @@ func TestInterruptLocalAsyncReturnsAdmissionSnapshotsWithoutStreaming(t *testing
 	}}
 	var output bytes.Buffer
 	err := BindInterrupt(nil, boundary, unexpectedWorkerID)(InterruptConfig{
-		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
+		FactorySessionID: " factory-a ", Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "take a different path",
 	})
@@ -216,7 +216,7 @@ func TestInterruptLocalAsyncReturnsAdmissionSnapshotsWithoutStreaming(t *testing
 		t.Fatalf("interrupt request count = %d, want 1", len(boundary.interruptRequests))
 	}
 	request := boundary.interruptRequests[0]
-	if request.RequestID != "interrupt-request" || request.SourceWorkerSessionID != "source-session" ||
+	if request.FactorySessionID != "factory-a" || request.RequestID != "interrupt-request" || request.SourceWorkerSessionID != "source-session" ||
 		request.SuccessorWorkerSessionID != "successor-session" || request.ReplacementMessage != "take a different path" {
 		t.Fatalf("interrupt request = %#v, want exact source/successor/input", request)
 	}
@@ -295,14 +295,14 @@ func TestInterruptRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
 	err := BindInterrupt(testHTTPProtocol(t), boundary, unexpectedWorkerID)(InterruptConfig{
-		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
+		FactorySessionID: " factory-a ", Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "remote replacement",
 	})
 	if err != nil {
 		t.Fatalf("remote async interrupt error = %v", err)
 	}
-	if postCount != 1 || len(boundary.interruptRequests) != 0 {
+	if received.FactorySessionId == nil || *received.FactorySessionId != "factory-a" || postCount != 1 || len(boundary.interruptRequests) != 0 {
 		t.Fatalf("remote/local calls = POST:%d local:%d, want POST:1 local:0", postCount, len(boundary.interruptRequests))
 	}
 	if received.RequestId != "interrupt-request" || received.SuccessorWorkerSessionId != "successor-session" || received.ReplacementMessage != "remote replacement" {

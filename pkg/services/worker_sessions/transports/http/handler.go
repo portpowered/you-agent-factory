@@ -162,6 +162,7 @@ func (h *Handler) GetWorkerSessionObservationByWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.GetWorkerSessionObservationByWorkerSessionIdParams,
 ) {
 	if h == nil || h.adapter == nil {
 		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
@@ -171,7 +172,12 @@ func (h *Handler) GetWorkerSessionObservationByWorkerSessionId(
 		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
 		return
 	}
-	response, err := h.adapter.GetTopLevelWorkerSessionObservation(r.Context(), string(workerSessionID))
+	factorySessionID := optionalString(params.FactorySessionId)
+	if params.FactorySessionId != nil && strings.TrimSpace(factorySessionID) == "" {
+		writeError(w, http.StatusBadRequest, "factory session id must not be empty", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.GetTopLevelWorkerSessionObservation(r.Context(), string(workerSessionID), factorySessionID)
 	if err != nil {
 		h.writeMappedObservationError(w, err)
 		return

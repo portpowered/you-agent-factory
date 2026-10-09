@@ -279,6 +279,9 @@ func (h *Handler) writeMappedInterruptError(
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
+	if writeAmbiguousAddressError(w, err, string(workersessions.InterruptPhaseValidation)) {
+		return
+	}
 	result := interruptResultForError(err, sourceWorkerSessionID, request)
 	status, code, message := interruptErrorResponse(err)
 	writeInterruptError(w, status, code, message, result.Phase, result)

@@ -437,10 +437,13 @@ func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (worker
 	}
 
 	r.mu.RLock()
-	id := r.workerAddressLocked(req.ID, req.FactorySessionID)
+	id, addressErr := r.resolveWorkerAddressLocked(req.ID, req.FactorySessionID)
 	session, exists := r.sessions[id]
 	scopeMatches := observationFactoryScopeMatches(r.observations[id], req.FactorySessionID)
 	r.mu.RUnlock()
+	if addressErr != nil {
+		return workersessions.Session{}, addressErr
+	}
 
 	if !exists || !scopeMatches {
 		r.logger.Info("worker session get", "sessionID", publicWorkerID(req.ID), "outcome", "not_found")
@@ -1044,34 +1047,48 @@ func (r *registry) workerAddress(id string, scopes ...string) string {
 // workerAddressLocked rejects ambiguous public IDs. Internal operations already
 // carry the captured address and never rediscover an owner during a retry.
 func (r *registry) workerAddressLocked(id string, scopes ...string) string {
+	address, _ := r.resolveWorkerAddressLocked(id, scopes...)
+	return address
+}
+
+// resolveWorkerAddressLocked proves cardinality before choosing an owner.
+// Internal captured addresses remain fixed through retry and terminal changes.
+func (r *registry) resolveWorkerAddressLocked(id string, scopes ...string) (string, error) {
 	scope := ""
 	if len(scopes) > 0 {
 		scope = strings.TrimSpace(scopes[0])
 	}
 	if strings.HasPrefix(id, "\x00") {
-		return id
+		return id, nil
 	}
 	if scope != "" {
 		address := scopedWorkerAddress(id, scope)
 		if _, exists := r.sessions[address]; exists {
-			return address
+			return address, nil
 		}
 		if observationFactoryScopeMatches(r.observations[id], scope) {
-			return id
+			return id, nil
 		}
-		return address
+		return address, nil
 	}
 	address := ""
+	var candidates []workersessions.AddressCandidate
 	for candidate, session := range r.sessions {
 		if session.ID != id {
 			continue
 		}
-		if address != "" {
-			return ""
+		metadata := r.observations[candidate]
+		identity := workersessions.AddressCandidate{WorkerSessionID: session.ID, FactorySessionID: workerAddressScope(candidate), State: session.State}
+		if metadata != nil {
+			identity = baseObservation(candidate, session, metadata).AddressCandidate()
 		}
+		candidates = append(candidates, identity)
 		address = candidate
 	}
-	return address
+	if len(candidates) > 1 {
+		return "", (workersessions.AmbiguousAddressError{Candidates: candidates}).Clone()
+	}
+	return address, nil
 }
 
 func workerAddressScope(address string) string {

@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+required:
+  - candidates
+properties:
+  candidates:
+    type: array
+    minItems: 2
+    description: Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included.
+    items:
+      $ref: ./WorkerSessionAddressCandidate.yaml

@@ -43,6 +43,8 @@ type InterruptConfig struct {
 	Server  string
 	Remote  bool
 
+	FactorySessionID         string
+	FactorySessionIDExplicit bool
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -125,6 +127,9 @@ func interruptWorkerSession(config InterruptConfig) error {
 }
 
 func validateInterruptConfig(config InterruptConfig) error {
+	if config.FactorySessionIDExplicit && strings.TrimSpace(config.FactorySessionID) == "" {
+		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_INVALID", "--session requires a non-empty Factory Session identity", string(workersessions.InterruptPhaseValidation), nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -171,6 +176,9 @@ func normalizeInterruptRequest(config InterruptConfig) (normalizedInterruptReque
 		RequestId:                requestID,
 		SuccessorWorkerSessionId: successorID,
 		ReplacementMessage:       replacement,
+	}
+	if scope := strings.TrimSpace(config.FactorySessionID); scope != "" {
+		apiRequest.FactorySessionId = &scope
 	}
 	serviceRequest, err := workersessionshttp.WorkerSessionInterruptRequestFromAPI(config.SourceWorkerSessionID, apiRequest)
 	if err != nil {
@@ -388,9 +396,10 @@ func remoteInterruptTransportError(config InterruptConfig, err error) error {
 
 func remoteInterruptHTTPError(response *http.Response, status int) error {
 	payload := struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-		Phase   string `json:"phase"`
+		Code    string                                  `json:"code"`
+		Message string                                  `json:"message"`
+		Phase   string                                  `json:"phase"`
+		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
 	}{}
 	if response != nil && response.Body != nil {
 		if err := json.NewDecoder(response.Body).Decode(&payload); err == nil && strings.TrimSpace(payload.Message) != "" {
@@ -402,7 +411,7 @@ func remoteInterruptHTTPError(response *http.Response, status int) error {
 			if phase == "" {
 				phase = interruptHTTPErrorPhase(status)
 			}
-			return newInterruptCLIError(code, payload.Message, phase, nil)
+			return &CLIError{Code: code, Message: payload.Message, Phase: phase, Details: payload.Details}
 		}
 	}
 	return newInterruptCLIError(interruptHTTPErrorCode(status), fmt.Sprintf("remote Worker Session interrupt failed (%d)", status), interruptHTTPErrorPhase(status), nil)
@@ -433,6 +442,9 @@ func interruptHTTPErrorPhase(status int) string {
 }
 
 func mapInterruptServiceError(err error) error {
+	if ambiguous := ambiguityCLIError(err, string(workersessions.InterruptPhaseValidation)); ambiguous != nil {
+		return ambiguous
+	}
 	if errors.Is(err, context.Canceled) {
 		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_INTERRUPTED", "Worker Session interrupt was interrupted", interruptPhaseWait, context.Canceled)
 	}
@@ -524,13 +536,15 @@ func emitInterruptCLIError(config InterruptConfig, jsonOutput bool, err error) e
 		return err
 	}
 	payload := struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-		Phase   string `json:"phase"`
+		Code    string                                  `json:"code"`
+		Message string                                  `json:"message"`
+		Phase   string                                  `json:"phase"`
+		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
 	}{
 		Code:    "WORKER_SESSION_INTERRUPT_FAILED",
 		Message: err.Error(),
 		Phase:   interruptPhaseResponse,
+		Details: cliErrorDetails(err),
 	}
 	var typed *CLIError
 	if errors.As(err, &typed) && typed != nil {

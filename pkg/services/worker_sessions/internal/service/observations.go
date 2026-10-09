@@ -448,6 +448,15 @@ func (r *registry) projectObservation(ctx context.Context, id string, factorySes
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	r.mu.RLock()
+	ownerID, addressErr := r.resolveWorkerAddressLocked(id, factorySessionIDs...)
+	r.mu.RUnlock()
+	if addressErr != nil {
+		return workersessions.Observation{}, addressErr
+	}
+	if ownerID != "" {
+		id = ownerID
+	}
 	projected, err := r.projectWorkerSessionIdentity(ctx, id, factorySessionIDs...)
 	if err != nil {
 		return workersessions.Observation{}, err
@@ -455,7 +464,6 @@ func (r *registry) projectObservation(ctx context.Context, id string, factorySes
 
 	// Durable captured facts are authoritative, including when the capture is
 	// unavailable. Legacy identities retain only their owned lifecycle facts.
-	ownerID := r.workerAddress(id, factorySessionIDs...)
 	if r.publicationFor(ownerID) != nil {
 		projected.TokenUsage = r.capturedObservationUsage(ctx, ownerID)
 	}

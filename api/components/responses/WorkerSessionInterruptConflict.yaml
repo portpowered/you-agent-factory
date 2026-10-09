@@ -1,4 +1,4 @@
-description: The Worker Session interrupt conflicts with source, lineage, or idempotency state.
+description: The Worker Session interrupt conflicts with source, lineage, or idempotency state. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects.
 content:
   application/json:
     schema:
