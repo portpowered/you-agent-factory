@@ -41,15 +41,7 @@ func TestInstallPackagedFactory_DeadPIDReclaimsLease(t *testing.T) {
 	}
 	observed := false
 	persistence := &installationPersistenceStub{prepareObserve: func() {
-		paths, err := filepath.Glob(staging + "-recovered-*")
-		if err != nil || len(paths) != 1 {
-			t.Fatalf("replacement lease: %v %v", paths, err)
-		}
-		data, err := os.ReadFile(filepath.Join(paths[0], stagingOwnerMetadataName))
-		var owner ownerRecord
-		if err != nil || json.Unmarshal(data, &owner) != nil || owner.PID != os.Getpid() {
-			t.Fatalf("replacement owner: %s %v", data, err)
-		}
+		assertRecoveredNativeOwner(t, staging)
 		observed = true
 	}}
 	logger := &packagedInstallationLogger{}
@@ -74,6 +66,23 @@ func TestInstallPackagedFactory_DeadPIDReclaimsLease(t *testing.T) {
 		}
 	}
 	t.Fatal("missing reclaimed-orphan diagnostic")
+}
+
+func assertRecoveredNativeOwner(t *testing.T, staging string) {
+	t.Helper()
+	paths, err := filepath.Glob(staging + "-recovered-*")
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("replacement lease: %v %v", paths, err)
+	}
+	data, err := os.ReadFile(filepath.Join(paths[0], stagingOwnerMetadataName))
+	var owner ownerRecord
+	if err != nil || json.Unmarshal(data, &owner) != nil || owner.PID != os.Getpid() {
+		t.Fatalf("replacement owner: %s %v", data, err)
+	}
+	identity, err := (platformprocess.IncarnationProbe{}).CurrentProcess()
+	if err != nil || owner.Host != identity.Host || owner.Start != identity.Start {
+		t.Fatalf("published identity=%+v native=%+v error=%v", owner, identity, err)
+	}
 }
 
 type packagedInstallationLogEntry struct {

@@ -136,16 +136,18 @@ func TestInstallPackagedFactory_IncarnationOwnership(t *testing.T) {
 				if !errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) || !strings.Contains(err.Error(), "owner_liveness="+string(cell.want)) {
 					t.Fatalf("contention: %v", err)
 				}
-				data, readErr := os.ReadFile(metadata)
-				if readErr != nil || string(data) != cell.record {
-					t.Fatalf("owner mutated: %s %v", data, readErr)
-				}
-				data, readErr = os.ReadFile(filepath.Join(target, "factory.json"))
-				if readErr != nil || string(data) != "prior" {
-					t.Fatalf("target mutated: %s %v", data, readErr)
-				}
+				assertInstallationFileUnchanged(t, metadata, cell.record)
+				assertInstallationFileUnchanged(t, filepath.Join(target, "factory.json"), "prior")
 			}
 		})
+	}
+}
+
+func assertInstallationFileUnchanged(t *testing.T, path, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != want {
+		t.Fatalf("file mutated: %s %v", data, err)
 	}
 }
 
