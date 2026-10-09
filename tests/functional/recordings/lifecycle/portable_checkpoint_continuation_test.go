@@ -229,7 +229,7 @@ func testPortableCheckpointInspection(t *testing.T, process support.Process, ses
 
 func testPortableCheckpointContinuation(t *testing.T, process support.Process, sessions factorysessions.Service, scenario checkpointScenario) {
 	dir, home, runner := scenario.dir, scenario.home, scenario.runner
-	started, _, path := preparePortableCheckpointContinuation(t, process, sessions, scenario)
+	started, before, path := preparePortableCheckpointContinuation(t, process, sessions, scenario)
 	assertPortableCheckpointWithoutRestorableState(t, process, sessions, dir, home, path, started.SessionID, runner)
 	writer := &checkpointInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
 	var releaseOnce sync.Once
@@ -260,7 +260,7 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	if err != nil || readSurvivor.Status != factorysessions.LifecycleStatusInterrupted {
 		t.Fatalf("older cleanup removed replacement replay: %#v %v", readSurvivor, err)
 	}
-	restartLivePeer := startT17HLivePeer(t, sessions, dir)
+	restartLivePeer, livePeerID := startCheckpointLivePeer(t, sessions, dir)
 	// T17I: resume must retain the captured workflow rather than the later
 	// authored source. The live peer was opened from the original definition.
 	workflowPath := filepath.Join(dir, ".claude", "workflows", "resumable-two-step-fake-children.js")
@@ -282,12 +282,27 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	}
 	assertSelectedReplayRead(t, sessions, peerID)
 	restartLivePeer()
+	peerContext, cancelPeer := context.WithCancel(t.Context())
+	defer cancelPeer()
+	peerHistory, err := sessions.SubscribeFactoryEventsForSession(peerContext, livePeerID, nil)
+	if err != nil || peerHistory == nil {
+		t.Fatalf("live peer history before continuation: %v", err)
+	}
 	if _, err := sessions.ResumeInterruptedSession(t.Context(), started.SessionID, factorysessions.ResumeSessionRequest{RequestID: uuid.NewString()}); err != nil {
 		t.Fatalf("checkpoint handoff: %v", err)
 	}
 	after := waitCheckpointContinuationStatus(t, sessions, started.SessionID, factorysessions.LifecycleStatusSucceeded)
 	if after.Progress == nil || after.Progress.CompletedDispatches != 2 || runner.calls.Load() != 3 {
 		t.Fatalf("continuation repeated completed child: %#v calls=%d", after, runner.calls.Load())
+	}
+	assertCheckpointContinuationHistory(t, sessions, before, after)
+	retainedPeer, err := sessions.SubscribeFactoryEventsForSession(peerContext, livePeerID, nil)
+	if err != nil || retainedPeer == nil || retainedPeer.StreamGenerationID != peerHistory.StreamGenerationID ||
+		!reflect.DeepEqual(peerHistory.History, retainedPeer.History) {
+		t.Fatalf("continuation changed live peer history: before=%+v after=%+v err=%v", peerHistory, retainedPeer, err)
+	}
+	if peer, err := sessions.GetFactorySession(t.Context(), livePeerID); err != nil || peer.Context.FactorySessionID != livePeerID {
+		t.Fatalf("continuation retired live peer: %+v %v", peer, err)
 	}
 	// A second resume is rejected by terminal lifecycle, and must not open or
 	// execute another generation. The durable child identities survive handoff.
@@ -311,9 +326,31 @@ func testPortableCheckpointContinuation(t *testing.T, process support.Process, s
 	assertSelectedReplayCommandJoined(t, peer.done)
 }
 
+func assertCheckpointContinuationHistory(t *testing.T, sessions factorysessions.Service,
+	before, after factorysessions.SessionReadResult) {
+	t.Helper()
+	if after.SessionID != before.SessionID || !reflect.DeepEqual(after.LatestCheckpoint, before.LatestCheckpoint) ||
+		!reflect.DeepEqual(after.ResolvedSource, before.ResolvedSource) || after.SourceHash != before.SourceHash {
+		t.Fatalf("continuation changed selected identity/source/checkpoint: before=%+v after=%+v", before, after)
+	}
+	continued, err := sessions.ReadEvents(t.Context(), before.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil || continued.SessionID != before.SessionID || len(continued.Events) == 0 {
+		t.Fatalf("continuation lost canonical session history: %+v %v", continued, err)
+	}
+	// The original portable recording is byte-checked by its fixture cleanup.
+	// Live continuation restores the durable commit, whose event prefix may
+	// precede the later portable checkpoint and interruption observations.
+}
+
 // H7/H9 retain an acquired replay beside a live peer and reopen that peer
 // before handoff. The replay must keep the recorded identity and captured owner.
 func startT17HLivePeer(t *testing.T, sessions factorysessions.Service, dir string) func() {
+	t.Helper()
+	restart, _ := startCheckpointLivePeer(t, sessions, dir)
+	return restart
+}
+
+func startCheckpointLivePeer(t *testing.T, sessions factorysessions.Service, dir string) (func(), string) {
 	t.Helper()
 	id := uuid.NewString()
 	request := factorysessions.SessionStartRequest{
@@ -342,7 +379,7 @@ func startT17HLivePeer(t *testing.T, sessions factorysessions.Service, dir strin
 			t.Fatal(err)
 		}
 		open()
-	}
+	}, id
 }
 
 func startCheckpointInspection(t *testing.T, process support.Process, dir, home, path string) (func(), <-chan error) {

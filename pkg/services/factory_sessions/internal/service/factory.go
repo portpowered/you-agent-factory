@@ -69,7 +69,7 @@ type Root struct {
 	webhooksService                webhooks.Service
 	factoryDefinitions             factorydefinitions.Service
 	definitionRuntimeRouter        *factorysessions.DefinitionRuntimeRouter
-	initialActivation              factoryruntime.InitialRuntimeActivationOperation
+	initialEngine                  *RuntimeInitialEngine
 	workService                    work.Service
 	providerSessions               providersessions.Service
 	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
@@ -125,7 +125,7 @@ func NewRoot(
 	workerService workers.Service,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
-	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	initialEngine *RuntimeInitialEngine,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	replayBehavior *recordingreplay.Behavior,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
@@ -139,7 +139,7 @@ func NewRoot(
 		replayBehavior:                 replayBehavior,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
-		initialActivation:              initialActivation,
+		initialEngine:                  initialEngine,
 		modelInvocation:                modelInvocation,
 		durableOpening:                 durableOpening,
 		resourceAcquisition:            resourceAcquisition,

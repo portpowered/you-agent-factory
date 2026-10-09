@@ -385,6 +385,7 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewRuntimeInputLoading,
 	factorysessionwire.NewRuntimePreparation,
 	factorysessionwire.NewRuntimeSnapshotSelection,
+	factorysessionwire.NewRuntimeInitialEngine,
 	factorysessionwire.NewHistoricalReplayBehavior,
 	wire.Bind(new(factorysessions.Service), new(*factorysessionwire.Root)),
 )

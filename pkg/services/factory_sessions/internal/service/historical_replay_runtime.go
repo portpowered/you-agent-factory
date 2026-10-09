@@ -231,11 +231,21 @@ func (r *Root) preparePortableReplayRuntime(
 	durableOwner durableexecution.Service,
 	cleanup *portableReplayRuntimeCleanup,
 ) (*factoryruntime.RuntimeInitialOpening, error) {
-	opening, err := r.assemblePortableReplayRuntime(
-		ctx,
-		configured,
-		durableOwner,
-	)
+	mutationOwner, ok := durableOwner.(interface {
+		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("construct portable replay runtime: durable execution owner does not record Petri mutations")
+	}
+	// Preserve the replay compatibility path's optional progress observation.
+	var observe workers.ProgressPublisher
+	if owner, ok := durableOwner.(interface {
+		PublishWorkerProgress(workers.ProgressFragment)
+	}); ok {
+		observe = owner.PublishWorkerProgress
+	}
+	observations := replaySessionObservations{mutations: mutationOwner.RecordPetriTokenMutations, progress: observe}
+	opening, err := r.initialEngine.OpenCheckpoint(ctx, configured, observations)
 	if err != nil {
 		return opening, err
 	}
@@ -269,49 +279,6 @@ func (r *Root) preparePortableReplayRuntime(
 		cleanup.releaseScope = releaseScope
 	}
 	cleanup.mu.Unlock()
-	return opening, nil
-}
-
-func (r *Root) assemblePortableReplayRuntime(
-	ctx context.Context,
-	configured preparedRuntime,
-	durableOwner durableexecution.Service,
-) (*factoryruntime.RuntimeInitialOpening, error) {
-	mutationOwner, ok := durableOwner.(interface {
-		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
-	})
-	if !ok {
-		return nil, fmt.Errorf("construct portable replay runtime: durable execution owner does not record Petri mutations")
-	}
-	// Preserve the replay compatibility path's optional progress observation.
-	var observe workers.ProgressPublisher
-	if owner, ok := durableOwner.(interface {
-		PublishWorkerProgress(workers.ProgressFragment)
-	}); ok {
-		observe = owner.PublishWorkerProgress
-	}
-	observations := replaySessionObservations{mutations: mutationOwner.RecordPetriTokenMutations, progress: observe}
-	// Select the authored live definition only after the durable owner confirms
-	// restorable state. Inspection and unsuccessful probes remain nonexecuting.
-	resolved, err := r.snapshotSelection.Resolve(ctx, configured.Definition, recordings.RuntimeSelection{}, nil, nil, configured.Session.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	inputs := runtimeActivationInputs(configured.Definition, configured.Session,
-		configured.CanonicalSessionIDGenerated, configured.Workers, configured.Recordings,
-		configured.ModelCacheDirectory, configured.OperatorDefaults, nil)
-	inputs.Session.CanonicalSessionID = configured.Session.SessionID
-	inputs.RecoveryInput.CheckpointContinuation = true
-	opening, err := r.initialActivation(ctx, factoryruntime.RuntimeActivationRequest{
-		RuntimeID: configured.Runtime.RuntimeInstanceID, FactorySessionID: configured.Session.SessionID,
-		Snapshot: resolved.snapshot, Runtime: configured.Runtime, Inputs: inputs,
-	}, observations)
-	if err != nil {
-		return opening, fmt.Errorf("construct portable replay runtime: %w", err)
-	}
-	if opening == nil || opening.Record == nil {
-		return opening, fmt.Errorf("construct portable replay runtime: runtime instance is required")
-	}
 	return opening, nil
 }
 
