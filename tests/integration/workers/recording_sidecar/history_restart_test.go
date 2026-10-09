@@ -388,6 +388,11 @@ func assertHistoryHTTP(t *testing.T, ctx context.Context, server string, observa
 
 func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
 	t.Helper()
+	assertHistoryMCPViews(t, ctx, binary, project, env, server, observation, logs, []string{"LIST", "READ", "logs", "events"})
+}
+
+func assertHistoryMCPViews(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage, views []string) {
+	t.Helper()
 	command := exec.CommandContext(ctx, binary, "--server", server, "server", "mcp")
 	command.Dir, command.Env = project, env
 	var diagnostics bytes.Buffer
@@ -402,7 +407,7 @@ func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string,
 			t.Errorf("MCP close: %v", err)
 		}
 	}()
-	for _, action := range []string{"LIST", "READ", "logs", "events"} {
+	for _, action := range views {
 		args := map[string]any{"action": action}
 		if action == "LIST" {
 			args["history"] = "archived"
