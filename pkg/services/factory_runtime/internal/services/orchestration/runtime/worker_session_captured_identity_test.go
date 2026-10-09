@@ -403,6 +403,8 @@ func TestRecordedForceObservationRetainsCapturedTerminalTruth(t *testing.T) {
 	service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
 		return interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{DispatchID: "dispatch-recorded-exact", WorkItemIDs: []string{fixture.workID}, Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeCanceled), Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}}}}}, nil
 	}
+	service.ledger = service.ledger.(*preparedScopedTestLedger).RuntimeLedger
+	prepareScopedTestFacts(service)
 	cause := "OPERATOR_KILL"
 	service.Service = &capturedForceService{observation: workersessions.Observation{WorkerSessionID: fixture.workerSessionID, FactorySessionID: "factory", AttemptID: "physical", State: workersessions.StateTerminated, TerminalCause: &cause}}
 	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID, FactorySessionID: "factory"})

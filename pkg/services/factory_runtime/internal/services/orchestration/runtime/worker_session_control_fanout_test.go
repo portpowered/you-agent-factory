@@ -765,6 +765,7 @@ func scopedListFixture(tb testing.TB, dispatches, works, fillerEvents int) (
 		nil, ledger, factory.WorldStateProjector(projector),
 		platformclock.NewDeterministic(base, time.Second), nil,
 	)
+	prepareScopedTestFacts(service)
 	return service.(*recordedWorkerSessionObservation), target, want
 }
 

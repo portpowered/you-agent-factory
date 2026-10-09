@@ -286,6 +286,7 @@ func TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronological
 		platformclock.NewDeterministic(base, time.Second),
 		nil,
 	)
+	prepareScopedTestFacts(service)
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
 		t.Fatalf("ListObservations() error = %v", err)
@@ -347,6 +348,7 @@ func TestRecordedWorkerSessionObservationUsesRestoredWorldState(t *testing.T) {
 		&restored,
 		events,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
@@ -576,6 +578,7 @@ func TestRecordedWorkerSessionObservation_KnownWorkWithoutSessionsIsExplicitlyEm
 		platformclock.Real{},
 		nil,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
@@ -995,20 +998,6 @@ func TestRecordedProviderMetadataBranches(t *testing.T) {
 
 func TestRecordedWorldStateBranches(t *testing.T) {
 	base, events := recordedDispatchFactTestEvents(t)
-	world := interfaces.FactoryWorldState{
-		WorkItemsByID:       map[string]work.FactoryWorkItem{"work-map": {ID: "work-map"}},
-		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{"work-active": {ID: "work-active"}},
-		TerminalWorkByID:    map[string]interfaces.FactoryTerminalWork{"work-terminal": {}},
-		FailedWorkItemsByID: map[string]work.FactoryWorkItem{"work-failed": {ID: "work-failed"}},
-	}
-	for _, workID := range []string{"work-map", "work-active", "work-terminal", "work-failed", "work-from-context"} {
-		if !recordedWorkExists(world, events, workID) {
-			t.Fatalf("recordedWorkExists(%q) = false, want true", workID)
-		}
-	}
-	if recordedWorkExists(world, nil, "missing") {
-		t.Fatal("recordedWorkExists(missing) = true")
-	}
 	completedWithResponseTimeZero := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1"}
 	if ended := recordedDispatchEnd(completedWithResponseTimeZero, newRecordedDispatchEventIndex(events), "dispatch-1"); ended == nil || !ended.Equal(base.Add(4*time.Second)) {
 		t.Fatalf("recordedDispatchEnd(event fallback) = %v", ended)

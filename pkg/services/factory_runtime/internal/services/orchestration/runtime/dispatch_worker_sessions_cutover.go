@@ -281,54 +281,6 @@ type recordedWorkerSessionObservation struct {
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
 
-func (s *recordedWorkerSessionObservation) projectRecorded(
-	ctx context.Context,
-	events []interfaces.FactoryEvent,
-	workID string,
-	live map[string]workersessions.Observation,
-) ([]workersessions.Observation, bool, error) {
-	if err := observationContextError(ctx); err != nil {
-		return nil, false, err
-	}
-	ordered := cloneAndSortFactoryEvents(events)
-	selectedTick := latestFactoryEventTick(ordered)
-	world, err := s.projectRecordedWorldState(ctx, events, ordered, selectedTick)
-	if err != nil {
-		return nil, false, workersessions.ErrObservationProjectionUnavailable
-	}
-
-	knownWork := recordedWorkExists(world, ordered, workID)
-	associations, requests := recordedDispatchFacts(ordered)
-	if len(associations) == 0 {
-		return make([]workersessions.Observation, 0), knownWork, nil
-	}
-
-	completed := recordedDispatchStateMaps(world)
-	index := newRecordedDispatchEventIndex(ordered)
-	result := make([]workersessions.Observation, 0, len(associations))
-	for dispatchID, association := range associations {
-		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, index))
-		if !containsRecordedWorkID(fact.workIDs, workID) {
-			continue
-		}
-		observation := recordedObservationFromFact(fact, s.clock)
-		if observation.State == workersessions.StateCanceled {
-			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
-			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		result = append(result, observation)
-	}
-	return result, knownWork, nil
-}
-
 func (s *recordedWorkerSessionObservation) canonicalEvents() []interfaces.FactoryEvent {
 	if s == nil {
 		return nil
@@ -453,7 +405,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	if s == nil || s.ledger == nil || (s.projector == nil && s.restoredWorldState == nil) {
+	if s == nil || s.ledger == nil {
 		result, err := s.listLive(ctx, req)
 		if err == nil {
 			s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
@@ -482,16 +434,11 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if len(recorded) > 0 || len(live.Observations) > 0 {
 		sample = s.sampleCompletedFlushWatermark()
 	}
-	if facts != nil {
-		if err := applySelectedWorkConfirmation(ctx, recorded, *facts, sample); err != nil {
-			return workersessions.ListObservationsResult{}, err
-		}
-		if err := applySelectedWorkConfirmation(ctx, live.Observations, *facts, sample); err != nil {
-			return workersessions.ListObservationsResult{}, err
-		}
-	} else {
-		s.applyConfirmation(recorded, sample)
-		s.applyConfirmation(live.Observations, sample)
+	if err := applySelectedWorkConfirmation(ctx, recorded, *facts, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
+	if err := applySelectedWorkConfirmation(ctx, live.Observations, *facts, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
 	}
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
@@ -504,8 +451,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
 	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
 	if !ok {
-		rows, known, err := s.projectRecorded(ctx, s.canonicalEvents(), workID, live)
-		return rows, known, nil, err
+		return nil, false, nil, workersessions.ErrObservationProjectionUnavailable
 	}
 	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
 	if err != nil {

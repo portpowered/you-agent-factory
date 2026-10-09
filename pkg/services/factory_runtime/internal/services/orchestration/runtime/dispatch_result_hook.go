@@ -572,27 +572,6 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 	}
 }
 
-func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {
-	if _, ok := world.WorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.ActiveWorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.TerminalWorkByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.FailedWorkItemsByID[workID]; ok {
-		return true
-	}
-	for _, event := range events {
-		if containsRecordedWorkID(pointerStringSlice(event.Context.WorkIDs), workID) {
-			return true
-		}
-	}
-	return false
-}
-
 func recordedObservationState(outcome string) workersessions.State {
 	switch workers.WorkOutcome(outcome) {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
