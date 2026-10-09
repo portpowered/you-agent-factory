@@ -49,14 +49,14 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	session := request
 	selection := runtimeSelectionForStart(request)
-	opening, err := r.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	opening, err := r.opening.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
 	if opening.load.HistoricalReplay == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
-	replay, closeReplay, err := r.openHistoricalSessionRuntime(ctx, opening)
+	replay, closeReplay, err := r.opening.openHistoricalSessionRuntime(ctx, opening)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}

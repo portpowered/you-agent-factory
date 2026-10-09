@@ -160,7 +160,7 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 // owner for a checkpoint-bearing replay. Runtime assembly is deferred until
 // HasRestorableState confirms that the durable owner can actually resume; a
 // public checkpoint summary alone must remain inspection-only.
-func (r *Root) openPortableReplayDurableOwner(
+func (r *RuntimeOpening) openPortableReplayDurableOwner(
 	ctx context.Context,
 	configured preparedRuntime,
 	root RuntimeRoot,
@@ -215,7 +215,7 @@ func (r *Root) openPortableReplayDurableOwner(
 	return owner, cleanup.Close, nil
 }
 
-func (r *Root) preparePortableReplayRuntime(
+func (r *RuntimeOpening) preparePortableReplayRuntime(
 	ctx context.Context,
 	configured preparedRuntime,
 	durableOwner durableexecution.Service,

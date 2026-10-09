@@ -98,7 +98,7 @@ func TestFailedSessionOpeningLogRetainsSafeJoinedCauseAndReleasesSink(t *testing
 	closeErr := errors.New("close diagnostic sink")
 	sink := &failedOpeningLogSink{logger: zap.New(core), closeErr: closeErr}
 	owner := &failedOpeningLogOwner{sink: sink}
-	root := &Root{runtimeLogs: owner}
+	root := &RuntimeOpening{runtimeLogs: owner}
 	opening := &sessionRuntimeOpening{sessionID: "candidate", load: RuntimeLoad{LoadedFactoryCfg: initialOpeningLoadedStub{}},
 		configured: preparedRuntime{Runtime: factoryruntime.RuntimeSelection{RuntimeInstanceID: "candidate-runtime", LogDirectory: "isolated-logs"}}}
 	cause := errors.Join(fmt.Errorf("restore retained history: %w", &os.PathError{Op: "read", Path: "retained.json", Err: os.ErrPermission}), errors.New("private-payload-marker"))

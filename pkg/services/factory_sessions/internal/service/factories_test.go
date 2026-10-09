@@ -80,20 +80,16 @@ type runtimeOpeningFixture struct {
 }
 
 func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
+	initialEngine := NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation)
 	return NewRoot(
+		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil),
 		fixture.ProviderSessions,
 		fixture.Logger,
-		nil,
 		fixture.WorkflowPreview,
 		fixture.RuntimeRoot,
-		fixture.ResolveClock,
-		fixture.Clock,
-		fixture.ProviderOverride,
 		fixture.Definitions,
 		fixture.snapshotSelection(),
-		fixture.preparation(),
 		fixture.Assembly,
-		fixture.DurableOpening,
 		fixture.resourceAcquisition(),
 		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
 		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner),
@@ -105,10 +101,8 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.RecordingsService,
 		fixture.RecordingsRuntime,
 		fixture.WorkerService,
-		NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner),
-		NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation),
+		initialEngine,
 		nil,
-		recordingreplay.NewBehavior(),
 		fixture.LiveChangeCoordinator,
 		fixture.RecordingProjections,
 	)
@@ -550,20 +544,33 @@ func preparationPath(parts ...string) string {
 	return filepath.Join(append([]string{root}, parts...)...)
 }
 
-func TestRuntimePreparationFailureDoesNotAllocateCanonicalMetricsIdentity(t *testing.T) {
+func TestRuntimeOpeningPreparationFailureDoesNotAllocateCanonicalMetricsIdentity(t *testing.T) {
 	t.Parallel()
-	cause := errors.New("controlled input loading failure")
-	identityRequests := 0
-	preparation := NewRuntimePreparation(func(RuntimeInputLoadRequest) (RuntimeLoad, error) { return RuntimeLoad{}, cause },
-		func(dir string) (string, error) { return dir, nil }, nil, func() (string, error) { return preparationPath("home"), nil },
-		nil, nil, nil, nil, nil)
-	root := &Root{preparation: preparation, recordingsService: &recordingsRootConstructionStub{}, recordingsRuntime: &recordingsRootConstructionStub{},
-		generateRuntimeInstanceID: func() string { identityRequests++; return "metrics-identity" }}
-	session := &factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{}}
-	opening, err := root.prepareRuntimeOpening(context.Background(), factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
-		factoryruntime.RuntimeSelection{RuntimeInstanceID: "already-selected"}, session, false, workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil)
-	if !errors.Is(err, cause) || opening != nil || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
-		t.Fatalf("failed definition preparation allocated metrics identity: opening=%#v error=%v allocations=%d", opening, err, identityRequests)
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New(id + " controlled input loading failure")
+			identityRequests, loadRequests := 0, 0
+			preparation := NewRuntimePreparation(func(RuntimeInputLoadRequest) (RuntimeLoad, error) {
+				loadRequests++
+				return RuntimeLoad{}, cause
+			}, func(dir string) (string, error) { return dir, nil }, nil,
+				func() (string, error) { return preparationPath("home"), nil }, nil, nil, nil, nil, nil)
+			operation := NewRuntimeOpening(preparation, nil, nil, nil, nil,
+				&recordingsRootConstructionStub{}, &recordingsRootConstructionStub{}, nil, nil, nil,
+				func() string { identityRequests++; return id + "-metrics-identity" }, nil)
+			if loadRequests != 0 || identityRequests != 0 {
+				t.Fatal("construction performed request-scoped work")
+			}
+			session := &factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{}}
+			opening, err := operation.prepareRuntimeOpening(context.Background(),
+				factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
+				factoryruntime.RuntimeSelection{RuntimeInstanceID: id + "-already-selected"}, session, false,
+				workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil)
+			if !errors.Is(err, cause) || opening != nil || loadRequests != 1 || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
+				t.Fatalf("failed preparation: opening=%#v error=%v loads=%d allocations=%d", opening, err, loadRequests, identityRequests)
+			}
+		})
 	}
 }
 

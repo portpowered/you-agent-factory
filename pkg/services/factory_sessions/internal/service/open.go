@@ -28,6 +28,40 @@ import (
 	"go.uber.org/zap"
 )
 
+// RuntimeOpening owns fixed preparation and historical acquisition behavior.
+// It retains selected collaborators directly and never retains the Sessions Root.
+type RuntimeOpening struct {
+	preparation               *RuntimePreparation
+	durableOpening            *DurableOpening
+	initialEngine             *RuntimeInitialEngine
+	executionBinding          *ExecutionBinding
+	replayBehavior            *recordingreplay.Behavior
+	recordingsService         recordings.Service
+	recordingsRuntime         recordings.RuntimeScopeService
+	clock                     factoryruntime.Clock
+	resolveClock              factoryruntime.ClockResolver
+	providerOverride          providers.Service
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator
+	runtimeLogs               factoryruntime.RuntimeLogOwner
+}
+
+// NewRuntimeOpening constructs inert behavior; acquisition happens only on a request.
+func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, executionBinding *ExecutionBinding,
+	replayBehavior *recordingreplay.Behavior, recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService, clock factoryruntime.Clock,
+	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
+) *RuntimeOpening {
+	return &RuntimeOpening{preparation: preparation, durableOpening: durableOpening,
+		initialEngine: initialEngine, executionBinding: executionBinding,
+		replayBehavior: replayBehavior, recordingsService: recordingsService,
+		recordingsRuntime: recordingsRuntime, clock: clock, resolveClock: resolveClock,
+		providerOverride: providerOverride, generateRuntimeInstanceID: generateRuntimeInstanceID,
+		runtimeLogs: runtimeLogs}
+}
+
 // openRuntimeWithOptions opens session-owned state using the collaborators already
 // injected into this owner. Only invocation selections cross this boundary.
 func (r *Root) openRuntimeWithOptions(
@@ -44,14 +78,14 @@ func (r *Root) openRuntimeWithOptions(
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (lifecycle roles.LifecycleRuntime, replay *recordingreplay.Scope, closeArtifacts func() error, activation *factoryruntime.RuntimeActivation, selectedRuntime roles.ApplicationRuntime, err error) {
-	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
+	opening, err := r.opening.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		replay, closeReplay, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
+		replay, closeReplay, historicalErr := r.opening.openHistoricalSessionRuntime(ctx, opening)
 		return nil, replay, closeReplay, nil, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
@@ -65,7 +99,7 @@ func (r *Root) openRuntimeWithOptions(
 				activation, _ = newRuntimeActivation(nil, cleanup.Close)
 			}
 			if opening.initial == nil {
-				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
+				if logErr := r.opening.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
 					err = errors.Join(err, logErr)
 					closeArtifacts = cleanup.Close
 					activation, _ = newRuntimeActivation(nil, cleanup.Close)
@@ -164,7 +198,7 @@ type sessionRuntimeOpening struct {
 	recordingTargetValidator    recordings.RecordingTargetValidator
 }
 
-func (r *Root) prepareRuntimeOpening(
+func (r *RuntimeOpening) prepareRuntimeOpening(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeSelection,
 	runtime factoryruntime.RuntimeSelection,
@@ -260,7 +294,7 @@ func applyRuntimeWorkerReasoningEffort(configured preparedRuntime, load RuntimeL
 	return nil
 }
 
-func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (*recordingreplay.Scope, func() error, error) {
+func (r *RuntimeOpening) openHistoricalSessionRuntime(ctx context.Context, opening *sessionRuntimeOpening) (*recordingreplay.Scope, func() error, error) {
 	var err error
 	var liveOwner durableexecution.Service
 	var replayClose func() error
@@ -768,7 +802,7 @@ type historicalRecordingReader interface {
 // A history read can fail before Factory Runtime has opened its sinks. Retain
 // that failed opening's diagnostic through the same injected log owner, without
 // constructing a runtime or binding a recording merely to report its failure.
-func (r *Root) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
+func (r *RuntimeOpening) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
 	if opening.configured.Runtime.FileLoggingPolicy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil
 	}

@@ -51,14 +51,13 @@ type ScriptCommandRunner interface {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
-	replayBehavior *recordingreplay.Behavior
+	opening *RuntimeOpening
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	openingCompletion              *RuntimeOpeningCompletion
 	openingBinding                 *RuntimeOpeningBinding
 	resourceAcquisition            *RuntimeResourceAcquisition
-	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	workerService                  workers.Service
 	modelService                   models.Service
@@ -72,34 +71,23 @@ type Root struct {
 	providerSessions               providersessions.Service
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
 	snapshotSelection              *RuntimeSnapshotSelection
-	preparation                    *RuntimePreparation
-	resolveClock                   factoryruntime.ClockResolver
 	baseLogger                     *zap.Logger
-	runtimeLogs                    factoryruntime.RuntimeLogOwner
 	generateSessionID              factorysessions.SessionIDGenerator
 	generateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                    factorysessions.HomeDirectoryResolver
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly
 	runtimeRoot                    FactoryRuntimeRoot
-	clock                          factoryruntime.Clock
-	providerOverride               providers.Service
-	executionBinding               *ExecutionBinding
 }
 
 func NewRoot(
+	opening *RuntimeOpening,
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
-	runtimeLogs factoryruntime.RuntimeLogOwner,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
-	resolveClock factoryruntime.ClockResolver,
-	clock factoryruntime.Clock,
-	providerOverride ProviderOverrideService,
 	definitions factorydefinitions.Service,
 	snapshotSelection *RuntimeSnapshotSelection,
-	preparation *RuntimePreparation,
 	assembly roles.RuntimeAssembly,
-	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
 	openingCompletion *RuntimeOpeningCompletion,
 	openingBinding *RuntimeOpeningBinding,
@@ -111,10 +99,8 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
-	replayBehavior *recordingreplay.Behavior,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordingProjections recordings.ProjectionService,
 ) (*Root, error) {
@@ -123,12 +109,11 @@ func NewRoot(
 		return nil, err
 	}
 	root := &Root{
-		replayBehavior:                 replayBehavior,
+		opening:                        opening,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		initialEngine:                  initialEngine,
 		modelInvocation:                modelInvocation,
-		durableOpening:                 durableOpening,
 		resourceAcquisition:            resourceAcquisition,
 		workerService:                  workerService,
 		modelService:                   modelService,
@@ -142,18 +127,12 @@ func NewRoot(
 		providerSessions:               providerSessions,
 		workflowPreview:                workflowPreview,
 		snapshotSelection:              snapshotSelection,
-		preparation:                    preparation,
-		resolveClock:                   resolveClock,
 		baseLogger:                     logger,
-		runtimeLogs:                    runtimeLogs,
 		openingCompletion:              openingCompletion,
 		openingBinding:                 openingBinding,
 		generateSessionID:              generateSessionID,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
-		clock:                          clock,
-		providerOverride:               providerOverride,
-		executionBinding:               executionBinding,
 	}
 	root.runtimeRoot = runtimeRoot
 	return root, nil

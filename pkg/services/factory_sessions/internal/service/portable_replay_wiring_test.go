@@ -75,7 +75,7 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 	var events []string
 	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	factory.initialEngine = NewRuntimeInitialEngine(factory.snapshotSelection.Resolve, portableReplayRuntimeAssemblerStub{
+	factory.opening.initialEngine = NewRuntimeInitialEngine(factory.snapshotSelection.Resolve, portableReplayRuntimeAssemblerStub{
 		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
 			events = append(events, "partial-runtime-close")
 			return artifactErr
@@ -149,9 +149,9 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 			failedOwner := &portableReplayRuntimeOwner{events: &events, closeErr: closeErr}
 			retryOwner := &portableReplayRuntimeOwner{}
 			factory := newPortableCheckpointRuntimeOpeningFactory(t, retryOwner)
-			acquire := factory.durableOpening.acquire
+			acquire := factory.opening.durableOpening.acquire
 			attempts := 0
-			factory.durableOpening = durableOpeningFixture(retryOwner, func(ctx context.Context,
+			factory.opening.durableOpening = durableOpeningFixture(retryOwner, func(ctx context.Context,
 				facts durableexecution.ScopeFacts, clock factoryruntime.Clock, logger *zap.Logger,
 			) (durableexecution.Service, func(context.Context) error, error) {
 				attempts++
@@ -842,7 +842,7 @@ func TestPortableReplayDurableOwnerPreservesProviderSelectionAndFailure(t *testi
 				}
 				return nil, func(context.Context) error { return owner.Close() }, tc.failure
 			}
-			factory := &Root{
+			factory := &RuntimeOpening{
 				clock: openingCoordinatorClock{}, providerOverride: tc.provider,
 				durableOpening: durableOpeningFixture(owner, acquire),
 			}

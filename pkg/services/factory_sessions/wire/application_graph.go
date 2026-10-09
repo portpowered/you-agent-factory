@@ -80,6 +80,7 @@ type (
 
 	ProviderOverrideService      = service.ProviderOverrideService
 	RuntimeResourceAcquisition   = service.RuntimeResourceAcquisition
+	RuntimeOpening               = service.RuntimeOpening
 	RuntimeOpeningCompletion     = service.RuntimeOpeningCompletion
 	RuntimeOpeningBinding        = service.RuntimeOpeningBinding
 	OpeningSessionIdentity       = service.OpeningSessionIdentity
@@ -117,23 +118,31 @@ var (
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 )
 
+// NewRuntimeOpening keeps the private implementation behind the Sessions Wire boundary.
+func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableOpening,
+	initialEngine *RuntimeInitialEngine, executionBinding *ExecutionBinding,
+	replayBehavior *HistoricalReplayBehavior, recordingsService recordings.Service,
+	recordingsRuntime recordings.RuntimeScopeService, clock factoryruntime.Clock,
+	resolveClock factoryruntime.ClockResolver, providerOverride ProviderOverrideService,
+	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
+) *RuntimeOpening {
+	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
+		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
+		generateRuntimeInstanceID, runtimeLogs)
+}
+
 func NewRoot(
+	opening *RuntimeOpening,
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
-	runtimeLogs factoryruntime.RuntimeLogOwner,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
-	resolveClock factoryruntime.ClockResolver,
-
-	clock factoryruntime.Clock,
-	providerOverride ProviderOverrideService,
 	definitions factorydefinitions.Service,
 
 	snapshotSelection *RuntimeSnapshotSelection,
-	preparation *RuntimePreparation,
 
 	assembly RuntimeAssembly,
-	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
 	openingCompletion *RuntimeOpeningCompletion,
 	openingBinding *RuntimeOpeningBinding,
@@ -145,30 +154,22 @@ func NewRoot(
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
-	executionBinding *ExecutionBinding,
 	initialEngine *RuntimeInitialEngine,
 	modelInvocation RuntimeModelInvocationOperation,
-	replayBehavior *HistoricalReplayBehavior,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
 	recordingProjections recordings.ProjectionService,
 ) (*Root, error) {
 	return service.NewRoot(
+		opening,
 		providerSessions,
 		logger,
-		runtimeLogs,
 		workflowPreview,
 		runtimeRoot,
-		resolveClock,
-
-		clock,
-		providerOverride,
 		definitions,
 
 		snapshotSelection,
-		preparation,
 
 		assembly,
-		durableOpening,
 		resourceAcquisition,
 		openingCompletion,
 		openingBinding,
@@ -180,10 +181,8 @@ func NewRoot(
 		recordingsService,
 		recordingsRuntime,
 		workerService,
-		executionBinding,
 		initialEngine,
 		modelInvocation,
-		replayBehavior,
 		liveChangeCoordinator,
 		recordingProjections,
 	)
