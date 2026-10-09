@@ -547,7 +547,7 @@ type RuntimeOpeningCompletion struct {
 
 type openingRegistration interface {
 	RegisterOpening(context.Context, roles.SessionOpeningFacts, factoryruntime.RuntimeRecord, factoryruntime.RuntimeInitialCompletion, factoryruntime.RuntimeReplacementBuilder, factoryruntime.RuntimeLifecycle, factoryruntime.RuntimeSidecars,
-		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost,
+		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, *livesession.LiveSession, factorysessions.DefinitionHost,
 		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
 	Resolve(string) *livesession.LiveSession
 }
@@ -632,7 +632,7 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if subscription != nil {
 		cleanup.Add(func() error { return subscription(context.WithoutCancel(ctx)) })
 	}
-	session, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
+	session, selected, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
 		request.Facts, record, completion, replacement, runtimeLifecycle, sidecars, clock, logger)
 	if release != nil {
 		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
@@ -640,7 +640,7 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	state := runtimebinding.SessionStateFrom(operation.registration.Resolve(request.Facts.FactorySessionID))
+	state := runtimebinding.SessionStateFrom(selected)
 	if state != nil {
 		state.SetMockWorkers(request.MockWorkers)
 	}

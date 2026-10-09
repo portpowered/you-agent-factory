@@ -340,20 +340,21 @@ func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string)
 }
 
 // RegisterOpening publishes scoped state through the fixed owner. Acquisition
-// remains owned by the caller; release retires only this registration.
+// remains owned by the caller; release retires only this registration. The
+// returned canonical record remains selected even if the registry key changes.
 func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeningFacts,
 	record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion, replacement factoryruntime.RuntimeReplacementBuilder, lifecycle factoryruntime.RuntimeLifecycle, sidecars factoryruntime.RuntimeSidecars, clock factoryruntime.Clock, logger *zap.Logger,
-) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
+) (roles.ApplicationRuntime, *livesession.LiveSession, factorysessions.DefinitionHost, factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	if record == nil {
-		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
 	session, err := a.prepareOpeningSession(facts, record, completion, clock)
 	startupRuntime := record
 	if session == nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	runtime := &SessionRuntime{
 		owner: a, openingSession: session,
@@ -369,7 +370,7 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 		if session.ResponseEvents == nil {
 			release = nil
 		}
-		return nil, nil, nil, release, err
+		return nil, session, nil, nil, release, err
 	}
 	runtime.runtimeState.SetStartup(startupRuntime)
 	bound := runtimebinding.SessionStateFrom(session)
@@ -379,12 +380,12 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 	bound.Logger = logger
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	if err := ctx.Err(); err != nil {
-		return nil, nil, nil, release, err
+		return nil, session, nil, nil, release, err
 	}
 	a.registry.Upsert(session, true)
 	logger.Debug("registered Factory Session opening", zap.String("session_id", facts.FactorySessionID),
 		zap.String("runtime_id", facts.RuntimeID), zap.String("generation_id", facts.GenerationID))
-	return runtime, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
+	return runtime, session, definitionHost{runtime: runtime}, a.definitionActivationGateway, release, nil
 }
 
 func (a *Assembly) prepareOpeningSession(facts roles.SessionOpeningFacts, record factoryruntime.RuntimeRecord, completion factoryruntime.RuntimeInitialCompletion,
