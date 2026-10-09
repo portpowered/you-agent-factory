@@ -149,22 +149,33 @@ func assertRemoteParityDiagnostic(t *testing.T, test remoteInterruptParityCase, 
 	if diagnostic["code"] != test.code || diagnostic["message"] != message {
 		t.Fatalf("diagnostic = %#v", diagnostic)
 	}
-	if test.operation == "interrupt" {
-		phase := test.phase
-		if phase == "" {
-			phase = "VALIDATION"
-		}
-		if diagnostic["phase"] != phase {
-			t.Fatalf("phase = %v, want %s", diagnostic["phase"], phase)
-		}
+	assertRemoteParityPhase(t, test, diagnostic)
+	assertRemoteParityDetails(t, test.candidates, diagnostic)
+}
+
+func assertRemoteParityPhase(t *testing.T, test remoteInterruptParityCase, diagnostic map[string]any) {
+	t.Helper()
+	if test.operation != "interrupt" {
+		return
 	}
-	if test.candidates == nil {
+	phase := test.phase
+	if phase == "" {
+		phase = "VALIDATION"
+	}
+	if diagnostic["phase"] != phase {
+		t.Fatalf("phase = %v, want %s", diagnostic["phase"], phase)
+	}
+}
+
+func assertRemoteParityDetails(t *testing.T, candidates []map[string]any, diagnostic map[string]any) {
+	t.Helper()
+	if candidates == nil {
 		if _, ok := diagnostic["details"]; ok {
 			t.Fatalf("general details exposed: %#v", diagnostic)
 		}
 		return
 	}
-	want, _ := json.Marshal(map[string]any{"candidates": test.candidates})
+	want, _ := json.Marshal(map[string]any{"candidates": candidates})
 	var expected any
 	_ = json.Unmarshal(want, &expected)
 	if !reflect.DeepEqual(diagnostic["details"], expected) {
