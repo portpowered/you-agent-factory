@@ -465,46 +465,57 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
 		return workersessions.ListObservationsResult{}, liveErr
 	}
-	recorded, knownWork, err := s.projectListedWork(ctx, req.WorkID, listedObservationIndex(live.Observations))
+	recorded, knownWork, facts, err := s.projectListedWorkSnapshot(ctx, req.WorkID, listedObservationIndex(live.Observations))
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
+	health, err := s.recordingHealth(ctx)
+	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
+	s.decorateRecordingHealth(recorded, health)
 	if liveErr == nil {
-		if err := s.applyLiveRecordingHealth(ctx, live.Observations); err != nil {
-			return workersessions.ListObservationsResult{}, err
-		}
+		s.decorateLiveRecordingHealth(live.Observations, health)
 		recorded = mergeRecordedObservations(recorded, live.Observations)
 	}
 	sample := completedFlushWatermarkSample{}
 	if len(recorded) > 0 || len(live.Observations) > 0 {
 		sample = s.sampleCompletedFlushWatermark()
 	}
-	if err := s.applyWorkConfirmation(ctx, req.WorkID, recorded, sample); err != nil {
-		return workersessions.ListObservationsResult{}, err
+	if facts != nil {
+		if err := applySelectedWorkConfirmation(ctx, recorded, *facts, sample); err != nil {
+			return workersessions.ListObservationsResult{}, err
+		}
+		if err := applySelectedWorkConfirmation(ctx, live.Observations, *facts, sample); err != nil {
+			return workersessions.ListObservationsResult{}, err
+		}
+	} else {
+		s.applyConfirmation(recorded, sample)
+		s.applyConfirmation(live.Observations, sample)
 	}
-	if err := s.applyWorkConfirmation(ctx, req.WorkID, live.Observations, sample); err != nil {
+	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
 }
 
-func (s *recordedWorkerSessionObservation) projectListedWork(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, error) {
+// One request retains one detached selected snapshot for both row projection
+// and terminal confirmation. A concurrent append is visible on the next read.
+func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
 	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
 	if !ok {
-		return s.projectRecorded(ctx, s.canonicalEvents(), workID, live)
+		rows, known, err := s.projectRecorded(ctx, s.canonicalEvents(), workID, live)
+		return rows, known, nil, err
 	}
 	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, false, workersessions.ErrObservationCanceled
+			return nil, false, nil, workersessions.ErrObservationCanceled
 		}
 		if canceled := observationContextError(ctx); canceled != nil {
-			return nil, false, canceled
+			return nil, false, nil, canceled
 		}
-		return nil, false, workersessions.ErrObservationProjectionUnavailable
+		return nil, false, nil, workersessions.ErrObservationProjectionUnavailable
 	}
 	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
 	for id, request := range facts.Requests {
@@ -536,18 +547,18 @@ func (s *recordedWorkerSessionObservation) projectListedWork(ctx context.Context
 		if observation.State == workersessions.StateCanceled {
 			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
 			if err != nil {
-				return nil, false, err
+				return nil, false, nil, err
 			}
 		}
 		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
 			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
 			if err != nil {
-				return nil, false, err
+				return nil, false, nil, err
 			}
 		}
 		result = append(result, observation)
 	}
-	return result, facts.KnownWork, nil
+	return result, facts.KnownWork, &facts, nil
 }
 
 func recordedObservationListResult(
@@ -726,14 +737,7 @@ func (s *recordedWorkerSessionObservation) withRecordingHealth(
 	return observation, nil
 }
 
-func (s *recordedWorkerSessionObservation) applyRecordingHealth(
-	ctx context.Context,
-	observations []workersessions.Observation,
-) error {
-	health, err := s.recordingHealth(ctx)
-	if err != nil {
-		return err
-	}
+func (s *recordedWorkerSessionObservation) decorateRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
 		if s != nil && s.factorySessionID != "" {
 			observations[index].FactorySessionID = s.factorySessionID
@@ -747,7 +751,6 @@ func (s *recordedWorkerSessionObservation) applyRecordingHealth(
 			}
 		}
 	}
-	return nil
 }
 
 func (s *recordedWorkerSessionObservation) validateRecordingHealth(ctx context.Context) error {
@@ -904,6 +907,11 @@ func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
 	if err != nil {
 		return err
 	}
+	s.decorateLiveRecordingHealth(observations, health)
+	return nil
+}
+
+func (s *recordedWorkerSessionObservation) decorateLiveRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
 		observation := &observations[index]
 		// Only restored lineage can be rebound; shared registries can contain
@@ -922,7 +930,6 @@ func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
 		}
 		*observation = liveRecordingHealth(*observation)
 	}
-	return nil
 }
 
 func liveRecordingHealth(observation workersessions.Observation) workersessions.Observation {

@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -796,32 +795,13 @@ func applyKnownConfirmation(observations []workersessions.Observation, sample co
 
 // Scoped lists confirm live terminal outcomes from selected committed response
 // cursors. A later reconciliation cursor must not replace the response cursor.
-func (s *recordedWorkerSessionObservation) applyWorkConfirmation(
+func applySelectedWorkConfirmation(
 	ctx context.Context,
-	workID string,
 	observations []workersessions.Observation,
+	facts recordings.WorkerSessionWorkFacts,
 	sample completedFlushWatermarkSample,
 ) error {
-	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
-	if !ok {
-		s.applyConfirmation(observations, sample)
-		return nil
-	}
-	needsConfirmation := false
-	for _, observation := range observations {
-		if sample.available && observation.State.Terminal() && !observation.StateSequenceKnown {
-			needsConfirmation = true
-			break
-		}
-	}
-	if needsConfirmation {
-		facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
-		if err != nil {
-			if observationContextError(ctx) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return workersessions.ErrObservationCanceled
-			}
-			return workersessions.ErrObservationProjectionUnavailable
-		}
+	if sample.available {
 		confirmSelectedTerminalStates(observations, facts, sample)
 	}
 	applyKnownConfirmation(observations, sample)
