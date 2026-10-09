@@ -15,7 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -28,7 +28,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
-	hosted        factoryruntime.RuntimeRecord
+	hosted        roles.RuntimeObservations
 }
 
 func (*lifecycleRuntime) StartLifecycle(context.Context, context.Context) error {
@@ -59,7 +59,7 @@ func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	return runtime.failErr
 }
 
-func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
+func (runtime *lifecycleRuntime) CurrentRuntimeBundle() roles.RuntimeObservations {
 	return runtime.hosted
 }
 
@@ -366,6 +366,9 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 	}}
 
 	err := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		if request.Logger != logger {
+			t.Error("HTTP hosting lost the selected runtime logger")
+		}
 		request.OnBound(platformhttpserver.Binding{Port: request.Port + 1})
 		<-ctx.Done()
 		return ctx.Err()
@@ -389,11 +392,17 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 	}
 	fields := entries[0].ContextMap()
 	for name, want := range map[string]any{
-		"dir":              "/factory",
-		"runtime_log_path": "/logs/runtime.jsonl",
-		"runtime_mode":     string(interfaces.RuntimeModeService),
-		"mock-workers":     true,
-		"port":             int64(8124),
+		"dir":                        "/factory",
+		"runtime_log_path":           "/logs/runtime.jsonl",
+		"runtime_log_root":           "/logs",
+		"runtime_log_start_time_utc": startedAt.Format(time.RFC3339Nano),
+		"runtime_log_max_size_mb":    int64(10),
+		"runtime_log_max_backups":    int64(3),
+		"runtime_log_max_age_days":   int64(7),
+		"runtime_log_compress":       true,
+		"runtime_mode":               string(interfaces.RuntimeModeService),
+		"mock-workers":               true,
+		"port":                       int64(8124),
 	} {
 		if got := fields[name]; got != want {
 			t.Errorf("log field %s = %#v, want %#v", name, got, want)
@@ -406,27 +415,10 @@ type hostedRuntime struct {
 	diagnostics factoryruntime.RuntimeLogDiagnostics
 }
 
-func (hostedRuntime) RuntimeService() factoryruntime.Service { return nil }
-func (hostedRuntime) Directory() string                      { return "" }
-func (hostedRuntime) FolderDirectory() string                { return "" }
-func (hostedRuntime) BackendScope() string                   { return "" }
-func (hostedRuntime) StartTime() time.Time                   { return time.Time{} }
-func (hostedRuntime) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
-	return nil
-}
-func (hostedRuntime) CanonicalEvents() []interfaces.FactoryEvent { return nil }
-func (hostedRuntime) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {
-}
-func (hostedRuntime) AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func()) {
-}
-func (hostedRuntime) StreamGeneration() string                      { return "" }
-func (runtime hostedRuntime) RuntimeLogger() *zap.Logger            { return runtime.logger }
-func (hostedRuntime) RuntimeMetrics() factoryruntime.MetricsEmitter { return nil }
+func (runtime hostedRuntime) RuntimeLogger() *zap.Logger { return runtime.logger }
 func (runtime hostedRuntime) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagnostics {
 	return runtime.diagnostics
 }
-func (hostedRuntime) RecordingLedger() recordings.Ledger { return nil }
-func (hostedRuntime) CloseArtifacts() error              { return nil }
 
 type cancellationLifecycleRuntime struct {
 	waiting     chan struct{}
@@ -459,7 +451,7 @@ func (runtime *cancellationLifecycleRuntime) StopLifecycle(context.Context) erro
 
 func (*cancellationLifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
+func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() roles.RuntimeObservations { return nil }
 
 func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
 	t.Parallel()

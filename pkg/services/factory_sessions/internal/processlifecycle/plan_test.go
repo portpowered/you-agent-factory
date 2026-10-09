@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
@@ -87,7 +86,7 @@ func (runtime *cancellationTransitionRuntime) Stop(ctx context.Context) error {
 
 func (*cancellationTransitionRuntime) FailStartup(err error) error { return err }
 
-func (*cancellationTransitionRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
+func (*cancellationTransitionRuntime) CurrentRuntimeBundle() roles.RuntimeObservations {
 	return nil
 }
 
