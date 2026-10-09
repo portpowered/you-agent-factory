@@ -112,6 +112,12 @@ func (opening *sessionRuntimeOpening) bindSelectedState(state *runtimebinding.Se
 	state.OperatorSettingsPath = opening.operatorSettingsPath
 	state.SkippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
 	state.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
+	state.ResumeRecoveryMetadata = nil
+	if opening.resumeInput != nil {
+		metadata := opening.resumeInput.RecoveryMetadata
+		metadata.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
+		state.ResumeRecoveryMetadata = &metadata
+	}
 	state.StartupRecovery = nil
 	if recovery := opening.startupRecovery; recovery != nil {
 		state.StartupRecovery = &factorysessions.StartupRecovery{

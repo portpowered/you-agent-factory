@@ -775,7 +775,7 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 			return replayRuntimeConfigStub{}, nil
 		}, nil, nil, nil),
 	}
-	opened, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		Recordings: recordings.RuntimeSelection{
 			RecordPath: "successor.recording.json",
@@ -809,21 +809,6 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	}
 	if root.activation.Inputs.Recordings.ReplayPath != "" {
 		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
-	}
-	assertResumeRecoveryMetadata(t, opened.resumeRecoveryMetadata, resumeInput.RecoveryMetadata)
-}
-
-func assertResumeRecoveryMetadata(
-	t *testing.T,
-	metadata *recordings.ResumeRecoveryMetadata,
-	want recordings.ResumeRecoveryMetadata,
-) {
-	t.Helper()
-	if metadata == nil || metadata.SourceRecordingID != want.SourceRecordingID ||
-		metadata.RecordedDefinitionID != want.RecordedDefinitionID ||
-		metadata.SuccessorRecordingID != recoveryRecordingID("runtime-1") ||
-		!metadata.PreviousRecordedAt.Equal(want.PreviousRecordedAt) {
-		t.Fatalf("opened resume recovery metadata = %#v, want selected source and successor identities", metadata)
 	}
 }
 

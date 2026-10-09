@@ -81,9 +81,7 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	return HistoricalApplicationInspection{
 		Replay:                 products.historicalReplay,
-		Diagnostics:            products.diagnostics,
 		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...),
-		ResumeRecoveryMetadata: products.resumeRecoveryMetadata,
 		Close:                  closeInspection,
 	}, true, nil
 }

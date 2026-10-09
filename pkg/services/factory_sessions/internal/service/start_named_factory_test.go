@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -62,6 +63,47 @@ func TestRuntimeOpeningRetainsSelectedFactsWithoutAliasing(t *testing.T) {
 				selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" ||
 				len(selected.SkippedBoardRecordings) != 0 || len(selected.ReplayMetadataWarnings) != 0 {
 				t.Fatal("empty opening retained stale facts")
+			}
+		})
+	}
+}
+
+func TestRuntimeOpeningRetainsSelectedResumeMetadata(t *testing.T) {
+	for _, name := range []string{"session-a", "session-b", "session-c", "session-d"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			input := &recordings.LoadResumeInputResult{RecoveryMetadata: recordings.ResumeRecoveryMetadata{
+				SourceRecordingID: name + "-source", RecordedDefinitionID: name + "-definition",
+				PreviousRecordedAt: time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC),
+			}}
+			opening := &sessionRuntimeOpening{
+				configured:  preparedRuntime{Runtime: factoryruntime.RuntimeSelection{RuntimeInstanceID: name + "-runtime"}},
+				resumeInput: input,
+			}
+			selected := &runtimebinding.SessionState{}
+			opening.bindSelectedState(selected)
+			want := input.RecoveryMetadata
+			want.SuccessorRecordingID = recoveryRecordingID(name + "-runtime")
+			if selected.ResumeRecoveryMetadata == nil || *selected.ResumeRecoveryMetadata != want {
+				t.Fatalf("selected resume identities/timestamp = %+v, want %+v", selected.ResumeRecoveryMetadata, want)
+			}
+			if input.RecoveryMetadata.SuccessorRecordingID != "" {
+				t.Fatal("binding changed source recording metadata")
+			}
+			input.RecoveryMetadata.SourceRecordingID = "changed"
+			opening.configured.Runtime.RuntimeInstanceID = "changed"
+			bindStartedSessionState(selected, &sessionActivation{}, " request ", nil)
+			if *selected.ResumeRecoveryMetadata != want || selected.StartRequestID() != "request" {
+				t.Fatal("later source mutation or lifecycle binding changed selected resume metadata")
+			}
+			peer := &runtimebinding.SessionState{}
+			(&sessionRuntimeOpening{}).bindSelectedState(peer)
+			if peer.ResumeRecoveryMetadata != nil || *selected.ResumeRecoveryMetadata != want {
+				t.Fatal("fresh peer inherited or changed selected resume metadata")
+			}
+			(&sessionRuntimeOpening{}).bindSelectedState(selected)
+			if selected.ResumeRecoveryMetadata != nil {
+				t.Fatal("fresh opening retained stale resume metadata")
 			}
 		})
 	}
@@ -234,7 +276,7 @@ func TestStartHelpersKeepSessionSelectionAndBindingDetached(t *testing.T) {
 		t.Fatal(err)
 	}
 	root.setStartedSessionTarget("missing", selected)
-	if _, err := root.bindStartedSession(context.Background(), "missing", selected, runtimeProducts{}, &sessionActivation{lifecycle: &startLifecycleStub{}}, "request", nil); err == nil || !strings.Contains(err.Error(), "unavailable") {
+	if _, err := root.bindStartedSession(context.Background(), "missing", selected, &sessionActivation{lifecycle: &startLifecycleStub{}}, "request", nil); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("binding absent session error = %v", err)
 	}
 	if _, found := root.startedForRequestID("request"); found {
@@ -246,7 +288,7 @@ func TestStartHelpersKeepSessionSelectionAndBindingDetached(t *testing.T) {
 		t.Fatalf("live start result = %+v", result)
 	}
 	bound := &runtimebinding.SessionState{OperatorSettingsPath: "/project/operator.yaml"}
-	bindSessionProducts(bound, runtimeProducts{}, &sessionActivation{}, " request ", nil)
+	bindStartedSessionState(bound, &sessionActivation{}, " request ", nil)
 	if bound.StartRequestID() != "request" || bound.OperatorSettingsPath != "/project/operator.yaml" || bound.Activation == nil {
 		t.Fatalf("bound state = %+v", bound)
 	}

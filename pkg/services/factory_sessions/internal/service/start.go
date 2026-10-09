@@ -199,7 +199,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	session, err := r.bindStartedSession(ctx, selectedID, selected, products, activation, request.Correlation.RequestID, previousControl)
+	session, err := r.bindStartedSession(ctx, selectedID, selected, activation, request.Correlation.RequestID, previousControl)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -239,7 +239,7 @@ func (r *Root) setStartedSessionTarget(selectedID string, selected factorysessio
 	session.ApplyStartedTarget(*selected.Target, selected.FolderPath)
 }
 
-func (r *Root) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
+func (r *Root) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
 	session := r.Resolve(selectedID)
 	if session == nil {
 		_ = activation.Close(ctx)
@@ -252,7 +252,7 @@ func (r *Root) bindStartedSession(ctx context.Context, selectedID string, select
 		_ = activation.lifecycle.StopLifecycle(ctx)
 		return nil, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
-	bindSessionProducts(bound, products, activation, requestID, previousControl)
+	bindStartedSessionState(bound, activation, requestID, previousControl)
 	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
 	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
 	return session, nil
@@ -395,9 +395,8 @@ func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferC
 	return activation, nil
 }
 
-func bindSessionProducts(bound *runtimebinding.SessionState, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
+func bindStartedSessionState(bound *runtimebinding.SessionState, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
 	bound.Activation = activation
-	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
 	bound.SetStartRequestID(strings.TrimSpace(requestID))
 	bound.InheritTerminalControl(previousControl)
 }

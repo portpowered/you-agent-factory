@@ -29,11 +29,9 @@ func recoveryRecordingID(recordingID string) string {
 type runtimeProducts struct {
 	lifecycle              roles.LifecycleRuntime
 	replayExecution        *recordingreplay.Scope
-	diagnostics            factoryruntime.RuntimeLogDiagnostics
 	closeArtifacts         func() error
 	historicalReplay       *factorysessions.HistoricalReplayInspection
 	replayMetadataWarnings []recordings.MetadataMismatchWarning
-	resumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	bindRuntime            func(factoryruntime.RuntimeBinding) error
 	engine                 factoryruntime.Service
 	activation             *factoryruntime.RuntimeActivation

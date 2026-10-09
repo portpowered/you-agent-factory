@@ -308,11 +308,6 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	if binding.IsZero() {
 		binding = result.Runtime.Binding
 	}
-	if resumeInput != nil {
-		metadata := resumeInput.RecoveryMetadata
-		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)
-		products.resumeRecoveryMetadata = &metadata
-	}
 	closeRuntime := r.activationCloser(binding, result.RuntimeID)
 	if !binding.IsZero() && products.bindRuntime != nil {
 		if err := products.bindRuntime(binding); err != nil {
