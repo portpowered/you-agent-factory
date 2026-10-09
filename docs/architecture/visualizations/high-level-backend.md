@@ -20,7 +20,7 @@ flowchart TB
     s_services_models["models<br/>38225 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>1043 LOC · 0 subservices"]
     s_services_providers["providers<br/>15235 LOC · 3 subservices"]
-    s_services_worker_sessions["worker sessions<br/>25783 LOC · 0 subservices"]
+    s_services_worker_sessions["worker sessions<br/>25781 LOC · 0 subservices"]
     s_services_workers["workers<br/>21774 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
