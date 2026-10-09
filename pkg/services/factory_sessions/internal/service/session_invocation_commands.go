@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
@@ -89,6 +90,10 @@ func (r *Root) InvokeModelForSession(ctx context.Context, sessionID, modelName s
 	if r.modelInvocation == nil {
 		return models.Result{}, fmt.Errorf("%w: model invoker for session %q", factorysessions.ErrRuntimeNotAvailable, sessionID)
 	}
+	return r.modelInvocation.InvokeRuntimeModel(ctx, selectedModelFacts(bound, sessionID), modelName, request)
+}
+
+func selectedModelFacts(bound *runtimebinding.SessionState, sessionID string) modelinvocation.RuntimeModelInvocation {
 	invocation := bound.ModelInvocation
 	invocation.FactorySessionID = sessionID
 	invocation.Scope = bound.ModelsScope
@@ -97,24 +102,21 @@ func (r *Root) InvokeModelForSession(ctx context.Context, sessionID, modelName s
 		invocation.FactoryDirectory = bound.Instance.Directory()
 		invocation.WorkingDirectory = bound.Instance.Directory()
 	}
-	return r.modelInvocation.InvokeRuntimeModel(ctx, invocation, modelName, request)
+	return invocation
 }
 
 // ResolveInvocationInputForSession applies the selected Factory signature
-// through the input resolver attached to that same live session.
+// through the fixed invocation owner.
 func (r *Root) ResolveInvocationInputForSession(_ context.Context, sessionID string, request factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
-	bound, err := r.applicationSessionState(sessionID)
+	_, err := r.applicationSessionState(sessionID)
 	if err != nil {
 		return factorysessions.ResolvedInvocationInput{}, err
-	}
-	if bound.InputResolver == nil {
-		return factorysessions.ResolvedInvocationInput{}, fmt.Errorf("%w: input resolver for session %q", factorysessions.ErrRuntimeNotAvailable, sessionID)
 	}
 	config, err := runtimebinding.RuntimeConfigForSession(r, sessionID)
 	if err != nil {
 		return factorysessions.ResolvedInvocationInput{}, err
 	}
-	return bound.InputResolver.ResolveInvocationInput(config.FactoryConfig(), request)
+	return r.Assembly.ResolveInvocationInput(config.FactoryConfig(), request)
 }
 
 func (r *Root) ModelsScopeForSession(_ context.Context, sessionID string) (models.RuntimeScopeRef, error) {
@@ -123,9 +125,4 @@ func (r *Root) ModelsScopeForSession(_ context.Context, sessionID string) (model
 		return models.RuntimeScopeRef{}, err
 	}
 	return bound.ModelsScope, nil
-}
-
-// InvokeModel preserves the default-session Models transport compatibility route.
-func (r *Root) InvokeModel(ctx context.Context, modelName string, request models.Request) (models.Result, error) {
-	return r.InvokeModelForSession(ctx, factorysessions.DefaultSessionID, modelName, request)
 }

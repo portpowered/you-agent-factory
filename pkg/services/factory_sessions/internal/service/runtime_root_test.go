@@ -589,15 +589,6 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		)
 	}
 
-	// Opening publishes the Runtime root itself; it does not hand callers a
-	// Sessions-retained runtime handle recovered from the opening products.
-	if products.factoryRuntime != factoryruntime.Service(root) {
-		t.Fatalf(
-			"opened application FactoryRuntime = %T, want the Runtime root %T",
-			products.factoryRuntime,
-			root,
-		)
-	}
 }
 
 type cleanupRoutingRoot struct {

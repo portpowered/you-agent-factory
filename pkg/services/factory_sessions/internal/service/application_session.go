@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -85,18 +86,23 @@ func (r *Root) ApplicationCleanSnapshot(ctx context.Context, sessionID string) (
 	if err != nil {
 		return factoryruntime.CleanInvocationSnapshot{}, err
 	}
-	if bound.FactoryRuntime == nil {
+	runtime := selectedRuntimeService(bound)
+	if runtime == nil {
 		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
 	}
-	return bound.FactoryRuntime.CleanInvocationSnapshot(ctx)
+	return runtime.CleanInvocationSnapshot(ctx)
 }
 
 func (r *Root) ApplicationControlWaitToComplete(sessionID string, request factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
 	bound, err := r.applicationSessionState(sessionID)
-	if err != nil || bound.FactoryRuntime == nil {
+	if err != nil {
 		return factoryruntime.WaitToCompleteResult{}
 	}
-	return bound.FactoryRuntime.ControlWaitToComplete(request)
+	runtime := selectedRuntimeService(bound)
+	if runtime == nil {
+		return factoryruntime.WaitToCompleteResult{}
+	}
+	return runtime.ControlWaitToComplete(request)
 }
 
 // ApplicationReady returns the selected session's runtime-host readiness.
@@ -145,9 +151,9 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		return SessionPresentation{}, err
 	}
 	return SessionPresentation{
-		FactoryRuntime:       bound.FactoryRuntime,
+		FactoryRuntime:       selectedRuntimeService(bound),
 		ModelsScope:          bound.ModelsScope,
-		ModelInvoker:         bound.ModelInvoker,
+		ModelInvoker:         selectedModelInvocation{facts: selectedModelFacts(bound, sessionID), operation: r.modelInvocation},
 		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
 		Reader:               r.factorySessionsRuntimeAssembly,
@@ -157,6 +163,18 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		OperatorSettingsPath: bound.OperatorSettingsPath,
 		Recordings:           r.recordingsService,
 	}, nil
+}
+
+// selectedModelInvocation adapts one live generation to the Models HTTP
+// invocation boundary. Captured facts keep a retained presentation scoped even
+// when the current session or its runtime generation changes.
+type selectedModelInvocation struct {
+	facts     modelinvocation.RuntimeModelInvocation
+	operation modelinvocation.RuntimeModelInvocationOperation
+}
+
+func (s selectedModelInvocation) InvokeModel(ctx context.Context, name string, request models.Request) (models.Result, error) {
+	return s.operation.InvokeRuntimeModel(ctx, s.facts, name, request)
 }
 
 func (r *Root) ApplicationReplayMetadataWarnings(sessionID string) ([]recordings.MetadataMismatchWarning, error) {
@@ -230,4 +248,16 @@ func (r *Root) ApplicationSkippedBoardRecordings(sessionID string) ([]string, er
 		return nil, err
 	}
 	return append([]string(nil), bound.SkippedBoardRecordings...), nil
+}
+
+// selectedRuntimeService reads the acquired generation rather than a copied
+// service peer inherited by replacement registration.
+func selectedRuntimeService(bound *runtimebinding.SessionState) factoryruntime.Service {
+	if bound.Handle != nil {
+		return bound.Handle.RuntimeInstance().RuntimeService()
+	}
+	if bound.Instance == nil {
+		return nil
+	}
+	return bound.Instance.RuntimeService()
 }

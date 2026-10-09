@@ -37,7 +37,6 @@ type runtimeProducts struct {
 	replayExecution        *recordingreplay.Scope
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
 	modelInvocation        modelinvocation.RuntimeModelInvocation
-	factoryRuntime         factoryruntime.Service
 	modelsScope            models.RuntimeScopeRef
 	workerSessions         workersessions.ObservationService
 	clock                  factoryruntime.Clock

@@ -253,7 +253,6 @@ func (r *Root) bindStartedSession(ctx context.Context, selectedID string, select
 		return nil, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bindSessionProducts(bound, products, activation, requestID, previousControl)
-	bound.ModelInvoker = r
 	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
 	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
 	bound.SetWorkerSettings(products.workerSettings)
@@ -402,7 +401,6 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 	bound.Process = products.process
 	bound.Diagnostics = products.diagnostics
 	bound.ModelInvocation = products.modelInvocation
-	bound.FactoryRuntime = products.factoryRuntime
 	bound.ModelsScope = products.modelsScope
 	bound.SetWorkerSessions(products.workerSessions)
 	bound.Logger = products.logger

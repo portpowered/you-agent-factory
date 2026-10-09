@@ -202,38 +202,6 @@ func TestStartHelpersKeepSessionSelectionAndBindingDetached(t *testing.T) {
 	}
 }
 
-type registeredOpeningInputResolver struct {
-	result factorysessions.ResolvedInvocationInput
-	err    error
-}
-
-func (r *registeredOpeningInputResolver) ResolveInvocationInput(_ *factorydefinitions.FactoryConfig, _ factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
-	return r.result, r.err
-}
-
-func TestBindSessionProductsPreservesRegisteredInputResultsAndErrors(t *testing.T) {
-	t.Parallel()
-	failure := errors.New("registered input rejected")
-	resolver := &registeredOpeningInputResolver{result: factorysessions.ResolvedInvocationInput{Source: "registered"}}
-	bound := &runtimebinding.SessionState{InputResolver: resolver}
-	// Opening and later replacement bind generation products onto the registered owner.
-	for _, requestID := range []string{"opening", "replacement"} {
-		bindSessionProducts(bound, runtimeProducts{}, &sessionActivation{}, requestID, nil)
-		if bound.InputResolver == nil {
-			t.Fatal("generation binding removed the registered input resolver")
-		}
-		resolver.err = nil
-		got, err := bound.InputResolver.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
-		if err != nil || got.Source != "registered" {
-			t.Fatalf("%s input = %+v, %v", requestID, got, err)
-		}
-		resolver.err = failure
-		if _, err := bound.InputResolver.ResolveInvocationInput(nil, factorysessions.InvocationRequest{}); !errors.Is(err, failure) {
-			t.Fatalf("%s input error = %v, want registered failure", requestID, err)
-		}
-	}
-}
-
 func TestDurableStartInheritsOnlyMatchingCurrentFactoryMockWorkers(t *testing.T) {
 	configured := workers.NewEmptyMockWorkersConfig()
 	current := &livesession.LiveSession{

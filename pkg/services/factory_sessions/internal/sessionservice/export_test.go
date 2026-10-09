@@ -100,7 +100,7 @@ func TestRegisterOpeningFailureCancellationAndRetryPreservePeer(t *testing.T) {
 			failed := true
 			completions := 0
 			store := &responseeventstore.SessionResponseEventStore{}
-			assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{},
+			assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
 				sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
 				responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) {
 					if failed && mode == "failure" {
@@ -164,7 +164,7 @@ func TestRegisterOpeningReleaseRetriesAndPreservesReplacementHistory(t *testing.
 	cause := errors.New("registration retirement failed")
 	retireErr := cause
 	completions := 0
-	assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{},
+	assembly := &Assembly{state: state, registry: state.Registry(), invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
 		sessionIDs: func() string { return "candidate" }, eventIDs: func() string { return "event" },
 		responseStreams: registrationResponseStreams{open: func() (*responseeventstore.SessionResponseEventStore, error) { return store, nil },
 			complete: func(*responseeventstore.SessionResponseEventStore) { completions++ }},
@@ -196,10 +196,14 @@ func TestRegisterOpeningReleaseRetriesAndPreservesReplacementHistory(t *testing.
 	}
 }
 
-type registrationInvoker struct{ roles.InvocationService }
+type registrationInvoker struct {
+	roles.InvocationService
+	result factorysessions.ResolvedInvocationInput
+	err    error
+}
 
-func (registrationInvoker) ResolveInvocationInput(_ *factorydefinitions.FactoryConfig, _ factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
-	return factorysessions.ResolvedInvocationInput{Source: "registered"}, nil
+func (r registrationInvoker) ResolveInvocationInput(_ *factorydefinitions.FactoryConfig, _ factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error) {
+	return r.result, r.err
 }
 
 type registrationObserver struct {
@@ -209,11 +213,12 @@ type registrationObserver struct {
 
 func (r registrationObserver) Upsert(session *livesession.LiveSession, _ bool) { r.publish(session) }
 
-func TestRegisterOpeningPublishesSessionWithRegisteredInputResolver(t *testing.T) {
+func TestRegisterOpeningPublishesSessionWithFixedInputResolver(t *testing.T) {
 	t.Parallel()
 	publications := 0
-	assembly := &Assembly{
-		state: &sessionruntime.Service{}, invoker: registrationInvoker{},
+	var assembly *Assembly
+	assembly = &Assembly{
+		state: &sessionruntime.Service{}, invoker: registrationInvoker{result: factorysessions.ResolvedInvocationInput{Source: "registered"}},
 		responseStreams: registrationResponseStreams{},
 		sessionIDs:      func() string { return "session" }, eventIDs: func() string { return "event" },
 		resolveHome:         func() (string, error) { return "/home", nil },
@@ -223,10 +228,10 @@ func TestRegisterOpeningPublishesSessionWithRegisteredInputResolver(t *testing.T
 		registry: registrationObserver{publish: func(session *livesession.LiveSession) {
 			publications++
 			bound := runtimebinding.SessionStateFrom(session)
-			if bound == nil || bound.InputResolver == nil {
-				t.Fatal("session published before its invocation input resolver was registered")
+			if bound == nil {
+				t.Fatal("session published without its scoped runtime state")
 			}
-			got, err := bound.InputResolver.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
+			got, err := assembly.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
 			if err != nil || got.Source != "registered" {
 				t.Fatalf("published input = %+v, %v", got, err)
 			}
@@ -1307,3 +1312,16 @@ func assertCanonicalFieldError(t *testing.T, err error, field string) {
 // TestService_CanonicalReadsUseModeOwnersAndRuntimeFreeViews proves the root
 // maps live and durable owner projections without selecting compatibility
 // methods or exposing runtime implementation state.
+
+func TestFixedInvocationInputPreservesResultsAndTypedErrors(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("registered input rejected")
+	for _, failure := range []error{nil, cause} {
+		want := factorysessions.ResolvedInvocationInput{Source: "registered"}
+		assembly := &Assembly{invoker: registrationInvoker{result: want, err: failure}}
+		got, err := assembly.ResolveInvocationInput(nil, factorysessions.InvocationRequest{})
+		if !reflect.DeepEqual(got, want) || !errors.Is(err, failure) {
+			t.Fatalf("fixed invocation input = %+v, %v; want %+v, %v", got, err, want, failure)
+		}
+	}
+}

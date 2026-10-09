@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,17 +21,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -369,3 +373,69 @@ var _ responsestreamservice.Service = rootTestResponseStreams{}
 type rootTestClock struct{}
 
 func (rootTestClock) Now() time.Time { return time.Unix(0, 0) }
+
+// This boundary deliberately holds selected values rather than a session
+// resolver: a retained HTTP presentation must never follow current selection.
+type selectedModelOperation func(context.Context, modelinvocation.RuntimeModelInvocation, string, models.Request) (models.Result, error)
+
+func (f selectedModelOperation) InvokeRuntimeModel(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
+	return f(ctx, facts, name, request)
+}
+
+type selectedModelRecord struct {
+	runtimebinding.RuntimeInstance
+	generation string
+	directory  string
+}
+
+func (r selectedModelRecord) StreamGeneration() string { return r.generation }
+func (r selectedModelRecord) Directory() string        { return r.directory }
+
+func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"first", "second", "third", "fourth"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("scope-" + id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bound := &runtimebinding.SessionState{ModelsScope: scope,
+				ModelInvocation: modelinvocation.RuntimeModelInvocation{RuntimeID: "runtime-" + id},
+				Instance:        selectedModelRecord{generation: "generation-" + id, directory: "/" + id},
+			}
+			expected := modelinvocation.RuntimeModelInvocation{
+				FactorySessionID: id, Scope: scope, RuntimeID: "runtime-" + id,
+				GenerationID: "generation-" + id, FactoryDirectory: "/" + id, WorkingDirectory: "/" + id,
+			}
+			cause := models.ErrRuntimeScopeStale
+			wantResult := models.Result{ModelName: "selected-model", Worker: id, Operation: "invoke"}
+			call := 0
+			adapter := selectedModelInvocation{facts: selectedModelFacts(bound, id), operation: selectedModelOperation(func(ctx context.Context, facts modelinvocation.RuntimeModelInvocation, name string, request models.Request) (models.Result, error) {
+				if facts != expected || name != "selected-model" || request.Operation != "invoke" || ctx != t.Context() {
+					t.Fatalf("invocation lost selected facts or request: %+v, %s, %+v", facts, name, request)
+				}
+				call++
+				if call == 2 {
+					return models.Result{}, cause
+				}
+				return wantResult, nil
+			})}
+			// Later registration changes do not retarget the retained adapter. A fresh
+			// presentation reads the replacement generation from its acquired instance.
+			bound.Instance = selectedModelRecord{generation: "replacement", directory: "/replacement"}
+			bound.ModelInvocation.FactorySessionID = "other"
+			replacement := selectedModelFacts(bound, id)
+			if replacement.GenerationID != "replacement" || replacement.FactoryDirectory != "/replacement" || replacement.FactorySessionID != id {
+				t.Fatalf("replacement facts = %+v", replacement)
+			}
+			result, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"})
+			if err != nil || !reflect.DeepEqual(result, wantResult) {
+				t.Fatalf("result = %+v, %v", result, err)
+			}
+			if _, err := adapter.InvokeModel(t.Context(), "selected-model", models.Request{Operation: "invoke"}); !errors.Is(err, cause) {
+				t.Fatalf("typed failure = %v", err)
+			}
+		})
+	}
+}

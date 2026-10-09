@@ -654,7 +654,7 @@ func (fake *canonicalDurableExecutionFake) StartSync(
 }
 
 type canonicalSessionInvokerFake struct {
-	roles.SessionInvoker
+	roles.InvocationService
 	sessionID       string
 	requestID       string
 	timeout         int64

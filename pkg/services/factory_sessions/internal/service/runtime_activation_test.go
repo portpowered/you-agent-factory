@@ -403,11 +403,9 @@ func (stub *historicalBoardReaderStub) QueryHistoricalRecording(
 func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	t.Parallel()
 
-	proxy := &activationServiceFake{}
 	engine := &activationServiceFake{}
 	products := runtimeProducts{
-		factoryRuntime: proxy,
-		engine:         engine,
+		engine: engine,
 	}
 
 	if got := runtimeEngineService(products); got != engine {
@@ -425,9 +423,6 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	}
 	if got := engine.submitCalls.Load(); got != 1 {
 		t.Fatalf("engine SubmitWorkRequest calls = %d, want 1", got)
-	}
-	if got := proxy.submitCalls.Load(); got != 0 {
-		t.Fatalf("session proxy SubmitWorkRequest calls = %d, want 0", got)
 	}
 	if activation.Service != engine {
 		t.Fatalf("published activation service = %T, want concrete engine %T", activation.Service, engine)

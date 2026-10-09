@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -219,25 +218,19 @@ func registerReplacementSession(
 	}
 	state.RotateResponseStreams(session)
 	var projectionOwner SessionProjectionOwner
-	var invoker roles.CanonicalSessionInvoker
-	var modelInvoker workers.ModelInvoker
-	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
 	previous := SessionStateFrom(session)
 	if previous != nil {
 		projectionOwner = previous.Owner
-		invoker = previous.Invoker
-		modelInvoker = previous.ModelInvoker
-		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
 	handle := &SessionState{
 		Handle: replacementHandle, Instance: replacement,
-		Spec: preparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation,
+		Spec: preparedSpec, Owner: projectionOwner, Activation: activation,
 		Process: process, Diagnostics: diagnostics,
 	}
 	handle.inheritApplicationValues(previous)
@@ -360,23 +353,17 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		PreparedSpec: PreparedSpecFromSession(state.Resolve(input.SessionID)),
 	})
 	var projectionOwner SessionProjectionOwner
-	var invoker roles.CanonicalSessionInvoker
-	var modelInvoker workers.ModelInvoker
-	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
 	previous := SessionStateFrom(state.Resolve(input.SessionID))
 	if previous != nil {
 		projectionOwner = previous.Owner
-		invoker = previous.Invoker
-		modelInvoker = previous.ModelInvoker
-		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
-	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation, Process: process, Diagnostics: diagnostics}
+	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Activation: activation, Process: process, Diagnostics: diagnostics}
 	handle.inheritApplicationValues(previous)
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,

@@ -103,7 +103,7 @@ func (operation *RuntimeOpeningBinding) products(ctx context.Context, facts role
 			RuntimeID: facts.RuntimeID, GenerationID: startup.StreamGeneration(),
 			FactoryDirectory: facts.Directory, WorkingDirectory: facts.Directory,
 		},
-		factoryRuntime: rootRuntime, modelsScope: facts.ModelsScope,
+		modelsScope:    facts.ModelsScope,
 		workerSessions: openedWorkerSessionsObservation(rootRuntime, startup, effectiveID),
 		logger:         startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
 		directory: facts.Directory, runtimeInstanceID: facts.RuntimeID, backendScopeID: facts.BackendScopeID,

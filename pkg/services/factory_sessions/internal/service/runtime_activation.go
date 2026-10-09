@@ -319,11 +319,6 @@ func (r *Root) openActivatedRuntimeWithInputs(
 			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
-	if binding.Service() != nil {
-		products.factoryRuntime = binding.Service()
-	} else {
-		products.factoryRuntime = r.runtimeRoot
-	}
 	products.closeArtifacts = closeRuntime
 	return products, nil
 }

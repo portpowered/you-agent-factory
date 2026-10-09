@@ -377,8 +377,6 @@ func (a *Assembly) RegisterOpening(ctx context.Context, facts roles.SessionOpeni
 	bound.Clock = clock
 	bound.ProjectionBackendScope = facts.BackendScopeID
 	bound.Logger = logger
-	bound.Invoker = a.invoker
-	bound.InputResolver = a.invoker
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, release, err
@@ -610,10 +608,10 @@ func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, r
 		return factorysessions.InvocationResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
 	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil || bound.Invoker == nil {
+	if bound == nil {
 		return factorysessions.InvocationResult{}, fmt.Errorf("%w: session invocation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
-	result, err := bound.Invoker.Invoke(ctx, sessionID, request)
+	result, err := a.invoker.Invoke(ctx, sessionID, request)
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
