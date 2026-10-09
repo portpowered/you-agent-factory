@@ -3,12 +3,14 @@ package addressing_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"sync"
 	"sync/atomic"
@@ -238,6 +240,8 @@ func assertSameJSON(t *testing.T, first, second []byte) {
 }
 
 type addressingRunner struct {
+	mu                   sync.Mutex
+	requests             []platformprocess.CommandRequest
 	started              chan struct{}
 	release              chan struct{}
 	releaseOnce          sync.Once
@@ -249,6 +253,11 @@ func (r *addressingRunner) Run(ctx context.Context, req platformprocess.CommandR
 }
 
 func (r *addressingRunner) RunStreaming(ctx context.Context, req platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	req.Args = append([]string(nil), req.Args...)
+	r.requests = append(r.requests, platformprocess.CommandRequest{Command: req.Command, Args: req.Args,
+		Stdin: append([]byte(nil), req.Stdin...), WorkDir: req.WorkDir})
+	r.mu.Unlock()
 	r.calls.Add(1)
 	thread := []byte("{\"type\":\"thread.started\",\"thread_id\":\"addressing-native\"}\n")
 	if observe != nil {
@@ -260,11 +269,103 @@ func (r *addressingRunner) RunStreaming(ctx context.Context, req platformprocess
 		r.cancellations.Add(1)
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
-		output := []byte("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
+		output := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
 		if observe != nil {
 			observe(platformprocess.OutputStreamStdout, output)
 		}
 		return platformprocess.CommandResult{Stdout: append(thread, output...)}, nil
+	}
+}
+
+// F2-05/F2-08: the terminal direct source shares its public ID with a retained
+// replay. Exact scope must resume its captured provider association only once.
+func TestSelectedLegacyCollisionContinuation(t *testing.T) {
+	t.Parallel()
+	runner := &addressingRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
+	f := newReplayFixtureWithRunner(t, runner, 1)
+	t.Cleanup(func() { runner.releaseOnce.Do(func() { close(runner.release) }) })
+	live := openAddressingOwner(t, f)
+	invokeAddressingSource(t, f, live)
+	awaitAddressingStart(t, runner, f, live)
+	runner.releaseOnce.Do(func() { close(runner.release) })
+	waitAddressingCompleted(t, f, f.worker, live.session)
+
+	body, flags := controlInput("continue")
+	body["factorySessionId"] = live.session
+	path := "/worker-sessions/" + f.worker + "/continue"
+	status, first := f.http(t, "POST", path, body)
+	if status != http.StatusAccepted {
+		t.Fatalf("selected continuation = %d: %s", status, first)
+	}
+	awaitAddressingStart(t, runner, f, live)
+	successor := body["successorWorkerSessionId"].(string)
+	waitAddressingCompleted(t, f, successor, live.session)
+	assertAddressingSuccessor(t, f, live, successor)
+	status, repeat := f.http(t, "POST", path, body)
+	if status != http.StatusAccepted {
+		t.Fatalf("repeat continuation = %d: %s", status, repeat)
+	}
+	assertSameJSON(t, first, repeat)
+	args := append([]string{"continue", f.worker}, flags...)
+	args = append(args, "--session", live.session)
+	assertSameJSON(t, first, f.cli(t, false, args...))
+	for _, change := range []map[string]any{
+		{"factorySessionId": f.owners[0].session},
+		{"followUpInput": "different input"},
+		{"successorWorkerSessionId": uuid.NewString()},
+	} {
+		changed := make(map[string]any, len(body))
+		for key, value := range body {
+			changed[key] = value
+		}
+		for key, value := range change {
+			changed[key] = value
+		}
+		status, raw := f.http(t, "POST", path, changed)
+		if status != http.StatusConflict {
+			t.Fatalf("changed continuation = %d: %s", status, raw)
+		}
+		assertErrorCode(t, raw, "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT")
+		changedFlags := []string{"continue", f.worker, "--session", changed["factorySessionId"].(string),
+			"--request-id", changed["requestId"].(string), "--successor-worker-session-id", changed["successorWorkerSessionId"].(string),
+			"--user-message", changed["followUpInput"].(string), "--async"}
+		assertErrorCode(t, f.cli(t, true, changedFlags...), "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT")
+	}
+	assertAddressingEffects(t, runner, 2, 0)
+	runner.mu.Lock()
+	requests := append([]platformprocess.CommandRequest(nil), runner.requests...)
+	runner.mu.Unlock()
+	if len(requests) != 2 || strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
+		t.Fatalf("initial provider requests: %#v", requests)
+	}
+	resume := strings.Join(requests[1].Args, " ")
+	if !strings.Contains(resume, "resume") || !strings.Contains(resume, "addressing-native") ||
+		string(requests[1].Stdin) != "replacement" || requests[1].WorkDir != live.dir {
+		t.Fatalf("selected provider continuation: %#v", requests[1])
+	}
+	assertAddressingState(t, f, live, "COMPLETED")
+	status, peer := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+f.owners[0].session, nil)
+	if status != http.StatusOK {
+		t.Fatalf("peer = %d: %s", status, peer)
+	}
+	assertOwner(t, f, f.owners[0], peer)
+}
+
+func waitAddressingCompleted(t *testing.T, f *replayFixture, worker, owner string) {
+	t.Helper()
+	raw, err := support.WaitForObservation(15*time.Second, func() ([]byte, error) {
+		status, raw := f.http(t, "GET", "/worker-sessions/"+worker+"?factorySessionId="+owner, nil)
+		if status != http.StatusOK {
+			return raw, fmt.Errorf("observation status %d", status)
+		}
+		return raw, nil
+	}, func(raw []byte) bool {
+		var observation factoryapi.WorkerSessionObservation
+		return json.Unmarshal(raw, &observation) == nil && observation.State == "COMPLETED" &&
+			observation.FactorySessionId != nil && *observation.FactorySessionId == owner
+	})
+	if err != nil {
+		t.Fatalf("selected terminal observation: %s: %v", raw, err)
 	}
 }
 
