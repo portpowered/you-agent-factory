@@ -19,6 +19,9 @@ import (
 
 	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -384,4 +387,45 @@ func assertAddressingEffects(t *testing.T, runner *addressingRunner, calls, canc
 	if runner.calls.Load() != calls || runner.cancellations.Load() != cancellations {
 		t.Fatalf("provider calls/cancellations = %d/%d, want %d/%d", runner.calls.Load(), runner.cancellations.Load(), calls, cancellations)
 	}
+}
+
+// F2-06: the real Providers policy denies resume while still admitting the
+// initial invocation. Scope must preserve that refusal beside a legacy peer.
+func TestSelectedLegacyCollisionUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+	runner := &addressingRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
+	f := newReplayFixtureWithEdges(t, runner, 1, serviceedges.Edges{
+		ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{Provider: providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission,
+				providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityUsage}}},
+	})
+	t.Cleanup(func() { runner.releaseOnce.Do(func() { close(runner.release) }) })
+	live := openAddressingOwner(t, f)
+	invokeAddressingSource(t, f, live)
+	awaitAddressingStart(t, runner, f, live)
+	body, flags := controlInput("interrupt")
+	body["factorySessionId"] = live.session
+	status, raw := f.http(t, "POST", "/worker-sessions/"+f.worker+"/interrupt", body)
+	if status != http.StatusConflict {
+		t.Fatalf("unsupported scoped provider interrupt = %d: %s", status, raw)
+	}
+	assertErrorCode(t, raw, "PROVIDER_UNSUPPORTED")
+	assertValidationPhase(t, raw)
+	args := append([]string{"interrupt", f.worker}, flags...)
+	args = append(args, "--session", live.session, "--resume-mode", "provider")
+	cli := f.cli(t, true, args...)
+	assertErrorCode(t, cli, "PROVIDER_UNSUPPORTED")
+	assertValidationPhase(t, cli)
+	assertNotFoundSuccessor(t, f, body["successorWorkerSessionId"].(string))
+	assertAddressingState(t, f, live, "RUNNING")
+	assertAddressingEffects(t, runner, 1, 0)
+	status, peer := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+f.owners[0].session, nil)
+	if status != http.StatusOK {
+		t.Fatalf("unsupported control peer = %d: %s", status, peer)
+	}
+	assertOwner(t, f, f.owners[0], peer)
+	// Policy refusal leaves the selected source able to finish normally.
+	runner.releaseOnce.Do(func() { close(runner.release) })
+	waitAddressingCompleted(t, f, f.worker, live.session)
+	assertAddressingEffects(t, runner, 1, 0)
 }

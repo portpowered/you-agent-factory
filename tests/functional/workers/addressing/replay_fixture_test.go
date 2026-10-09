@@ -35,6 +35,11 @@ func newReplayFixture(t *testing.T) *replayFixture {
 
 func newReplayFixtureWithRunner(t *testing.T, runner platformprocess.CommandRunner, ownerCount int) *replayFixture {
 	t.Helper()
+	return newReplayFixtureWithEdges(t, runner, ownerCount, serviceedges.Edges{})
+}
+
+func newReplayFixtureWithEdges(t *testing.T, runner platformprocess.CommandRunner, ownerCount int, replacements serviceedges.Edges) *replayFixture {
+	t.Helper()
 	f := &replayFixture{worker: uuid.NewString()}
 	payloads := make(map[string][]byte)
 	servers := make(map[int]*support.ProcessAPIServer)
@@ -65,7 +70,7 @@ func newReplayFixtureWithRunner(t *testing.T, runner platformprocess.CommandRunn
 	if runner == nil {
 		runner = &refuseProviderCalls{calls: &f.calls}
 	}
-	f.process = support.BuildProcess(t, serviceedges.Edges{
+	f.process = support.BuildProcess(t, serviceedges.Merge(serviceedges.Edges{
 		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
 			payload, ok := payloads[path]
 			if !ok {
@@ -78,7 +83,7 @@ func newReplayFixtureWithRunner(t *testing.T, runner platformprocess.CommandRunn
 			return servers[req.Port].Start(ctx, req)
 		},
 		ProviderCommandRunner: runner,
-	})
+	}, replacements))
 	if host.session != "" {
 		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", host.session,
 			"--dir", host.dir, "--no-record", "--continuously", "--with-server", "--quiet", "--listen", "127.0.0.1:23999"})
