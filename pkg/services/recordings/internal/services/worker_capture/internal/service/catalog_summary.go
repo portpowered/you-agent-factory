@@ -210,7 +210,7 @@ func (writer *FileWriter) LookupWorkerSessionSummary(ctx context.Context, id str
 	if err != nil {
 		return recordings.WorkerCapturedSummary{}, err
 	}
-	return recordings.WorkerCapturedSummary{Capture: item, ControlOperations: entry.summaryControls(item.Catalog)}, ctx.Err()
+	return recordings.WorkerCapturedSummary{Capture: item, ControlOperations: entry.summaryControls(item)}, ctx.Err()
 }
 
 func (writer *FileWriter) summaryCatalogMatches(catalog recordings.WorkerSessionCatalogEntry) bool {
@@ -242,16 +242,42 @@ func (writer *FileWriter) preparedSummaryIdentity(id string) (recordings.WorkerS
 	return catalog, nil
 }
 
-func (entry *recordingEntry) summaryControls(catalog recordings.WorkerSessionCatalogEntry) []recordings.WorkerControlOperationRecord {
-	var result []recordings.WorkerControlOperationRecord
-	for _, history := range entry.operations {
-		for _, record := range history {
-			target := record.Target
-			if target.WorkerSessionID == catalog.WorkerSessionID && target.RecordingID == catalog.RecordingID && target.FactorySessionID == catalog.FactorySessionID && target.RecordingGenerationID == catalog.RecordingGenerationID && target.OwnerEpoch == catalog.OwnerEpoch {
-				result = append(result, record.Detached())
+func (entry *recordingEntry) summaryControls(item recordings.WorkerCapturedCatalogItem) []recordings.WorkerControlOperationRecord {
+	if item.Terminal == nil || item.Terminal.Position == 0 {
+		return nil
+	}
+	var terminal workers.Draft
+	for _, record := range item.MetadataRecords {
+		if record.ID.Position == item.Terminal.Position {
+			if json.Unmarshal(record.Payload, &terminal) != nil {
+				return nil
 			}
+			break
 		}
 	}
+	if terminal.DispatchID == "" {
+		return nil
+	}
+	catalog := item.Catalog
+	target := recordings.WorkerControlTarget{
+		WorkerSessionID: catalog.WorkerSessionID, RecordingID: catalog.RecordingID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: terminal.DispatchID,
+	}
+	// Index admission shares the durable append barrier and startup reducer.
+	// Only this physical target's facts are copied; sibling histories are never
+	// searched. Worker Sessions retains strict result/cause interpretation.
+	history := entry.summaryOperations[target]
+	result := make([]recordings.WorkerControlOperationRecord, len(history))
+	for i, record := range history {
+		result[i] = record.Detached()
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Operation.RequestID == result[j].Operation.RequestID {
+			return result[i].Revision < result[j].Revision
+		}
+		return result[i].Operation.RequestID < result[j].Operation.RequestID
+	})
 	return result
 }
 

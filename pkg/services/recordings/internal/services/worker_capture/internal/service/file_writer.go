@@ -54,16 +54,17 @@ type FileWriter struct {
 	controlIndexLoaded bool
 }
 type recordingEntry struct {
-	pendingMu       sync.Mutex
-	pending         []*pendingWorkerRecord
-	controlUnsynced bool
-	mu              sync.Mutex
-	loaded          bool
-	exists          bool
-	damaged         bool
-	sessions        map[string]*recordingSession
-	order           []string
-	operations      map[string][]recordings.WorkerControlOperationRecord
+	pendingMu         sync.Mutex
+	pending           []*pendingWorkerRecord
+	controlUnsynced   bool
+	mu                sync.Mutex
+	loaded            bool
+	exists            bool
+	damaged           bool
+	sessions          map[string]*recordingSession
+	order             []string
+	operations        map[string][]recordings.WorkerControlOperationRecord
+	summaryOperations map[recordings.WorkerControlTarget][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
 	originatingArtifact string
@@ -340,6 +341,7 @@ func (writer *FileWriter) hydrate(ctx context.Context, id string, entry *recordi
 	entry.exists = loaded.exists
 	entry.damaged = loaded.damaged
 	entry.operations = loaded.operations
+	entry.summaryOperations = loaded.summaryOperations
 	entry.loaded = true
 	return nil
 }

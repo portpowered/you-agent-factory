@@ -55,7 +55,7 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	if err := os.MkdirAll(storeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"first", "peer", "stopped", "scoped", "damaged", "ambiguous", "unreadable"} {
+	for _, id := range []string{"first", "peer", "stopped", "owner-lost", "scoped", "damaged", "ambiguous", "unreadable"} {
 		factory := ""
 		if id == "scoped" {
 			factory = "retained-factory"
@@ -71,7 +71,7 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	host := startHost(t, factory, profile, gate)
 	gate.denied.Store(true)
 	t.Run("first-and-repeated-independent-identities", func(t *testing.T) {
-		for _, id := range []string{"first", "peer", "stopped"} {
+		for _, id := range []string{"first", "peer", "stopped", "owner-lost"} {
 			t.Run(id, func(t *testing.T) {
 				t.Parallel()
 				for i := 0; i < 3; i++ {
@@ -101,7 +101,7 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	if err := os.MkdirAll(cleanRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"first", "peer", "stopped"} {
+	for _, id := range []string{"first", "peer", "stopped", "owner-lost"} {
 		data, err := os.ReadFile(journalPath(storeRoot, id))
 		if err != nil {
 			t.Fatal(err)
@@ -113,7 +113,7 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	restartGate := &readGate{}
 	restarted := startHost(t, factory, clean, restartGate)
 	restartGate.denied.Store(true)
-	for _, id := range []string{"first", "stopped"} {
+	for _, id := range []string{"first", "stopped", "owner-lost"} {
 		assertSummary(t, readSummary(t, restarted.Endpoint()+"/worker-sessions/"+id, http.StatusOK), id, id == "stopped")
 	}
 	readSummary(t, restarted.Endpoint()+"/worker-sessions/unknown", http.StatusNotFound)
@@ -185,13 +185,38 @@ func assertSummary(t *testing.T, got factoryapi.WorkerSessionObservation, id str
 	if stopped {
 		state, cause = "TERMINATED", "OPERATOR_TERMINATE"
 	}
+	if id == "owner-lost" {
+		state, cause = "FAILED", "OWNER_LOST"
+		assertOwnerLossHealth(t, got)
+	}
 	if got.WorkerSessionId != id || string(got.State) != state || got.Model == nil || *got.Model != "later-model" || got.TerminalCause == nil || string(*got.TerminalCause) != cause {
 		t.Fatalf("durable identity/model/cause lost: %+v", got)
 	}
 	assertSummaryUsage(t, got)
+	if got.PredecessorWorkerSessionId == nil || *got.PredecessorWorkerSessionId != "prior-"+id {
+		t.Fatalf("durable lineage lost: %+v", got)
+	}
+	assertSummaryTiming(t, got, id == "owner-lost")
+}
 
-	if got.StartedAt == nil || got.EndedAt == nil || got.DurationMillis == nil || got.ProviderSessionAvailable || got.ProviderSession != nil {
+func assertOwnerLossHealth(t *testing.T, got factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if got.RecordingHealth == nil || string(*got.RecordingHealth) != "INCOMPLETE" || got.RecordingHealthReason == nil || *got.RecordingHealthReason != "OWNER_LOST" || got.Failure == nil {
+		t.Fatalf("owner-loss health/failure lost: %+v", got)
+	}
+}
+
+func assertSummaryTiming(t *testing.T, got factoryapi.WorkerSessionObservation, ownerLost bool) {
+	t.Helper()
+	if got.StartedAt == nil || got.ProviderSessionAvailable || got.ProviderSession != nil {
 		t.Fatalf("timing/provider availability lost: %+v", got)
+	}
+	if ownerLost {
+		if got.EndedAt != nil || got.DurationMillis != nil {
+			t.Fatalf("owner loss invented callback timing: %+v", got)
+		}
+	} else if got.EndedAt == nil || got.DurationMillis == nil {
+		t.Fatalf("committed terminal timing lost: %+v", got)
 	}
 }
 
@@ -210,8 +235,11 @@ func journalPath(root, id string) string {
 func seedCapture(t *testing.T, storeRoot string, recordingID, id, factory string, stopped bool) {
 	t.Helper()
 	start := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
-	opening, _ := json.Marshal(workers.SessionPayload{WorkerSessionID: id, Status: "STARTING", FactorySessionID: factory, AttemptID: "physical-attempt", StartedAt: &start, Model: "initial-model"})
+	opening, _ := json.Marshal(workers.SessionPayload{WorkerSessionID: id, Status: "STARTING", FactorySessionID: factory, AttemptID: "physical-attempt", DispatchID: "physical-attempt", AttemptReason: workers.AttemptReasonResume, StartedAt: &start, Model: "initial-model", Lineage: &workers.SessionLineage{PredecessorWorkerSessionID: "prior-" + id, PreviousDispatchID: "prior-attempt", PreviousAttemptID: "prior-attempt"}})
 	payloads := []json.RawMessage{opening, []byte(`{"inputTokens":0,"totalTokens":12}`), []byte(`{"model":"later-model"}`), []byte(`{"status":"COMPLETED"}`)}
+	if id == "owner-lost" {
+		payloads = payloads[:3]
+	}
 	for index, payload := range payloads {
 		position := index + 1
 		kind, phase, source := workers.KindUsage, workers.PhaseUpdated, "provider"
@@ -235,6 +263,9 @@ func seedCapture(t *testing.T, storeRoot string, recordingID, id, factory string
 		if index == 0 {
 			envelope["recordingGenerationId"] = "generation-" + recordingID
 			envelope["ownerEpoch"] = "fixture"
+			if id == "owner-lost" {
+				envelope["ownerEpoch"] = lostOwnerEpoch("prior", 123)
+			}
 		}
 		data, err := json.Marshal(envelope)
 		if err != nil {
@@ -246,6 +277,23 @@ func seedCapture(t *testing.T, storeRoot string, recordingID, id, factory string
 	}
 	if stopped {
 		seedStop(t, storeRoot, id)
+	}
+	if id == "owner-lost" {
+		seedOwnerLoss(t, storeRoot, id)
+	}
+}
+
+func lostOwnerEpoch(instance string, pid int) string {
+	return fmt.Sprintf(`{"version":1,"runtimeInstanceId":%q,"process":{"host":"fixture-host","pid":%d,"start":%q}}`, instance, pid, instance)
+}
+
+func seedOwnerLoss(t *testing.T, root, id string) {
+	t.Helper()
+	// The owner-loss contract requires canonical field order as well as values.
+	data := fmt.Sprintf(`{"recordingGenerationId":%q,"ownerEpoch":%q,"capturedAt":"2026-10-05T00:00:05Z","version":2,"kind":"owner-loss","recordingId":%q,"workerSessionId":%q,"ownerLoss":{"recoveryOwnerEpoch":%q,"childLiveness":"UNKNOWN"}}`,
+		"generation-"+id, lostOwnerEpoch("prior", 123), id, id, lostOwnerEpoch("recovered", 456))
+	if err := appendFixture(journalPath(root, id), append([]byte(data), '\n')); err != nil {
+		t.Fatal(err)
 	}
 }
 
