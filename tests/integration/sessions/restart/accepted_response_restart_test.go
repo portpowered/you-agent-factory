@@ -29,6 +29,13 @@ func TestAcceptedResponseSurvivesPlainRestart(t *testing.T) {
 	if err := os.WriteFile(release, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
+	// A reference alone is deliberately insufficient authority for plain
+	// reopening. Establish the real durable store through a customer process.
+	bootstrap := startBoardPersistenceDaemon(t, binary, factory, home, "", release)
+	batch := `{"requestId":"restart-request","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"accepted-work","name":"accepted","workTypeName":"task","state":"processing"},{"workId":"interrupted-work","name":"interrupted","workTypeName":"task","state":"processing"}]}`
+	submitBoardPersistenceBatchThroughCLI(t, bootstrap, binary, factory, home, batch, "restart-request", 2)
+	waitPlainBoardConfirmed(t, bootstrap.baseURL, map[string]string{"accepted-work": "complete", "interrupted-work": "complete"})
+	shutdownPlainBoard(t, bootstrap)
 	source, payload := seedAcceptedRestartBoard(t, repo, factory, config)
 	want := map[string]string{"accepted-work": "complete", "interrupted-work": "complete"}
 	for generation := 0; generation < 2; generation++ {
@@ -64,7 +71,7 @@ func seedAcceptedRestartBoard(t *testing.T, repo, factory string, config map[str
 		t.Fatal(err)
 	}
 	base := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
-	session := "accepted-restart-session"
+	session := "~default"
 	artifact := definitions.ReplayArtifact{SchemaVersion: definitions.ReplayV1SourceFormat, RecordedAt: base}
 	add := func(kind definitions.FactoryEventType, dispatch, workID string, payload any) {
 		raw, err := json.Marshal(payload)
