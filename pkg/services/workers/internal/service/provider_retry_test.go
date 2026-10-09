@@ -631,3 +631,107 @@ func TestAdaptInputPayloadContentPrecedenceAndIsolation(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteProviderWithRetryOutlastsLongDependencyEventThenSucceeds(t *testing.T) {
+	t.Parallel()
+
+	clock := newThrottleClock()
+	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	// More overloads than the old 3-attempt budget allowed, but recoverable
+	// inside the 30 minute window (waits of ~30s, 1m, 2m, 4m, then 5m each).
+	const overloads = 8
+	attempts := 0
+	result, err := service.executeProviderWithRetry(
+		context.Background(),
+		workers.RunnerExecutionRequest{},
+		func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			attempts++
+			if attempts <= overloads {
+				return workers.RunnerExecutionResult{}, dependencyProviderError()
+			}
+			return workers.RunnerExecutionResult{Content: "accepted"}, nil
+		},
+	)
+	if err != nil || result.Content != "accepted" {
+		t.Fatalf("executeProviderWithRetry() = (%#v, %v), want accepted after capacity recovers", result, err)
+	}
+	if attempts != overloads+1 {
+		t.Fatalf("attempts = %d, want %d", attempts, overloads+1)
+	}
+	if got := clock.slept(); got > 30*time.Minute {
+		t.Fatalf("slept %s, want within the 30 minute window", got)
+	}
+	if first := clock.sleeps[0]; first < 24*time.Second || first > 36*time.Second {
+		t.Fatalf("first wait = %s, want about 30s with jitter", first)
+	}
+	if second := clock.sleeps[1]; second < 48*time.Second || second > 72*time.Second {
+		t.Fatalf("second wait = %s, want about 60s with jitter", second)
+	}
+	for i, d := range clock.sleeps {
+		if d > 5*time.Minute {
+			t.Fatalf("wait %d = %s, want capped at 5 minutes", i, d)
+		}
+	}
+}
+
+func TestExecuteProviderWithRetryPersistentDependencyStopsAtWindow(t *testing.T) {
+	t.Parallel()
+
+	clock := newThrottleClock()
+	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	providerErr := dependencyProviderError()
+	attempts := 0
+	_, err := service.executeProviderWithRetry(
+		context.Background(),
+		workers.RunnerExecutionRequest{},
+		func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			attempts++
+			return workers.RunnerExecutionResult{}, providerErr
+		},
+	)
+	if !errors.Is(err, providerErr) {
+		t.Fatalf("error = %v, want the throttled provider error after the window", err)
+	}
+	var normalized *workers.ProviderError
+	if !errors.As(err, &normalized) {
+		t.Fatalf("error = %v, want provider identity", err)
+	}
+	decision := workers.WorkFailureDecisionFromProviderError(normalized)
+	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
+		t.Fatalf("exhausted window lost backpressure: %+v", decision)
+	}
+	if got := clock.slept(); got != 30*time.Minute {
+		t.Fatalf("slept %s, want exactly the 30 minute window", got)
+	}
+	if attempts <= 3 {
+		t.Fatalf("attempts = %d, want more than the old 3-attempt limit", attempts)
+	}
+}
+
+func TestExecuteProviderWithRetryDependencyWaitHonorsCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	service := &Service{retrySleep: func(ctx context.Context, _ time.Duration) error {
+		cancel()
+		return ctx.Err()
+	}}
+	attempts := 0
+	_, err := service.executeProviderWithRetry(
+		ctx,
+		workers.RunnerExecutionRequest{},
+		func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			attempts++
+			return workers.RunnerExecutionResult{}, dependencyProviderError()
+		},
+	)
+	if !errors.Is(err, context.Canceled) || attempts != 1 {
+		t.Fatalf("canceled capacity wait = (%v, %d attempts), want context.Canceled after one attempt", err, attempts)
+	}
+}
+
+func dependencyProviderError() error {
+	err := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary server outage", nil)
+	err.ProviderFailureKind = providers.ExecuteFailureKindDependency
+	return err
+}

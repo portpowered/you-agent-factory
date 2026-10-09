@@ -305,6 +305,12 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 			wantCalls:  1,
 		},
 		{
+			name:       "invalid request",
+			results:    []platformprocess.CommandResult{{ExitCode: 1, Stderr: []byte("unexpected status 400 Bad Request: invalid request; please try again")}},
+			wantReason: factoryapi.WorkFailureTypePermanentBadRequest,
+			wantCalls:  1,
+		},
+		{
 			name:       "timeout failure",
 			results:    nil,
 			wantReason: factoryapi.WorkFailureTypeTimeout,

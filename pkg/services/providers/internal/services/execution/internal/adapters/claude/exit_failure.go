@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -20,6 +21,9 @@ type apiErrorRecord struct {
 }
 
 func exitFailureFromCommandResult(result providerservice.CommandResult) error {
+	if kind := explicitHTTPFailureKind(formatCombinedCommandOutput(result)); kind != providers.ExecuteFailureKindUnknown {
+		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+	}
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
@@ -33,10 +37,12 @@ func exitFailureFromCommandResult(result providerservice.CommandResult) error {
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
 	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "429", "overloaded"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindThrottled)}
-	case containsAny(normalized, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504", "api_error", "server_error"):
+	case containsAny(normalized, "internal server error", "api_error", "server_error"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency)}
 	case result.ExitCode == 124 || containsAny(normalized, "deadline exceeded", "timed out", "timeout", "request timed out"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindTimeout, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindTimeout)}
+	case containsAny(normalized, "service unavailable", "please try again"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindDependency)}
 	}
 	return fmt.Errorf("claude exited with code %d", result.ExitCode)
 }
@@ -70,7 +76,10 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 	subtype := strings.ToLower(strings.TrimSpace(record.Type))
 	message := strings.TrimSpace(record.Message)
-	kind := providers.ExecuteFailureKindUnknown
+	kind := explicitHTTPFailureKind(message)
+	if kind != providers.ExecuteFailureKindUnknown {
+		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+	}
 	switch subtype {
 	case "authentication_error", "permission_error":
 		kind = providers.ExecuteFailureKindAuthentication
@@ -79,6 +88,9 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 	case "rate_limit_error", "overloaded_error":
 		kind = providers.ExecuteFailureKindThrottled
 	case "api_error", "server_error":
+		kind = providers.ExecuteFailureKindDependency
+	}
+	if kind == providers.ExecuteFailureKindUnknown && containsAny(strings.ToLower(message), "service unavailable", "please try again") {
 		kind = providers.ExecuteFailureKindDependency
 	}
 	if kind == providers.ExecuteFailureKindUnknown {
@@ -120,3 +132,28 @@ func containsAny(text string, needles ...string) bool {
 	}
 	return false
 }
+
+// explicitHTTPFailureKind recognizes provider status diagnostics, not bare
+// numbers in prompts or request identifiers. Server evidence wins over prose.
+func explicitHTTPFailureKind(message string) providers.ExecuteFailureKind {
+	matches := providerHTTPStatus.FindAllStringSubmatch(strings.ToLower(message), -1)
+	kind := providers.ExecuteFailureKindUnknown
+	for _, match := range matches {
+		switch match[1][0] {
+		case '5':
+			return providers.ExecuteFailureKindDependency
+		case '4':
+			switch match[1] {
+			case "400":
+				kind = providers.ExecuteFailureKindInvalidRequest
+			case "401", "403":
+				kind = providers.ExecuteFailureKindAuthentication
+			case "429":
+				kind = providers.ExecuteFailureKindThrottled
+			}
+		}
+	}
+	return kind
+}
+
+var providerHTTPStatus = regexp.MustCompile(`\b(?:unexpected status|http(?: status)?)\s+([45][0-9]{2})\b`)

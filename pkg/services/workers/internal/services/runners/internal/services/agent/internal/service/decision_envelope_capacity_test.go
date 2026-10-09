@@ -46,7 +46,7 @@ func TestExecuteKeepsDeclaredProviderFailureWhenPartialOutputIsNotAnEnvelope(t *
 		throttle bool
 	}{
 		{"capacity at turn end stays throttled", providers.ExecuteFailureKindThrottled, workers.WorkFailureTypeThrottled, true},
-		{"dependency failure stays dependency", providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, false},
+		{"dependency failure stays dependency", providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -18,6 +19,9 @@ const (
 )
 
 func exitFailureFromCommandResult(result providerservice.CommandResult, workingDirectory string) error {
+	if kind := explicitHTTPFailureKind(formatCombinedCommandOutput(result)); kind != providers.ExecuteFailureKindUnknown {
+		return providers.ExecuteFailure{Kind: kind, Message: declaredFailureMessage(kind)}
+	}
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
@@ -35,10 +39,12 @@ func exitFailureFromCommandResult(result providerservice.CommandResult, workingD
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
 	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "server_overloaded", "429"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: declaredFailureMessage(providers.ExecuteFailureKindThrottled)}
-	case containsAny(normalized, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+	case containsAny(normalized, "internal server error"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
 	case result.ExitCode == 124 || containsAny(normalized, "deadline exceeded", "timed out", "timeout", "request timed out"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindTimeout, Message: declaredFailureMessage(providers.ExecuteFailureKindTimeout)}
+	case containsAny(normalized, "service unavailable", "please try again"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
 	}
 	return fmt.Errorf("codex exited with code %d", result.ExitCode)
 }
@@ -159,3 +165,28 @@ func containsAny(text string, needles ...string) bool {
 	}
 	return false
 }
+
+// explicitHTTPFailureKind recognizes provider status diagnostics, not bare
+// numbers in prompts or request identifiers. Server evidence wins over prose.
+func explicitHTTPFailureKind(message string) providers.ExecuteFailureKind {
+	matches := providerHTTPStatus.FindAllStringSubmatch(strings.ToLower(message), -1)
+	kind := providers.ExecuteFailureKindUnknown
+	for _, match := range matches {
+		switch match[1][0] {
+		case '5':
+			return providers.ExecuteFailureKindDependency
+		case '4':
+			switch match[1] {
+			case "400":
+				kind = providers.ExecuteFailureKindInvalidRequest
+			case "401", "403":
+				kind = providers.ExecuteFailureKindAuthentication
+			case "429":
+				kind = providers.ExecuteFailureKindThrottled
+			}
+		}
+	}
+	return kind
+}
+
+var providerHTTPStatus = regexp.MustCompile(`\b(?:unexpected status|http(?: status)?)\s+([45][0-9]{2})\b`)

@@ -607,7 +607,10 @@ func (decoder *decoder) declareFailure(failure providers.ExecuteFailure) {
 func classifyResultFailure(envelope nativeEnvelope) providers.ExecuteFailure {
 	subtype := strings.ToLower(strings.TrimSpace(envelope.Subtype))
 	message := strings.ToLower(strings.TrimSpace(envelope.Result))
-	kind := providers.ExecuteFailureKindUnknown
+	kind := explicitHTTPFailureKind(message)
+	if kind != providers.ExecuteFailureKindUnknown {
+		return providers.ExecuteFailure{Kind: kind, Message: claudeDeclaredFailureMessage(kind)}
+	}
 	switch subtype {
 	case "authentication_error", "permission_error":
 		kind = providers.ExecuteFailureKindAuthentication
@@ -627,6 +630,8 @@ func classifyResultFailure(envelope nativeEnvelope) providers.ExecuteFailure {
 			strings.Contains(message, "deadline exceeded"),
 			strings.Contains(message, "timed out"):
 			kind = providers.ExecuteFailureKindTimeout
+		case containsAny(message, "service unavailable", "please try again"):
+			kind = providers.ExecuteFailureKindDependency
 		}
 	}
 	return providers.ExecuteFailure{

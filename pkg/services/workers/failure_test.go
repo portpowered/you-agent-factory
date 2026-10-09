@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestParseMockWorkersConfigWithDiagnosticsPreservesKnownBehavior(t *testing.T) {
@@ -315,6 +316,35 @@ func assertProviderSessionFailureIdentity(t *testing.T, err error, got *Provider
 		}
 		if got.Continuation == nil || got.Continuation.Provider != "codex" || got.Continuation.Kind != providersessions.SessionIDKind || got.Continuation.ProviderSessionID != "validated-id" {
 			t.Fatalf("continuation = %#v", got.Continuation)
+		}
+	}
+}
+
+func TestProviderDependencyUsesBackpressureWithoutRescuingTerminalFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind            providers.ExecuteFailureKind
+		typ             WorkFailureType
+		pause, terminal bool
+	}{
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, true, false},
+		{"", WorkFailureTypeInternalServerError, false, false},
+		{providers.ExecuteFailureKindThrottled, WorkFailureTypeThrottled, true, false},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeAuthFailure, false, true},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypePermanentBadRequest, false, true},
+	} {
+		err := NewProviderError(tc.typ, "safe", nil)
+		err.ProviderFailureKind = tc.kind
+		metadata := WorkFailureMetadataFromProviderError(err)
+		decision := WorkFailureDecisionFromProviderError(err)
+		if metadata.Type != tc.typ || decision.TriggersThrottlePause != tc.pause || decision.Terminal != tc.terminal || decision.Retryable == tc.terminal {
+			t.Fatalf("kind=%s type=%s metadata=%+v decision=%+v", tc.kind, tc.typ, metadata, decision)
+		}
+		if tc.terminal {
+			metadata.Family = WorkFailureFamilyThrottle
+			if got := FailureDecisionFromMetadata(metadata); !got.Terminal || got.Retryable {
+				t.Fatalf("terminal rescued by family: %+v", got)
+			}
 		}
 	}
 }

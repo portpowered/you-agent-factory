@@ -567,22 +567,24 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 	message := strings.ToLower(strings.TrimSpace(record.Message))
 	nativeType := strings.ToLower(strings.TrimSpace(record.Type))
 	nativeInfo := strings.ToLower(strings.TrimSpace(record.CodexErrorInfo))
-	kind := providers.ExecuteFailureKindUnknown
+	kind := explicitHTTPFailureKind(message)
+	if record.Status >= 500 && record.Status <= 599 {
+		kind = providers.ExecuteFailureKindDependency
+	}
+	if kind != providers.ExecuteFailureKindUnknown {
+		return providers.ExecuteFailure{Kind: kind, Message: declaredFailureMessage(kind)}
+	}
 	switch {
 	case nativeType == "authentication_error",
 		nativeType == "permission_error",
-		record.Status == 401, record.Status == 403,
-		strings.HasPrefix(message, "unexpected status 401"),
-		strings.HasPrefix(message, "unexpected status 403"):
+		record.Status == 401, record.Status == 403:
 		kind = providers.ExecuteFailureKindAuthentication
 	case nativeType == "invalid_request_error",
-		record.Status == 400,
-		strings.HasPrefix(message, "unexpected status 400"):
+		record.Status == 400:
 		kind = providers.ExecuteFailureKindInvalidRequest
 	case nativeType == "rate_limit_error",
 		nativeType == "overloaded_error",
 		record.Status == 429,
-		strings.HasPrefix(message, "unexpected status 429"),
 		strings.HasPrefix(message, "you've hit your usage limit"),
 		isCapacityOverload(nativeInfo, message):
 		kind = providers.ExecuteFailureKindThrottled
@@ -592,9 +594,9 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 		strings.HasPrefix(message, "request timed out"),
 		strings.HasPrefix(message, "provider timeout"):
 		kind = providers.ExecuteFailureKindTimeout
-	case nativeType == "api_error",
-		nativeType == "server_error",
-		record.Status >= 500 && record.Status <= 599:
+	case containsAny(message, "service unavailable", "please try again"),
+		nativeType == "api_error",
+		nativeType == "server_error":
 		kind = providers.ExecuteFailureKindDependency
 	}
 	return providers.ExecuteFailure{

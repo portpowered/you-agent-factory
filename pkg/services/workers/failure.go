@@ -282,7 +282,13 @@ func WorkFailureMetadataFromProviderError(err *ProviderError) *WorkFailureMetada
 	if err == nil {
 		return nil
 	}
-	return &WorkFailureMetadata{Family: providerFailureFamily(err.Type), Type: err.Type}
+	family := providerFailureFamily(err.Type)
+	// Only native provider outages share capacity backpressure and its failure
+	// budget exemption. Internal faults retain their short retry budget.
+	if err.ProviderFailureKind == providers.ExecuteFailureKindDependency && err.Type == WorkFailureTypeInternalServerError {
+		family = WorkFailureFamilyThrottle
+	}
+	return &WorkFailureMetadata{Family: family, Type: err.Type}
 }
 
 func WorkFailureDecisionFromProviderError(err *ProviderError) WorkFailureDecision {
