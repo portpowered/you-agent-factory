@@ -39,7 +39,8 @@ func (writer *FileWriter) catalogEntry(session *recordingSession) recordings.Wor
 		origin = "factory"
 	}
 	return recordings.WorkerSessionCatalogEntry{
-		Version: 1, WorkerSessionID: session.projection.WorkerSessionID,
+		WorkName: session.workName,
+		Version:  1, WorkerSessionID: session.projection.WorkerSessionID,
 		RecordingID: session.projection.RecordingID, RecordingGenerationID: session.generation,
 		Origin: origin, FactorySessionID: opening.FactorySessionID, OwnerEpoch: session.ownerEpoch,
 		OriginatingArtifact: session.originatingArtifact,
