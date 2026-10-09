@@ -17,6 +17,15 @@ parameter indices count individual parameters, including grouped names;
 parameter type expressions use qualified names. Constructor results require
 matching construction-kind classifications in the same capability set.
 
+For compiled handwritten references and declarations, constructor names
+(`New`, `Build`, `Create`, `Ensure`, `Open`, `Provide`) returning an already
+classified behavior/effect also inherit that policy without another constructor
+entry. Compiler identities preserve generic origins and named aliases. Typed
+classified behavior/effect parameters become required inputs; explicit
+constructor metadata takes precedence. A multi-result constructor inherits
+enforcement if any classified result is enforced. This does not classify a new
+owner or turn domain/state/resource results into services.
+
 Allowances name one caller, callee, and repository-relative file, plus a
 semantic kind, owner, and reason. Malformed, duplicate, stale, and mismatched
 metadata fails as `construction-metadata`. A focused-provider allowance permits
@@ -80,6 +89,15 @@ excluded; compiled `servertests` helpers remain in scope. The canonical tags
 are `functionallong,backendconformance,factoryartifact,managed_process_integration`.
 Excluded import edges alone may use `parser.ImportsOnly`; no excluded call-body
 proof is claimed. Native platform execution owns platform-dependent bodies.
+
+Unlisted constructor discovery is bounded by the existing constructor-name
+vocabulary and exact named result classifications. Arbitrarily named factories,
+structural/erased results, distinct defined-type ancestry, callable variables,
+and opaque cross-package factories are not proved by this inference. Parameter
+requiredness is inferred only for exact classified named collaborators, not
+unclassified callbacks or containers. These limits remain inventory obligations;
+they authorize no new baseline or exemption. Repository coverage and allowance
+retirement remain incomplete while the registry has only a report-only owner.
 
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined

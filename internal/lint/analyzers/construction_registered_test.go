@@ -152,6 +152,75 @@ func TestConstructionRegisteredBaseline(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registeredFixtureRegistry(ConstructionEnforce)), "m/pkg/registeredlisted", "m/pkg/registeredstale")
 }
 
+// Real compiler objects prove that omission from the constructor list cannot
+// exempt an already classified result, even within the owning service.
+func TestConstructionUnlistedClassifiedResults(t *testing.T) {
+	useFixtures(t)
+	const owner = "m/pkg/services/unlisted"
+	registry := ConstructionRegistry{
+		CapabilitySets: []ConstructionCapabilitySet{
+			{Name: "unlisted", OwnerTask: "T29", Mode: ConstructionEnforce},
+			{Name: "reporting", OwnerTask: "T29", Mode: ConstructionReport},
+		},
+		Types: []ConstructionType{{
+			Symbol:        ConstructionSymbol{ImportPath: owner, Name: "Reporting"},
+			CapabilitySet: "reporting", Kind: ConstructionBehavior,
+		}},
+	}
+	for name, kind := range map[string]ConstructionKind{
+		"Service": ConstructionBehavior, "Dependency": ConstructionEffect,
+		"Domain": ConstructionDomain, "Scope": ConstructionState, "Resource": ConstructionResource,
+	} {
+		registry.Types = append(registry.Types, ConstructionType{
+			Symbol: ConstructionSymbol{ImportPath: owner, Name: name}, CapabilitySet: "unlisted", Kind: kind,
+		})
+	}
+	files := map[string]string{
+		owner + "/owner.go": `package unlisted
+type Dependency interface { Run() }
+type Service struct{}
+type Reporting struct{}
+type Alias = Service
+type Domain struct{}
+type Scope struct{}
+type Resource struct{}
+func NewAlternate(dep Dependency) *Alias { return &Service{} }
+func NewGeneric[T any](dep Dependency) (*Service, error) { return &Service{}, nil }
+func NewMixed() (*Reporting, *Service) { return &Reporting{}, &Service{} }
+func NewGuarded(dep Dependency) *Service {
+ if dep == nil { return nil } // want "required-dependency-guard:.*NewGuarded"
+ return &Service{}
+}
+func NewDomain(payload *Domain) Domain { if payload == nil { return Domain{} }; return *payload }
+func NewScope(previous *Scope) *Scope { if previous == nil { return &Scope{} }; return previous }
+func OpenResource(previous *Resource) *Resource { if previous == nil { return &Resource{} }; return previous }
+func Run(dep Dependency) {
+ NewAlternate(dep) // want "registered-construction:.*Run.*m/pkg/services/unlisted.NewAlternate"
+ NewGeneric[int](dep) // want "registered-construction:.*Run.*m/pkg/services/unlisted.NewGeneric"
+ NewMixed() // want "registered-construction:.*Run.*m/pkg/services/unlisted.NewMixed"
+ _ = NewDomain(nil); _ = NewScope(nil); _ = OpenResource(nil)
+}
+`,
+		"m/pkg/services/unrelated/consumer.go": `package unrelated
+import owner "m/pkg/services/unlisted"
+func Run(dep owner.Dependency) {
+ owner.NewAlternate(dep) // want "registered-construction:.*Run.*m/pkg/services/unlisted.NewAlternate"
+ create := owner.NewGeneric[int]
+ create(dep) // want "registered-construction:.*Run.*m/pkg/services/unlisted.NewGeneric"
+ _ = owner.NewDomain(nil); _ = owner.NewScope(nil); _ = owner.OpenResource(nil)
+}
+func Escape() any { return owner.NewAlternate } // want "unresolved-construction-reference:.*Escape.*NewAlternate"
+func Shadowed() { owner := struct { NewAlternate func() }{func(){}}; owner.NewAlternate() }
+`,
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(registry), owner, "m/pkg/services/unrelated")
+}
+
 func TestConstructionRegisteredSignatureValidation(t *testing.T) {
 	useFixtures(t)
 	registry := registeredFixtureRegistry(ConstructionReport)
