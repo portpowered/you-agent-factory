@@ -652,7 +652,9 @@ func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCanc
 				return nil
 			}
 			factory := &Root{runtimeRoot: root}
-			closeRuntime := factory.activationCloser(factoryruntime.RuntimeBinding{}, "selected-generation")
+			closeRuntime := activationCloser(factory.runtimeRoot, factoryruntime.RuntimeBinding{}, "selected-generation")
+			peer := &cleanupRoutingRoot{}
+			factory.runtimeRoot = peer
 			firstErr := closeRuntime()
 			if test.wantCalls == 2 && !errors.Is(firstErr, test.firstError) {
 				t.Fatalf("first cleanup error = %v, want original close cause", firstErr)
@@ -667,6 +669,9 @@ func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCanc
 			}
 			if root.deactivations != test.wantCalls {
 				t.Fatalf("cleanup attempts = %d, want %d", root.deactivations, test.wantCalls)
+			}
+			if peer.deactivations != 0 {
+				t.Fatalf("replacement owner cleanup attempts = %d, want zero", peer.deactivations)
 			}
 		})
 	}

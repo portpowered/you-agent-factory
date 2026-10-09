@@ -556,7 +556,7 @@ func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
 			return factoryruntime.RuntimeDeactivationResult{}, nil
 		},
 	)
-	closer := (&Root{}).activationCloser(binding, "runtime-1")
+	closer := activationCloser(nil, binding, "runtime-1")
 
 	const callers = 16
 	var wait sync.WaitGroup

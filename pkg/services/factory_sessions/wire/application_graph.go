@@ -3,7 +3,6 @@ package wire
 import (
 	"github.com/google/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -122,15 +121,12 @@ func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
-	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 
 	clock factoryruntime.Clock,
 	providerOverride ProviderOverrideService,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	definitions factorydefinitions.Service,
 
 	snapshotSelection *RuntimeSnapshotSelection,
@@ -145,7 +141,6 @@ func NewRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
-	automationService automations.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
@@ -161,15 +156,12 @@ func NewRoot(
 		providerSessions,
 		logger,
 		runtimeLogs,
-		factoryWorkflows,
 		workflowPreview,
 		runtimeRoot,
 		resolveClock,
 
 		clock,
 		providerOverride,
-		submissionRecorder,
-		dispatchRecorder,
 		definitions,
 
 		snapshotSelection,
@@ -184,7 +176,6 @@ func NewRoot(
 		generateRuntimeInstanceID,
 		resolveHome,
 		workService,
-		automationService,
 		modelService,
 		recordingsService,
 		recordingsRuntime,

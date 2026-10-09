@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -71,7 +70,6 @@ type Root struct {
 	initialEngine                  *RuntimeInitialEngine
 	workService                    work.Service
 	providerSessions               providersessions.Service
-	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
 	snapshotSelection              *RuntimeSnapshotSelection
 	preparation                    *RuntimePreparation
@@ -86,22 +84,17 @@ type Root struct {
 	clock                          factoryruntime.Clock
 	providerOverride               providers.Service
 	executionBinding               *ExecutionBinding
-	submissionRecorder             recordings.SubmissionRecorder
-	dispatchRecorder               recordings.DispatchRecorder
 }
 
 func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
-	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
 	resolveClock factoryruntime.ClockResolver,
 	clock factoryruntime.Clock,
 	providerOverride ProviderOverrideService,
-	submissionRecorder recordings.SubmissionRecorder,
-	dispatchRecorder recordings.DispatchRecorder,
 	definitions factorydefinitions.Service,
 	snapshotSelection *RuntimeSnapshotSelection,
 	preparation *RuntimePreparation,
@@ -114,7 +107,6 @@ func NewRoot(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
-	automationService automations.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
@@ -148,7 +140,6 @@ func NewRoot(
 		factoryDefinitions:             definitions,
 		workService:                    workService,
 		providerSessions:               providerSessions,
-		factoryWorkflows:               factoryWorkflows,
 		workflowPreview:                workflowPreview,
 		snapshotSelection:              snapshotSelection,
 		preparation:                    preparation,
@@ -163,8 +154,6 @@ func NewRoot(
 		clock:                          clock,
 		providerOverride:               providerOverride,
 		executionBinding:               executionBinding,
-		submissionRecorder:             submissionRecorder,
-		dispatchRecorder:               dispatchRecorder,
 	}
 	root.runtimeRoot = runtimeRoot
 	return root, nil

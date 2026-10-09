@@ -293,7 +293,7 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	if binding.IsZero() {
 		binding = result.Runtime.Binding
 	}
-	closeRuntime := r.activationCloser(binding, result.RuntimeID)
+	closeRuntime := activationCloser(r.runtimeRoot, binding, result.RuntimeID)
 	if !binding.IsZero() {
 		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
 			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
@@ -302,7 +302,9 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	return lifecycle, replay, closeRuntime, nil
 }
 
-func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
+// activationCloser retains the selected Runtime owner and opaque binding. A
+// later Root selection must not retarget cleanup of this acquisition.
+func activationCloser(runtimeRoot FactoryRuntimeRoot, binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
 	var mu sync.Mutex
 	closed := false
 	return func() error {
@@ -315,7 +317,7 @@ func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID
 		if !binding.IsZero() {
 			_, err = binding.Deactivate(context.Background())
 		} else {
-			_, err = r.runtimeRoot.Deactivate(
+			_, err = runtimeRoot.Deactivate(
 				context.Background(),
 				factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
 			)

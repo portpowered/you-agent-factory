@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -48,15 +47,12 @@ type runtimeOpeningFixture struct {
 	LiveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	ProviderSessions             providersessions.Service
 	Logger                       *zap.Logger
-	FactoryWorkflows             factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview              factoryruntime.WorkflowPreviewOperation
 	RuntimeRoot                  FactoryRuntimeRoot
 	ResolveClock                 factoryruntime.ClockResolver
 	NewSessionLogger             factoryruntime.SessionLoggerFactory
 	Clock                        factoryruntime.Clock
 	ProviderOverride             ProviderOverrideService
-	SubmissionRecorder           recordings.SubmissionRecorder
-	DispatchRecorder             recordings.DispatchRecorder
 	Validator                    factorydefinitions.Validator
 	NamedPaths                   factorydefinitions.NamedPathResolver
 	Definitions                  factorydefinitions.Service
@@ -73,7 +69,6 @@ type runtimeOpeningFixture struct {
 	ResolveHome                  factorysessions.HomeDirectoryResolver
 	ProviderIdentities           factorysessions.ProviderIdentityResolver
 	WorkService                  work.Service
-	AutomationService            automations.Service
 	WebhooksService              webhooks.Service
 	ModelService                 models.Service
 	RecordingsService            recordings.Service
@@ -89,14 +84,11 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.ProviderSessions,
 		fixture.Logger,
 		nil,
-		fixture.FactoryWorkflows,
 		fixture.WorkflowPreview,
 		fixture.RuntimeRoot,
 		fixture.ResolveClock,
 		fixture.Clock,
 		fixture.ProviderOverride,
-		fixture.SubmissionRecorder,
-		fixture.DispatchRecorder,
 		fixture.Definitions,
 		fixture.snapshotSelection(),
 		fixture.preparation(),
@@ -109,7 +101,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,
 		fixture.WorkService,
-		fixture.AutomationService,
 		fixture.ModelService,
 		fixture.RecordingsService,
 		fixture.RecordingsRuntime,
@@ -200,7 +191,6 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		InitialActivation:            inertRuntimeOpeningFunction[factoryruntime.InitialRuntimeActivationOperation](calls),
 		ProviderSessions:             providerSessionsConstructionStub{},
 		Logger:                       zap.NewNop(),
-		FactoryWorkflows:             workflowDefinitionsConstructionStub{},
 		WorkflowPreview:              workflowPreviewConstructionStub{},
 		ResolveClock:                 inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
 		NewSessionLogger:             inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
@@ -221,7 +211,6 @@ func validRuntimeOpeningCollaborators(calls *int) runtimeOpeningFixture {
 		ResolveHome:                  inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 		ProviderIdentities:           inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
 		WorkService:                  work.MaterializationService(constructionMaterializer{calls: calls}),
-		AutomationService:            automations.Root{},
 		ModelService:                 &modelsConstructionStub{},
 		RecordingsService:            &recordingsRootConstructionStub{},
 		RecordingsRuntime:            &recordingsRootConstructionStub{},
@@ -247,9 +236,6 @@ func inertRuntimeOpeningFunction[T any](calls *int) T {
 }
 
 type providerSessionsConstructionStub struct{ providersessions.Service }
-type workflowDefinitionsConstructionStub struct {
-	factoryruntime.JavaScriptWorkflowDefinitions
-}
 type workflowPreviewConstructionStub struct {
 	factoryruntime.WorkflowPreviewOperation
 }
