@@ -82,6 +82,22 @@ OUTPUT_CONFLICTS = (
 )
 
 
+def check_changed_line_budgets(prompts):
+    """Reject numeric diff budgets in supplied path/text pairs, without I/O."""
+    number = r'\d[\d,]*(?:[-–]\d[\d,]*)?'
+    pattern = (
+        rf'\b{number} changed[- ]lines?\b'
+        rf'|\bchanged[- ]line budget(?: is| of|:)? {number}\b'
+        rf'|\bdiff (?:limit|budget|cap)(?: is| of|:)? {number} lines?\b'
+        rf'|\b{number} lines? \(added plus deleted\)'
+    )
+    return [
+        f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts'
+        for path, source in sorted(prompts.items())
+        if re.search(pattern, ' '.join(source.split()), re.IGNORECASE)
+    ]
+
+
 def check_output_policy(prompts):
     """Diagnose size/proof policy in isolated role strings, without I/O."""
     diagnostics = []
@@ -379,6 +395,10 @@ def main(argv=None):
     parser.add_argument('root', nargs='?', type=Path, default=Path('.'))
     args = parser.parse_args(argv)
     try:
+        workstation_prompts = {
+            path.relative_to(args.root).as_posix(): path.read_text(encoding='utf-8')
+            for path in sorted((args.root / 'factory/workstations').rglob('AGENTS.md'))
+        }
         texts = [
             (args.root / 'factory' / 'workstations' / owner / 'AGENTS.md').read_text(encoding='utf-8')
             for owner in ('plan', 'process', 'project-lead')
@@ -397,7 +417,8 @@ def main(argv=None):
     except (OSError, UnicodeError) as error:
         print(f'lane prompt policy: cannot read authored prompts: {error}', file=sys.stderr)
         return 1
-    diagnostics = (check_output_policy(output_prompts) + check_policy(*texts[:2]) + check_mailbox_policy(*texts)
+    diagnostics = (check_changed_line_budgets(workstation_prompts)
+                   + check_output_policy(output_prompts) + check_policy(*texts[:2]) + check_mailbox_policy(*texts)
                    + check_recovery_policy(recovery)
                    + check_ownership_policy(texts[0], texts[1], recovery['review'])
                    + check_loopback_policy(loopback)
