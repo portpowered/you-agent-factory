@@ -156,7 +156,7 @@ func TestBindModelsRuntimeScopeRetainsFailedOpeningForCleanupRetry(t *testing.T)
 			cancel()
 			cleanup := &runtimeOpeningCleanup{}
 			cleanup.OwnModelsScope(context.WithoutCancel(ctx), bind)
-			activation, validationErr := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+			activation, validationErr := newRuntimeActivation(nil, cleanup.Close)
 			if validationErr == nil || activation.Service != nil {
 				t.Fatal("failed opening published a runnable activation")
 			}
@@ -790,7 +790,7 @@ func TestRuntimeOpeningCleanupRetainsOwnershipAddedDuringClose(t *testing.T) {
 		})
 		return nil
 	})
-	activation, err := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+	activation, err := newRuntimeActivation(nil, cleanup.Close)
 	if err == nil || activation == nil || activation.Service != nil {
 		t.Fatalf("partial activation = %v, %v, want cleanup without a live service", activation, err)
 	}
@@ -863,7 +863,7 @@ func TestRuntimeOpeningCleanupRetainsDependenciesWhenModelsReleaseAddsConsumer(t
 				registering.failure = releaseErr
 			}
 			cleanup.OwnModelsScope(t.Context(), modelsRuntimeBind{Root: registering, Scope: scope})
-			activation, _ := newRuntimeActivation(runtimeProducts{closeArtifacts: cleanup.Close})
+			activation, _ := newRuntimeActivation(nil, cleanup.Close)
 			closeErr := activation.Close(t.Context())
 			if releaseFails && !errors.Is(closeErr, releaseErr) {
 				t.Fatalf("cleanup = %v, want original release failure", closeErr)

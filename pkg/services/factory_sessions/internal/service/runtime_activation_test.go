@@ -400,29 +400,40 @@ func (stub *historicalBoardReaderStub) QueryHistoricalRecording(
 	return stub.result, stub.err
 }
 
-func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
+func TestRuntimeActivationKeepsSelectedHandlesForDetachedHandoff(t *testing.T) {
 	t.Parallel()
 
 	engine := &activationServiceFake{}
-	products := runtimeProducts{
-		engine: engine,
+	ingress := &activationServiceFake{}
+	opened := &factoryruntime.RuntimeActivation{
+		Service: engine, WorkAndEventIngress: ingress,
 	}
 
-	if got := runtimeEngineService(products); got != engine {
-		t.Fatalf("runtimeEngineService() = %T, want concrete engine %T", got, engine)
-	}
-	activation, err := newRuntimeActivation(products)
+	activation, err := newRuntimeActivation(opened, nil)
 	if err != nil {
 		t.Fatalf("newRuntimeActivation() error = %v", err)
 	}
-	if activation.WorkAndEventIngress != factoryruntime.APIFactory(engine) {
-		t.Fatalf("published ingress = %T, want concrete engine %T", activation.WorkAndEventIngress, engine)
+	if activation.WorkAndEventIngress != factoryruntime.APIFactory(ingress) {
+		t.Fatalf("published ingress = %T, want declared ingress %T", activation.WorkAndEventIngress, ingress)
 	}
+	// Later changes to the acquisition value must not retarget retained handles.
+	peer := &activationServiceFake{}
+	opened.Service = peer
+	opened.WorkAndEventIngress = peer
 	if _, err := activation.WorkAndEventIngress.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
 		t.Fatalf("SubmitWorkRequest() error = %v", err)
 	}
-	if got := engine.submitCalls.Load(); got != 1 {
-		t.Fatalf("engine SubmitWorkRequest calls = %d, want 1", got)
+	if got := ingress.submitCalls.Load(); got != 1 {
+		t.Fatalf("declared ingress SubmitWorkRequest calls = %d, want 1", got)
+	}
+	if engine.submitCalls.Load() != 0 || peer.submitCalls.Load() != 0 {
+		t.Fatal("Work was routed through the engine or a later selection")
+	}
+	if _, err := activation.WorkAndEventIngress.SubscribeFactoryEvents(t.Context(), nil, factorydefinitions.FactoryEventReconnectScope{}); err != nil {
+		t.Fatalf("SubscribeFactoryEvents() error = %v", err)
+	}
+	if ingress.subscribeCalls.Load() != 1 || engine.subscribeCalls.Load() != 0 || peer.subscribeCalls.Load() != 0 {
+		t.Fatal("event subscription did not use the retained declared ingress")
 	}
 	if activation.Service != engine {
 		t.Fatalf("published activation service = %T, want concrete engine %T", activation.Service, engine)
@@ -432,8 +443,8 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 func TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress(t *testing.T) {
 	t.Parallel()
 
-	products := runtimeProducts{engine: controlOnlyEngineFake{}}
-	if _, err := newRuntimeActivation(products); err == nil {
+	opened := &factoryruntime.RuntimeActivation{Service: controlOnlyEngineFake{}}
+	if _, err := newRuntimeActivation(opened, nil); err == nil {
 		t.Fatal("newRuntimeActivation() error = nil, want a missing-ingress failure")
 	}
 }
@@ -453,9 +464,7 @@ func TestRuntimeActivationConsumesDeclaredOpeningAndKeepsSessionCleanup(t *testi
 	cleanup := &runtimeOpeningCleanup{}
 	cleanup.Add(func() error { return initial.Close(t.Context()) })
 	cleanup.Add(func() error { releases = append(releases, "session"); return nil })
-	activation, err := newRuntimeActivation(runtimeProducts{
-		activation: initial, closeArtifacts: cleanup.Close,
-	})
+	activation, err := newRuntimeActivation(initial, cleanup.Close)
 	if err != nil || activation.Service != service {
 		t.Fatalf("declared activation = %#v, %v; want selected service", activation, err)
 	}
@@ -496,9 +505,7 @@ func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 				}
 				return nil
 			})
-			activation, err := newRuntimeActivation(runtimeProducts{
-				engine: test.engine, closeArtifacts: cleanup.Close,
-			})
+			activation, err := newRuntimeActivation(&factoryruntime.RuntimeActivation{Service: test.engine}, cleanup.Close)
 			if err == nil || activation == nil || activation.Close == nil {
 				t.Fatalf("validation = (%v, %v), want failed activation with owned cleanup", activation, err)
 			}

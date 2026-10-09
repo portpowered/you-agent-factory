@@ -97,7 +97,6 @@ func (r *Root) openRuntimeWithOptions(
 		products.lifecycle = completed.Lifecycle
 		products.closeArtifacts = cleanup.Close
 		products.activation = opening.activation
-		products.engine = opening.activation.Service
 		rootRuntime := completed.SessionRuntime.(factoryruntime.Service)
 		products.bindRuntime = runtimeBindingForSession(rootRuntime, opening.sessionID)
 		opening.bindSelectedState(completed.State)

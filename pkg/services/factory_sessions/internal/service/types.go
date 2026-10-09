@@ -33,7 +33,6 @@ type runtimeProducts struct {
 	historicalReplay       *factorysessions.HistoricalReplayInspection
 	replayMetadataWarnings []recordings.MetadataMismatchWarning
 	bindRuntime            func(factoryruntime.RuntimeBinding) error
-	engine                 factoryruntime.Service
 	activation             *factoryruntime.RuntimeActivation
 }
 
