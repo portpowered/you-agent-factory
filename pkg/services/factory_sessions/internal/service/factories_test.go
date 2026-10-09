@@ -118,7 +118,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.WorkerService,
 		fixture.ProviderCommandRunner,
 		fixture.ScriptCommandRunner,
-		fixture.InitialActivation,
+		NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation),
 		nil,
 		recordingreplay.NewBehavior(),
 		fixture.LiveChangeCoordinator,

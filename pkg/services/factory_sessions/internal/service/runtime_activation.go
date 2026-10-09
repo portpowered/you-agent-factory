@@ -681,3 +681,107 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 	}
 	return output
 }
+
+// RuntimeInitialEngine shapes detached selected facts through fixed capabilities.
+// It retains no invocation state or acquired resources.
+type RuntimeInitialEngine struct {
+	selectSnapshot initialEngineSnapshotSelection
+	activate       factoryruntime.InitialRuntimeActivationOperation
+}
+
+type initialEngineSnapshotSelection func(context.Context, factorydefinitions.RuntimeSelection,
+	recordings.RuntimeSelection, *recordings.LoadReplayInputResult, *recordings.LoadResumeInputResult,
+	string) (activationSnapshotResolution, error)
+
+type initialEngineLiveRequest struct {
+	Configured       preparedRuntime
+	EffectiveFactory factorydefinitions.FactoryConfig
+	Workers          []factorydefinitions.FactoryWorkerConfig
+	Workstations     []factorydefinitions.FactoryWorkstationConfig
+	ResumeInput      *recordings.LoadResumeInputResult
+	Recovery         factoryruntime.RuntimeActivationRecoveryInput
+}
+
+// NewRuntimeInitialEngine stores direct collaborators without executing them.
+func NewRuntimeInitialEngine(selectSnapshot initialEngineSnapshotSelection,
+	activate factoryruntime.InitialRuntimeActivationOperation) *RuntimeInitialEngine {
+	return &RuntimeInitialEngine{selectSnapshot: selectSnapshot, activate: activate}
+}
+
+func (engine *RuntimeInitialEngine) OpenLive(ctx context.Context, request initialEngineLiveRequest,
+	observations factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+	configured := request.Configured
+	selected := configured.DefinitionSnapshot
+	if selected == nil {
+		resolved, err := engine.selectSnapshot(ctx, configured.Definition, configured.Recordings,
+			nil, request.ResumeInput, configured.Session.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		selected = &resolved.snapshot
+	}
+	snapshot, err := selected.Clone()
+	if err != nil {
+		return nil, err
+	}
+	config, err := factorydefinitions.CloneFactoryConfig(&request.EffectiveFactory)
+	if err != nil {
+		return nil, err
+	}
+	snapshot.EffectiveFactory = *config
+	for index := range snapshot.Workers {
+		for _, worker := range request.Workers {
+			if worker.Name == snapshot.Workers[index].Name {
+				snapshot.Workers[index] = factorydefinitions.CloneWorkerConfig(worker)
+				break
+			}
+		}
+	}
+	for index := range snapshot.Workstations {
+		for _, workstation := range request.Workstations {
+			if workstation.Name == snapshot.Workstations[index].Name {
+				snapshot.Workstations[index] = factorydefinitions.CloneWorkstationConfig(workstation)
+				break
+			}
+		}
+	}
+	inputs := runtimeActivationInputs(configured.Definition, configured.Session,
+		configured.CanonicalSessionIDGenerated, configured.Workers, configured.Recordings,
+		configured.ModelCacheDirectory, configured.OperatorDefaults, request.ResumeInput)
+	inputs.RecoveryInput = request.Recovery
+	return engine.activate(ctx, factoryruntime.RuntimeActivationRequest{
+		RuntimeID: configured.Runtime.RuntimeInstanceID, FactorySessionID: configured.Session.SessionID,
+		Snapshot: snapshot, Runtime: configured.Runtime, Inputs: inputs,
+	}, observations)
+}
+
+func (engine *RuntimeInitialEngine) OpenCheckpoint(ctx context.Context, configured preparedRuntime,
+	observations factoryruntime.SessionObservations) (*factoryruntime.RuntimeInitialOpening, error) {
+	// Checkpoint continuation selects the authored definition after the caller's
+	// successful restoration probe, with no replay selection or normalization.
+	resolved, err := engine.selectSnapshot(ctx, configured.Definition, recordings.RuntimeSelection{},
+		nil, nil, configured.Session.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := resolved.snapshot.Clone()
+	if err != nil {
+		return nil, err
+	}
+	inputs := runtimeActivationInputs(configured.Definition, configured.Session,
+		configured.CanonicalSessionIDGenerated, configured.Workers, configured.Recordings,
+		configured.ModelCacheDirectory, configured.OperatorDefaults, nil)
+	inputs.Session.CanonicalSessionID = configured.Session.SessionID
+	inputs.RecoveryInput.CheckpointContinuation = true
+	opening, err := engine.activate(ctx, factoryruntime.RuntimeActivationRequest{
+		RuntimeID: configured.Runtime.RuntimeInstanceID, FactorySessionID: configured.Session.SessionID,
+		Snapshot: snapshot, Runtime: configured.Runtime, Inputs: inputs,
+	}, observations)
+	if err != nil {
+		return opening, fmt.Errorf("construct portable replay runtime: %w", err)
+	}
+	if opening == nil || opening.Record == nil {
+		return opening, fmt.Errorf("construct portable replay runtime: runtime instance is required")
+	}
+	return opening, nil
+}
