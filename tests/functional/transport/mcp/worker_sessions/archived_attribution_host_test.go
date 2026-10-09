@@ -52,6 +52,7 @@ func TestArchivedWorkAttributionJourneys(t *testing.T) {
 		{"named close", runArchivedWorkAttributionNamedCloseJourneys},
 		{"canceled history read", runArchivedWorkAttributionCanceledRead},
 		{"provider completion preserves frozen history", runArchivedWorkAttributionCompleted},
+		{"many retained histories within latency bound", runArchivedWorkAttributionManyHistories},
 	} {
 		t.Run(scenario.name, func(t *testing.T) { scenario.run(t, process) })
 	}
