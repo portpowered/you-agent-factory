@@ -1411,7 +1411,6 @@ const (
 	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
 	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
 	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
-	WorkStateChangeSourceSessionReopen    WorkStateChangeSource = "session-reopen"
 )
 
 // Defines values for WorkStateType.
@@ -8713,23 +8712,11 @@ type WorkState struct {
 	// Name Customer-authored state name referenced by workstation inputs and outputs.
 	Name string `json:"name"`
 
-	// OnReopen Optional recovery rule for restored Work in a processing state. Live reopening applies one move before scheduling. Replay applies none. At maxWaits recorded waiting admissions, reopening selects exhaustedState.
-	OnReopen *struct {
-		// ExhaustedState Failed state in the same work type selected when the budget is exhausted.
-		ExhaustedState string `json:"exhaustedState"`
-
-		// MaxWaits Number of recorded waiting admissions that exhaust the recovery budget.
-		MaxWaits int `json:"maxWaits"`
-
-		// State Different processing state in the same work type for another attempt.
-		State string `json:"state"`
-	} `json:"onReopen,omitempty"`
-
 	// Type Lifecycle category for this state, such as initial, processing, terminal, or failed.
 	Type WorkStateType `json:"type"`
 }
 
-// WorkStateChangeEventPayload Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. Live reopening recovery uses session-reopen. Exhaustion reasons retain the accumulated named preconditions from canonical waiting dispatches. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+// WorkStateChangeEventPayload Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
 type WorkStateChangeEventPayload struct {
 	// FromPlaceId Marking place identifier before the move.
 	FromPlaceId string `json:"fromPlaceId"`

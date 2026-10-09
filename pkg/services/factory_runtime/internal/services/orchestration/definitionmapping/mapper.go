@@ -637,10 +637,6 @@ func (cm *Mapper) convertToWorkTypes(cfg *interfaces.FactoryConfig) map[string]*
 				Value:    s.Name,
 				Category: mapStateCategory(s.Type),
 			}
-			if s.OnReopen != nil {
-				rule := *s.OnReopen
-				states[i].OnReopen = &rule
-			}
 		}
 		workTypes[wt.Name] = &state.WorkType{
 			ID:                wt.Name,

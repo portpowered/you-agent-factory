@@ -40,11 +40,6 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) ([]interfaces.Wor
 				Name: state.Name,
 				Type: interfaces.StateType(state.Type),
 			}
-			if rule := state.OnReopen; rule != nil {
-				states[si].OnReopen = &interfaces.StateReopenConfig{
-					State: rule.State, MaxWaits: rule.MaxWaits, ExhaustedState: rule.ExhaustedState,
-				}
-			}
 		}
 		values[i] = interfaces.WorkTypeConfig{
 			ID:                stringValue(workType.Id),

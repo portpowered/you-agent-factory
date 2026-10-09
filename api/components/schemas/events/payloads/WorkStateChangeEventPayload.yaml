@@ -5,8 +5,6 @@ description: >-
   factories. JavaScript workflow progress is represented by
   JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves
   use source api or cli; automatic cascade propagation uses cascading-failure.
-  Live reopening recovery uses session-reopen. Exhaustion reasons retain
-  the accumulated named preconditions from canonical waiting dispatches.
   FactoryEvent.context carries workIds and optional requestId for operator
   idempotency.
 required:

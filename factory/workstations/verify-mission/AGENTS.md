@@ -1,4 +1,5 @@
 # Bound mission verification
+
 {{range .Inputs}}{{if eq .DataType "work"}}
 Payload: {{.Payload}}
 Work ID: {{.WorkID}}
@@ -18,9 +19,8 @@ Fetch missing merge objects before ancestry checks; unavailable objects are not 
 Use the read helper for these operations, retrying once; do not retry fetch, reads or checks beyond its budget.
 Use python factory/scripts/mission-read.py [--required] -- <read-command> [args...] for authorized reads, including GitHub reads. Mark --required only when the mission requires that read. Each failed read retries once; retain both attempts and available output. Optional exhaustion is a recorded gap, not alone FAILED.
 Never retry mutations through the helper or add an agent retry after exhaustion.
-Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values.
-If the only problem is an unmet prerequisite, return PRECONDITION even with partial measurements; retain available evidence in output.precondition and output.measurements.
-This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.
+Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values. If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.
+This includes exhausted required reads and a daemon not yet restarted onto the fix; file no corrective Work or proposal for it.
 Do not restart the daemon or mutate product state to satisfy a precondition.
 On correction feedback, correct the output shape while retaining the mission, measurements and original failure evidence; do not reset the rejection marker.
 
@@ -41,7 +41,8 @@ and follow-up validation. Keep measurements and proposal path; do not emit
 another report or thoughts join. Admission ownership alone never causes FAILED.
 Write/dry-run/admission failures return FAILED with exact reason and any saved path.
 Do not use Work controls, equivalent APIs, canonical edits or operatorOverride.
-Return only decision, feedback and output. decision is ACCEPTED, FAILED or PRECONDITION,
+
+Return only decision, feedback and output. decision is ACCEPTED or FAILED,
 feedback is a string, and output is a native JSON object containing non-empty measurements
 or a non-empty precondition naming the unmet requirement with available values.
 Use the exact key output.precondition with a non-blank string for an unmet precondition.
@@ -54,5 +55,4 @@ A path or receipt alone cannot complete a mission.
 Measurements example:
 {"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
 Unmet precondition example:
-{"decision":"PRECONDITION","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
-{"decision":"PRECONDITION","feedback":"Daemon not restarted onto the fix.","output":{"precondition":{"requirement":"daemon running the fix","observed":"old revision","needed":"restart"}}}
+{"decision":"ACCEPTED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}

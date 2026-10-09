@@ -589,15 +589,6 @@ func buildWorkStateAdjacency(cfg *factorydefinitions.FactoryConfig) map[string]m
 			connectRoutes(workstation.Inputs, route.Outputs)
 		}
 	}
-	for _, workType := range cfg.WorkTypes {
-		for _, state := range workType.States {
-			if rule := state.OnReopen; rule != nil {
-				from := placeKey(workType.Name, state.Name)
-				addEdge(from, placeKey(workType.Name, rule.State))
-				addEdge(from, placeKey(workType.Name, rule.ExhaustedState))
-			}
-		}
-	}
 	return adj
 }
 

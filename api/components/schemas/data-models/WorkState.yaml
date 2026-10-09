@@ -16,27 +16,3 @@ properties:
     allOf:
       - $ref: './WorkStateType.yaml'
     description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
-  onReopen:
-    type: object
-    additionalProperties: false
-    description: >-
-      Optional recovery rule for restored Work in a processing state.
-      Live reopening applies one move before scheduling. Replay applies none.
-      At maxWaits recorded waiting admissions, reopening selects exhaustedState.
-    required:
-      - state
-      - maxWaits
-      - exhaustedState
-    properties:
-      state:
-        type: string
-        minLength: 1
-        description: Different processing state in the same work type for another attempt.
-      maxWaits:
-        type: integer
-        minimum: 1
-        description: Number of recorded waiting admissions that exhaust the recovery budget.
-      exhaustedState:
-        type: string
-        minLength: 1
-        description: Failed state in the same work type selected when the budget is exhausted.

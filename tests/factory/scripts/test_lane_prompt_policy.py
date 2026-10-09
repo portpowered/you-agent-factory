@@ -3,7 +3,6 @@
 from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -118,8 +117,7 @@ Run every named command/read and report every named value, unit and source.
 Each failed read retries once; retain both attempts and available output.
 Optional exhaustion is a recorded gap, not alone FAILED.
 Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values.
-If the only problem is an unmet prerequisite, return PRECONDITION even with partial measurements.
-Do not restart the daemon or mutate product state to satisfy a precondition.
+If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.
 For gaps, prepare a narrow corrective batch plus its own dependent loopback.
 For untagged Work, use a stable request ID, dry-run, idempotent submission and verified receipt.
 Dry-run only in the bound Factory Session; submit no Project children.
@@ -130,7 +128,7 @@ do not reset the rejection marker.
 Use the exact key output.precondition with a non-blank string for an unmet precondition.
 Each measurement requires value. Zero, false and null are valid values.
 {"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
-{"decision":"PRECONDITION","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
+{"decision":"ACCEPTED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
 """
 
 
@@ -276,22 +274,6 @@ The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60
 
     def test_empty_mission_policy_reports_required_rules(self):
         self.assertEqual(len(policy.check_mission_policy('')), len(policy.MISSION_RULES))
-
-    def test_precondition_examples_cannot_accept_or_fail_prerequisites(self):
-        diagnostic = 'verify-mission:mission-example-conflict: precondition examples must return PRECONDITION'
-        for decision in ('ACCEPTED', 'FAILED'):
-            for measurements in (None, [{'name': 'pending', 'source': 'read', 'value': 0}]):
-                output = {'precondition': {'requirement': 'daemon running the fix', 'needed': 'restart'}}
-                if measurements:
-                    output['measurements'] = measurements
-                example = json.dumps({'output': output, 'feedback': 'blocked', 'decision': decision}, indent=2)
-                with self.subTest(decision=decision, measurements=measurements):
-                    self.assertIn(diagnostic, policy.check_mission_policy(MISSION + example))
-
-    def test_old_required_read_policy_conflicts_even_with_wait_clause(self):
-        source = MISSION + 'Required read/command failures return FAILED with the exact reason and available values.'
-        self.assertIn('verify-mission:mission-wait-conflict: prerequisite-only failures must return PRECONDITION',
-                      policy.check_mission_policy(source))
 
     def test_optional_inventory_fatal_instructions_conflict_with_mission(self):
         prompts = {owner: '\n'.join(clause for _, clause in rules)
@@ -657,8 +639,8 @@ class AuthoredMissionPolicyTests(unittest.TestCase):
     def test_unsatisfied_preconditions_name_missing_values_without_filing(self):
         clauses = (
             'Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values.',
-            'If the only problem is an unmet prerequisite, return PRECONDITION even with partial measurements; retain available evidence in output.precondition and output.measurements.',
-            'This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.',
+            'If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.',
+            'This includes exhausted required reads and a daemon not yet restarted onto the fix; file no corrective Work or proposal for it.',
             'Do not restart the daemon or mutate product state to satisfy a precondition.',
             'Use the exact key output.precondition with a non-blank string for an unmet precondition.',
         )

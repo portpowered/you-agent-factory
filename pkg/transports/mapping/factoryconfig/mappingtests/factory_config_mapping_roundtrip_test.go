@@ -2,7 +2,6 @@ package mappingtests
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -10,65 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	. "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
-
-func TestReopenPolicyRoundtrip(t *testing.T) {
-	t.Parallel()
-	original := &interfaces.FactoryConfig{Name: "waiting-mission", WorkTypes: []interfaces.WorkTypeConfig{{
-		Name: "mission", States: []interfaces.StateConfig{
-			{Name: "ready", Type: interfaces.StateTypeProcessing},
-			{Name: "waiting", Type: interfaces.StateTypeProcessing,
-				OnReopen: &interfaces.StateReopenConfig{State: "ready", MaxWaits: 3, ExhaustedState: "failed"}},
-			{Name: "failed", Type: interfaces.StateTypeFailed},
-			{Name: "complete", Type: interfaces.StateTypeTerminal},
-		},
-	}}}
-	api, err := FactoryConfigToOpenAPI(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := json.Marshal(api)
-	if err != nil {
-		t.Fatal(err)
-	}
-	restored, err := FactoryConfigFromOpenAPIJSON(encoded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(original.WorkTypes, restored.WorkTypes) {
-		t.Fatalf("policy changed across API roundtrip: %#v", restored.WorkTypes)
-	}
-	mapper := NewFactoryConfigMapper()
-	flattened, err := mapper.Flatten(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expanded, err := mapper.Expand(flattened)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(original.WorkTypes, expanded.WorkTypes) {
-		t.Fatalf("policy changed across import/export: %#v", expanded.WorkTypes)
-	}
-}
-
-func TestReopenEventSourceRoundtrip(t *testing.T) {
-	t.Parallel()
-	reason := "retry after live reopen"
-	input := interfaces.WorkStateChangeEventPayload{WorkID: "mission-1", WorkTypeName: "mission",
-		FromState: "waiting", ToState: "ready", FromPlaceID: "mission:waiting", ToPlaceID: "mission:ready",
-		Source: work.WorkStateChangeSourceSessionReopen, Reason: &reason}
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var decoded interfaces.WorkStateChangeEventPayload
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(input, decoded) {
-		t.Fatalf("event changed: %#v", decoded)
-	}
-}
 
 func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T) {
 	mapper := NewFactoryConfigMapper()

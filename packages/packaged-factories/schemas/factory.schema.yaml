@@ -1422,27 +1422,6 @@ $defs:
             name:
                 description: Customer-authored state name referenced by workstation inputs and outputs.
                 type: string
-            onReopen:
-                additionalProperties: false
-                description: Optional recovery rule for restored Work in a processing state. Live reopening applies one move before scheduling. Replay applies none. At maxWaits recorded waiting admissions, reopening selects exhaustedState.
-                properties:
-                    exhaustedState:
-                        description: Failed state in the same work type selected when the budget is exhausted.
-                        minLength: 1
-                        type: string
-                    maxWaits:
-                        description: Number of recorded waiting admissions that exhaust the recovery budget.
-                        minimum: 1
-                        type: integer
-                    state:
-                        description: Different processing state in the same work type for another attempt.
-                        minLength: 1
-                        type: string
-                required:
-                    - state
-                    - maxWaits
-                    - exhaustedState
-                type: object
             type:
                 allOf:
                     - $ref: '#/$defs/WorkStateType'

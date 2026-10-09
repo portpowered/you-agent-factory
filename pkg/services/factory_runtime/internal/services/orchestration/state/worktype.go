@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -19,9 +18,8 @@ type WorkType struct {
 
 // StateDefinition defines a single state within a work type.
 type StateDefinition struct {
-	Value    string                                `json:"value"`
-	Category StateCategory                         `json:"category"` // INITIAL, PROCESSING, TERMINAL, FAILED
-	OnReopen *factorydefinitions.StateReopenConfig `json:"onReopen,omitempty"`
+	Value    string        `json:"value"`
+	Category StateCategory `json:"category"` // INITIAL, PROCESSING, TERMINAL, FAILED
 }
 
 // StateCategory classifies states within a work type.

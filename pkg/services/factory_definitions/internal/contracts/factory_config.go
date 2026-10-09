@@ -602,18 +602,9 @@ func isASCIIAlpha(value byte) bool {
 
 // StateConfig declares a state within a work type.
 type StateConfig struct {
-	ID       string             `json:"id,omitempty" yaml:"id,omitempty"`
-	Name     string             `json:"name"`
-	Type     StateType          `json:"type"`
-	OnReopen *StateReopenConfig `json:"onReopen,omitempty" yaml:"onReopen,omitempty"`
-}
-
-// StateReopenConfig releases restored waiting Work once per live opening.
-// Recorded admissions, rather than elapsed time or ticks, bound retries.
-type StateReopenConfig struct {
-	State          string `json:"state" yaml:"state"`
-	MaxWaits       int    `json:"maxWaits" yaml:"maxWaits"`
-	ExhaustedState string `json:"exhaustedState" yaml:"exhaustedState"`
+	ID   string    `json:"id,omitempty" yaml:"id,omitempty"`
+	Name string    `json:"name"`
+	Type StateType `json:"type"`
 }
 
 type StateType string

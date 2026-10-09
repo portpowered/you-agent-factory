@@ -75,13 +75,6 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 				Name: state.Name,
 				Type: factoryapi.WorkStateType(state.Type),
 			}
-			if rule := state.OnReopen; rule != nil {
-				states[stateIndex].OnReopen = &struct {
-					ExhaustedState string `json:"exhaustedState"`
-					MaxWaits       int    `json:"maxWaits"`
-					State          string `json:"state"`
-				}{ExhaustedState: rule.ExhaustedState, MaxWaits: rule.MaxWaits, State: rule.State}
-			}
 		}
 		result[i] = factoryapi.WorkType{
 			Id:                stringPtrIfNotEmpty(workType.ID),
