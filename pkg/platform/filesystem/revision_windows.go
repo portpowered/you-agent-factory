@@ -2,7 +2,6 @@ package filesystem
 
 import (
 	"fmt"
-	"os"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -13,8 +12,8 @@ import (
 // caller-restorable write time. No content or service policy is retained.
 // Filesystems without change-time support return an empty revision, requiring
 // the consumer to read the content instead.
-func (Local) ReadRevision(path string) (revision string, err error) {
-	file, err := os.Open(path)
+func (reader RevisionReader) ReadRevision(path string) (revision string, err error) {
+	file, err := reader.OpenFile(path)
 	if err != nil {
 		return "", err
 	}

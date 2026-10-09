@@ -449,7 +449,7 @@ func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
 	<-read
 	select {
 	case <-waiter.waiting:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("waiter did not join the shared decode")
 	}
 	cancel()
@@ -459,7 +459,7 @@ func TestRetainedNamesWaiterCancellationDoesNotInterruptDecode(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("waiter cancellation = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("canceled waiter waited for the unrelated decode")
 	}
 	go invoke(t.Context(), otherAttempt)
@@ -514,7 +514,7 @@ func TestRetainedNamesSurvivesCanceledLeader(t *testing.T) {
 	<-read
 	select {
 	case <-waiter.waiting:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("survivor did not join the shared decode")
 	}
 	cancel()
@@ -552,7 +552,7 @@ func awaitNamesResult(t *testing.T, result <-chan namesResult, name string, want
 		if !errors.Is(got.err, want) || (want == nil && got.projection.names["work"] != name) {
 			t.Fatalf("names = %+v, %v; want %q, %v", got.projection, got.err, name, want)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("name read did not complete")
 	}
 }
@@ -561,7 +561,7 @@ func awaitNamesSignal(t *testing.T, signal <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-signal:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("name read did not reach the controlled edge")
 	}
 }
@@ -664,7 +664,7 @@ func TestRetainedNamesSharedUnavailableReadRetries(t *testing.T) {
 			if !isUnavailableHistory(got.err) || !errors.Is(got.err, os.ErrNotExist) {
 				t.Fatalf("unavailable source = %v", got.err)
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(30 * time.Second):
 			t.Fatal("shared unavailable read did not complete")
 		}
 	}

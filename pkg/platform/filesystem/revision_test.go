@@ -12,6 +12,9 @@ import (
 func TestReadRevisionDetectsRestoredWriteTimeAndReplacement(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "source")
+	reader := RevisionReader{OpenFile: func(path string) (RevisionFile, error) {
+		return os.Open(path)
+	}}
 	write := func(value string) {
 		t.Helper()
 		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
@@ -20,7 +23,7 @@ func TestReadRevisionDetectsRestoredWriteTimeAndReplacement(t *testing.T) {
 	}
 	revision := func() string {
 		t.Helper()
-		value, err := (Local{}).ReadRevision(path)
+		value, err := reader.ReadRevision(path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -60,7 +63,55 @@ func TestReadRevisionDetectsRestoredWriteTimeAndReplacement(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if value, err := (Local{}).ReadRevision(path); value != "" || !errors.Is(err, os.ErrNotExist) {
+	if value, err := reader.ReadRevision(path); value != "" || !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing source = %q, %v", value, err)
 	}
+}
+
+func TestReadRevisionPropagatesInjectedOpenAndCloseFailures(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "source")
+	openErr := errors.New("read access unavailable")
+	reader := RevisionReader{OpenFile: func(selected string) (RevisionFile, error) {
+		if selected != path {
+			t.Fatalf("opened %q, want %q", selected, path)
+		}
+		return nil, openErr
+	}}
+	if value, err := reader.ReadRevision(path); value != "" || !errors.Is(err, openErr) {
+		t.Fatalf("open failure = %q, %v", value, err)
+	}
+	if err := os.WriteFile(path, []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	closeErr := errors.New("close unavailable")
+	var opened *revisionCloseFailure
+	reader.OpenFile = func(selected string) (RevisionFile, error) {
+		file, err := os.Open(selected)
+		if err != nil {
+			return nil, err
+		}
+		opened = &revisionCloseFailure{File: file, err: closeErr}
+		return opened, nil
+	}
+	if value, err := reader.ReadRevision(path); value != "" || !errors.Is(err, closeErr) {
+		t.Fatalf("close failure = %q, %v", value, err)
+	}
+	if opened == nil || !opened.closed {
+		t.Fatal("readable descriptor was not closed")
+	}
+}
+
+type revisionCloseFailure struct {
+	*os.File
+	err    error
+	closed bool
+}
+
+func (file *revisionCloseFailure) Close() error {
+	file.closed = true
+	if err := file.File.Close(); err != nil {
+		return err
+	}
+	return file.err
 }

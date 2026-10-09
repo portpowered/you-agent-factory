@@ -2,7 +2,6 @@ package filesystem
 
 import (
 	"fmt"
-	"os"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -11,8 +10,8 @@ import (
 // ReadRevision checks readability and includes inode identity and change time,
 // so restoring a file's size and write time cannot hide ordinary replacement
 // or an in-place update. Unsupported metadata falls back to content reads.
-func (Local) ReadRevision(path string) (revision string, err error) {
-	file, err := os.Open(path)
+func (reader RevisionReader) ReadRevision(path string) (revision string, err error) {
+	file, err := reader.OpenFile(path)
 	if err != nil {
 		return "", err
 	}

@@ -31,6 +31,20 @@ type ReadOpener interface {
 	Open(string) (io.ReadCloser, error)
 }
 
+// RevisionFile exposes metadata from the same readable descriptor whose
+// identity is checked, avoiding a separate path lookup during replacement.
+type RevisionFile interface {
+	Fd() uintptr
+	Stat() (fs.FileInfo, error)
+	Close() error
+}
+
+// RevisionReader checks file revisions using the readable-file capability
+// selected by Wire. Unsupported host metadata declines content reuse.
+type RevisionReader struct {
+	OpenFile func(string) (RevisionFile, error)
+}
+
 // PathInspector is the exact metadata lookup effect used after a caller has
 // selected a path. It carries no service-owned path or existence policy.
 type PathInspector interface {

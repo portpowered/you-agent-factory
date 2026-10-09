@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -150,7 +151,11 @@ func provideWorkerWorkAttributionReader(edges serviceedges.Edges, writer recordi
 	// transient fault. Local file metadata cannot establish its revision.
 	var revision func(string) (string, error)
 	if edges.RecordingReadFile == nil {
-		revision = platformfilesystem.Local{}.ReadRevision
+		revision = (platformfilesystem.RevisionReader{
+			OpenFile: func(path string) (platformfilesystem.RevisionFile, error) {
+				return os.Open(path)
+			},
+		}).ReadRevision
 	}
 	return recordingswire.NewWorkerWorkAttributionReader(writer, history, root.CurrentBoardRecordingArtifact, readFile, revision)
 }
