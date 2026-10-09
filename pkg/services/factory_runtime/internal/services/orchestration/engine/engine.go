@@ -40,6 +40,7 @@ type FactoryEngine struct {
 	replayDispatchWorkIDs map[string]struct{}
 	historicalWorkIDs     map[string]struct{}
 	replayHistoricalWorks []workdomain.ExistingWork
+	replayPauseControls   []interfaces.FactoryEvent
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -584,15 +585,13 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	paused := e.automaticTicksPaused != nil && e.automaticTicksPaused()
-	if paused {
-		e.drainPendingResults()
-		if _, err := e.invokeDispatchResultHook(ctx); err != nil {
-			return false, false, err
-		}
-		if len(e.runtimeState.Results) == 0 {
-			e.logger.Debug("engine: skipping automatic tick while factory is paused")
-			return false, false, nil
-		}
+	hasResults, err := e.pausedTickHasResults(ctx, paused)
+	if err != nil {
+		return false, false, err
+	}
+	if !hasResults {
+		e.logger.Debug("engine: skipping automatic tick while factory is paused")
+		return false, false, nil
 	}
 	e.capacityWakePending = false
 	e.terminationResult = nil
@@ -601,14 +600,17 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	if err != nil {
 		return false, false, err
 	}
-	shouldTerminate := false
+	replayPaused, replayControlPending, replayFinished := e.replayPauseAtTick(e.runtimeState.TickCount)
+	keepAlive = keepAlive || replayControlPending
+	mutated = mutated || replayControlPending
+	shouldTerminate := replayFinished
 	totalDispatches := 0
 	completedDispatches := make(map[string]interfaces.CompletedDispatch)
 	e.logger.Info("engine: [START] running engine tick", "tick", e.runtimeState.TickCount)
 	for _, sub := range e.subsystems {
 		// Pause gates scheduling, not completion of already-started work.
 		// Only the result phases run; termination must not close a paused session.
-		if paused && sub.TickGroup() != subsystems.History && sub.TickGroup() != subsystems.Transitioner {
+		if skipPausedTickGroup(sub.TickGroup(), paused || replayPaused) {
 			continue
 		}
 		rtSnapshot = e.refreshSnapshotBeforeSubsystem(sub, rtSnapshot)
@@ -661,6 +663,21 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	// deadlock detection when async results arrive mid-tick.
 	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, completedDispatches, rtSnapshot, mutated)
 	return mutated, shouldTerminate, nil
+}
+
+func skipPausedTickGroup(group subsystems.TickGroup, paused bool) bool {
+	return paused && group != subsystems.History && group != subsystems.Transitioner
+}
+
+func (e *FactoryEngine) pausedTickHasResults(ctx context.Context, paused bool) (bool, error) {
+	if !paused {
+		return true, nil
+	}
+	e.drainPendingResults()
+	if _, err := e.invokeDispatchResultHook(ctx); err != nil {
+		return false, err
+	}
+	return len(e.runtimeState.Results) > 0, nil
 }
 
 func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.CompletedDispatch) error {

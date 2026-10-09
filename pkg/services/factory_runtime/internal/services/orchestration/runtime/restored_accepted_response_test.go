@@ -323,6 +323,21 @@ func TestRecordedResponseRestoresOriginalClaimsAndLineage(t *testing.T) {
 	}
 }
 
+func TestRecordedAcceptanceIsNotRecoveredDuringExplicitReplay(t *testing.T) {
+	t.Parallel()
+	cfg := acceptedResponseConfig()
+	cfg.skipRestoredDispatchReconciliation = true
+	cfg.restoredEventPrefix = acceptedResponseFixture(t)
+	marking := petri.NewMarking("replay")
+	marking.AddToken(&factorytoken.Token{ID: "recorded-input", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-1"}})
+	if err := prepareRestoredAcceptedDispatches(cfg, marking); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.restoredAcceptedDispatches) != 0 || len(marking.Tokens) != 1 {
+		t.Fatal("explicit replay performed live restart completion or consumed recorded input")
+	}
+}
+
 func TestRecordedResponseRejectsTruncatedTypedText(t *testing.T) {
 	t.Parallel()
 	events := acceptedResponseFixture(t)

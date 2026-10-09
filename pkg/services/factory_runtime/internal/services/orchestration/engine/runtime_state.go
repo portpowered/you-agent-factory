@@ -498,6 +498,33 @@ func (e *FactoryEngine) SetReplayHistoricalWorks(existing []work.ExistingWork) {
 	e.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
 }
 
+// SetReplayLifecycleControls preserves the scheduling boundary of paused
+// completion ticks. Replay advances its logical clock and consumes recorded
+// results; it never interprets those ticks as a live restart or resume.
+func (e *FactoryEngine) SetReplayLifecycleControls(events []interfaces.FactoryEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.replayPauseControls = nil
+	for _, event := range events {
+		if event.Type == interfaces.FactoryEventTypeSessionPaused || event.Type == interfaces.FactoryEventTypeSessionResumed {
+			e.replayPauseControls = append(e.replayPauseControls, interfaces.FactoryEvent{Type: event.Type, Context: interfaces.FactoryEventContext{Tick: event.Context.Tick}})
+		}
+	}
+}
+
+func (e *FactoryEngine) replayPauseAtTick(tick int) (paused, pending, finished bool) {
+	for _, event := range e.replayPauseControls {
+		// Controls are recorded between ticks: their scheduling effect begins
+		// on the next tick, including the first paused completion tick.
+		if event.Context.Tick >= tick {
+			pending = true
+			continue
+		}
+		paused = event.Type == interfaces.FactoryEventTypeSessionPaused
+	}
+	return paused, pending, paused && !pending && e.runtimeState.InFlightCount == 0
+}
+
 // existingWorksForAdmissionLocked returns the current board identities used
 // by live relation admission. Marking tokens cover queued, terminal, and
 // failed Work; consumed dispatch tokens cover Work that is currently active

@@ -302,6 +302,9 @@ func (f *factoryImpl) SetReplayEvents(events []interfaces.FactoryEvent) {
 		return
 	}
 	f.cfg.replayEvents = cloneAndSortFactoryEvents(events)
+	if f.cfg.skipRestoredDispatchReconciliation {
+		f.engine.SetReplayLifecycleControls(f.cfg.replayEvents)
+	}
 	if f.cfg.restoredWorldState != nil && len(f.cfg.restoredEventPrefix) == 0 {
 		f.cfg.restoredEventPrefix = cloneFactoryEventsInOrder(f.cfg.replayEvents)
 	}

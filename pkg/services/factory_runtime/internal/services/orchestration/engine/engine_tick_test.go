@@ -54,6 +54,68 @@ func TestTickCallsSubsystem(t *testing.T) {
 	}
 }
 
+func TestReplayPausedCompletionWaitsForRecordedResume(t *testing.T) {
+	for _, outcome := range []workerexecution.WorkOutcome{workerexecution.OutcomeAccepted, workerexecution.OutcomeCanceled} {
+		t.Run(string(outcome), func(t *testing.T) {
+			dispatcher := &mockSubsystem{group: subsystems.Dispatcher}
+			termination := &mockSubsystem{group: subsystems.TerminationCheck}
+			applications := 0
+			router := &mockSubsystem{group: subsystems.Transitioner, execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+				if len(snapshot.Results) > 0 {
+					applications++
+					if len(snapshot.Results) != 1 || snapshot.Results[0].Outcome != outcome {
+						t.Fatalf("replayed results = %#v", snapshot.Results)
+					}
+				}
+				return nil, nil
+			}}
+			engine := newTestFactoryEngine(buildTestNet(), petri.NewMarking("replay"), []subsystems.Subsystem{dispatcher, router, termination})
+			engine.SetReplayLifecycleControls([]interfaces.FactoryEvent{
+				{Type: interfaces.FactoryEventTypeSessionPaused, Context: interfaces.FactoryEventContext{Tick: 0}},
+				{Type: interfaces.FactoryEventTypeSessionResumed, Context: interfaces.FactoryEventContext{Tick: 3}},
+			})
+			engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{DispatchID: "recorded", Outcome: outcome})
+			assertReplayPausedTicks(t, engine)
+			if applications != 1 || dispatcher.callCount != 0 || termination.callCount != 0 {
+				t.Fatalf("paused replay: applications=%d dispatcher=%d termination=%d", applications, dispatcher.callCount, termination.callCount)
+			}
+			if err := engine.Tick(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if dispatcher.callCount != 1 || termination.callCount != 1 || applications != 1 {
+				t.Fatalf("resumed replay: applications=%d dispatcher=%d termination=%d", applications, dispatcher.callCount, termination.callCount)
+			}
+		})
+	}
+}
+
+func assertReplayPausedTicks(t *testing.T, engine *FactoryEngine) {
+	t.Helper()
+	for range 3 {
+		mutated, terminated, err := engine.tickOnce(context.Background())
+		if err != nil || !mutated || terminated {
+			t.Fatalf("paused replay tick = %t, %t, %v", mutated, terminated, err)
+		}
+	}
+}
+
+func TestReplayEndingPausedFinishesAfterRecordedResult(t *testing.T) {
+	dispatcher := &mockSubsystem{group: subsystems.Dispatcher}
+	engine := newTestFactoryEngine(buildTestNet(), petri.NewMarking("replay"), []subsystems.Subsystem{dispatcher})
+	engine.SetReplayLifecycleControls([]interfaces.FactoryEvent{{Type: interfaces.FactoryEventTypeSessionPaused}})
+	engine.runtimeState.Dispatches["recorded"] = &interfaces.DispatchEntry{DispatchID: "recorded"}
+	engine.runtimeState.InFlightCount = 1
+	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{DispatchID: "recorded", Outcome: workerexecution.OutcomeAccepted})
+	_, terminated, err := engine.tickOnce(context.Background())
+	if err != nil || terminated || len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+		t.Fatalf("recorded completion: terminated=%t err=%v", terminated, err)
+	}
+	_, terminated, err = engine.tickOnce(context.Background())
+	if err != nil || !terminated || dispatcher.callCount != 0 {
+		t.Fatalf("paused replay end: terminated=%t dispatcher=%d err=%v", terminated, dispatcher.callCount, err)
+	}
+}
+
 func TestTickNRunsMultipleTicks(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
