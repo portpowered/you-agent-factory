@@ -272,6 +272,24 @@ func TestExactLegacyWorkerUsesPreparedSelectorWithoutHistoryReplay(t *testing.T)
 	}
 }
 
+func TestExactLegacyWorkerSurvivesAnotherOwnersCaptureCorrelation(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+	reader.summary.Capture.Opening.Payload = []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q,"dispatchId":"other-attempt","workIds":["other-work"]}}`, fixture.workerSessionID))
+	reader.summary.Capture.Catalog.FactorySessionID = "other-owner"
+	service.restoredWorkerScopes = map[string]string{fixture.workerSessionID: "original-owner"}
+	service.recordingReader, service.recordingID = reader, "owned"
+	service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+		panic("colliding exact summary replayed canonical history")
+	}
+	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+	if err != nil || got.WorkerSessionID != fixture.workerSessionID || got.AttemptID != "dispatch-recorded-exact" || got.State != workersessions.StateCompleted || got.TokenUsage != nil {
+		t.Fatalf("colliding capture hid prepared legacy identity: %+v, %v", got, err)
+	}
+}
+
 func TestScopedWorkHistoricalCaptureErrorsDoNotReturnPartialRows(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

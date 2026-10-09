@@ -338,7 +338,7 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	// An unscoped terminal runtime row can describe business Work processing.
 	// Exact historical inspection instead reports the committed Worker capture;
 	// explicit current-runtime selectors retain their existing attribution.
-	if errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && factorySessionID == "" && observation.State.Terminal()) {
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && factorySessionID == "" && !observation.Direct && observation.State.Terminal()) {
 		if a.logs != nil {
 			captured, captureErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, FactorySessionID: factorySessionID})
 			if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) || err != nil {

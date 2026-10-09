@@ -134,6 +134,17 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 	}
 	item := summary.Capture
 	restoredScope := s.restoredWorkerScopes[observation.WorkerSessionID]
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(item.Opening.Payload, &draft) == nil && json.Unmarshal(draft.Payload, &opening) == nil &&
+		opening.DispatchID != "" && opening.DispatchID != observation.AttemptID {
+		// Legacy IDs can collide across owners. This committed opening cannot
+		// enrich the canonical peer's different physical attempt.
+		return observation, nil
+	}
+	if s.captureHasAnotherPhysicalScope(observation.WorkerSessionID, item.Catalog) {
+		return observation, nil
+	}
 	if !s.selectedCaptureMatches(observation.WorkerSessionID, item.Catalog) {
 		return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
 	}
@@ -155,6 +166,14 @@ func (s *recordedWorkerSessionObservation) selectedCaptureMatches(workerID strin
 		return catalog.FactorySessionID == restoredScope
 	}
 	return catalog.RecordingID == s.recordingID
+}
+
+func (s *recordedWorkerSessionObservation) captureHasAnotherPhysicalScope(workerID string, catalog recordings.WorkerSessionCatalogEntry) bool {
+	scope := s.executionFactorySessionID
+	if restored := s.restoredWorkerScopes[workerID]; restored != "" {
+		return false // Restored membership requires this exact capture scope.
+	}
+	return scope != "" && catalog.FactorySessionID != "" && catalog.FactorySessionID != scope
 }
 
 // A restored canonical association authorizes this exact physical capture in
@@ -264,6 +283,9 @@ func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx contex
 	if len(summary.Capture.Opening.Payload) == 0 {
 		return workersessions.Observation{}, false, false, nil
 	}
+	if s.captureHasAnotherPhysicalScope(workerID, summary.Capture.Catalog) {
+		return workersessions.Observation{}, false, false, nil
+	}
 	if json.Unmarshal(summary.Capture.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil {
 		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
 	}
@@ -274,7 +296,10 @@ func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx contex
 		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
 	}
 	observation, found, err := s.readSelectedWorkerSummary(ctx, workerID, opening.WorkIDs[0], opening.DispatchID)
-	return observation, found, true, err
+	// A colliding capture can belong to a different physical owner. Absence
+	// from this Work selection is not absence from the selected canonical
+	// ledger; its prepared exact selector still resolves the legacy peer.
+	return observation, found, found || err != nil, err
 }
 
 func (s *recordedWorkerSessionObservation) readSelectedWorkerSummary(ctx context.Context, workerID, workID, dispatchID string) (workersessions.Observation, bool, error) {

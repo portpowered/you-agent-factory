@@ -92,6 +92,7 @@ func TestWorkerSessionSummaryUnscopedTerminalPrefersCapture(t *testing.T) {
 	for _, cell := range []struct {
 		name        string
 		state       workersessions.State
+		direct      bool
 		selector    string
 		captureErr  error
 		wantCapture bool
@@ -99,12 +100,13 @@ func TestWorkerSessionSummaryUnscopedTerminalPrefersCapture(t *testing.T) {
 		{name: "failed Work", state: workersessions.StateFailed, wantCapture: true},
 		{name: "current runtime", state: workersessions.StateFailed, selector: "~default"},
 		{name: "live", state: workersessions.StateRunning},
+		{name: "direct terminal", state: workersessions.StateTerminated, direct: true},
 		{name: "legacy absent capture", state: workersessions.StateCompleted, captureErr: workersessions.ErrObservationSessionNotFound, wantCapture: true},
 		{name: "corrupt capture", state: workersessions.StateFailed, captureErr: workersessions.ErrObservationRecordingCorrupt, wantCapture: true},
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			live := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "~default", State: cell.state}}
+			live := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "~default", State: cell.state, Direct: cell.direct}}
 			capture := &closedScopeCaptureStub{observation: workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "original", State: workersessions.StateCompleted}, err: cell.captureErr}
 			adapter := NewAdapter(live, workServiceStub{}).WithLogsService(capture)
 			got, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker", cell.selector)
