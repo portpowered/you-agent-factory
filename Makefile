@@ -231,7 +231,7 @@ LINT_RUN_DEADCODE ?= 1
 LINT_SELECTION_FILE ?=
 $(foreach flag,LINT_BACKEND_ONLY LINT_RUN_DOCS LINT_RUN_DEADCODE,$(if $(and $(filter 1,$(words $($(flag)))),$(filter 0 1,$($(flag)))),,$(error $(flag) must be 0 or 1)))
 LINT_TARGETS_DOCS := $(if $(filter 1,$(LINT_RUN_DOCS)),docs-reference-check)
-LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check
+LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check test-backend-conformance
 LINT_TARGETS_UI := $(if $(filter 1,$(LINT_BACKEND_ONLY)),,ui-lint ui-deadcode)
 LINT_TARGETS_CI_ONLY := $(if $(filter 1,$(LINT_RUN_DEADCODE)),deadcode)
 LINT_FULL ?=
@@ -626,7 +626,7 @@ test-localai-runner-v2-prebuilt:
 
 test-integration:
 	$(MAKE) test-wiring-integration
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt ./tests/integration/workers/recording_sidecar -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/cancel ./tests/integration/workers/interrupt ./tests/integration/workers/recording_sidecar -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/internal/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)

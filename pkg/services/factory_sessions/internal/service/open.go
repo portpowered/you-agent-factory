@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -57,11 +58,25 @@ func (r *Root) openRuntimeWithOptions(
 				err = errors.Join(err, cleanupErr)
 				products.closeArtifacts = cleanup.Close
 			}
+			if opening.initial == nil {
+				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
+					err = errors.Join(err, logErr)
+					products.closeArtifacts = cleanup.Close
+				}
+			}
 		}
 	}()
-	if err = r.openSessionDurableScopes(ctx, opening, cleanup); err != nil {
+	resources, err := r.resourceAcquisition.Acquire(ctx, RuntimeResourceRequest{
+		Configured: opening.configured, FactoryRootDir: opening.root.FactoryRootDir,
+		ModelsRuntime: modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg),
+	}, opening.clock, opening.logger, cleanup)
+	if err != nil {
 		return runtimeProducts{}, err
 	}
+	opening.operatorSettingsPath = resources.OperatorSettingsPath
+	opening.durableExecution = resources.DurableExecution
+	opening.observations = resources.Observations
+	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return runtimeProducts{}, err
 	}
@@ -82,7 +97,6 @@ type sessionRuntimeOpening struct {
 	canonicalSessionIDGenerated bool
 	sessionSelection            *factorysessions.SessionRuntimeSelection
 	operatorSettingsPath        string
-	providerForDurable          providers.Service
 	durableExecution            DurableExecution
 	observations                factoryruntime.SessionObservations
 	modelsBind                  modelsRuntimeBind
@@ -98,6 +112,7 @@ type sessionRuntimeOpening struct {
 	startupRuntime              runtimeports.RuntimeInstance
 	completion                  factoryruntime.RuntimeInitialCompletion
 	activation                  *factoryruntime.RuntimeActivation
+	recordingTargetValidator    recordings.RecordingTargetValidator
 }
 
 func (r *Root) prepareRuntimeOpening(
@@ -130,7 +145,7 @@ func (r *Root) prepareRuntimeOpening(
 		sessionID = factorysessions.DefaultSessionID
 	}
 	session.SessionID = sessionID
-	configured, root, load, clock, logger, err := r.prepareRuntime(
+	configured, root, load, clock, logger, err := r.preparation.Prepare(
 		ctx,
 		definition,
 		runtime,
@@ -141,6 +156,7 @@ func (r *Root) prepareRuntimeOpening(
 		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
+		r.clock,
 		definitionSnapshot,
 		replayInput,
 	)
@@ -231,97 +247,8 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 	return historicalProducts, nil
 }
 
-func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
-	var err error
-	opening.operatorSettingsPath, err = operatorConfigPath(opening.sessionSelection.SystemConfigPath, opening.sessionSelection.SystemConfigHome)
-	if err != nil {
-		return fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
-	}
-	if opening.clock == nil {
-		return fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
-	}
-	if r.durableOpening == nil {
-		return fmt.Errorf("construct runtime scope: durable execution operation is required")
-	}
-	opening.providerForDurable = r.providerOverride
-	opening.durableExecution, err = r.durableOpening.Open(
-		ctx, opening.sessionID,
-		opening.configured.Definition,
-		opening.configured.Session.Persistence,
-		opening.sessionSelection.SystemConfigHome,
-		opening.sessionSelection.SystemConfigPath,
-		opening.configured.OperatorDefaults,
-		opening.root,
-		opening.clock,
-		opening.providerForDurable,
-		opening.configured.Workers.MockWorkers,
-	)
-	if release := opening.durableExecution.Release; release != nil {
-		cleanup.Add(func() error {
-			if err := release(context.WithoutCancel(ctx)); err != nil {
-				return fmt.Errorf("release durable Factory Session execution: %w", err)
-			}
-			return nil
-		})
-	}
-	if err != nil {
-		return err
-	}
-	if err := opening.bindSessionObservations(); err != nil {
-		return err
-	}
-	if r.factorySessionsRuntimeAssembly == nil {
-		return fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
-	}
-	currentRuntimeConfig := func() *models.RuntimeConfig {
-		// The Models scope must snapshot the Factory Definition selected by this
-		// opening. CurrentRuntime is process-global and can belong to another
-		// concurrently opening Factory Session, which would bind this session's
-		// host launcher to the other session's worker endpoint.
-		return modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg)
-	}
-	opening.modelsBind, err = bindModelsRuntimeScope(
-		ctx,
-		r.modelService,
-		opening.configured.ModelCacheDirectory,
-		currentRuntimeConfig,
-		opening.durableExecution.OperatorModels,
-	)
-	cleanup.OwnModelsScope(context.WithoutCancel(ctx), opening.modelsBind)
-	if err != nil {
-		return err
-	}
-	if r.workService == nil {
-		return fmt.Errorf("construct runtime scope: Work service is required")
-	}
-	if r.workerService == nil {
-		return fmt.Errorf("construct runtime scope: Workers service is required")
-	}
-	if r.automationService == nil {
-		return fmt.Errorf("construct runtime scope: Automations service is required")
-	}
-	return nil
-}
-
-// bindSessionObservations resolves the required scoped handoff while the
-// durable owner is acquired, before any Models or engine resources open.
-// Only this opening retains it; the reusable Root never stores observations.
-func (opening *sessionRuntimeOpening) bindSessionObservations() error {
-	observations, ok := opening.durableExecution.Service.(factoryruntime.SessionObservations)
-	if !ok {
-		return fmt.Errorf(
-			"compose runtime: durable execution owner must record mutations and publish worker progress",
-		)
-	}
-	opening.observations = observations
-	return nil
-}
-
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
 	var err error
-	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
-		return err
-	}
 	if opening.emptyCurrentBoard {
 		return nil
 	}
@@ -383,11 +310,28 @@ func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessio
 }
 
 func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	if err := r.selectCurrentBoardReference(ctx, opening); err != nil {
+		return err
+	}
+	selectedPath := opening.configured.Recordings.RecordPath
+	if err := r.claimSessionRecordingTarget(ctx, opening, cleanup); err != nil {
+		return err
+	}
 	if err := r.restoreSessionOpeningHistory(ctx, opening); err != nil {
 		return err
 	}
+	if opening.configured.Recordings.RecordPath == selectedPath && opening.recordingTargetValidator != nil {
+		if err := opening.recordingTargetValidator.Validate(); err != nil {
+			return err
+		}
+	}
 	if err := r.reserveFreshCurrentBoard(ctx, opening); err != nil {
 		return err
+	}
+	if opening.configured.Recordings.RecordPath != selectedPath {
+		if err := r.claimSessionRecordingTarget(ctx, opening, cleanup); err != nil {
+			return err
+		}
 	}
 
 	initial, err := r.openInitialSessionEngine(ctx, opening)
@@ -414,18 +358,12 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		opening.sessionID == factorysessions.DefaultSessionID &&
 		opening.metricsSessionID != factorysessions.DefaultSessionID
 	opening.initial.Completion = opening.completion
-	if opening.publishesCurrentBoardWriter() && (strings.TrimSpace(opening.configured.Recordings.ResumePath) != "" ||
-		(opening.usesImplicitCurrentBoard() && opening.restoredWorldState != nil)) {
-		flush := newOrderlyRecordingFlush(r.recordingsService, opening.configured.Runtime.RuntimeInstanceID, opening.configured.Recordings.RecordPath)
-		if flush == nil {
-			return fmt.Errorf("successor recording flush is unavailable")
-		}
-		if err := flush(ctx); err != nil {
+	// Quarantine starts an empty board. Preserve its existing pre-host
+	// reference-publication failure boundary; no retained history is activated.
+	if (!opening.usesImplicitCurrentBoard() || opening.startupRecovery != nil) && strings.TrimSpace(opening.configured.Recordings.ResumePath) == "" {
+		if err := opening.publishCurrentBoardReference(ctx); err != nil {
 			return err
 		}
-	}
-	if err := opening.publishCurrentBoardReference(ctx); err != nil {
-		return err
 	}
 	if recovery := opening.startupRecovery; recovery != nil && opening.logger != nil {
 		opening.logger.Warn("unreadable durable state quarantined; started an empty board",
@@ -433,6 +371,24 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 			zap.String("cause", recovery.cause))
 	}
 	opening.warnMissingBoardHistory()
+	return nil
+}
+
+func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
+	path := strings.TrimSpace(opening.configured.Recordings.RecordPath)
+	if path == "" {
+		return nil
+	}
+	ownership, ok := r.recordingsService.(recordings.RecordingTargetOwnership)
+	if !ok {
+		return fmt.Errorf("%w: recording target %q ownership is unavailable", recordings.ErrRecordingBindingConflict, path)
+	}
+	lease, err := ownership.ClaimRecordingTarget(ctx, factoryruntime.RecordingPath(path).ForSession(opening.sessionID))
+	if err != nil {
+		return err
+	}
+	cleanup.OwnRecordingTarget(lease)
+	opening.recordingTargetValidator, _ = lease.(recordings.RecordingTargetValidator)
 	return nil
 }
 
@@ -563,8 +519,12 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if r.processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
+	var startup roles.LifecycleRuntime = sessionRuntime
+	if (opening.usesImplicitCurrentBoard() && opening.startupRecovery == nil) || (opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "") {
+		startup = &successorBoardStartup{LifecycleRuntime: sessionRuntime, publish: opening.publishCurrentBoardReference}
+	}
 	processRuntime, err := r.processRuntimeFactory.Bind(
-		sessionRuntime,
+		startup,
 		factorysessions.RuntimeHostRequest{
 			Directory: opening.configured.Definition.Directory, RuntimeMode: opening.configured.Runtime.Mode,
 			WorkFile: opening.sessionSelection.WorkFile, MockWorkers: opening.configured.Workers.MockWorkers != nil,
@@ -576,7 +536,11 @@ func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRunti
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	return r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, processRuntime)
+	products, err := r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, processRuntime)
+	if err == nil {
+		products.lifecycle = startup
+	}
+	return products, err
 }
 
 func (r *Root) bindSessionOpeningProducts(
@@ -586,6 +550,9 @@ func (r *Root) bindSessionOpeningProducts(
 	sessionRuntime roles.ApplicationRuntime,
 	processRuntime roles.ProcessRuntime,
 ) (runtimeProducts, error) {
+	if recording, ok := opening.startupRuntime.(recordings.RuntimeRecordingStartup); ok {
+		recording.DeferRecordingPublication()
+	}
 	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
@@ -606,7 +573,7 @@ func (r *Root) bindSessionOpeningProducts(
 		opening.configured.Runtime.RuntimeInstanceID,
 		opening.startupRuntime.StreamGeneration(),
 		opening.startupRuntime.RecordingLedger(),
-		opening.providerForDurable,
+		r.providerOverride,
 		opening.configured.Workers.MockWorkers,
 		r.providerCommandRunner,
 		runtimeProgressPublisher(opening.startupRuntime),
@@ -810,4 +777,40 @@ func runtimeWorkerAttemptStarter(
 
 type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+}
+
+// A history read can fail before Factory Runtime has opened its sinks. Retain
+// that failed opening's diagnostic through the same injected log owner, without
+// constructing a runtime or binding a recording merely to report its failure.
+func (r *Root) logFailedSessionOpening(opening *sessionRuntimeOpening, cause error, cleanup *runtimeOpeningCleanup) error {
+	if opening.configured.Runtime.FileLoggingPolicy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
+		return nil
+	}
+	if r.runtimeLogs == nil {
+		return fmt.Errorf("log failed session opening: runtime log owner is required")
+	}
+	sink, openErr := r.runtimeLogs.Open(opening.logger, factoryruntime.RuntimeLogScopeRequest{
+		SessionID: opening.sessionID, RuntimeInstanceID: opening.configured.Runtime.RuntimeInstanceID,
+		FactoryDirectory: opening.load.LoadedFactoryCfg.FactoryDir(),
+		RootDirectory:    opening.configured.Runtime.LogDirectory,
+		Policy:           opening.configured.Runtime.FileLoggingPolicy, Config: opening.configured.Runtime.LogConfig,
+	})
+	if sink == nil {
+		if openErr != nil {
+			return fmt.Errorf("log failed session opening: %w", openErr)
+		}
+		return fmt.Errorf("log failed session opening: runtime log owner returned nil scope")
+	}
+	if logger := sink.Logger(); logger != nil {
+		logger.Error("Factory Session runtime startup failed",
+			zap.String("session_id", opening.sessionID),
+			zap.String("failure_class", "runtime_startup_failed"),
+			zap.String("cause", logging.SafeErrorCause(cause)),
+		)
+	}
+	closeErr := sink.Close()
+	if closeErr != nil {
+		cleanup.Add(sink.Close)
+	}
+	return errors.Join(openErr, closeErr)
 }

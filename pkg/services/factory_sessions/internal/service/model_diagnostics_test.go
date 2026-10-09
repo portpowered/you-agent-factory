@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,6 +161,22 @@ func TestCurrentBoardHistoryFailureExposesSafeCLIClassificationWithoutCauseText(
 	}
 	if strings.Contains(coded.CLIErrorMessage(), "work payload") || strings.Contains(err.Error(), "work payload") {
 		t.Fatalf("startup error exposed underlying cause: %q", err)
+	}
+}
+
+func TestCurrentBoardHistoryFailureNamesSafeFileCauseAndKeepsIdentity(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "current-board.json")
+	cause := &fs.PathError{Op: "read recording", Path: path, Err: fs.ErrPermission}
+	err := currentBoardHistoryFailure(path, "session-safe", "UNREADABLE_RECORDING: preserve the artifact", cause)
+	want := fmt.Sprintf("read recording %q: permission denied", path)
+	if !strings.Contains(err.Error(), want) || !errors.Is(err, cause) {
+		t.Fatalf("restore failure = %v, want safe cause %q and original identity", err, want)
+	}
+	core, logs := observer.New(zap.ErrorLevel)
+	logCurrentBoardHistoryFailure(zap.New(core), "session-safe", path, err)
+	if logs.Len() != 1 || !strings.Contains(fmt.Sprint(logs.All()[0].ContextMap()["cause"]), want) {
+		t.Fatalf("restore failure log omitted file cause: %#v", logs.All())
 	}
 }
 

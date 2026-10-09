@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -161,14 +162,18 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 	}, 120*time.Second)
 }
 
-// TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails proves that a
+// TestRecordStartupSafetyFailedRestore proves that a
 // present-but-invalid current-board artifact is not treated as an interrupted
 // write. The child process is intentional so the assertion covers the actual
 // operator-facing startup diagnostic emitted by the real CLI.
-func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) {
+func TestRecordStartupSafetyFailedRestore(t *testing.T) {
 	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
-	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
+	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "RF-I1-failed-restore", t.Name())
+	evidence.StoryID = "record-flag-never-destroys-an-existing-recording-001"
+	t.Cleanup(func() { evidence.publishRestartScenario(t) })
+	const privateMarker = "private-recording-decoder-marker"
+	corruptPayload := []byte(`{"schemaVersion":"replay.v1","private":"` + privateMarker + `","events":[`)
 	if err := os.WriteFile(scenario.recordPath, corruptPayload, 0o600); err != nil {
 		t.Fatalf("write corrupt current-board recording: %v", err)
 	}
@@ -182,17 +187,120 @@ func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) 
 		scenario.releasePath,
 	)
 	defer daemon.cleanup()
+	evidence.trackDaemon(t, "failed-restore-after-cleanup", daemon)
 	waitForBoardPersistenceDaemonExit(t, daemon, 90*time.Second)
-	if daemon.waitError() == nil {
-		t.Fatal("corrupt current-board recording process exited successfully")
+	var exitError *exec.ExitError
+	if !errors.As(daemon.waitError(), &exitError) || exitError.ExitCode() != 1 {
+		t.Fatalf("failed restore exit = %v, want CLI exit 1", daemon.waitError())
 	}
 	output := daemon.stdout.String() + daemon.stderr.String()
+	assertRecordStartupSafetyRestoreDiagnostic(t, output, scenario.recordPath)
+	contents, err := os.ReadFile(scenario.recordPath)
+	if err != nil {
+		t.Fatalf("read corrupt current-board recording after failed startup: %v", err)
+	}
+	if !bytes.Equal(contents, corruptPayload) {
+		t.Fatal("failed startup changed the corrupt recording; artifact must remain available for investigation")
+	}
+	logs := collectRestartRuntimeLogs(daemon.logDir)
+	encodedLogs, err := json.Marshal(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output, privateMarker) || bytes.Contains(encodedLogs, []byte(privateMarker)) {
+		t.Fatal("startup diagnostic exposed recording payload")
+	}
+	if len(logs) == 0 || !bytes.Contains(encodedLogs, []byte("runtime_startup_failed")) ||
+		!bytes.Contains(encodedLogs, []byte("invalid JSON at byte 84")) {
+		t.Fatalf("failed restore runtime logs lack the safe startup cause: %s", encodedLogs)
+	}
+	t.Logf("RF-I1 failed restore: exit=1, retained bytes=%d, safe JSON cause in ErrorResponse, payload withheld; runtime log files=%d", len(contents), len(logs))
+}
+
+// This cell consumes the same prebuilt CLI as the failed-restore cell. Work
+// stays in states without a workstation, so recovery needs no worker process.
+func TestRecordStartupSafetyResumeCopy(t *testing.T) {
+	t.Parallel()
+	scenario := newBoardPersistenceScenario(t)
+	delete(scenario.expected, boardPersistenceProcessingWorkID)
+	for id, want := range scenario.expected {
+		want.RequestID = boardPersistenceNewRequestID
+		want.RelationTarget = ""
+		scenario.expected[id] = want
+	}
+	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "RF-I1-resume-copy", t.Name())
+	evidence.StoryID = "record-flag-never-destroys-an-existing-recording-001"
+	t.Cleanup(func() { evidence.publishRestartScenario(t) })
+	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	evidence.trackDaemon(t, "source-graceful-stop", first)
+	batch := boardPersistenceBatchJSON(t, boardPersistenceNewRequestID, []boardPersistenceBatchWork{
+		{Name: "board-init", WorkID: boardPersistenceInitialWorkID, State: "init", TraceID: "trace-board-init", Content: "durable init content"},
+		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
+	})
+	submitBoardPersistenceBatchThroughCLI(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batch, boardPersistenceNewRequestID, 2)
+	assertBoardCLIListAndShows(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
+	first.stop(t)
+	source, err := os.ReadFile(scenario.recordPath)
+	if err != nil || len(source) == 0 {
+		t.Fatalf("read gracefully stopped source: bytes=%d, error=%v", len(source), err)
+	}
+	copyPath := filepath.Join(t.TempDir(), "board-backup.json")
+	if err := os.WriteFile(copyPath, source, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.recordSourceRecording(copyPath); err != nil {
+		t.Fatal(err)
+	}
+	successorPath := filepath.Join(t.TempDir(), "successor.json")
+	assertRecordStartupSafetyCopyGeneration(t, scenario, evidence, "resume-copy", copyPath, successorPath)
+	assertRecordStartupSafetyUnchangedFile(t, scenario.recordPath, source)
+	assertRecordStartupSafetyUnchangedFile(t, copyPath, source)
+	successor, err := os.ReadFile(successorPath)
+	if err != nil || len(successor) == 0 {
+		t.Fatalf("read flushed successor: bytes=%d, error=%v", len(successor), err)
+	}
+	// A fresh customer profile rules out recovering Work from the source's
+	// durable snapshot instead of reconstructing the selected successor.
+	assertRecordStartupSafetyCopyGeneration(t, scenario, evidence, "resume-successor", successorPath, filepath.Join(t.TempDir(), "next.json"))
+	assertRecordStartupSafetyUnchangedFile(t, successorPath, successor)
+	if err := evidence.verifySourceRecordingUnchanged(copyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := evidence.recordSuccessorRecordings(copyPath, successorPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("RF-I1 resume copy: original and backup unchanged (%d bytes); successor readable (%d bytes); Work IDs/states retained", len(source), len(successor))
+}
+
+func assertRecordStartupSafetyCopyGeneration(t *testing.T, scenario *boardPersistenceScenario, evidence *restartBaselineEvidence, name, source, target string) {
+	t.Helper()
+	home := t.TempDir()
+	daemon := startBoardPersistenceResumeDaemon(t, scenario.binaryPath, scenario.factoryDir, home, source, target, scenario.releasePath)
+	evidence.trackDaemon(t, name, daemon)
+	assertBoardCLIListAndShows(t, daemon, scenario.binaryPath, scenario.factoryDir, home, scenario.expected)
+	daemon.stop(t)
+}
+
+func assertRecordStartupSafetyUnchangedFile(t *testing.T, path string, expected []byte) {
+	t.Helper()
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual, expected) {
+		t.Fatalf("resume changed retained source %q", path)
+	}
+}
+
+func assertRecordStartupSafetyRestoreDiagnostic(t *testing.T, output, recordPath string) {
+	t.Helper()
 	for _, fragment := range []string{
 		"CURRENT_BOARD_RECORDING_CORRUPT",
 		"CORRUPT_HISTORY",
-		filepath.Base(scenario.recordPath),
+		filepath.Base(recordPath),
 		"preserve the artifact",
 		"replace it from a trusted backup",
+		"invalid JSON at byte",
 	} {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("corrupt recording startup output = %q, want fragment %q", output, fragment)
@@ -209,19 +317,12 @@ func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) 
 	if diagnostic.Code != factoryapi.ErrorResponseCode("CURRENT_BOARD_RECORDING_CORRUPT") {
 		t.Fatalf("corrupt recording startup output = %q, want structured corruption diagnostic", output)
 	}
-	expectedRecordPath := strconv.Quote(filepath.Clean(scenario.recordPath))
+	expectedRecordPath := strconv.Quote(filepath.Clean(recordPath))
 	if !strings.Contains(diagnostic.Message, expectedRecordPath) {
 		t.Fatalf("corrupt recording diagnostic message = %q, want exact resolved path %q", diagnostic.Message, expectedRecordPath)
 	}
 	if strings.Contains(output, "board contents were lost") || strings.Contains(output, "empty board was initialized") {
 		t.Fatalf("corrupt recording was reported as recoverable absence: %q", output)
-	}
-	contents, err := os.ReadFile(scenario.recordPath)
-	if err != nil {
-		t.Fatalf("read corrupt current-board recording after failed startup: %v", err)
-	}
-	if !bytes.Equal(contents, corruptPayload) {
-		t.Fatal("failed startup changed the corrupt recording; artifact must remain available for investigation")
 	}
 }
 

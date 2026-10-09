@@ -205,6 +205,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.FactoryWorkerConfi
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
 		Args:             stringSlicePtr(def.Args),
+		Stdin:            stringPtrIfNotEmpty(def.Stdin),
 		Auth:             hostedWorkerAuthAPIFromInternal(def.Auth),
 		Body:             stringPtrIfNotEmpty(def.Body),
 		Command:          stringPtrIfNotEmpty(def.Command),

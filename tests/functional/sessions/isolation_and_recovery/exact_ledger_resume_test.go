@@ -45,7 +45,6 @@ type exactLedgerInitialState struct {
 // task-owned artifact is intentionally not committed; ordinary CI runs this
 // cell as a documented skip unless the operator supplies the exact artifact.
 func TestResumeExactLedgerCurrentProjectCycle(t *testing.T) {
-	acquireRootCompositionFixtureSlot(t)
 	snapshotPath, snapshotPayload := loadExactLedgerSnapshot(t)
 	successorPath := filepath.Join(t.TempDir(), "exact-ledger-successor.jsonl")
 	factoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")

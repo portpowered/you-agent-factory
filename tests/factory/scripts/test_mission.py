@@ -37,6 +37,28 @@ class MissionRouteTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "mission must be a string"):
                 router.route_thoughts(json.dumps({"mission": mission}))
 
+    def test_stdin_and_positional_modes(self):
+        payload = json.dumps({"mission": "measure café 😀"}, ensure_ascii=False)
+        for args in ([payload], ["--payload-stdin"]):
+            stdout = io.StringIO()
+            with patch.object(router.sys, "stdin", io.TextIOWrapper(io.BytesIO(payload.encode("utf-8")))), patch.object(router.sys, "stdout", stdout):
+                self.assertEqual(router.main(args), 0)
+            self.assertEqual(stdout.getvalue(), "mission\n")
+
+    def test_stdin_read_and_utf8_errors_never_classify(self):
+        for stream in (io.TextIOWrapper(io.BytesIO(b"\xff")),):
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.object(router.sys, "stdin", stream), patch.object(router.sys, "stdout", stdout), patch.object(router.sys, "stderr", stderr):
+                self.assertEqual(router.main(["--payload-stdin"]), 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertTrue(stderr.getvalue())
+        from unittest.mock import Mock
+        stream = Mock()
+        stream.buffer.read.side_effect = OSError("read failed")
+        with patch.object(router.sys, "stdin", stream), patch.object(router.sys, "stdout", io.StringIO()) as stdout, patch.object(router.sys, "stderr", io.StringIO()):
+            self.assertEqual(router.main(["--payload-stdin"]), 2)
+            self.assertEqual(stdout.getvalue(), "")
+
 
 class MissionOutputTests(unittest.TestCase):
     def run_checker(self, raw, feedback=""):

@@ -198,7 +198,7 @@ func (component *completionTransport) cancelRun() {
 func joinCompletionTransportResults(first, second completionTransportResult) error {
 	var errs []error
 	for _, candidate := range []completionTransportResult{first, second} {
-		if candidate.err != nil && !errors.Is(candidate.err, context.Canceled) {
+		if candidate.err != nil && !lifecycle.CancellationOnly(candidate.err) {
 			errs = append(errs, fmt.Errorf("%s: %w", candidate.name, candidate.err))
 		}
 	}

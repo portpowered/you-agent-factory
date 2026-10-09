@@ -6,6 +6,7 @@ package locking
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -19,17 +20,24 @@ import (
 
 const lockRetryInterval = 10 * time.Millisecond
 
+// ErrBusy means another owner holds the requested coordination marker.
+var ErrBusy = errors.New("filesystem coordination is busy")
+
 // Service is the policy-free cross-process locking effect used by services
 // that need recoverable ownership of a filesystem transaction.
 type Service interface {
 	Lock(context.Context, string) (io.Closer, error)
+	TryLock(context.Context, string) (io.Closer, error)
+	TryLockTarget(context.Context, string, string) (io.Closer, error)
 }
 
 // File is the narrow host handle required by the OS-specific lock adapter.
 // The platform implementation never exposes an operating-system-specific
 // descriptor type to its callers.
 type File interface {
+	io.Reader
 	Fd() uintptr
+	Stat() (fs.FileInfo, error)
 	Close() error
 }
 
@@ -71,6 +79,110 @@ func New(filesystem FileSystem) (Service, error) {
 }
 
 func (service localService) Lock(ctx context.Context, path string) (io.Closer, error) {
+	return service.acquire(ctx, path, true)
+}
+
+// TryLock refuses an occupied marker without waiting for its owner to exit.
+func (service localService) TryLock(ctx context.Context, path string) (io.Closer, error) {
+	return service.acquire(ctx, path, false)
+}
+
+// TryLockTarget refuses aliases that cannot share a stable pathname marker.
+// The caller selects both the protected target and its coordination marker.
+func (service localService) TryLockTarget(ctx context.Context, target, marker string) (io.Closer, error) {
+	before, err := service.inspectTarget(target)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := service.TryLock(ctx, marker)
+	if err != nil {
+		return nil, err
+	}
+	after, err := service.inspectTarget(target)
+	if err != nil {
+		return nil, errors.Join(err, lease.Close())
+	}
+	if !sameClaimedTarget(before, after) {
+		return nil, errors.Join(fmt.Errorf("ownership target %q changed during acquisition", target), lease.Close())
+	}
+	return &targetLock{Closer: lease, service: service, target: target, original: after}, nil
+}
+
+// targetLock retains the identity observed while acquiring the marker so a
+// caller can reject a changed input after reading it, before publishing.
+type targetLock struct {
+	io.Closer
+	service  localService
+	target   string
+	original *targetIdentity
+}
+
+func (lock *targetLock) Validate() error {
+	current, err := lock.service.inspectTarget(lock.target)
+	if err != nil {
+		return err
+	}
+	if !sameClaimedTarget(lock.original, current) {
+		return fmt.Errorf("ownership target %q changed after acquisition", lock.target)
+	}
+	return nil
+}
+
+type targetIdentity struct {
+	info   fs.FileInfo
+	digest [sha256.Size]byte
+}
+
+func sameClaimedTarget(before, after *targetIdentity) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	return sameTarget(before.info, after.info) && before.digest == after.digest
+}
+
+func sameTarget(before, after fs.FileInfo) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	return os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime())
+}
+
+func (service localService) inspectTarget(path string) (*targetIdentity, error) {
+	info, err := service.filesystem.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect ownership target %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("ownership target %q must be a regular file without aliases", path)
+	}
+	file, err := service.filesystem.OpenFile(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open ownership target %q: %w", path, err)
+	}
+	openedInfo, statErr := file.Stat()
+	count, inspectErr := fileLinkCount(file)
+	digest := sha256.New()
+	_, readErr := io.Copy(digest, file)
+	readInfo, readStatErr := file.Stat()
+	closeErr := file.Close()
+	if err := errors.Join(statErr, inspectErr, readErr, readStatErr, closeErr); err != nil {
+		return nil, fmt.Errorf("inspect ownership target links %q: %w", path, err)
+	}
+	if !sameTarget(info, openedInfo) || !sameTarget(openedInfo, readInfo) {
+		return nil, fmt.Errorf("ownership target %q changed during inspection", path)
+	}
+	if count != 1 {
+		return nil, fmt.Errorf("ownership target %q has multiple hard links; use a separate copy", path)
+	}
+	identity := &targetIdentity{info: readInfo}
+	copy(identity.digest[:], digest.Sum(nil))
+	return identity, nil
+}
+
+func (service localService) acquire(ctx context.Context, path string, wait bool) (io.Closer, error) {
 	ctx, err := validateContext(ctx, path)
 	if err != nil {
 		return nil, err
@@ -90,6 +202,9 @@ func (service localService) Lock(ctx context.Context, path string) (io.Closer, e
 		}
 		if locked {
 			return &fileLock{file: file}, nil
+		}
+		if !wait {
+			return nil, errors.Join(ErrBusy, file.Close())
 		}
 		timer := time.NewTimer(lockRetryInterval)
 		select {

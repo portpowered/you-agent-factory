@@ -23,6 +23,7 @@ type Config struct {
 	Operations       []ModelOperation          `json:"operations,omitempty" yaml:"operations,omitempty"`
 	Command          string                    `json:"command,omitempty" yaml:"command,omitempty"`
 	Args             []string                  `json:"args,omitempty" yaml:"args,omitempty"`
+	Stdin            string                    `json:"stdin,omitempty" yaml:"stdin,omitempty"`
 	Resources        []factoryresource.Config  `json:"resources,omitempty" yaml:"resources,omitempty"`
 	Timeout          string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	StopToken        string                    `json:"stopToken,omitempty" yaml:"stopToken,omitempty"`

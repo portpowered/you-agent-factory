@@ -118,23 +118,35 @@ func TestStartSessionLifecycleCleansFailedPhases(t *testing.T) {
 			lifecycle := &startLifecycleStub{}
 			failure.set(lifecycle)
 			artifacts := 0
-			_, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle, closeArtifacts: func() error { artifacts++; return nil }})
+			_, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle, closeArtifacts: func() error { artifacts++; return nil }}, false)
 			if err == nil || artifacts != 1 || lifecycle.stops == 0 {
 				t.Fatalf("failed lifecycle: error=%v artifacts=%d stops=%d", err, artifacts, lifecycle.stops)
 			}
 		})
 	}
 	closed := 0
-	if _, err := startSessionLifecycle(ctx, runtimeProducts{closeArtifacts: func() error { closed++; return nil }}); err == nil || closed != 1 {
+	if _, err := startSessionLifecycle(ctx, runtimeProducts{closeArtifacts: func() error { closed++; return nil }}, false); err == nil || closed != 1 {
 		t.Fatalf("missing lifecycle: error=%v closes=%d", err, closed)
 	}
 	lifecycle := &startLifecycleStub{}
-	activation, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle})
+	activation, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle}, false)
 	if err != nil || activation == nil || activation.stopWorker == nil {
 		t.Fatalf("successful lifecycle: activation=%+v error=%v", activation, err)
 	}
 	if err := activation.Close(ctx); err != nil || lifecycle.stops != 1 {
 		t.Fatalf("close activation: error=%v stops=%d", err, lifecycle.stops)
+	}
+}
+
+func TestHostedStartDefersCompletionUntilTransportReadiness(t *testing.T) {
+	t.Parallel()
+	lifecycle := &startLifecycleStub{completeErr: errors.New("completion must wait for host")}
+	activation, err := startSessionLifecycle(t.Context(), runtimeProducts{lifecycle: lifecycle}, true)
+	if err != nil || activation == nil {
+		t.Fatalf("hosted start completed before transport: %v", err)
+	}
+	if err := activation.Close(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }
 

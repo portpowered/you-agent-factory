@@ -108,6 +108,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.FactoryWorkerCon
 		Operations:       modelOperationsInternalFromAPI(worker.Operations),
 		Command:          stringValue(worker.Command),
 		Args:             stringSliceValue(worker.Args),
+		Stdin:            stringValue(worker.Stdin),
 		Resources:        resourceRequirementsInternalFromAPI(worker.Resources),
 		Timeout:          stringValue(worker.Timeout),
 		StopToken:        stringValue(worker.StopToken),

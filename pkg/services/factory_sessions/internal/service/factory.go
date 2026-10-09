@@ -16,7 +16,6 @@ import (
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -58,11 +57,11 @@ type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
+	resourceAcquisition            *RuntimeResourceAcquisition
 	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	workerService                  workers.Service
 	modelService                   models.Service
-	automationService              automations.Service
 	recordingsService              recordings.Service
 	recordingsRuntime              recordings.RuntimeScopeService
 	recordingProjections           recordings.ProjectionService
@@ -70,25 +69,20 @@ type Root struct {
 	webhooksService                webhooks.Service
 	factoryDefinitions             factorydefinitions.Service
 	definitionRuntimeRouter        *factorysessions.DefinitionRuntimeRouter
-	factoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
-	editableFactoryValidator       factorysessions.EditableFactoryValidator
 	initialActivation              factoryruntime.InitialRuntimeActivationOperation
 	workService                    work.Service
 	providerSessions               providersessions.Service
-	factoryDefinitionValidator     factorydefinitions.Validator
-	namedPaths                     factorydefinitions.NamedPathResolver
 	factoryWorkflows               factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                factoryruntime.WorkflowPreviewOperation
-	runtimeInputLoading            *RuntimeInputLoading
 	snapshotSelection              *RuntimeSnapshotSelection
+	preparation                    *RuntimePreparation
 	resolveClock                   factoryruntime.ClockResolver
 	baseLogger                     *zap.Logger
+	runtimeLogs                    factoryruntime.RuntimeLogOwner
 	processRuntimeFactory          roles.ProcessRuntimeFactory
-	ensureOperatorBackendScope     operatorsettings.BackendScopeEnsurer
 	generateSessionID              factorysessions.SessionIDGenerator
 	generateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                    factorysessions.HomeDirectoryResolver
-	providerIdentities             factorysessions.ProviderIdentityResolver
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly
 	runtimeRoot                    FactoryRuntimeRoot
 	clock                          factoryruntime.Clock
@@ -102,6 +96,7 @@ type Root struct {
 func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	runtimeRoot FactoryRuntimeRoot,
@@ -110,21 +105,17 @@ func NewRoot(
 	providerOverride ProviderOverrideService,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
-	validator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
 	definitions factorydefinitions.Service,
 	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
-	runtimeInputLoading *RuntimeInputLoading,
 	snapshotSelection *RuntimeSnapshotSelection,
+	preparation *RuntimePreparation,
 	assembly roles.RuntimeAssembly,
 	durableOpening *DurableOpening,
-	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
-	editableFactoryValidator factorysessions.EditableFactoryValidator,
+	resourceAcquisition *RuntimeResourceAcquisition,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	providerIdentities factorysessions.ProviderIdentityResolver,
 	workService work.Service,
 	automationService automations.Service,
 	webhooksService webhooks.Service,
@@ -134,7 +125,6 @@ func NewRoot(
 	workerService workers.Service,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
-	ensureBackendScope operatorsettings.BackendScopeEnsurer,
 	initialActivation factoryruntime.InitialRuntimeActivationOperation,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	replayBehavior *recordingreplay.Behavior,
@@ -152,9 +142,9 @@ func NewRoot(
 		initialActivation:              initialActivation,
 		modelInvocation:                modelInvocation,
 		durableOpening:                 durableOpening,
+		resourceAcquisition:            resourceAcquisition,
 		workerService:                  workerService,
 		modelService:                   modelService,
-		automationService:              automationService,
 		factorySessionsRuntimeAssembly: assembly,
 		recordingsService:              recordingsService,
 		recordingsRuntime:              recordingsRuntime,
@@ -163,24 +153,19 @@ func NewRoot(
 		webhooksService:                webhooksService,
 		factoryDefinitions:             definitions,
 		definitionRuntimeRouter:        runtimeRouter,
-		factoryScaffoldInitializer:     factoryScaffoldInitializer,
-		editableFactoryValidator:       editableFactoryValidator,
 		workService:                    workService,
 		providerSessions:               providerSessions,
-		factoryDefinitionValidator:     validator,
-		namedPaths:                     namedPaths,
 		factoryWorkflows:               factoryWorkflows,
 		workflowPreview:                workflowPreview,
-		runtimeInputLoading:            runtimeInputLoading,
 		snapshotSelection:              snapshotSelection,
+		preparation:                    preparation,
 		resolveClock:                   resolveClock,
 		baseLogger:                     logger,
+		runtimeLogs:                    runtimeLogs,
 		processRuntimeFactory:          processRuntimeFactory,
 		generateSessionID:              generateSessionID,
-		ensureOperatorBackendScope:     ensureBackendScope,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
-		providerIdentities:             providerIdentities,
 		clock:                          clock,
 		providerOverride:               providerOverride,
 		providerCommandRunner:          providerCommandRunner,

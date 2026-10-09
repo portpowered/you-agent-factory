@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // Handle hosts one running factory runtime bundle and coordinates its run loop.
@@ -232,6 +233,11 @@ func withoutRunCancellation(err error) error {
 		return err
 	}
 	switch wrapped := err.(type) {
+	case *recordings.RecordingCleanupError:
+		if cause := withoutRunCancellation(wrapped.Cause); cause != nil {
+			return &recordings.RecordingCleanupError{Cause: cause, Complete: wrapped.Complete}
+		}
+		return nil
 	case interface{ Unwrap() []error }:
 		var remaining []error
 		for _, cause := range wrapped.Unwrap() {

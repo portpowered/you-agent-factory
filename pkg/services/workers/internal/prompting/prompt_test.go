@@ -873,3 +873,17 @@ Count: {{ len .Inputs }}`
 		t.Errorf("expected Inputs length 1, got: %s", result)
 	}
 }
+
+func TestPromptRendererSubmittedProjectPayloadIsComplete(t *testing.T) {
+	t.Parallel()
+	renderer := &DefaultPromptRenderer{FactoryDocs: func(string) (map[string]string, error) { return nil, nil }}
+	payload := `{"title":"project","mission":"measure café","budget":{"paid":"0"}}`
+	tokens := []workers.Token{{Color: workers.Color{Name: "project-witness", Payload: []byte(payload)}}, {Color: workers.Color{Name: "other", Payload: []byte("other payload")}}}
+	got, err := renderer.Render(`Project {{ (index .Inputs 0).Name }}: {{ (index .Inputs 0).Payload }}`, tokens, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Project project-witness: "+payload {
+		t.Fatalf("project-lead prompt=%q", got)
+	}
+}

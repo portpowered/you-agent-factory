@@ -3,13 +3,60 @@ package runtimeapplication
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
+
+// Both completion orders must retain the startup cause when lifecycle cleanup
+// also fails. Controlled result channels avoid racing the observer goroutines.
+func TestHostObserverPreservesReadinessAndCleanupFailures(t *testing.T) {
+	t.Parallel()
+	for _, order := range []string{"readiness first", "run first", "reader delivers during cancellation"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+			primary := &fs.PathError{Op: "read recording", Path: "retained.json", Err: fs.ErrPermission}
+			cleanup := &fs.PathError{Op: "close recording", Path: "retained.json", Err: fs.ErrClosed}
+			runner := hostObservingRunner{
+				runner:  &hostReadinessRunner{readinessConfigured: true},
+				onReady: func(initializer.RuntimeHostBinding) { t.Error("failed startup reported readiness") },
+			}
+			var err error
+			if order == "readiness first" {
+				runResult := make(chan error, 1)
+				runResult <- cleanup
+				err = runner.finishAfterReadinessResult(t.Context(), runtimeHostResult{err: primary}, runResult)
+			} else {
+				readyResult := make(chan runtimeHostResult, 1)
+				cancel := func() {}
+				if order == "run first" {
+					readyResult <- runtimeHostResult{err: primary}
+				} else {
+					var delivered sync.Once
+					cancel = func() { delivered.Do(func() { readyResult <- runtimeHostResult{err: primary} }) }
+				}
+				err = runner.finishAfterRunResult(t.Context(), cleanup, readyResult, cancel)
+			}
+			var startupErr *initializer.RuntimeHostStartupError
+			if !errors.As(err, &startupErr) || !errors.Is(err, primary) || !errors.Is(err, cleanup) {
+				t.Fatalf("startup error = %v, want classified primary and cleanup causes", err)
+			}
+			diagnostic := logging.SafeErrorCause(err)
+			for _, want := range []string{`read recording "retained.json": permission denied`, `close recording "retained.json": file already closed`} {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("safe diagnostic %q omits %q", diagnostic, want)
+				}
+			}
+		})
+	}
+}
 
 func TestHostObservingRunnerReportsReadinessAndJoinsCancellation(t *testing.T) {
 	transport := &hostObservingTestComponent{started: make(chan struct{})}
@@ -56,6 +103,19 @@ func TestHostObservingRunnerReportsReadinessAndJoinsCancellation(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("runner did not join after cancellation")
+	}
+}
+
+func TestHostObserverClassifiesPrimaryFailureDespiteCleanupCancellation(t *testing.T) {
+	t.Parallel()
+	primary := &fs.PathError{Op: "read recording", Path: "retained.json", Err: fs.ErrPermission}
+	runner := hostObservingRunner{runner: &hostReadinessRunner{readinessConfigured: true}}
+	runResult := make(chan error, 1)
+	runResult <- context.Canceled
+	err := runner.finishAfterReadinessResult(t.Context(), runtimeHostResult{err: errors.Join(primary, context.Canceled)}, runResult)
+	var startupErr *initializer.RuntimeHostStartupError
+	if !errors.As(err, &startupErr) || !errors.Is(err, primary) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want classified primary with cleanup cancellation identity", err)
 	}
 }
 

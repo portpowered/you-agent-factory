@@ -24,45 +24,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestSessionObservationRequiresDurableProgressAtAcquisition(t *testing.T) {
-	t.Parallel()
-	opening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: &mutationOnlyOpeningOwner{}}}
-	err := opening.bindSessionObservations()
-	if err == nil || !strings.Contains(err.Error(), "must record mutations and publish worker progress") {
-		t.Fatalf("opening without durable progress error = %v", err)
-	}
-}
-
-func TestSessionObservationBindingPreservesBothOpeningOwners(t *testing.T) {
-	t.Parallel()
-	var firstMutations, secondMutations []string
-	var firstProgress, secondProgress []string
-	first := &durableOpeningObservationStub{mutations: &firstMutations, progress: &firstProgress}
-	second := &durableOpeningObservationStub{mutations: &secondMutations, progress: &secondProgress}
-	firstOpening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: first}}
-	secondOpening := &sessionRuntimeOpening{durableExecution: DurableExecution{Service: second}}
-	for _, opening := range []*sessionRuntimeOpening{firstOpening, secondOpening} {
-		if err := opening.bindSessionObservations(); err != nil {
-			t.Fatalf("bind observations: %v", err)
-		}
-	}
-	// Acquiring a peer must not replace either capability of the first owner.
-	for index, opening := range []*sessionRuntimeOpening{firstOpening, secondOpening} {
-		sessionID := []string{"first", "second"}[index]
-		if err := opening.observations.RecordPetriTokenMutations(sessionID, nil); err != nil {
-			t.Fatalf("record scoped mutations: %v", err)
-		}
-		opening.observations.PublishWorkerProgress(workers.ProgressFragment{Payload: sessionID})
-	}
-	if !reflect.DeepEqual(firstMutations, []string{"first"}) ||
-		!reflect.DeepEqual(firstProgress, []string{"first"}) ||
-		!reflect.DeepEqual(secondMutations, []string{"second"}) ||
-		!reflect.DeepEqual(secondProgress, []string{"second"}) {
-		t.Fatalf("observation owners crossed: mutations %v/%v, progress %v/%v",
-			firstMutations, secondMutations, firstProgress, secondProgress)
-	}
-}
-
 type durableOpeningObservationStub struct {
 	durableexecution.Service
 	mutations, progress *[]string

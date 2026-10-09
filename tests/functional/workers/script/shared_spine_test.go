@@ -44,7 +44,11 @@ func TestScriptWorkerSharedSuccessSpine(t *testing.T) {
 		scenario := scenario
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
-			fixture.runScenario(t, scenario)
+			if scenario.run != nil {
+				scenario.run(t, fixture)
+			} else {
+				fixture.runScenario(t, scenario)
+			}
 		})
 	}
 }
@@ -131,6 +135,7 @@ type scriptSharedSpineFixture struct {
 }
 
 type scriptSharedScenario struct {
+	run                     func(*testing.T, *scriptSharedSpineFixture)
 	name                    string
 	factoryDir              string
 	workName                string
@@ -266,7 +271,8 @@ func newScriptSharedSpineScenarios(t *testing.T) []scriptSharedScenario {
 		})
 	}
 	scenarios = append(scenarios, newScriptSharedExecutionScenarios(t)...)
-	return append(scenarios, newScriptSharedEnvironmentScenarios(t)...)
+	scenarios = append(scenarios, newScriptSharedEnvironmentScenarios(t)...)
+	return append(scenarios, newScriptPayloadScenarios(t)...)
 }
 
 func (fixture *scriptSharedSpineFixture) runScenario(

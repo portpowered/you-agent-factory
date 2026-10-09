@@ -29,7 +29,6 @@ import (
 
 func TestUnreadableSnapshotRepeatedDamagePreservesBoardEvidence(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
 	repo, home := t.TempDir(), t.TempDir()
 	scaffoldUnreadableBoard(t, repo)
 	apis := []*support.ProcessAPIServer{support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer(), support.NewProcessAPIServer()}

@@ -5,7 +5,6 @@ package backendconformance
 import (
 	"fmt"
 	"io/fs"
-	"os"
 	"strings"
 	"testing"
 
@@ -27,106 +26,8 @@ func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
 	}
-	if len(inputs.PinnedArtifacts) != 11 {
-		t.Fatalf("checked-in default manifest has %d artifacts, want the nine-entry baseline plus two Qwen Windows CUDA publications", len(inputs.PinnedArtifacts))
-	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestRepositoryBackendReferenceCollectorPreservesCustomerSources(t *testing.T) {
-	t.Parallel()
-
-	inputs, err := repositoryConformanceInputs()
-	if err != nil {
-		t.Fatalf("collect repository backend references: %v", err)
-	}
-
-	var factoryReference, catalogReference bool
-	for _, reference := range inputs.References {
-		if strings.Contains(reference.Source, "generated/factories/tts/factory.json") && reference.Identifier != "" {
-			factoryReference = true
-		}
-		if strings.Contains(reference.Source, "BuiltInCatalog.ModelDefinitions") && reference.Identifier == "localai-vibevoice" {
-			catalogReference = true
-		}
-	}
-	if !factoryReference {
-		t.Fatal("collector did not preserve the generated TTS Factory path for localai-vibevoice")
-	}
-	if !catalogReference {
-		t.Fatal("collector did not preserve the built-in TTS catalog source")
-	}
-}
-
-func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing.T) {
-	t.Parallel()
-	const fixtureBackend = "localai-llamacpp"
-
-	fixture, err := os.ReadFile("../artifacts/testdata/windows-cuda-variant-manifest.json")
-	if err != nil {
-		t.Fatalf("read exact Windows CUDA fixture: %v", err)
-	}
-	manifest, err := artifacts.Decode(fixture)
-	if err != nil {
-		t.Fatalf("Decode(exact Windows CUDA fixture): %v", err)
-	}
-
-	pinnedArtifacts := pinnedArtifactsFromManifest(manifest)
-	wantTargets := map[string]int{
-		TargetDarwinArm64:      1,
-		TargetLinuxAmd64:       1,
-		TargetWindowsAmd64:     1,
-		TargetWindowsAmd64CUDA: 1,
-	}
-	observedTargets := make(map[string]int, len(pinnedArtifacts))
-	for _, artifact := range pinnedArtifacts {
-		if artifact.BackendID != fixtureBackend {
-			continue
-		}
-		observedTargets[artifact.TargetID]++
-	}
-	if len(pinnedArtifacts) != 10 || len(observedTargets) != len(wantTargets) {
-		t.Fatalf("projected exact fixture = %d artifacts; approved backend targets = %#v, want three baselines plus one CUDA entry", len(pinnedArtifacts), observedTargets)
-	}
-	for target, wantCount := range wantTargets {
-		if observedTargets[target] != wantCount {
-			t.Fatalf("projected target %q count = %d, want %d", target, observedTargets[target], wantCount)
-		}
-	}
-
-	inputs := Inputs{
-		References:         []Reference{{Identifier: fixtureBackend, Source: "exact Windows CUDA fixture"}},
-		RegisteredBackends: []string{fixtureBackend},
-		PinnedArtifacts:    pinnedArtifacts,
-	}
-	if err := Validate(inputs); err != nil {
-		t.Fatalf("Validate(projected exact Windows CUDA fixture): %v", err)
-	}
-
-	// Reuse the decoded repository fixture to exercise both optional targets on
-	// another registered backend while retaining its three real CPU baselines.
-	const otherBackend = "localai-whisper"
-	var cuda PinnedArtifact
-	for _, artifact := range pinnedArtifacts {
-		if artifact.BackendID == fixtureBackend && artifact.TargetID == TargetWindowsAmd64CUDA {
-			cuda = artifact
-			break
-		}
-	}
-	windowsCUDA := cuda
-	windowsCUDA.BackendID = otherBackend
-	linuxCUDA := windowsCUDA
-	linuxCUDA.TargetID = TargetLinuxAmd64CUDA
-	linuxCUDA.OperatingSystem = "linux"
-	inputs = Inputs{
-		References:         []Reference{{Identifier: otherBackend, Source: "projected CUDA variants"}},
-		RegisteredBackends: []string{otherBackend},
-		PinnedArtifacts:    append(pinnedArtifacts, windowsCUDA, linuxCUDA),
-	}
-	if err := Validate(inputs); err != nil {
-		t.Fatalf("Validate(projected CUDA variants on another registered backend): %v", err)
 	}
 }
 

@@ -90,6 +90,25 @@ test("Backend Lint uses exactly one job on a one-CPU runner without changing oth
 
 const inputs = (paths, event = "pull_request") => selectLintInputs({ event, baseSha: SHA("a"), testedSha: SHA("b"), paths });
 
+test("queue always selects required deadcode while retaining other input decisions", () => {
+	for (const paths of [["README.md"], ["docs/architecture/architecture.md"], ["ui/src/App.tsx"], ["pkg/service/code.go"], ["docs/reference/run.md"]]) {
+		const queue = inputs(paths, "merge_group");
+		const pr = inputs(paths);
+		assert.equal(queue.deadcode, 1);
+		assert.equal(queue.reasons.deadcode, "required queue artifact");
+		assert.deepEqual([queue.docs, queue.directBoundary], [pr.docs, pr.directBoundary]);
+		assert.equal(validateLintSelection(queue), queue);
+		assert.throws(() => validateLintSelection({ ...queue, deadcode: 0 }), /selection/);
+	}
+	for (const paths of [null, [], ["unknown.txt"], [null]]) {
+		const queue = inputs(paths, "merge_group");
+		assert.deepEqual([queue.docs, queue.deadcode, queue.directBoundary], [1, 1, 1]);
+		assert.equal(queue.reasons.deadcode, "conservative");
+	}
+	const unavailable = selectLintInputs({ event: "merge_group", testedSha: SHA("b") });
+	assert.equal(validateLintSelection(unavailable).deadcode, 1);
+});
+
 test("only known independent UI/prose changes skip optional checks", () => {
 	for (const path of ["README.md", "ui/src/App.tsx"]) {
 		const selected = inputs([path]);

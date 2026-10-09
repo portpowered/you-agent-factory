@@ -277,6 +277,16 @@ func TestQueryHistoricalRecordingClassifiesMissingAndCorruptHistory(t *testing.T
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 	})
+	t.Run("empty reservation", func(t *testing.T) {
+		query := New(func(string) ([]byte, error) { return nil, nil }, unusedHistoricalProjection{})
+		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorMissingHistory)
+	})
+	t.Run("non-empty malformed document", func(t *testing.T) {
+		query := New(func(string) ([]byte, error) { return []byte(" "), nil }, unusedHistoricalProjection{})
+		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
+	})
 	t.Run("unreadable", func(t *testing.T) {
 		query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, projectionquerywire.NewService())
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
@@ -285,6 +295,10 @@ func TestQueryHistoricalRecordingClassifiesMissingAndCorruptHistory(t *testing.T
 			t.Fatal("unreadable recording was classified as missing history")
 		}
 	})
+}
+
+type unusedHistoricalProjection struct {
+	recordings.ProjectionService
 }
 
 func assertHistoricalQueryKind(

@@ -20,11 +20,12 @@ def route_thoughts(payload):
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 1:
-        print("usage: route-thoughts.py <payload>", file=sys.stderr)
+        print("usage: route-thoughts.py <payload> | --payload-stdin", file=sys.stderr)
         return 2
     try:
-        print(route_thoughts(args[0]))
-    except ValueError as error:
+        payload = sys.stdin.buffer.read().decode("utf-8") if args[0] == "--payload-stdin" else args[0]
+        print(route_thoughts(payload))
+    except (ValueError, OSError) as error:
         print(error, file=sys.stderr)
         return 2
     return 0

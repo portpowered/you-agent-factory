@@ -148,6 +148,7 @@ func mapExecutionCatalogSelection(
 		ExecutorProvider:            worker.ExecutorProvider,
 		Command:                     worker.Command,
 		Args:                        append([]string(nil), worker.Args...),
+		Stdin:                       worker.Stdin,
 		StopToken:                   worker.StopToken,
 		AgentToolPolicy:             worker.AgentToolPolicy,
 		SkipPermissions:             worker.SkipPermissions,

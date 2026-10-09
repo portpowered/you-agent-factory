@@ -14,7 +14,7 @@ import (
 func TestAdapterReportRecordingPathOnShutdownPreservesAcceptedPresentation(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	var out bytes.Buffer
 
 	adapter.ReportRecordingPathOnShutdown(&out, recordingscli.ResolvedRecordPath{
@@ -30,7 +30,7 @@ func TestAdapterReportRecordingPathOnShutdownPreservesAcceptedPresentation(t *te
 func TestAdapterReportRecordingPathOnShutdownSkipsNonGeneratedPaths(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	var out bytes.Buffer
 
 	adapter.ReportRecordingPathOnShutdown(&out, recordingscli.ResolvedRecordPath{
@@ -44,7 +44,7 @@ func TestAdapterReportRecordingPathOnShutdownSkipsNonGeneratedPaths(t *testing.T
 func TestAdapterRecordingDiagnosticsLabelPreservesAcceptedModes(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	tests := []struct {
 		name       string
 		resolved   recordingscli.ResolvedRecordPath
@@ -93,7 +93,7 @@ func TestAdapterRecordingDiagnosticsLabelPreservesAcceptedModes(t *testing.T) {
 func TestAdapterFailurePathsPreserveExitRelevantErrors(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	tests := []struct {
 		name    string
 		request recordingscli.InvocationRequest
@@ -181,7 +181,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellation(t *testing.T) {
 			}, nil
 		},
 	)
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -202,7 +202,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellationAfterPlanner(t *te
 	t.Parallel()
 
 	// Covers the post-planner cancellation checkpoint in ResolveRecordPathWithContext.
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	planner := recordings.LiveRecordingTargetPlannerFunc(
 		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -227,7 +227,7 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellationAfterPlanner(t *te
 func TestAdapterShutdownReportingUnaffectedByCanceledRequestContext(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := recordingscli.New(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

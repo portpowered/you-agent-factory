@@ -84,6 +84,7 @@ func TestLoadWorkerConfig_ScriptWorker(t *testing.T) {
 type: SCRIPT_WORKER
 command: ./scripts/inpaint.py
 args: ["--input", "{{input_path}}", "--output", "{{output_path}}"]
+stdin: "{{ (index .Inputs 0).Payload }}"
 resources:
   - name: gpu:1
     capacity: 1
@@ -106,6 +107,9 @@ Inpainting worker. Runs the inpaint.py script.
 	}
 	if cfg.Command != "./scripts/inpaint.py" {
 		t.Errorf("expected command ./scripts/inpaint.py, got %s", cfg.Command)
+	}
+	if cfg.Stdin != `{{ (index .Inputs 0).Payload }}` {
+		t.Fatalf("stdin = %q", cfg.Stdin)
 	}
 	if len(cfg.Args) != 4 {
 		t.Errorf("expected 4 args, got %d", len(cfg.Args))

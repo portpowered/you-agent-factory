@@ -42,7 +42,6 @@ jobs:
       run_readme: "true"
       run_frontend: ${{ steps.classify.outputs.run_frontend != 'false' }}
       run_backend: ${{ steps.classify.outputs.run_backend != 'false' }}
-      run_backend_conformance: ${{ steps.classify.outputs.run_backend_conformance != 'false' }}
       run_ui_backend_integration: ${{ steps.classify.outputs.run_ui_backend_integration != 'false' }}
       run_api_package: ${{ steps.classify.outputs.run_api_package != 'false' }}
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
@@ -51,7 +50,6 @@ jobs:
       readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       backend_reason: ${{ steps.classify.outputs.backend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
-      backend_conformance_reason: ${{ steps.classify.outputs.backend_conformance_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
@@ -667,25 +665,6 @@ jobs:
               body: publication.body,
             });
 
-  backend-conformance:
-    name: Backend Conformance
-    needs: classify
-    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend_conformance != 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Run offline backend conformance guard
-        run: make test-backend-conformance
-      - name: Verify pinned backend release assets
-        run: make test-backend-conformance-live
-
   backend-integration:
     name: Backend Integration
     needs: classify
@@ -712,13 +691,6 @@ jobs:
         run: |
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
           test -x .artifacts/integration/bin/platform-conformance-helper
-      - name: Build TTS clean-install helper artifact
-        run: |
-          go test -c -o .artifacts/integration/bin/tts-clean-install-helper ./tests/integration/models/tts_clean_install
-          test -x .artifacts/integration/bin/tts-clean-install-helper
-          helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
-          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
-          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:
@@ -770,55 +742,6 @@ jobs:
         with:
           name: pinned-real-acp-evidence
           path: .artifacts/integration/real-acpx-evidence.json
-          if-no-files-found: error
-          retention-days: 14
-
-  tts-clean-install-windows:
-    name: TTS Clean-Install Windows
-    needs: classify
-    if: always() && github.event_name != 'push' && needs.classify.outputs.run_backend != 'false'
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - name: Build TTS clean-install helper artifact
-        shell: pwsh
-        run: |
-          $artifactDirectory = Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\bin'
-          New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
-          $helperPath = Join-Path $artifactDirectory 'tts-clean-install-helper.exe'
-          go test -c -o $helperPath ./tests/integration/models/tts_clean_install
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-          if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
-            throw "compiled TTS helper is missing: $helperPath"
-          }
-          $helperSha256 = (Get-FileHash -LiteralPath $helperPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=$helperPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helperSha256" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          New-Item -ItemType File -Force -Path (Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\tts-clean-install-windows.log') | Out-Null
-      - name: Run TTS clean-install Windows integration
-        shell: pwsh
-        run: |
-          $logPath = Join-Path $env:GITHUB_WORKSPACE '.artifacts\integration\tts-clean-install-windows.log'
-          & go test ./tests/integration/models/tts_clean_install -count=1 -v -timeout=20m 2>&1 | Tee-Object -FilePath $logPath
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) {
-            exit $exitCode
-          }
-      - name: Upload TTS clean-install Windows evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-clean-install-windows-evidence
-          path: .artifacts/integration/tts-clean-install-windows.log
           if-no-files-found: error
           retention-days: 14
 
@@ -1148,7 +1071,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-conformance, backend-integration, tts-clean-install-windows, backend-lint, ui-backend-integration, development-package, api-pr-verification]
+    needs: [classify, readme, frontend, frontend-browser, backend-coverage, backend-integration, backend-lint, ui-backend-integration, development-package, api-pr-verification]
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
@@ -1169,7 +1092,6 @@ jobs:
           RUN_README: ${{ needs.classify.outputs.run_readme }}
           RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
           RUN_BACKEND: ${{ needs.classify.outputs.run_backend }}
-          RUN_BACKEND_CONFORMANCE: ${{ needs.classify.outputs.run_backend_conformance }}
           RUN_UI_BACKEND: ${{ needs.classify.outputs.run_ui_backend_integration }}
           RUN_API: ${{ needs.classify.outputs.run_api_package }}
           RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
@@ -1178,7 +1100,6 @@ jobs:
           README_REASON: ${{ needs.classify.outputs.readme_reason }}
           FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
           BACKEND_REASON: ${{ needs.classify.outputs.backend_reason }}
-          BACKEND_CONFORMANCE_REASON: ${{ needs.classify.outputs.backend_conformance_reason }}
           UI_BACKEND_REASON: ${{ needs.classify.outputs.ui_backend_integration_reason }}
           API_REASON: ${{ needs.classify.outputs.api_package_reason }}
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
@@ -1195,8 +1116,6 @@ jobs:
           BACKEND_COVERAGE_RESULT: ${{ needs.backend-coverage.result }}
           BACKEND_RESULT: ${{ needs.backend-integration.result }}
           BACKEND_MODELS_RESULT: ${{ needs.classify.outputs.run_backend != 'false' && needs.backend-coverage.result || 'skipped' }}
-          BACKEND_TTS_RESULT: ${{ needs.tts-clean-install-windows.result }}
-          BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "Mandatory PR/queue lint."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}

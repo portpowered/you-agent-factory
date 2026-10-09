@@ -110,6 +110,9 @@ func applyWorkerRuntimeDefinition(
 	if len(runtimeDefinition.Args) > 0 {
 		worker.Args = append([]string(nil), runtimeDefinition.Args...)
 	}
+	if runtimeDefinition.Stdin != "" {
+		worker.Stdin = runtimeDefinition.Stdin
+	}
 	if runtimeDefinition.Concurrency != 0 {
 		worker.Concurrency = runtimeDefinition.Concurrency
 	}

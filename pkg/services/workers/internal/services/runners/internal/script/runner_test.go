@@ -920,3 +920,37 @@ func validRequest() workers.RunnerExecutionRequest {
 		},
 	}
 }
+
+func TestScriptStdinTemplatesAndOmission(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, stdin, want string
+		fail              bool
+	}{
+		{name: "payload", stdin: `{{ (index .Inputs 0).Payload }}`, want: "payload-value"},
+		{name: "omitted"},
+		{name: "literal", stdin: "café $() \n", want: "café $() \n"},
+		{name: "parse failure", stdin: "{{", fail: true},
+		{name: "render failure", stdin: `{{ (index .Inputs 9).Payload }}`, fail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			edge := &captureCommandRunner{}
+			events := 0
+			runner := New(Config{Command: "python", Stdin: tc.stdin}, edge, emptyDocs, func() time.Time { return time.Unix(0, 0) }, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) { events++ })
+			_, err := runner.Execute(t.Context(), validRequest())
+			if tc.fail {
+				if err == nil || events != 0 || edge.Request().Command != "" {
+					t.Fatalf("template failure launched/recorded command: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := edge.Request(); string(got.Stdin) != tc.want || len(got.Args) != 0 {
+				t.Fatalf("stdin/args=%q/%q, want %q/empty", got.Stdin, got.Args, tc.want)
+			}
+		})
+	}
+}

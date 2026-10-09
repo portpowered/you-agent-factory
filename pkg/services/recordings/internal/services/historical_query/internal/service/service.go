@@ -111,6 +111,7 @@ func (service *Service) readHistoricalEvents(request recordings.HistoricalRecord
 // retaining the source history or reading a second snapshot during validation.
 func (service *Service) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, payload []byte) (recordings.HistoricalRecordingQueryResult, error) {
 	result, _, err := service.decodeHistoricalEvents(request, payload)
+
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err
 	}
@@ -122,6 +123,10 @@ func (service *Service) decodeHistoricalEvents(request recordings.HistoricalReco
 	identity, err := validHistoricalRecordingIdentity(request.Recording)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, 0, err
+	}
+	// Reserved recording targets have no history until the first commit.
+	if len(payload) == 0 {
+		return recordings.HistoricalRecordingQueryResult{}, 0, historicalQueryError(recordings.HistoricalRecordingQueryErrorMissingHistory, identity, "", io.EOF)
 	}
 	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity, request.InferFactorySessionScope)
 	if err != nil {

@@ -2296,6 +2296,10 @@
           "description": "When true, bypasses permission checks for providers that support permission gating.",
           "type": "boolean"
         },
+        "stdin": {
+          "description": "Optional Go template for SCRIPT_WORKER standard input. Omit it to keep standard input empty.",
+          "type": "string"
+        },
         "stopToken": {
           "description": "Marker that tells model-oriented workers where to stop generated output when the provider supports it.",
           "type": "string"

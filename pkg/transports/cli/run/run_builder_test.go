@@ -521,7 +521,7 @@ func testMockWorkersConfigLoader(string) (*workers.MockWorkersConfig, error) {
 
 func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
 	if cfg.RecordingsCLI == nil {
-		cfg.RecordingsCLI = recordingscli.New()
+		cfg.RecordingsCLI = recordingscli.New(distinctRecordingPathInspector{})
 	}
 	if cfg.CanonicalSessionIDGenerator == nil {
 		cfg.CanonicalSessionIDGenerator = uuid.NewString

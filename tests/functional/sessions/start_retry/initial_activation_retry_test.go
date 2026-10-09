@@ -74,6 +74,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Parallel()
 
 	detached := newInitialOpeningScenario(t)
+	selectedModels := newSelectedModelsScenario(t)
 	inputFailure := newInitialOpeningScenario(t)
 	replayFailure := newInitialOpeningScenario(t)
 	failed := newInitialOpeningScenario(t)
@@ -81,6 +82,11 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
 	overlap := newInitialOpeningProviderScenario(t)
+	canceledWork := newInitialOpeningProviderScenario(t)
+	canceledWorkGate := &selectedProviderGate{paths: map[string]string{
+		canceledWork.candidateDir: canceledWork.candidateID, canceledWork.peerDir: canceledWork.peerID,
+	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	t.Cleanup(canceledWorkGate.unblock)
 	providerGate := &selectedProviderGate{paths: map[string]string{
 		overlap.candidateDir: overlap.candidateID, overlap.peerDir: overlap.peerID,
 	}, entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
@@ -121,9 +127,20 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter:                           api.Start,
+		ModelAssetHTTPClient:                       selectedModels,
+		ModelHostHTTPClient:                        selectedModels,
+		ModelHostProcessLauncher:                   selectedModels,
+		ModelHostProtocolNegotiator:                selectedModels,
+		ModelHostCompatibilityChecker:              selectedModels,
+		ModelInvocationProtocolClient:              selectedModels,
+		ModelAssetHostPlatform:                     modelprovider.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveHuggingFaceRevision:            func(context.Context, string) (string, error) { return selectedModelsRevision, nil },
+		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			return selectedModels.backend, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
@@ -148,6 +165,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("CLI Work reaches the opened durable mutation owner", func(t *testing.T) {
 		t.Parallel()
 		testInitialOpeningDurableMutation(t, sessions, process, durable, effects, persistence, api.WaitForURL(t))
+	})
+	t.Run("selected managed model endpoints and operator overlays stay isolated", func(t *testing.T) {
+		t.Parallel()
+		testSelectedModelsAcquisition(t, sessions, selectedModels)
 	})
 	t.Run("remote CLI child uses the explicitly opened session", func(t *testing.T) {
 		t.Parallel()
@@ -196,7 +217,11 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	})
 	t.Run("selected prompts and results survive overlapping live Work", func(t *testing.T) {
 		t.Parallel()
-		testSelectedProviderOverlap(t, sessions, overlap, providerGate, api.WaitForURL(t), logs)
+		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
+	})
+	t.Run("closing one session preserves a peer with gated live Work", func(t *testing.T) {
+		t.Parallel()
+		testSelectedProviderCancellation(t, sessions, canceledWork, canceledWorkGate, api.WaitForURL(t))
 	})
 	t.Run("reused customer checkout survives session close and destination reuse", func(t *testing.T) {
 		t.Parallel()
@@ -463,6 +488,7 @@ func initialOpeningScenarioWithConfig(t *testing.T, config map[string]any) initi
 type initialOpeningProviderRunner struct {
 	effects  *initialOpeningEffects
 	selected *selectedProviderGate
+	canceled *selectedProviderGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -472,6 +498,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 	runner.effects.record("worker.codex", request.WorkDir)
 	if runner.selected != nil && runner.selected.paths[request.WorkDir] != "" {
 		return runner.selected.run(ctx, request)
+	}
+	if runner.canceled != nil && runner.canceled.paths[request.WorkDir] != "" {
+		return runner.canceled.run(ctx, request)
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
 }
@@ -510,7 +539,7 @@ func (gate *selectedProviderGate) run(ctx context.Context, request platformproce
 	}
 }
 
-func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
+func testSelectedProviderOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario, gate *selectedProviderGate, baseURL string, logs *observer.ObservedLogs) {
 	t.Helper()
 	defer gate.unblock()
 	startInitialOpeningSession(t, sessions, scenario.request())
@@ -541,6 +570,7 @@ func testSelectedProviderOverlap(t *testing.T, sessions factorysessions.Service,
 			t.Fatal("both selected providers did not enter before release")
 		}
 	}
+	assertPreparationReplayBesideLiveWork(t, process, sessions, scenario)
 	gate.unblock()
 	for range 2 {
 		if err := <-done; err != nil {

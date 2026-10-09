@@ -366,10 +366,13 @@ func (router *reviewFailureCommandRouter) Run(
 	if provider {
 		return reviewFailureAccepted("fixture accepted"), nil
 	}
-	for _, arg := range request.Args {
+	for index, arg := range request.Args {
 		if strings.HasSuffix(arg, "route-thoughts.py") {
+			if index+1 >= len(request.Args) || request.Args[index+1] != "--payload-stdin" || len(request.Stdin) == 0 {
+				return platformprocess.CommandResult{}, fmt.Errorf("route stdin payload or flag absent")
+			}
 			var payload map[string]any
-			_ = json.Unmarshal([]byte(request.Args[len(request.Args)-1]), &payload)
+			_ = json.Unmarshal(request.Stdin, &payload)
 			if mission, ok := payload["mission"].(string); ok && strings.TrimSpace(mission) != "" {
 				return platformprocess.CommandResult{Stdout: []byte("mission\n")}, nil
 			}

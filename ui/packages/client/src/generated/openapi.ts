@@ -816,7 +816,7 @@ export interface paths {
     };
     /**
      * Get provider session details
-     * @description Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
+     * @description Returns captured Codex or Cursor details from the selected profile. Supply a provider, session_id kind, and identifier. Native-only sessions return NOT_FOUND. No filesystem path is accepted.
      */
     get: operations["getProviderSessionDetails"];
     put?: never;
@@ -4328,21 +4328,21 @@ export interface components {
      */
     LoadableProviderSessionKind: LoadableProviderSessionKind;
     ProviderSessionSourceMetadata: {
-      /** @description Path to the loaded session file relative to the configured provider sessions root. */
+      /** @description Legacy source path. Empty when native source metadata was not captured. */
       relativePath: string;
       /**
        * Format: int64
-       * @description Size of the loaded session file in bytes.
+       * @description Legacy source size. Zero when native source metadata was not captured.
        */
       sizeBytes: number;
       /**
        * Format: date-time
-       * @description Filesystem modification time when available.
+       * @description Native source modification time when captured. Otherwise omitted.
        */
       modifiedAt?: string;
     };
     ProviderSessionParseSummary: {
-      /** @description Number of JSON event records parsed from the session stream. */
+      /** @description Number of captured records inspected for this detail projection. */
       eventCount: number;
       /** @description Number of non-empty event-stream lines inspected. */
       lineCount: number;
@@ -4448,12 +4448,12 @@ export interface components {
       turnIndex?: number;
       /**
        * Format: date-time
-       * @description Capture time for Codex; provider time for Cursor.
+       * @description Capture time when present in the recorded history.
        */
       timestamp?: string;
       /** @description One-based source line; omitted when uncaptured. */
       lineNumber?: number;
-      /** @description Captured event type for Codex when available; raw event type for Cursor. */
+      /** @description Captured event type when available. Otherwise omitted. */
       sourceType?: string;
       /** @description Provider tool-call identifier when present. */
       callId?: string;
@@ -6243,6 +6243,8 @@ export interface components {
       command?: string;
       /** @description Additional command arguments passed to the configured command. */
       args?: string[];
+      /** @description Optional Go template for SCRIPT_WORKER standard input. Omit it to keep standard input empty. */
+      stdin?: string;
       /** @description Resource capacity this worker requires before it can be dispatched. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Optional Go duration that caps one worker execution attempt. */
@@ -6786,7 +6788,7 @@ export interface components {
       [key: string]: unknown;
     };
     /**
-     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+     * @description Optional worker-output parsing mode. With `decision-envelope`, agent output and successful script stdout use the reviewer/checker envelope. The envelope supplies WorkResult outcome, feedback, output, and optional recorded output work. Script process failures keep their existing failure policy.
      * @enum {string}
      */
     WorkstationOutcomeFormat: WorkstationOutcomeFormat;
@@ -9584,7 +9586,7 @@ export interface operations {
   getProviderSessionDetails: {
     parameters: {
       query: {
-        /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
+        /** @description Provider that emitted the captured session identifier. Codex and Cursor are supported. */
         provider: components["schemas"]["LoadableProviderSessionProvider"];
         /** @description Provider-session identifier kind. Only session_id is currently loadable. */
         kind: components["schemas"]["LoadableProviderSessionKind"];
@@ -9597,7 +9599,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Parsed provider-session details. */
+      /** @description Captured provider-session details. */
       200: {
         headers: {
           [name: string]: unknown;
