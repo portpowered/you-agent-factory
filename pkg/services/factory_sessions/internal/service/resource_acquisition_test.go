@@ -91,7 +91,10 @@ func TestRuntimeResourceAcquisitionIsolatesOverlappingFactsEffectsAndObservation
 	var cleanups [2]runtimeOpeningCleanup
 	var requests [2]RuntimeResourceRequest
 	var errors [2]error
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	// entered/resume synchronize overlap; this generous ceiling only detects a
+	// deadlock and does not impose a latency expectation on a loaded host.
+	const deadlockCeiling = time.Minute
+	ctx, cancel := context.WithTimeout(t.Context(), deadlockCeiling)
 	defer cancel()
 	var group sync.WaitGroup
 	for i, id := range []string{"first", "second"} {
