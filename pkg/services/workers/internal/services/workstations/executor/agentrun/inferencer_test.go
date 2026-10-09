@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
@@ -146,6 +147,7 @@ func TestRunnerInferencer_BoundsPersistentProviderFailure(t *testing.T) {
 		"temporary provider output failure",
 		errors.New("temporary provider output failure"),
 	)
+	failure.ProviderFailureKind = providers.ExecuteFailureKindDependency
 	runner := &sequenceRunner{errors: []error{failure, failure, failure, failure}}
 	inferencer := newRunnerInferencer(runner, workerexecution.ProviderInferenceRequest{}).(*runnerInferencer)
 	inferencer.retrySleep = func(context.Context, time.Duration) error { return nil }
@@ -155,6 +157,9 @@ func TestRunnerInferencer_BoundsPersistentProviderFailure(t *testing.T) {
 	}
 	if runner.calls != 3 {
 		t.Fatalf("runner calls = %d, want three bounded attempts", runner.calls)
+	}
+	if decision := workerexecution.WorkFailureDecisionFromProviderError(failure); decision.TriggersThrottlePause || !decision.Retryable {
+		t.Fatalf("local dependency fault lost bounded retry policy: %+v", decision)
 	}
 }
 

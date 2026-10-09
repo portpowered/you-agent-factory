@@ -353,6 +353,10 @@ const ExecuteDiagnosticMetadataSafeFailureMessage = "safe_failure_message"
 // Generic unknown failures do not carry this policy marker.
 const ExecuteDiagnosticMetadataUnrecognizedProviderRefusal = "unrecognized_provider_refusal"
 
+// ExecuteDiagnosticMetadataUpstreamOutage marks adapter-classified upstream
+// server failures. Dependency alone also includes local output/inspection faults.
+const ExecuteDiagnosticMetadataUpstreamOutage = "upstream_outage"
+
 // ExecuteDiagnostics carries sanitized one-attempt diagnostic facts on success
 // or failure without raw provider command output.
 type ExecuteDiagnostics struct {

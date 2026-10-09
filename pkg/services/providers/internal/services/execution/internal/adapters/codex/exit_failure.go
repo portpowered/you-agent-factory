@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -18,27 +19,32 @@ const (
 )
 
 func exitFailureFromCommandResult(result providerservice.CommandResult, workingDirectory string) error {
+	if kind := explicitHTTPFailureKind(formatCombinedCommandOutput(result)); kind != providers.ExecuteFailureKindUnknown {
+		return declaredProviderFailure(kind, declaredFailureMessage(kind))
+	}
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
 	case containsAny(normalized, "no rollout found", "no conversation found", "no thread found", "thread not found"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
+		return declaredProviderFailure(providers.ExecuteFailureKindSessionNotFound, declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound))
 	case result.ExitCode == codexUntrustedWorkingDirectoryExit &&
 		containsAny(normalized, codexUntrustedWorkingDirectoryNeedle) &&
 		strings.Contains(normalized, codexSkipGitRepoCheckNeedle):
 		return untrustedWorkingDirectoryFailure(workingDirectory)
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: declaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
+		return declaredProviderFailure(providers.ExecuteFailureKindAuthentication, declaredFailureMessage(providers.ExecuteFailureKindAuthentication))
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
+		return declaredProviderFailure(providers.ExecuteFailureKindInvalidRequest, declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest))
 	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "server_overloaded", "429"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: declaredFailureMessage(providers.ExecuteFailureKindThrottled)}
-	case containsAny(normalized, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
+		return declaredProviderFailure(providers.ExecuteFailureKindThrottled, declaredFailureMessage(providers.ExecuteFailureKindThrottled))
+	case containsAny(normalized, "internal server error"):
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, declaredFailureMessage(providers.ExecuteFailureKindDependency))
 	case result.ExitCode == 124 || containsAny(normalized, "deadline exceeded", "timed out", "timeout", "request timed out"):
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindTimeout, Message: declaredFailureMessage(providers.ExecuteFailureKindTimeout)}
+		return declaredProviderFailure(providers.ExecuteFailureKindTimeout, declaredFailureMessage(providers.ExecuteFailureKindTimeout))
+	case containsAny(normalized, "service unavailable", "please try again"):
+		return declaredProviderFailure(providers.ExecuteFailureKindDependency, declaredFailureMessage(providers.ExecuteFailureKindDependency))
 	}
 	return fmt.Errorf("codex exited with code %d", result.ExitCode)
 }
@@ -158,4 +164,39 @@ func containsAny(text string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+// explicitHTTPFailureKind recognizes provider status diagnostics, not bare
+// numbers in prompts or request identifiers. Server evidence wins over prose.
+func explicitHTTPFailureKind(message string) providers.ExecuteFailureKind {
+	matches := providerHTTPStatus.FindAllStringSubmatch(strings.ToLower(message), -1)
+	kind := providers.ExecuteFailureKindUnknown
+	for _, match := range matches {
+		switch match[1][0] {
+		case '5':
+			return providers.ExecuteFailureKindDependency
+		case '4':
+			switch match[1] {
+			case "400":
+				kind = providers.ExecuteFailureKindInvalidRequest
+			case "401", "403":
+				kind = providers.ExecuteFailureKindAuthentication
+			case "429":
+				kind = providers.ExecuteFailureKindThrottled
+			}
+		}
+	}
+	return kind
+}
+
+var providerHTTPStatus = regexp.MustCompile(`\b(?:unexpected status|http(?: status)?)\s+([45][0-9]{2})\b`)
+
+func declaredProviderFailure(kind providers.ExecuteFailureKind, message string) providers.ExecuteFailure {
+	failure := providers.ExecuteFailure{Kind: kind, Message: message}
+	if kind == providers.ExecuteFailureKindDependency {
+		failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			providers.ExecuteDiagnosticMetadataUpstreamOutage: "true",
+		}}
+	}
+	return failure
 }

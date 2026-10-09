@@ -701,7 +701,9 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 	switch metadata.Type {
 	case WorkFailureTypeThrottled:
 		return WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case WorkFailureTypeInternalServerError, WorkFailureTypeTimeout:
+	case WorkFailureTypeInternalServerError:
+		return WorkFailureDecision{Retryable: true, TriggersThrottlePause: metadata.Family == WorkFailureFamilyThrottle}
+	case WorkFailureTypeTimeout:
 		return WorkFailureDecision{Retryable: true}
 	case WorkFailureTypeAuthFailure,
 		WorkFailureTypePermanentBadRequest,

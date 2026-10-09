@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestParseMockWorkersConfigWithDiagnosticsPreservesKnownBehavior(t *testing.T) {
@@ -315,6 +316,42 @@ func assertProviderSessionFailureIdentity(t *testing.T, err error, got *Provider
 		}
 		if got.Continuation == nil || got.Continuation.Provider != "codex" || got.Continuation.Kind != providersessions.SessionIDKind || got.Continuation.ProviderSessionID != "validated-id" {
 			t.Fatalf("continuation = %#v", got.Continuation)
+		}
+	}
+}
+
+func TestProviderDependencyUsesBackpressureWithoutRescuingTerminalFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind            providers.ExecuteFailureKind
+		typ             WorkFailureType
+		upstream        bool
+		pause, terminal bool
+	}{
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, true, true, false},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeInternalServerError, false, false, false},
+		{"", WorkFailureTypeInternalServerError, true, false, false},
+		{providers.ExecuteFailureKindThrottled, WorkFailureTypeThrottled, false, true, false},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypeAuthFailure, true, false, true},
+		{providers.ExecuteFailureKindDependency, WorkFailureTypePermanentBadRequest, true, false, true},
+	} {
+		err := NewProviderError(tc.typ, "safe", nil)
+		err.ProviderFailureKind = tc.kind
+		if tc.upstream {
+			err.Diagnostics = &WorkDiagnostics{Provider: &ProviderDiagnostic{
+				ResponseMetadata: map[string]string{providers.ExecuteDiagnosticMetadataUpstreamOutage: "true"},
+			}}
+		}
+		metadata := WorkFailureMetadataFromProviderError(err)
+		decision := WorkFailureDecisionFromProviderError(err)
+		if metadata.Type != tc.typ || decision.TriggersThrottlePause != tc.pause || decision.Terminal != tc.terminal || decision.Retryable == tc.terminal {
+			t.Fatalf("kind=%s type=%s metadata=%+v decision=%+v", tc.kind, tc.typ, metadata, decision)
+		}
+		if tc.terminal {
+			metadata.Family = WorkFailureFamilyThrottle
+			if got := FailureDecisionFromMetadata(metadata); !got.Terminal || got.Retryable {
+				t.Fatalf("terminal rescued by family: %+v", got)
+			}
 		}
 	}
 }

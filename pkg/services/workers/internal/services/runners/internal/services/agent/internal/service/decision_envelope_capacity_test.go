@@ -44,9 +44,11 @@ func TestExecuteKeepsDeclaredProviderFailureWhenPartialOutputIsNotAnEnvelope(t *
 		kind     providers.ExecuteFailureKind
 		wantType workers.WorkFailureType
 		throttle bool
+		outage   bool
 	}{
-		{"capacity at turn end stays throttled", providers.ExecuteFailureKindThrottled, workers.WorkFailureTypeThrottled, true},
-		{"dependency failure stays dependency", providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, false},
+		{"capacity at turn end stays throttled", providers.ExecuteFailureKindThrottled, workers.WorkFailureTypeThrottled, true, false},
+		{"local dependency keeps bounded retries", providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, false, false},
+		{"upstream outage keeps backpressure", providers.ExecuteFailureKindDependency, workers.WorkFailureTypeInternalServerError, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -54,6 +56,11 @@ func TestExecuteKeepsDeclaredProviderFailureWhenPartialOutputIsNotAnEnvelope(t *
 			fake := &partialOutputFailingProvidersFake{
 				content: "Thinking about the plan",
 				failure: providers.ExecuteFailure{Kind: tc.kind, Message: "declared"},
+			}
+			if tc.outage {
+				fake.failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+					providers.ExecuteDiagnosticMetadataUpstreamOutage: "true",
+				}}
 			}
 			runner, err := New(fake, noopPublisher, envelopes)
 			if err != nil {
