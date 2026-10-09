@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -69,6 +70,7 @@ func TestWorkScopedRetainedSessionsBoundedWork(t *testing.T) {
 	empty := submitRetainedWork(t, server.Config.Handler, f.sessionID, "idle")
 	waitRetainedWork(t, ctx, server.Config.Handler, f.sessionID, f.workID)
 	retained := 4
+	var selectedIDs []string
 	for _, unrelatedWorks := range []int{334, 550} {
 		previous := (retained - 4) / 6
 		var pending []string
@@ -78,13 +80,18 @@ func TestWorkScopedRetainedSessionsBoundedWork(t *testing.T) {
 		}
 		waitRetainedWorks(t, ctx, server.Config.Handler, f.sessionID, pending)
 		retained += 6 * len(pending)
-		t.Logf("prepared retained attempts=%d", retained)
-		measureRetainedReads(t, ctx, server.Config.Handler, f, empty, retained, counts, logs)
+		assertRetainedInventory(t, ctx, counts.WorkerRecordingStore, f.sessionID, retained)
+		ids := measureRetainedReads(t, ctx, server.Config.Handler, f, empty, retained, counts, logs)
+		if selectedIDs != nil && !slices.Equal(selectedIDs, ids) {
+			t.Fatalf("selected identities/order changed with unrelated membership: %v -> %v", selectedIDs, ids)
+		}
+		selectedIDs = ids
 	}
 }
 
-func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handler, f scopedLatencyFixture, empty string, retained int, counts *retainedReadCounts, logs *observer.ObservedLogs) {
+func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handler, f scopedLatencyFixture, empty string, retained int, counts *retainedReadCounts, logs *observer.ObservedLogs) []string {
 	t.Helper()
+	var selectedIDs []string
 	for _, selected := range []struct {
 		id   string
 		rows int
@@ -95,7 +102,13 @@ func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handle
 			path := "/factory-sessions/" + f.sessionID + "/worker-sessions?workId=" + url.QueryEscape(selected.id)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx))
-			assertRetainedRead(t, response, selected.id, selected.rows)
+			ids := assertRetainedRead(t, response, selected.id, selected.rows)
+			if selected.rows != 0 {
+				if selectedIDs != nil && !slices.Equal(selectedIDs, ids) {
+					t.Fatalf("selected identities/order changed between reads: %v -> %v", selectedIDs, ids)
+				}
+				selectedIDs = ids
+			}
 			visits := counts.dispatchVisits()
 			for _, entry := range logs.FilterMessage("worker session observation candidate selection").All() {
 				visits += int(entry.ContextMap()["candidate_visits"].(int64))
@@ -110,6 +123,45 @@ func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handle
 			t.Logf("N=%d k=%d sample=%d full=%d history=%d summaries=%d visits=%d bytes=%d", retained, selected.rows, sample, full, counts.history.Load(), summaries, visits, response.Body.Len())
 		}
 	}
+	return selectedIDs
+}
+
+// Enumerate committed capture identities independently of station counts and
+// the scoped list. This setup observation precedes counter reset and never
+// warms the Work-scoped route being measured.
+func assertRetainedInventory(t *testing.T, ctx context.Context, store recordings.WorkerRecordingStore, sessionID string, expected int) {
+	t.Helper()
+	seen := make(map[string]bool, expected)
+	request := recordings.WorkerCapturedCatalogRequest{Limit: 1000, RequireCompleteMembership: true}
+	for {
+		page, err := store.ListWorkerSessionCaptures(ctx, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range page.Items {
+			// Host bootstrap owns a separate default Factory Session in the
+			// same profile; it is outside this explicit-session capacity rig.
+			if item.Catalog.FactorySessionID != sessionID {
+				continue
+			}
+			id := item.Catalog.WorkerSessionID
+			if id == "" || seen[id] || item.Catalog.CommittedPosition == 0 {
+				t.Fatalf("invalid retained identity: %#v", item.Catalog)
+			}
+			seen[id] = true
+		}
+		if page.NextToken == "" {
+			break
+		}
+		if page.NextToken == request.NextToken {
+			t.Fatal("capture inventory did not advance")
+		}
+		request.NextToken = page.NextToken
+	}
+	if len(seen) != expected {
+		t.Fatalf("actual retained captures=%d, expected=%d", len(seen), expected)
+	}
+	t.Logf("independent committed retained identities=%d scope=%s", len(seen), sessionID)
 }
 
 type retainedReadCounts struct {
@@ -218,19 +270,41 @@ func waitRetainedWorks(t *testing.T, ctx context.Context, handler http.Handler, 
 	}
 }
 
-func assertRetainedRead(t *testing.T, response *httptest.ResponseRecorder, workID string, count int) {
+func assertRetainedRead(t *testing.T, response *httptest.ResponseRecorder, workID string, count int) []string {
 	t.Helper()
 	var page factoryapi.ListWorkerSessionsResponse
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Sessions) != count {
 		t.Fatalf("scoped rows: %d %s", response.Code, response.Body.String())
 	}
 	seen := map[string]bool{}
-	for _, row := range page.Sessions {
+	ids := make([]string, 0, count)
+	for index, row := range page.Sessions {
 		if seen[row.WorkerSessionId] || row.WorkId == nil || *row.WorkId != workID || row.State != factoryapi.WorkerSessionObservationStateCompleted || row.TokenUsage == nil {
 			t.Fatalf("incorrect selected attempt: %#v", row)
 		}
 		seen[row.WorkerSessionId] = true
+		ids = append(ids, row.WorkerSessionId)
+		if row.StartedAt == nil {
+			t.Fatalf("execution-derived attempt has no start time: %#v", row)
+		}
+		if index > 0 {
+			previous := page.Sessions[index-1]
+			if retainedAttemptBefore(row, previous) {
+				t.Fatalf("attempts out of chronological order: %#v then %#v", previous, row)
+			}
+		}
 	}
+	return ids
+}
+
+func retainedAttemptBefore(left, right factoryapi.WorkerSessionObservation) bool {
+	if !left.StartedAt.Equal(*right.StartedAt) {
+		return left.StartedAt.Before(*right.StartedAt)
+	}
+	if left.AttemptId != right.AttemptId {
+		return left.AttemptId < right.AttemptId
+	}
+	return left.WorkerSessionId < right.WorkerSessionId
 }
 
 func writeRetainedFactory(t *testing.T, dir string) {
