@@ -75,6 +75,7 @@ type InputGuardConfig = contracts.InputGuardConfig
 type InputTypeConfig = contracts.InputTypeConfig
 type IOConfig = contracts.IOConfig
 type StateConfig = contracts.StateConfig
+type StateReopenConfig = contracts.StateReopenConfig
 type StateType = contracts.StateType
 type WorkTypeConfig = contracts.WorkTypeConfig
 type WorkerWorkstationBehaviorClass = contracts.WorkerWorkstationBehaviorClass

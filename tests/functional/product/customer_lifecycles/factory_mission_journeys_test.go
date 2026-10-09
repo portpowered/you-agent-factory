@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const invalidMissionPrecondition = `{"decision":"FAILED","feedback":"required read failed","output":{"precondition":{"reason":"read unavailable"}}}`
+const invalidMissionPrecondition = `{"decision":"FAILED","feedback":"required read failed","output":{"precondition":{"reason":" "}}}`
 const correctedFailedMissionReply = `{"decision":"FAILED","feedback":"required recording read unavailable","output":{"precondition":"required recording read unavailable; pending Work observed: 0","measurements":[{"name":"pending","value":0,"source":"fixture"},{"name":"available","value":false,"source":"fixture"},{"name":"missing","value":null,"source":"fixture"}],"reads":[{"required":true,"attempts":2,"available":false}]}}`
 
 const measuredMissionReply = `{"decision":"ACCEPTED","feedback":"measured","output":{"measurements":[{"name":"pending","value":0,"source":"local fixture"},{"name":"ready","value":false,"source":"read fixture"}]}}`
@@ -39,7 +39,11 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 		{"F04 corrected", `{"mission":"measure pending and ready","reads":["recording"],"budget":{"paid":0}}`, invalidMissionPrecondition, measuredMissionReply, "complete", true, false},
 		{"F04 corrected FAILED", `{"mission":"measure required recording café","required":true}`, invalidMissionPrecondition, correctedFailedMissionReply, "failed", true, false},
 		{"F05 twice invalid", `{"mission":"measure pending and ready","evidence":"two-visit ceiling"}`, invalidMissionPrecondition, "", "failed", true, false},
-		{"F06 precondition", `{"mission":"measure pending and ready"}`, `{"decision":"ACCEPTED","feedback":"blocked","output":{"precondition":"required fixture unavailable","measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "complete", false, false},
+		{"F06 precondition", `{"mission":"measure pending and ready"}`, `{"decision":"ACCEPTED","feedback":"blocked","output":{"precondition":"required fixture unavailable","measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "awaiting-restart", false, false},
+		{"restart prerequisite with partial values", `{"mission":"measure pending and ready"}`, `{"decision":"PRECONDITION","feedback":"daemon not restarted","output":{"precondition":{"requirement":"daemon running the fix","observed":"old revision","needed":"restart"},"measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "awaiting-restart", false, false},
+		{"legacy prerequisite only failure", `{"mission":"measure pending and ready"}`, `{"decision":"FAILED","feedback":"read unavailable","output":{"precondition":"recording read unavailable"}}`, "", "awaiting-restart", false, false},
+		{"malformed prerequisite corrected to wait", `{"mission":"measure pending and ready"}`, `{"decision":"PRECONDITION","feedback":"blocked","output":{"precondition":{"reason":" "}}}`, `{"decision":"PRECONDITION","feedback":"blocked","output":{"precondition":"daemon not restarted"}}`, "awaiting-restart", true, false},
+		{"malformed prerequisite twice", `{"mission":"measure pending and ready"}`, `{"decision":"PRECONDITION","feedback":"blocked","output":{"precondition":{"reason":" "}}}`, "", "failed", true, false},
 		{"F07 optional gap", `{"mission":"measure pending; optional GitHub read"}`, `{"decision":"ACCEPTED","feedback":"optional read exhausted","output":{"measurements":[{"name":"pending","value":0,"source":"fixture"}],"reads":[{"available":false,"required":false,"attempts":2}]}}`, "", "complete", false, false},
 		{"F08 required gap", `{"mission":"measure pending; required GitHub read"}`, `{"decision":"FAILED","feedback":"required GitHub read unavailable","output":{"precondition":"required GitHub read unavailable","measurements":[{"name":"pending","value":0,"source":"fixture"}]}}`, "", "failed", false, false},
 		{"F12 provider failure", `{"mission":"measure pending and ready"}`, "", "", "failed", false, true},
@@ -68,11 +72,17 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 			dependency := id + "-completed-fix"
 			scenario.submit(t, dependency+"-request", reviewFailureSeed{Name: dependency, WorkID: dependency, WorkType: "task", State: "complete", TraceID: dependency + "-trace"})
 			tags := map[string]string{"evidence": "retained-tag"}
+			if tc.state == "awaiting-restart" {
+				tags["project"] = scenario.marker + "-project"
+			}
 			payload := strings.ReplaceAll(tc.payload, "measure", "measure "+id)
 			submitMissionThroughCLI(t, scenario, id, dependency, payload, tags)
 			terminal := "report-thoughts-complete"
 			if tc.state == "failed" {
 				terminal = "report-thoughts-failure"
+			}
+			if tc.state == "awaiting-restart" {
+				terminal = "check-mission-output"
 			}
 			awaitReviewFailureDispatchResponses(t, stream, terminal, 1)
 			awaitReviewFailureWorkStates(t, scenario, map[string]string{id: tc.state})
@@ -94,6 +104,19 @@ func TestMissionThoughtsJourneys(t *testing.T) {
 			assertMissionJourneyEvidence(t, scenario, id, payload, first, mission, tc.correction)
 			assertMissionDispatchContract(t, scenario, id, mission, tc.correction, tc.state == "failed" && tc.correction && tc.final == "")
 			assertMissionFinalReply(t, scenario, id, first, tc.final, tc.correction, tc.providerFailure)
+			if tc.state == "awaiting-restart" {
+				parked := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID, "/work/"+id))
+				assertPayloadHasSentinel(t, "parked project tag", parked.Tags, tags["project"])
+				dependent := id + "-dependent"
+				scenario.submit(t, dependent+"-request", reviewFailureSeed{Name: dependent, WorkID: dependent,
+					WorkType: "thoughts", State: "init", Payload: `{"mission":"measure downstream result"}`,
+					DependsOn: id, DependsOnState: "complete", TraceID: dependent + "-trace"})
+				awaitReviewFailureWorkStates(t, scenario, map[string]string{id: "awaiting-restart", dependent: "init"})
+				assertMissionParked(t, scenario)
+				if providers.Load() != wantProviders {
+					t.Fatalf("parked mission or its dependent dispatched another verifier: %d calls", providers.Load())
+				}
+			}
 		})
 	}
 	t.Run("F09-F11 gap handoff", testMissionGapHandoff)
@@ -167,12 +190,19 @@ func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureComm
 				}
 				var reply map[string]any
 				_ = json.Unmarshal([]byte(raw), &reply)
-				if strings.Contains(raw, `"precondition":{"reason":"read unavailable"}`) {
+				if strings.Contains(raw, `"precondition":{"reason":" "}`) {
 					decision := "REJECTED"
 					if strings.Contains(feedback, "mission-output-invalid:") {
 						decision = "FAILED"
 					}
 					reply = map[string]any{"decision": decision, "feedback": "mission-output-invalid: output.precondition must name the unmet precondition", "output": map[string]string{"invalidReply": raw}}
+				}
+				if output, ok := reply["output"].(map[string]any); ok {
+					_, precondition := output["precondition"]
+					_, measurements := output["measurements"]
+					if precondition && (reply["decision"] == "PRECONDITION" || reply["decision"] == "ACCEPTED" || !measurements) {
+						reply["decision"] = "CONTINUE"
+					}
 				}
 				encoded, _ := json.Marshal(reply)
 				return platformprocess.CommandResult{Stdout: encoded}, nil
@@ -180,6 +210,17 @@ func missionScriptResponse(t *testing.T, checks *atomic.Int32) reviewFailureComm
 		}
 		return platformprocess.CommandResult{Stdout: []byte("script-ok")}, nil
 	}
+}
+
+func assertMissionParked(t *testing.T, scenario *reviewFailureScenario) {
+	t.Helper()
+	dispatches := reviewFailureDispatches(t, scenario)
+	for _, step := range []string{"report-thoughts-complete", "report-thoughts-failure", "project-report"} {
+		if len(dispatchesWithTransition(dispatches, step)) != 0 {
+			t.Fatalf("parked mission emitted terminal report through %s", step)
+		}
+	}
+	assertNoIncompleteReviewFailureDispatches(t, dispatches)
 }
 
 func assertMissionJourneyEvidence(t *testing.T, scenario *reviewFailureScenario, id, payload, first string, mission, corrected bool) {

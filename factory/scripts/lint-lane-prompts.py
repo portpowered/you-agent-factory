@@ -2,6 +2,7 @@
 """Read-only lane prompt policy lint; not runtime admission or agent proof."""
 
 import argparse
+import json
 from pathlib import Path
 import re
 import sys
@@ -352,7 +353,9 @@ MISSION_RULES = (
     ('commands', 'Run every named command/read and report every named value, unit and source'),
     ('retry', 'Each failed read retries once; retain both attempts and available output'),
     ('optional', 'Optional exhaustion is a recorded gap, not alone FAILED'),
-    ('required', 'Required read/command failures return FAILED with the exact reason and available values'),
+    ('required', 'Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values'),
+    ('wait', 'If the only problem is an unmet prerequisite, return PRECONDITION even with partial measurements'),
+    ('no-restart', 'Do not restart the daemon or mutate product state to satisfy a precondition.'),
     ('correction', 'For gaps, prepare a narrow corrective batch plus its own dependent loopback'),
     ('receipt', 'For untagged Work, use a stable request ID, dry-run, idempotent submission and verified receipt'),
     ('tagged', 'Dry-run only in the bound Factory Session; submit no Project children'),
@@ -363,7 +366,7 @@ MISSION_RULES = (
     ('precondition-key', 'Use the exact key output.precondition with a non-blank string for an unmet precondition.'),
     ('values', 'Each measurement requires value. Zero, false and null are valid values.'),
     ('measurements-example', '{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}'),
-    ('precondition-example', '{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}'),
+    ('precondition-example', '{"decision":"PRECONDITION","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}'),
 )
 
 
@@ -378,6 +381,21 @@ def check_mission_policy(source):
         diagnostics.append('verify-mission:mission-lines: prompt must be under 60 lines')
     if re.search(r'portfolio|supervisor-slot', source, re.IGNORECASE):
         diagnostics.append('verify-mission:mission-isolation: remove portfolio/supervisor instructions')
+    if re.search(r'Required read/command failures return FAILED', normalized):
+        diagnostics.append('verify-mission:mission-wait-conflict: prerequisite-only failures must return PRECONDITION')
+    # Examples are part of the shipped prompt contract. Decode each complete
+    # object, including nested/prettified examples, rather than matching JSON
+    # key order or counting braces with a regular expression.
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r'\{', source):
+        try:
+            example, _ = decoder.raw_decode(source[match.start():])
+        except ValueError:
+            continue
+        if not isinstance(example, dict) or not isinstance(example.get('output'), dict):
+            continue
+        if 'precondition' in example['output'] and example.get('decision') != 'PRECONDITION':
+            diagnostics.append('verify-mission:mission-example-conflict: precondition examples must return PRECONDITION')
     return diagnostics
 
 

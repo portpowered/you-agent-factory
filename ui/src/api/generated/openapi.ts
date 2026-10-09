@@ -5129,7 +5129,7 @@ export interface components {
       outputResources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["StringMap"];
     };
-    /** @description Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
+    /** @description Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. Live reopening recovery uses session-reopen. Exhaustion reasons retain the accumulated named preconditions from canonical waiting dispatches. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
     WorkStateChangeEventPayload: {
       workId: string;
       workTypeName: string;
@@ -6180,6 +6180,15 @@ export interface components {
       name: string;
       /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
       type: components["schemas"]["WorkStateType"];
+      /** @description Optional recovery rule for restored Work in a processing state. Live reopening applies one move before scheduling. Replay applies none. At maxWaits recorded waiting admissions, reopening selects exhaustedState. */
+      onReopen?: {
+        /** @description Different processing state in the same work type for another attempt. */
+        state: string;
+        /** @description Number of recorded waiting admissions that exhaust the recovery budget. */
+        maxWaits: number;
+        /** @description Failed state in the same work type selected when the budget is exhausted. */
+        exhaustedState: string;
+      };
     };
     /**
      * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
@@ -11590,6 +11599,8 @@ export const WorkStateChangeSource = {
   WorkStateChangeSourceCLI: "cli",
   // Automatic cascade propagation after a dependency failure.
   WorkStateChangeSourceCascadingFailure: "cascading-failure",
+  // Automatic recovery of waiting Work during live Factory Session reopening.
+  WorkStateChangeSourceSessionReopen: "session-reopen",
 } as const;
 export type WorkStateChangeSource =
   (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];

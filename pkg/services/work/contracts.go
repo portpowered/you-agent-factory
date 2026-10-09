@@ -539,6 +539,7 @@ const (
 	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
 	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
 	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
+	WorkStateChangeSourceSessionReopen    WorkStateChangeSource = "session-reopen"
 )
 
 type WorkStateChangeRecord struct {

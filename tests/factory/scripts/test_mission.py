@@ -93,7 +93,7 @@ class MissionOutputTests(unittest.TestCase):
                     self.assertEqual(second["output"]["invalidReply"], raw[:512])
 
     def test_precondition_with_available_values_and_failed_reply(self):
-        for decision in ("ACCEPTED", "FAILED"):
+        for decision in ("ACCEPTED", "FAILED", "PRECONDITION"):
             for precondition in ("GitHub credentials unavailable", {
                     "requirement": "daemon running the fix", "observed": "old revision", "needed": "restart"},
                     {"custom": " café unavailable ", "count": 0, "available": False,
@@ -106,8 +106,38 @@ class MissionOutputTests(unittest.TestCase):
                         if not measurements:
                             del reply["output"]["measurements"]
                         raw = json.dumps(reply)
-                        self.assertEqual(checker.check_mission_output(raw), reply)
-                        self.assertEqual(self.run_checker(raw, checker.INVALID_PREFIX), reply)
+                        expected = dict(reply, decision=("FAILED" if decision == "FAILED" and measurements
+                                                         else "CONTINUE"))
+                        self.assertEqual(checker.check_mission_output(raw), expected)
+                        self.assertEqual(self.run_checker(raw, checker.INVALID_PREFIX), expected)
+
+    def test_precondition_requires_named_requirement_even_with_measurements(self):
+        reply = self.valid()
+        reply["decision"] = "PRECONDITION"
+        raw = json.dumps(reply)
+        first = self.run_checker(raw)
+        self.assertEqual(first["decision"], "REJECTED")
+        self.assertEqual(first["feedback"], checker.INVALID_PREFIX + " PRECONDITION requires output.precondition")
+        second = self.run_checker(raw, first["feedback"])
+        self.assertEqual(second["decision"], "FAILED")
+        self.assertEqual(second["output"], {"invalidReply": raw})
+
+    def test_invalid_reply_failure_does_not_become_a_wait(self):
+        reply = {"decision": "FAILED", "feedback": checker.INVALID_PREFIX + " invalid shape",
+                 "output": {"precondition": "read unavailable", "invalidReply": "bad reply"}}
+        self.assertEqual(self.run_checker(json.dumps(reply)), reply)
+
+    def test_malformed_precondition_cannot_consume_a_wait(self):
+        for output in ({'precondition': ' '}, {'precondition': {'count': 0}},
+                       {'precondition': 'restart needed', 'measurements': []},
+                       {'precondition': 'restart needed', 'measurements': [{'name': 'pending', 'source': 'read'}]}):
+            with self.subTest(output=output):
+                raw = json.dumps({'decision': 'PRECONDITION', 'feedback': 'blocked', 'output': output})
+                first = self.run_checker(raw)
+                self.assertEqual(first['decision'], 'REJECTED')
+                second = self.run_checker(raw, first['feedback'])
+                self.assertEqual(second['decision'], 'FAILED')
+                self.assertEqual(second['output'], {'invalidReply': raw})
 
     def test_invalid_preconditions_cannot_be_excused_by_measurements(self):
         invalid = ("", " \t\n", {}, {"reason": " "}, {"count": 0, "available": False},
@@ -150,7 +180,7 @@ class MissionOutputTests(unittest.TestCase):
         reply["output"]["precondition"] = {"reason": "read unavailable"}
         reply.update(recorded_output_work=[{"name": "unauthorized"}], request={"works": []})
         self.assertEqual(checker.check_mission_output(json.dumps(reply)),
-                         {field: reply[field] for field in ("decision", "feedback", "output")})
+                         {"decision": "CONTINUE", "feedback": reply["feedback"], "output": reply["output"]})
 
     def test_invalid_reply_rejects_once_then_fails_with_same_reason(self):
         cases = ["not JSON", "[]", '{"decision":"ACCEPTED","feedback":"hold","output":"hold"}',
@@ -193,7 +223,7 @@ class MissionOutputTests(unittest.TestCase):
         corrected = {"decision": "FAILED", "feedback": "required recording read unavailable",
                      "output": {"precondition": "Required recording read unavailable; pending Work observed: 0",
                                 "reads": [{"required": True, "attempts": 2, "available": False}]}}
-        self.assertEqual(self.run_checker(json.dumps(corrected), reason), corrected)
+        self.assertEqual(self.run_checker(json.dumps(corrected), reason), dict(corrected, decision="CONTINUE"))
         self.assertEqual(self.run_checker(json.dumps(invalid), reason), {
             "decision": "FAILED", "feedback": reason, "output": first["output"]})
 
@@ -209,12 +239,13 @@ class MissionOutputTests(unittest.TestCase):
         examples = [
             {"decision": "ACCEPTED", "feedback": "Measured pending Work.", "output": {
                 "measurements": [{"name": "pending", "value": 0, "source": "authorized Work list"}]}},
-            {"decision": "FAILED", "feedback": "Required read unavailable.", "output": {
+            {"decision": "PRECONDITION", "feedback": "Required read unavailable.", "output": {
                 "precondition": "Required recording read unavailable; pending Work observed: 0"}},
         ]
         for example in examples:
-            self.assertEqual(self.run_checker(json.dumps(example)), example)
-            self.assertEqual(self.run_checker(json.dumps(example), checker.INVALID_PREFIX), example)
+            expected = dict(example, decision=("CONTINUE" if example["decision"] == "PRECONDITION" else "ACCEPTED"))
+            self.assertEqual(self.run_checker(json.dumps(example)), expected)
+            self.assertEqual(self.run_checker(json.dumps(example), checker.INVALID_PREFIX), expected)
 
 
 if __name__ == "__main__":

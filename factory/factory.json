@@ -1142,6 +1142,16 @@
           "type": "PROCESSING"
         },
         {
+          "id": "awaiting-restart",
+          "name": "awaiting-restart",
+          "type": "PROCESSING",
+          "onReopen": {
+            "state": "mission-ready",
+            "maxWaits": 3,
+            "exhaustedState": "reporting-failed"
+          }
+        },
+        {
           "id": "reporting-complete",
           "name": "reporting-complete",
           "type": "PROCESSING"
@@ -2926,6 +2936,12 @@
         {
           "workType": "thoughts",
           "state": "reporting-failed"
+        }
+      ],
+      "onContinue": [
+        {
+          "workType": "thoughts",
+          "state": "awaiting-restart"
         }
       ],
       "workPropagation": {

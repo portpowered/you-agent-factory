@@ -11,6 +11,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
+func TestReopenPolicyCompilesToDetachedOpeningState(t *testing.T) {
+	t.Parallel()
+	mapper, err := New(uuid.NewString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := &interfaces.StateReopenConfig{State: "ready", MaxWaits: 3, ExhaustedState: "failed"}
+	cfg := &interfaces.FactoryConfig{WorkTypes: []interfaces.WorkTypeConfig{{Name: "mission", States: []interfaces.StateConfig{
+		{Name: "ready", Type: interfaces.StateTypeProcessing},
+		{Name: "waiting", Type: interfaces.StateTypeProcessing, OnReopen: rule},
+		{Name: "failed", Type: interfaces.StateTypeFailed},
+	}}}}
+	first := mapper.convertToWorkTypes(cfg)["mission"].States[1].OnReopen
+	second := mapper.convertToWorkTypes(cfg)["mission"].States[1].OnReopen
+	if first == nil || second == nil || *first != *rule || *second != *rule {
+		t.Fatalf("compiled rule was lost: first=%#v second=%#v", first, second)
+	}
+	first.MaxWaits = 1
+	if rule.MaxWaits != 3 || second.MaxWaits != 3 {
+		t.Fatal("opening mutated authored policy or another opening")
+	}
+	if mapper.convertToWorkTypes(cfg)["mission"].States[0].OnReopen != nil {
+		t.Fatal("unconfigured state acquired a reopen policy")
+	}
+}
+
 func TestSharedMapperKeepsConcurrentOpeningStateDetached(t *testing.T) {
 	t.Parallel()
 	mapper, err := New(uuid.NewString)

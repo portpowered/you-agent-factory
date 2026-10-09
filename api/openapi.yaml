@@ -10208,14 +10208,17 @@ components:
         - WorkStateChangeSourceAPI
         - WorkStateChangeSourceCLI
         - WorkStateChangeSourceCascadingFailure
+        - WorkStateChangeSourceSessionReopen
       enum:
         - api
         - cli
         - cascading-failure
+        - session-reopen
       x-enum-descriptions:
         - Operator move through the HTTP API.
         - Operator move through the CLI.
         - Automatic cascade propagation after a dependency failure.
+        - Automatic recovery of waiting Work during live Factory Session reopening.
     DispatchConsumedWorkRef:
       type: object
       additionalProperties: false
@@ -10880,7 +10883,7 @@ components:
     WorkStateChangeEventPayload:
       type: object
       additionalProperties: false
-      description: Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+      description: Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. Live reopening recovery uses session-reopen. Exhaustion reasons retain the accumulated named preconditions from canonical waiting dispatches. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
       required:
         - workId
         - workTypeName
@@ -12794,6 +12797,27 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkStateType'
           description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
+        onReopen:
+          type: object
+          additionalProperties: false
+          description: Optional recovery rule for restored Work in a processing state. Live reopening applies one move before scheduling. Replay applies none. At maxWaits recorded waiting admissions, reopening selects exhaustedState.
+          required:
+            - state
+            - maxWaits
+            - exhaustedState
+          properties:
+            state:
+              type: string
+              minLength: 1
+              description: Different processing state in the same work type for another attempt.
+            maxWaits:
+              type: integer
+              minimum: 1
+              description: Number of recorded waiting admissions that exhaust the recovery budget.
+            exhaustedState:
+              type: string
+              minLength: 1
+              description: Failed state in the same work type selected when the budget is exhausted.
     WorkStateType:
       type: string
       description: 'Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.'

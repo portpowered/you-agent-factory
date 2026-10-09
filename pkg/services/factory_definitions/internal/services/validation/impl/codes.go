@@ -25,6 +25,7 @@ const (
 	CodeWorkstationInvalidOutputSchema                           = "factory.workstation.invalidOutputSchema"
 	CodeWorkstationConflictingOutputs                            = "factory.workstation.conflictingWorkStateOutputs"
 	CodeWorkTypeInvalidExpectedArtifact                          = "factory.workType.invalidExpectedArtifact"
+	CodeWorkStateInvalidReopen                                   = "factory.workState.invalidReopen"
 	CodeWorkstationInvalidExpectedArtifact                       = "factory.workstation.invalidExpectedArtifact"
 	CodeWorkstationHumanApproval                                 = "factory.workstation.humanApproval"
 	CodeWorkTypeMissingCompletionState                           = "factory.workType.missingCompletionState"

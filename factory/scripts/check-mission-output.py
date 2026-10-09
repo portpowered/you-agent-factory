@@ -27,13 +27,15 @@ def finite_float(raw):
 def validate_reply(reply):
     if not isinstance(reply, dict):
         return "reply must be a JSON object"
-    if reply.get("decision") not in ("ACCEPTED", "FAILED"):
-        return "decision must be ACCEPTED or FAILED"
+    if reply.get("decision") not in ("ACCEPTED", "FAILED", "PRECONDITION"):
+        return "decision must be ACCEPTED, FAILED or PRECONDITION"
     if not isinstance(reply.get("feedback"), str):
         return "feedback must be a string"
     output = reply.get("output")
     if not isinstance(output, dict):
         return "output must be a native object with measurements or a named unmet precondition"
+    if reply["decision"] == "PRECONDITION" and "precondition" not in output:
+        return "PRECONDITION requires output.precondition"
     if "precondition" in output:
         precondition = output["precondition"]
         if not (nonblank(precondition) or
@@ -72,6 +74,13 @@ def check_mission_output(raw, rejection_feedback=""):
             "feedback": INVALID_PREFIX + " " + reason,
             "output": {"invalidReply": raw[:MAX_DIAGNOSTIC]},
         }
+    # PRECONDITION belongs only to the verifier. The factory consumes its
+    # existing CONTINUE envelope, retaining all available evidence unchanged.
+    output = reply["output"]
+    if reply["decision"] == "PRECONDITION" or (
+            "precondition" in output and "invalidReply" not in output and (
+                reply["decision"] == "ACCEPTED" or "measurements" not in output)):
+        reply["decision"] = "CONTINUE"
     return reply
 
 
