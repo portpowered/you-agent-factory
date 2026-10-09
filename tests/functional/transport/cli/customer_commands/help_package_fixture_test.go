@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -39,6 +40,7 @@ type helpPackageFixture struct {
 	process        support.ApplicationProcess
 	providerRunner *testutil.ProviderCommandRunner
 	processBuilds  atomic.Int32
+	hostStarts     atomic.Int32
 
 	rootDir              string
 	homeDir              string
@@ -126,6 +128,10 @@ func newHelpPackageFixture(t *testing.T) (*helpPackageFixture, error) {
 
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: fixture.providerRunner,
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			fixture.hostStarts.Add(1)
+			return errors.New("help must not start a host")
+		},
 	})
 	if err != nil {
 		_ = os.RemoveAll(rootDir)

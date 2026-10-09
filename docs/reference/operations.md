@@ -637,18 +637,65 @@ document fields produce sorted field-path warnings on stderr; their values do
 not appear in those warnings. An admitted provider failure remains inspectable
 as a failed Worker Session.
 
-For observers in later commands, invoke against a running host:
+Save this complete request as `execution.json`:
 
-```bash
-you --remote --server http://localhost:7437 --json worker-sessions invoke \
-  --execution execution.json --model MODEL --reasoning-effort high --async
-you --server http://localhost:7437 --json worker-sessions show --worker-session-id WS_ID
-you --server http://localhost:7437 --json worker-sessions read --worker-session-id WS_ID --view logs
-you --remote --server http://localhost:7437 --json worker-sessions cancel WS_ID
+```json
+{
+  "requestId": "direct-example-request",
+  "workerSessionId": "direct-example-session",
+  "execution": {
+    "workstationName": "direct",
+    "workerType": "direct-worker",
+    "runnerId": "codex",
+    "executorProvider": "codex",
+    "modelProvider": "codex",
+    "model": "gpt-5",
+    "reasoningEffort": "high",
+    "systemPrompt": "Return the requested short reply.",
+    "userMessage": "Reply with DIRECT_EXAMPLE_OK.",
+    "workingDirectory": ".",
+    "dispatch": {
+      "dispatchId": "direct-example-attempt",
+      "workstationName": "direct",
+      "workerType": "direct-worker",
+      "execution": {
+        "requestId": "direct-example-request"
+      }
+    }
+  },
+  "retry": {
+    "maxAttempts": 1
+  }
+}
 ```
 
-Use the returned `workerSessionId` in place of `WS_ID`. It identifies the same
-execution before a Provider Session ID exists and after execution ends.
+Choose fresh request, session, and dispatch IDs for each new execution.
+The working directory resolves on the selected host. Choose an existing,
+host-visible directory. Model availability depends on the selected provider's
+configuration. Keep credentials in provider configuration, outside this document.
+
+For observers in later commands, invoke against your running host:
+
+```powershell
+you --server http://127.0.0.1:17437 worker-sessions --help
+you --remote --server http://127.0.0.1:17437 --json worker-sessions invoke --execution execution.json --user-message "Reply with DIRECT_EXAMPLE_OK." --async
+```
+
+Copy the admission JSON's `workerSessionId` into `$workerSessionId`:
+
+```powershell
+$workerSessionId = 'direct-example-session' # Replace with the returned ID.
+you --server http://127.0.0.1:17437 --json worker-sessions show --worker-session-id $workerSessionId
+you --server http://127.0.0.1:17437 --json worker-sessions read --worker-session-id $workerSessionId --view logs
+```
+
+The canonical ID identifies the same execution before a Provider Session ID
+exists and after execution ends. Early logs can be empty while capture commits.
+Read the same ID again after completion. Provider failures remain inspectable
+with state `FAILED`.
+
+For `--execution -`, supply the message in the document or through
+`--user-message`. Close document stdin after sending the JSON.
 
 A completed synchronous local invocation also leaves captured history. Start a
 host from the same project directory to inspect it with `list --history archived`,
@@ -663,6 +710,92 @@ Worker messages, continuation input, or replacement input.
 Input at the limit is accepted. Larger input fails before Worker Session
 admission. Use `--execution FILE`, `--user-message`, or
 `--replacement-message` when the selected command supports those alternatives.
+
+#### Try direct inspection without provider calls
+
+This private mock host returns synthetic `mock worker accepted` output.
+It demonstrates admission and captured inspection without inference or paid calls.
+Use an available loopback port and two dedicated PowerShell terminals.
+
+1. In terminal 1, create a fresh private directory. Keep its inputs directory empty.
+
+```powershell
+New-Item -ItemType Directory -Path ./direct-demo/factory/workers/processor, ./direct-demo/factory/workstations/process-task, ./direct-demo/factory/inputs, ./direct-demo/profile/.you-agent-factory
+@'
+{
+  "name": "direct-demo",
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workers": [{"name":"processor"}],
+  "workstations": [{"name":"process-task","worker":"processor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]
+}
+'@ | Set-Content ./direct-demo/factory/factory.json -Encoding ascii
+@'
+---
+type: AGENT_WORKER
+modelProvider: CODEX
+model: gpt-5
+executorProvider: SCRIPT_WRAP
+---
+Return the requested short reply.
+'@ | Set-Content ./direct-demo/factory/workers/processor/AGENTS.md -Encoding ascii
+@'
+---
+type: AGENT_RUN
+---
+Return the requested short reply.
+'@ | Set-Content ./direct-demo/factory/workstations/process-task/AGENTS.md -Encoding ascii
+'{"unmatchedDispatchPolicy":"accept","mockWorkers":[]}' | Set-Content ./direct-demo/mock-workers.json -Encoding ascii
+'{"defaults":{"workerModelProvider":"codex","workerModel":"gpt-5"}}' | Set-Content ./direct-demo/profile/.you-agent-factory/config.json -Encoding ascii
+```
+
+The Factory follows [Minimal Workflow](authoring-factories.md#minimal-workflow).
+The worker uses the existing executor setting from
+[split runtime definitions](authoring-factories.md#2-create-the-split-runtime-definitions).
+No Work is submitted by this setup.
+
+2. Save the complete request above as `./direct-demo/execution.json`.
+3. In both dedicated terminals, select this private profile before running `you`.
+   Start both terminals in the directory containing `direct-demo`.
+
+```powershell
+$directProfile = (Resolve-Path ./direct-demo/profile).Path
+$env:HOME = $directProfile
+$env:USERPROFILE = $directProfile
+$env:HOMEDRIVE = [System.IO.Path]::GetPathRoot($directProfile).TrimEnd('\')
+$env:HOMEPATH = $directProfile.Substring($env:HOMEDRIVE.Length)
+$env:YOU_NO_BROWSER_OPEN = '1'
+```
+
+These variables isolate the dedicated terminals from your usual operator profile.
+Keep the mock policy as `accept`; do not select `passthrough` or a script runner.
+
+4. In terminal 1, validate the Factory and start the private host.
+
+```powershell
+you factory config validate ./direct-demo/factory/factory.json
+you run --dir ./direct-demo/factory --continuously --with-server --listen 127.0.0.1:17437 --with-mock-workers ./direct-demo/mock-workers.json
+```
+
+5. Wait for the host's readiness message. In terminal 2, invoke and inspect the returned canonical ID.
+
+```powershell
+you --server http://127.0.0.1:17437 worker-sessions --help
+you --remote --server http://127.0.0.1:17437 --json worker-sessions invoke --execution ./direct-demo/execution.json --user-message "Reply with DIRECT_EXAMPLE_OK." --async
+$workerSessionId = 'direct-example-session' # Replace with the returned workerSessionId.
+you --server http://127.0.0.1:17437 --json worker-sessions show --worker-session-id $workerSessionId
+you --server http://127.0.0.1:17437 --json worker-sessions read --worker-session-id $workerSessionId --view logs
+```
+
+After completion, logs contain synthetic `mock worker accepted` output.
+This result does not verify native provider execution.
+
+6. In terminal 2, stop the private host. Wait for terminal 1's command to exit.
+
+```powershell
+you --server http://127.0.0.1:17437 server stop
+```
+
+Close both dedicated terminals to release their private profile selection.
 
 When a continuation source ID is shared, select its Factory Session with
 `you worker-sessions continue <id> --session <factory-session-id> --user-message "follow up"`.

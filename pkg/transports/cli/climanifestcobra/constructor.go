@@ -4,6 +4,7 @@
 package climanifestcobra
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -537,12 +538,27 @@ func projectCommand(
 }
 
 func configureGenericGroupCommand(command *cobra.Command) {
-	command.DisableFlagParsing = true
+	// Once an unknown subcommand is encountered, its trailing flags must not
+	// replace the command diagnostic. Recognized inherited flags still parse.
+	command.Flags().SetInterspersed(false)
+	command.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		var unknown *pflag.NotExistError
+		if cmd == command && errors.As(err, &unknown) {
+			token := "--" + unknown.GetSpecifiedName()
+			if shortnames := unknown.GetSpecifiedShortnames(); shortnames != "" {
+				token = "-" + shortnames
+			}
+			err = fmt.Errorf("unknown command %q for %q", token, cmd.CommandPath())
+		}
+		// Cobra inherits this callback into runnable descendants, whose flag
+		// errors retain their ordinary diagnostics and parent classification.
+		if parent := command.Parent(); parent != nil {
+			return parent.FlagErrorFunc()(cmd, err)
+		}
+		return err
+	})
 	command.Args = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return nil
-		}
-		if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 			return nil
 		}
 		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
