@@ -1567,8 +1567,10 @@ export interface components {
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
-    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS. */
     WorkerSessionContinueRequest: {
+      /** @description Exact source Factory Session; omit only when the Worker Session ID is unique. */
+      factorySessionId?: string;
       /** @description Required caller idempotency key for this continuation. */
       requestId: string;
       /** @description Distinct Worker Session identity to reserve for the successor. */

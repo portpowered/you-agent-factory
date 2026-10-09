@@ -25,6 +25,7 @@ func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T)
 	handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/continue", strings.NewReader(`{
+		"factorySessionId": " owner-1 ",
 		"requestId": " request-1 ",
 		"successorWorkerSessionId": " successor-1 ",
 		"followUpInput": "  continue the work  "
@@ -46,7 +47,7 @@ func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T)
 	if response.EventTopic != "worker-session/successor-1/events" {
 		t.Fatalf("event topic = %q, want deterministic successor topic", response.EventTopic)
 	}
-	if !service.continueCalled || service.continueRequest.RequestID != "request-1" ||
+	if !service.continueCalled || service.continueRequest.FactorySessionID != "owner-1" || service.continueRequest.RequestID != "request-1" ||
 		service.continueRequest.SourceWorkerSessionID != "source-1" ||
 		service.continueRequest.SuccessorWorkerSessionID != "successor-1" ||
 		service.continueRequest.FollowUpInput != "  continue the work  " {
@@ -455,4 +456,23 @@ func (f *controlHTTPServiceFake) Cancel(_ context.Context, request workersession
 
 func (f *controlHTTPServiceFake) Terminate(_ context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return f.control(workersessions.ControlActionTerminate, request)
+}
+
+func TestContinueWorkerSessionRejectsEmptyExplicitScopeBeforeService(t *testing.T) {
+	for _, scope := range []string{"", "   "} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{}
+			handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.NewNop())
+			body, err := json.Marshal(map[string]string{"factorySessionId": scope, "requestId": "request", "successorWorkerSessionId": "successor", "followUpInput": "next"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source/continue", strings.NewReader(string(body))), factoryapi.WorkerSessionID("source"))
+			if recorder.Code != http.StatusBadRequest || service.continueCalled || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
+				t.Fatalf("status=%d called=%t body=%s", recorder.Code, service.continueCalled, recorder.Body.String())
+			}
+		})
+	}
 }

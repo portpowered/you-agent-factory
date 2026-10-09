@@ -453,7 +453,7 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 	}
 	return continueOperation(workersessionscli.ContinueConfig{
 		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
-		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
+		FactorySessionID: inputs.factorySessionID, RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, FollowUpInput: inputs.userMessage,
 		Prompt: inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
 		Async: inputs.async, OutputFormat: inputs.outputFormat,
@@ -464,10 +464,10 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 }
 
 type generatedWorkerSessionsContinueInputs struct {
-	sourceWorkerSessionID, requestID, successorWorkerSessionID string
-	userMessage, outputFormat                                  string
-	followUpInput                                              []string
-	async                                                      bool
+	factorySessionID, sourceWorkerSessionID, requestID, successorWorkerSessionID string
+	userMessage, outputFormat                                                    string
+	followUpInput                                                                []string
+	async                                                                        bool
 }
 
 func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generatedWorkerSessionsContinueInputs, error) {
@@ -485,6 +485,7 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 		target *string
 	}{
 		{"you.worker-sessions.continue.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.continue.flag.session", &inputs.factorySessionID},
 		{"you.worker-sessions.continue.flag.request-id", &inputs.requestID},
 		{"you.worker-sessions.continue.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
 		{"you.worker-sessions.continue.flag.user-message", &inputs.userMessage},

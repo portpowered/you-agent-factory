@@ -28,6 +28,7 @@ type ContinueConfig struct {
 	Server  string
 	Remote  bool
 
+	FactorySessionID         string
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -139,6 +140,9 @@ func normalizeContinueRequest(config ContinueConfig) (normalizedContinueRequest,
 	}
 	apiRequest := factoryapi.WorkerSessionContinueRequest{
 		RequestId: requestID, SuccessorWorkerSessionId: successorID, FollowUpInput: followUp,
+	}
+	if scope := strings.TrimSpace(config.FactorySessionID); scope != "" {
+		apiRequest.FactorySessionId = &scope
 	}
 	serviceRequest, err := workersessionshttp.WorkerSessionContinueRequestFromAPI(config.SourceWorkerSessionID, apiRequest)
 	if err != nil {

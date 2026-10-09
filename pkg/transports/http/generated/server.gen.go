@@ -8943,8 +8943,11 @@ type WorkerSessionAddressDetails struct {
 	Candidates []WorkerSessionAddressCandidate `json:"candidates"`
 }
 
-// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS.
 type WorkerSessionContinueRequest struct {
+	// FactorySessionId Exact source Factory Session; omit only when the Worker Session ID is unique.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
 	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
 	FollowUpInput string `json:"followUpInput"`
 

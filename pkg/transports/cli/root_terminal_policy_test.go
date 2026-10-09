@@ -607,7 +607,7 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
 		"--json", "--server", "http://factory.test:7437",
-		"worker-sessions", "continue", "source-1", "--request-id", "request-1",
+		"worker-sessions", "continue", "source-1", "--session", "owner-1", "--request-id", "request-1",
 		"--successor-worker-session-id", "successor-1", "--user-message", "hello",
 		"--async", "--output", "json", "follow", "up",
 	})
@@ -615,7 +615,7 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute worker-sessions continue: %v", err)
 	}
-	if got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
+	if got.FactorySessionID != "owner-1" || got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
 		got.SuccessorWorkerSessionID != "successor-1" || got.FollowUpInput != "hello" ||
 		got.Server != "http://factory.test:7437" || got.Remote || !got.Async || got.OutputFormat != "json" || !got.JSON {
 		t.Fatalf("continue config = %#v, want manifest values", got)

@@ -7,8 +7,13 @@ required:
 description: >-
   Idempotent continuation request for one terminal Worker Session. The server
   resolves and validates the source Provider Session association; callers may
-  supply only the successor identity and follow-up input.
+  select the source Factory Session, successor identity and follow-up input.
+  Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS.
 properties:
+  factorySessionId:
+    type: string
+    minLength: 1
+    description: Exact source Factory Session; omit only when the Worker Session ID is unique.
   requestId:
     type: string
     minLength: 1

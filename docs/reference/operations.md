@@ -658,6 +658,13 @@ Input at the limit is accepted. Larger input fails before Worker Session
 admission. Use `--execution FILE`, `--user-message`, or
 `--replacement-message` when the selected command supports those alternatives.
 
+When a continuation source ID is shared, select its Factory Session with
+`you worker-sessions continue <id> --session <factory-session-id> --user-message "follow up"`.
+The HTTP continuation body accepts the same selection as `factorySessionId`.
+Omitting scope for a shared ID returns `WORKER_SESSION_AMBIGUOUS` before
+opening a successor. Scope selects the source; existing continuation support
+rules still apply.
+
 To resume a terminal direct Worker Session, continue it through the server-owned
 Provider Session association. The command reserves a distinct successor and
 returns its lineage after admission; use `--async` to return before terminal
