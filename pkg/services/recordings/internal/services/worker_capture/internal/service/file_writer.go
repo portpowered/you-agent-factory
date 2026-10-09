@@ -50,7 +50,8 @@ type FileWriter struct {
 	catalogDamaged     bool
 	successors         map[capturedLineageIdentity]map[string]capturedSuccessor
 	catalogLoaded      bool
-	rebuildMu          sync.Mutex
+	rebuildOnce        sync.Once
+	rebuildGate        chan struct{}
 	controlIndexMu     sync.Mutex
 	controlIndex       map[string]*controlKeySlot
 	controlRebuildMu   sync.Mutex

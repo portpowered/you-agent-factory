@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,129 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type catalogScanGate struct {
+	platformreplay.Local
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+	scans   atomic.Int32
+}
+
+func (gate *catalogScanGate) ScanDirectory(path string, size int, visit func([]os.DirEntry) error) error {
+	gate.scans.Add(1)
+	gate.once.Do(func() { close(gate.entered); <-gate.release })
+	return gate.Local.ScanDirectory(path, size, visit)
+}
+
+// Observe evaluation of the waiter's cancellation arm, rather than sleeping
+// or inspecting the writer's gate. The context remains owned by this caller.
+type catalogWaitContext struct {
+	context.Context
+	once    sync.Once
+	entered chan struct{}
+}
+
+func (ctx *catalogWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.entered) })
+	return ctx.Context.Done()
+}
+
+func TestFileWriterCatalogScanCancellation(t *testing.T) {
+	t.Parallel()
+	for _, recovery := range []bool{false, true} {
+		for _, cancelLeader := range []bool{false, true} {
+			t.Run(fmt.Sprintf("recovery=%t/cancelLeader=%t", recovery, cancelLeader), func(t *testing.T) {
+				t.Parallel()
+				assertCatalogScanCancellation(t, recovery, cancelLeader)
+			})
+		}
+	}
+}
+
+func assertCatalogScanCancellation(t *testing.T, recovery, cancelLeader bool) {
+	t.Helper()
+	ctx, finish := context.WithTimeout(t.Context(), 10*time.Second)
+	defer finish()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	seed := journalWriter(t, local)
+	persistCatalogSummaryFixture(t, seed, journalRecord(t, "scan-cancellation", "summary-worker"))
+	gate := &catalogScanGate{Local: local, entered: make(chan struct{}), release: make(chan struct{})}
+	store, err := NewFileWriter(gate, gate, gate, &captureTimeProbe{}, seed.root, "restarted", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := store.(*FileWriter)
+	release := sync.OnceFunc(func() { close(gate.release) })
+	var calls sync.WaitGroup
+	t.Cleanup(func() { release(); calls.Wait() })
+	leaderCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	leader := make(chan error, 1)
+	calls.Add(1)
+	go func() {
+		defer calls.Done()
+		if recovery {
+			leader <- writer.RecoverWorkerOwners(leaderCtx)
+		} else {
+			_, err := writer.ListWorkerSessionCaptures(leaderCtx, recordings.WorkerCapturedCatalogRequest{})
+			leader <- err
+		}
+	}()
+	waitCatalogSignal(t, ctx, gate.entered)
+	waitCtx, cancelWaiter := context.WithCancel(ctx)
+	defer cancelWaiter()
+	waiterCtx := &catalogWaitContext{Context: waitCtx, entered: make(chan struct{})}
+	waiter := make(chan error, 1)
+	calls.Add(1)
+	go func() {
+		defer calls.Done()
+		_, err := writer.ListWorkerSessionCaptures(waiterCtx, recordings.WorkerCapturedCatalogRequest{})
+		waiter <- err
+	}()
+	waitCatalogSignal(t, ctx, waiterCtx.entered)
+	if cancelLeader {
+		cancel()
+		release()
+		assertCatalogCallResult(t, ctx, leader, context.Canceled)
+		assertCatalogCallResult(t, ctx, waiter, nil)
+	} else {
+		cancelWaiter()
+		assertCatalogCallResult(t, ctx, waiter, context.Canceled)
+		// The canceled waiter leaves while the leader is still blocked in IO.
+		release()
+		assertCatalogCallResult(t, ctx, leader, nil)
+	}
+	assertCatalogSummaryFacts(t, mustCatalogSummary(t, writer))
+	wantScans := int32(1)
+	if cancelLeader {
+		wantScans++ // A canceled scan cannot establish complete membership.
+	}
+	if scans := gate.scans.Load(); scans != wantScans {
+		t.Fatalf("directory scans = %d, want %d", scans, wantScans)
+	}
+}
+
+func waitCatalogSignal(t *testing.T, ctx context.Context, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-ctx.Done():
+		t.Fatalf("catalog scenario signal: %v", ctx.Err())
+	}
+}
+
+func assertCatalogCallResult(t *testing.T, ctx context.Context, result <-chan error, want error) {
+	t.Helper()
+	select {
+	case err := <-result:
+		if !errors.Is(err, want) {
+			t.Fatalf("catalog call error = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatalf("catalog caller remained blocked: %v", ctx.Err())
+	}
+}
 
 type groupedAppendProbe struct {
 	platformreplay.Local

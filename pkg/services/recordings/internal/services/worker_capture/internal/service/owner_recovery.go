@@ -28,8 +28,10 @@ func (writer *FileWriter) RecoverWorkerOwners(ctx context.Context) error {
 	// Activation and the first catalog read share one scan and the same
 	// hydrated, committed prefixes. A request must not start a second rebuild
 	// while recovery is still deciding which owners can be fenced.
-	writer.rebuildMu.Lock()
-	defer writer.rebuildMu.Unlock()
+	if err := writer.lockCatalogRebuild(ctx); err != nil {
+		return err
+	}
+	defer writer.unlockCatalogRebuild()
 	if writer.ownerDeaths == nil {
 		writer.ownerDeaths = make(map[string]bool)
 	}
