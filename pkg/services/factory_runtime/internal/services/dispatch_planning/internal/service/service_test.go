@@ -648,9 +648,11 @@ func TestStopRacingPublicationCancelsAfterWorkersAcceptance(t *testing.T) {
 	<-entered
 
 	stopped := make(chan error, 1)
+	waitContext := &publicationWaitContext{Context: context.Background(), observed: make(chan struct{})}
 	go func() {
-		stopped <- planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonTerminated)
+		stopped <- planner.Stop(waitContext, dispatchplanning.RuntimeStopReasonTerminated)
 	}()
+	<-waitContext.observed
 	close(release)
 	if err := <-stopped; err != nil {
 		t.Fatalf("Stop() error = %v", err)
