@@ -186,7 +186,7 @@ func waitFleet(b *testing.B, handler http.Handler) []factoryapi.WorkerSessionObs
 	}
 }
 
-func writeFleetFactory(b *testing.B, dir string) {
+func writeFleetFactory(b testing.TB, dir string) {
 	b.Helper()
 	files := map[string]string{
 		"factory.json":                   `{"name":"fleet-load","workTypes":[{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"name":"processor"}],"workstations":[{"name":"process","worker":"processor","inputs":[{"workType":"task","state":"ready"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`,
