@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -81,23 +82,21 @@ func runArchivedWorkAttributionCompleted(t *testing.T, process support.Process) 
 	}
 }
 
-// The declarative mock completes while business result processing fails.
+// The command-edge provider completes with an accepted envelope whose proposed
+// Work state is invalid. Runtime rejects the business result after capture ends.
 // Restart requires a fresh graph in the same private
 // profile; Worker completion must remain distinct from failed Work.
 func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	t.Parallel()
 	process := newSelectedHostClientProcess(t)
 	dir := support.ScaffoldSingleStepFactory(t, "completed-worker-failed-work")
+	configureFailedBusinessAttribution(t, dir)
 	support.WriteAgentConfig(t, dir, "processor", "---\ntype: AGENT_WORKER\nmodelProvider: CODEX\nmodel: gpt-5\nexecutorProvider: SCRIPT_WRAP\n---\nReturn a short reply.\n")
-	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: AGENT_RUN\nlimits:\n  maxExecutionTime: 1h\nstopWords:\n  - DONE\n---\nReturn DONE when the task is complete.\n")
-	mockPath := filepath.Join(dir, "mock.json")
-	if err := os.WriteFile(mockPath, []byte(`{"unmatchedDispatchPolicy":"accept","mockWorkers":[{"runType":"accept","usage":{"provider":"codex","model":"gpt-5","inputTokens":11,"outputTokens":7}}]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: AGENT_RUN\noutcomeFormat: decision-envelope\nlimits:\n  maxExecutionTime: 1h\n---\nReturn an accepted decision envelope.\n")
 	cfg := support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Args:  []string{"--record", filepath.Join(dir, "failed-work.json"), "--with-mock-workers", mockPath},
-		Edges: serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}, ScriptCommandRunner: rejectLocalProvider{t: t}, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
+		Args:  []string{"--record", filepath.Join(dir, "failed-work.json")},
+		Edges: serviceedges.Edges{ProviderCommandRunner: failedBusinessAttributionRunner{}, ScriptCommandRunner: rejectLocalProvider{t: t}, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)},
 	}
 	host := support.StartFunctionalAPIServer(t, cfg)
 	connection, ctx := startMCP(t, process, host.URL())
@@ -106,7 +105,7 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	support.SubmitSessionWorkAt(t, host.URL(), scope, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Name: &name, Payload: "complete the Worker before processing the Work result"})
 	status := support.WaitForSessionTerminalStatus(t, host.URL(), scope, 30*time.Second)
 	if status.Categories.Failed != 1 {
-		t.Fatalf("mock result did not fail business Work: %+v", status)
+		t.Fatalf("invalid proposed Work did not fail business Work: %+v", status)
 	}
 	// Archive is capture-derived even while the original runtime remains open.
 	before := historyParityPage(t, ctx, connection, host, "archived", "factory", "")["sessions"].([]any)[0].(map[string]any)
@@ -117,12 +116,15 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	assertFailedAttributionWork(t, host, scope, workID)
 	logs := getHost(t, endpoint+"/logs")
 	encodedLogs, err := json.Marshal(logs)
-	if err != nil || !strings.Contains(string(encodedLogs), "mock worker accepted") {
+	if err != nil || !strings.Contains(string(encodedLogs), "completed capture marker") {
 		t.Fatalf("capture lost completed output: %v %v", logs, err)
 	}
 	transcript := getHost(t, endpoint+"/transcript")
+	assertCompletedAttributionTranscript(t, transcript, id)
 	host.Close(t)
-	cfg.Args = []string{"--replay", filepath.Join(dir, "failed-work.json")}
+	cfg.Args = []string{"--record", filepath.Join(dir, "failed-work.json")}
+	siblingRunner := controlHostRunner{started: make(chan (<-chan struct{}), 1)}
+	cfg.Edges.ProviderCommandRunner = siblingRunner
 	host = support.StartFunctionalAPIServer(t, cfg)
 	connection, ctx = startMCP(t, process, host.URL())
 	assertFailedAttributionWork(t, host, support.GetDefaultSession(t, host.URL()).Id, workID)
@@ -153,6 +155,86 @@ func TestRestoredFactorySummaryCompletedCaptureWithFailedWork(t *testing.T) {
 	assertJSONEqual(t, selected, archived[0])
 	assertJSONEqual(t, logs, getHost(t, endpoint+"/logs"))
 	assertJSONEqual(t, transcript, getHost(t, endpoint+"/transcript"))
+	assertTranscriptEqual(t, transcript, callWorker(t, ctx, connection, "read", map[string]any{"workerSessionId": id, "view": "transcript"})["result"].(map[string]any)["transcript"])
+	assertCompletedAttributionCLITranscript(t, host, id, transcript)
+	done := admitControlWorker(t, ctx, host.URL(), "new-unrelated-owner", siblingRunner)
+	assertCompletedAttributionControls(t, host, id)
+	for _, operation := range []string{"CANCEL", "TERMINATE", "KILL", "INTERRUPT"} {
+		args := map[string]any{"workerSessionId": id, "operation": operation, "requestId": "archived-" + operation}
+		if operation == "KILL" {
+			args["expectedAttemptId"] = selected["attemptId"]
+		}
+		if operation == "INTERRUPT" {
+			args["successorWorkerSessionId"], args["replacementMessage"] = "must-not-exist", "must not revive"
+		}
+		if operation == "CANCEL" || operation == "TERMINATE" {
+			delete(args, "requestId")
+			result := callWorker(t, ctx, connection, "control", args)["result"].(map[string]any)
+			assertCompletedAttributionNoop(t, result, id)
+			continue
+		}
+		assertToolError(t, callAction(t, ctx, connection, "CONTROL", args), "worker_session.not_found", false)
+	}
+	assertForceStillActive(t, host, "new-unrelated-owner", done)
+	assertJSONEqual(t, selected, getHost(t, endpoint))
+	assertHistoryReadFailure(t, host, "must-not-exist", http.StatusNotFound, "NOT_FOUND")
+}
+
+func assertCompletedAttributionTranscript(t *testing.T, transcript any, id string) {
+	t.Helper()
+	row := transcript.(map[string]any)
+	ref, ok := row["providerSession"].(map[string]any)
+	if !ok || ref["provider"] != "codex" || ref["id"] != "1453c576-a18d-4a03-8099-ce6e92bd1a2b" || row["workerSessionId"] != id {
+		t.Fatalf("associated transcript identity: %v", row)
+	}
+	entries, ok := row["entries"].([]any)
+	if !ok || len(entries) == 0 {
+		t.Fatalf("associated transcript lost captured content: %v", row)
+	}
+	for index, entry := range entries {
+		item := entry.(map[string]any)
+		if item["order"] != float64(index+1) || !strings.Contains(item["text"].(string), "completed capture marker") {
+			t.Fatalf("associated transcript order/content: %v", entries)
+		}
+	}
+}
+
+func assertCompletedAttributionCLITranscript(t *testing.T, host *support.FunctionalAPIServer, id string, want any) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--server", host.URL(), "--view", "transcript", "--json"})
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("associated transcript CLI: %v %s", err, inputs.Stderr())
+	}
+	var got any
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &got); err != nil {
+		t.Fatal(err)
+	}
+	assertTranscriptEqual(t, want, got)
+}
+
+func assertCompletedAttributionControls(t *testing.T, host *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	for _, action := range []string{"cancel", "terminate"} {
+		result := postHostJSON(t, t.Context(), host.URL()+"/worker-sessions/"+id+"/"+action, map[string]any{}, http.StatusOK).(map[string]any)
+		assertCompletedAttributionNoop(t, result, id)
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", host.URL(), "--json", "worker-sessions", action, id})
+		if err := host.Execute(t, inputs.Input); err != nil {
+			t.Fatalf("archived CLI %s: %v %s", action, err, inputs.Stderr())
+		}
+		if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
+			t.Fatal(err)
+		}
+		assertCompletedAttributionNoop(t, result, id)
+	}
+	postHostJSON(t, t.Context(), host.URL()+"/worker-sessions/"+id+"/terminate", map[string]any{"force": true, "requestId": "archived-kill", "expectedAttemptId": id}, http.StatusNotFound)
+	postHostJSON(t, t.Context(), host.URL()+"/worker-sessions/"+id+"/interrupt", interruptModePayload("must not revive", ""), http.StatusNotFound)
+}
+
+func assertCompletedAttributionNoop(t *testing.T, result map[string]any, id string) {
+	t.Helper()
+	if result["workerSessionId"] != id || result["outcome"] != "NOOP" {
+		t.Fatalf("archived control acquired authority: %v", result)
+	}
 }
 
 func assertFailedAttributionWork(t *testing.T, host *support.FunctionalAPIServer, scope, workID string) {
@@ -164,13 +246,61 @@ func assertFailedAttributionWork(t *testing.T, host *support.FunctionalAPIServer
 	}
 }
 
+type failedBusinessAttributionRunner struct{}
+
+func configureFailedBusinessAttribution(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	station := config["workstations"].([]any)[0].(map[string]any)
+	station["outcomeFormat"] = "decision-envelope"
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (failedBusinessAttributionRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	message := `{"decision":"ACCEPTED","output":"completed capture marker","recorded_output_work":[{"workTypeId":"task","state":"unknown-business-state","content":[{"type":"text","text":"invalid proposal"}]}]}`
+	item, err := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "result", "type": "agent_message", "text": message}})
+	if err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	output := "{\"type\":\"thread.started\",\"thread_id\":\"1453c576-a18d-4a03-8099-ce6e92bd1a2b\"}\n" + string(item) + "\n" +
+		"{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":11,\"output_tokens\":7}}\n"
+	return platformprocess.CommandResult{Stdout: []byte(output)}, nil
+}
+
+func (runner failedBusinessAttributionRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if err == nil && observer != nil {
+		observer(platformprocess.OutputStreamStdout, result.Stdout)
+	}
+	return result, err
+}
+
 func assertCompletedFailedWorkCapture(t *testing.T, row map[string]any, scope, id string) {
 	t.Helper()
 	if row["workerSessionId"] != id || row["factorySessionId"] != scope || row["state"] != "COMPLETED" || row["terminalCause"] != "COMPLETED" || row["recordingHealth"] != "COMPLETE" || row["provider"] != "codex" || row["model"] != "gpt-5" {
 		t.Fatalf("completed Worker facts replaced by business Work failure: %v", row)
 	}
 	usage, ok := row["tokenUsage"].(map[string]any)
-	if !ok || usage["inputTokens"] != float64(11) || usage["outputTokens"] != float64(7) || usage["totalTokens"] != float64(18) {
+	// Codex's command stream reports input/output counters without a total.
+	// The supplied declarative-artifact journey must separately prove total=18.
+	if !ok || usage["inputTokens"] != float64(11) || usage["outputTokens"] != float64(7) {
 		t.Fatalf("captured usage changed: %v", row)
 	}
 }
