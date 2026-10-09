@@ -2,17 +2,241 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestOwnerRecoveryCatalogReusesCommittedPrefixes(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"empty", "ended", "owner-lost", "alive"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			root := t.TempDir()
+			prior := platformprocess.Incarnation{Host: "host", PID: 123, Start: "prior-start"}
+			original := ownerRecoveryWriter(t, local, root, "prior-runtime", &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: prior}})
+			if state != "empty" {
+				opening := journalRecord(t, "recording", "worker")
+				if err := original.PersistWorkerRecord(t.Context(), opening); err != nil {
+					t.Fatal(err)
+				}
+				if state == "ended" {
+					opening.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "worker"), 2)
+					if err := original.PersistWorkerRecord(t.Context(), opening); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			storage := &catalogReadProbe{Local: local}
+			scan := &catalogScanProbe{local: local}
+			probe := &ownerLivenessProbe{ownerIdentityProbe: ownerIdentityProbe{identity: platformprocess.Incarnation{Host: "host", PID: 456, Start: "new-start"}}, live: prior}
+			if state == "owner-lost" {
+				probe.lookupErr = platformprocess.ErrProcessGone
+			}
+			reader, err := NewFileWriter(storage, local, scan, &captureTimeProbe{}, root, "new-runtime", probe)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := reader.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			// A history read after readiness must need neither another directory
+			// scan nor journal IO; failed edges make accidental rebuilds visible.
+			storage.fault, scan.fault = errors.New("unexpected journal read"), errors.New("unexpected scan")
+			want := 1
+			if state == "empty" {
+				want = 0
+			}
+			for range 2 {
+				page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+				if err != nil || scan.calls != 1 || len(page.Items) != want {
+					t.Fatalf("ready catalog: %+v err=%v scans=%d", page, err, scan.calls)
+				}
+				if state != "empty" {
+					assertRecoveredCatalogState(t, page.Items[0], state)
+					page.Items[0].Opening.Payload[0] = '!'
+				}
+			}
+		})
+	}
+}
+
+// The file owner proves startup IO with a counting storage edge and asserts
+// recovered public facts. No application graph or capacity fixture is needed.
+func TestOwnerRecoveryReadsEachCaptureSourceOnce(t *testing.T) {
+	t.Parallel()
+	for _, fixture := range []struct {
+		name, format string
+		journalFirst bool
+	}{
+		{name: "journal", format: "journal"},
+		{name: "snapshot", format: "snapshot"},
+		{name: "snapshot-first", format: "snapshot-and-journal"},
+		{name: "journal-first", format: "snapshot-and-journal", journalFirst: true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			original := seedRecoverySource(t, local, fixture.format)
+			want, err := original.LoadWorkerRecording(t.Context(), "recording")
+			if err != nil {
+				t.Fatal(err)
+			}
+			storage := &recoverySourceReadProbe{Local: local, reads: make(map[string]int), journalFirst: fixture.journalFirst}
+			store, err := NewFileWriter(storage, local, storage, &captureTimeProbe{}, original.root, "reopened", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range []string{original.path("recording"), original.path("recording") + "l"} {
+				_, err := local.ReadFile(path)
+				count := 1
+				if errors.Is(err, os.ErrNotExist) {
+					count = 0
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				if storage.reads[path] != count {
+					t.Fatalf("successful source reads = %d, want %d for %s", storage.reads[path], count, fixture.name)
+				}
+			}
+			storage.fault = errors.New("read after readiness")
+			got, err := store.LoadWorkerRecording(t.Context(), "recording")
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("recovery changed committed history: got=%+v want=%+v err=%v", got, want, err)
+			}
+			page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+			if err != nil || len(page.Items) != 1 || page.Items[0].Terminal == nil || page.Items[0].Terminal.Status != "COMPLETED" {
+				t.Fatalf("ready catalog: %+v err=%v", page, err)
+			}
+		})
+	}
+}
+
+func seedRecoverySource(t *testing.T, local platformreplay.Local, format string) *FileWriter {
+	t.Helper()
+	original := journalWriter(t, local)
+	opening := journalRecord(t, "recording", "worker")
+	terminal := opening
+	terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "worker"), 2)
+	if format == "journal" {
+		persistWorkerRecoveryPrefix(t, original, "recording", "worker", opening.Record, terminal.Record)
+		return original
+	}
+	records := []events.Record{opening.Record}
+	if format == "snapshot" {
+		records = append(records, terminal.Record)
+	}
+	data, err := json.Marshal(recordings.WorkerRecordingSnapshot{
+		RecordingID: "recording", Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: "worker", Topic: opening.Record.ID.Topic, Records: records,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := local.WriteFile(original.path("recording"), data); err != nil {
+		t.Fatal(err)
+	}
+	if format == "snapshot-and-journal" {
+		if err := original.PersistWorkerRecord(t.Context(), terminal); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return original
+}
+
+type recoverySourceReadProbe struct {
+	platformreplay.Local
+	reads        map[string]int
+	fault        error
+	journalFirst bool
+}
+
+func (probe *recoverySourceReadProbe) ScanDirectory(path string, size int, visit func([]os.DirEntry) error) error {
+	return probe.Local.ScanDirectory(path, size, func(files []os.DirEntry) error {
+		sort.Slice(files, func(i, j int) bool {
+			if probe.journalFirst {
+				return files[i].Name() > files[j].Name()
+			}
+			return files[i].Name() < files[j].Name()
+		})
+		return visit(files)
+	})
+}
+
+func (probe *recoverySourceReadProbe) ReadFile(path string) ([]byte, error) {
+	if probe.fault != nil {
+		return nil, probe.fault
+	}
+	data, err := probe.Local.ReadFile(path)
+	if err == nil {
+		probe.reads[path]++
+	}
+	return data, err
+}
+
+func assertRecoveredCatalogState(t *testing.T, item recordings.WorkerCapturedCatalogItem, state string) {
+	t.Helper()
+	if item.Catalog.WorkerSessionID != "worker" || item.Opening.Payload[0] != '{' {
+		t.Fatalf("identity or detached opening changed: %+v", item)
+	}
+	switch state {
+	case "ended":
+		if item.Terminal == nil || item.Terminal.Status != "COMPLETED" || item.Health != recordings.WorkerRecordingStatusComplete {
+			t.Fatalf("ended capture: %+v", item)
+		}
+	case "owner-lost":
+		if item.Terminal == nil || item.Terminal.Status != "FAILED" || item.Terminal.Position != 0 || item.HealthReason != "OWNER_LOST" {
+			t.Fatalf("fenced capture: %+v", item)
+		}
+	case "alive":
+		if item.Terminal != nil || item.HealthReason == "OWNER_LOST" {
+			t.Fatalf("live prior owner acquired fabricated terminal: %+v", item)
+		}
+	}
+}
+
+func TestOwnerRecoveryCanceledScanLeavesCatalogRetryable(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	original := journalWriter(t, local)
+	if err := original.PersistWorkerRecord(t.Context(), journalRecord(t, "recording", "worker")); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	scan := &catalogScanProbe{local: local, afterScan: cancel}
+	reader, err := NewFileWriter(local, local, scan, &captureTimeProbe{}, original.root, "reopened", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.(*FileWriter).RecoverWorkerOwners(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled activation: %v", err)
+	}
+	scan.afterScan = nil
+	if err := reader.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	page, err := reader.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+	if err != nil || len(page.Items) != 1 || scan.calls != 2 {
+		t.Fatalf("fresh activation/list after cancellation: %+v err=%v scans=%d", page, err, scan.calls)
+	}
+}
 
 func TestOwnerRecoveryPersistsOneFencedLossWithoutWorkerCallback(t *testing.T) {
 	t.Parallel()
@@ -166,10 +390,17 @@ func TestOwnerRecoveryUnreadableJournalKeepsReadsRecoverableWithoutAuthority(t *
 	if err := recovered.RecoverWorkerOwners(t.Context()); err != nil || probe.lookups != 0 {
 		t.Fatalf("unavailable journal blocked activation or acquired authority: %v lookups=%d", err, probe.lookups)
 	}
+	if _, err := recovered.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true}); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unavailable recovery cached empty catalog: %v", err)
+	}
 	if _, err := recovered.LoadWorkerRecording(t.Context(), "recording"); !errors.Is(err, unavailable) {
 		t.Fatalf("unavailable read = %v", err)
 	}
 	storage.fault = nil
+	page, err := recovered.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+	if err != nil || len(page.Items) != 1 || page.Items[0].Terminal != nil {
+		t.Fatalf("restored catalog: %+v %v", page, err)
+	}
 	snapshot, err := recovered.LoadWorkerRecording(t.Context(), "recording")
 	if err != nil || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ExecutionTerminal != nil {
 		t.Fatalf("restored prefix = %+v, %v", snapshot, err)

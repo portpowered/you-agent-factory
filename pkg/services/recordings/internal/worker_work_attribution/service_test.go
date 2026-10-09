@@ -40,6 +40,72 @@ type historyFake struct {
 	cancel    context.CancelFunc
 }
 
+type preparationCatalog struct {
+	captureFake
+	pages    []recordings.WorkerCapturedCatalogPage
+	requests []recordings.WorkerCapturedCatalogRequest
+	err      error
+}
+
+func (f *preparationCatalog) ListWorkerSessionCaptures(_ context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.requests = append(f.requests, request)
+	if f.err != nil {
+		return recordings.WorkerCapturedCatalogPage{}, f.err
+	}
+	page := f.pages[0]
+	f.pages = f.pages[1:]
+	return page, nil
+}
+
+func TestPrepareRetainedNamesUsesCommittedCatalogAcrossPages(t *testing.T) {
+	t.Parallel()
+	first := capturePage(t, "worker-a", "scope", "recording", "dispatch", "work")
+	second := capturePage(t, "worker-b", "scope", "recording", "dispatch", "work")
+	first.Catalog.OriginatingArtifact, second.Catalog.OriginatingArtifact = "exact.json", "exact.json"
+	catalog := &preparationCatalog{pages: []recordings.WorkerCapturedCatalogPage{
+		{Items: []recordings.WorkerCapturedCatalogItem{{Catalog: first.Catalog, Opening: first.Opening}}, NextToken: "next"},
+		{Items: []recordings.WorkerCapturedCatalogItem{{Catalog: second.Catalog, Opening: second.Opening}}},
+	}}
+	history := &historyFake{histories: map[string]recordings.HistoricalRecordingQueryResult{"recording": namedHistory(t, "scope", "worker-a", "dispatch", "work", "Alpha")}}
+	if err := New(catalog, history).PrepareWorkerWorkAttribution(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if catalog.calls != 0 || history.calls != 1 || len(catalog.requests) != 2 || catalog.requests[1].NextToken != "next" {
+		t.Fatalf("capture reads=%d, history reads=%d, pages=%+v", catalog.calls, history.calls, catalog.requests)
+	}
+}
+
+func TestPrepareRetainedNamesUnavailableAndCanceledRemainRetryable(t *testing.T) {
+	t.Parallel()
+	page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+	page.Catalog.OriginatingArtifact = "exact.json"
+	item := recordings.WorkerCapturedCatalogItem{Catalog: page.Catalog, Opening: page.Opening}
+	catalog := &preparationCatalog{pages: []recordings.WorkerCapturedCatalogPage{{Items: []recordings.WorkerCapturedCatalogItem{item}}}}
+	history := &historyFake{err: &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}}
+	service := New(catalog, history)
+	if err := service.PrepareWorkerWorkAttribution(t.Context()); err != nil {
+		t.Fatalf("optional history blocked startup: %v", err)
+	}
+	history.err = nil
+	history.histories = map[string]recordings.HistoricalRecordingQueryResult{"recording": namedHistory(t, "scope", "worker", "dispatch", "work", "Restored")}
+	catalog.pages = []recordings.WorkerCapturedCatalogPage{{Items: []recordings.WorkerCapturedCatalogItem{item}}}
+	if err := service.PrepareWorkerWorkAttribution(t.Context()); err != nil || history.calls != 2 {
+		t.Fatalf("restored source was not retried: %v, reads=%d", err, history.calls)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	history.cancel = cancel
+	catalog.pages = []recordings.WorkerCapturedCatalogPage{{Items: []recordings.WorkerCapturedCatalogItem{item}}}
+	if err := service.PrepareWorkerWorkAttribution(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("activation cancellation=%v", err)
+	}
+	history.cancel = nil
+	catalog.pages = []recordings.WorkerCapturedCatalogPage{{Items: []recordings.WorkerCapturedCatalogItem{item}}}
+	if err := service.PrepareWorkerWorkAttribution(t.Context()); err != nil || history.calls != 4 {
+		t.Fatalf("canceled preparation poisoned retry: %v, reads=%d", err, history.calls)
+	}
+}
+
 func (f *historyFake) ReadWorkerFactoryHistory(_ context.Context, page recordings.WorkerCapturedActivityPage) (recordings.HistoricalRecordingQueryResult, error) {
 	f.calls++
 	if f.cancel != nil {
@@ -81,6 +147,12 @@ func TestWorkerWorkAttributionSharesRecordingProjection(t *testing.T) {
 		"worker-a": capturePage(t, "worker-a", "scope", "recording", "dispatch-a", "work"),
 		"worker-b": capturePage(t, "worker-b", "scope", "recording", "dispatch-b", "work"),
 	}}
+	// Production generations include the Worker identity even when both
+	// attempts share the same originating Factory recording.
+	for id, page := range captures.pages {
+		page.Catalog.RecordingGenerationID = "generation-" + id
+		captures.pages[id] = page
+	}
 	history := &historyFake{histories: map[string]recordings.HistoricalRecordingQueryResult{"recording": h}}
 	got, err := New(captures, history).ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{
 		{WorkerSessionID: "worker-a", FactorySessionID: "scope", WorkID: "work"}, {WorkerSessionID: "worker-b", FactorySessionID: "scope", WorkID: "work"},

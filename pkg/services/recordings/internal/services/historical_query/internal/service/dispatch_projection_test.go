@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -142,4 +144,61 @@ func historicalDispatchEvent(
 		},
 		Payload: encoded,
 	}, "historical-usage-test")
+}
+
+func TestHistoricalDispatchesIgnoreUnrelatedEventsWithoutLosingValidation(t *testing.T) {
+	t.Parallel()
+	identity := recordings.HistoricalRecordingIdentity{RecordingID: "mixed-history"}
+	request := historicalDispatchEvent(t, "dispatch", factorydefinitions.FactoryEventTypeDispatchRequest,
+		factorydefinitions.DispatchRequestEventPayload{TransitionID: "process"})
+	association := historicalDispatchEvent(t, "dispatch", factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc,
+		factorydefinitions.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker"})
+	response := historicalDispatchEvent(t, "dispatch", factorydefinitions.FactoryEventTypeDispatchResponse,
+		workerexecution.DispatchResponseEventPayload{Outcome: workerexecution.OutcomeAccepted, TransitionID: "process"})
+	unrelated := historicalDispatchEvent(t, "dispatch", factorydefinitions.FactoryEventTypeWorkRequest,
+		map[string]string{"name": "Named Work", "payload": strings.Repeat("x", 1024)})
+	want, err := projectHistoricalDispatches(identity, []recordings.CanonicalEvent{request, association, response})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := projectHistoricalDispatches(identity, []recordings.CanonicalEvent{unrelated, request, unrelated, association, unrelated, response, unrelated})
+	if err != nil || !reflect.DeepEqual(got, want) || len(got) != 1 || got[0].Association.WorkerSessionID != "worker" {
+		t.Fatalf("mixed-history dispatch facts = %+v, %v; want %+v", got, err, want)
+	}
+	// Only the dispatch reducer skips unrelated events. Canonical decoding still
+	// owns validation of every event; malformed relevant facts remain errors.
+	association.Payload = `{"workerSessionId":""}`
+	_, err = projectHistoricalDispatches(identity, []recordings.CanonicalEvent{unrelated, request, association, response})
+	var diagnostic *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &diagnostic) || diagnostic.Kind != recordings.HistoricalRecordingQueryErrorCorruptHistory || diagnostic.EventID != association.ID {
+		t.Fatalf("malformed association = %v; want corrupt history at %s", err, association.ID)
+	}
+}
+
+// This bounded component benchmark measures reducer allocation/CPU, not the
+// customer GET latency bound or operator-profile equivalence.
+func BenchmarkHistoricalDispatchesSparseEvents(b *testing.B) {
+	identity := recordings.HistoricalRecordingIdentity{RecordingID: "sparse-history"}
+	noise := recordings.CanonicalEvent{
+		Kind:          recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
+		Payload:       `{"payload":"` + strings.Repeat("x", 4096) + `"}`,
+		SourceContext: `{"sequence":1,"tick":1}`,
+	}
+	events := make([]recordings.CanonicalEvent, 64)
+	for index := range events {
+		events[index] = noise
+	}
+	events[32] = recordings.CanonicalEvent{
+		Kind:          recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeDispatchResponse),
+		Payload:       `{"outcome":"ACCEPTED","transitionId":"process"}`,
+		SourceContext: `{"dispatchId":"dispatch","sequence":32,"tick":1}`,
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		result, err := projectHistoricalDispatches(identity, events)
+		if err != nil || len(result) != 1 || result[0].Status != recordings.FactoryDispatchStatusCompleted {
+			b.Fatalf("dispatch = %+v, %v", result, err)
+		}
+	}
 }

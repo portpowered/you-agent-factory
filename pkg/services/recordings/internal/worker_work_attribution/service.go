@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"os"
 	"strings"
 
@@ -62,7 +61,7 @@ func (s *Service) ResolveWorkerWorkAttribution(ctx context.Context, requests []r
 	}
 	query := attributionQuery{
 		service: s, captures: make(map[string]recordings.WorkerCapturedActivityPage),
-		projections: make(map[historyIdentity]nameProjection),
+		projections: make(map[historyIdentity]projectionResult),
 	}
 	results := make([]recordings.WorkerWorkAttribution, 0, len(requests))
 	for _, request := range requests {
@@ -75,12 +74,17 @@ func (s *Service) ResolveWorkerWorkAttribution(ctx context.Context, requests []r
 	return results, ctx.Err()
 }
 
-type historyIdentity struct{ factory, recording, artifact string }
+type historyIdentity struct{ factory, recording, generation, artifact string }
+
+type projectionResult struct {
+	projection nameProjection
+	err        error
+}
 
 type attributionQuery struct {
 	service     *Service
 	captures    map[string]recordings.WorkerCapturedActivityPage
-	projections map[historyIdentity]nameProjection
+	projections map[historyIdentity]projectionResult
 }
 
 func (q *attributionQuery) resolve(ctx context.Context, request recordings.WorkerWorkAttributionRequest) (recordings.WorkerWorkAttribution, error) {
@@ -174,32 +178,56 @@ func (q *attributionQuery) capture(ctx context.Context, workerID string) (record
 }
 
 func (q *attributionQuery) projection(ctx context.Context, page recordings.WorkerCapturedActivityPage, factory string) (nameProjection, error) {
-	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.OriginatingArtifact}
-	projection, loaded := q.projections[key]
-	if !loaded {
-		history, err := q.service.history.ReadWorkerFactoryHistory(ctx, page)
-		if canceled := ctx.Err(); canceled != nil {
-			return nameProjection{}, canceled
-		}
+	if reader, ok := q.service.history.(interface {
+		workerFactoryArtifact(context.Context, recordings.WorkerCapturedActivityPage) (recordings.RecordingArtifactReference, error)
+	}); ok {
+		artifact, err := reader.workerFactoryArtifact(ctx, page)
 		if err != nil {
 			return nameProjection{}, err
 		}
-		// Default recordings retain their reported ~default token while the
-		// capture retains the canonical UUID. Accept that source-native alias
-		// only from the selected artifact; exact captured association checks below
-		// remain mandatory. A foreign explicit scope is never accepted.
-		sourceScope := history.Recording.Scope.FactorySessionID
-		if sourceScope != factory {
-			if _, err := uuid.Parse(factory); err != nil || sourceScope != "~default" {
-				return nameProjection{}, recordings.ErrInvalidProjectionScope
-			}
-		}
-		projection, err = projectNames(history, sourceScope)
+		page.Catalog.OriginatingArtifact = string(artifact)
+	}
+	key := historyIdentity{page.Catalog.FactorySessionID, page.Catalog.RecordingID, page.Catalog.RecordingGenerationID, page.Catalog.OriginatingArtifact}
+	// Capture generations identify individual Worker attempts, not revisions of
+	// their shared Factory artifact. Each opening is validated before reaching
+	// here; within this request the exact scoped artifact supplies one snapshot
+	// of names and associations for all those attempts. Legacy candidates are
+	// resolved independently above before sharing the selected exact source.
+	// The reader's cross-request cache still uses the complete capture identity.
+	if key.artifact != "" {
+		key.generation = ""
+	}
+	if result, loaded := q.projections[key]; loaded {
+		return result.projection, result.err
+	}
+	projection, err := q.loadProjection(ctx, page, factory)
+	// Unavailability is one source observation for this request, just like a
+	// successful projection. A fresh request retries it; no negative result is
+	// retained in the cross-request cache. Every opening is still validated.
+	q.projections[key] = projectionResult{projection, err}
+	return projection, err
+}
+
+func (q *attributionQuery) loadProjection(ctx context.Context, page recordings.WorkerCapturedActivityPage, factory string) (nameProjection, error) {
+	if reader, ok := q.service.history.(interface {
+		readWorkerFactoryNames(context.Context, recordings.WorkerCapturedActivityPage) (nameProjection, error)
+	}); ok {
+		projection, err := reader.readWorkerFactoryNames(ctx, page)
 		if err != nil {
 			return nameProjection{}, err
 		}
-		projection.reportedDefault = sourceScope != factory
-		q.projections[key] = projection
+		return projection, ctx.Err()
+	}
+	history, err := q.service.history.ReadWorkerFactoryHistory(ctx, page)
+	if canceled := ctx.Err(); canceled != nil {
+		return nameProjection{}, canceled
+	}
+	if err != nil {
+		return nameProjection{}, err
+	}
+	projection, err := scopedNames(history, factory)
+	if err != nil {
+		return nameProjection{}, err
 	}
 	return projection, nil
 }

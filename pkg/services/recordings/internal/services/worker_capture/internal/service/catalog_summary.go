@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"sort"
 	"strconv"
 	"time"
@@ -104,7 +105,7 @@ func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []re
 		}
 		items = append(items, item)
 	}
-	if writer.catalogGeneration(writer.catalogEntries()) != generation {
+	if _, current := writer.catalogMembership(); current != generation {
 		return nil, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return items, nil
@@ -137,8 +138,28 @@ func (writer *FileWriter) capturedCatalogItem(ctx context.Context, catalog recor
 }
 
 func (session *recordingSession) capturedSummary() recordings.WorkerCapturedCatalogItem {
+	if session.catalogSummary == nil {
+		item := session.buildCapturedSummary()
+		session.catalogSummary = &item
+	}
+	// The cached selection references immutable committed records. Only the
+	// returned page owns mutable payloads/maps; callers cannot poison later
+	// lists. Owner and reverse-lineage facts are sampled separately by the
+	// writer under their existing barriers, never cached with this selection.
+	item := *session.catalogSummary
+	item.Opening = item.Opening.Detached()
+	item.Terminal = cloneWorkerRecordingTerminal(item.Terminal)
+	item.CapturedAt = maps.Clone(item.CapturedAt)
+	item.MetadataRecords = make([]events.Record, len(session.catalogSummary.MetadataRecords))
+	for index, record := range session.catalogSummary.MetadataRecords {
+		item.MetadataRecords[index] = record.Detached()
+	}
+	return item
+}
+
+func (session *recordingSession) buildCapturedSummary() recordings.WorkerCapturedCatalogItem {
 	item := recordings.WorkerCapturedCatalogItem{
-		Opening:  session.records[0].Detached(),
+		Opening:  session.records[0],
 		Terminal: cloneWorkerRecordingTerminal(session.projection.ExecutionTerminal),
 		Health:   session.projection.Status, HealthReason: session.projection.Degradation,
 		CapturedAt: make(map[string]time.Time), MetadataRecords: make([]events.Record, 0, summaryFactCount+1),
@@ -160,7 +181,7 @@ func (session *recordingSession) capturedSummary() recordings.WorkerCapturedCata
 	session.copySummaryStamp(item.CapturedAt, 1)
 	for _, position := range ordered {
 		// The reducer admits contiguous positions starting at one.
-		item.MetadataRecords = append(item.MetadataRecords, session.records[position-1].Detached())
+		item.MetadataRecords = append(item.MetadataRecords, session.records[position-1])
 		session.copySummaryStamp(item.CapturedAt, position)
 	}
 	return item
