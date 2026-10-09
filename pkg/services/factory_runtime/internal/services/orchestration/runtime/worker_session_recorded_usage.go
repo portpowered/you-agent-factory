@@ -1063,6 +1063,7 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 	if len(factorySessionIDs) > 0 {
 		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
 	}
+	history := prepareRecordedObservationHistory(replayEvents, restoredEventPrefix)
 	return &recordedWorkerSessionObservation{
 		Service:             live,
 		ledger:              ledger,
@@ -1070,9 +1071,10 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 		projector:           projector,
 		clock:               clock,
 		providerSessions:    providerSessions,
-		replayEvents:        cloneAndSortFactoryEvents(replayEvents),
+		replayEvents:        history.replayEvents,
 		restoredWorldState:  restoredWorldState,
-		restoredEventPrefix: cloneFactoryEventsInOrder(restoredEventPrefix),
+		restoredEventPrefix: history.restoredEventPrefix,
+		restoredSessionIDs:  history.restoredSessionIDs,
 		recordingID:         strings.TrimSpace(recordingID),
 		recordingReader:     recordingReader,
 		factorySessionID:    factorySessionID,
@@ -1089,10 +1091,28 @@ func (s *recordedWorkerSessionObservation) liveObservationBelongsToRestoredPrefi
 	if observationSessionID == "" {
 		return false
 	}
-	for _, event := range s.restoredEventPrefix {
-		if event.Context.SessionID != nil && strings.TrimSpace(*event.Context.SessionID) == observationSessionID {
-			return true
+	_, belongs := s.restoredSessionIDs[observationSessionID]
+	return belongs
+}
+
+// preparedWorkerSessionHistory is prepared before runtime publication. Views
+// share its detached values read-only; request results remain detached.
+type preparedWorkerSessionHistory struct {
+	replayEvents        []interfaces.FactoryEvent
+	restoredEventPrefix []interfaces.FactoryEvent
+	restoredSessionIDs  map[string]struct{}
+}
+
+func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent) preparedWorkerSessionHistory {
+	history := preparedWorkerSessionHistory{
+		replayEvents:        cloneAndSortFactoryEvents(replay),
+		restoredEventPrefix: cloneFactoryEventsInOrder(prefix),
+		restoredSessionIDs:  make(map[string]struct{}),
+	}
+	for _, event := range history.restoredEventPrefix {
+		if id := strings.TrimSpace(stringPointerValue(event.Context.SessionID)); id != "" {
+			history.restoredSessionIDs[id] = struct{}{}
 		}
 	}
-	return false
+	return history
 }

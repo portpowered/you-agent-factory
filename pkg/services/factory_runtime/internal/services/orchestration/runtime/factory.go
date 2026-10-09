@@ -69,6 +69,7 @@ type factoryImpl struct {
 	workerSessionControlResults map[workerSessionControlKey]factory.WorkerSessionControlResult
 	capacitySnapshotMu          sync.Mutex
 	effectiveFactoryConfig      *interfaces.FactoryConfig
+	observationHistory          preparedWorkerSessionHistory
 }
 type appliedOperatorMove struct {
 	workID string
@@ -566,6 +567,7 @@ func newFactoryImpl(
 		dispatchFlow:                dispatchFlow,
 		dispatchPlan:                dispatchPlan,
 		eventHistory:                eventHistory,
+		observationHistory:          prepareRecordedObservationHistory(cfg.replayEvents, cfg.restoredEventPrefix),
 		state:                       interfaces.FactoryStateIdle,
 		clock:                       cfg.clock,
 		completeCh:                  make(chan struct{}),

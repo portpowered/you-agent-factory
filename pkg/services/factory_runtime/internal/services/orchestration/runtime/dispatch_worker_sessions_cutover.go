@@ -248,13 +248,20 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		f.cfg.worldStateProjector,
 		f.clock,
 		f.cfg.providerSessions,
-		f.cfg.replayEvents,
+		nil,
 		f.cfg.recordingID,
 		workerRecordingReader,
 		f.cfg.restoredWorldState,
-		f.cfg.restoredEventPrefix,
+		nil,
 		factorySessionID,
 	)
+	// History is detached once before readiness, then shared read-only by views.
+	f.mu.RLock()
+	history := f.observationHistory
+	f.mu.RUnlock()
+	view.replayEvents = history.replayEvents
+	view.restoredEventPrefix = history.restoredEventPrefix
+	view.restoredSessionIDs = history.restoredSessionIDs
 	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
 	view.executionFactorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	return view
@@ -272,6 +279,7 @@ type recordedWorkerSessionObservation struct {
 	replayEvents              []interfaces.FactoryEvent
 	restoredWorldState        *interfaces.FactoryWorldState
 	restoredEventPrefix       []interfaces.FactoryEvent
+	restoredSessionIDs        map[string]struct{}
 	recordingID               string
 	recordingReader           recordings.WorkerRecordingReader
 	factorySessionID          string
