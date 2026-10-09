@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -438,7 +439,9 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	s.decorateRecordingHealth(recorded, health)
 	if liveErr == nil {
 		s.decorateLiveRecordingHealth(live.Observations, health)
-		recorded = mergeRecordedObservations(recorded, live.Observations)
+		var comparisons int
+		recorded, comparisons = mergeRecordedObservations(recorded, live.Observations)
+		s.recordScopedSort(len(recorded), comparisons)
 	}
 	sample := completedFlushWatermarkSample{}
 	if len(recorded) > 0 || len(live.Observations) > 0 {
@@ -453,7 +456,9 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	return recordedObservationListResult(recorded, knownWork, live, liveErr)
+	result, comparisons, err := recordedObservationListResult(recorded, knownWork, live, liveErr)
+	s.recordScopedSort(len(recorded), comparisons)
+	return result, err
 }
 
 // One request retains one detached selected snapshot for both row projection
@@ -530,18 +535,29 @@ func recordedObservationListResult(
 	knownWork bool,
 	live workersessions.ListObservationsResult,
 	liveErr error,
-) (workersessions.ListObservationsResult, error) {
+) (workersessions.ListObservationsResult, int, error) {
 	if !knownWork && len(recorded) == 0 {
 		if liveErr == nil && len(live.Observations) > 0 {
-			return live, nil
+			return live, 0, nil
 		}
-		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
+		return workersessions.ListObservationsResult{}, 0, workersessions.ErrObservationWorkNotFound
 	}
 	if len(recorded) == 0 && liveErr == nil && len(live.Observations) > 0 {
-		return live, nil
+		return live, 0, nil
 	}
-	sortObservationAttempts(recorded)
-	return workersessions.ListObservationsResult{Observations: recorded}, nil
+	comparisons := sortObservationAttempts(recorded)
+	return workersessions.ListObservationsResult{Observations: recorded}, comparisons, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordScopedSort(rows, comparisons int) {
+	if recorder, ok := s.ledger.(interface {
+		RecordRuntimeReadMetric(recordings.RuntimeReadMetric)
+	}); ok {
+		recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+			Name:   "worker_sessions.read.selected_sort",
+			Labels: map[string]string{"sort_rows": strconv.Itoa(rows), "sort_comparisons": strconv.Itoa(comparisons)},
+		})
+	}
 }
 
 func (s *recordedWorkerSessionObservation) listLive(
@@ -990,7 +1006,7 @@ func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
 	if s.Service != nil {
 		live, err := s.Service.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref})
 		if err == nil {
-			merged := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
+			merged, _ := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
 			if len(merged) == 1 {
 				return merged[0], nil
 			}

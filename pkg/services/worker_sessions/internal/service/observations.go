@@ -341,7 +341,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
 	}
-	sortObservationOrder(ids)
+	orderComparisons := sortObservationOrder(ids)
 
 	projectionStartedAt := r.clock.Now()
 	usage, err := r.capturedListUsage(ctx, ids)
@@ -364,7 +364,12 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		}
 		observations = append(observations, projected)
 	}
-	sortObservationAttempts(observations)
+	attemptComparisons := sortObservationAttempts(observations)
+	r.logger.Debug(
+		"worker session observation sorting",
+		"sort_rows", len(ids)+len(observations),
+		"sort_comparisons", orderComparisons+attemptComparisons,
+	)
 	r.logger.Debug(
 		"worker session observation list phases",
 		"candidate_count", len(ids),
@@ -756,8 +761,10 @@ type observationOrder struct {
 	attemptID string
 }
 
-func sortObservationOrder(values []observationOrder) {
+func sortObservationOrder(values []observationOrder) int {
+	comparisons := 0
 	sort.SliceStable(values, func(i, j int) bool {
+		comparisons++
 		left, right := values[i], values[j]
 		switch {
 		case !left.startedAt.Equal(right.startedAt):
@@ -768,10 +775,13 @@ func sortObservationOrder(values []observationOrder) {
 			return left.id < right.id
 		}
 	})
+	return comparisons
 }
 
-func sortObservationAttempts(observations []workersessions.Observation) {
+func sortObservationAttempts(observations []workersessions.Observation) int {
+	comparisons := 0
 	sort.SliceStable(observations, func(i, j int) bool {
+		comparisons++
 		left, right := observations[i], observations[j]
 		switch {
 		case left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt):
@@ -786,6 +796,7 @@ func sortObservationAttempts(observations []workersessions.Observation) {
 			return left.WorkerSessionID < right.WorkerSessionID
 		}
 	})
+	return comparisons
 }
 
 // observationSubscription adapts the canonical Events subscription to the

@@ -671,17 +671,17 @@ func TestWorkerSessionDispatchOutcomeBranches(t *testing.T) {
 }
 
 func TestRecordedObservationListBranches(t *testing.T) {
-	if got, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live"}}}, nil); err != nil || len(got.Observations) != 1 {
+	if got, _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live"}}}, nil); err != nil || len(got.Observations) != 1 {
 		t.Fatalf("live fallback = %#v, %v", got, err)
 	}
-	if _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound); !errors.Is(err, workersessions.ErrObservationWorkNotFound) {
+	if _, _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound); !errors.Is(err, workersessions.ErrObservationWorkNotFound) {
 		t.Fatalf("missing work error = %v", err)
 	}
 	recorded := []workersessions.Observation{{WorkerSessionID: "b", AttemptID: "b"}, {WorkerSessionID: "a", AttemptID: "a"}}
-	if got, err := recordedObservationListResult(recorded, true, workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable); err != nil || got.Observations[0].AttemptID != "a" {
-		t.Fatalf("recorded result = %#v, %v", got, err)
+	if got, comparisons, err := recordedObservationListResult(recorded, true, workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable); err != nil || got.Observations[0].AttemptID != "a" || comparisons != 1 {
+		t.Fatalf("recorded result = %#v, comparisons=%d, %v", got, comparisons, err)
 	}
-	if got, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
+	if got, _, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
 		t.Fatalf("known live fallback = %#v, %v", got, err)
 	}
 
@@ -757,7 +757,7 @@ func TestMergeRecordedObservationsUsesCanonicalWorkerStartTimestamp(t *testing.T
 	recordedStarted := time.Date(2026, 8, 10, 12, 0, 0, 100, time.UTC)
 	authoritativeStarted := recordedStarted.Add(500 * time.Microsecond)
 
-	merged := mergeRecordedObservations(
+	merged, _ := mergeRecordedObservations(
 		[]workersessions.Observation{{
 			WorkerSessionID: "worker-1",
 			StartedAt:       &recordedStarted,
@@ -788,7 +788,7 @@ func TestMergeRecordedObservationsUsesAllLiveFacts(t *testing.T) {
 			recorded.ProviderSessionAvailable = true
 			recorded.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure}
 			historyOnly := workersessions.Observation{WorkerSessionID: "historical", State: workersessions.StateCompleted}
-			merged := mergeRecordedObservations([]workersessions.Observation{recorded, recorded, historyOnly}, []workersessions.Observation{live, live})
+			merged, _ := mergeRecordedObservations([]workersessions.Observation{recorded, recorded, historyOnly}, []workersessions.Observation{live, live})
 			if len(merged) != 2 {
 				t.Fatalf("merged attempts = %#v, want two unique identities", merged)
 			}

@@ -860,7 +860,7 @@ func TestMergeRecordedObservationsKeepsHistoricalOnlyTerminalTimingAcrossRestart
 	recordedEnded := recordedStarted.Add(2 * time.Second)
 	recordedDuration := 2 * time.Second
 
-	merged := mergeRecordedObservations(
+	merged, _ := mergeRecordedObservations(
 		[]workersessions.Observation{{
 			WorkerSessionID: "worker-terminal",
 			State:           workersessions.StateCompleted,

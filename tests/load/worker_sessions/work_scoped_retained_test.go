@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,7 +29,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-// Dedicated capacity lane: one root, <=552 Work, <=3,304 real attempts,
+// Dedicated capacity lane: one root, <=552 Work, <=3,305 real attempts,
 // controlled Codex execution, temporary profile, no subprocess or remote call.
 // Readiness uses Work state; no scoped list warms the measured request.
 func TestWorkScopedRetainedSessionsBoundedWork(t *testing.T) {
@@ -97,6 +98,17 @@ func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handle
 		rows int
 	}{{f.workID, 4}, {empty, 0}} {
 		for sample := range 2 {
+			// Commit a new attempt for the same selected Work after its first
+			// read at the larger retained count. Readiness observes Work state,
+			// never a scoped-list warm-up.
+			if retained == 3304 && selected.rows == 4 && sample == 1 {
+				var moved factoryapi.WorkRead
+				fleetPOST(t, handler, "/factory-sessions/"+f.sessionID+"/work/"+f.workID+"/move", factoryapi.MoveWorkRequest{StateName: "stage-2"}, http.StatusOK, &moved)
+				waitRetainedWork(t, ctx, handler, f.sessionID, f.workID)
+				assertRetainedInventory(t, ctx, counts.WorkerRecordingStore, f.sessionID, retained+1)
+				retained++
+				selected.rows++
+			}
 			counts.reset()
 			logs.TakeAll()
 			path := "/factory-sessions/" + f.sessionID + "/worker-sessions?workId=" + url.QueryEscape(selected.id)
@@ -104,26 +116,48 @@ func measureRetainedReads(t *testing.T, ctx context.Context, handler http.Handle
 			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx))
 			ids := assertRetainedRead(t, response, selected.id, selected.rows)
 			if selected.rows != 0 {
-				if selectedIDs != nil && !slices.Equal(selectedIDs, ids) {
+				if selected.rows == 5 {
+					if len(ids) != len(selectedIDs)+1 || !slices.Equal(selectedIDs, ids[:len(selectedIDs)]) {
+						t.Fatalf("selected commit lost/reordered prior attempts: %v -> %v", selectedIDs, ids)
+					}
+				} else if selectedIDs != nil && !slices.Equal(selectedIDs, ids) {
 					t.Fatalf("selected identities/order changed between reads: %v -> %v", selectedIDs, ids)
 				}
-				selectedIDs = ids
+				if selected.rows == 4 {
+					selectedIDs = ids
+				}
 			}
-			visits := counts.dispatchVisits()
-			for _, entry := range logs.FilterMessage("worker session observation candidate selection").All() {
-				visits += int(entry.ContextMap()["candidate_visits"].(int64))
-			}
-			summaries, full := counts.summaries.Load(), counts.full.Load()
-			if full != 0 || counts.history.Load() != 0 || summaries > int64(2*selected.rows) || visits > 8*selected.rows+8 {
-				t.Fatalf("N=%d k=%d: full=%d history=%d summaries=%d visits=%d", retained, selected.rows, full, counts.history.Load(), summaries, visits)
-			}
-			if selected.rows == 0 && summaries != 0 {
-				t.Fatalf("empty Work read %d summaries", summaries)
-			}
-			t.Logf("N=%d k=%d sample=%d full=%d history=%d summaries=%d visits=%d bytes=%d", retained, selected.rows, sample, full, counts.history.Load(), summaries, visits, response.Body.Len())
+			assertRetainedRequestWork(t, retained, selected.rows, sample, response.Body.Len(), counts, logs)
 		}
 	}
 	return selectedIDs
+}
+
+func assertRetainedRequestWork(t *testing.T, retained, rows, sample, responseBytes int, counts *retainedReadCounts, logs *observer.ObservedLogs) {
+	t.Helper()
+	visits := counts.dispatchVisits()
+	for _, entry := range logs.FilterMessage("worker session observation candidate selection").All() {
+		visits += int(entry.ContextMap()["candidate_visits"].(int64))
+	}
+	sortRows, comparisons := counts.sortWork()
+	for _, entry := range logs.FilterMessage("worker session observation sorting").All() {
+		sortRows += int(entry.ContextMap()["sort_rows"].(int64))
+		comparisons += int(entry.ContextMap()["sort_comparisons"].(int64))
+	}
+	// Four selected sorts (live identity/output and recorded merge/output)
+	// must never sort unrelated retained rows. The comparison allowance
+	// covers stable sort's small-input insertion passes and merge passes.
+	if sortRows != 4*rows || comparisons > 8*rows*bits.Len(uint(rows)) || (rows > 1 && comparisons == 0) {
+		t.Fatalf("N=%d k=%d: sorted rows=%d comparisons=%d", retained, rows, sortRows, comparisons)
+	}
+	summaries, full := counts.summaries.Load(), counts.full.Load()
+	if full != 0 || counts.history.Load() != 0 || summaries > int64(2*rows) || visits > 8*rows+8 {
+		t.Fatalf("N=%d k=%d: full=%d history=%d summaries=%d visits=%d", retained, rows, full, counts.history.Load(), summaries, visits)
+	}
+	if rows == 0 && summaries != 0 {
+		t.Fatalf("empty Work read %d summaries", summaries)
+	}
+	t.Logf("N=%d k=%d sample=%d full=%d history=%d summaries=%d visits=%d sorted_rows=%d comparisons=%d bytes=%d", retained, rows, sample, full, counts.history.Load(), summaries, visits, sortRows, comparisons, responseBytes)
 }
 
 // Enumerate committed capture identities independently of station counts and
@@ -166,9 +200,9 @@ func assertRetainedInventory(t *testing.T, ctx context.Context, store recordings
 
 type retainedReadCounts struct {
 	recordings.WorkerRecordingStore
-	summaries, full, history atomic.Int64
-	mu                       sync.Mutex
-	visits                   int
+	summaries, full, history      atomic.Int64
+	mu                            sync.Mutex
+	visits, sortRows, comparisons int
 }
 
 func (c *retainedReadCounts) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
@@ -189,6 +223,17 @@ func (c *retainedReadCounts) RecordInvocationMetric(metric factorysessions.Invoc
 	switch metric.Name {
 	case "factory_runtime.read.canonical_history", "factory_runtime.read.full_history_reduction":
 		c.history.Add(1)
+	case "worker_sessions.read.selected_sort":
+		rows, rowErr := strconv.Atoi(metric.Labels["sort_rows"])
+		comparisons, compareErr := strconv.Atoi(metric.Labels["sort_comparisons"])
+		if rowErr != nil || compareErr != nil {
+			c.history.Add(1)
+			return
+		}
+		c.mu.Lock()
+		c.sortRows += rows
+		c.comparisons += comparisons
+		c.mu.Unlock()
 	case "worker_sessions.read.selected_dispatches":
 		visits, err := strconv.Atoi(metric.Labels["dispatch_visits"])
 		if err != nil {
@@ -206,7 +251,7 @@ func (c *retainedReadCounts) reset() {
 	c.full.Store(0)
 	c.history.Store(0)
 	c.mu.Lock()
-	c.visits = 0
+	c.visits, c.sortRows, c.comparisons = 0, 0, 0
 	c.mu.Unlock()
 }
 
@@ -214,6 +259,12 @@ func (c *retainedReadCounts) dispatchVisits() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.visits
+}
+
+func (c *retainedReadCounts) sortWork() (int, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sortRows, c.comparisons
 }
 
 func submitRetainedWork(t *testing.T, handler http.Handler, sessionID, workType string) string {

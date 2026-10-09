@@ -319,14 +319,14 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 		t.Fatalf("sortObservationOrder() = %#v", orders)
 	}
 	tied := []observationOrder{{id: "b", startedAt: time.Unix(3, 0), attemptID: "a"}, {id: "a", startedAt: time.Unix(3, 0), attemptID: "a"}}
-	sortObservationOrder(tied)
-	if tied[0].id != "a" {
-		t.Fatalf("sortObservationOrder() tie = %#v, want id a first", tied)
+	comparisons := sortObservationOrder(tied)
+	if tied[0].id != "a" || comparisons != 1 {
+		t.Fatalf("sortObservationOrder() tie = %#v, comparisons=%d, want id a first and one comparison", tied, comparisons)
 	}
 	observations := []workersessions.Observation{{WorkerSessionID: "without-time", AttemptID: "b"}, {WorkerSessionID: "with-time", AttemptID: "a", StartedAt: timePointer(time.Unix(1, 0))}}
-	sortObservationAttempts(observations)
-	if observations[0].WorkerSessionID != "with-time" {
-		t.Fatalf("sortObservationAttempts() = %#v", observations)
+	comparisons = sortObservationAttempts(observations)
+	if observations[0].WorkerSessionID != "with-time" || comparisons != 1 {
+		t.Fatalf("sortObservationAttempts() = %#v, comparisons=%d", observations, comparisons)
 	}
 }
 
