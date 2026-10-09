@@ -231,7 +231,7 @@ LINT_RUN_DEADCODE ?= 1
 LINT_SELECTION_FILE ?=
 $(foreach flag,LINT_BACKEND_ONLY LINT_RUN_DOCS LINT_RUN_DEADCODE,$(if $(and $(filter 1,$(words $($(flag)))),$(filter 0 1,$($(flag)))),,$(error $(flag) must be 0 or 1)))
 LINT_TARGETS_DOCS := $(if $(filter 1,$(LINT_RUN_DOCS)),docs-reference-check)
-LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check test-backend-conformance
+LINT_TARGETS_BASE := model-provider-package-check golangci $(LINT_TARGETS_DOCS) fmt-check contracts-check test-backend-conformance factory-project-tag-check
 LINT_TARGETS_UI := $(if $(filter 1,$(LINT_BACKEND_ONLY)),,ui-lint ui-deadcode)
 LINT_TARGETS_CI_ONLY := $(if $(filter 1,$(LINT_RUN_DEADCODE)),deadcode)
 LINT_FULL ?=
@@ -1069,6 +1069,11 @@ provider-catalog-generate:
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
+
+.PHONY: factory-project-tag-check
+factory-project-tag-check:
+	$(PYTHON) -B -m unittest discover -s factory/scripts -p 'test_project_tag_propagation.py'
+	$(PYTHON) -B factory/scripts/lint-project-tag-propagation.py factory/factory.json
 
 model-provider-package-check:
 	node scripts/model-provider-package.mjs check
