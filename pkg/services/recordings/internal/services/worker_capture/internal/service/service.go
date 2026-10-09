@@ -91,6 +91,19 @@ func (service *Service) CurrentWorkerRecordingHealth(ctx context.Context, record
 	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
 }
 
+// LookupWorkerSessionSummary selects committed metadata from the same store
+// that accepts live capture. It never loads a recording or provider transcript.
+func (service *Service) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := service.writer.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LookupWorkerSessionSummary(ctx, id)
+}
+
 // PersistWorkerRecord forwards a source-native record to the same durable
 // writer used by live capture. Worker Sessions uses this optional capability
 // for a continuation link that is appended after the source's execution

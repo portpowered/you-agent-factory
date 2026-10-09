@@ -705,3 +705,35 @@ func TestWorkerWorkAttributionOriginatingArtifactSurvivesCatalogRebuild(t *testi
 		})
 	}
 }
+
+type selectedSummaryWriter struct {
+	recordings.WorkerRecordingWriter
+	read func(context.Context, string) (recordings.WorkerCapturedSummary, error)
+}
+
+func (writer *selectedSummaryWriter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return writer.read(ctx, id)
+}
+func TestCaptureSummaryUsesSelectedStoreAndPreservesErrors(t *testing.T) {
+	t.Parallel()
+	for _, want := range []error{nil, context.Canceled, recordings.ErrWorkerRecordingReplay} {
+		calls := 0
+		ctx := t.Context()
+		capture := &Service{writer: &selectedSummaryWriter{read: func(actual context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+			calls++
+			if actual != ctx || id != "selected" {
+				t.Fatalf("summary correlation = %v, %s", actual, id)
+			}
+			return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id}}}, want
+		}}}
+		result, err := capture.LookupWorkerSessionSummary(ctx, "selected")
+		if !errors.Is(err, want) || result.Capture.Catalog.WorkerSessionID != "selected" || calls != 1 {
+			t.Fatalf("summary = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	for _, capture := range []*Service{nil, {}, {writer: &selectedCaptureWriter{}}} {
+		if _, err := capture.LookupWorkerSessionSummary(t.Context(), "selected"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+			t.Fatalf("missing summary = %v", err)
+		}
+	}
+}

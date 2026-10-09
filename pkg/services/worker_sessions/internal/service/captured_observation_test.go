@@ -254,3 +254,88 @@ func TestListOptionalTranscriptBudgetRetainsIdentityAndCallerCancellation(t *tes
 		t.Fatalf("caller cancellation became success: %v", err)
 	}
 }
+
+func TestScopedListSelectedCaptureFailsWithoutPartialRowsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name        string
+		fault, want error
+	}{
+		{"canceled", context.Canceled, workersessions.ErrObservationCanceled},
+		{"deadline", context.DeadlineExceeded, workersessions.ErrObservationCanceled},
+		{"corrupt", recordings.ErrWorkerRecordingReplay, workersessions.ErrObservationRecordingCorrupt},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			r := newObservationRegistry(nil)
+			fake := &listUsageRecordingFake{err: cell.fault}
+			fake.snapshot.RecordingID = "recording"
+			r.recording = fake
+			for _, id := range []string{"worker-a", "worker-b"} {
+				r.sessions[id] = observationSession(id, workersessions.StateRunning)
+				r.observations[id] = observationMetadata()
+				r.publications[id] = &publication{recordingID: "recording"}
+			}
+			req := workersessions.ListObservationsRequest{WorkID: "work-1"}
+			result, err := r.ListObservations(t.Context(), req)
+			if !errors.Is(err, cell.want) || len(result.Observations) != 0 || fake.fullLoads != 0 {
+				t.Fatalf("selected failure returned partial rows or read history: %+v, %v, full=%d", result, err, fake.fullLoads)
+			}
+			fake.err = nil
+			result, err = r.ListObservations(t.Context(), req)
+			if err != nil || len(result.Observations) != 2 || fake.fullLoads != 0 {
+				t.Fatalf("independent read failed recovery: %+v, %v", result, err)
+			}
+		})
+	}
+}
+
+type scopedUsageSummaryReader struct {
+	recordings.WorkerSessionRecordingService
+	item  recordings.WorkerCapturedCatalogItem
+	reads int
+}
+
+func (reader *scopedUsageSummaryReader) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
+	reader.reads++
+	return recordings.WorkerCapturedSummary{Capture: reader.item}, nil
+}
+func TestScopedListCaptureUsageRequiresMatchingScopeAndCommittedHead(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	r.sessions["worker"] = observationSession("worker", workersessions.StateRunning)
+	r.observations["worker"] = observationMetadata()
+	r.observations["worker"].factorySessionID = "owned"
+	r.indexObservationBySessionWorkLocked("worker", r.observations["worker"])
+	r.publications["worker"] = &publication{recordingID: "recording"}
+	reader := &scopedUsageSummaryReader{item: recordings.WorkerCapturedCatalogItem{
+		Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: "worker", FactorySessionID: "owned", RecordingID: "recording", CommittedPosition: 2},
+		MetadataRecords: []events.Record{
+			{ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"totalTokens":12}}`)},
+			{ID: events.RecordID{Position: 3}, Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"totalTokens":999}}`)},
+		},
+	}}
+	r.recording = reader
+	req := workersessions.ListObservationsRequest{WorkID: "work-1", FactorySessionID: "owned"}
+	read := func() workersessions.Observation {
+		t.Helper()
+		result, err := r.ListObservations(t.Context(), req)
+		if err != nil || len(result.Observations) != 1 {
+			t.Fatalf("scoped list = %+v, %v", result, err)
+		}
+		return result.Observations[0]
+	}
+	got := read()
+	if got.TokenUsage == nil || *got.TokenUsage.TotalTokens != 12 || reader.reads != 1 {
+		t.Fatalf("usage crossed committed head: %+v, reads=%d", got, reader.reads)
+	}
+	reader.item.Catalog.FactorySessionID = "foreign"
+	if got := read(); got.TokenUsage != nil || got.FactorySessionID != "owned" {
+		t.Fatalf("foreign capture leaked: %+v", got)
+	}
+	reader.item.Catalog.FactorySessionID = "owned"
+	reader.item.Catalog.WorkerSessionID = "sibling"
+	if got := read(); got.TokenUsage != nil {
+		t.Fatalf("sibling capture leaked: %+v", got)
+	}
+}

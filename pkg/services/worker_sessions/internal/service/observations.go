@@ -343,7 +343,10 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	sortObservationOrder(ids)
 
 	projectionStartedAt := r.clock.Now()
-	usage := r.capturedListUsage(ctx, ids)
+	usage, err := r.capturedListUsage(ctx, ids)
+	if err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
 	optionalCtx, cancelOptional := context.WithTimeout(ctx, scopedListTranscriptBudget)
 	defer cancelOptional()
 	observations := make([]workersessions.Observation, 0, len(ids))

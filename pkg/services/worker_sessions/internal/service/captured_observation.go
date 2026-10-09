@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
@@ -87,43 +88,57 @@ func capturedSessionUsage(session recordings.WorkerSessionRecordingSnapshot, hea
 	return usage
 }
 
-// A list owns its detached snapshot for this request only. Loading the entire
-// recording for each row repeats copies of every sibling's accumulated history.
-// Group by recording, reduce each selected worker once, and never reuse the
-// result across requests: the next list must observe new committed facts.
-func (r *registry) capturedListUsage(ctx context.Context, ids []observationOrder) map[string]*workersessions.TokenUsage {
-	groups := make(map[string]map[string]string)
-	usage := make(map[string]*workersessions.TokenUsage)
+// Scoped lists select committed metadata slots for matching physical workers.
+// Missing optional capture clears live usage; caller cancellation and damaged
+// committed capture fail the whole read. No request loads sibling histories.
+func (r *registry) capturedListUsage(ctx context.Context, ids []observationOrder) (map[string]*workersessions.TokenUsage, error) {
+	usage := make(map[string]*workersessions.TokenUsage, len(ids))
+	reader, supported := r.recording.(recordings.WorkerCapturedSummaryReader)
 	for _, item := range ids {
+		if err := observationContextError(ctx); err != nil {
+			return nil, err
+		}
 		pub := r.publicationFor(item.id)
 		if pub == nil {
 			continue
 		}
-		usage[item.id] = nil // An unavailable capture must clear live usage.
+		usage[item.id] = nil
 		pub.mu.Lock()
 		recordingID := pub.recordingID
 		pub.mu.Unlock()
-		if recordingID == "" {
+		if recordingID == "" || r.recording == nil {
 			continue
 		}
-		if groups[recordingID] == nil {
-			groups[recordingID] = make(map[string]string)
+		if !supported {
+			return nil, workersessions.ErrObservationProjectionUnavailable
 		}
-		groups[recordingID][publicWorkerID(item.id)] = item.id
-	}
-	for recordingID, selected := range groups {
-		snapshot, err := r.LoadWorkerRecording(ctx, recordingID)
-		if err != nil || snapshot.RecordingID != recordingID {
-			continue
-		}
-		for _, session := range snapshot.Sessions {
-			id, exists := selected[session.WorkerSessionID]
-			if !exists {
-				continue
+		summary, err := reader.LookupWorkerSessionSummary(ctx, publicWorkerID(item.id))
+		if err != nil {
+			if failure := capturedListReadError(ctx, err); failure != nil {
+				return nil, failure
 			}
-			usage[id] = capturedSessionUsage(session, ^uint64(0))
-			delete(selected, session.WorkerSessionID) // Preserve first-match semantics.
+			continue
 		}
+		capture := summary.Capture
+		_, metadata, exists := r.loadObservationState(item.id)
+		if !exists || capture.Catalog.FactorySessionID != metadata.factorySessionID || capture.Catalog.RecordingID != recordingID || capture.Catalog.WorkerSessionID != publicWorkerID(item.id) {
+			continue
+		}
+		session := recordings.WorkerSessionRecordingSnapshot{Records: capture.MetadataRecords}
+		usage[item.id] = capturedSessionUsage(session, capture.Catalog.CommittedPosition)
 	}
-	return usage
+	return usage, observationContextError(ctx)
+}
+
+func capturedListReadError(ctx context.Context, err error) error {
+	if canceled := observationContextError(ctx); canceled != nil {
+		return canceled
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return workersessions.ErrObservationCanceled
+	}
+	if errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		return workersessions.ErrObservationRecordingCorrupt
+	}
+	return nil
 }

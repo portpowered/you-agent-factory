@@ -616,20 +616,8 @@ func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error
 // Preserve the real store's bounded read and activation capabilities while
 // keeping this decorator's controlled write/activity faults.
 func (store *workerSessionCaptureReads) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
-	store.mu.Lock()
-	fault, selected := store.faults[id]
-	store.mu.Unlock()
-	if selected {
-		select {
-		case fault.reached <- struct{}{}:
-		default:
-		}
-		if fault.err == nil {
-			<-ctx.Done()
-			fault.err = ctx.Err()
-		}
-		return recordings.WorkerCapturedSummary{}, fault.err
-	}
+	// These faults belong to optional activity reads. Already committed
+	// metadata remains independently available through the summary boundary.
 	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
 }
 

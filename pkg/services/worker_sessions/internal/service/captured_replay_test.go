@@ -18,6 +18,27 @@ type replayCaptureReader struct {
 	snapshot recordings.WorkerRecordingSnapshot
 }
 
+// Prepare selected peer facts from the component fixture, independently of
+// LoadWorkerRecording. Production readers maintain metadata slots at append.
+func (f replayCaptureReader) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	for _, session := range f.snapshot.Sessions {
+		if session.WorkerSessionID != id {
+			continue
+		}
+		item := recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{
+			WorkerSessionID: id, RecordingID: f.snapshot.RecordingID, CommittedPosition: ^uint64(0),
+		}}
+		for _, record := range session.Records {
+			item.MetadataRecords = append(item.MetadataRecords, record.Detached())
+		}
+		return recordings.WorkerCapturedSummary{Capture: item}, nil
+	}
+	return recordings.WorkerCapturedSummary{}, nil
+}
+
 type continuationPageReader struct {
 	capturedActivityFake
 	next recordings.WorkerCapturedActivityPage

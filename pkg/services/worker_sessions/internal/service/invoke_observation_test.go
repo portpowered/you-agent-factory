@@ -100,13 +100,23 @@ func observationMetadata() *observation {
 
 type listUsageRecordingFake struct {
 	observationRecordingReaderStub
-	loads int
-	err   error
+	loads     int
+	fullLoads int
+	err       error
 }
 
 func (f *listUsageRecordingFake) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
-	f.loads++
+	f.fullLoads++
 	return f.snapshot, f.err
+}
+
+func (f *listUsageRecordingFake) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	f.loads++
+	summary, err := (replayCaptureReader{snapshot: f.snapshot}).LookupWorkerSessionSummary(ctx, id)
+	if f.err != nil {
+		return recordings.WorkerCapturedSummary{}, f.err
+	}
+	return summary, err
 }
 
 func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
@@ -138,14 +148,14 @@ func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
 		assertListCapturedUsage(t, i, row)
 		*row.TokenUsage.TotalTokens = -1
 	}
-	if f.loads != 1 {
-		t.Fatalf("recording reads = %d, want one per request", f.loads)
+	if f.loads != 3 || f.fullLoads != 0 {
+		t.Fatalf("recording reads = %d, want one selected summary per worker", f.loads)
 	}
 	f.snapshot.Sessions[0].Records = append(f.snapshot.Sessions[0].Records, events.Record{
 		Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"totalTokens":99}}`),
 	})
 	second := read()
-	if f.loads != 2 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
+	if f.loads != 6 || f.fullLoads != 0 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
 		t.Fatalf("fresh detached usage = %+v, loads=%d", second, f.loads)
 	}
 	assertListUnavailableCapture(t, f, read)
