@@ -398,20 +398,12 @@ func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferC
 
 func bindSessionProducts(bound *runtimebinding.SessionState, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
 	bound.Activation = activation
-	bound.Process = products.process
-	bound.Diagnostics = products.diagnostics
-	bound.ModelInvocation = products.modelInvocation
-	bound.ModelsScope = products.modelsScope
-	bound.SetWorkerSessions(products.workerSessions)
-	bound.Logger = products.logger
-	bound.Clock = products.clock
 	bound.CurrentBoardRecordPath = products.currentBoardRecordPath
 	bound.StartupRecovery = products.startupRecovery
 	bound.OperatorSettingsPath = products.operatorSettingsPath
 	bound.SkippedBoardRecordings = append([]string(nil), products.skippedBoardRecordings...)
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
 	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
-	bound.OrderlyStop = products.orderlyStop
 	bound.SetStartRequestID(strings.TrimSpace(requestID))
 	bound.InheritTerminalControl(previousControl)
 }

@@ -185,7 +185,7 @@ func assertFailedReplayAcquisition(t *testing.T, failed runtimeProducts, err, fa
 	if !errors.Is(err, failure) || (closeErr != nil && !errors.Is(err, closeErr)) {
 		t.Fatalf("failed opening error = %v, want acquisition and cleanup causes", err)
 	}
-	if failed.replayExecution != nil || failed.process != nil {
+	if failed.replayExecution != nil || failed.lifecycle != nil {
 		t.Fatal("failed acquisition published usable session roles")
 	}
 	if !reflect.DeepEqual(events, []string{"durable-owner-close"}) {
@@ -214,7 +214,7 @@ func testPortableReplayResumeInterruptedSession(t *testing.T) {
 		},
 	}
 	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
-		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
 		}, owner, nil)
@@ -253,7 +253,7 @@ func testPortableReplayResume(t *testing.T) {
 		},
 	}
 	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
-		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
 		}, owner, nil)
@@ -286,7 +286,7 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 	}
 	owner := &portableReplayRuntimeOwner{probeErr: want}
 	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
-		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
 		}, owner, nil)
@@ -309,7 +309,7 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 func testPortableReplayWithoutRestorableState(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{}
 	opened := (&Root{replayBehavior: recordingreplay.NewBehavior()}).historicalReplayRuntimeProducts(
-		zap.NewNop(), recordingreplay.RecordingReplayProjection{
+		recordingreplay.RecordingReplayProjection{
 			Session:    factorysessions.SessionReadResult{SessionID: "session-js-checkpoint-001", Status: factorysessions.LifecycleStatusInterrupted},
 			Checkpoint: &recordingreplay.CheckpointReadModel{ID: "checkpoint"},
 		}, owner, nil)

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
@@ -9,14 +8,11 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"go.uber.org/zap"
 )
 
 func recoveryRecordingID(recordingID string) string {
@@ -32,22 +28,12 @@ func recoveryRecordingID(recordingID string) string {
 // It is consumed by canonical Start and never stored as another session graph.
 type runtimeProducts struct {
 	startupRecovery        *factorysessions.StartupRecovery
-	process                roles.ProcessRuntime
 	lifecycle              roles.LifecycleRuntime
 	replayExecution        *recordingreplay.Scope
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
-	modelInvocation        modelinvocation.RuntimeModelInvocation
-	modelsScope            models.RuntimeScopeRef
-	workerSessions         workersessions.ObservationService
-	clock                  factoryruntime.Clock
-	logger                 *zap.Logger
 	diagnostics            factoryruntime.RuntimeLogDiagnostics
-	directory              string
-	runtimeInstanceID      string
-	backendScopeID         string
 	currentBoardRecordPath string
 	operatorSettingsPath   string
-	orderlyStop            func(context.Context) error
 	closeArtifacts         func() error
 	historicalReplay       *factorysessions.HistoricalReplayInspection
 	skippedBoardRecordings []string
@@ -67,7 +53,6 @@ type workerSessionsObservationForSessionProvider interface {
 }
 
 func (r *Root) historicalReplayRuntimeProducts(
-	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
 	liveOwner durableexecution.Service,
 	closeResources func() error,
@@ -78,9 +63,7 @@ func (r *Root) historicalReplayRuntimeProducts(
 	replay := r.replayBehavior.Acquire(projection, liveOwner)
 	inspection := replay.Inspection()
 	return runtimeProducts{
-		process:          historicalReplayProcessRuntime{},
 		historicalReplay: &inspection,
-		logger:           logger,
 		closeArtifacts:   closeResources,
 		replayExecution:  replay,
 	}

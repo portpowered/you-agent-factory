@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 
@@ -21,15 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// historicalReplayProcessRuntime completes the process lifecycle for an
-// inspection-only portable recording. It intentionally starts neither a live
-// Factory runtime nor worker sidecars nor an HTTP host.
-type historicalReplayProcessRuntime struct{}
-
-func (historicalReplayProcessRuntime) RunTransport(context.Context, http.Handler) error { return nil }
-
-func (historicalReplayProcessRuntime) Stop(context.Context) error { return nil }
 
 type portableReplayDurableOwner struct {
 	durableexecution.Service

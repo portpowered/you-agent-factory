@@ -87,14 +87,19 @@ func (r *Root) openRuntimeWithOptions(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	products, err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
+	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
 		RecordPath:  opening.configured.Recordings.RecordPath,
 		MockWorkers: opening.configured.Workers.MockWorkers,
-	}, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
+	}, completed.State, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
 		opening.activation, opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
 		products.lifecycle = completed.Lifecycle
+		products.closeArtifacts = cleanup.Close
+		products.activation = opening.activation
+		products.engine = opening.activation.Service
+		rootRuntime := completed.SessionRuntime.(factoryruntime.Service)
+		products.bindRuntime = runtimeBindingForSession(rootRuntime, opening.sessionID)
 		products.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
 		products.currentBoardRecordPath = opening.configured.Recordings.RecordPath
 		if recovery := opening.startupRecovery; recovery != nil {
@@ -262,7 +267,6 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 		}
 	}
 	historicalProducts := r.historicalReplayRuntimeProducts(
-		opening.logger,
 		*opening.load.HistoricalReplay,
 		liveOwner,
 		replayClose,
@@ -501,6 +505,7 @@ type RuntimeCompletionRequest struct {
 
 type RuntimeCompletionResult struct {
 	SessionRuntime roles.ApplicationRuntime
+	State          *runtimebinding.SessionState
 	Lifecycle      roles.LifecycleRuntime
 	ProcessRuntime roles.ProcessRuntime
 }
@@ -555,8 +560,9 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	if bound := runtimebinding.SessionStateFrom(operation.registration.Resolve(request.Facts.FactorySessionID)); bound != nil {
-		bound.SetMockWorkers(request.MockWorkers)
+	state := runtimebinding.SessionStateFrom(operation.registration.Resolve(request.Facts.FactorySessionID))
+	if state != nil {
+		state.SetMockWorkers(request.MockWorkers)
 	}
 	if binder, ok := runtime.(interface {
 		BindModelsRuntimeScope(models.RuntimeScopeRef) error
@@ -576,7 +582,7 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	return RuntimeCompletionResult{SessionRuntime: session, Lifecycle: lifecycle, ProcessRuntime: process}, nil
+	return RuntimeCompletionResult{SessionRuntime: session, State: state, Lifecycle: lifecycle, ProcessRuntime: process}, nil
 }
 
 func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session roles.ApplicationRuntime,

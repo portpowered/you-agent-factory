@@ -30,6 +30,36 @@ func (fake *completionRegistration) Resolve(id string) *livesession.LiveSession 
 	return fake.sessions[id]
 }
 
+func TestRuntimeOpeningCompletionRetainsSelectedRecordAcrossRegistryChange(t *testing.T) {
+	t.Parallel()
+	session := &completionSession{}
+	selected := &runtimebinding.SessionState{Owner: session}
+	newer := &runtimebinding.SessionState{Owner: &completionSession{}}
+	registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
+	registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+		registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: selected}
+		return session, nil, nil, nil, nil
+	}
+	routing := completionRouting{bind: func(string, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway) error {
+		return nil
+	}, unbind: func(string) { t.Fatal("stale completion unbound the newer record") }}
+	host := completionHost(func(roles.LifecycleRuntime, factorysessions.RuntimeHostRequest, *zap.Logger) (roles.ProcessRuntime, error) {
+		registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: newer}
+		return nil, nil
+	})
+	cleanup := &runtimeOpeningCleanup{}
+	result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
+		RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
+		&factoryruntime.RuntimeInitialOpening{}, inertHostedInstance{}, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+	if err != nil || result.State != selected || result.SessionRuntime != session ||
+		runtimebinding.SessionStateFrom(registration.Resolve("selected")) != newer {
+		t.Fatalf("completion retargeted its acquired record: %+v, %v", result, err)
+	}
+	if err := cleanup.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type completionRouting struct {
 	bind   func(string, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway) error
 	unbind func(string)
