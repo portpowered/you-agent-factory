@@ -134,6 +134,12 @@ func (r *registry) Continue(
 		return workersessions.ContinueResult{}, err
 	}
 	req = req.Normalize()
+	r.mu.RLock()
+	_, addressErr := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID)
+	r.mu.RUnlock()
+	if addressErr != nil {
+		return workersessions.ContinueResult{}, addressErr
+	}
 	replay, owner, err := r.reserveContinuation(req)
 	if err != nil {
 		r.logContinuationRejected(req, continuationReservationOutcome(err))

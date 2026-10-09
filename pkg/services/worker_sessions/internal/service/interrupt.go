@@ -63,6 +63,14 @@ func (r *registry) Interrupt(
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
 	}
 	req = req.Normalize()
+	r.mu.RLock()
+	_, addressErr := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID)
+	r.mu.RUnlock()
+	if addressErr != nil {
+		result := workersessions.InterruptResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Phase: workersessions.InterruptPhaseValidation}
+		return result, newInterruptError(result.Phase, result, addressErr)
+	}
 	if result, found, err := r.replayDurableInterrupt(callerCtx, req); found {
 		return result, err
 	}

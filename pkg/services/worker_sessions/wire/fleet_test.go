@@ -901,8 +901,11 @@ func (source *fleetObservationSource) GetObservationByWorkerSessionID(
 	if err := ctx.Err(); err != nil {
 		return workersessions.Observation{}, err
 	}
+	if source.err != nil {
+		return workersessions.Observation{}, source.err
+	}
 	for _, observation := range source.inventory {
-		if observation.WorkerSessionID == request.WorkerSessionID {
+		if observation.WorkerSessionID == request.WorkerSessionID && (request.FactorySessionID == "" || observation.FactorySessionID == strings.TrimSpace(request.FactorySessionID)) {
 			return observation.Clone(), nil
 		}
 	}
