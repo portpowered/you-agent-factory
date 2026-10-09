@@ -1008,6 +1008,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		Clock: initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		// Hydration preserves real bytes/errors through the same read effect as
+		// the healthy matrix, without Windows replacement retries on absent files.
+		RecordingReadFile:  os.ReadFile,
 		RecordingWriteFile: fault.write, APIServerStarter: api.Start,
 	})
 	if err != nil {
@@ -1025,6 +1028,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", directory, "--continuously", "--with-server", "--quiet", "--no-record"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = directory
+	// Installation is fixture setup, outside the host readiness window. The
+	// recording fault applies only to the later selected session's directory.
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, directory)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	api.WaitForURL(t)
 	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
