@@ -3030,7 +3030,6 @@ recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal
 recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal/lifecycle_capability.go#runtimeLedgerRouter.CanonicalEvents#CanonicalEvents::count=2
 recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal/lifecycle_runtime_recorder.go#combinedService.ReconstructCanonicalFactoryWorldState#ReconstructFactoryWorldState::count=1
 recording-read|pkg/services/recordings/wire|pkg/services/recordings/wire/work_snapshot.go#workSnapshotReader.ReadWorkSnapshot#ReconstructWorldState::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/archived_terminal_cause.go#LogReader.archivedTerminalCause#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_observation.go#registry.capturedListUsage#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_observation.go#registry.capturedObservationUsage#LoadWorkerRecording::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_replay.go#registry.replayCaptureTimes#LoadWorkerRecording::count=1
