@@ -11,6 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -195,7 +196,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
-	activation, err := startSessionLifecycle(ctx, products, sessionRuntimeSelection(&selected).Host.Port > 0)
+	activation, err := startSessionLifecycle(ctx, products.lifecycle, products.closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -367,18 +368,18 @@ func selectStartTarget(request factorysessions.SessionStartRequest, selected *fa
 	return nil
 }
 
-func startSessionLifecycle(ctx context.Context, products runtimeProducts, deferCompletion bool) (*sessionActivation, error) {
-	if products.lifecycle == nil {
-		if products.closeArtifacts != nil {
-			_ = products.closeArtifacts()
+func startSessionLifecycle(ctx context.Context, lifecycle roles.LifecycleRuntime, closeArtifacts func() error, deferCompletion bool) (*sessionActivation, error) {
+	if lifecycle == nil {
+		if closeArtifacts != nil {
+			_ = closeArtifacts()
 		}
 		return nil, fmt.Errorf("start Factory Session: lifecycle is unavailable")
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	activation := &sessionActivation{
-		lifecycle:      products.lifecycle,
+		lifecycle:      lifecycle,
 		cancel:         cancel,
-		closeArtifacts: products.closeArtifacts,
+		closeArtifacts: closeArtifacts,
 	}
 	err := activation.lifecycle.StartLifecycle(ctx, runContext)
 	if err == nil {

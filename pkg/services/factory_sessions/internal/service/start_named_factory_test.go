@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -181,59 +182,106 @@ func TestPrepareLiveStartRequestNormalizesSelectionAndValidatesTarget(t *testing
 
 type startLifecycleStub struct {
 	roles.LifecycleRuntime
-	startErr    error
-	workerErr   error
-	completeErr error
-	stops       int
+	startErr      error
+	workerErr     error
+	completeErr   error
+	stops         int
+	stopErr       error
+	workerStopErr error
+	events        []string
+	runContext    context.Context
 }
 
-func (s *startLifecycleStub) StartLifecycle(context.Context, context.Context) error {
+func (s *startLifecycleStub) StartLifecycle(_ context.Context, runContext context.Context) error {
+	s.runContext = runContext
+	s.events = append(s.events, "start")
 	return s.startErr
 }
 func (s *startLifecycleStub) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
-	return func(context.Context) error { s.stops++; return nil }, s.workerErr
+	s.events = append(s.events, "worker")
+	return func(context.Context) error {
+		s.stops++
+		s.events = append(s.events, "stop-worker")
+		return s.workerStopErr
+	}, s.workerErr
 }
-func (s *startLifecycleStub) CompleteStartup(context.Context) error { return s.completeErr }
-func (s *startLifecycleStub) StopLifecycle(context.Context) error   { s.stops++; return nil }
+func (s *startLifecycleStub) CompleteStartup(context.Context) error {
+	s.events = append(s.events, "complete")
+	return s.completeErr
+}
+func (s *startLifecycleStub) StopLifecycle(context.Context) error {
+	s.stops++
+	s.events = append(s.events, "stop")
+	return s.stopErr
+}
 
 func TestStartSessionLifecycleCleansFailedPhases(t *testing.T) {
-	ctx := context.Background()
-	for _, failure := range []struct {
-		name string
-		set  func(*startLifecycleStub)
-	}{
-		{"start", func(s *startLifecycleStub) { s.startErr = errors.New("start failed") }},
-		{"worker", func(s *startLifecycleStub) { s.workerErr = errors.New("worker failed") }},
-		{"complete", func(s *startLifecycleStub) { s.completeErr = errors.New("complete failed") }},
-	} {
-		t.Run(failure.name, func(t *testing.T) {
-			lifecycle := &startLifecycleStub{}
-			failure.set(lifecycle)
-			artifacts := 0
-			_, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle, closeArtifacts: func() error { artifacts++; return nil }}, false)
-			if err == nil || artifacts != 1 || lifecycle.stops == 0 {
-				t.Fatalf("failed lifecycle: error=%v artifacts=%d stops=%d", err, artifacts, lifecycle.stops)
+	t.Parallel()
+	for _, phase := range []string{"start", "worker", "complete"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("selected phase failed")
+			cleanupCause := errors.New("artifact cleanup failed")
+			stopCause := errors.New("lifecycle stop failed")
+			workerStopCause := errors.New("worker stop failed")
+			lifecycle := &startLifecycleStub{stopErr: stopCause, workerStopErr: workerStopCause}
+			switch phase {
+			case "start":
+				lifecycle.startErr = cause
+			case "worker":
+				lifecycle.workerErr = cause
+			case "complete":
+				lifecycle.completeErr = cause
+			}
+			cleanup := func() error {
+				lifecycle.events = append(lifecycle.events, "artifacts")
+				if !errors.Is(lifecycle.runContext.Err(), context.Canceled) {
+					t.Error("cleanup ran before run cancellation")
+				}
+				return cleanupCause
+			}
+			activation, err := startSessionLifecycle(t.Context(), lifecycle, cleanup, false)
+			if activation != nil || !errors.Is(err, cause) || !errors.Is(err, cleanupCause) || !errors.Is(err, stopCause) {
+				t.Fatalf("failed phase lost cause/cleanup: activation=%v error=%v", activation, err)
+			}
+			want := []string{"start"}
+			if phase != "start" {
+				want = append(want, "worker")
+				if phase == "complete" {
+					want = append(want, "complete")
+				}
+				want = append(want, "stop-worker")
+				if !errors.Is(err, workerStopCause) {
+					t.Fatalf("lost worker cleanup cause: %v", err)
+				}
+			}
+			want = append(want, "artifacts", "stop")
+			if !reflect.DeepEqual(lifecycle.events, want) {
+				t.Fatalf("phase order = %v, want %v", lifecycle.events, want)
 			}
 		})
 	}
 	closed := 0
-	if _, err := startSessionLifecycle(ctx, runtimeProducts{closeArtifacts: func() error { closed++; return nil }}, false); err == nil || closed != 1 {
+	if _, err := startSessionLifecycle(t.Context(), nil, func() error { closed++; return nil }, false); err == nil || closed != 1 {
 		t.Fatalf("missing lifecycle: error=%v closes=%d", err, closed)
 	}
 	lifecycle := &startLifecycleStub{}
-	activation, err := startSessionLifecycle(ctx, runtimeProducts{lifecycle: lifecycle}, false)
+	activation, err := startSessionLifecycle(t.Context(), lifecycle, nil, false)
 	if err != nil || activation == nil || activation.stopWorker == nil {
 		t.Fatalf("successful lifecycle: activation=%+v error=%v", activation, err)
 	}
-	if err := activation.Close(ctx); err != nil || lifecycle.stops != 1 {
+	if err := activation.Close(t.Context()); err != nil || lifecycle.stops != 1 {
 		t.Fatalf("close activation: error=%v stops=%d", err, lifecycle.stops)
+	}
+	if !reflect.DeepEqual(lifecycle.events, []string{"start", "worker", "complete", "stop-worker"}) {
+		t.Fatalf("successful order = %v", lifecycle.events)
 	}
 }
 
 func TestHostedStartDefersCompletionUntilTransportReadiness(t *testing.T) {
 	t.Parallel()
 	lifecycle := &startLifecycleStub{completeErr: errors.New("completion must wait for host")}
-	activation, err := startSessionLifecycle(t.Context(), runtimeProducts{lifecycle: lifecycle}, true)
+	activation, err := startSessionLifecycle(t.Context(), lifecycle, nil, true)
 	if err != nil || activation == nil {
 		t.Fatalf("hosted start completed before transport: %v", err)
 	}
