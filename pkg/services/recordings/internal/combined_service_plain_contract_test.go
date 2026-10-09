@@ -1464,6 +1464,14 @@ func (unavailableHistoricalOwner) QueryHistoricalRecording(recordings.Historical
 	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}
 }
 
+func (owner unavailableHistoricalOwner) ReadHistoricalEvents(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	return owner.QueryHistoricalRecording(request)
+}
+
+func (owner unavailableHistoricalOwner) DecodeHistoricalEvents(request recordings.HistoricalRecordingQueryRequest, _ []byte) (recordings.HistoricalRecordingQueryResult, error) {
+	return owner.QueryHistoricalRecording(request)
+}
+
 type injectedCanonicalOwner struct {
 	canonicalledger.Service
 	err error

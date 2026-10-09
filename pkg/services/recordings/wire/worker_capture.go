@@ -13,11 +13,18 @@ import (
 
 // NewWorkerOwnerRecoveryOperation binds the existing writer's boot capability.
 // External writers retain their explicit ownership/recovery policy.
-func NewWorkerOwnerRecoveryOperation(writer recordings.WorkerRecordingWriter) recordings.WorkerOwnerRecoveryOperation {
-	if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
-		return recovery.RecoverWorkerOwners
+func NewWorkerOwnerRecoveryOperation(writer recordings.WorkerRecordingWriter, attribution recordings.WorkerWorkAttributionReader) recordings.WorkerOwnerRecoveryOperation {
+	return func(ctx context.Context) error {
+		if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
+			if err := recovery.RecoverWorkerOwners(ctx); err != nil {
+				return err
+			}
+		}
+		if preparation, ok := attribution.(interface{ PrepareWorkerWorkAttribution(context.Context) error }); ok {
+			return preparation.PrepareWorkerWorkAttribution(ctx)
+		}
+		return ctx.Err()
 	}
-	return func(context.Context) error { return nil }
 }
 
 // NewWorkerSessionRecorder constructs the Recordings-owned capture capability

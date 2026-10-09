@@ -105,8 +105,10 @@ func (writer *FileWriter) LookupWorkerSessionCapture(ctx context.Context, id str
 }
 
 func (writer *FileWriter) rebuildCatalog(ctx context.Context) error {
-	writer.rebuildMu.Lock()
-	defer writer.rebuildMu.Unlock()
+	if err := writer.lockCatalogRebuild(ctx); err != nil {
+		return err
+	}
+	defer writer.unlockCatalogRebuild()
 	if writer.catalogLoaded {
 		return nil
 	}
@@ -125,6 +127,27 @@ func (writer *FileWriter) rebuildCatalog(ctx context.Context) error {
 	}
 	writer.catalogLoaded = true
 	return nil
+}
+
+// Recovery and ordinary reads share one synchronous scan owner. Waiting for
+// that owner must not trap a canceled request behind uninterruptible storage
+// IO. The gate also guards catalogLoaded; catalogMu never covers the scan.
+func (writer *FileWriter) lockCatalogRebuild(ctx context.Context) error {
+	writer.rebuildOnce.Do(func() { writer.rebuildGate = make(chan struct{}, 1) })
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case writer.rebuildGate <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			writer.unlockCatalogRebuild()
+			return err
+		}
+		return nil
+	}
+}
+
+func (writer *FileWriter) unlockCatalogRebuild() {
+	<-writer.rebuildGate
 }
 
 func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirEntry) error {

@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -861,5 +863,38 @@ func assertReplayHydratedFactoryRuntime(t *testing.T, factory factoryapi.Factory
 	}
 	if workstation.Type == nil || *workstation.Type != factoryapi.WorkstationTypeScriptRun {
 		t.Fatalf("workstation type = %#v, want SCRIPT_RUN", workstation.Type)
+	}
+}
+
+// A small decoder correctness fixture, not a load or wall-time assertion.
+func TestReplayV2DuplicateEventIdentityUsesWholeStreamAndResetsPerRead(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)
+	original := minimalValidArtifact(at)
+	original.Events = []interfaces.FactoryEvent{original.Events[0]}
+	template := original.Events[0]
+	for index := 1; index < 32; index++ {
+		event := template
+		event.Id = fmt.Sprintf("event-%d", index)
+		event.Context.Sequence = index
+		original.Events = append(original.Events, event)
+	}
+	valid := replayV2FixtureData(t, original, at.Add(time.Minute))
+	for range 2 {
+		stream, err := ParseReplayV2(valid)
+		if err != nil || !reflect.DeepEqual(stream.Events, original.Events) {
+			t.Fatalf("independent stream = %+v, %v", stream, err)
+		}
+	}
+	for _, duplicate := range []int{0, 15, 30} {
+		t.Run(fmt.Sprint(duplicate), func(t *testing.T) {
+			t.Parallel()
+			artifact := *original
+			artifact.Events = append([]interfaces.FactoryEvent(nil), original.Events...)
+			last := len(artifact.Events) - 1
+			artifact.Events[last].Id = artifact.Events[duplicate].Id
+			_, err := ParseReplayV2(replayV2FixtureData(t, &artifact, at.Add(time.Minute)))
+			assertReplayStructuralDiagnostic(t, err, recordings.ReplayArtifactDiagnosticInvalidIdentity, fmt.Sprintf("events[%d]", last), artifact.Events[duplicate].Id, recordings.ReplayArtifactErrorCorruptInput)
+		})
 	}
 }

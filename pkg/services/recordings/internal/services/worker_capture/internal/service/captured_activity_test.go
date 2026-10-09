@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,129 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type catalogScanGate struct {
+	platformreplay.Local
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+	scans   atomic.Int32
+}
+
+func (gate *catalogScanGate) ScanDirectory(path string, size int, visit func([]os.DirEntry) error) error {
+	gate.scans.Add(1)
+	gate.once.Do(func() { close(gate.entered); <-gate.release })
+	return gate.Local.ScanDirectory(path, size, visit)
+}
+
+// Observe evaluation of the waiter's cancellation arm, rather than sleeping
+// or inspecting the writer's gate. The context remains owned by this caller.
+type catalogWaitContext struct {
+	context.Context
+	once    sync.Once
+	entered chan struct{}
+}
+
+func (ctx *catalogWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.entered) })
+	return ctx.Context.Done()
+}
+
+func TestFileWriterCatalogScanCancellation(t *testing.T) {
+	t.Parallel()
+	for _, recovery := range []bool{false, true} {
+		for _, cancelLeader := range []bool{false, true} {
+			t.Run(fmt.Sprintf("recovery=%t/cancelLeader=%t", recovery, cancelLeader), func(t *testing.T) {
+				t.Parallel()
+				assertCatalogScanCancellation(t, recovery, cancelLeader)
+			})
+		}
+	}
+}
+
+func assertCatalogScanCancellation(t *testing.T, recovery, cancelLeader bool) {
+	t.Helper()
+	ctx, finish := context.WithTimeout(t.Context(), 10*time.Second)
+	defer finish()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	seed := journalWriter(t, local)
+	persistCatalogSummaryFixture(t, seed, journalRecord(t, "scan-cancellation", "summary-worker"))
+	gate := &catalogScanGate{Local: local, entered: make(chan struct{}), release: make(chan struct{})}
+	store, err := NewFileWriter(gate, gate, gate, &captureTimeProbe{}, seed.root, "restarted", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := store.(*FileWriter)
+	release := sync.OnceFunc(func() { close(gate.release) })
+	var calls sync.WaitGroup
+	t.Cleanup(func() { release(); calls.Wait() })
+	leaderCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	leader := make(chan error, 1)
+	calls.Add(1)
+	go func() {
+		defer calls.Done()
+		if recovery {
+			leader <- writer.RecoverWorkerOwners(leaderCtx)
+		} else {
+			_, err := writer.ListWorkerSessionCaptures(leaderCtx, recordings.WorkerCapturedCatalogRequest{})
+			leader <- err
+		}
+	}()
+	waitCatalogSignal(t, ctx, gate.entered)
+	waitCtx, cancelWaiter := context.WithCancel(ctx)
+	defer cancelWaiter()
+	waiterCtx := &catalogWaitContext{Context: waitCtx, entered: make(chan struct{})}
+	waiter := make(chan error, 1)
+	calls.Add(1)
+	go func() {
+		defer calls.Done()
+		_, err := writer.ListWorkerSessionCaptures(waiterCtx, recordings.WorkerCapturedCatalogRequest{})
+		waiter <- err
+	}()
+	waitCatalogSignal(t, ctx, waiterCtx.entered)
+	if cancelLeader {
+		cancel()
+		release()
+		assertCatalogCallResult(t, ctx, leader, context.Canceled)
+		assertCatalogCallResult(t, ctx, waiter, nil)
+	} else {
+		cancelWaiter()
+		assertCatalogCallResult(t, ctx, waiter, context.Canceled)
+		// The canceled waiter leaves while the leader is still blocked in IO.
+		release()
+		assertCatalogCallResult(t, ctx, leader, nil)
+	}
+	assertCatalogSummaryFacts(t, mustCatalogSummary(t, writer))
+	wantScans := int32(1)
+	if cancelLeader {
+		wantScans++ // A canceled scan cannot establish complete membership.
+	}
+	if scans := gate.scans.Load(); scans != wantScans {
+		t.Fatalf("directory scans = %d, want %d", scans, wantScans)
+	}
+}
+
+func waitCatalogSignal(t *testing.T, ctx context.Context, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-ctx.Done():
+		t.Fatalf("catalog scenario signal: %v", ctx.Err())
+	}
+}
+
+func assertCatalogCallResult(t *testing.T, ctx context.Context, result <-chan error, want error) {
+	t.Helper()
+	select {
+	case err := <-result:
+		if !errors.Is(err, want) {
+			t.Fatalf("catalog call error = %v, want %v", err, want)
+		}
+	case <-ctx.Done():
+		t.Fatalf("catalog caller remained blocked: %v", ctx.Err())
+	}
+}
 
 type groupedAppendProbe struct {
 	platformreplay.Local
@@ -574,6 +699,71 @@ func mustCatalogSummary(t *testing.T, reader recordings.WorkerCapturedActivityRe
 	return page.Items[0]
 }
 
+func TestFileWriterRepeatedCatalogSummariesRemainDetachedAcrossCommits(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "summary", "worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":10}`, 2)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	frozen := mustCatalogSummary(t, writer)
+	assertConcurrentSummaryDetachment(t, writer, frozen)
+	if got := mustCatalogSummary(t, writer); !reflect.DeepEqual(got, frozen) {
+		t.Fatalf("reader mutation escaped into a later page: %+v", got)
+	}
+	record.Record = catalogMetadataRecord(t, record.Record.ID.Topic, workers.KindUsage, `{"totalTokens":20}`, 3)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	updated := mustCatalogSummary(t, writer)
+	if updated.Catalog.CommittedPosition != 3 || len(updated.MetadataRecords) != 1 || updated.MetadataRecords[0].ID.Position != 3 || frozen.MetadataRecords[0].ID.Position != 2 {
+		t.Fatalf("commit failed to refresh selection or changed a frozen page: %+v %+v", updated, frozen)
+	}
+	if err := writer.PersistWorkerRecordingFailure(t.Context(), recordings.WorkerRecordingFailure{
+		RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Topic: record.Record.ID.Topic, Code: "PERSISTENCE_FAILED",
+		ExecutionTerminal: &recordings.WorkerRecordingTerminal{Position: 4, Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	failed := mustCatalogSummary(t, writer)
+	if failed.Terminal == nil || failed.Terminal.Position != 4 || failed.Health != recordings.WorkerRecordingStatusDegraded || updated.Terminal != nil {
+		t.Fatalf("failure commit left a stale summary: %+v", failed)
+	}
+	failed.Terminal.Status = "caller mutation"
+	if got := mustCatalogSummary(t, writer); got.Terminal.Status != "COMPLETED" {
+		t.Fatalf("terminal pointer escaped into later pages: %+v", got)
+	}
+}
+
+func assertConcurrentSummaryDetachment(t *testing.T, writer recordings.WorkerCapturedActivityReader, frozen recordings.WorkerCapturedCatalogItem) {
+	t.Helper()
+	// Concurrent readers own their returned payloads and timestamp maps. Their
+	// mutations must not alter the retained selection or each other's pages.
+	var readers sync.WaitGroup
+	for range 8 {
+		readers.Go(func() {
+			page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
+			if err != nil || len(page.Items) != 1 {
+				t.Errorf("concurrent summary: %+v %v", page, err)
+				return
+			}
+			item := page.Items[0]
+			if !reflect.DeepEqual(item, frozen) {
+				t.Errorf("reader received changed summary: %+v", item)
+			}
+			item.Opening.Payload[0] = '!'
+			item.MetadataRecords[0].Payload[0] = '!'
+			item.CapturedAt["1"] = time.Time{}
+		})
+	}
+	readers.Wait()
+}
+
 func assertCatalogSummaryFacts(t *testing.T, item recordings.WorkerCapturedCatalogItem) {
 	t.Helper()
 	var positions []uint64
@@ -832,6 +1022,55 @@ func TestFileWriterCatalogEnumerationSurvivesRestart(t *testing.T) {
 	}
 }
 
+func TestFileWriterCatalogPagesObserveCommitsWithoutChangingMembership(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	for _, id := range []string{"a", "b"} {
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1})
+	if err != nil || first.NextToken == "" {
+		t.Fatalf("first page = %+v, %v", first, err)
+	}
+	terminal := recordings.WorkerRecordingRecord{
+		RecordingID: "b", WorkerSessionID: "b",
+		Record: mustRecord(t, terminalAppend(events.Topic("worker-session/b/events"), "b"), 2),
+	}
+	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+		t.Fatal(err)
+	}
+	var readers sync.WaitGroup
+	for range 16 {
+		readers.Go(func() {
+			assertCatalogCommittedContinuation(t, writer, first)
+		})
+	}
+	readers.Wait()
+	if first.Items[0].Catalog.CommittedPosition != 1 || first.Items[0].Terminal != nil {
+		t.Fatalf("first page mutated: %+v", first)
+	}
+}
+
+func assertCatalogCommittedContinuation(t *testing.T, writer *FileWriter, first recordings.WorkerCapturedCatalogPage) {
+	t.Helper()
+	page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{Limit: 1, NextToken: first.NextToken})
+	if err != nil || len(page.Items) != 1 {
+		t.Errorf("continued page = %+v, %v", page, err)
+		return
+	}
+	item := page.Items[0]
+	if page.GenerationID != first.GenerationID || page.NextToken != "" || item.Catalog.WorkerSessionID != "b" ||
+		item.Catalog.CommittedPosition != 2 || item.Terminal == nil || item.Terminal.Status != "COMPLETED" {
+		t.Errorf("continued page lost committed terminal: %+v", page)
+	}
+	// Returned facts belong to this reader; mutating them cannot affect peers.
+	if item.Terminal != nil {
+		item.Terminal.Status = "changed by caller"
+	}
+}
+
 func TestFileWriterCatalogEnumerationFencesMembershipAndProfile(t *testing.T) {
 	t.Parallel()
 	local := platformreplay.NewLocal(runtime.GOOS)
@@ -880,6 +1119,12 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, id, "collision")); err != nil {
 			t.Fatal(err)
 		}
+		if id == "first" {
+			page, err := writer.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
+			if err != nil || len(page.Items) != 1 {
+				t.Fatalf("initial catalog = %+v, %v", page, err)
+			}
+		}
 	}
 	if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, "healthy", "healthy")); err != nil {
 		t.Fatal(err)
@@ -889,6 +1134,9 @@ func TestFileWriterCatalogCollisionNeverSelectsOneCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, store := range []recordings.WorkerCapturedActivityReader{writer, reopened} {
+		if err := store.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+			t.Fatal(err)
+		}
 		page, err := store.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true})
 		if !errors.Is(err, recordings.ErrWorkerRecordingReplay) || len(page.Items) != 0 {
 			t.Fatalf("ambiguous enumeration = %+v, %v", page, err)
@@ -955,6 +1203,9 @@ func TestFileWriterTornCatalogCannotProveAssociations(t *testing.T) {
 
 func assertDamagedCapturedCatalog(t *testing.T, reopened recordings.WorkerRecordingStore) {
 	t.Helper()
+	if err := reopened.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	page, err := reopened.ListWorkerSessionCaptures(t.Context(), recordings.WorkerCapturedCatalogRequest{})
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("default enumeration lost healthy histories beside damage: %+v, %v", page, err)
