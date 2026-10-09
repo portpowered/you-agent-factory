@@ -255,7 +255,7 @@ func (r *Root) preparePortableReplayRuntime(
 	if admission, ok := runtimeService.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	releaseScope, err := bindDurableExecutionCapabilities(
+	releaseScope, err := r.executionBinding.Bind(
 		configured.Session.SessionID,
 		durableOwner,
 		runtimeService,
@@ -263,9 +263,7 @@ func (r *Root) preparePortableReplayRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		runtime.StreamGeneration(),
 		runtime.RecordingLedger(),
-		r.providerOverride,
 		configured.Workers.MockWorkers,
-		r.providerCommandRunner,
 		runtimeProgressPublisher(runtime),
 		runtimeWorkerAttemptStarter(runtime),
 	)
@@ -299,7 +297,21 @@ func (observations replaySessionObservations) PublishWorkerProgress(fragment wor
 	}
 }
 
-func bindDurableExecutionCapabilities(
+// ExecutionBinding registers acquired session capabilities using fixed process effects.
+// It owns no selected session state; the durable owner captures each registration.
+type ExecutionBinding struct {
+	providerOverride providers.Service
+	commandRunner    platformprocess.CommandRunner
+}
+
+// NewExecutionBinding stores the selected effects without invoking them.
+func NewExecutionBinding(providerOverride ProviderOverrideService, commandRunner ProviderCommandRunner) *ExecutionBinding {
+	return &ExecutionBinding{providerOverride: providerOverride, commandRunner: commandRunner}
+}
+
+// Bind preserves worker, live-change and durability registration and owned release order.
+// Opening callers retain their scoped lifecycle diagnostics and failure reporting.
+func (operation *ExecutionBinding) Bind(
 	sessionID string,
 	execution durableexecution.Service,
 	invoker factoryruntime.Service,
@@ -307,21 +319,17 @@ func bindDurableExecutionCapabilities(
 	runtimeID string,
 	generationID string,
 	recordingLedger recordings.Ledger,
-	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunner platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error),
 ) (func(), error) {
-	release, err := bindWorkerScope(
+	release, err := operation.bindWorkerScope(
 		sessionID,
 		execution,
 		admission,
 		runtimeID,
 		generationID,
-		providerOverride,
 		mockWorkers,
-		commandRunner,
 		progressPublisher,
 		attemptStarter,
 	)
