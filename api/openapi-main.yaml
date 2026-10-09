@@ -213,7 +213,8 @@ paths:
         Returns one authoritative Worker Session observation by its stable
         Worker Session identity. Direct observations expose their origin and
         any recorded Provider Session association without requiring callers to
-        reconstruct a provider tuple.
+        reconstruct a provider tuple. A retained ID with multiple owners returns
+        409 WORKER_SESSION_AMBIGUOUS with exact details.candidates.
       parameters:
         - $ref: '#/components/parameters/WorkerSessionID'
       responses:
@@ -227,6 +228,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session ID has multiple retained Factory Session owners.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /worker-sessions/{worker_session_id}/continue:

@@ -174,6 +174,7 @@ const (
 	ErrorResponseCodeSHUTDOWNCONTROLUNAVAILABLE                     ErrorResponseCode = "SHUTDOWN_CONTROL_UNAVAILABLE"
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONAMBIGUOUS                         ErrorResponseCode = "WORKER_SESSION_AMBIGUOUS"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
@@ -687,10 +688,10 @@ const (
 
 // Defines values for FactoryStopKind.
 const (
-	BLOCKED     FactoryStopKind = "BLOCKED"
-	INTERRUPTED FactoryStopKind = "INTERRUPTED"
-	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
-	PAUSED      FactoryStopKind = "PAUSED"
+	FactoryStopKindBLOCKED     FactoryStopKind = "BLOCKED"
+	FactoryStopKindINTERRUPTED FactoryStopKind = "INTERRUPTED"
+	FactoryStopKindNEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	FactoryStopKindPAUSED      FactoryStopKind = "PAUSED"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -1437,6 +1438,18 @@ const (
 	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
 	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
+)
+
+// Defines values for WorkerSessionAddressCandidateState.
+const (
+	WorkerSessionAddressCandidateStateCANCELED   WorkerSessionAddressCandidateState = "CANCELED"
+	WorkerSessionAddressCandidateStateCOMPLETED  WorkerSessionAddressCandidateState = "COMPLETED"
+	WorkerSessionAddressCandidateStateFAILED     WorkerSessionAddressCandidateState = "FAILED"
+	WorkerSessionAddressCandidateStatePAUSED     WorkerSessionAddressCandidateState = "PAUSED"
+	WorkerSessionAddressCandidateStateRESERVED   WorkerSessionAddressCandidateState = "RESERVED"
+	WorkerSessionAddressCandidateStateRUNNING    WorkerSessionAddressCandidateState = "RUNNING"
+	WorkerSessionAddressCandidateStateSTARTING   WorkerSessionAddressCandidateState = "STARTING"
+	WorkerSessionAddressCandidateStateTERMINATED WorkerSessionAddressCandidateState = "TERMINATED"
 )
 
 // Defines values for WorkerSessionContinueResponseState.
@@ -2201,7 +2214,8 @@ type ErrorFamily string
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	// Code Stable machine-readable error code.
-	Code ErrorResponseCode `json:"code"`
+	Code    ErrorResponseCode            `json:"code"`
+	Details *WorkerSessionAddressDetails `json:"details,omitempty"`
 
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`
@@ -8904,6 +8918,25 @@ type WorkerModelProvider string
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
+// WorkerSessionAddressCandidate defines model for WorkerSessionAddressCandidate.
+type WorkerSessionAddressCandidate struct {
+	FactorySessionId string                             `json:"factorySessionId"`
+	State            WorkerSessionAddressCandidateState `json:"state"`
+
+	// WorkId Primary Work ID, or null when unavailable.
+	WorkId          *string `json:"workId"`
+	WorkerSessionId string  `json:"workerSessionId"`
+}
+
+// WorkerSessionAddressCandidateState defines model for WorkerSessionAddressCandidate.State.
+type WorkerSessionAddressCandidateState string
+
+// WorkerSessionAddressDetails defines model for WorkerSessionAddressDetails.
+type WorkerSessionAddressDetails struct {
+	// Candidates Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included.
+	Candidates []WorkerSessionAddressCandidate `json:"candidates"`
+}
+
 // WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
 type WorkerSessionContinueRequest struct {
 	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
@@ -9088,7 +9121,8 @@ type WorkerSessionFailure struct {
 // WorkerSessionInterruptError Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
 type WorkerSessionInterruptError struct {
 	// Code Stable machine-readable interrupt error code.
-	Code string `json:"code"`
+	Code    string                       `json:"code"`
+	Details *WorkerSessionAddressDetails `json:"details,omitempty"`
 
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`
@@ -20246,6 +20280,7 @@ type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
 	JSON200      *WorkerSessionObservation
 	JSON400      *BadRequest
 	JSON404      *NotFound
+	JSON409      *ErrorResponse
 	JSON500      *InternalError
 }
 
@@ -20971,6 +21006,13 @@ func ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp *http.R
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

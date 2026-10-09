@@ -77,7 +77,7 @@ export interface paths {
     };
     /**
      * Show one top-level Worker Session observation
-     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple. A retained ID with multiple owners returns 409 WORKER_SESSION_AMBIGUOUS with exact details.candidates.
      */
     get: operations["getWorkerSessionObservationByWorkerSessionId"];
     put?: never;
@@ -1651,6 +1651,8 @@ export interface components {
       successorWorkerSessionId?: string;
       source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
       successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      /** @description Exact candidate identities for WORKER_SESSION_AMBIGUOUS in VALIDATION. */
+      details?: components["schemas"]["WorkerSessionAddressDetails"];
     };
     /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
     WorkerSessionControlResponse: {
@@ -2707,6 +2709,8 @@ export interface components {
       targets?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Resource accounting for a rejected capacity reduction. */
       resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
+      /** @description Exact candidate identities when code is WORKER_SESSION_AMBIGUOUS. */
+      details?: components["schemas"]["WorkerSessionAddressDetails"];
     };
     ShutdownAcceptedResponse: {
       /** @enum {string} */
@@ -7446,6 +7450,18 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
+    WorkerSessionAddressCandidate: {
+      factorySessionId: string;
+      workerSessionId: string;
+      /** @description Primary Work ID, or null when unavailable. */
+      workId: string | null;
+      /** @enum {string} */
+      state: WorkerSessionAddressCandidateState;
+    };
+    WorkerSessionAddressDetails: {
+      /** @description Distinct retained owners, sorted by Factory Session and Worker Session identity. No provider content is included. */
+      candidates: components["schemas"]["WorkerSessionAddressCandidate"][];
+    };
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */
@@ -7961,7 +7977,7 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
-    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects. */
     WorkerSessionContinuationConflict: {
       headers: {
         [name: string]: unknown;
@@ -7997,7 +8013,7 @@ export interface components {
         "application/json": components["schemas"]["WorkerSessionInterruptError"];
       };
     };
-    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. */
+    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects. */
     WorkerSessionInterruptConflict: {
       headers: {
         [name: string]: unknown;
@@ -8389,6 +8405,15 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      /** @description The Worker Session ID has multiple retained Factory Session owners. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -10976,6 +11001,8 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session ID is retained by multiple Factory Sessions; select factorySessionId from details.candidates.
+  WORKER_SESSION_AMBIGUOUS: "WORKER_SESSION_AMBIGUOUS",
   // Worker Session continuation requestId was reused with different inputs.
   WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
     "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
@@ -12396,6 +12423,18 @@ export const RelationType = {
   RelationTypeSpawnedBy: "SPAWNED_BY",
 } as const;
 export type RelationType = (typeof RelationType)[keyof typeof RelationType];
+export const WorkerSessionAddressCandidateState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type WorkerSessionAddressCandidateState =
+  (typeof WorkerSessionAddressCandidateState)[keyof typeof WorkerSessionAddressCandidateState];
 export const WorkVideoContentPartType = {
   VIDEO: "VIDEO",
 } as const;

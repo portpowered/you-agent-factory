@@ -1,4 +1,4 @@
-description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation.
+description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. WORKER_SESSION_AMBIGUOUS includes exact details.candidates and refuses the request before effects.
 content:
   application/json:
     schema:

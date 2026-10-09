@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - factorySessionId
+  - workerSessionId
+  - workId
+  - state
+properties:
+  factorySessionId:
+    type: string
+  workerSessionId:
+    type: string
+  workId:
+    type: string
+    nullable: true
+    description: Primary Work ID, or null when unavailable.
+  state:
+    type: string
+    enum: [RESERVED, STARTING, RUNNING, PAUSED, COMPLETED, FAILED, CANCELED, TERMINATED]

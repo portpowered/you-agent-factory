@@ -167,7 +167,7 @@ func workerSessionShowHTTPError(response *http.Response, status int) error {
 		if code == "" {
 			code = "WORKER_SESSION_SHOW_FAILED"
 		}
-		return newCLIError(code, apiError.Message, nil)
+		return &CLIError{Code: code, Message: apiError.Message, Details: apiError.Details}
 	}
 	if status == http.StatusNotFound {
 		return newCLIError("WORKER_SESSION_NOT_FOUND", "worker session not found", nil)
@@ -188,9 +188,10 @@ func emitShowCLIError(config ShowConfig, jsonOutput bool, err error) error {
 		return err
 	}
 	payload := struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}{Code: cliErrorCodeWithFallback(err, "WORKER_SESSION_SHOW_FAILED"), Message: cliErrorMessage(err)}
+		Code    string                                  `json:"code"`
+		Message string                                  `json:"message"`
+		Details *factoryapi.WorkerSessionAddressDetails `json:"details,omitempty"`
+	}{Code: cliErrorCodeWithFallback(err, "WORKER_SESSION_SHOW_FAILED"), Message: cliErrorMessage(err), Details: cliErrorDetails(err)}
 	if encodeErr := json.NewEncoder(output).Encode(payload); encodeErr != nil {
 		return errors.Join(err, encodeErr)
 	}

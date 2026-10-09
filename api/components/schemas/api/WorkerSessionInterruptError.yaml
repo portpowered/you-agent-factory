@@ -43,3 +43,6 @@ properties:
     $ref: './WorkerSessionInterruptSnapshot.yaml'
   successor:
     $ref: './WorkerSessionInterruptSnapshot.yaml'
+  details:
+    $ref: ./WorkerSessionAddressDetails.yaml
+    description: Exact candidate identities for WORKER_SESSION_AMBIGUOUS in VALIDATION.
