@@ -292,8 +292,14 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
+	for index := range 2 {
+		addSuccessRoute(fmt.Sprintf("worker-session-correlated-scope-%d", index), fmt.Sprintf("session_fixture_codex_correlated_scope_%d", index))
+	}
 	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
 	addSuccessRoute("worker-session-scoped-fresh", "session_fixture_codex_scoped_fresh")
+	for _, kind := range []string{"cancel", "corrupt", "unavailable"} {
+		addSuccessRoute("worker-session-selected-read-"+kind, "session_fixture_codex_selected_read_"+kind)
+	}
 	for _, kind := range []string{"slow", "missing", "failed"} {
 		addSuccessRoute("worker-session-optional-"+kind, "session_fixture_codex_optional_"+kind)
 	}
@@ -572,8 +578,9 @@ func resetprovidersessionscli5State() {
 // and commit operations retain the real Wire-built durable implementation.
 type workerSessionCaptureReads struct {
 	recordings.WorkerRecordingStore
-	mu     sync.Mutex
-	faults map[string]workerSessionCaptureFault
+	mu            sync.Mutex
+	faults        map[string]workerSessionCaptureFault
+	summaryFaults map[string]*workerSessionSummaryFault
 }
 
 func (reads *workerSessionCaptureReads) ReadWorkerCapturedActivity(ctx context.Context, request recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
@@ -616,21 +623,69 @@ func (reads *workerSessionCaptureReads) fault(t *testing.T, id string, err error
 // Preserve the real store's bounded read and activation capabilities while
 // keeping this decorator's controlled write/activity faults.
 func (store *workerSessionCaptureReads) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	// These faults belong to optional activity reads. Already committed
+	// metadata remains independently available through the summary boundary.
 	store.mu.Lock()
-	fault, selected := store.faults[id]
+	fault := store.summaryFaults[id]
 	store.mu.Unlock()
-	if selected {
+	if fault != nil && !fault.healthOnly {
+		fault.calls.Add(1)
 		select {
 		case fault.reached <- struct{}{}:
 		default:
 		}
 		if fault.err == nil {
 			<-ctx.Done()
-			fault.err = ctx.Err()
+			fault.drained <- struct{}{}
+			return recordings.WorkerCapturedSummary{}, ctx.Err()
 		}
 		return recordings.WorkerCapturedSummary{}, fault.err
 	}
 	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+type workerSessionSummaryFault struct {
+	healthOnly bool
+	err        error
+	calls      atomic.Int32
+	reached    chan struct{}
+	drained    chan struct{}
+}
+
+func (store *workerSessionCaptureReads) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	store.mu.Lock()
+	var failure error
+	for _, id := range workerIDs {
+		if fault := store.summaryFaults[id]; fault != nil && fault.healthOnly {
+			fault.calls.Add(1)
+			failure = fault.err
+			break
+		}
+	}
+	store.mu.Unlock()
+	if failure != nil {
+		return recordings.WorkerRecordingSnapshot{}, failure
+	}
+	return store.WorkerRecordingStore.(recordings.WorkerRecordingHealthReader).CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
+}
+
+func (store *workerSessionCaptureReads) summaryFault(t *testing.T, id string, err error) (*workerSessionSummaryFault, func()) {
+	t.Helper()
+	fault := &workerSessionSummaryFault{err: err, reached: make(chan struct{}, 2), drained: make(chan struct{}, 2)}
+	fault.healthOnly = errors.Is(err, recordings.ErrMissingWorkerRecordingReader)
+	store.mu.Lock()
+	if store.summaryFaults == nil {
+		store.summaryFaults = make(map[string]*workerSessionSummaryFault)
+	}
+	store.summaryFaults[id] = fault
+	store.mu.Unlock()
+	clear := func() {
+		store.mu.Lock()
+		delete(store.summaryFaults, id)
+		store.mu.Unlock()
+	}
+	t.Cleanup(clear)
+	return fault, clear
 }
 
 func (store *workerSessionCaptureReads) RecoverWorkerOwners(ctx context.Context) error {

@@ -325,6 +325,7 @@ func NewInvocationPolicyService() Service {
 }
 
 type invocationPolicyServiceAdapter struct {
+	workerSessionWorkUnavailable
 	inner *invocationreturnpolicy.PolicyService
 }
 

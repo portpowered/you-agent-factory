@@ -25,15 +25,17 @@ import (
 // FileWriter persists synced deltas; its map lock never covers disk I/O.
 // Each process owns one writer. Multiple processes must not share this store.
 type FileWriter struct {
-	storage    platformreplay.Storage
-	appender   platformreplay.Appender
-	directory  platformreplay.DirectoryScanner
-	root       string
-	mu         sync.Mutex
-	entries    map[string]*recordingEntry
-	clock      recordings.WorkerCaptureClock
-	ownerEpoch string
-	ownerProbe interface {
+	storage           platformreplay.Storage
+	appender          platformreplay.Appender
+	directory         platformreplay.DirectoryScanner
+	root              string
+	mu                sync.Mutex
+	entries           map[string]*recordingEntry
+	preparationErrors map[string]error
+	healthPrepared    bool
+	clock             recordings.WorkerCaptureClock
+	ownerEpoch        string
+	ownerProbe        interface {
 		CurrentProcess() (platformprocess.Incarnation, error)
 	}
 	ownerStamped       bool
@@ -63,6 +65,7 @@ type recordingEntry struct {
 	controlUnsynced   bool
 	mu                sync.Mutex
 	loaded            bool
+	preparationError  error
 	exists            bool
 	damaged           bool
 	sessions          map[string]*recordingSession
@@ -327,7 +330,10 @@ func (writer *FileWriter) readHydrationFile(path string, scanned *scannedWorkerF
 	return writer.storage.ReadFile(path)
 }
 
-func (writer *FileWriter) hydrateFromScan(ctx context.Context, id string, entry *recordingEntry, scanned *scannedWorkerFile) error {
+func (writer *FileWriter) hydrateFromScan(ctx context.Context, id string, entry *recordingEntry, scanned *scannedWorkerFile) (resultErr error) {
+	defer func() {
+		writer.rememberHydrationResult(id, entry, resultErr)
+	}()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

@@ -146,6 +146,16 @@ func (r *completeWorkTestRoot) GetWork(ctx context.Context, sessionID, workID st
 	return r.read.GetWork(ctx, sessionID, workID)
 }
 
+func (r *completeWorkTestRoot) ResolveWorkerSessionWork(ctx context.Context, sessionID, workID string) (work.WorkerSessionWork, error) {
+	reader, ok := r.read.(interface {
+		ResolveWorkerSessionWork(context.Context, string, string) (work.WorkerSessionWork, error)
+	})
+	if !ok {
+		return work.WorkerSessionWork{}, errWorkFixtureUnavailable
+	}
+	return reader.ResolveWorkerSessionWork(ctx, sessionID, workID)
+}
+
 func (r *completeWorkTestRoot) MoveWorkAndRead(ctx context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
 	if r.read == nil {
 		return work.ReadModel{}, errWorkFixtureUnavailable

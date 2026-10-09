@@ -18,10 +18,194 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const workScopedAttemptCount = 200
+const workScopedAttemptCount = 3
+
+// Both scopes admit the same explicit Work identities atomically. A two-input
+// workstation creates one physical attempt correlated with both Works.
+func testWorkerSessionsListWorkScopedCorrelatedScopes(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	seen := make(map[string]bool)
+	var reread []func()
+	for index := range 2 {
+		c := newWorkerSessionsCLICase(t)
+		route := fmt.Sprintf("worker-session-correlated-scope-%d", index)
+		c.registerRoutes(t, route)
+		writeCorrelatedScopedFactory(t, c.factoryDir, route)
+		sessionID := c.openSession(t)
+		request := `{"requestId":"correlated-request","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"correlated-plan","name":"plan","workTypeName":"plan","payload":{}},{"workId":"correlated-task","name":"task","workTypeName":"task","payload":{}}]}`
+		executeCLI(t, ctx, c.fixture.process, functionalEnvironment(c.fixture.homeDir), c.factoryDir,
+			"--server", c.fixture.baseURL, "--json", "submit", "batch", "--session", sessionID, request)
+		var physicalID string
+		for _, workID := range []string{"correlated-plan", "correlated-task"} {
+			endpoint := c.fixture.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + workID
+			waitForScopedUsageCommit(t, ctx, endpoint)
+			inputs := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			reread = append(reread, func() {
+				after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+				assertNormalizedFleetJSONEqual(t, "coexisting scopes preserve complete correlated rows", []byte(inputs.Stdout()), []byte(after.Stdout()))
+			})
+			var listed workerSessionListJSON
+			decodeCLIJSON(t, inputs, &listed)
+			if len(listed.Sessions) != 1 {
+				t.Fatalf("scope %s Work %s rows=%+v, want one physical attempt", sessionID, workID, listed)
+			}
+			row := listed.Sessions[0]
+			if row.FactorySessionID == nil || *row.FactorySessionID != sessionID || !containsString(row.WorkIDs, "correlated-plan") || !containsString(row.WorkIDs, "correlated-task") {
+				t.Fatalf("lost scope or multi-Work correlation: %+v", row)
+			}
+			assertScopedCapturedUsage(t, row)
+			if physicalID == "" {
+				physicalID = row.WorkerSessionID
+			} else if physicalID != row.WorkerSessionID {
+				t.Fatalf("participating Works returned different physical attempts: %s / %s", physicalID, row.WorkerSessionID)
+			}
+		}
+		if physicalID == "" || seen[physicalID] {
+			t.Fatalf("physical identity leaked across Factory Sessions: %q", physicalID)
+		}
+		seen[physicalID] = true
+	}
+	for _, read := range reread {
+		read()
+	}
+}
+
+func writeCorrelatedScopedFactory(t *testing.T, factoryDir, route string) {
+	t.Helper()
+	types := make([]any, 0, 2)
+	inputs, outputs := make([]any, 0, 2), make([]any, 0, 2)
+	for _, kind := range []string{"plan", "task"} {
+		types = append(types, map[string]any{"name": kind, "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "done", "type": "TERMINAL"}}})
+		inputs = append(inputs, map[string]any{"workType": kind, "state": "init"})
+		outputs = append(outputs, map[string]any{"workType": kind, "state": "done"})
+	}
+	raw, err := json.Marshal(map[string]any{"name": "correlated-scopes", "workTypes": types, "workers": []any{map[string]any{"name": "worker"}}, "workstations": []any{map[string]any{"name": "pair", "worker": "worker", "inputs": inputs, "outputs": outputs}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, factoryDir, "pair", "---\ntype: MODEL_WORKSTATION\n---\nworker-session-route="+route+"\n")
+}
+
+// Selected durable reads fail the entire customer list, unlike optional
+// transcript reads. Each fault is isolated by physical Worker identity on the
+// shared process; request cancellation must drain without canceling the Work.
+func testWorkerSessionsListWorkScopedSelectedReadFailure(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"cancel", "corrupt", "unavailable"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			c := newWorkerSessionsCLICase(t)
+			route := "worker-session-selected-read-" + kind
+			c.registerRoutes(t, route)
+			f := c.fixture
+			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+			defer cancel()
+			sessionID := c.openSession(t)
+			workID := submitWork(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, route)
+			row := waitForWorkerSessionState(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, workID, "COMPLETED")
+			endpoint := f.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
+			waitForScopedUsageCommit(t, ctx, endpoint)
+			before := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			var failure error
+			if kind == "corrupt" {
+				failure = fmt.Errorf("private-capture-path sentinel-secret: %w", recordings.ErrWorkerRecordingReplay)
+			}
+			if kind == "unavailable" {
+				failure = fmt.Errorf("private-capture-path sentinel-secret: %w", recordings.ErrMissingWorkerRecordingReader)
+			}
+			fault, clear := f.captureReads.summaryFault(t, row.WorkerSessionID, failure)
+			if kind == "cancel" {
+				assertScopedSelectedReadCancellation(t, ctx, c, sessionID, workID, fault)
+			} else {
+				assertScopedSelectedReadError(t, ctx, c, sessionID, workID, endpoint, kind)
+				if calls := fault.calls.Load(); calls != 2 {
+					t.Fatalf("selected %s calls=%d, want one per HTTP/CLI request", kind, calls)
+				}
+			}
+			clear()
+			after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			assertNormalizedFleetJSONEqual(t, "selected read recovery preserves complete committed facts", []byte(before.Stdout()), []byte(after.Stdout()))
+		})
+	}
+}
+
+func assertScopedSelectedReadCancellation(t *testing.T, ctx context.Context, c *workerSessionsCLICase, sessionID, workID string, fault *workerSessionSummaryFault) {
+	t.Helper()
+	f := c.fixture
+	readCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	inputs := support.FakeInputs(readCtx, []string{"you", "--server", f.baseURL, "worker-sessions", "list", "--session", sessionID, "--work-id", workID, "--output", "json"})
+	inputs.Input.Env = functionalEnvironment(f.homeDir)
+	inputs.Input.WorkingDirectory = c.factoryDir
+	done := make(chan error, 1)
+	go func() { done <- f.process.Execute(inputs.Input) }()
+	select {
+	case <-fault.reached:
+	case <-ctx.Done():
+		t.Fatalf("selected summary read never reached: %v", ctx.Err())
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) || strings.TrimSpace(inputs.Stdout()) != "" {
+			t.Fatalf("canceled list err=%v stdout=%q", err, inputs.Stdout())
+		}
+	case <-ctx.Done():
+		t.Fatalf("canceled list did not return: %v", ctx.Err())
+	}
+	assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), "WORKER_SESSION_LIST_FAILED", "selected summary cancellation")
+	select {
+	case <-fault.drained:
+	case <-ctx.Done():
+		t.Fatalf("selected summary read did not drain: %v", ctx.Err())
+	}
+	if calls := fault.calls.Load(); calls != 1 {
+		t.Fatalf("canceled selected read calls=%d, want one with no retry", calls)
+	}
+}
+
+func assertScopedSelectedReadError(t *testing.T, ctx context.Context, c *workerSessionsCLICase, sessionID, workID, endpoint, kind string) {
+	t.Helper()
+	wantStatus, wantCode := http.StatusInternalServerError, "WORKER_SESSION_RECORDING_CORRUPT"
+	if kind == "unavailable" {
+		wantStatus, wantCode = http.StatusServiceUnavailable, "WORKER_SESSION_RECORDING_UNAVAILABLE"
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != wantStatus {
+		t.Fatalf("selected %s read status=%d err=%v body=%s", kind, response.StatusCode, err, body)
+	}
+	assertFleetJSONErrorCode(t, body, wantCode, "selected read "+kind)
+	f := c.fixture
+	inputs, err := executeCLIExpectError(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir,
+		"--server", f.baseURL, "worker-sessions", "list", "--session", sessionID, "--work-id", workID, "--output", "json")
+	if err == nil || strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("selected %s CLI err=%v stdout=%q", kind, err, inputs.Stdout())
+	}
+	assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), wantCode, "selected read "+kind+" CLI")
+	for _, output := range []string{string(body), inputs.Stderr()} {
+		if strings.Contains(output, "sentinel-secret") || strings.Contains(output, "private-capture-path") || strings.Contains(output, `"sessions"`) {
+			t.Fatalf("selected %s read exposed private details or successful partial rows: %s", kind, output)
+		}
+	}
+}
 
 func testWorkerSessionsListWorkScopedFreshCommit(t *testing.T) {
 	t.Parallel()
@@ -59,17 +243,26 @@ func testWorkerSessionsListWorkScopedFreshCommit(t *testing.T) {
 
 func waitForScopedUsageCommit(t *testing.T, ctx context.Context, endpoint string) {
 	t.Helper()
+	waitForScopedAttemptsCommit(t, ctx, endpoint, 1)
+}
+
+func waitForScopedAttemptsCommit(t *testing.T, ctx context.Context, endpoint string, attempts int) {
+	t.Helper()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		listed := support.GetJSON[workerSessionListJSON](t, endpoint)
-		if len(listed.Sessions) == 1 && listed.Sessions[0].State == "COMPLETED" && listed.Sessions[0].TokenUsage != nil {
+		complete := len(listed.Sessions) == attempts
+		for _, row := range listed.Sessions {
+			complete = complete && row.State == "COMPLETED" && row.TokenUsage != nil
+		}
+		if complete {
 			return
 		}
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
-			t.Fatalf("usage never committed: %v", ctx.Err())
+			t.Fatalf("%d attempts never committed: rows=%d: %v", attempts, len(listed.Sessions), ctx.Err())
 		}
 	}
 }
@@ -124,23 +317,7 @@ func testWorkerSessionsListWorkScopedBoundedParity(t *testing.T) {
 	endpoint := f.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
 	// Completion is observed through the public projection because dispatch and
 	// committed capture publication are asynchronous, separate runtime steps.
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		listed := support.GetJSON[workerSessionListJSON](t, endpoint)
-		complete := len(listed.Sessions) == workScopedAttemptCount
-		for _, row := range listed.Sessions {
-			complete = complete && row.State == "COMPLETED" && row.TokenUsage != nil
-		}
-		if complete {
-			break
-		}
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			t.Fatalf("200 attempts never committed: rows=%d: %v", len(listed.Sessions), ctx.Err())
-		}
-	}
+	waitForScopedAttemptsCommit(t, ctx, endpoint, workScopedAttemptCount)
 	// A separate peer Factory Session proves Work/Session isolation while
 	// remaining parallel with independent scenarios on the reusable process.
 	peer := newWorkerSessionsCLICase(t)
@@ -148,6 +325,8 @@ func testWorkerSessionsListWorkScopedBoundedParity(t *testing.T) {
 	peerSession := peer.openSession(t)
 	peerWork := submitWork(t, ctx, f.process, env, peer.factoryDir, f.baseURL, peerSession, "worker-session-scoped-peer")
 	waitForWorkerSessionState(t, ctx, f.process, env, peer.factoryDir, f.baseURL, peerSession, peerWork, "COMPLETED")
+	unrelated := submitWork(t, ctx, f.process, env, c.factoryDir, f.baseURL, sessionID, "scoped-list-unrelated")
+	waitForScopedAttemptsCommit(t, ctx, f.baseURL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+url.QueryEscape(unrelated), workScopedAttemptCount)
 	assertWorkScopedSingleRead(t, ctx, c, sessionID, workID, endpoint)
 }
 
@@ -270,6 +449,10 @@ func testWorkerSessionsListWorkScopedDefault(t *testing.T) {
 		t.Fatalf("default selector lost complete Work: rows=%d", len(listed.Sessions))
 	}
 	assertCommittedScopedRows(t, listed, *listed.Sessions[0].FactorySessionID, workID)
+	resolvedID := *listed.Sessions[0].FactorySessionID
+	resolvedEndpoint := f.baseURL + "/factory-sessions/" + resolvedID + "/worker-sessions?workId=" + url.QueryEscape(workID)
+	resolved := observeWorkScopedRead(t, ctx, c, resolvedID, workID, resolvedEndpoint, false)
+	assertNormalizedFleetJSONEqual(t, "default alias versus resolved session", []byte(omitted.Stdout()), []byte(resolved.Stdout()))
 }
 
 func waitForDefaultScopedCommit(t *testing.T, ctx context.Context, endpoint string) {

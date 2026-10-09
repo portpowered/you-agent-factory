@@ -75,6 +75,7 @@ func TestRecordedWorkerSessionObservation_PreservesIncompleteOutputFromReplay(t 
 		platformclock.Real{},
 		nil,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil || len(result.Observations) != 1 {
@@ -772,6 +773,7 @@ func newRecordedExactObservationFixture(t *testing.T) recordedExactObservationFi
 			Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}, ProviderSession: providerMetadata,
 		}}}, nil
 	}, platformclock.NewDeterministic(base.Add(10*time.Second), time.Second), providerProjection)
+	prepareScopedTestFacts(service)
 	return recordedExactObservationFixture{service: service, ref: ref, workerSessionID: "worker-recorded-exact", workID: workID, inputTokens: inputTokens, transcriptText: transcriptText}
 }
 
@@ -875,7 +877,7 @@ func requireRecordedWorkerStream(t *testing.T, fixture recordedExactObservationF
 func TestRecordedWorkerSessionObservationResumesExclusivelyAndClassifiesCursors(t *testing.T) {
 	fixture := newRecordedExactObservationFixture(t)
 	adapter := fixture.service.(*recordedWorkerSessionObservation)
-	ledger := adapter.ledger.(*recordingfixtures.ScriptedRuntimeLedger)
+	ledger := adapter.ledger.(*preparedScopedTestLedger).RuntimeLedger.(*recordingfixtures.ScriptedRuntimeLedger)
 	ledger.GenerationID = "generation-1"
 	requireRecordedCursorResume(t, fixture)
 	requireRecordedCursorErrors(t, fixture, ledger)

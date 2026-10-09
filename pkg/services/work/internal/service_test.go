@@ -293,3 +293,7 @@ func TestNewServiceDelegatesPrepareWorkRequest(t *testing.T) {
 		}
 	}
 }
+
+func (*recordingFactory) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}

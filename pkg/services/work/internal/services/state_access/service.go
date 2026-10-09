@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/workeridentity"
 )
 
 // SessionAdapter is the private Factory Session port used for session-scoped
@@ -39,6 +40,10 @@ type SessionResolver interface {
 	ResolveSessionAdapter(string) (SessionAdapter, error)
 }
 
+// WorkerSessionWorkResolver binds a selected read without preparing unrelated
+// snapshots or admission projections.
+type WorkerSessionWorkResolver = workeridentity.AdapterResolver
+
 // Service is the singular state_access subservice contract for the published
 // submit, move, and read slice of the Work root Service.
 type Service interface {
@@ -46,5 +51,6 @@ type Service interface {
 	MoveWorkForSession(context.Context, string, string, string, string) (work.OperatorMoveResult, error)
 	ListWork(context.Context, string, work.ListOptions) (work.ListResult, error)
 	GetWork(context.Context, string, string) (work.ReadModel, error)
+	ResolveWorkerSessionWork(context.Context, string, string) (work.WorkerSessionWork, error)
 	MoveWorkAndRead(context.Context, string, string, string, string) (work.ReadModel, error)
 }

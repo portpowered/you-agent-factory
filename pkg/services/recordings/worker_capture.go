@@ -35,6 +35,9 @@ type WorkerCapturedSummary = recordingcontracts.WorkerCapturedSummary
 // Host activation prepares retained generations before accepting requests.
 type WorkerCapturedSummaryReader = recordingcontracts.WorkerCapturedSummaryReader
 
+// WorkerRecordingHealthReader reads selected, activation-prepared capture health.
+type WorkerRecordingHealthReader = recordingcontracts.WorkerRecordingHealthReader
+
 // WorkerControlInputMaxBytes bounds the complete serialized control input,
 // including execution settings and replacement text, before artifact encoding.
 const WorkerControlInputMaxBytes = 1 << 20

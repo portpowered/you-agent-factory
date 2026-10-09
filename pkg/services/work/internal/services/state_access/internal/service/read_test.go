@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service"
 )
 
@@ -692,5 +693,87 @@ func TestGetWorkAndMoveWorkAndReadOwnDetachedReadSemantics(t *testing.T) {
 	moved.State.Name = "mutated"
 	if runtime.snapshot.Items[0].State.Name != "complete" {
 		t.Fatalf("MoveWorkAndRead result mutated source snapshot: %#v", runtime.snapshot.Items[0])
+	}
+}
+
+func (*readRuntime) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}
+
+type selectedWorkSession struct {
+	stateaccess.SessionAdapter
+	read func(context.Context, string) (work.WorkerSessionWork, error)
+}
+
+func (a selectedWorkSession) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	return a.read(ctx, id)
+}
+
+type selectedWorkResolver func(string) (stateaccess.SessionAdapter, error)
+
+func (r selectedWorkResolver) ResolveSessionAdapter(id string) (stateaccess.SessionAdapter, error) {
+	return r(id)
+}
+
+func TestWorkerSessionWorkSelectsAuthorityWithoutSnapshot(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	resolver := selectedWorkResolver(func(session string) (stateaccess.SessionAdapter, error) {
+		if session == "missing-scope" {
+			return nil, work.ErrWorkNotFound
+		}
+		return selectedWorkSession{read: func(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+			calls++
+			if id == "missing" {
+				return work.WorkerSessionWork{}, work.ErrWorkNotFound
+			}
+			if id == "failed" {
+				return work.WorkerSessionWork{}, context.DeadlineExceeded
+			}
+			return work.WorkerSessionWork{WorkID: "resolved-work", Name: session + ":" + id}, nil
+		}}, nil
+	})
+	// No snapshot or durability collaborator: a selected read must not ask for
+	// the full snapshot, read annotations or canonical confirmation facts.
+	svc := internalservice.New(resolver, nil, nil)
+	for _, session := range []string{"session-a", "session-b"} {
+		item, err := svc.ResolveWorkerSessionWork(context.Background(), session, "cursor")
+		if err != nil || item.WorkID != "resolved-work" || item.Name != session+":cursor" {
+			t.Fatalf("selected authority: %#v, %v", item, err)
+		}
+		item.Name = "caller mutation"
+	}
+	if calls != 2 {
+		t.Fatalf("reads = %d, want 2", calls)
+	}
+	for id, want := range map[string]error{"missing": work.ErrWorkNotFound, "failed": context.DeadlineExceeded} {
+		item, err := svc.ResolveWorkerSessionWork(context.Background(), "session-a", id)
+		if !errors.Is(err, want) || item != (work.WorkerSessionWork{}) {
+			t.Fatalf("%s = %#v, %v", id, item, err)
+		}
+	}
+	before := calls
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := svc.ResolveWorkerSessionWork(ctx, "session-a", "cursor"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation = %v", err)
+	}
+	if calls != before {
+		t.Fatalf("canceled request read peer")
+	}
+	if _, err := svc.ResolveWorkerSessionWork(context.Background(), "missing-scope", "cursor"); !errors.Is(err, work.ErrWorkNotFound) {
+		t.Fatalf("missing scope = %v", err)
+	}
+}
+
+func TestWorkerSessionWorkRequiresSelectedCapability(t *testing.T) {
+	t.Parallel()
+	for _, resolver := range []stateaccess.SessionResolver{
+		nil, stubSessionResolver{}, stubSessionResolver{adapter: &recordingSessionAdapter{}},
+	} {
+		svc := internalservice.New(resolver, nil, nil)
+		if item, err := svc.ResolveWorkerSessionWork(context.Background(), "session-a", "cursor"); err == nil || item != (work.WorkerSessionWork{}) {
+			t.Fatalf("unsupported selected read = %#v, %v", item, err)
+		}
 	}
 }

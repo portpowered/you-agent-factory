@@ -14,6 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// WorkScopedListTranscriptBudget bounds optional transcript checks across one
+// Work list. Authoritative identity and committed metadata use the caller context.
+const WorkScopedListTranscriptBudget = 250 * time.Millisecond
+
 // ObservationService is retained as the public name for the Worker Sessions
 // observation capability. The capability is part of Service, so callers do
 // not need a second service locator or a type assertion to inspect a session.

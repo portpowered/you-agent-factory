@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -248,13 +249,21 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		f.cfg.worldStateProjector,
 		f.clock,
 		f.cfg.providerSessions,
-		f.cfg.replayEvents,
+		nil,
 		f.cfg.recordingID,
 		workerRecordingReader,
 		f.cfg.restoredWorldState,
-		f.cfg.restoredEventPrefix,
+		nil,
 		factorySessionID,
 	)
+	// History is detached once before readiness, then shared read-only by views.
+	f.mu.RLock()
+	history := f.observationHistory
+	f.mu.RUnlock()
+	view.replayEvents = history.replayEvents
+	view.restoredEventPrefix = history.restoredEventPrefix
+	view.restoredSessionIDs = history.restoredSessionIDs
+	view.restoredWorkerScopes = history.restoredWorkerScopes
 	view.runtimeID = strings.TrimSpace(f.cfg.runtimeID)
 	view.executionFactorySessionID = canonicalSessionIDFromFactoryConfig(f.cfg)
 	return view
@@ -272,6 +281,8 @@ type recordedWorkerSessionObservation struct {
 	replayEvents              []interfaces.FactoryEvent
 	restoredWorldState        *interfaces.FactoryWorldState
 	restoredEventPrefix       []interfaces.FactoryEvent
+	restoredSessionIDs        map[string]struct{}
+	restoredWorkerScopes      map[string]string
 	recordingID               string
 	recordingReader           recordings.WorkerRecordingReader
 	factorySessionID          string
@@ -280,54 +291,6 @@ type recordedWorkerSessionObservation struct {
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
-
-func (s *recordedWorkerSessionObservation) projectRecorded(
-	ctx context.Context,
-	events []interfaces.FactoryEvent,
-	workID string,
-	live map[string]workersessions.Observation,
-) ([]workersessions.Observation, bool, error) {
-	if err := observationContextError(ctx); err != nil {
-		return nil, false, err
-	}
-	ordered := cloneAndSortFactoryEvents(events)
-	selectedTick := latestFactoryEventTick(ordered)
-	world, err := s.projectRecordedWorldState(ctx, events, ordered, selectedTick)
-	if err != nil {
-		return nil, false, workersessions.ErrObservationProjectionUnavailable
-	}
-
-	knownWork := recordedWorkExists(world, ordered, workID)
-	associations, requests := recordedDispatchFacts(ordered)
-	if len(associations) == 0 {
-		return make([]workersessions.Observation, 0), knownWork, nil
-	}
-
-	completed := recordedDispatchStateMaps(world)
-	index := newRecordedDispatchEventIndex(ordered)
-	result := make([]workersessions.Observation, 0, len(associations))
-	for dispatchID, association := range associations {
-		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, index))
-		if !containsRecordedWorkID(fact.workIDs, workID) {
-			continue
-		}
-		observation := recordedObservationFromFact(fact, s.clock)
-		if observation.State == workersessions.StateCanceled {
-			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
-			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
-			if err != nil {
-				return nil, false, err
-			}
-		}
-		result = append(result, observation)
-	}
-	return result, knownWork, nil
-}
 
 func (s *recordedWorkerSessionObservation) canonicalEvents() []interfaces.FactoryEvent {
 	if s == nil {
@@ -453,7 +416,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	if s == nil || s.ledger == nil || (s.projector == nil && s.restoredWorldState == nil) {
+	if s == nil || s.ledger == nil {
 		result, err := s.listLive(ctx, req)
 		if err == nil {
 			s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
@@ -461,31 +424,112 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return result, err
 	}
 
+	optionalCtx, cancelOptional := context.WithTimeout(ctx, workersessions.WorkScopedListTranscriptBudget)
+	defer cancelOptional()
 	live, liveErr := s.listLive(ctx, req)
 	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
 		return workersessions.ListObservationsResult{}, liveErr
 	}
-	events := s.canonicalEvents()
-	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID, listedObservationIndex(live.Observations))
+	recorded, knownWork, facts, err := s.projectListedWorkSnapshot(ctx, optionalCtx, req.WorkID, listedObservationIndex(live.Observations))
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
+	health, err := s.selectedRecordingHealth(ctx, recorded, live.Observations)
+	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
+	s.decorateRecordingHealth(recorded, health)
 	if liveErr == nil {
-		if err := s.applyLiveRecordingHealth(ctx, live.Observations); err != nil {
-			return workersessions.ListObservationsResult{}, err
-		}
-		recorded = mergeRecordedObservations(recorded, live.Observations)
+		s.decorateLiveRecordingHealth(live.Observations, health)
+		var comparisons int
+		recorded, comparisons = mergeRecordedObservations(recorded, live.Observations)
+		s.recordScopedSort(len(recorded), comparisons)
 	}
 	sample := completedFlushWatermarkSample{}
 	if len(recorded) > 0 || len(live.Observations) > 0 {
 		sample = s.sampleCompletedFlushWatermark()
 	}
-	s.applyConfirmation(recorded, sample)
-	s.applyConfirmation(live.Observations, sample)
-	return recordedObservationListResult(recorded, knownWork, live, liveErr)
+	if err := applySelectedWorkConfirmation(ctx, recorded, *facts, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
+	if err := applySelectedWorkConfirmation(ctx, live.Observations, *facts, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
+	result, comparisons, err := recordedObservationListResult(recorded, knownWork, live, liveErr)
+	s.recordScopedSort(len(recorded), comparisons)
+	return result, err
+}
+
+// One request retains one detached selected snapshot for both row projection
+// and terminal confirmation. A concurrent append is visible on the next read.
+func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx, optionalCtx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+	facts, err := s.readSelectedWorkFacts(ctx, workID)
+	if err != nil {
+		return nil, false, nil, err
+	}
+	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
+	for id, request := range facts.Requests {
+		requests[id] = recordedDispatchRequest{workIDs: request.WorkItemIDs, startedAt: request.StartedAt}
+	}
+	index := recordedDispatchEventIndex{cursors: make(map[string]int64, len(facts.StateCursors)), responseTimes: facts.ResponseTimes, interruptions: make(map[string]recordedDispatchInterruptionFact, len(facts.Interruptions))}
+	for id, cursor := range facts.StateCursors {
+		index.cursors[id] = int64(cursor.Sequence)
+	}
+	for id, interruption := range facts.Interruptions {
+		index.interruptions[id] = recordedDispatchInterruptionFact{workIDs: facts.Requests[id].WorkItemIDs, interruptedAt: interruption.InterruptedAt, reason: interruption.Reason}
+	}
+	completed := recordedDispatchStateMaps(facts.World)
+	providers := make(map[string]interfaces.FactoryWorldProviderSessionRecord, len(facts.World.ProviderSessions))
+	for _, provider := range facts.World.ProviderSessions {
+		if _, exists := providers[provider.DispatchID]; !exists {
+			providers[provider.DispatchID] = provider
+		}
+	}
+	result := make([]workersessions.Observation, 0, len(facts.Associations))
+	for id, association := range facts.Associations {
+		var selectedProvider []interfaces.FactoryWorldProviderSessionRecord
+		if provider, ok := providers[id]; ok {
+			selectedProvider = []interfaces.FactoryWorldProviderSessionRecord{provider}
+		}
+		fact := s.annotateRecordedFact(recordedDispatchFact(id, recordedDispatchAssociation{workerSessionID: association.WorkerSessionID, turnID: association.TurnID, model: association.Model, reasoningEffort: association.ReasoningEffort, eventTime: association.AssociatedAt}, requests, completed, selectedProvider, facts.World.ActiveDispatches, index))
+		fact.streamGenerationID = facts.StreamGenerationID
+		observation := recordedObservationFromFact(fact, s.clock)
+		// Live rows already selected committed usage. Historical rows use the
+		// same bounded capture source, never provider-native transcripts.
+		if _, owned := live[observation.WorkerSessionID]; !owned {
+			observation, err = s.withSelectedCapturedIdentity(ctx, observation)
+			if err != nil {
+				return nil, false, nil, err
+			}
+			observation, err = s.withSelectedCapturedTranscript(ctx, optionalCtx, observation)
+			if err != nil {
+				return nil, false, nil, err
+			}
+		}
+		result = append(result, observation)
+	}
+	return result, facts.KnownWork, &facts, nil
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkFacts(ctx context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
+	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
+	if !ok {
+		return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
+	if err == nil {
+		return facts, nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationCanceled
+	}
+	if canceled := observationContextError(ctx); canceled != nil {
+		return recordings.WorkerSessionWorkFacts{}, canceled
+	}
+	return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationProjectionUnavailable
 }
 
 func recordedObservationListResult(
@@ -493,18 +537,29 @@ func recordedObservationListResult(
 	knownWork bool,
 	live workersessions.ListObservationsResult,
 	liveErr error,
-) (workersessions.ListObservationsResult, error) {
+) (workersessions.ListObservationsResult, int, error) {
 	if !knownWork && len(recorded) == 0 {
 		if liveErr == nil && len(live.Observations) > 0 {
-			return live, nil
+			return live, 0, nil
 		}
-		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
+		return workersessions.ListObservationsResult{}, 0, workersessions.ErrObservationWorkNotFound
 	}
 	if len(recorded) == 0 && liveErr == nil && len(live.Observations) > 0 {
-		return live, nil
+		return live, 0, nil
 	}
-	sortObservationAttempts(recorded)
-	return workersessions.ListObservationsResult{Observations: recorded}, nil
+	comparisons := sortObservationAttempts(recorded)
+	return workersessions.ListObservationsResult{Observations: recorded}, comparisons, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordScopedSort(rows, comparisons int) {
+	if recorder, ok := s.ledger.(interface {
+		RecordRuntimeReadMetric(recordings.RuntimeReadMetric)
+	}); ok {
+		recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+			Name:   "worker_sessions.read.selected_sort",
+			Labels: map[string]string{"sort_rows": strconv.Itoa(rows), "sort_comparisons": strconv.Itoa(comparisons)},
+		})
+	}
 }
 
 func (s *recordedWorkerSessionObservation) listLive(
@@ -664,14 +719,7 @@ func (s *recordedWorkerSessionObservation) withRecordingHealth(
 	return observation, nil
 }
 
-func (s *recordedWorkerSessionObservation) applyRecordingHealth(
-	ctx context.Context,
-	observations []workersessions.Observation,
-) error {
-	health, err := s.recordingHealth(ctx)
-	if err != nil {
-		return err
-	}
+func (s *recordedWorkerSessionObservation) decorateRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
 		if s != nil && s.factorySessionID != "" {
 			observations[index].FactorySessionID = s.factorySessionID
@@ -685,7 +733,6 @@ func (s *recordedWorkerSessionObservation) applyRecordingHealth(
 			}
 		}
 	}
-	return nil
 }
 
 func (s *recordedWorkerSessionObservation) validateRecordingHealth(ctx context.Context) error {
@@ -842,6 +889,11 @@ func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
 	if err != nil {
 		return err
 	}
+	s.decorateLiveRecordingHealth(observations, health)
+	return nil
+}
+
+func (s *recordedWorkerSessionObservation) decorateLiveRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
 		observation := &observations[index]
 		// Only restored lineage can be rebound; shared registries can contain
@@ -860,7 +912,6 @@ func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
 		}
 		*observation = liveRecordingHealth(*observation)
 	}
-	return nil
 }
 
 func liveRecordingHealth(observation workersessions.Observation) workersessions.Observation {
@@ -957,7 +1008,7 @@ func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
 	if s.Service != nil {
 		live, err := s.Service.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref})
 		if err == nil {
-			merged := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
+			merged, _ := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
 			if len(merged) == 1 {
 				return merged[0], nil
 			}

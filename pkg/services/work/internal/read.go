@@ -22,6 +22,10 @@ func (s *applicationService) GetWork(
 	return s.stateAccess.GetWork(ctx, sessionID, id)
 }
 
+func (s *applicationService) ResolveWorkerSessionWork(ctx context.Context, sessionID, id string) (work.WorkerSessionWork, error) {
+	return s.stateAccess.ResolveWorkerSessionWork(ctx, sessionID, id)
+}
+
 func (s *applicationService) MoveWorkAndRead(
 	ctx context.Context,
 	sessionID string,

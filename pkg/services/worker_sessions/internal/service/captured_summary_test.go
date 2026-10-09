@@ -12,6 +12,69 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type selectedHealthRecordingFake struct {
+	recordings.WorkerSessionRecordingService
+	read    func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+	summary func(context.Context, string) (recordings.WorkerCapturedSummary, error)
+}
+
+func (fake *selectedHealthRecordingFake) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return fake.summary(ctx, id)
+}
+
+func TestCapturedSummaryForwardsExactMetadataSelection(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	for _, want := range []error{nil, recordings.ErrWorkerRecordingReplay, context.Canceled} {
+		calls := 0
+		fake := &selectedHealthRecordingFake{summary: func(actual context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+			calls++
+			if actual != ctx || id != "worker" {
+				t.Fatalf("selected summary correlation = %v, %s", actual, id)
+			}
+			return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id}}}, want
+		}}
+		result, err := (&registry{recording: fake}).LookupWorkerSessionSummary(ctx, "worker")
+		if !errors.Is(err, want) || calls != 1 || result.Capture.Catalog.WorkerSessionID != "worker" {
+			t.Fatalf("selected summary = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	for _, registry := range []*registry{nil, {}, {recording: &observationRecordingServiceStub{}}} {
+		if _, err := registry.LookupWorkerSessionSummary(ctx, "worker"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+			t.Fatalf("missing selected summary = %v", err)
+		}
+	}
+}
+
+func (fake *selectedHealthRecordingFake) CurrentWorkerRecordingHealth(ctx context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	return fake.read(ctx, id, ids)
+}
+
+func TestCapturedSummaryForwardsSelectedRecordingHealth(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	failure := errors.New("selected-health-failure")
+	for _, want := range []error{nil, failure, context.Canceled} {
+		calls := 0
+		fake := &selectedHealthRecordingFake{read: func(actual context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+			calls++
+			if actual != ctx || id != "owned" || len(ids) != 1 || ids[0] != "worker" {
+				t.Fatalf("selected health correlation = %v, %s, %v", actual, id, ids)
+			}
+			return recordings.WorkerRecordingSnapshot{RecordingID: id}, want
+		}}
+		result, err := (&registry{recording: fake}).CurrentWorkerRecordingHealth(ctx, "owned", []string{"worker"})
+		if !errors.Is(err, want) || result.RecordingID != "owned" || calls != 1 {
+			t.Fatalf("selected health = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	for _, registry := range []*registry{nil, {}, {recording: &observationRecordingServiceStub{}}} {
+		if _, err := registry.CurrentWorkerRecordingHealth(ctx, "owned", nil); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+			t.Fatalf("missing selected health = %v", err)
+		}
+	}
+}
+
 type capturedSummaryFake struct {
 	capturedActivityFake
 	snapshot recordings.WorkerRecordingSnapshot

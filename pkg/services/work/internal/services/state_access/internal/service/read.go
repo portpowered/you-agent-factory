@@ -84,6 +84,39 @@ func (s *Service) GetWork(
 	return work.ReadModel{}, work.ErrWorkNotFound
 }
 
+func (s *Service) ResolveWorkerSessionWork(ctx context.Context, sessionID, id string) (work.WorkerSessionWork, error) {
+	if err := requireContext(ctx); err != nil {
+		return work.WorkerSessionWork{}, err
+	}
+	var reader work.WorkerSessionWorkRuntimeReader
+	if s != nil && s.sessions != nil {
+		if resolver, ok := s.sessions.(stateaccess.WorkerSessionWorkResolver); ok {
+			var err error
+			reader, err = resolver.ResolveWorkerSessionWorkAdapter(sessionID)
+			if err != nil {
+				return work.WorkerSessionWork{}, err
+			}
+		} else {
+			adapter, err := s.resolveSession(sessionID)
+			if err != nil {
+				return work.WorkerSessionWork{}, err
+			}
+			reader, _ = adapter.(work.WorkerSessionWorkRuntimeReader)
+		}
+	}
+	if reader == nil {
+		return work.WorkerSessionWork{}, errors.New("selected Work identity reader is required")
+	}
+	item, err := reader.ReadWorkerSessionWork(ctx, id)
+	if err != nil {
+		return work.WorkerSessionWork{}, fmt.Errorf("read selected Work identity: %w", err)
+	}
+	if err := requireContext(ctx); err != nil {
+		return work.WorkerSessionWork{}, err
+	}
+	return item, nil
+}
+
 func (s *Service) MoveWorkAndRead(
 	ctx context.Context,
 	sessionID string,

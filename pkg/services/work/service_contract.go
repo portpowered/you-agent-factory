@@ -3,12 +3,22 @@ package work
 import (
 	"context"
 	"io/fs"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/workeridentity"
 )
+
+// WorkerSessionWork contains selected authority and presentation facts.
+type WorkerSessionWork = workeridentity.Work
+
+// WorkerSessionWorkRuntimeReader selects a published Work identity without
+// materializing the complete Work snapshot or replaying canonical history.
+type WorkerSessionWorkRuntimeReader = workeridentity.Reader
 
 // Runtime is the narrow live-session capability consumed by Work operations.
 type Runtime interface {
 	SubmitWorkRequest(context.Context, WorkRequest) (WorkRequestSubmitResult, error)
 	ReadWorkSnapshot(context.Context) (ReadSnapshot, error)
+	ReadWorkerSessionWork(context.Context, string) (WorkerSessionWork, error)
 	MoveWork(
 		context.Context,
 		string,
@@ -23,6 +33,10 @@ type Runtime interface {
 type RuntimeResolver interface {
 	ResolveWorkRuntime(string) (Runtime, error)
 }
+
+// WorkerSessionWorkRuntimeResolver resolves only the selected read capability;
+// unrelated admission projections must not be activated by a scoped list.
+type WorkerSessionWorkRuntimeResolver = workeridentity.RuntimeResolver
 
 // RequestIDGenerator supplies opaque identity components for Work Requests and
 // chaining traces. Wire selects the production generator; callers that submit
@@ -72,6 +86,9 @@ type Service interface {
 	// GetWork is part of the published state-access slice. Peers look up one Work
 	// by id and receive a detached ReadModel, or ErrWorkNotFound when missing.
 	GetWork(context.Context, string, string) (ReadModel, error)
+	// ResolveWorkerSessionWork keeps cursor-before-Work precedence for authority
+	// and name, without projecting unrelated Work or changing attempt membership.
+	ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error)
 	// MoveWorkAndRead is the combined state-access outcome peers already rely on:
 	// apply an operator move, then return the detached post-move ReadModel (or a
 	// typed state-access failure such as ErrWorkNotFound or

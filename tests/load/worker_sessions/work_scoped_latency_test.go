@@ -103,7 +103,7 @@ func scopedLatencyHTTP(t *testing.T, ctx context.Context, endpoint string) ([]by
 	defer response.Body.Close()
 	raw, err := io.ReadAll(response.Body)
 	if err != nil || response.StatusCode != http.StatusOK {
-		t.Fatalf("scoped HTTP status=%d read=%v", response.StatusCode, err)
+		t.Fatalf("scoped HTTP status=%d read=%v body=%s", response.StatusCode, err, raw)
 	}
 	var decoded any
 	if err := json.Unmarshal(raw, &decoded); err != nil {

@@ -301,6 +301,8 @@ func (f *factoryImpl) SetReplayEvents(events []interfaces.FactoryEvent) {
 	if f == nil || f.cfg == nil {
 		return
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.cfg.replayEvents = cloneAndSortFactoryEvents(events)
 	if f.cfg.skipRestoredDispatchReconciliation {
 		f.engine.SetReplayLifecycleControls(f.cfg.replayEvents)
@@ -308,6 +310,7 @@ func (f *factoryImpl) SetReplayEvents(events []interfaces.FactoryEvent) {
 	if f.cfg.restoredWorldState != nil && len(f.cfg.restoredEventPrefix) == 0 {
 		f.cfg.restoredEventPrefix = cloneFactoryEventsInOrder(f.cfg.replayEvents)
 	}
+	f.observationHistory = prepareRecordedObservationHistory(f.cfg.replayEvents, f.cfg.restoredEventPrefix, workerCaptureReader(f.cfg.workerSessions))
 }
 
 // canonicalWorkerSessionControlEvents applies the same replay precedence used

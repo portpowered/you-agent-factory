@@ -177,6 +177,18 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	return result, nil
 }
 
+func (a workRuntimeAdapter) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return work.WorkerSessionWork{}, err
+		}
+	}
+	if reader, ok := a.runtime.(work.WorkerSessionWorkRuntimeReader); ok {
+		return reader.ReadWorkerSessionWork(ctx, id)
+	}
+	return work.WorkerSessionWork{}, factoryruntime.ErrNotRunning
+}
+
 func (a workRuntimeAdapter) recordWorkRead(observation workReadObservation) {
 	if a.readMetrics == nil {
 		return

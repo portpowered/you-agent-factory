@@ -38,7 +38,7 @@ func (a *Adapter) ListWorkerSessions(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
-	workModel, err := a.work.GetWork(ctx, sessionID, workID)
+	workModel, err := a.work.ResolveWorkerSessionWork(ctx, sessionID, workID)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return factoryapi.ListWorkerSessionsResponse{}, ctxErr

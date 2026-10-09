@@ -530,3 +530,21 @@ func (router *inferenceWorkerRecordingRouter) ReadWorkerCapturedActivity(ctx con
 	}
 	return reader.ReadWorkerCapturedActivity(ctx, request)
 }
+
+// Select through the same routed journal that accepted this identity. Scoped
+// observations must retain the real store's prepared health and committed facts.
+func (router *inferenceWorkerRecordingRouter) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	reader, ok := router.routeIdentity(recordingID, "").(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, ids)
+}
+
+func (router *inferenceWorkerRecordingRouter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	reader, ok := router.routeIdentity("", id).(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LookupWorkerSessionSummary(ctx, id)
+}

@@ -98,15 +98,58 @@ func observationMetadata() *observation {
 	}
 }
 
+func TestListObservationsCandidateVisitsCountDiscardedEntries(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	for _, id := range []string{"selected", "sibling", "removed"} {
+		metadata := observationMetadata()
+		metadata.factorySessionID = "owned"
+		if id == "sibling" {
+			metadata.workIDs = []string{"other-work"}
+		}
+		r.observations[id] = metadata
+		r.indexObservationBySessionWorkLocked(id, metadata)
+		if id != "removed" {
+			r.sessions[id] = observationSession(id, workersessions.StateRunning)
+		}
+	}
+	for _, tc := range []struct {
+		name, scope, work string
+		visits, rows      int
+	}{
+		{"selected", "owned", "work-1", 2, 1},
+		{"empty", "owned", "empty-work", 0, 0},
+		{"other-session", "other", "work-1", 0, 0},
+		{"unscoped", "", "work-1", 3, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ids, visits := r.observationCandidatesForWork(workersessions.ListObservationsRequest{FactorySessionID: tc.scope, WorkID: tc.work})
+			if visits != tc.visits || len(ids) != tc.rows {
+				t.Fatalf("visits=%d rows=%d, want visits=%d rows=%d", visits, len(ids), tc.visits, tc.rows)
+			}
+		})
+	}
+}
+
 type listUsageRecordingFake struct {
 	observationRecordingReaderStub
-	loads int
-	err   error
+	loads     int
+	fullLoads int
+	err       error
 }
 
 func (f *listUsageRecordingFake) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
-	f.loads++
+	f.fullLoads++
 	return f.snapshot, f.err
+}
+
+func (f *listUsageRecordingFake) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	f.loads++
+	summary, err := (replayCaptureReader{snapshot: f.snapshot}).LookupWorkerSessionSummary(ctx, id)
+	if f.err != nil {
+		return recordings.WorkerCapturedSummary{}, f.err
+	}
+	return summary, err
 }
 
 func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
@@ -138,14 +181,14 @@ func TestListObservationsReusesRequestSnapshotAndRefreshesUsage(t *testing.T) {
 		assertListCapturedUsage(t, i, row)
 		*row.TokenUsage.TotalTokens = -1
 	}
-	if f.loads != 1 {
-		t.Fatalf("recording reads = %d, want one per request", f.loads)
+	if f.loads != 3 || f.fullLoads != 0 {
+		t.Fatalf("recording reads = %d, want one selected summary per worker", f.loads)
 	}
 	f.snapshot.Sessions[0].Records = append(f.snapshot.Sessions[0].Records, events.Record{
 		Payload: []byte(`{"kind":"USAGE","phase":"UPDATED","payload":{"totalTokens":99}}`),
 	})
 	second := read()
-	if f.loads != 2 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
+	if f.loads != 6 || f.fullLoads != 0 || *second.Observations[0].TokenUsage.TotalTokens != 99 || *second.Observations[1].TokenUsage.TotalTokens != 2 {
 		t.Fatalf("fresh detached usage = %+v, loads=%d", second, f.loads)
 	}
 	assertListUnavailableCapture(t, f, read)
@@ -276,14 +319,14 @@ func TestInvokeObservationHelpersCoverTimingDiagnosticsAndClones(t *testing.T) {
 		t.Fatalf("sortObservationOrder() = %#v", orders)
 	}
 	tied := []observationOrder{{id: "b", startedAt: time.Unix(3, 0), attemptID: "a"}, {id: "a", startedAt: time.Unix(3, 0), attemptID: "a"}}
-	sortObservationOrder(tied)
-	if tied[0].id != "a" {
-		t.Fatalf("sortObservationOrder() tie = %#v, want id a first", tied)
+	comparisons := sortObservationOrder(tied)
+	if tied[0].id != "a" || comparisons != 1 {
+		t.Fatalf("sortObservationOrder() tie = %#v, comparisons=%d, want id a first and one comparison", tied, comparisons)
 	}
 	observations := []workersessions.Observation{{WorkerSessionID: "without-time", AttemptID: "b"}, {WorkerSessionID: "with-time", AttemptID: "a", StartedAt: timePointer(time.Unix(1, 0))}}
-	sortObservationAttempts(observations)
-	if observations[0].WorkerSessionID != "with-time" {
-		t.Fatalf("sortObservationAttempts() = %#v", observations)
+	comparisons = sortObservationAttempts(observations)
+	if observations[0].WorkerSessionID != "with-time" || comparisons != 1 {
+		t.Fatalf("sortObservationAttempts() = %#v, comparisons=%d", observations, comparisons)
 	}
 }
 

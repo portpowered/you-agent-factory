@@ -198,11 +198,15 @@ func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
 		return nil
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
 	h.canonicalEventsCalls.Add(1)
 	h.canonicalEventsCopied.Add(uint64(len(h.events)))
-	return cloneFactoryEvents(h.events)
+	events := cloneFactoryEvents(h.events)
+	h.mu.RUnlock()
+	h.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+		Name:   "factory_runtime.read.canonical_history",
+		Labels: map[string]string{"canonical_events_copied": strconv.Itoa(len(events))},
+	})
+	return events
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
