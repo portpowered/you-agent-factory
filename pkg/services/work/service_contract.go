@@ -3,19 +3,16 @@ package work
 import (
 	"context"
 	"io/fs"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/workeridentity"
 )
 
 // WorkerSessionWork contains selected authority and presentation facts.
-type WorkerSessionWork struct {
-	WorkID string
-	Name   string
-}
+type WorkerSessionWork = workeridentity.Work
 
 // WorkerSessionWorkRuntimeReader selects a published Work identity without
 // materializing the complete Work snapshot or replaying canonical history.
-type WorkerSessionWorkRuntimeReader interface {
-	ReadWorkerSessionWork(context.Context, string) (WorkerSessionWork, error)
-}
+type WorkerSessionWorkRuntimeReader = workeridentity.Reader
 
 // Runtime is the narrow live-session capability consumed by Work operations.
 type Runtime interface {
@@ -39,9 +36,7 @@ type RuntimeResolver interface {
 
 // WorkerSessionWorkRuntimeResolver resolves only the selected read capability;
 // unrelated admission projections must not be activated by a scoped list.
-type WorkerSessionWorkRuntimeResolver interface {
-	ResolveWorkerSessionWorkRuntime(string) (WorkerSessionWorkRuntimeReader, error)
-}
+type WorkerSessionWorkRuntimeResolver = workeridentity.RuntimeResolver
 
 // RequestIDGenerator supplies opaque identity components for Work Requests and
 // chaining traces. Wire selects the production generator; callers that submit

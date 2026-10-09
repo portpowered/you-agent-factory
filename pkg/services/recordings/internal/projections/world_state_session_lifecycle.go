@@ -429,7 +429,7 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 			ReasoningEffort string `json:"reasoningEffort"`
 		}
 		if err := event.DecodePayload(&payload); err != nil {
-			return nil
+			return nil //nolint:nilerr // Malformed optional association facts are ignored, matching the canonical reducer.
 		}
 		if payload.WorkerSessionID == "" {
 			return nil

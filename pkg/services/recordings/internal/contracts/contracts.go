@@ -19,6 +19,11 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// WorkerSessionWorkProjectionReader selects prepared facts from one session ledger.
+type WorkerSessionWorkProjectionReader interface {
+	CurrentWorkerSessionWorkFacts(context.Context, string) (sessionprojectionfacts.WorkerSessionWorkFacts, error)
+}
+
 // CompletedFlushWatermarkReader is the narrow durability capability exposed
 // by the recording lifecycle without widening the broad Recordings service
 // contract. Its cursor is comparable only within the requested stream

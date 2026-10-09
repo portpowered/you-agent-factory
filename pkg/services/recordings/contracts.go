@@ -3,7 +3,6 @@
 package recordings
 
 import (
-	"context"
 	"errors"
 
 	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
@@ -666,9 +665,7 @@ type RuntimeReadMetricsRecorder func(RuntimeReadMetric)
 
 // WorkerSessionWorkProjectionReader selects prepared dispatch facts for an
 // exact Work identity within one Factory Session ledger.
-type WorkerSessionWorkProjectionReader interface {
-	CurrentWorkerSessionWorkFacts(context.Context, string) (WorkerSessionWorkFacts, error)
-}
+type WorkerSessionWorkProjectionReader = recordingcontracts.WorkerSessionWorkProjectionReader
 
 // WorkerSessionWorkFacts contains detached, selected Work and dispatch facts.
 // The dependency-neutral vocabulary is shared by the ledger and projection.

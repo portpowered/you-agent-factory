@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/workeridentity"
 )
 
 // SessionAdapter is the private Factory Session port used for session-scoped
@@ -41,9 +42,7 @@ type SessionResolver interface {
 
 // WorkerSessionWorkResolver binds a selected read without preparing unrelated
 // snapshots or admission projections.
-type WorkerSessionWorkResolver interface {
-	ResolveWorkerSessionWorkAdapter(string) (work.WorkerSessionWorkRuntimeReader, error)
-}
+type WorkerSessionWorkResolver = workeridentity.AdapterResolver
 
 // Service is the singular state_access subservice contract for the published
 // submit, move, and read slice of the Work root Service.
