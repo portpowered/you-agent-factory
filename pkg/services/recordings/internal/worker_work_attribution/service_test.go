@@ -200,7 +200,9 @@ func TestWorkerWorkAttributionOptionalAbsenceAndCancellation(t *testing.T) {
 	if _, err = service.ResolveWorkerWorkAttribution(ctx, requests); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if _, err = service.ResolveWorkerWorkAttribution(nil, requests); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+	// A missing context is invalid input; retain this rejection witness.
+	var missingContext context.Context
+	if _, err = service.ResolveWorkerWorkAttribution(missingContext, requests); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatal(err)
 	}
 	if _, err = service.ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: " "}}); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
