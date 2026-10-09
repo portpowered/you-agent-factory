@@ -79,6 +79,7 @@ type (
 
 	ProviderOverrideService      = service.ProviderOverrideService
 	RuntimeResourceAcquisition   = service.RuntimeResourceAcquisition
+	RuntimeOpeningCompletion     = service.RuntimeOpeningCompletion
 	DurableOpening               = service.DurableOpening
 	DurableExecution             = service.DurableExecution
 	WorkerCommandRunnerAdapter   = service.WorkerCommandRunnerAdapter
@@ -127,7 +128,6 @@ func NewRoot(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	definitions factorydefinitions.Service,
-	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
 
 	snapshotSelection *RuntimeSnapshotSelection,
 	preparation *RuntimePreparation,
@@ -135,13 +135,12 @@ func NewRoot(
 	assembly RuntimeAssembly,
 	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
-	processRuntimeFactory ProcessRuntimeFactory,
+	openingCompletion *RuntimeOpeningCompletion,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
 	automationService automations.Service,
-	webhooksService webhooks.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
@@ -168,7 +167,6 @@ func NewRoot(
 		submissionRecorder,
 		dispatchRecorder,
 		definitions,
-		runtimeRouter,
 
 		snapshotSelection,
 		preparation,
@@ -176,13 +174,12 @@ func NewRoot(
 		assembly,
 		durableOpening,
 		resourceAcquisition,
-		processRuntimeFactory,
+		openingCompletion,
 		generateSessionID,
 		generateRuntimeInstanceID,
 		resolveHome,
 		workService,
 		automationService,
-		webhooksService,
 		modelService,
 		recordingsService,
 		recordingsRuntime,
@@ -293,4 +290,9 @@ type RuntimeInitialEngine = service.RuntimeInitialEngine
 func NewRuntimeInitialEngine(selection *RuntimeSnapshotSelection,
 	activate factoryruntime.InitialRuntimeActivationOperation) *RuntimeInitialEngine {
 	return service.NewRuntimeInitialEngine(selection.Resolve, activate)
+}
+
+func NewRuntimeOpeningCompletion(assembly RuntimeAssembly, routing *factorysessions.DefinitionRuntimeRouter,
+	webhooksService webhooks.Service, host ProcessRuntimeFactory) *RuntimeOpeningCompletion {
+	return service.NewRuntimeOpeningCompletion(assembly, routing, webhooksService, host)
 }

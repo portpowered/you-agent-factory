@@ -19,7 +19,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -57,6 +56,7 @@ type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
+	openingCompletion              *RuntimeOpeningCompletion
 	resourceAcquisition            *RuntimeResourceAcquisition
 	durableOpening                 *DurableOpening
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
@@ -66,9 +66,7 @@ type Root struct {
 	recordingsRuntime              recordings.RuntimeScopeService
 	recordingProjections           recordings.ProjectionService
 	replayInputs                   recordings.ReplayInputLoader
-	webhooksService                webhooks.Service
 	factoryDefinitions             factorydefinitions.Service
-	definitionRuntimeRouter        *factorysessions.DefinitionRuntimeRouter
 	initialEngine                  *RuntimeInitialEngine
 	workService                    work.Service
 	providerSessions               providersessions.Service
@@ -79,7 +77,6 @@ type Root struct {
 	resolveClock                   factoryruntime.ClockResolver
 	baseLogger                     *zap.Logger
 	runtimeLogs                    factoryruntime.RuntimeLogOwner
-	processRuntimeFactory          roles.ProcessRuntimeFactory
 	generateSessionID              factorysessions.SessionIDGenerator
 	generateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                    factorysessions.HomeDirectoryResolver
@@ -106,19 +103,17 @@ func NewRoot(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	definitions factorydefinitions.Service,
-	runtimeRouter *factorysessions.DefinitionRuntimeRouter,
 	snapshotSelection *RuntimeSnapshotSelection,
 	preparation *RuntimePreparation,
 	assembly roles.RuntimeAssembly,
 	durableOpening *DurableOpening,
 	resourceAcquisition *RuntimeResourceAcquisition,
-	processRuntimeFactory roles.ProcessRuntimeFactory,
+	openingCompletion *RuntimeOpeningCompletion,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
 	automationService automations.Service,
-	webhooksService webhooks.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
 	recordingsRuntime recordings.RuntimeScopeService,
@@ -150,9 +145,7 @@ func NewRoot(
 		recordingsRuntime:              recordingsRuntime,
 		recordingProjections:           recordingProjections,
 		replayInputs:                   recordingsRuntime,
-		webhooksService:                webhooksService,
 		factoryDefinitions:             definitions,
-		definitionRuntimeRouter:        runtimeRouter,
 		workService:                    workService,
 		providerSessions:               providerSessions,
 		factoryWorkflows:               factoryWorkflows,
@@ -162,7 +155,7 @@ func NewRoot(
 		resolveClock:                   resolveClock,
 		baseLogger:                     logger,
 		runtimeLogs:                    runtimeLogs,
-		processRuntimeFactory:          processRuntimeFactory,
+		openingCompletion:              openingCompletion,
 		generateSessionID:              generateSessionID,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
