@@ -153,21 +153,16 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
-	selectedService, _ := completed.SessionRuntime.(factoryruntime.Service)
 	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
 		RecordPath:  opening.configured.Recordings.RecordPath,
 		MockWorkers: opening.configured.Workers.MockWorkers,
-	}, completed.State, opening.clock, opening.startupRuntime, selectedService, completed.ProcessRuntime,
+	}, completed.State, opening.clock, opening.startupRuntime, completed.RuntimeService, completed.ProcessRuntime,
 		opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
 		lifecycle = completed.Lifecycle
 		closeArtifacts = cleanup.Close
-		if selected, ok := completed.SessionRuntime.(interface {
-			BindRuntime(string, factoryruntime.RuntimeBinding) error
-		}); ok {
-			bindRuntime = selected.BindRuntime
-		}
+		bindRuntime = completed.BindRuntime
 		opening.bindSelectedState(completed.State)
 		activation, err = newRuntimeActivation(opening.activation, cleanup.Close)
 	}
@@ -577,7 +572,8 @@ type RuntimeCompletionRequest struct {
 }
 
 type RuntimeCompletionResult struct {
-	SessionRuntime roles.ApplicationRuntime
+	RuntimeService factoryruntime.Service
+	BindRuntime    func(string, factoryruntime.RuntimeBinding) error
 	State          *runtimebinding.SessionState
 	Lifecycle      roles.LifecycleRuntime
 	ProcessRuntime roles.ProcessRuntime
@@ -664,7 +660,14 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
-	return RuntimeCompletionResult{SessionRuntime: session, State: state, Lifecycle: lifecycle, ProcessRuntime: process}, nil
+	service, _ := session.(factoryruntime.Service)
+	var bindRuntime func(string, factoryruntime.RuntimeBinding) error
+	if selected, ok := session.(interface {
+		BindRuntime(string, factoryruntime.RuntimeBinding) error
+	}); ok {
+		bindRuntime = selected.BindRuntime
+	}
+	return RuntimeCompletionResult{RuntimeService: service, BindRuntime: bindRuntime, State: state, Lifecycle: lifecycle, ProcessRuntime: process}, nil
 }
 
 func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session roles.ApplicationRuntime,

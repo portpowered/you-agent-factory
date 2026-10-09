@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRecordAcrossRegistryChange(t *te
 	result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
 		RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
 		&factoryruntime.RuntimeInitialOpening{}, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
-	if err != nil || result.State != selected || result.SessionRuntime != session ||
+	if err != nil || result.State != selected || result.Lifecycle != session ||
 		runtimebinding.SessionStateFrom(registration.Resolve("selected")) != newer {
 		t.Fatalf("completion retargeted its acquired record: %+v, %v", result, err)
 	}
@@ -83,6 +84,71 @@ func (fake completionWebhooks) Start(ctx context.Context, request webhooks.Start
 }
 
 type completionSession struct{ roles.ApplicationRuntime }
+
+type completionSelectedSession struct {
+	completionSession
+	factoryruntime.Service
+	bind func(string, factoryruntime.RuntimeBinding) error
+}
+
+func (session *completionSelectedSession) BindRuntime(id string, binding factoryruntime.RuntimeBinding) error {
+	return session.bind(id, binding)
+}
+
+func TestRuntimeOpeningCompletionRetainsSelectedRuntimeCapabilities(t *testing.T) {
+	t.Parallel()
+	for _, available := range []bool{false, true} {
+		t.Run(fmt.Sprint(available), func(t *testing.T) {
+			t.Parallel()
+			cause := &factorysessions.DetachedRequestError{Message: "selected publication failed"}
+			calls := 0
+			binding := (factoryruntime.RuntimeBinding{}).New("selected", bindingLegacyRuntime{})
+			selected := &completionSelectedSession{bind: func(id string, got factoryruntime.RuntimeBinding) error {
+				calls++
+				if id != "selected" || got != binding {
+					t.Fatal("publication substituted selected identity")
+				}
+				return cause
+			}}
+			var session roles.ApplicationRuntime = &completionSession{}
+			if available {
+				session = selected
+			}
+			registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
+			registration.register = func(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening, factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway, func(context.Context) error, error) {
+				registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{Owner: session.(runtimebinding.SessionProjectionOwner)}}
+				return session, nil, nil, nil, nil
+			}
+			routing := completionRouting{bind: func(string, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway) error {
+				return nil
+			}, unbind: func(string) {}}
+			host := completionHost(func(roles.LifecycleRuntime, factorysessions.RuntimeHostRequest, *zap.Logger) (roles.ProcessRuntime, error) {
+				registration.sessions["selected"] = &livesession.LiveSession{ID: "selected", Handle: &runtimebinding.SessionState{Owner: &completionSession{}}}
+				return nil, nil
+			})
+			cleanup := &runtimeOpeningCleanup{}
+			result, err := NewRuntimeOpeningCompletion(registration, routing, nil, host).Complete(t.Context(),
+				RuntimeCompletionRequest{Facts: roles.SessionOpeningFacts{FactorySessionID: "selected"}},
+				&factoryruntime.RuntimeInitialOpening{}, nil, nil, openingCoordinatorClock{}, zap.NewNop(), cleanup)
+			if err != nil || calls != 0 {
+				t.Fatalf("completion activated publication: %v calls=%d", err, calls)
+			}
+			if available {
+				if result.RuntimeService != selected || result.BindRuntime == nil {
+					t.Fatal("completion lost selected capabilities")
+				}
+				if err := result.BindRuntime("selected", binding); err != cause || calls != 1 {
+					t.Fatalf("selected publication cause: %v calls=%d", err, calls)
+				}
+			} else if result.RuntimeService != nil || result.BindRuntime != nil {
+				t.Fatal("completion invented optional capabilities")
+			}
+			if err := cleanup.Close(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
 func (*completionSession) BuildSessionProjectionContext(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
 	return factorysessions.ProjectionContext{}, nil
@@ -217,7 +283,7 @@ func (fixture completionSelectionFixture) open(t *testing.T, id string) (Runtime
 		return nil
 	}}
 	result, err := fixture.operation.Complete(t.Context(), request, initial, runtime.RecordingLedger(), runtime.BindModelsRuntimeScope, fixture.clock, fixture.logger, cleanup)
-	if err != nil || result.SessionRuntime != session || result.ProcessRuntime != fixture.process {
+	if err != nil || result.Lifecycle.(*successorBoardStartup).LifecycleRuntime != session || result.ProcessRuntime != fixture.process {
 		t.Fatalf("completion: %#v %v", result, err)
 	}
 
@@ -239,7 +305,7 @@ func TestRuntimeOpeningCompletionSelectionsAndOrdering(t *testing.T) {
 	for _, id := range []string{"first", "peer"} {
 		selected[id], cleanups[id] = fixture.open(t, id)
 	}
-	if selected["first"].SessionRuntime == selected["peer"].SessionRuntime {
+	if selected["first"].State.Owner == selected["peer"].State.Owner {
 		t.Fatal("overlapping openings shared runtime")
 	}
 	want := []string{"first:webhook", "first:register", "first:models", "first:route", "first:publish", "first:host", "peer:webhook", "peer:register", "peer:models", "peer:route", "peer:publish", "peer:host"}
@@ -383,7 +449,7 @@ type completionOwnershipKey struct{}
 func assertCompletionFailureCleanup(t *testing.T, stage string, cause, errorRelease error, result RuntimeCompletionResult, err error, cleanup *runtimeOpeningCleanup, releaseCalls, hookClose, routeClose *int) {
 	t.Helper()
 	var typed *factorysessions.DetachedRequestError
-	if !errors.Is(err, cause) || !errors.As(err, &typed) || result != (RuntimeCompletionResult{}) {
+	if !errors.Is(err, cause) || !errors.As(err, &typed) || !reflect.ValueOf(result).IsZero() {
 		t.Fatalf("completion error: %#v %v", result, err)
 	}
 	closeErr := cleanup.Close()
