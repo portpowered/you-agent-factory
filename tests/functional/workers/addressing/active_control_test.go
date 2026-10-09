@@ -311,6 +311,7 @@ func TestSelectedLegacyCollisionContinuation(t *testing.T) {
 	successor := body["successorWorkerSessionId"].(string)
 	waitAddressingCompleted(t, f, successor, live.session)
 	assertAddressingSuccessor(t, f, live, successor)
+	assertUniqueCapturedSuccessor(t, f, live, successor)
 	status, repeat := f.http(t, "POST", path, body)
 	if status != http.StatusAccepted {
 		t.Fatalf("repeat continuation = %d: %s", status, repeat)

@@ -1,11 +1,85 @@
 package addressing_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// F2-11: archived history proves a real captured representation exists while
+// the same process retains the terminal live observation. Both representations
+// must still address one identity, without requiring another root graph.
+func assertUniqueCapturedSuccessor(t *testing.T, f *replayFixture, owner replayOwner, successor string) {
+	t.Helper()
+	rows, err := support.WaitForObservation(15*time.Second, func() ([]factoryapi.WorkerSessionObservation, error) {
+		return addressingHistoryRows(t, f, "archived", successor)
+	}, func(rows []factoryapi.WorkerSessionObservation) bool { return len(rows) != 0 })
+	if err != nil {
+		t.Fatalf("successor capture did not become readable: %v", err)
+	}
+	assertSingleSuccessorRow(t, f, owner, successor, rows)
+	rows, err = addressingHistoryRows(t, f, "all", successor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSingleSuccessorRow(t, f, owner, successor, rows)
+	for _, scope := range []string{"", "?factorySessionId=" + owner.session} {
+		status, raw := f.http(t, "GET", "/worker-sessions/"+successor+scope, nil)
+		if status != http.StatusOK {
+			t.Fatalf("unique live/captured show = %d: %s", status, raw)
+		}
+		var observation factoryapi.WorkerSessionObservation
+		if err := json.Unmarshal(raw, &observation); err != nil {
+			t.Fatal(err)
+		}
+		assertSingleSuccessorRow(t, f, owner, successor, []factoryapi.WorkerSessionObservation{observation})
+	}
+	var observation factoryapi.WorkerSessionObservation
+	raw := f.cli(t, false, "show", "--worker-session-id", successor)
+	if err := json.Unmarshal(raw, &observation); err != nil {
+		t.Fatal(err)
+	}
+	assertSingleSuccessorRow(t, f, owner, successor, []factoryapi.WorkerSessionObservation{observation})
+}
+
+func addressingHistoryRows(t *testing.T, f *replayFixture, history, worker string) ([]factoryapi.WorkerSessionObservation, error) {
+	t.Helper()
+	status, raw := f.http(t, "GET", "/worker-sessions?history="+history, nil)
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("%s history = %d: %s", history, status, raw)
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	var rows []factoryapi.WorkerSessionObservation
+	for _, row := range response.Sessions {
+		if row.WorkerSessionId == worker {
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
+}
+
+func assertSingleSuccessorRow(t *testing.T, f *replayFixture, owner replayOwner, successor string, rows []factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if len(rows) != 1 {
+		t.Fatalf("live/captured successor has %d identities: %+v", len(rows), rows)
+	}
+	row := rows[0]
+	if row.WorkerSessionId != successor || row.FactorySessionId == nil || *row.FactorySessionId != owner.session ||
+		row.State != "COMPLETED" || !reflect.DeepEqual(row.WorkIds, []string{owner.work}) ||
+		row.PredecessorWorkerSessionId == nil || *row.PredecessorWorkerSessionId != f.worker {
+		t.Fatalf("live/captured successor lost selected identity: %+v", row)
+	}
+}
 
 // F2-11: the selected attempt awaits the real command cancellation callback
 // while a retained equal-ID owner stays independently readable. Concurrent
