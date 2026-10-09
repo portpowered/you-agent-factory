@@ -14,6 +14,10 @@ import (
 // WorkerCaptureClock supplies host commit-operation time.
 type WorkerCaptureClock interface{ Now() time.Time }
 
+// WorkerCapturePreparationOperation prepares committed capture facts before
+// runtime activation, independently of Factory Work-name attribution.
+type WorkerCapturePreparationOperation func(context.Context) error
+
 type WorkerCapturedActivityReader interface {
 	ListWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)

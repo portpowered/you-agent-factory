@@ -218,7 +218,12 @@ func startCancelDaemon(t *testing.T, ctx context.Context, binaryPath string, fix
 		daemon.mu.Unlock()
 		close(daemon.done)
 	}()
-	t.Cleanup(func() { cleanupCancelDaemon(daemon) })
+	t.Cleanup(func() {
+		cleanupCancelDaemon(daemon)
+		if t.Failed() {
+			t.Logf("prebuilt Factory daemon: error=%v; stdout=%s stderr=%s", daemon.waitError(), daemon.stdout.String(), daemon.stderr.String())
+		}
+	})
 	return daemon
 }
 

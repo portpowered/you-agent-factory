@@ -23,6 +23,10 @@ type WorkerWorkAttributionReader = recordingcontracts.WorkerWorkAttributionReade
 // before a host accepts controls or new execution. It never stops children.
 type WorkerOwnerRecoveryOperation func(context.Context) error
 
+// WorkerCapturePreparationOperation prepares committed captures before runtime
+// consumers start; it does not depend on Factory Session attribution.
+type WorkerCapturePreparationOperation = recordingcontracts.WorkerCapturePreparationOperation
+
 // WorkerCapturedSummary contains selected committed metadata and control facts.
 // Worker Sessions owns interpretation of the terminal cause.
 type WorkerCapturedSummary = recordingcontracts.WorkerCapturedSummary
