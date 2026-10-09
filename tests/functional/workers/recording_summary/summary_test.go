@@ -50,6 +50,7 @@ func (gate *readGate) read(path string) ([]byte, error) {
 // Restart gets a second graph because reconstructing retained state is the
 // behavior under test. All reads begin only after /status proves readiness.
 func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
+	t.Parallel()
 	profile := t.TempDir()
 	storeRoot := filepath.Join(profile, ".you-agent-factory", "worker-recordings")
 	if err := os.MkdirAll(storeRoot, 0o700); err != nil {
@@ -75,7 +76,7 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 			t.Run(id, func(t *testing.T) {
 				t.Parallel()
 				for i := 0; i < 3; i++ {
-					got := readSummary(t, host.Endpoint()+"/worker-sessions/"+id, http.StatusOK)
+					got := readSummary(t, host.URL()+"/worker-sessions/"+id, http.StatusOK)
 					assertSummary(t, got, id, id == "stopped")
 					*got.Model = "client mutation"
 				}
@@ -84,11 +85,11 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	})
 	t.Run("unavailable-is-private", func(t *testing.T) {
 		for _, id := range []string{"damaged", "ambiguous", "unreadable"} {
-			readSummary(t, host.Endpoint()+"/worker-sessions/"+id, http.StatusInternalServerError)
+			readSummary(t, host.URL()+"/worker-sessions/"+id, http.StatusInternalServerError)
 		}
 	})
 	t.Run("foreign-factory-is-not-found", func(t *testing.T) {
-		readSummary(t, host.Endpoint()+"/factory-sessions/foreign/worker-sessions/scoped", http.StatusNotFound)
+		readSummary(t, host.URL()+"/factory-sessions/foreign/worker-sessions/scoped", http.StatusNotFound)
 	})
 	if attempts := gate.attempts.Load(); attempts != 0 {
 		t.Fatalf("detail tried %d recording reads", attempts)
@@ -114,38 +115,30 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	restarted := startHost(t, factory, clean, restartGate)
 	restartGate.denied.Store(true)
 	for _, id := range []string{"first", "stopped", "owner-lost"} {
-		assertSummary(t, readSummary(t, restarted.Endpoint()+"/worker-sessions/"+id, http.StatusOK), id, id == "stopped")
+		assertSummary(t, readSummary(t, restarted.URL()+"/worker-sessions/"+id, http.StatusOK), id, id == "stopped")
 	}
-	readSummary(t, restarted.Endpoint()+"/worker-sessions/unknown", http.StatusNotFound)
+	readSummary(t, restarted.URL()+"/worker-sessions/unknown", http.StatusNotFound)
 	if attempts := restartGate.attempts.Load(); attempts != 0 {
 		t.Fatalf("restart tried %d recording reads", attempts)
 	}
 	stopHost(t, restarted)
 }
 
-func startHost(t *testing.T, factory, profile string, gate *readGate) *support.RootRunFunctionalHost {
+func startHost(t *testing.T, factory, profile string, gate *readGate) *support.FunctionalAPIServer {
 	t.Helper()
-	host, err := support.StartRootRunFunctionalHost(t.Context(), support.RootRunFunctionalHostConfig{
-		FactoryRoot: factory, SystemRoot: t.TempDir(), StartupTimeout: 60 * time.Second,
-		FunctionalEdges: serviceedges.Edges{
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factory, WorkingDirectory: profile, ServerReadyTimeout: time.Minute,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
 			FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: profile},
 			RecordingReadFile:               gate.read,
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { stopHost(t, host) })
-	return host
 }
 
-func stopHost(t *testing.T, host *support.RootRunFunctionalHost) {
+func stopHost(t *testing.T, host *support.FunctionalAPIServer) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if _, err := host.Shutdown(ctx); err != nil {
-		t.Error(err)
-	}
+	host.Close(t)
 }
 
 func readSummary(t *testing.T, endpoint string, want int) factoryapi.WorkerSessionObservation {
