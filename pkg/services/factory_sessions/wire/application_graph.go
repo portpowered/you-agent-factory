@@ -148,7 +148,7 @@ func NewRoot(
 	workerService workers.Service,
 	providerCommandRunner ProviderCommandRunner,
 	scriptCommandRunner ScriptCommandRunner,
-	initialActivation factoryruntime.InitialRuntimeActivationOperation,
+	initialEngine *RuntimeInitialEngine,
 	modelInvocation RuntimeModelInvocationOperation,
 	replayBehavior *HistoricalReplayBehavior,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
@@ -189,7 +189,7 @@ func NewRoot(
 		workerService,
 		providerCommandRunner,
 		scriptCommandRunner,
-		initialActivation,
+		initialEngine,
 		modelInvocation,
 		replayBehavior,
 		liveChangeCoordinator,
@@ -285,4 +285,12 @@ func NewRuntimePreparation(
 
 func NewRuntimeResourceAcquisition(opening *DurableOpening, modelService models.Service, providerOverride ProviderOverrideService) *RuntimeResourceAcquisition {
 	return service.NewRuntimeResourceAcquisition(opening.Open, modelService, providerOverride)
+}
+
+// RuntimeInitialEngine is the fixed initial activation behavior for live and checkpoint callers.
+type RuntimeInitialEngine = service.RuntimeInitialEngine
+
+func NewRuntimeInitialEngine(selection *RuntimeSnapshotSelection,
+	activate factoryruntime.InitialRuntimeActivationOperation) *RuntimeInitialEngine {
+	return service.NewRuntimeInitialEngine(selection.Resolve, activate)
 }

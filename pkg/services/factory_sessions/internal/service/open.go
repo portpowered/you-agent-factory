@@ -334,7 +334,7 @@ func (r *Root) openSessionEngine(ctx context.Context, opening *sessionRuntimeOpe
 		}
 	}
 
-	initial, err := r.openInitialSessionEngine(ctx, opening)
+	initial, err := r.initialEngine.OpenLive(ctx, opening.initialEngineRequest(), opening.observations)
 	if initial != nil {
 		opening.initial = initial
 		opening.startupRuntime = initial.Record
@@ -392,47 +392,33 @@ func (r *Root) claimSessionRecordingTarget(ctx context.Context, opening *session
 	return nil
 }
 
-func (r *Root) openInitialSessionEngine(ctx context.Context, opening *sessionRuntimeOpening) (*factoryruntime.RuntimeInitialOpening, error) {
-	if opening.configured.DefinitionSnapshot == nil {
-		resolved, err := r.snapshotSelection.Resolve(ctx, opening.configured.Definition,
-			opening.configured.Recordings, nil, opening.resumeInput, opening.sessionID)
-		if err != nil {
-			return nil, err
-		}
-		opening.configured.DefinitionSnapshot = &resolved.snapshot
+func (opening *sessionRuntimeOpening) initialEngineRequest() initialEngineLiveRequest {
+	config := opening.load.LoadedFactoryCfg.FactoryConfig()
+	request := initialEngineLiveRequest{
+		Configured: opening.configured, EffectiveFactory: *config,
+		ResumeInput: opening.resumeInput,
+		Recovery: factoryruntime.RuntimeActivationRecoveryInput{
+			WorldState: opening.restoredWorldState, EventHistory: opening.restoredEventHistory,
+			ReplayArtifact: opening.load.ReplayArtifact,
+		},
 	}
-	snapshot, err := opening.configured.DefinitionSnapshot.Clone()
-	if err != nil {
-		return nil, err
+	workers := config.Workers
+	workstations := config.Workstations
+	if snapshot := opening.configured.DefinitionSnapshot; snapshot != nil {
+		workers = snapshot.Workers
+		workstations = snapshot.Workstations
 	}
-	// Preserve provider normalization and worker selections made during the
-	// validated session preparation; carry only detached definition data.
-	config, err := factorydefinitions.CloneFactoryConfig(opening.load.LoadedFactoryCfg.FactoryConfig())
-	if err != nil {
-		return nil, err
-	}
-	snapshot.EffectiveFactory = *config
-	for index := range snapshot.Workers {
-		if worker, ok := opening.load.LoadedFactoryCfg.Worker(snapshot.Workers[index].Name); ok {
-			snapshot.Workers[index] = factorydefinitions.CloneWorkerConfig(*worker)
+	for _, selected := range workers {
+		if worker, ok := opening.load.LoadedFactoryCfg.Worker(selected.Name); ok {
+			request.Workers = append(request.Workers, *worker)
 		}
 	}
-	for index := range snapshot.Workstations {
-		if workstation, ok := opening.load.LoadedFactoryCfg.Workstation(snapshot.Workstations[index].Name); ok {
-			snapshot.Workstations[index] = factorydefinitions.CloneWorkstationConfig(*workstation)
+	for _, selected := range workstations {
+		if workstation, ok := opening.load.LoadedFactoryCfg.Workstation(selected.Name); ok {
+			request.Workstations = append(request.Workstations, *workstation)
 		}
 	}
-	inputs := runtimeActivationInputs(opening.configured.Definition, opening.configured.Session,
-		opening.canonicalSessionIDGenerated, opening.configured.Workers, opening.configured.Recordings,
-		opening.configured.ModelCacheDirectory, opening.configured.OperatorDefaults, opening.resumeInput)
-	inputs.RecoveryInput = factoryruntime.RuntimeActivationRecoveryInput{
-		WorldState: opening.restoredWorldState, EventHistory: opening.restoredEventHistory,
-		ReplayArtifact: opening.load.ReplayArtifact,
-	}
-	return r.initialActivation(ctx, factoryruntime.RuntimeActivationRequest{
-		RuntimeID: opening.configured.Runtime.RuntimeInstanceID, FactorySessionID: opening.sessionID,
-		Snapshot: snapshot, Runtime: opening.configured.Runtime, Inputs: inputs,
-	}, opening.observations)
+	return request
 }
 
 func (opening *sessionRuntimeOpening) warnMissingBoardHistory() {

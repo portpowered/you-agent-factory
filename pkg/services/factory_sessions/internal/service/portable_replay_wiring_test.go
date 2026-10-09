@@ -74,13 +74,13 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 	var events []string
 	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	factory.initialActivation = portableReplayRuntimeAssemblerStub{
+	factory.initialEngine = NewRuntimeInitialEngine(factory.snapshotSelection.Resolve, portableReplayRuntimeAssemblerStub{
 		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
 			events = append(events, "partial-runtime-close")
 			return artifactErr
 		}},
 		err: openingErr,
-	}.Open
+	}.Open)
 	products, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatal(err)
