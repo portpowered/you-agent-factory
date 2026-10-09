@@ -30,16 +30,23 @@ func TestAcceptedResponseSurvivesInvalidRecordingWithoutRetry(t *testing.T) {
 	runner := &invalidAcceptedResponseRunner{calls: make(map[string]int)}
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
 	support.CleanupProcess(t, process)
-	for _, shape := range []string{"missing", "preview", "inconsistent"} {
+	for _, shape := range []string{"missing", "preview", "inconsistent", "truncated", "missing envelope", "invalid proposed Work"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()
-			dir := support.ScaffoldFactory(t, acceptedResponsePauseFactory())
+			config := acceptedResponsePauseFactory()
+			if shape == "missing envelope" || shape == "invalid proposed Work" {
+				config = acceptedEnvelopeFactory()
+			}
+			dir := support.ScaffoldFactory(t, config)
 			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
 			for _, name := range []string{"process", "finish"} {
 				support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
 			}
 			session := uuid.NewString()
 			payload := invalidAcceptedRecording(t, shape, session)
+			if shape == "missing envelope" || shape == "invalid proposed Work" {
+				payload = invalidAcceptedEnvelopeRecording(t, config, session, shape)
+			}
 			source := filepath.Join(dir, "accepted-source.json")
 			if err := os.WriteFile(source, payload, 0o600); err != nil {
 				t.Fatal(err)
@@ -122,6 +129,10 @@ func invalidAcceptedRecording(t *testing.T, shape, session string) []byte {
 			content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "accepted recorded output COMPLETE"}}
 			response.OutputContent = &content
 		}
+		if shape == "truncated" {
+			content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: `{"output":"PRIVATE-ACCEPTED-PAYLOAD`}}
+			response.OutputContent = &content
+		}
 		addEvent(definitions.FactoryEventTypeModelResponse, response)
 	}
 	addEvent(definitions.FactoryEventTypeAgentRunResponse, workers.AgentRunResponseEventPayload{AgentRunID: dispatch + "/agent-run/1", Outcome: "ACCEPTED"})
@@ -133,6 +144,43 @@ func invalidAcceptedRecording(t *testing.T, shape, session string) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func invalidAcceptedEnvelopeRecording(t *testing.T, config map[string]any, session, shape string) []byte {
+	t.Helper()
+	var artifact definitions.ReplayArtifact
+	if err := json.Unmarshal(acceptedEnvelopeRecording(t, config, session, "text"), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	events := artifact.Events[:0]
+	for _, event := range artifact.Events {
+		if event.Type == definitions.FactoryEventTypeInferenceResponse {
+			if shape == "missing envelope" {
+				continue
+			}
+			var response workers.InferenceResponseEventPayload
+			if err := event.DecodePayload(&response); err != nil {
+				t.Fatal(err)
+			}
+			raw := strings.ReplaceAll(*response.Response, `"workTypeId":"task"`, `"workTypeId":"PRIVATE-ACCEPTED-PAYLOAD-unknown-type"`)
+			response.Response = &raw
+			var err error
+			event.Payload, err = json.Marshal(response)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		events = append(events, event)
+	}
+	artifact.Events = events
+	for index := range artifact.Events {
+		artifact.Events[index].Context.Sequence = index
+	}
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
 }
 
 func TestAcceptedResponseSurvivesRecordedCompletionWithoutRedispatch(t *testing.T) {

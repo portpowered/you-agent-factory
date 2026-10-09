@@ -92,7 +92,9 @@ func buildRestoredAcceptedDispatch(cfg *runtimeConfig, marking *petri.Marking, r
 	// Typed content follows the detached proposal/materialization boundary.
 	var proposal *workers.ProposedOutput
 	if len(content) != 1 || content[0].Type.Normalized() != work.WorkContentPartTypeText {
-		proposal = &workers.ProposedOutput{Primary: content}
+		detached := workers.ProposedOutputFromLegacyWorkResult(result)
+		detached.Primary = work.CloneWorkContentParts(content)
+		proposal = &detached
 	}
 	result = materializeWorkerOutputForDispatchWithProposal(context.Background(), cfg.workService, cfg.net,
 		cfg.workRequestIDs, workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{Dispatch: dispatch}}, result, proposal)
