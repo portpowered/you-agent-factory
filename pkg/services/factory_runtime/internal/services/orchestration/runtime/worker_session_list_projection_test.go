@@ -21,6 +21,20 @@ type preparedScopedTestLedger struct {
 	err    error
 }
 
+func (ledger *preparedScopedTestLedger) CurrentWorkerSessionFacts(ctx context.Context, workerID string) (recordings.WorkerSessionWorkFacts, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	for _, facts := range ledger.byWork {
+		for _, association := range facts.Associations {
+			if association.WorkerSessionID == workerID {
+				return facts, ledger.err
+			}
+		}
+	}
+	return recordings.WorkerSessionWorkFacts{}, ledger.err
+}
+
 func (ledger *preparedScopedTestLedger) CurrentWorkerSessionWorkFacts(ctx context.Context, id string) (recordings.WorkerSessionWorkFacts, error) {
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkerSessionWorkFacts{}, err
@@ -42,7 +56,7 @@ func prepareScopedTestFacts(service workersessions.Service) {
 	ordered := s.canonicalEvents()
 	world, err := s.projectRecordedWorldState(context.Background(), ordered, ordered, latestFactoryEventTick(ordered))
 	ledger := &preparedScopedTestLedger{RuntimeLedger: s.ledger, byWork: make(map[string]recordings.WorkerSessionWorkFacts), err: err}
-	workIDs := make(map[string]struct{})
+	workIDs := map[string]struct{}{"": {}}
 	for id := range world.WorkItemsByID {
 		workIDs[id] = struct{}{}
 	}
@@ -73,7 +87,7 @@ func preparedScopedTestWorkFacts(workID, generation string, world interfaces.Fac
 	}
 	for id, association := range associations {
 		fact := recordedDispatchFact(id, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, index)
-		if !containsRecordedWorkID(fact.workIDs, workID) {
+		if workID != "" && !containsRecordedWorkID(fact.workIDs, workID) {
 			continue
 		}
 		facts.Associations[id] = recordings.WorkerSessionAssociationFacts{WorkerSessionID: association.workerSessionID, TurnID: association.turnID, Model: association.model, ReasoningEffort: association.reasoningEffort, AssociatedAt: association.eventTime}

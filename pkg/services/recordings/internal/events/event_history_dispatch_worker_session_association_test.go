@@ -37,9 +37,12 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 		t.Fatal(err)
 	}
 	assertSeededWorkerSessionWorkFacts(t, seeded, dispatchID, prefix[len(prefix)-1].Context.Sequence)
+	assertExactWorkerSessionFacts(t, seeded, "worker-selected", "dispatch-selected")
 	record.DispatchID, record.Dispatch.DispatchID = "dispatch-next", "dispatch-next"
 	seeded.RecordWorkstationRequest(2, record, when.Add(time.Second))
 	seeded.RecordDispatchWorkerSessionAssociation(2, "dispatch-next", "worker-next", "turn-next", when.Add(time.Second))
+	assertExactWorkerSessionFacts(t, seeded, "worker-selected", "dispatch-selected")
+	assertExactWorkerSessionFacts(t, seeded, "worker-next", "dispatch-next")
 	fresh, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
 	if err != nil || len(fresh.Associations) != 2 || fresh.Associations["dispatch-next"].WorkerSessionID != "worker-next" {
 		t.Fatalf("new append did not update selected facts: %+v, %v", fresh, err)
@@ -51,6 +54,35 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 	}
 	if _, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected"); err != nil {
 		t.Fatalf("cancellation poisoned next read: %v", err)
+	}
+}
+
+func assertExactWorkerSessionFacts(t *testing.T, history *FactoryEventHistory, workerID, dispatchID string) {
+	t.Helper()
+	before := history.CanonicalHistoryReadStats()
+	facts, err := history.CurrentWorkerSessionFacts(t.Context(), workerID)
+	if err != nil || len(facts.Associations) != 1 || facts.Associations[dispatchID].WorkerSessionID != workerID {
+		t.Fatalf("exact prepared facts = %+v, %v", facts, err)
+	}
+	if facts.StreamGenerationID != history.StreamGenerationID() || facts.StateCursors[dispatchID].StreamGenerationID != facts.StreamGenerationID {
+		t.Fatal("exact prepared facts lost generation fence")
+	}
+	delete(facts.Associations, dispatchID)
+	again, err := history.CurrentWorkerSessionFacts(t.Context(), workerID)
+	if err != nil || len(again.Associations) != 1 {
+		t.Fatalf("exact facts not detached: %+v, %v", again, err)
+	}
+	missing, err := history.CurrentWorkerSessionFacts(t.Context(), "unknown")
+	if err != nil || len(missing.Associations) != 0 {
+		t.Fatalf("unknown Worker disclosed facts: %+v, %v", missing, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := history.CurrentWorkerSessionFacts(ctx, workerID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled exact prepared read = %v", err)
+	}
+	if history.CanonicalHistoryReadStats() != before {
+		t.Fatal("exact prepared read consumed canonical history")
 	}
 }
 

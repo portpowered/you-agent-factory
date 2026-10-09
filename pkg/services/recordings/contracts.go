@@ -667,6 +667,10 @@ type RuntimeReadMetricsRecorder func(RuntimeReadMetric)
 // exact Work identity within one Factory Session ledger.
 type WorkerSessionWorkProjectionReader = recordingcontracts.WorkerSessionWorkProjectionReader
 
+// WorkerSessionProjectionReader selects the same prepared dispatch facts by
+// physical Worker identity when capture correlation is unavailable.
+type WorkerSessionProjectionReader = recordingcontracts.WorkerSessionProjectionReader
+
 // WorkerSessionWorkFacts contains detached, selected Work and dispatch facts.
 // The dependency-neutral vocabulary is shared by the ledger and projection.
 type WorkerSessionWorkFacts = sessionprojectionfacts.WorkerSessionWorkFacts

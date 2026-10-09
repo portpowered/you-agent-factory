@@ -531,6 +531,7 @@ func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *test
 		nil,
 	)
 
+	prepareScopedTestFacts(service)
 	show, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
 	if err != nil {
 		t.Fatalf("GetObservationByWorkerSessionID() error = %v", err)
@@ -856,6 +857,7 @@ func TestRecordedWorkerSessionObservationFallsBackOnTypedAbsence(t *testing.T) {
 			return interfaces.FactoryWorldState{}, nil
 		},
 	}
+	prepareScopedTestFacts(service)
 	got, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-early"})
 	if err != nil || got.WorkerSessionID != "worker-early" || got.AttemptID != "dispatch-early" || got.StartedAt == nil || !got.StartedAt.Equal(base.Add(time.Second)) {
 		t.Fatalf("typed-absence fallback = %#v, %v; want unchanged recorded identity and timing", got, err)

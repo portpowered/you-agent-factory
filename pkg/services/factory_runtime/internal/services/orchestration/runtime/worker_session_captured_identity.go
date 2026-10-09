@@ -228,8 +228,8 @@ func selectedCapturedTranscriptMatches(transcript workersessions.ReadTranscriptR
 
 // The committed opening supplies a Work selector, not authority. Membership
 // still comes from the selected canonical association in the owning ledger.
-// Older readers without materialized capture correlation retain their existing
-// fallback; a selected storage failure never falls back to canonical replay.
+// Missing capture correlation uses the ledger's prepared selector; a selected
+// storage failure never falls back to canonical replay.
 func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx context.Context, workerID string) (workersessions.Observation, bool, bool, error) {
 	if s.recordingID == "" {
 		return workersessions.Observation{}, false, false, nil
@@ -273,46 +273,46 @@ func (s *recordedWorkerSessionObservation) readSelectedCapturedWorker(ctx contex
 	if opening.WorkerSessionID != workerID || summary.Capture.Catalog.WorkerSessionID != workerID {
 		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
 	}
+	observation, found, err := s.readSelectedWorkerSummary(ctx, workerID, opening.WorkIDs[0], opening.DispatchID)
+	return observation, found, true, err
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkerSummary(ctx context.Context, workerID, workID, dispatchID string) (workersessions.Observation, bool, error) {
+	facts, err := s.readSelectedWorkFacts(ctx, workID)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	return s.readSelectedWorkerFactsSummary(ctx, workerID, dispatchID, facts)
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkerFactsSummary(ctx context.Context, workerID, dispatchID string, selected recordings.WorkerSessionWorkFacts) (workersessions.Observation, bool, error) {
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, false, err
+	}
 	// Exact summary reads do not need optional transcript enrichment.
 	optionalCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	rows, _, facts, err := s.projectSelectedWorkSnapshot(ctx, optionalCtx, opening.WorkIDs[0], nil, workerID)
+	rows, _, facts, err := s.projectWorkerSnapshotFacts(ctx, optionalCtx, selected, nil, workerID)
 	if err != nil {
-		return workersessions.Observation{}, false, true, err
+		return workersessions.Observation{}, false, err
 	}
 	if len(rows) == 0 {
-		return workersessions.Observation{}, false, true, nil
+		return workersessions.Observation{}, false, nil
 	}
-	if len(rows) != 1 || rows[0].AttemptID != opening.DispatchID {
-		return workersessions.Observation{}, false, true, workersessions.ErrObservationRecordingCorrupt
+	if len(rows) != 1 || (dispatchID != "" && rows[0].AttemptID != dispatchID) {
+		return workersessions.Observation{}, false, workersessions.ErrObservationRecordingCorrupt
 	}
 	health, err := s.selectedRecordingHealth(ctx, rows, nil)
 	if err != nil {
-		return workersessions.Observation{}, false, true, err
+		return workersessions.Observation{}, false, err
 	}
 	s.decorateRecordingHealth(rows, health)
 	if err := applySelectedWorkConfirmation(ctx, rows, *facts, s.sampleCompletedFlushWatermark()); err != nil {
-		return workersessions.Observation{}, false, true, err
+		return workersessions.Observation{}, false, err
 	}
-	return rows[0], true, true, nil
+	return rows[0], true, nil
 }
 
-// Exact-ID runtime reads share the selected capture and health capabilities
-// used by scoped lists. Current-runtime attribution remains distinct from the
-// immutable captured owner exposed by archived inspection.
-func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
-	observation, err := s.withSelectedCapturedIdentity(ctx, observation)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	health, err := s.selectedRecordingHealth(ctx, []workersessions.Observation{observation}, nil)
-	if err != nil {
-		return workersessions.Observation{}, err
-	}
-	rows := []workersessions.Observation{observation}
-	s.decorateRecordingHealth(rows, health)
-	return rows[0], nil
-}
 func capturedWorkerUsageRecords(records []events.Record, head uint64) *workersessions.TokenUsage {
 	var usage *workersessions.TokenUsage
 	for _, record := range records {

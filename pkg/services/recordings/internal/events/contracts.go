@@ -76,6 +76,29 @@ var _ recordings.DispatchWorkerSessionAssociationRecorder = (*FactoryEventHistor
 var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.SessionProjectionReader = (*FactoryEventHistory)(nil)
 var _ recordings.WorkerSessionWorkProjectionReader = (*FactoryEventHistory)(nil)
+var _ recordings.WorkerSessionProjectionReader = (*FactoryEventHistory)(nil)
+
+// CurrentWorkerSessionFacts selects one append-maintained association, including
+// seeded legacy histories with no Worker capture. It never copies history.
+func (h *FactoryEventHistory) CurrentWorkerSessionFacts(ctx context.Context, workerID string) (recordings.WorkerSessionWorkFacts, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	if h == nil {
+		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("factory event history is unavailable")
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	if h.sessionProjectionErr != nil {
+		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
+	}
+	facts, _ := h.sessionProjection.WorkerSessionFacts(workerID)
+	h.fenceWorkerSessionFacts(&facts)
+	return facts, nil
+}
 
 // CurrentWorkerSessionWorkFacts reads only matching materialized dispatches;
 // activation and canonical append own preparation, including a seeded prefix.
@@ -108,6 +131,11 @@ func (h *FactoryEventHistory) currentWorkerSessionWorkFacts(ctx context.Context,
 		return recordings.WorkerSessionWorkFacts{}, 0, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
 	}
 	facts, visits := h.sessionProjection.WorkerSessionWorkFacts(workID)
+	h.fenceWorkerSessionFacts(&facts)
+	return facts, visits, nil
+}
+
+func (h *FactoryEventHistory) fenceWorkerSessionFacts(facts *recordings.WorkerSessionWorkFacts) {
 	facts.StreamGenerationID = h.streamGenerationID
 	for id, cursor := range facts.StateCursors {
 		cursor.StreamGenerationID = h.streamGenerationID
@@ -117,7 +145,6 @@ func (h *FactoryEventHistory) currentWorkerSessionWorkFacts(ctx context.Context,
 		cursor.StreamGenerationID = h.streamGenerationID
 		facts.ResponseCursors[id] = cursor
 	}
-	return facts, visits, nil
 }
 
 // CurrentSessionProjectionFacts returns detached event-derived facts maintained

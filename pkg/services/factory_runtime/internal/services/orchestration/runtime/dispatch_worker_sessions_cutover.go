@@ -474,6 +474,11 @@ func (s *recordedWorkerSessionObservation) projectSelectedWorkSnapshot(ctx, opti
 	if err != nil {
 		return nil, false, nil, err
 	}
+	return s.projectWorkerSnapshotFacts(ctx, optionalCtx, facts, live, workerSessionID)
+}
+
+func (s *recordedWorkerSessionObservation) projectWorkerSnapshotFacts(ctx, optionalCtx context.Context, facts recordings.WorkerSessionWorkFacts, live map[string]workersessions.Observation, workerSessionID string) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
+	var err error
 	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
 	for id, request := range facts.Requests {
 		requests[id] = recordedDispatchRequest{workIDs: request.WorkItemIDs, startedAt: request.StartedAt}
@@ -850,16 +855,18 @@ func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
 	if observation, found, selected, err := s.readSelectedCapturedWorker(ctx, workerSessionID); selected {
 		return observation, found, err
 	}
-	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, workerSessionID)
-	if err != nil || !found {
-		return workersessions.Observation{}, found, err
+	selector, ok := s.ledger.(recordings.WorkerSessionProjectionReader)
+	if !ok {
+		return workersessions.Observation{}, false, workersessions.ErrObservationProjectionUnavailable
 	}
-	observation := recordedObservationFromFact(fact, s.clock)
-	observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+	facts, err := selector.CurrentWorkerSessionFacts(ctx, workerSessionID)
 	if err != nil {
-		return workersessions.Observation{}, false, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || observationContextError(ctx) != nil {
+			return workersessions.Observation{}, false, workersessions.ErrObservationCanceled
+		}
+		return workersessions.Observation{}, false, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.confirmedObservation(observation), true, nil
+	return s.readSelectedWorkerFactsSummary(ctx, workerSessionID, "", facts)
 }
 
 func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(

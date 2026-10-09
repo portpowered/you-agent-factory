@@ -216,6 +216,62 @@ func TestExactCapturedWorkerUsesSelectedCanonicalFacts(t *testing.T) {
 	}
 }
 
+func (ledger *selectedWorkFactsLedger) CurrentWorkerSessionFacts(ctx context.Context, workerID string) (recordings.WorkerSessionWorkFacts, error) {
+	ledger.reads++
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	for id, association := range ledger.facts.Associations {
+		if association.WorkerSessionID == workerID {
+			if ids := ledger.facts.Requests[id].WorkItemIDs; len(ids) > 0 {
+				ledger.workID = ids[0]
+			}
+			return ledger.facts, ledger.err
+		}
+	}
+	return recordings.WorkerSessionWorkFacts{}, ledger.err
+}
+
+func TestExactLegacyWorkerUsesPreparedSelectorWithoutHistoryReplay(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"legacy opening", "missing capture", "unknown worker", "projection unavailable", "projection canceled"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRecordedExactObservationFixture(t)
+			service := fixture.service.(*recordedWorkerSessionObservation)
+			facts := service.ledger.(*preparedScopedTestLedger).byWork[fixture.workID]
+			ledger := &selectedWorkFactsLedger{RuntimeLedger: service.ledger, facts: facts}
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
+			service.ledger, service.recordingReader, service.recordingID = ledger, reader, "owned"
+			service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+				panic("legacy exact summary replayed canonical history")
+			}
+			workerID := fixture.workerSessionID
+			var want error
+			switch scenario {
+			case "missing capture":
+				reader.err = os.ErrNotExist
+			case "unknown worker":
+				workerID, reader.err, want = "unknown", os.ErrNotExist, workersessions.ErrObservationSessionNotFound
+			case "projection unavailable":
+				ledger.err, want = errors.New("unavailable"), workersessions.ErrObservationProjectionUnavailable
+			case "projection canceled":
+				ledger.err, want = context.Canceled, workersessions.ErrObservationCanceled
+			}
+			got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID})
+			if !errors.Is(err, want) || (want != nil && got.WorkerSessionID != "") {
+				t.Fatalf("prepared legacy summary = %+v, %v; want %v", got, err, want)
+			}
+			if want == nil && (got.WorkerSessionID != workerID || got.State != workersessions.StateCompleted || ledger.reads != 1 || ledger.workID != fixture.workID) {
+				t.Fatalf("legacy identity lost prepared facts: %+v, selector=%q reads=%d", got, ledger.workID, ledger.reads)
+			}
+			if scenario == "missing capture" && got.TokenUsage != nil {
+				t.Fatal("missing capture fabricated usage")
+			}
+		})
+	}
+}
+
 func TestScopedWorkHistoricalCaptureErrorsDoNotReturnPartialRows(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

@@ -42,6 +42,29 @@ func TestIncrementalSessionProjection_WorkerSessionWorkSelectsAndDetachesMatchin
 	assertUnassociatedWorkerFactsVisit(t, projection)
 }
 
+func TestIncrementalSessionProjection_ExactWorkerWithoutWorkAndReplacementAssociation(t *testing.T) {
+	t.Parallel()
+	projection := NewIncrementalSessionProjection()
+	dispatchID := "attempt"
+	for _, workerID := range []string{"original", "replacement"} {
+		event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			interfaces.FactoryEventContext{DispatchID: &dispatchID}, map[string]string{"workerSessionId": workerID})
+		if err := projection.Apply(event); err != nil {
+			t.Fatal(err)
+		}
+		facts, visits := projection.WorkerSessionFacts(workerID)
+		if visits != 1 || len(facts.Associations) != 1 || facts.Associations[dispatchID].WorkerSessionID != workerID {
+			t.Fatalf("Work-free physical selection = %+v, visits=%d", facts, visits)
+		}
+	}
+	for _, workerID := range []string{"original", "unknown"} {
+		facts, visits := projection.WorkerSessionFacts(workerID)
+		if len(facts.Associations) != 0 || visits != 0 {
+			t.Fatalf("stale or unknown association selected facts: %+v, visits=%d", facts, visits)
+		}
+	}
+}
+
 func assertSelectedWorkerFactsDetached(t *testing.T, projection *IncrementalSessionProjection, workID string) {
 	t.Helper()
 	facts, visits := projection.WorkerSessionWorkFacts(workID)

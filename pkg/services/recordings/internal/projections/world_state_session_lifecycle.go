@@ -378,6 +378,7 @@ type workerSessionWorkIndex struct {
 	known              map[string]struct{}
 	byWork             map[string]map[string]struct{}
 	workByDispatch     map[string][]string
+	dispatchByWorker   map[string]string
 	associations       map[string]sessionprojectionfacts.WorkerSessionAssociationFacts
 	requests           map[string]interfaces.FactoryWorldDispatch
 	completions        map[string]int
@@ -392,10 +393,11 @@ type workerSessionWorkIndex struct {
 func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
 	return &workerSessionWorkIndex{
 		known: make(map[string]struct{}), byWork: make(map[string]map[string]struct{}),
-		workByDispatch: make(map[string][]string),
-		associations:   make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
-		requests:       make(map[string]interfaces.FactoryWorldDispatch),
-		completions:    make(map[string]int), providers: make(map[string]int),
+		workByDispatch:   make(map[string][]string),
+		dispatchByWorker: make(map[string]string),
+		associations:     make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
+		requests:         make(map[string]interfaces.FactoryWorldDispatch),
+		completions:      make(map[string]int), providers: make(map[string]int),
 		cursors:            make(map[string]sessionprojectionfacts.CanonicalEventCursor),
 		responseTimes:      make(map[string]time.Time),
 		responseCursors:    make(map[string]sessionprojectionfacts.CanonicalEventCursor),
@@ -434,6 +436,10 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 		if payload.WorkerSessionID == "" {
 			return nil
 		}
+		if previous := index.associations[dispatchID].WorkerSessionID; previous != "" && index.dispatchByWorker[previous] == dispatchID {
+			delete(index.dispatchByWorker, previous)
+		}
+		index.dispatchByWorker[payload.WorkerSessionID] = dispatchID
 		index.associations[dispatchID] = sessionprojectionfacts.WorkerSessionAssociationFacts{
 			WorkerSessionID: payload.WorkerSessionID, TurnID: stringValue(event.Context.RequestID),
 			Model: optionalWorkerFactString(payload.Model), ReasoningEffort: optionalWorkerFactString(payload.ReasoningEffort),
@@ -463,6 +469,19 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 	}
 	index.updateMembership(dispatchID, state)
 	return nil
+}
+
+// WorkerSessionFacts selects one physical association without walking history
+// or requiring capture correlation or a Work-bearing request.
+func (projection *IncrementalSessionProjection) WorkerSessionFacts(workerID string) (sessionprojectionfacts.WorkerSessionWorkFacts, int) {
+	var selected map[string]struct{}
+	if projection != nil && projection.workerWork != nil {
+		index := projection.workerWork
+		if dispatchID, found := index.dispatchByWorker[workerID]; found && index.associations[dispatchID].WorkerSessionID == workerID {
+			selected = map[string]struct{}{dispatchID: {}}
+		}
+	}
+	return projection.selectedWorkerSessionFacts("", selected)
 }
 
 func optionalWorkerFactString(value string) *string {
@@ -501,6 +520,14 @@ func (index *workerSessionWorkIndex) updateMembership(dispatchID string, state i
 // WorkerSessionWorkFacts selects from the exact Work index. The ledger holds
 // its read lock across selection and supplies the generation fence.
 func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) (sessionprojectionfacts.WorkerSessionWorkFacts, int) {
+	var selected map[string]struct{}
+	if projection != nil && projection.workerWork != nil {
+		selected = projection.workerWork.byWork[workID]
+	}
+	return projection.selectedWorkerSessionFacts(workID, selected)
+}
+
+func (projection *IncrementalSessionProjection) selectedWorkerSessionFacts(workID string, selected map[string]struct{}) (sessionprojectionfacts.WorkerSessionWorkFacts, int) {
 	facts := sessionprojectionfacts.WorkerSessionWorkFacts{
 		Associations:    make(map[string]sessionprojectionfacts.WorkerSessionAssociationFacts),
 		Requests:        make(map[string]interfaces.FactoryWorldDispatch),
@@ -519,7 +546,7 @@ func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID st
 		facts.KnownWork, facts.WorkName = true, item.DisplayName
 	}
 	visits := 0
-	for dispatchID := range index.byWork[workID] {
+	for dispatchID := range selected {
 		visits++
 		association, ok := index.associations[dispatchID]
 		if !ok || association.WorkerSessionID == "" {
