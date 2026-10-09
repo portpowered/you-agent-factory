@@ -629,6 +629,7 @@ const (
 	// failure emitted when a successful worker did not produce its declared
 	// workspace files.
 	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeWorkerDeclaredFailure        WorkFailureType = "worker_declared_failure"
 )
 
 // ExpectedArtifactVerificationReason identifies why one expected artifact
@@ -709,7 +710,7 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 		WorkFailureTypeMissingExecutable,
 		WorkFailureTypeCommandLineTooLong,
 		WorkFailureTypeStructuredOutputSchemaViolation,
-		WorkFailureTypeExpectedArtifactsUnsatisfied:
+		WorkFailureTypeExpectedArtifactsUnsatisfied, WorkFailureTypeWorkerDeclaredFailure:
 		return WorkFailureDecision{Terminal: true}
 	}
 	switch metadata.Family {

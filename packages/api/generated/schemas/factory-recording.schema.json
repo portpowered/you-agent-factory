@@ -5487,7 +5487,8 @@
         "missing_executable",
         "command_line_too_long",
         "structured_output_schema_violation",
-        "EXPECTED_ARTIFACTS_UNSATISFIED"
+        "EXPECTED_ARTIFACTS_UNSATISFIED",
+        "worker_declared_failure"
       ],
       "type": "string"
     },

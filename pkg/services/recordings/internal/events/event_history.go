@@ -967,7 +967,7 @@ func normalizedFailureReason(reason string) workers.WorkFailureType {
 		workers.WorkFailureTypeMissingExecutable,
 		workers.WorkFailureTypeCommandLineTooLong,
 		workers.WorkFailureTypeStructuredOutputSchemaViolation,
-		workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
+		workers.WorkFailureTypeExpectedArtifactsUnsatisfied, workers.WorkFailureTypeWorkerDeclaredFailure:
 		return candidate
 	default:
 		return workers.WorkFailureTypeUnknown

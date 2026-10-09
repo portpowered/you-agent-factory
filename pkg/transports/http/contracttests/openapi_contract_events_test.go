@@ -950,3 +950,33 @@ func assertSessionEventsSSELifecycleDescription(t *testing.T, description string
 		}
 	}
 }
+func TestOpenAPIContract_FailureReasonsRemainReadable(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	reasons := []generated.WorkFailureType{
+		generated.WorkFailureTypeAuthFailure, generated.WorkFailureTypePermanentBadRequest,
+		generated.WorkFailureTypeThrottled, generated.WorkFailureTypeInternalServerError,
+		generated.WorkFailureTypeTimeout, generated.WorkFailureTypeUnknown,
+		generated.WorkFailureTypeMisconfigured, generated.WorkFailureTypeMissingExecutable,
+		generated.WorkFailureTypeCommandLineTooLong, generated.WorkFailureTypeStructuredOutputSchemaViolation,
+		generated.WorkFailureTypeExpectedArtifactsUnsatisfied, generated.WorkFailureTypeWorkerDeclaredFailure,
+	}
+	for _, reason := range reasons {
+		t.Run(string(reason), func(t *testing.T) {
+			encoded, err := json.Marshal(generated.FailureDetail{Reason: reason, Message: "safe explanation"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var detail any
+			if err := json.Unmarshal(encoded, &detail); err != nil {
+				t.Fatal(err)
+			}
+			event := map[string]any{"id": "failure-event", "schemaVersion": "agent-factory.event.v1", "type": "DISPATCH_RESPONSE",
+				"context": map[string]any{"sequence": 1, "tick": 1, "eventTime": "2026-10-09T04:00:00Z", "dispatchId": "dispatch-failure"},
+				"payload": map[string]any{"transitionId": "supervise", "outcome": "FAILED", "failureDetail": detail},
+			}
+			if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err != nil {
+				t.Fatalf("serialized failure event: %v", err)
+			}
+		})
+	}
+}
