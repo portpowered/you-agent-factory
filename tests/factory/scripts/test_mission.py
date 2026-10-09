@@ -136,6 +136,40 @@ class MissionOutputTests(unittest.TestCase):
         reply = self.valid()
         self.assertEqual(checker.check_mission_output(json.dumps(reply), checker.INVALID_PREFIX), reply)
 
+    def test_exact_precondition_diagnostic_and_corrected_failed_evidence(self):
+        invalid = {"decision": "FAILED", "feedback": "required read failed",
+                   "output": {"precondition": {"reason": "read unavailable"}}}
+        first = self.run_checker(json.dumps(invalid))
+        reason = "mission-output-invalid: output.precondition must name the unmet precondition"
+        self.assertEqual(first["decision"], "REJECTED")
+        self.assertEqual(first["feedback"], reason)
+        self.assertEqual(first["output"], {"invalidReply": json.dumps(invalid)})
+        corrected = {"decision": "FAILED", "feedback": "required recording read unavailable",
+                     "output": {"precondition": "Required recording read unavailable; pending Work observed: 0",
+                                "reads": [{"required": True, "attempts": 2, "available": False}]}}
+        self.assertEqual(self.run_checker(json.dumps(corrected), reason), corrected)
+        self.assertEqual(self.run_checker(json.dumps(invalid), reason), {
+            "decision": "FAILED", "feedback": reason, "output": first["output"]})
+
+    def test_alternate_precondition_keys_do_not_satisfy_failed_shape(self):
+        for key in ("reason", "unmetPrecondition", "preconditions"):
+            reply = {"decision": "FAILED", "feedback": "blocked", "output": {key: "read unavailable"}}
+            checked = self.run_checker(json.dumps(reply))
+            self.assertEqual(checked["decision"], "REJECTED")
+            self.assertEqual(checked["feedback"],
+                             "mission-output-invalid: output requires measurements or a named unmet precondition")
+
+    def test_documented_reply_examples(self):
+        examples = [
+            {"decision": "ACCEPTED", "feedback": "Measured pending Work.", "output": {
+                "measurements": [{"name": "pending", "value": 0, "source": "authorized Work list"}]}},
+            {"decision": "FAILED", "feedback": "Required read unavailable.", "output": {
+                "precondition": "Required recording read unavailable; pending Work observed: 0"}},
+        ]
+        for example in examples:
+            self.assertEqual(self.run_checker(json.dumps(example)), example)
+            self.assertEqual(self.run_checker(json.dumps(example), checker.INVALID_PREFIX), example)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -73,6 +74,12 @@ func initialOpeningFactoryConfig() map[string]any {
 func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T) {
 	t.Parallel()
 
+	hostFailure := newInitialOpeningProviderScenario(t)
+	hostGate := &selectedProviderGate{paths: map[string]string{hostFailure.peerDir: hostFailure.peerID}, entered: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	t.Cleanup(hostGate.unblock)
+	hostRetryAPI := support.NewProcessAPIServer()
+	hostCause := errors.New("controlled completion host unavailable")
+	var hostFailed atomic.Bool
 	detached := newInitialOpeningScenario(t)
 	selectedModels := newSelectedModelsScenario(t)
 	inputFailure := newInitialOpeningScenario(t)
@@ -127,17 +134,25 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
-		APIServerStarter:                           api.Start,
-		ModelAssetHTTPClient:                       selectedModels,
-		ModelHostHTTPClient:                        selectedModels,
-		ModelHostProcessLauncher:                   selectedModels,
-		ModelHostProtocolNegotiator:                selectedModels,
-		ModelHostCompatibilityChecker:              selectedModels,
-		ModelInvocationProtocolClient:              selectedModels,
-		ModelAssetHostPlatform:                     modelprovider.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelResolveHuggingFaceRevision:            func(context.Context, string) (string, error) { return selectedModelsRevision, nil },
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if request.Port == completionFailurePort {
+				if hostFailed.CompareAndSwap(false, true) {
+					return hostCause
+				}
+				return hostRetryAPI.Start(ctx, request)
+			}
+			return api.Start(ctx, request)
+		},
+		ModelAssetHTTPClient:            selectedModels,
+		ModelHostHTTPClient:             selectedModels,
+		ModelHostProcessLauncher:        selectedModels,
+		ModelHostProtocolNegotiator:     selectedModels,
+		ModelHostCompatibilityChecker:   selectedModels,
+		ModelInvocationProtocolClient:   selectedModels,
+		ModelAssetHostPlatform:          modelprovider.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveHuggingFaceRevision: func(context.Context, string) (string, error) { return selectedModelsRevision, nil },
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selectedModels.backend, nil
 		},
@@ -195,6 +210,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		})
 	}
 
+	t.Run("completion host failure unwinds and retries while peer Work remains gated", func(t *testing.T) {
+		t.Parallel()
+		testCompletionHostFailure(t, sessions, process, hostFailure, hostGate, hostCause, hostRetryAPI)
+	})
 	t.Run("fixed observations select empty and completed Work", func(t *testing.T) {
 		t.Parallel()
 		testFixedOpeningReads(t, sessions, api.WaitForURL(t))
@@ -489,6 +508,7 @@ type initialOpeningProviderRunner struct {
 	effects  *initialOpeningEffects
 	selected *selectedProviderGate
 	canceled *selectedProviderGate
+	host     *selectedProviderGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -501,6 +521,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 	}
 	if runner.canceled != nil && runner.canceled.paths[request.WorkDir] != "" {
 		return runner.canceled.run(ctx, request)
+	}
+	if runner.host != nil && runner.host.paths[request.WorkDir] != "" {
+		return runner.host.run(ctx, request)
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
 }
