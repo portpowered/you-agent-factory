@@ -224,15 +224,35 @@ func assertMockInterruptFailure(t *testing.T, name, phase string, body []byte, r
 	if string(result.Phase) != phase || strings.Contains(string(body), "private-mock-storage") {
 		t.Fatalf("failure phase/redaction/admission = %+v", result)
 	}
-	if name == "input-failure" && (result.Code != "INTERNAL_ERROR" || result.Successor != nil) {
+	switch name {
+	case "input-failure":
+		assertMockInterruptInputFailure(t, result)
+	case "opening-failure":
+		assertMockInterruptOpeningFailure(t, body, result)
+	case "completion-race":
+		assertMockInterruptCompletionRace(t, body, result)
+	}
+}
+
+func assertMockInterruptInputFailure(t *testing.T, result factoryapi.WorkerSessionInterruptError) {
+	t.Helper()
+	if result.Code != "INTERNAL_ERROR" || result.Successor != nil {
 		t.Fatalf("pre-stop refusal = %+v", result)
 	}
-	if name == "opening-failure" && (result.Code != "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED" ||
-		result.Source == nil || result.Source.State != "CANCELED" || result.Successor == nil || result.Successor.State != "FAILED") {
+}
+
+func assertMockInterruptOpeningFailure(t *testing.T, body []byte, result factoryapi.WorkerSessionInterruptError) {
+	t.Helper()
+	if result.Code != "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED" ||
+		result.Source == nil || result.Source.State != "CANCELED" || result.Successor == nil || result.Successor.State != "FAILED" {
 		t.Fatalf("stopped source/failed reserved successor = %s", body)
 	}
-	if name == "completion-race" && (result.Code != "WORKER_SESSION_INTERRUPT_CONFLICT" ||
-		result.Source == nil || result.Source.State != "COMPLETED" || result.Successor != nil) {
+}
+
+func assertMockInterruptCompletionRace(t *testing.T, body []byte, result factoryapi.WorkerSessionInterruptError) {
+	t.Helper()
+	if result.Code != "WORKER_SESSION_INTERRUPT_CONFLICT" ||
+		result.Source == nil || result.Source.State != "COMPLETED" || result.Successor != nil {
 		t.Fatalf("natural completion race = %s", body)
 	}
 }

@@ -59,16 +59,6 @@ func checkMockInterruptScopeIsolation(t *testing.T, baseURL, dir string, gate, s
 	assertMockIsolationState(t, baseURL, "scope-isolation-successor", "RUNNING", 17)
 	gate.Release()
 	siblingGate.Release()
-	for _, id := range []string{"scope-isolation-successor", "isolation-sibling-source"} {
-		// Gate release precedes capture finalization; the public observation is
-		// the completion signal and bounded polling is only its HTTP observer.
-		_, err := support.WaitForObservation(10*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
-			return support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/"+id), nil
-		}, func(observation factoryapi.WorkerSessionObservation) bool { return observation.State == "COMPLETED" })
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	assertMockIsolationState(t, baseURL, "scope-isolation-successor", "COMPLETED", 17)
 	assertMockIsolationState(t, baseURL, "isolation-sibling-source", "COMPLETED", 29)
 }
@@ -76,6 +66,19 @@ func checkMockInterruptScopeIsolation(t *testing.T, baseURL, dir string, gate, s
 func assertMockIsolationState(t *testing.T, baseURL, id, state string, tokens int) {
 	t.Helper()
 	observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/"+id)
+	if state != "RUNNING" {
+		// The gate observes execution, not asynchronous capture finalization.
+		// Observe terminal state and declared usage through the public API.
+		var err error
+		observation, err = support.WaitForObservation(10*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
+			return support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/"+id), nil
+		}, func(observation factoryapi.WorkerSessionObservation) bool {
+			return mockInterruptStateUsageReady(observation, state, int64(tokens))
+		})
+		if err != nil {
+			t.Fatalf("isolated mock state/usage = %+v, %v", observation, err)
+		}
+	}
 	if string(observation.State) != state || state != "RUNNING" && (observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != tokens) {
 		t.Fatalf("isolated mock state/usage = %+v, want %s/%d", observation, state, tokens)
 	}

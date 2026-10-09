@@ -119,7 +119,7 @@ func checkMockInterruptCompletion(t *testing.T, baseURL string, gate *support.Mo
 	final, err := support.WaitForObservation(10*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
 		return support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/mock-successor"), nil
 	}, func(observation factoryapi.WorkerSessionObservation) bool {
-		return observation.State == "COMPLETED" || observation.State == "FAILED"
+		return mockInterruptStateUsageReady(observation, "COMPLETED", tokens)
 	})
 	if err != nil || final.State != "COMPLETED" || final.TokenUsage == nil || final.TokenUsage.InputTokens == nil || int64(*final.TokenUsage.InputTokens) != tokens {
 		t.Fatalf("successor completion/usage = %+v, %v", final, err)
@@ -131,6 +131,13 @@ func checkMockInterruptCompletion(t *testing.T, baseURL string, gate *support.Mo
 	if got := deny.attempts.Load(); got != 0 {
 		t.Fatalf("native launch attempts = %d, want zero", got)
 	}
+}
+
+// Captured usage can lag live terminal publication. Keep observing the public
+// contract until both are present, while surfacing FAILED immediately.
+func mockInterruptStateUsageReady(observation factoryapi.WorkerSessionObservation, state string, tokens int64) bool {
+	return observation.State == "FAILED" || string(observation.State) == state &&
+		observation.TokenUsage != nil && observation.TokenUsage.InputTokens != nil && int64(*observation.TokenUsage.InputTokens) == tokens
 }
 
 type interruptDenyNative struct{ attempts atomic.Int64 }

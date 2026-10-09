@@ -77,7 +77,7 @@ func TestPrebuiltRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 	if err := os.WriteFile(gate.ReleaseFile, []byte("release\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	final := waitForInterruptWorkerState(t, ctx, baseURL, root, daemon, interruptSuccessorWorkerSessionID, "COMPLETED")
+	final := waitForMockInterruptCompletionUsage(t, ctx, baseURL, tokens)
 	if final.TokenUsage == nil || final.TokenUsage.InputTokens == nil || int64(*final.TokenUsage.InputTokens) != tokens {
 		t.Fatalf("mock completion lost declared usage: %+v", final)
 	}
@@ -95,6 +95,32 @@ func TestPrebuiltRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 	assertInterruptPortAvailable(t, port)
 	assertNoMockNativeAttempts(t, marker)
 	t.Log("post-change prebuilt CLI/host: source canceled before one gated mock successor; declared usage, settings, lineage, exact replay, zero native attempts/starts and joined cleanup")
+}
+
+func waitForMockInterruptCompletionUsage(t *testing.T, ctx context.Context, baseURL string, tokens int64) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	client := &http.Client{Timeout: 2 * time.Second}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		observation, _, err := getInterruptWorker(ctx, client, baseURL, interruptSuccessorWorkerSessionID)
+		if err == nil {
+			switch observation.State {
+			case "FAILED", "CANCELED", "TERMINATED":
+				t.Fatalf("mock successor failed while waiting for captured usage: %+v", observation)
+			case "COMPLETED":
+				// Live completion may precede captured declared usage.
+				if observation.TokenUsage != nil && observation.TokenUsage.InputTokens != nil && int64(*observation.TokenUsage.InputTokens) == tokens {
+					return observation
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("mock completion/usage deadline: %v observation=%+v error=%v", ctx.Err(), observation, err)
+		case <-ticker.C:
+		}
+	}
 }
 
 func mockInterruptExecution(dir string) string {
