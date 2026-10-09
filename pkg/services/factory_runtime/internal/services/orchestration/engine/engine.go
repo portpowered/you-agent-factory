@@ -569,14 +569,21 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 // mutated is true if any mutations were applied (another tick may be needed).
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
-	if e.automaticTicksPaused != nil && e.automaticTicksPaused() {
-		e.logger.Debug("engine: skipping automatic tick while factory is paused")
-		return false, false, nil
+	paused := e.automaticTicksPaused != nil && e.automaticTicksPaused()
+	if paused {
+		e.drainPendingResults()
+		if _, err := e.invokeDispatchResultHook(ctx); err != nil {
+			return false, false, err
+		}
+		if len(e.runtimeState.Results) == 0 {
+			e.logger.Debug("engine: skipping automatic tick while factory is paused")
+			return false, false, nil
+		}
 	}
 	e.capacityWakePending = false
 	e.terminationResult = nil
 
-	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
+	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx, paused)
 	if err != nil {
 		return false, false, err
 	}
@@ -585,6 +592,11 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	completedDispatches := make(map[string]interfaces.CompletedDispatch)
 	e.logger.Info("engine: [START] running engine tick", "tick", e.runtimeState.TickCount)
 	for _, sub := range e.subsystems {
+		// Pause gates scheduling, not completion of already-started work.
+		// Only the result phases run; termination must not close a paused session.
+		if paused && sub.TickGroup() != subsystems.History && sub.TickGroup() != subsystems.Transitioner {
+			continue
+		}
 		rtSnapshot = e.refreshSnapshotBeforeSubsystem(sub, rtSnapshot)
 		result, err := e.executeSubsystem(ctx, sub, &rtSnapshot)
 		if err != nil {
@@ -659,11 +671,14 @@ func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.Com
 	return nil
 }
 
-func (e *FactoryEngine) beginTick(ctx context.Context) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {
+func (e *FactoryEngine) beginTick(ctx context.Context, paused bool) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {
 	e.runtimeState.TickCount++
 	e.runtimeState.Marking.TickCount = e.runtimeState.TickCount
 	if logicalClock, ok := e.clock.(factory.LogicalClock); ok {
 		logicalClock.SetTick(e.runtimeState.TickCount)
+	}
+	if paused {
+		return e.runtimeState.Snapshot(), true, false, nil
 	}
 	e.drainPendingResults()
 	dispatchResults, err := e.invokeDispatchResultHook(ctx)

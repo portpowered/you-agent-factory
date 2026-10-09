@@ -345,43 +345,30 @@ func TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake(t *t
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- engine.Run(ctx)
-	}()
-
-	if err := waitForRunningDispatch(t, engine, "d-hook-paused-wake", time.Second); err != nil {
-		t.Fatalf("wait for dispatch before pause: %v", err)
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("initial dispatch tick: %v", err)
 	}
-
 	paused = true
 	hook.results = []workerexecution.WorkResult{{
-		DispatchID:   "d-hook-paused-wake",
-		TransitionID: "t1",
-		Outcome:      workerexecution.OutcomeAccepted,
+		DispatchID: "d-hook-paused-wake", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted,
 	}}
 	hook.SignalBufferedResults()
-
-	time.Sleep(100 * time.Millisecond)
-	if len(engine.RunningDispatches()) != 1 {
-		t.Fatalf("running dispatches while paused = %d, want 1", len(engine.RunningDispatches()))
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("paused result tick: %v", err)
 	}
-	if !hook.HasBufferedResults() {
-		t.Fatal("dispatch hook backlog empty while paused, want buffered completion")
+	if len(engine.RunningDispatches()) != 0 || hook.HasBufferedResults() {
+		t.Fatal("paused tick did not drain and retire the dispatch result")
 	}
-
+	if dispatchSub.callCount != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1 before resume", dispatchSub.callCount)
+	}
 	paused = false
 	engine.WakeForPendingProcessing()
-	if err := waitForNoRunningDispatches(t, engine, time.Second); err != nil {
-		t.Fatalf("wait for dispatch hook drain after resume: %v", err)
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("resume tick: %v", err)
 	}
-
-	cancel()
-	if err := <-errCh; err != nil && err != context.Canceled {
-		t.Fatalf("Run: %v", err)
+	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+		t.Fatal("resume duplicated completion")
 	}
 }
 
@@ -420,12 +407,15 @@ func TestRepeatedPausedWakePreservesBufferedSubmission(t *testing.T) {
 	}
 }
 
-func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
+func TestRepeatedPausedWakeCompletesResultOnce(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	dispatchSub := &mockSubsystem{
 		group: subsystems.Dispatcher,
-		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if len(snapshot.DispatchHistory) > 0 {
+				return nil, nil
+			}
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
 					Dispatch: work.WorkDispatch{
@@ -473,8 +463,8 @@ func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
 		if err := engine.Tick(context.Background()); err != nil {
 			t.Fatalf("Tick while paused: %v", err)
 		}
-		if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 0 {
-			t.Fatal("dispatch completed while paused")
+		if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+			t.Fatal("paused wake did not preserve exactly one completion")
 		}
 	}
 
@@ -665,5 +655,46 @@ func assertSelectedTickEffects(t *testing.T, effects []string, snap interfaces.E
 	}
 	if hook.submits[0].Execution.TraceID != scope+"-trace" || hook.submits[0].Execution.DispatchCreatedTick != 1 {
 		t.Fatalf("dispatch identity = %+v", hook.submits)
+	}
+}
+
+// The engine owns result draining and phase ordering; routing is a controlled
+// collaborator that produces the same marking/completion contract as production.
+func TestPausedResultAppliesWorkMutationWithoutSchedulingOrTermination(t *testing.T) {
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(&factorytoken.Token{ID: "work-1", PlaceID: "task:init", Color: factorytoken.Color{WorkTypeID: "task"}})
+	scheduler := &mockSubsystem{group: subsystems.Dispatcher}
+	termination := &mockSubsystem{group: subsystems.TerminationCheck}
+	router := &mockSubsystem{group: subsystems.Transitioner, execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		if len(snapshot.Results) == 0 {
+			return nil, nil
+		}
+		if len(snapshot.Results) != 1 || snapshot.Results[0].DispatchID != "dispatch-1" {
+			t.Fatalf("routing results = %#v, want one correlated result", snapshot.Results)
+		}
+		return &interfaces.TickResult{
+			Mutations:           []interfaces.MarkingMutation{{Type: interfaces.MutationMove, TokenID: "work-1", FromPlace: "task:init", ToPlace: "task:complete"}},
+			CompletedDispatches: []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted}},
+		}, nil
+	}}
+	engine := newTestFactoryEngine(buildTestNet(), marking, []subsystems.Subsystem{scheduler, router, termination}, WithAutomaticTicksPaused(func() bool { return true }))
+	engine.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{DispatchID: "dispatch-1", TransitionID: "t1"}
+	engine.runtimeState.InFlightCount = 1
+	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{DispatchID: "dispatch-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted})
+	engine.NotifyResult()
+	for range 2 {
+		if err := engine.Tick(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot := engine.GetRuntimeStateSnapshot()
+	if got := snapshot.Marking.Tokens["work-1"].PlaceID; got != "task:complete" {
+		t.Fatalf("Work location = %q, want task:complete before resume", got)
+	}
+	if len(snapshot.DispatchHistory) != 1 || len(snapshot.Dispatches) != 0 || snapshot.InFlightCount != 0 {
+		t.Fatalf("completion bookkeeping = %#v", snapshot)
+	}
+	if scheduler.callCount != 0 || termination.callCount != 0 {
+		t.Fatalf("paused phase calls: scheduler=%d termination=%d", scheduler.callCount, termination.callCount)
 	}
 }
