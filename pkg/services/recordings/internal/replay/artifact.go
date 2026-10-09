@@ -348,6 +348,9 @@ func ParseReplayV2(data []byte) (*ReplayV2Stream, error) {
 		return nil, fmt.Errorf("replay v2 artifact is empty")
 	}
 	stream := &ReplayV2Stream{}
+	// Identity validation is linear in the retained stream length. Keep the set
+	// local to this parse so returned streams and later reads retain no index.
+	seenEventIDs := make(map[string]struct{})
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), maxReplayV2LineBytes)
 	finalLineMayBeIncomplete := len(data) > 0 && data[len(data)-1] != '\n'
@@ -356,6 +359,7 @@ func ParseReplayV2(data []byte) (*ReplayV2Stream, error) {
 		lineNumber++
 		truncated, err := parseReplayV2Line(
 			stream,
+			seenEventIDs,
 			bytes.TrimSpace(scanner.Bytes()),
 			lineNumber,
 			finalLineMayBeIncomplete,
@@ -384,6 +388,7 @@ func ParseReplayV2(data []byte) (*ReplayV2Stream, error) {
 
 func parseReplayV2Line(
 	stream *ReplayV2Stream,
+	seenEventIDs map[string]struct{},
 	line []byte,
 	lineNumber int,
 	finalLineMayBeIncomplete bool,
@@ -412,7 +417,7 @@ func parseReplayV2Line(
 	case replayV2RecordHeader:
 		return false, parseReplayV2Header(stream, line, lineNumber)
 	case replayV2RecordEvent:
-		return false, parseReplayV2Event(stream, line, lineNumber)
+		return false, parseReplayV2Event(stream, seenEventIDs, line, lineNumber)
 	case replayV2RecordTerminal:
 		return false, parseReplayV2Terminal(stream, line, lineNumber)
 	default:
@@ -441,6 +446,7 @@ func parseReplayV2Header(
 
 func parseReplayV2Event(
 	stream *ReplayV2Stream,
+	seenEventIDs map[string]struct{},
 	line []byte,
 	lineNumber int,
 ) error {
@@ -467,7 +473,7 @@ func parseReplayV2Event(
 	if code, err := replayV2EventStructuralFailure(record.Event, len(stream.Events)); err != nil {
 		return replayEventStructuralError(code, len(stream.Events), record.Event.Id, err)
 	}
-	if replayV2HasEventID(stream.Events, record.Event.Id) {
+	if _, duplicate := seenEventIDs[record.Event.Id]; duplicate {
 		return replayEventStructuralError(
 			recordings.ReplayArtifactDiagnosticInvalidIdentity,
 			len(stream.Events),
@@ -475,17 +481,9 @@ func parseReplayV2Event(
 			fmt.Errorf("replay v2 event line %d duplicates event", lineNumber),
 		)
 	}
+	seenEventIDs[record.Event.Id] = struct{}{}
 	stream.Events = append(stream.Events, record.Event)
 	return nil
-}
-
-func replayV2HasEventID(events []interfaces.FactoryEvent, id string) bool {
-	for _, event := range events {
-		if event.Id == id {
-			return true
-		}
-	}
-	return false
 }
 
 func parseReplayV2Terminal(

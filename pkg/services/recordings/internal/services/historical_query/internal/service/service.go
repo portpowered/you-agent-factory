@@ -123,16 +123,11 @@ func (service *Service) decodeHistoricalEvents(request recordings.HistoricalReco
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, 0, err
 	}
-	if request.InferFactorySessionScope {
-		identity, err = inferRecordedScope(payload, identity)
-		if err != nil {
-			return recordings.HistoricalRecordingQueryResult{}, 0, err
-		}
-	}
-	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity)
+	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity, request.InferFactorySessionScope)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, 0, err
 	}
+	identity.Scope = status.Scope
 	return recordings.HistoricalRecordingQueryResult{
 		Recording: identity, Status: status, Events: events,
 		IgnoredJSONPaths: ignoredJSONPaths,
@@ -193,9 +188,10 @@ type legacyArtifactDocument struct {
 func decodeHistoricalArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
+	inferScope bool,
 ) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
 	if replayimpl.IsReplayV2Artifact(payload) {
-		return decodeReplayV2Artifact(payload, identity)
+		return decodeReplayV2Artifact(payload, identity, inferScope)
 	}
 	var header struct {
 		SchemaVersion string `json:"schemaVersion"`
@@ -206,20 +202,21 @@ func decodeHistoricalArtifact(
 		)
 	}
 	if header.SchemaVersion == string(recordings.PortableArtifactSchemaV1) {
-		return decodePortableArtifact(payload, identity)
+		return decodePortableArtifact(payload, identity, inferScope)
 	}
 	if header.SchemaVersion != factorydefinitions.ReplayV1SourceFormat {
 		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", nil,
 		)
 	}
-	events, selectedTick, status, err := decodeLegacyArtifact(payload, identity)
+	events, selectedTick, status, err := decodeLegacyArtifact(payload, identity, inferScope)
 	return events, selectedTick, status, nil, err
 }
 
 func decodePortableArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
+	inferScope bool,
 ) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
 	var artifact recordings.PortableArtifact
 	diagnostics, err := jsoncompat.Decode(payload, &artifact)
@@ -227,6 +224,12 @@ func decodePortableArtifact(
 		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
+	}
+	if inferScope {
+		identity, err = recordedScope(identity, artifact.Summary.Scope.FactorySessionID)
+		if err != nil {
+			return nil, 0, recordings.RecordingStatusFacts{}, nil, err
+		}
 	}
 	if err := validatePortableArtifact(artifact, identity); err != nil {
 		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
@@ -310,6 +313,7 @@ func portableArtifactDigest(artifact recordings.PortableArtifact) (string, error
 func decodeLegacyArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
+	inferScope bool,
 ) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, error) {
 	var artifact legacyArtifactDocument
 	decoder := json.NewDecoder(bytes.NewReader(payload))
@@ -328,6 +332,13 @@ func decodeLegacyArtifact(
 		return nil, 0, recordings.RecordingStatusFacts{}, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", nil,
 		)
+	}
+	if inferScope {
+		var err error
+		identity, err = recordedEventScope(identity, artifact.Events)
+		if err != nil {
+			return nil, 0, recordings.RecordingStatusFacts{}, err
+		}
 	}
 	events := make([]recordings.CanonicalEvent, len(artifact.Events))
 	generationID := "historical-recording/" + string(identity.RecordingID)
@@ -351,12 +362,19 @@ func decodeLegacyArtifact(
 func decodeReplayV2Artifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
+	inferScope bool,
 ) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
 	stream, err := replayimpl.ParseReplayV2(payload)
 	if err != nil {
 		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
 		)
+	}
+	if inferScope {
+		identity, err = recordedEventScope(identity, stream.Events)
+		if err != nil {
+			return nil, 0, recordings.RecordingStatusFacts{}, nil, err
+		}
 	}
 	events := make([]recordings.CanonicalEvent, len(stream.Events))
 	generationID := "historical-recording/" + string(identity.RecordingID)
