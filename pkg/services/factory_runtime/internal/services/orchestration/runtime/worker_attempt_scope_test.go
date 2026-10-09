@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -167,6 +168,33 @@ func TestWorkerSessionOptionalScopeLookupPreservesCancellation(t *testing.T) {
 				}
 			} else if err != nil || scope != "recording-session" {
 				t.Fatalf("optional lookup = %q, %v, want retained scope", scope, err)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionRetainedReadScopePrecedesForeignDirectIdentity(t *testing.T) {
+	t.Parallel()
+	for _, requested := range []string{"", "replay-owner", "recorded-owner", "foreign-owner"} {
+		t.Run(requested, func(t *testing.T) {
+			t.Parallel()
+			reader := &recordedWorkerSessionObservation{
+				Service: &selectedObservationSource{observation: workersessions.Observation{
+					WorkerSessionID: "worker-early", Direct: true, FactorySessionID: "direct-owner",
+				}},
+				factorySessionID: "replay-owner", executionFactorySessionID: "recorded-owner",
+				ledger: &recordingfixtures.ScriptedRuntimeLedger{Events: recordedObservationTestEvents(t, time.Unix(0, 0), "retained-work")},
+				projector: func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+					return interfaces.FactoryWorldState{}, nil
+				},
+			}
+			scope, err := reader.observationReadScopeForWorker(t.Context(), "worker-early", requested)
+			if requested == "foreign-owner" {
+				if scope != "" || !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+					t.Fatalf("foreign read = %q, %v", scope, err)
+				}
+			} else if scope != "recorded-owner" || err != nil {
+				t.Fatalf("retained read scope = %q, %v; want immutable recorded owner", scope, err)
 			}
 		})
 	}

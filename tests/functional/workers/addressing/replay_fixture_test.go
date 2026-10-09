@@ -30,12 +30,29 @@ type replayFixture struct {
 // One immutable root graph hosts both legacy recordings. Only replay bytes and
 // the HTTP listener/provider command effects are replaced, through Edges.
 func newReplayFixture(t *testing.T) *replayFixture {
+	return newReplayFixtureWithRunner(t, nil, 2)
+}
+
+func newReplayFixtureWithRunner(t *testing.T, runner platformprocess.CommandRunner, ownerCount int) *replayFixture {
 	t.Helper()
 	f := &replayFixture{worker: uuid.NewString()}
 	payloads := make(map[string][]byte)
 	servers := make(map[int]*support.ProcessAPIServer)
 	started := make(map[int]chan struct{})
-	for i := range 2 {
+	var host replayOwner
+	if runner != nil {
+		host = replayOwner{session: uuid.NewString(), dir: t.TempDir(), home: t.TempDir()}
+		config, err := os.ReadFile(filepath.Join(support.LegacyFixtureDir(t, "executor_success"), "factory.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(host.dir, "factory.json"), config, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		servers[23999] = support.NewProcessAPIServer()
+		started[23999] = make(chan struct{})
+	}
+	for i := range ownerCount {
 		owner := replayOwner{session: uuid.NewString(), work: "work-" + uuid.NewString(), dir: t.TempDir(), home: t.TempDir()}
 		f.owners = append(f.owners, owner)
 		payloads[filepath.Join(owner.dir, "legacy.json")] = legacyRecording(t, owner, f.worker)
@@ -44,6 +61,9 @@ func newReplayFixture(t *testing.T) *replayFixture {
 		}
 		servers[24000+i] = support.NewProcessAPIServer()
 		started[24000+i] = make(chan struct{})
+	}
+	if runner == nil {
+		runner = &refuseProviderCalls{calls: &f.calls}
 	}
 	f.process = support.BuildProcess(t, serviceedges.Edges{
 		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
@@ -57,8 +77,24 @@ func newReplayFixture(t *testing.T) *replayFixture {
 			close(started[req.Port])
 			return servers[req.Port].Start(ctx, req)
 		},
-		ProviderCommandRunner: &refuseProviderCalls{calls: &f.calls},
+		ProviderCommandRunner: runner,
 	})
+	if host.session != "" {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", host.session,
+			"--dir", host.dir, "--no-record", "--continuously", "--with-server", "--quiet", "--listen", "127.0.0.1:23999"})
+		inputs.Input.Env = append(os.Environ(), "HOME="+host.home, "USERPROFILE="+host.home)
+		inputs.Input.WorkingDirectory = host.dir
+		command := support.StartProcessCommand(t, f.process, inputs.Input)
+		t.Cleanup(func() { command.Stop(t) })
+		select {
+		case <-started[23999]:
+		case <-command.Done():
+			t.Fatalf("host opening failed: %v; stderr=%s", command.Err(), inputs.Stderr())
+		case <-time.After(30 * time.Second):
+			t.Fatal("host listener did not start")
+		}
+		f.url = servers[23999].WaitForURL(t)
+	}
 	for i, owner := range f.owners {
 		inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", owner.session,
 			"--dir", owner.dir, "--replay", filepath.Join(owner.dir, "legacy.json"), "--no-record",
@@ -76,7 +112,9 @@ func newReplayFixture(t *testing.T) *replayFixture {
 		}
 		endpoint := servers[24000+i].WaitForURL(t)
 		support.WaitForSessionTerminalStatus(t, endpoint, owner.session, 15*time.Second)
-		f.url = endpoint
+		if host.session == "" {
+			f.url = endpoint
+		}
 	}
 	return f
 }
