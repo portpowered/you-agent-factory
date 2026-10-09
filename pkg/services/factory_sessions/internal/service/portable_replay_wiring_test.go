@@ -764,7 +764,7 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 		},
 	}
 	resumeRuntime := &resumeInputRuntime{result: resumeInput}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },

@@ -630,7 +630,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 			InvocationSkipPermissionsOverride: &skipPermissions,
 		},
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
@@ -729,7 +729,7 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 			},
 		},
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
@@ -757,7 +757,7 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 	t.Parallel()
 
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 	}
@@ -779,7 +779,7 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 	t.Parallel()
 
 	sourcePath := filepath.Join(t.TempDir(), factorydefinitions.FactoryConfigFile)
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: factorydefinitions.RuntimeSnapshot{
 			EffectiveFactory:  factorydefinitions.FactoryConfig{Name: "source-only"},
@@ -807,7 +807,7 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 		},
 		Cause: factorydefinitions.ErrInvalidRuntimeSnapshotDefinition,
 	}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{err: want}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
 		generateSessionID:         func() string { return "" },
@@ -864,7 +864,7 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 
 	root := &replayRoutingRoot{}
 	replayInputs := &legacyReplayInputsStub{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		replayInputs:              replayInputs,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
@@ -896,11 +896,11 @@ func TestOpenForRequestReplayRequiresRuntimeRootAndReplayInputs(t *testing.T) {
 	}).startRequest()
 	for _, test := range []struct {
 		name    string
-		factory *Root
+		factory *RuntimeOpening
 		want    string
 	}{
-		{"runtime root", &Root{}, "Factory Runtime root is required for replay"},
-		{"replay inputs", &Root{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
+		{"runtime root", &RuntimeOpening{}, "Factory Runtime root is required for replay"},
+		{"replay inputs", &RuntimeOpening{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, _, _, err := test.factory.openForRequest(t.Context(), request)
@@ -924,7 +924,7 @@ func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t 
 		Cause: errors.New("invalid source bytes"),
 	}
 	resumeRuntime := &resumeInputRuntime{err: inputErr}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
@@ -1067,10 +1067,24 @@ func (stub *legacyReplayInputsStub) LoadReplayInput(
 	}, nil
 }
 
-// TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation pins the
-// P6-B successor behavior for Sessions runtime opening: opening resolves
-// Definitions values, calls Runtime.Activate, and routes every opened role's
-// cleanup edge through the Runtime deactivation operation rather than through a
-// retained hosted-instance, replacement-builder, lifecycle, or sidecar handle.
-// All three role cleanup edges must resolve to the single Runtime-owned closer,
-// so draining them cannot deactivate the Runtime more than once.
+// Cancellation before activation admission acquires no state or handles and
+// must not allocate a canonical identity through the fixed opening owner.
+func TestRuntimeOpeningActivationCancellationStopsBeforeAcquisition(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"selected-a", "selected-b"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			opening := &RuntimeOpening{generateSessionID: func() string { calls++; return id }}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			lifecycle, replay, closeArtifacts, activation, selected, err := opening.activateRuntime(ctx, factoryruntime.RuntimeActivationRequest{FactorySessionID: id})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("activation error = %v, want cancellation", err)
+			}
+			if lifecycle != nil || replay != nil || closeArtifacts != nil || activation != nil || selected != nil || calls != 0 {
+				t.Fatalf("cancelled activation acquired handles or allocated identity: lifecycle=%v replay=%v cleanup=%v activation=%v selected=%v identities=%d", lifecycle, replay, closeArtifacts != nil, activation, selected, calls)
+			}
+		})
+	}
+}

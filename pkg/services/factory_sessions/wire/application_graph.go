@@ -128,10 +128,11 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
+	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
 ) *RuntimeOpening {
 	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
 		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
-		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding)
+		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding, runtimeRoot, snapshots, logger)
 }
 
 func NewRoot(
@@ -139,14 +140,12 @@ func NewRoot(
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	runtimeRoot FactoryRuntimeRoot,
 	definitions factorydefinitions.Service,
 
 	snapshotSelection *RuntimeSnapshotSelection,
 
 	assembly RuntimeAssembly,
 	generateSessionID factorysessions.SessionIDGenerator,
-	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
 	modelService models.Service,
@@ -162,14 +161,12 @@ func NewRoot(
 		providerSessions,
 		logger,
 		workflowPreview,
-		runtimeRoot,
 		definitions,
 
 		snapshotSelection,
 
 		assembly,
 		generateSessionID,
-		generateRuntimeInstanceID,
 		resolveHome,
 		workService,
 		modelService,

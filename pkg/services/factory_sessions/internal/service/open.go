@@ -28,9 +28,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// RuntimeOpening owns fixed preparation, live binding and historical acquisition behavior.
+// RuntimeOpening owns fixed preparation, activation, live binding and historical acquisition behavior.
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
+	runtimeRoot               FactoryRuntimeRoot
+	snapshotSelection         *RuntimeSnapshotSelection
+	baseLogger                *zap.Logger
+	replayInputs              recordings.ReplayInputLoader
 	resourceAcquisition       *RuntimeResourceAcquisition
 	openingCompletion         *RuntimeOpeningCompletion
 	openingBinding            *RuntimeOpeningBinding
@@ -60,8 +64,11 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
+	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
 ) *RuntimeOpening {
-	return &RuntimeOpening{resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
+	return &RuntimeOpening{
+		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger, replayInputs: recordingsRuntime,
+		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
 		replayBehavior: replayBehavior, recordingsService: recordingsService,
 		recordingsRuntime: recordingsRuntime, clock: clock, resolveClock: resolveClock,
@@ -840,4 +847,68 @@ func (r *RuntimeOpening) logFailedSessionOpening(opening *sessionRuntimeOpening,
 		cleanup.Add(sink.Close)
 	}
 	return errors.Join(openErr, closeErr)
+}
+
+func (r *RuntimeOpening) openForRequest(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
+	if strings.TrimSpace(request.FolderPath) == "" {
+		return nil, nil, nil, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
+	}
+	selection := runtimeSelectionForStart(request)
+	recording := recordingRequestForStart(request)
+	open := func(replayInput *recordings.LoadReplayInputResult) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
+		session := request
+		lifecycle, replay, closeArtifacts, _, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+		return lifecycle, replay, closeArtifacts, err
+	}
+	// Historical replay, whether portable or legacy, is an inspection-only
+	// product and must select its detached projection before live Factory
+	// Runtime assembly. Resume remains an explicit live successor path below.
+	if recording.ReplayPath != "" {
+		if r.runtimeRoot == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: Factory Runtime root is required for replay")
+		}
+		if r.replayInputs == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: replay input capability is required for replay")
+		}
+		input, err := r.replayInputs.LoadReplayInput(
+			recordings.LoadReplayInputRequest{Path: recording.ReplayPath},
+		)
+		if err != nil {
+			// The loader has already classified and safely detached the
+			// replay input. Propagating that result preserves the one-read
+			// runtime-opening contract; routing the error through openRuntime
+			// would ask the same loader to read the artifact again.
+			return nil, nil, nil, err
+		}
+		// Offline replay is a detached historical inspection. A caller that
+		// explicitly requested a hosted process still owns the established
+		// ordinary replay contract, which exposes the replay through its live
+		// API and metrics surfaces. Keeping that distinction here prevents the
+		// inspection-only product from being wrapped in host-readiness or live
+		// transport lifecycle requirements.
+		if replayRequestsHistoricalInspection(selection.Host) && selectsHistoricalReplayInspection(input) {
+			return open(&input)
+		}
+		// Hosted replay and legacy V1 JSON retain the ordinary activated runtime
+		// path. Keep intentionally incomplete synthetic inputs used by narrow
+		// compatibility callers on that same path; the real Recordings loader
+		// reports the format before this branch.
+		return r.openActivatedRuntimeWithReplayInput(ctx, request, &input)
+	}
+	if strings.TrimSpace(recording.ResumePath) != "" {
+		if r.recordingsRuntime == nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: Recordings resume input capability is required")
+		}
+		input, err := r.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
+			Path: recording.ResumePath,
+		})
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("open Factory Runtime: load resume input: %w", err)
+		}
+		return r.openActivatedRuntimeWithResumeInput(ctx, request, &input)
+	}
+	return r.openActivatedRuntime(ctx, request)
 }

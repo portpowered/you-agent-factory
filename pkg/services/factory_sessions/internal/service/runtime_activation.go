@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func (r *Root) activateRuntime(
+func (r *RuntimeOpening) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
 ) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, *factoryruntime.RuntimeActivation, roles.ApplicationRuntime, error) {
@@ -56,7 +56,7 @@ func (r *Root) activateRuntime(
 	if canonicalSessionIDGenerated && ctx.Err() != nil {
 		openingContext = context.WithoutCancel(ctx)
 	}
-	return r.opening.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
+	return r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
 }
 
 // newRuntimeActivation retains the acquired activation's declared handles and
@@ -237,14 +237,14 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 	return config
 }
 
-func (r *Root) openActivatedRuntime(
+func (r *RuntimeOpening) openActivatedRuntime(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 ) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
-func (r *Root) openActivatedRuntimeWithReplayInput(
+func (r *RuntimeOpening) openActivatedRuntimeWithReplayInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
@@ -252,7 +252,7 @@ func (r *Root) openActivatedRuntimeWithReplayInput(
 	return r.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
 }
 
-func (r *Root) openActivatedRuntimeWithResumeInput(
+func (r *RuntimeOpening) openActivatedRuntimeWithResumeInput(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	resumeInput *recordings.LoadResumeInputResult,
@@ -260,7 +260,7 @@ func (r *Root) openActivatedRuntimeWithResumeInput(
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
 }
 
-func (r *Root) openActivatedRuntimeWithInputs(
+func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
@@ -295,7 +295,7 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	}
 	closeRuntime := activationCloser(r.runtimeRoot, binding, result.RuntimeID)
 	if !binding.IsZero() {
-		if err := r.opening.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
+		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
 			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
@@ -342,14 +342,14 @@ func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
 	)
 }
 
-func (r *Root) activationRequest(
+func (r *RuntimeOpening) activationRequest(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 ) (factoryruntime.RuntimeActivationRequest, error) {
 	return r.activationRequestWithInputs(ctx, request, nil, nil)
 }
 
-func (r *Root) activationRequestWithInputs(
+func (r *RuntimeOpening) activationRequestWithInputs(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
@@ -420,7 +420,7 @@ type activationSnapshotResolution struct {
 	runtimeBaseDir string
 }
 
-func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
+func (r *RuntimeOpening) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
 	if runtime == nil {
 		return "", fmt.Errorf("activate Factory Runtime: runtime selection is required")
 	}
@@ -439,7 +439,7 @@ func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelectio
 	return runtimeID, nil
 }
 
-func (r *Root) canonicalSessionIDGenerator() func() string {
+func (r *RuntimeOpening) canonicalSessionIDGenerator() func() string {
 	if r == nil {
 		return nil
 	}

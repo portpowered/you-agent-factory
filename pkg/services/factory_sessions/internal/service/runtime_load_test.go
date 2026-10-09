@@ -670,7 +670,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		},
 	}
 	root := &resumeRoutingRoot{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },

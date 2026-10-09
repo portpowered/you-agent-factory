@@ -610,17 +610,17 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v169 := wire5.NewRuntimeOpeningCompletion(v126, definitionRuntimeRouter, webhooksService, v168)
 	v170 := wire5.NewRuntimeOpeningBinding(serviceService, recordingsService, v91, v160)
-	v171 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner, v45, recordedSessionInventory, v166, v169, v170)
-	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
-	v172 := provideRuntimeDispatchPlanning()
-	v173, err := provideFactoryRuntimeRoot(v43, v109, v172)
+	v171 := provideRuntimeDispatchPlanning()
+	v172, err := provideFactoryRuntimeRoot(v43, v109, v171)
 	if err != nil {
 		return nil, err
 	}
+	v173 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner, v45, recordedSessionInventory, v166, v169, v170, v172, v103, logger)
+	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	v174 := provideRuntimeModelFactoryConfigReader(v126)
 	v175 := provideRuntimeModelWorkerExecution(workersService)
 	v176 := wire5.NewRuntimeModelInvocation(modelsService, v174, v175)
-	v177, err := wire5.NewRoot(v171, providersessionsService, logger, workflowPreviewOperation, v173, factorydefinitionsService, v103, v126, v45, runtimeInstanceIDGenerator, homeDirectoryResolver, workService, modelsService, recordingsService, v34, workersService, v176, liveChangeCoordinator, v21)
+	v177, err := wire5.NewRoot(v173, providersessionsService, logger, workflowPreviewOperation, factorydefinitionsService, v103, v126, v45, homeDirectoryResolver, workService, modelsService, recordingsService, v34, workersService, v176, liveChangeCoordinator, v21)
 	if err != nil {
 		return nil, err
 	}

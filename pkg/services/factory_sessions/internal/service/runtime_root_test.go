@@ -383,7 +383,7 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
 	var canonicalCalls atomic.Int32
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateSessionID: func() string {
 			canonicalCalls.Add(1)
 			return canonicalID
@@ -413,7 +413,7 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
 	var canonicalCalls atomic.Int32
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateSessionID: func() string {
 			canonicalCalls.Add(1)
 			return canonicalID
@@ -441,7 +441,7 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
-	factory := &Root{
+	factory := &RuntimeOpening{
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
 	runtimeSelection := factoryruntime.RuntimeSelection{}
@@ -544,7 +544,7 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 	t.Parallel()
 
 	root := &cleanupRoutingRoot{}
-	factory := &Root{
+	factory := &RuntimeOpening{
 		runtimeRoot:               root,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection:         NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, nil, nil, nil, nil),
@@ -651,7 +651,7 @@ func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCanc
 				}
 				return nil
 			}
-			factory := &Root{runtimeRoot: root}
+			factory := &RuntimeOpening{runtimeRoot: root}
 			closeRuntime := activationCloser(factory.runtimeRoot, factoryruntime.RuntimeBinding{}, "selected-generation")
 			peer := &cleanupRoutingRoot{}
 			factory.runtimeRoot = peer
