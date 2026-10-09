@@ -445,15 +445,52 @@ func (fixture *exactStopFixture) assertIncompleteInterruptRecovery(t *testing.T,
 	fixture.assertIncompleteCLIAndLogs(t, wantCode)
 	fixture.assertJoined(t, "source")
 	fixture.assertJoined(t, "sibling")
-	_, status, _ := getInterruptWorker(fixture.ctx, http.DefaultClient, fixture.url, "exact-successor")
-	if status != http.StatusNotFound {
-		t.Fatalf("incomplete intent admitted successor: HTTP %d", status)
-	}
+	fixture.assertUnadmittedSuccessor(t, fault)
 	if _, err := os.Stat(filepath.Join(fixture.state, "unexpected.marker")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("incomplete intent executed provider: %v", err)
 	}
 	stopInterruptDaemon(t, fixture.binary, fixture.dir, fixture.url, fixture.env, fixture.daemon)
 	assertInterruptPortAvailable(t, fixture.port)
+}
+
+func (fixture *exactStopFixture) assertUnadmittedSuccessor(t *testing.T, fault string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(fixture.ctx, http.MethodGet, fixture.url+"/worker-sessions/exact-successor", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var result factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	wantStatus, wantCode := http.StatusNotFound, factoryapi.ErrorResponseCode("NOT_FOUND")
+	if fault == "torn-tail" {
+		// Incomplete archived membership cannot prove absence. This error alone
+		// does not prove that the successor was never admitted to the live host.
+		wantStatus, wantCode = http.StatusInternalServerError, "PROJECTION_UNAVAILABLE"
+	}
+	if response.StatusCode != wantStatus || result.Code != wantCode {
+		t.Fatalf("incomplete intent successor lookup: HTTP %d error=%#v want=%d/%s", response.StatusCode, result, wantStatus, wantCode)
+	}
+	live, err := getInterruptJSON[factoryapi.ListWorkerSessionsResponse](fixture.ctx, http.DefaultClient,
+		fixture.url+"/worker-sessions?history=active&maxResults=100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.PaginationContext != nil && live.PaginationContext.NextToken != nil {
+		t.Fatal("live Worker Session inventory is incomplete")
+	}
+	for _, session := range live.Sessions {
+		if session.WorkerSessionId == "exact-successor" {
+			t.Fatalf("incomplete intent admitted live successor: %#v", session)
+		}
+	}
+	t.Logf("successor detail HTTP %d/%s; exact-successor absent from live Worker Sessions", response.StatusCode, result.Code)
 }
 
 func (fixture *exactStopFixture) assertIncompleteCLIAndLogs(t *testing.T, wantCode string) {

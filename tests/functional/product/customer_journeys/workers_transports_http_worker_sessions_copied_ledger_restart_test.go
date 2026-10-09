@@ -755,3 +755,13 @@ func copyCopiedLedgerDirectory(t *testing.T, source, destination string) {
 		t.Fatalf("copy controlled Provider Session transcript store: %v", err)
 	}
 }
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *copiedLedgerWorkerRecordingWriter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *copiedLedgerWorkerRecordingWriter) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}

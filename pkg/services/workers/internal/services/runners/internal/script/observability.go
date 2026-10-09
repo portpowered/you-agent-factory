@@ -1,6 +1,7 @@
 package script
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strconv"
 	"strings"
@@ -86,6 +87,8 @@ func scriptRequestEvent(
 	eventTime time.Time,
 	transitionID string,
 ) workers.ScriptEvent {
+	stdinByteLength := int64(len(request.Stdin))
+	stdinSha256 := fmt.Sprintf("%x", sha256.Sum256(request.Stdin))
 	return scriptEvent(request, eventTime, &workers.ScriptRequestEventPayload{
 		Args:            append([]string(nil), request.Args...),
 		Attempt:         scriptAttempt,
@@ -93,6 +96,8 @@ func scriptRequestEvent(
 		DispatchID:      request.DispatchID,
 		ScriptRequestID: requestID,
 		TransitionID:    transitionID,
+		StdinByteLength: &stdinByteLength,
+		StdinSha256:     &stdinSha256,
 	}, nil)
 }
 

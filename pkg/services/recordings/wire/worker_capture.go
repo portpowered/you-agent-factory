@@ -11,12 +11,21 @@ import (
 	workerrecordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/wire"
 )
 
+// NewWorkerCapturePreparationOperation binds the writer's startup capability
+// without the Factory Sessions dependency of Work-name attribution.
+func NewWorkerCapturePreparationOperation(writer recordings.WorkerRecordingWriter) recordings.WorkerCapturePreparationOperation {
+	if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
+		return recovery.RecoverWorkerOwners
+	}
+	return func(ctx context.Context) error { return ctx.Err() }
+}
+
 // NewWorkerOwnerRecoveryOperation binds the existing writer's boot capability.
 // External writers retain their explicit ownership/recovery policy.
-func NewWorkerOwnerRecoveryOperation(writer recordings.WorkerRecordingWriter, attribution recordings.WorkerWorkAttributionReader) recordings.WorkerOwnerRecoveryOperation {
+func NewWorkerOwnerRecoveryOperation(prepare recordings.WorkerCapturePreparationOperation, attribution recordings.WorkerWorkAttributionReader) recordings.WorkerOwnerRecoveryOperation {
 	return func(ctx context.Context) error {
-		if recovery, ok := writer.(interface{ RecoverWorkerOwners(context.Context) error }); ok {
-			if err := recovery.RecoverWorkerOwners(ctx); err != nil {
+		if prepare != nil {
+			if err := prepare(ctx); err != nil {
 				return err
 			}
 		}

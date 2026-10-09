@@ -1380,6 +1380,7 @@ const (
 	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
 	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
 	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
+	WorkFailureTypeWorkerDeclaredFailure           WorkFailureType = "worker_declared_failure"
 )
 
 // Defines values for WorkOutcome.
@@ -7915,7 +7916,13 @@ type ScriptRequestEventPayload struct {
 
 	// ScriptRequestId Stable identifier correlating this script request with its response.
 	ScriptRequestId string `json:"scriptRequestId"`
-	TransitionId    string `json:"transitionId"`
+
+	// StdinByteLength Byte length of rendered stdin passed to the command runner, including zero for empty stdin.
+	StdinByteLength *int64 `json:"stdinByteLength,omitempty"`
+
+	// StdinSha256 Lowercase SHA-256 digest of rendered stdin bytes passed to the command runner.
+	StdinSha256  *string `json:"stdinSha256,omitempty"`
+	TransitionId string  `json:"transitionId"`
 }
 
 // ScriptResponseEventPayload Response details captured after a script-backed worker command returns or fails before a normal exit code. Raw environment values and raw stdin content are intentionally excluded from the public script event contract.

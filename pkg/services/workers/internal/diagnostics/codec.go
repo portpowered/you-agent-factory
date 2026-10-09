@@ -478,15 +478,16 @@ var safeFailureStageValues = map[string]struct{}{
 }
 
 var safeFailureTypeValues = map[string]struct{}{
-	"auth_failure":          {},
-	"command_line_too_long": {},
-	"internal_server_error": {},
-	"missing_executable":    {},
-	"misconfigured":         {},
-	"permanent_bad_request": {},
-	"throttled":             {},
-	"timeout":               {},
-	"unknown":               {},
+	"worker_declared_failure": {},
+	"auth_failure":            {},
+	"command_line_too_long":   {},
+	"internal_server_error":   {},
+	"missing_executable":      {},
+	"misconfigured":           {},
+	"permanent_bad_request":   {},
+	"throttled":               {},
+	"timeout":                 {},
+	"unknown":                 {},
 }
 
 var safeInspectionLimitCategoryValues = map[string]struct{}{

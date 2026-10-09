@@ -265,6 +265,8 @@ type ScriptRequestEventPayload struct {
 	DispatchID      string   `json:"dispatchId"`
 	ScriptRequestID string   `json:"scriptRequestId"`
 	TransitionID    string   `json:"transitionId"`
+	StdinByteLength *int64   `json:"stdinByteLength,omitempty"`
+	StdinSha256     *string  `json:"stdinSha256,omitempty"`
 }
 
 // ScriptResponseEventPayload records one script attempt outcome.
@@ -627,6 +629,7 @@ const (
 	// failure emitted when a successful worker did not produce its declared
 	// workspace files.
 	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeWorkerDeclaredFailure        WorkFailureType = "worker_declared_failure"
 )
 
 // ExpectedArtifactVerificationReason identifies why one expected artifact
@@ -707,7 +710,7 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 		WorkFailureTypeMissingExecutable,
 		WorkFailureTypeCommandLineTooLong,
 		WorkFailureTypeStructuredOutputSchemaViolation,
-		WorkFailureTypeExpectedArtifactsUnsatisfied:
+		WorkFailureTypeExpectedArtifactsUnsatisfied, WorkFailureTypeWorkerDeclaredFailure:
 		return WorkFailureDecision{Terminal: true}
 	}
 	switch metadata.Family {

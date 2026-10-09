@@ -346,3 +346,22 @@ func TestExactStopPublicResultsExcludeConfiguredSecrets(t *testing.T) {
 		t.Fatalf("private stop provider calls=%d", runner.callCount())
 	}
 }
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *exactStopIntentGate) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	summary, err := store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+	if id == "corrupt-stop-target" {
+		for index := range summary.ControlOperations {
+			record := &summary.ControlOperations[index]
+			if record.Operation.Phase == "COMPLETED" {
+				record.Result = append([]byte(`{"private":"private-stop-detail",`), record.Result[1:]...)
+			}
+		}
+	}
+	return summary, err
+}
+
+func (store *exactStopIntentGate) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}

@@ -219,3 +219,13 @@ func assertPressureCancel(t *testing.T, ctx context.Context, endpoint, id string
 	fleetProfileHTTP(t, ctx, http.MethodPost, endpoint+"/worker-sessions/"+id+"/cancel", map[string]any{})
 	waitEvictionSignal(t, ctx, runner.canceled)
 }
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *pressureWriter) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *pressureWriter) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}

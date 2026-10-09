@@ -566,6 +566,7 @@ func assertPublishedWorkFailureSchemas(t *testing.T, schemas map[string]any, pro
 		"command_line_too_long",
 		"structured_output_schema_violation",
 		"EXPECTED_ARTIFACTS_UNSATISFIED",
+		"worker_declared_failure",
 	})
 }
 

@@ -14,6 +14,10 @@ import (
 // WorkerCaptureClock supplies host commit-operation time.
 type WorkerCaptureClock interface{ Now() time.Time }
 
+// WorkerCapturePreparationOperation prepares committed capture facts before
+// runtime activation, independently of Factory Work-name attribution.
+type WorkerCapturePreparationOperation func(context.Context) error
+
 type WorkerCapturedActivityReader interface {
 	ListWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
@@ -107,4 +111,15 @@ type WorkerRecordingFailureWriter interface {
 // WorkerRecordingWriter is the durable acceptance port for one Worker record.
 type WorkerRecordingWriter interface {
 	PersistWorkerRecord(context.Context, workerrecording.WorkerRecordingRecord) error
+}
+
+// WorkerCapturedSummary contains bounded committed metadata and control facts.
+type WorkerCapturedSummary struct {
+	Capture           workerrecording.WorkerCapturedCatalogItem
+	ControlOperations []workerrecording.WorkerControlOperationRecord
+}
+
+// WorkerCapturedSummaryReader never hydrates or scans recording history.
+type WorkerCapturedSummaryReader interface {
+	LookupWorkerSessionSummary(context.Context, string) (WorkerCapturedSummary, error)
 }

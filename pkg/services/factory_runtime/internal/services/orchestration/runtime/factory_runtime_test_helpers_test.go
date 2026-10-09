@@ -1329,8 +1329,9 @@ func waitForBufferedResult(t *testing.T, written <-chan struct{}) {
 	}
 }
 
-func assertPausedWorkerResultBuffered(t *testing.T, f factoryhost.Engine) {
+func assertPausedWorkerResultApplied(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
+	waitForWorkAtPlace(t, f, "task:done", time.Minute)
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot while paused: %v", err)
@@ -1338,11 +1339,8 @@ func assertPausedWorkerResultBuffered(t *testing.T, f factoryhost.Engine) {
 	if snap.FactoryState != string(interfaces.FactoryStatePaused) {
 		t.Fatalf("factory state = %q, want PAUSED", snap.FactoryState)
 	}
-	if hasWorkAtPlace(snap, "task:done") {
-		t.Fatal("worker result applied while paused")
-	}
-	if snap.InFlightCount == 0 {
-		t.Fatalf("dispatch completed while paused inFlight=%d", snap.InFlightCount)
+	if countTokensAtPlace(snap, "task:done") != 1 || snap.InFlightCount != 0 || len(snap.DispatchHistory) != 1 {
+		t.Fatalf("paused result was not applied exactly once: %#v", snap)
 	}
 }
 
@@ -1355,11 +1353,6 @@ func assertPausedSubmissionNotDone(t *testing.T, f factoryhost.Engine) {
 	if hasWorkAtPlace(snap, "task:done") {
 		t.Fatal("buffered submission applied while paused")
 	}
-}
-
-func assertPausedWorkerResultNotDone(t *testing.T, f factoryhost.Engine) {
-	t.Helper()
-	assertPausedWorkerResultBuffered(t, f)
 }
 
 func assertTaskDoneOnce(t *testing.T, f factoryhost.Engine) {

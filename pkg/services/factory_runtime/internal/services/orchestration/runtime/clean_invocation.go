@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -575,6 +576,17 @@ func restoredWorkItems(restored *interfaces.FactoryWorldState) map[string]work.F
 	mergeRestoredWorkItems(items, restored.ActiveWorkItemsByID, true)
 	mergeRestoredTerminalWork(items, restored.TerminalWorkByID)
 	mergeRestoredWorkItems(items, restored.FailedWorkItemsByID, true)
+	// Current placement projections can omit the admission payload. Recover
+	// it by exact Work identity from the existing canonical request history.
+	for _, requestID := range sortedRestoredKeys(restored.WorkRequestsByID) {
+		for _, submitted := range restored.WorkRequestsByID[requestID].WorkItems {
+			item, exists := items[submitted.ID]
+			if exists && len(item.Payload) == 0 {
+				item.Payload = work.ClonePayload(submitted.Payload)
+				items[submitted.ID] = item
+			}
+		}
+	}
 	return items
 }
 
@@ -822,15 +834,7 @@ func restoredWorkToken(
 	if chainingTraceDepth == 0 && currentChainingTraceID != "" {
 		chainingTraceDepth = 1
 	}
-	// Recording projections retain canonical content, while prompt templates
-	// also consume the text payload derived during live admission. Rebuild that
-	// projection without trimming or re-encoding the saved UTF-8 text.
-	var payload []byte
-	for _, part := range item.Content {
-		if part.Type.Normalized() == work.WorkContentPartTypeText {
-			payload = append(payload, part.Text...)
-		}
-	}
+	payload := restoredWorkPayload(item)
 	return &factorytoken.Token{
 		ID:      item.ID,
 		PlaceID: placeID,
@@ -860,6 +864,25 @@ func restoredWorkToken(
 			PlaceVisits:         make(map[string]int),
 		},
 	}
+}
+
+// Explicit current content wins over the admission payload, including empty
+// content. Older recordings without a payload retain the text projection.
+func restoredWorkPayload(item work.FactoryWorkItem) []byte {
+	if item.Content == nil && len(item.Payload) > 0 {
+		var text string
+		if json.Unmarshal(item.Payload, &text) == nil {
+			return []byte(text)
+		}
+		return work.ClonePayload(item.Payload)
+	}
+	var payload []byte
+	for _, part := range item.Content {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
+			payload = append(payload, part.Text...)
+		}
+	}
+	return payload
 }
 
 func restoredWorkRelations(relations []work.FactoryRelation) []work.Relation {
