@@ -1069,7 +1069,7 @@ func (r *registry) resolveWorkerAddressLocked(id string, scopes ...string) (stri
 		address = candidate
 	}
 	if len(candidates) > 1 {
-		return "", workersessions.NewAmbiguousAddressError(candidates)
+		return "", (workersessions.AmbiguousAddressError{Candidates: candidates}).Clone()
 	}
 	return address, nil
 }

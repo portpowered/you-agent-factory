@@ -419,7 +419,7 @@ func assertWorkerAddressCandidates(t *testing.T, owner, peer *perRuntimeAttemptF
 		}
 		want = append(want, scoped.AddressCandidate())
 	}
-	if !reflect.DeepEqual(ambiguous.Candidates, workersessions.NewAmbiguousAddressError(want).Candidates) {
+	if !reflect.DeepEqual(ambiguous.Candidates, (workersessions.AmbiguousAddressError{Candidates: want}).Clone().Candidates) {
 		t.Fatalf("candidates = %+v, want %+v", ambiguous.Candidates, want)
 	}
 	if ambiguous.Candidates[0].WorkID != nil {
@@ -428,7 +428,7 @@ func assertWorkerAddressCandidates(t *testing.T, owner, peer *perRuntimeAttemptF
 	ambiguous.Candidates[0].FactorySessionID = "changed-by-caller"
 	_, againErr := owner.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: owner.request.ID})
 	var again *workersessions.AmbiguousAddressError
-	if !errors.As(againErr, &again) || !reflect.DeepEqual(again.Candidates, workersessions.NewAmbiguousAddressError(want).Candidates) {
+	if !errors.As(againErr, &again) || !reflect.DeepEqual(again.Candidates, (workersessions.AmbiguousAddressError{Candidates: want}).Clone().Candidates) {
 		t.Fatalf("caller mutated retained candidates: %+v, %v", again, againErr)
 	}
 }

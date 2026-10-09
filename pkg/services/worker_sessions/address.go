@@ -40,9 +40,10 @@ func (err *AmbiguousAddressError) Error() string {
 
 func (err *AmbiguousAddressError) Unwrap() error { return ErrWorkerSessionAmbiguous }
 
-// NewAmbiguousAddressError freezes candidates and deduplicates representations
+// Clone freezes candidates and deduplicates representations
 // of the same identity. The first representation retains authority for facts.
-func NewAmbiguousAddressError(candidates []AddressCandidate) *AmbiguousAddressError {
+func (err AmbiguousAddressError) Clone() *AmbiguousAddressError {
+	candidates := err.Candidates
 	result := &AmbiguousAddressError{}
 	type identity struct{ factory, worker string }
 	seen := make(map[identity]bool, len(candidates))

@@ -61,10 +61,10 @@ func TestControlPreflightUsesFleetCandidatesBeforeBoundRegistry(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
 			bound := &fakeObservationService{}
-			candidates := workersessions.NewAmbiguousAddressError([]workersessions.AddressCandidate{
+			candidates := (workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{
 				{WorkerSessionID: "source", FactorySessionID: "owner-a", State: workersessions.StateCompleted},
 				{WorkerSessionID: "source", FactorySessionID: "owner-b", State: workersessions.StateCompleted},
-			})
+			}}).Clone()
 			fleet := &fakeObservationService{getByWorkerErr: candidates}
 			adapter := NewAdapterWithStartAndContinueAndInterrupt(bound, bound, bound, bound, workServiceStub{}).WithTopLevelObservationService(fleet)
 			var err error

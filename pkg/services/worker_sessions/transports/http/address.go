@@ -17,7 +17,7 @@ func writeAmbiguousAddressError(w http.ResponseWriter, err error, phase string) 
 		return false
 	}
 	details := factoryapi.WorkerSessionAddressDetails{}
-	for _, candidate := range workersessions.NewAmbiguousAddressError(ambiguous.Candidates).Candidates {
+	for _, candidate := range ambiguous.Clone().Candidates {
 		details.Candidates = append(details.Candidates, factoryapi.WorkerSessionAddressCandidate{
 			FactorySessionId: candidate.FactorySessionID,
 			WorkerSessionId:  candidate.WorkerSessionID,

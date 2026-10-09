@@ -21,7 +21,7 @@ func TestWorkerSessionAddressErrorCLI(t *testing.T) {
 		{FactorySessionID: "owner", WorkerSessionID: "legacy", WorkID: &work, State: workersessions.StateRunning},
 		{FactorySessionID: "peer", WorkerSessionID: "legacy", State: workersessions.StateCompleted},
 	}
-	ambiguous := workersessions.NewAmbiguousAddressError(candidates)
+	ambiguous := (workersessions.AmbiguousAddressError{Candidates: candidates}).Clone()
 	encoded, err := json.Marshal(struct {
 		Code    string                                `json:"code"`
 		Message string                                `json:"message"`

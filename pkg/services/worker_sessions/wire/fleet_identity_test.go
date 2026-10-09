@@ -19,7 +19,7 @@ func TestFleetWorkerSessionAddressCollisionAndSelectedOwner(t *testing.T) {
 	ctx := context.Background()
 	result, err := service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "legacy"})
 	var ambiguous *workersessions.AmbiguousAddressError
-	want := workersessions.NewAmbiguousAddressError([]workersessions.AddressCandidate{left.AddressCandidate(), right.AddressCandidate()})
+	want := (workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{left.AddressCandidate(), right.AddressCandidate()}}).Clone()
 	if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || !errors.As(err, &ambiguous) || !reflect.DeepEqual(ambiguous.Candidates, want.Candidates) || result.WorkerSessionID != "" {
 		t.Fatalf("fleet collision = %+v, %v, candidates=%+v", result, err, ambiguous)
 	}
@@ -70,13 +70,13 @@ func TestFleetWorkerSessionAddressCombinesAmbiguousSourceWithPeer(t *testing.T) 
 	second := workersessions.Observation{WorkerSessionID: "legacy", FactorySessionID: "factory-b", State: workersessions.StateCompleted}
 	third := workersessions.Observation{WorkerSessionID: "legacy", FactorySessionID: "factory-c", State: workersessions.StatePaused}
 	ambiguousSource := newFleetObservationSource("colliding-registry")
-	ambiguousSource.err = workersessions.NewAmbiguousAddressError([]workersessions.AddressCandidate{first.AddressCandidate(), second.AddressCandidate()})
+	ambiguousSource.err = (workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{first.AddressCandidate(), second.AddressCandidate()}}).Clone()
 	service := newLegacyFleetFixture(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{ambiguousSource, newFleetObservationSource("duplicate", first), newFleetObservationSource("peer", third)}, nil
 	})
 	result, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "legacy"})
 	var ambiguous *workersessions.AmbiguousAddressError
-	want := workersessions.NewAmbiguousAddressError([]workersessions.AddressCandidate{first.AddressCandidate(), second.AddressCandidate(), third.AddressCandidate()})
+	want := (workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{first.AddressCandidate(), second.AddressCandidate(), third.AddressCandidate()}}).Clone()
 	if !errors.As(err, &ambiguous) || !reflect.DeepEqual(ambiguous.Candidates, want.Candidates) || result.WorkerSessionID != "" {
 		t.Fatalf("complete fleet candidate set = %+v, %v, candidates=%+v", result, err, ambiguous)
 	}

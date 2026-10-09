@@ -15,7 +15,7 @@ func TestWorkerSessionAddressCandidatesAreDetachedDistinctIdentities(t *testing.
 		{FactorySessionID: "a", WorkerSessionID: "legacy", WorkID: &work, State: StateCompleted},
 		{FactorySessionID: "b", WorkerSessionID: "legacy", State: StateCompleted},
 	}
-	err := NewAmbiguousAddressError(input)
+	err := (AmbiguousAddressError{Candidates: input}).Clone()
 	work = "mutated"
 	input[0].FactorySessionID = "mutated"
 	if !errors.Is(err, ErrWorkerSessionAmbiguous) || len(err.Candidates) != 2 || err.Candidates[0].FactorySessionID != "a" ||

@@ -83,7 +83,7 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 			return workersessions.Observation{}, err
 		}
 	}
-	identities := workersessions.NewAmbiguousAddressError(candidates)
+	identities := (workersessions.AmbiguousAddressError{Candidates: candidates}).Clone()
 	if len(identities.Candidates) > 1 {
 		return workersessions.Observation{}, identities
 	}
