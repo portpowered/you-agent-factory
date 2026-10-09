@@ -9,13 +9,11 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -131,7 +129,6 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 type SessionPresentation struct {
 	FactoryRuntime       factoryruntime.Service
 	ModelsScope          models.RuntimeScopeRef
-	ModelInvoker         workers.ModelInvoker
 	WorkerSessions       workersessions.ObservationService
 	Logger               *zap.Logger
 	Reader               roles.RuntimeReader
@@ -149,7 +146,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 	return SessionPresentation{
 		FactoryRuntime:       selectedRuntimeService(bound),
 		ModelsScope:          bound.ModelsScope,
-		ModelInvoker:         selectedModelInvocation{facts: selectedModelFacts(bound, sessionID), operation: r.modelInvocation},
 		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
 		Reader:               r.factorySessionsRuntimeAssembly,
@@ -158,18 +154,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
 	}, nil
-}
-
-// selectedModelInvocation adapts one live generation to the Models HTTP
-// invocation boundary. Captured facts keep a retained presentation scoped even
-// when the current session or its runtime generation changes.
-type selectedModelInvocation struct {
-	facts     modelinvocation.RuntimeModelInvocation
-	operation modelinvocation.RuntimeModelInvocationOperation
-}
-
-func (s selectedModelInvocation) InvokeModel(ctx context.Context, name string, request models.Request) (models.Result, error) {
-	return s.operation.InvokeRuntimeModel(ctx, s.facts, name, request)
 }
 
 func (r *Root) ApplicationReplayMetadataWarnings(sessionID string) ([]recordings.MetadataMismatchWarning, error) {
