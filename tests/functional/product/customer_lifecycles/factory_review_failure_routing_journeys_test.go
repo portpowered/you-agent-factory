@@ -13,6 +13,7 @@ func TestReviewFailureRecoveryJourneys(t *testing.T) {
 	t.Run("TestMergedPRRoute_AuthoredFactoryValidateOnly", testFactoryreviewfailureroutingMergedPRRoute_AuthoredFactoryValidateOnly)
 	t.Run("TestProjectLead_ContinueDecisionKeepsProjectWaitingWithoutEscalation", testFactoryreviewfailureroutingProjectLead_ContinueDecisionKeepsProjectWaitingWithoutEscalation)
 	t.Run("TestProjectLoopback_ProposalOutcomes", testProjectLoopbackProposalOutcomes)
+	t.Run("TestProjectEscalationTagLineage", testProjectEscalationTagLineage)
 	t.Run("TestProjectLoopback_F4BusyLead", testProjectLoopbackBusyLead)
 	t.Run("TestProjectLoopback_F5SequentialOrigins", testProjectLoopbackSequentialOrigins)
 	t.Run("TestProjectReport_CarriesTheExactFailedChildWorkID", testFactoryreviewfailureroutingProjectReport_CarriesTheExactFailedChildWorkID)
