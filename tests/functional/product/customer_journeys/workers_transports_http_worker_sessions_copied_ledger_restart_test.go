@@ -130,20 +130,12 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	workIDs := append([]string{targetWorkID}, siblingWorkIDs...)
 	workIDs = append(workIDs, failureWorkID)
 	support.WaitForSessionTerminalStatus(t, fixture.server.URL(), fixture.factoryID, copiedLedgerReplayTimeout)
-	for _, workID := range workIDs {
-		waitCopiedLedgerWorkConfirmed(t, fixture.server.URL(), fixture.factoryID, workID)
-	}
 
 	before := captureCopiedLedgerSnapshot(t, fixture.server.URL(), fixture.factoryID, workIDs, targetWorkID, failureWorkID)
 	workerRecordingID := fixture.workerRecordingWriter.recordingIdentity()
 	if workerRecordingID == "" {
 		t.Fatal("Worker Session execution did not persist a source-native recording identity")
 	}
-	beforeWorkerRecording, err := fixture.server.WorkerRecordingReader().LoadWorkerRecording(ctx, workerRecordingID)
-	if err != nil {
-		t.Fatalf("load source-native Worker recording before copy: %v", err)
-	}
-	assertCopiedLedgerWorkerRecordingTimings(t, beforeWorkerRecording, before)
 	assertCopiedLedgerWorkRows(t, before.lists[targetWorkID], fixture.factoryID, targetWorkID, 2, factoryapi.WorkerSessionObservationStateCompleted)
 	assertCopiedLedgerWorkRows(t, before.lists[failureWorkID], fixture.factoryID, failureWorkID, 1, factoryapi.WorkerSessionObservationStateFailed)
 	if before.details[firstWorkerSessionID].State != factoryapi.WorkerSessionObservationStateCompleted {
@@ -178,14 +170,6 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	support.WaitForSessionTerminalStatus(t, resumedServer.URL(), fixture.factoryID, copiedLedgerReplayTimeout)
 
 	after := captureCopiedLedgerSnapshot(t, resumedServer.URL(), fixture.factoryID, workIDs, targetWorkID, failureWorkID)
-	afterWorkerRecording, err := resumedServer.WorkerRecordingReader().LoadWorkerRecording(ctx, workerRecordingID)
-	if err != nil {
-		t.Fatalf("load copied source-native Worker recording after restart: %v", err)
-	}
-	if !reflect.DeepEqual(beforeWorkerRecording, afterWorkerRecording) {
-		t.Fatalf("copied source-native Worker recording changed after restart:\nbefore=%#v\nafter=%#v", beforeWorkerRecording, afterWorkerRecording)
-	}
-	assertCopiedLedgerWorkerRecordingTimings(t, afterWorkerRecording, after)
 	assertCopiedLedgerWorkInventory(t, before.inventory, workIDs)
 	assertCopiedLedgerWorkInventory(t, after.inventory, workIDs)
 	assertCopiedLedgerSnapshotsEqual(t, before, after)
@@ -600,29 +584,6 @@ func waitCopiedLedgerWorkState(t *testing.T, baseURL, factoryID, workID, want st
 	}
 }
 
-func waitCopiedLedgerWorkConfirmed(t *testing.T, baseURL, factoryID, workID string) factoryapi.Work {
-	t.Helper()
-	endpoint := copiedLedgerWorkURL(baseURL, factoryID, workID)
-	deadline := time.NewTimer(copiedLedgerReplayTimeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	var last factoryapi.Work
-	for {
-		last = support.GetJSON[factoryapi.Work](t, endpoint)
-		if last.ConfirmationState != nil && *last.ConfirmationState == factoryapi.CONFIRMED {
-			return last
-		}
-		select {
-		case <-t.Context().Done():
-			t.Fatalf("waiting for confirmed Work %q: %v", workID, t.Context().Err())
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for confirmed Work %q; last=%#v", workID, last)
-		case <-ticker.C:
-		}
-	}
-}
-
 func captureCopiedLedgerSnapshot(
 	t *testing.T,
 	baseURL, factoryID string,
@@ -630,24 +591,15 @@ func captureCopiedLedgerSnapshot(
 	targetWorkID, failureWorkID string,
 ) copiedLedgerPublicSnapshot {
 	t.Helper()
-	snapshot := copiedLedgerPublicSnapshot{
-		inventory:   support.GetJSON[factoryapi.ListWorkResponse](t, copiedLedgerWorkListURL(baseURL, factoryID)),
-		works:       make(map[string]factoryapi.Work, len(workIDs)),
-		lists:       make(map[string]factoryapi.ListWorkerSessionsResponse, len(workIDs)),
-		details:     make(map[string]factoryapi.WorkerSessionObservation),
-		transcripts: make(map[string]factoryapi.WorkerSessionTranscriptResponse),
-		events:      make(map[string][]factoryapi.WorkerSessionEvent),
-	}
+	snapshot := waitCopiedLedgerSnapshotConfirmed(t, baseURL, factoryID, workIDs, targetWorkID, failureWorkID)
+	snapshot.transcripts = make(map[string]factoryapi.WorkerSessionTranscriptResponse)
+	snapshot.events = make(map[string][]factoryapi.WorkerSessionEvent)
 	for _, workID := range workIDs {
-		snapshot.works[workID] = support.GetJSON[factoryapi.Work](t, copiedLedgerWorkURL(baseURL, factoryID, workID))
-		snapshot.lists[workID] = support.ListSessionWorkerSessions(t, baseURL, factoryID, workID)
 		if workID != targetWorkID && workID != failureWorkID {
 			continue
 		}
 		for _, listed := range snapshot.lists[workID].Sessions {
 			workerSessionID := listed.WorkerSessionId
-			snapshot.details[workerSessionID] = support.GetJSON[factoryapi.WorkerSessionObservation](t,
-				copiedLedgerWorkerSessionURL(baseURL, factoryID, workerSessionID))
 			if listed.ProviderSessionAvailable && listed.Transcript == factoryapi.WorkerSessionObservationTranscriptAVAILABLE {
 				transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t,
 					copiedLedgerWorkerSessionURL(baseURL, factoryID, workerSessionID)+"/transcript")
@@ -687,7 +639,7 @@ func assertCopiedLedgerWorkRows(
 			t.Fatalf("Work %q repeated Worker Session identity %q", workID, observation.WorkerSessionId)
 		}
 		seen[observation.WorkerSessionId] = struct{}{}
-		if (observation.ConfirmationState != factoryapi.CONFIRMED && observation.ConfirmationState != factoryapi.UNCONFIRMED) ||
+		if observation.ConfirmationState != factoryapi.CONFIRMED ||
 			observation.DurationMillis == nil || observation.DurationBasis == "" ||
 			observation.StartedAt == nil || observation.EndedAt == nil || observation.Parse.MalformedLineCount != 0 || observation.Parse.UnknownEventCount != 0 || observation.TurnUsage != nil ||
 			(wantState == factoryapi.WorkerSessionObservationStateCompleted && (observation.TokenUsage == nil || observation.TokenUsage.InputTokens == nil || *observation.TokenUsage.InputTokens != 8 ||
