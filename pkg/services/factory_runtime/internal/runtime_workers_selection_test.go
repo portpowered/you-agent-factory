@@ -10,6 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -167,6 +168,58 @@ func assertSelectionResult(t *testing.T, result workers.ExecuteResult, correlati
 type selectionWorkers struct {
 	workers.Service
 	execute func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+func TestRuntimeWorkerResolvedSuccessorRetainsDetachedMockPolicy(t *testing.T) {
+	t.Parallel()
+	tokens := int64(17)
+	config := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: "selected", Usage: &workers.MockWorkerUsageConfig{InputTokens: &tokens}}}}
+	calls := 0
+	selected := newRuntimeWorkersService(selectionWorkers{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		if ctx.Err() != nil || request.Input.MockWorkers == nil || request.Input.MockWorkers.MockWorkers[0].ID != "selected" || *request.Input.MockWorkers.MockWorkers[0].Usage.InputTokens != 17 {
+			t.Fatalf("attempt %d lost detached mock policy: %+v", calls, request.Input.MockWorkers)
+		}
+		request.Input.MockWorkers.MockWorkers[0].ID = "attempt mutation"
+		*request.Input.MockWorkers.MockWorkers[0].Usage.InputTokens = 99
+		return workers.ExecuteResult{}, nil
+	}}, nil, runtimebuild.SessionBuildSpec{}, "selected-session", false, nil, nil, config)
+	config.MockWorkers[0].ID = "caller mutation"
+	*config.MockWorkers[0].Usage.InputTokens = 42
+	request := workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "codex", Model: workers.ModelReference{Name: "selected-model"}}}
+	for range 2 {
+		if _, err := selected.Execute(t.Context(), request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if request.Input.MockWorkers != nil || calls != 2 {
+		t.Fatalf("caller request mutated or attempts missing: %+v, calls=%d", request, calls)
+	}
+}
+
+func TestRuntimeWorkerMockSelectionPreservesAbsentAndExplicitPolicy(t *testing.T) {
+	t.Parallel()
+	for _, explicit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "nonmock", true: "explicit"}[explicit], func(t *testing.T) {
+			t.Parallel()
+			request := workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "codex", Model: workers.ModelReference{Name: "ordinary-model", ReasoningEffort: "high"}}}
+			if explicit {
+				request.Input.MockWorkers = &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: "explicit"}}}
+			}
+			selected := runtimeWorkersServiceWithProgress{Service: selectionWorkers{execute: func(_ context.Context, got workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				if !reflect.DeepEqual(got, request) {
+					t.Fatalf("selected request = %+v, want %+v", got, request)
+				}
+				return workers.ExecuteResult{}, nil
+			}}}
+			if explicit {
+				selected.mockWorkersConfig = &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{ID: "host"}}}
+			}
+			if _, err := selected.Execute(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 func (s selectionWorkers) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
