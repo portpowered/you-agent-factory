@@ -2318,6 +2318,19 @@ def create_or_reuse_worktree(
         )
 
 
+def initialize_progress_log(worktree_path):
+    """Seed ordinary lane progress without replacing any existing path."""
+    destination = worktree_path / "progress.txt"
+    if os.path.lexists(destination):
+        return
+    try:
+        with destination.open("x", encoding="utf-8", newline="\n") as progress:
+            progress.write("# Codebase Patterns\n")
+    except FileExistsError:
+        # Another creator won the race; its history belongs to it.
+        return
+
+
 def copy_prd_files(prd_json_path, prd_md_path, worktree_path):
     """Copy PRD files into the worktree root."""
     dest_json = worktree_path / "prd.json"
@@ -2456,6 +2469,8 @@ def main():
                 prd_json_path, prd_md_path, worktree_dir,
             )
             dest_rules = copy_standing_rules(repo_root, worktree_dir)
+            failure_stage = "Progress log initialization failed"
+            initialize_progress_log(worktree_dir)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(
             format_stage_failure(failure_stage, e),

@@ -661,5 +661,25 @@ class AuthoredMissionPolicyTests(unittest.TestCase):
         self.assertLess(self.mission.index(clauses[0]), self.mission.index(clauses[-1]))
 
 
+class AuthoredProgressStartupPolicyTests(unittest.TestCase):
+    """The delivered first-visit instructions are the requested contract."""
+
+    def test_first_visit_initialization_precedes_dependent_reading(self):
+        prompt = SCRIPT.parent.parent / 'workstations/process/AGENTS.md'
+        text = ' '.join(prompt.read_text(encoding='utf-8').split())
+        startup = text[text.index('2. Read the progress log'):text.index('2.1.')]
+        for clause in (
+            'An absent or empty `progress.txt` on a first visit is normal.',
+            'Start it with a `# Codebase Patterns` header, then continue the task.',
+            'Never block or escalate solely because the first-visit progress log is absent or empty.',
+            'Preserve existing non-empty progress and retained history.',
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, startup)
+        reminder = 'Read the Codebase Patterns section in progress.txt before starting.'
+        self.assertLess(text.index(startup), text.index(reminder))
+        self.assertIn(reminder + ' For an absent or empty first-visit log, initialize it as described in step 2 and continue.', text)
+
+
 if __name__ == '__main__':
     unittest.main()

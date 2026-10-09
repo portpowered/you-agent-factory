@@ -709,7 +709,7 @@ func newRootWithAssembly(assembly RuntimeAssembly, liveChangeCoordinator LiveCha
 	return NewRoot(
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, assembly, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		NewHistoricalReplayBehavior(), liveChangeCoordinator, nil,
 	)
 }
