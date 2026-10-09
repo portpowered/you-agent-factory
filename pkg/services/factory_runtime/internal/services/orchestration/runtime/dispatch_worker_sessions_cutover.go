@@ -465,8 +465,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if liveErr != nil && !errors.Is(liveErr, workersessions.ErrObservationWorkNotFound) && s.Service != nil {
 		return workersessions.ListObservationsResult{}, liveErr
 	}
-	events := s.canonicalEvents()
-	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID, listedObservationIndex(live.Observations))
+	recorded, knownWork, err := s.projectListedWork(ctx, req.WorkID, listedObservationIndex(live.Observations))
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
@@ -486,6 +485,65 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	s.applyConfirmation(recorded, sample)
 	s.applyConfirmation(live.Observations, sample)
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
+}
+
+func (s *recordedWorkerSessionObservation) projectListedWork(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, error) {
+	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
+	if !ok {
+		return s.projectRecorded(ctx, s.canonicalEvents(), workID, live)
+	}
+	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, false, workersessions.ErrObservationCanceled
+		}
+		if canceled := observationContextError(ctx); canceled != nil {
+			return nil, false, canceled
+		}
+		return nil, false, workersessions.ErrObservationProjectionUnavailable
+	}
+	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
+	for id, request := range facts.Requests {
+		requests[id] = recordedDispatchRequest{workIDs: request.WorkItemIDs, startedAt: request.StartedAt}
+	}
+	index := recordedDispatchEventIndex{cursors: make(map[string]int64, len(facts.StateCursors)), responseTimes: facts.ResponseTimes, interruptions: make(map[string]recordedDispatchInterruptionFact, len(facts.Interruptions))}
+	for id, cursor := range facts.StateCursors {
+		index.cursors[id] = int64(cursor.Sequence)
+	}
+	for id, interruption := range facts.Interruptions {
+		index.interruptions[id] = recordedDispatchInterruptionFact{workIDs: facts.Requests[id].WorkItemIDs, interruptedAt: interruption.InterruptedAt, reason: interruption.Reason}
+	}
+	completed := recordedDispatchStateMaps(facts.World)
+	providers := make(map[string]interfaces.FactoryWorldProviderSessionRecord, len(facts.World.ProviderSessions))
+	for _, provider := range facts.World.ProviderSessions {
+		if _, exists := providers[provider.DispatchID]; !exists {
+			providers[provider.DispatchID] = provider
+		}
+	}
+	result := make([]workersessions.Observation, 0, len(facts.Associations))
+	for id, association := range facts.Associations {
+		var selectedProvider []interfaces.FactoryWorldProviderSessionRecord
+		if provider, ok := providers[id]; ok {
+			selectedProvider = []interfaces.FactoryWorldProviderSessionRecord{provider}
+		}
+		fact := s.annotateRecordedFact(recordedDispatchFact(id, recordedDispatchAssociation{workerSessionID: association.WorkerSessionID, turnID: association.TurnID, model: association.Model, reasoningEffort: association.ReasoningEffort, eventTime: association.AssociatedAt}, requests, completed, selectedProvider, facts.World.ActiveDispatches, index))
+		fact.streamGenerationID = facts.StreamGenerationID
+		observation := recordedObservationFromFact(fact, s.clock)
+		if observation.State == workersessions.StateCanceled {
+			observation, err = s.withCapturedWorkerIdentity(ctx, observation)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		if fact.provider != nil && !listedObservationMatches(observation, providerSessionRef(*fact.provider), live) {
+			observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		result = append(result, observation)
+	}
+	return result, facts.KnownWork, nil
 }
 
 func recordedObservationListResult(

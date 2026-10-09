@@ -7,12 +7,64 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+type selectedWorkFactsLedger struct {
+	recordings.RuntimeLedger
+	facts  recordings.WorkerSessionWorkFacts
+	err    error
+	workID string
+}
+
+func (ledger *selectedWorkFactsLedger) CurrentWorkerSessionWorkFacts(_ context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
+	ledger.workID = workID
+	return ledger.facts, ledger.err
+}
+
+func (*selectedWorkFactsLedger) CanonicalEvents() []interfaces.FactoryEvent {
+	panic("scoped list read canonical history")
+}
+
+func TestRecordedListWorkerSessionWorkUsesPreparedFacts(t *testing.T) {
+	t.Parallel()
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	when := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	ledger := &selectedWorkFactsLedger{RuntimeLedger: service.ledger, facts: recordings.WorkerSessionWorkFacts{
+		KnownWork: true, StreamGenerationID: "selected-generation",
+		Associations: map[string]recordings.WorkerSessionAssociationFacts{"selected": {WorkerSessionID: "worker-selected", AssociatedAt: when}},
+		Requests:     map[string]interfaces.FactoryWorldDispatch{"selected": {WorkItemIDs: []string{fixture.workID}, StartedAt: when}},
+		StateCursors: map[string]recordings.CanonicalEventCursor{"selected": {StreamGenerationID: "selected-generation", Sequence: 7}},
+		World:        interfaces.FactoryWorldState{ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{"selected": {WorkItemIDs: []string{fixture.workID}, StartedAt: when}}},
+	}}
+	service.ledger = ledger
+	service.projector = func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+		panic("scoped list rebuilt the world")
+	}
+	rows, known, err := service.projectListedWork(t.Context(), fixture.workID, nil)
+	if err != nil || !known || len(rows) != 1 || rows[0].WorkerSessionID != "worker-selected" || rows[0].State != workersessions.StateRunning || rows[0].StateSequence != 7 || rows[0].StreamGenerationID != "selected-generation" || ledger.workID != fixture.workID {
+		t.Fatalf("selected list = %+v, known=%v, err=%v, selector=%q", rows, known, err, ledger.workID)
+	}
+	ledger.facts.Associations = nil
+	rows, known, err = service.projectListedWork(t.Context(), fixture.workID, nil)
+	if err != nil || !known || len(rows) != 0 {
+		t.Fatalf("known empty Work = %+v, %v, %v", rows, known, err)
+	}
+	ledger.err = context.Canceled
+	if _, _, err := service.projectListedWork(t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("selected cancellation = %v", err)
+	}
+	ledger.err = errors.New("selected projection unavailable")
+	if _, _, err := service.projectListedWork(t.Context(), fixture.workID, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("selected read error = %v", err)
+	}
+}
 
 type forbiddenCapturedProviderProjection struct{ providersessions.Service }
 

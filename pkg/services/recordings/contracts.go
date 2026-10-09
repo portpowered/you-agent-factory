@@ -3,7 +3,9 @@
 package recordings
 
 import (
+	"context"
 	"errors"
+	"time"
 )
 
 import recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
@@ -661,6 +663,34 @@ type RuntimeReadMetric struct {
 // A function type keeps the optional capability narrow without publishing a
 // second service-root interface.
 type RuntimeReadMetricsRecorder func(RuntimeReadMetric)
+
+// WorkerSessionWorkProjectionReader selects prepared dispatch facts for an
+// exact Work identity within one Factory Session ledger.
+type WorkerSessionWorkProjectionReader interface {
+	CurrentWorkerSessionWorkFacts(context.Context, string) (WorkerSessionWorkFacts, error)
+}
+
+// WorkerSessionWorkFacts contains only selected Work and physical dispatch
+// facts. Values are detached from the append-maintained projection.
+type WorkerSessionWorkFacts struct {
+	KnownWork          bool
+	WorkName           string
+	StreamGenerationID string
+	World              FactoryWorldState
+	Associations       map[string]WorkerSessionAssociationFacts
+	Requests           map[string]FactoryWorldDispatch
+	StateCursors       map[string]CanonicalEventCursor
+	ResponseTimes      map[string]time.Time
+	Interruptions      map[string]DispatchInterruptedEventPayload
+}
+
+type WorkerSessionAssociationFacts struct {
+	WorkerSessionID string
+	TurnID          string
+	Model           *string
+	ReasoningEffort *string
+	AssociatedAt    time.Time
+}
 
 // CanonicalHistoryReadStats is a detached snapshot of canonical-history work
 // observed by one runtime ledger.

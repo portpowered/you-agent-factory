@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -73,6 +74,33 @@ var _ recordings.CompletedFlushWatermarkReader = (*FactoryEventHistory)(nil)
 var _ recordings.DispatchWorkerSessionAssociationRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.SessionProjectionReader = (*FactoryEventHistory)(nil)
+var _ recordings.WorkerSessionWorkProjectionReader = (*FactoryEventHistory)(nil)
+
+// CurrentWorkerSessionWorkFacts reads only matching materialized dispatches;
+// activation and canonical append own preparation, including a seeded prefix.
+func (h *FactoryEventHistory) CurrentWorkerSessionWorkFacts(ctx context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	if h == nil {
+		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("factory event history is unavailable")
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerSessionWorkFacts{}, err
+	}
+	if h.sessionProjectionErr != nil {
+		return recordings.WorkerSessionWorkFacts{}, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
+	}
+	facts := h.sessionProjection.WorkerSessionWorkFacts(workID)
+	facts.StreamGenerationID = h.streamGenerationID
+	for id, cursor := range facts.StateCursors {
+		cursor.StreamGenerationID = h.streamGenerationID
+		facts.StateCursors[id] = cursor
+	}
+	return facts, nil
+}
 
 // CurrentSessionProjectionFacts returns detached event-derived facts maintained
 // while canonical events are appended. It never reads the canonical event

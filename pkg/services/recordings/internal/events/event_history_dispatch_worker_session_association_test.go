@@ -3,12 +3,63 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *testing.T) {
+	t.Parallel()
+	when := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return when })
+	record := interfaces.FactoryDispatchRecord{DispatchID: "dispatch-selected", Dispatch: work.WorkDispatch{
+		DispatchID: "dispatch-selected", TransitionID: "station",
+		InputTokens: workers.InputTokens(workers.Token{ID: "token", Color: workers.Color{WorkID: "work-selected"}}),
+	}}
+	history.RecordWorkstationRequest(1, record, when)
+	history.RecordDispatchWorkerSessionAssociationWithExecution(1, "dispatch-selected", "worker-selected", "turn-selected", recordings.DispatchWorkerSessionExecutionFacts{Model: "model-one"}, when)
+	prefix := history.CanonicalEvents()
+	seeded := newTestFactoryEventHistory(nil, func() time.Time { return when })
+	if err := seeded.SeedCanonicalEvents(prefix); err != nil {
+		t.Fatal(err)
+	}
+	before := seeded.CanonicalHistoryReadStats()
+	facts, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
+	if err != nil || !facts.KnownWork || len(facts.Associations) != 1 || facts.Associations["dispatch-selected"].WorkerSessionID != "worker-selected" {
+		t.Fatalf("seeded selected facts = %+v, %v", facts, err)
+	}
+	if facts.StreamGenerationID != seeded.StreamGenerationID() || facts.StateCursors["dispatch-selected"].StreamGenerationID != facts.StreamGenerationID {
+		t.Fatal("selected facts lost the generation fence")
+	}
+	if seeded.CanonicalHistoryReadStats() != before {
+		t.Fatal("selected projection read canonical history")
+	}
+	*facts.Associations["dispatch-selected"].Model = "poisoned"
+	again, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
+	if err != nil || *again.Associations["dispatch-selected"].Model != "model-one" {
+		t.Fatalf("seeded facts were not detached: %+v, %v", again, err)
+	}
+	record.DispatchID, record.Dispatch.DispatchID = "dispatch-next", "dispatch-next"
+	seeded.RecordWorkstationRequest(2, record, when.Add(time.Second))
+	seeded.RecordDispatchWorkerSessionAssociation(2, "dispatch-next", "worker-next", "turn-next", when.Add(time.Second))
+	fresh, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected")
+	if err != nil || len(fresh.Associations) != 2 || fresh.Associations["dispatch-next"].WorkerSessionID != "worker-next" {
+		t.Fatalf("new append did not update selected facts: %+v, %v", fresh, err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := seeded.CurrentWorkerSessionWorkFacts(ctx, "work-selected"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled selected read = %v", err)
+	}
+	if _, err := seeded.CurrentWorkerSessionWorkFacts(t.Context(), "work-selected"); err != nil {
+		t.Fatalf("cancellation poisoned next read: %v", err)
+	}
+}
 
 func TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanonicalAssociation(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)

@@ -2,8 +2,10 @@ package projections
 
 import (
 	"strings"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	sessionprojectionfacts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -342,7 +344,8 @@ func projectOrchestratorCheckpointWarnings(
 // The owning event ledger serializes Apply with canonical appends; callers of
 // SnapshotSessionProjectionFacts receive detached values.
 type IncrementalSessionProjection struct {
-	reducer *factoryWorldReducer
+	reducer    *factoryWorldReducer
+	workerWork *workerSessionWorkIndex
 }
 
 // NewIncrementalSessionProjection creates an empty append-order projection.
@@ -358,7 +361,235 @@ func (projection *IncrementalSessionProjection) Apply(event interfaces.FactoryEv
 	if projection.reducer == nil {
 		projection.reducer = newFactoryWorldReducer(0)
 	}
-	return projection.reducer.apply(event)
+	if projection.workerWork == nil {
+		projection.workerWork = newWorkerSessionWorkIndex()
+	}
+	state := &projection.reducer.stateValue
+	completedBefore, providersBefore := len(state.CompletedDispatches), len(state.ProviderSessions)
+	if err := projection.reducer.apply(event); err != nil {
+		return err
+	}
+	return projection.workerWork.apply(event, *state, completedBefore, providersBefore)
+}
+
+// workerSessionWorkIndex holds keys and canonical facts, not another lifecycle
+// model. Completion/provider positions are admitted at the same append barrier
+// as the world reducer, so selection never walks those growing slices.
+type workerSessionWorkIndex struct {
+	known              map[string]struct{}
+	byWork             map[string]map[string]struct{}
+	workByDispatch     map[string][]string
+	associations       map[string]recordings.WorkerSessionAssociationFacts
+	requests           map[string]interfaces.FactoryWorldDispatch
+	completions        map[string]int
+	providers          map[string]int
+	cursors            map[string]recordings.CanonicalEventCursor
+	responseTimes      map[string]time.Time
+	interruptions      map[string]interfaces.DispatchInterruptedEventPayload
+	interruptedWorkIDs map[string][]string
+}
+
+func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
+	return &workerSessionWorkIndex{
+		known: make(map[string]struct{}), byWork: make(map[string]map[string]struct{}),
+		workByDispatch: make(map[string][]string),
+		associations:   make(map[string]recordings.WorkerSessionAssociationFacts),
+		requests:       make(map[string]interfaces.FactoryWorldDispatch),
+		completions:    make(map[string]int), providers: make(map[string]int),
+		cursors:            make(map[string]recordings.CanonicalEventCursor),
+		responseTimes:      make(map[string]time.Time),
+		interruptions:      make(map[string]interfaces.DispatchInterruptedEventPayload),
+		interruptedWorkIDs: make(map[string][]string),
+	}
+}
+
+func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state interfaces.FactoryWorldState, completedBefore, providersBefore int) error {
+	for _, id := range sliceValue(event.Context.WorkIDs) {
+		index.known[id] = struct{}{}
+	}
+	for position := completedBefore; position < len(state.CompletedDispatches); position++ {
+		index.completions[state.CompletedDispatches[position].DispatchID] = position
+	}
+	for position := providersBefore; position < len(state.ProviderSessions); position++ {
+		id := state.ProviderSessions[position].DispatchID
+		if _, exists := index.providers[id]; !exists {
+			index.providers[id] = position
+		}
+	}
+	dispatchID := stringValue(event.Context.DispatchID)
+	if dispatchID == "" {
+		return nil
+	}
+	switch event.Type {
+	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+		var payload struct {
+			WorkerSessionID string `json:"workerSessionId"`
+			Model           string `json:"model"`
+			ReasoningEffort string `json:"reasoningEffort"`
+		}
+		if err := event.DecodePayload(&payload); err != nil {
+			return nil
+		}
+		if payload.WorkerSessionID == "" {
+			return nil
+		}
+		index.associations[dispatchID] = recordings.WorkerSessionAssociationFacts{
+			WorkerSessionID: payload.WorkerSessionID, TurnID: stringValue(event.Context.RequestID),
+			Model: optionalWorkerFactString(payload.Model), ReasoningEffort: optionalWorkerFactString(payload.ReasoningEffort),
+			AssociatedAt: event.Context.EventTime.UTC(),
+		}
+	case interfaces.FactoryEventTypeDispatchRequest:
+		index.requests[dispatchID] = state.ActiveDispatches[dispatchID]
+	case interfaces.FactoryEventTypeDispatchResponse:
+		index.responseTimes[dispatchID] = event.Context.EventTime.UTC()
+	case interfaces.FactoryEventTypeDispatchInterrupted:
+		var payload interfaces.DispatchInterruptedEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			return err
+		}
+		if payload.InterruptedAt.IsZero() {
+			payload.InterruptedAt = event.Context.EventTime
+		}
+		index.interruptions[dispatchID] = payload
+		index.interruptedWorkIDs[dispatchID] = append([]string(nil), sliceValue(event.Context.WorkIDs)...)
+	}
+	switch event.Type {
+	case interfaces.FactoryEventTypeDispatchRequest, interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		interfaces.FactoryEventTypeDispatchResponse, interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeDispatchQueued, interfaces.FactoryEventTypeDispatchReconciled:
+		index.cursors[dispatchID] = recordings.CanonicalEventCursor{Sequence: recordings.CanonicalEventSequence(event.Context.Sequence)}
+	}
+	index.updateMembership(dispatchID, state)
+	return nil
+}
+
+func optionalWorkerFactString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func (index *workerSessionWorkIndex) updateMembership(dispatchID string, state interfaces.FactoryWorldState) {
+	workIDs := index.requests[dispatchID].WorkItemIDs
+	if active, ok := state.ActiveDispatches[dispatchID]; ok && len(active.WorkItemIDs) > 0 {
+		workIDs = active.WorkItemIDs
+	}
+	if position, ok := index.completions[dispatchID]; ok {
+		if completed := state.CompletedDispatches[position]; len(completed.WorkItemIDs) > 0 {
+			workIDs = completed.WorkItemIDs
+		}
+	} else if interrupted := index.interruptedWorkIDs[dispatchID]; len(interrupted) > 0 {
+		workIDs = interrupted
+	}
+	for _, id := range index.workByDispatch[dispatchID] {
+		delete(index.byWork[id], dispatchID)
+	}
+	index.workByDispatch[dispatchID] = append([]string(nil), workIDs...)
+	for _, id := range workIDs {
+		index.known[id] = struct{}{}
+		if index.byWork[id] == nil {
+			index.byWork[id] = make(map[string]struct{})
+		}
+		index.byWork[id][dispatchID] = struct{}{}
+	}
+}
+
+// WorkerSessionWorkFacts selects from the exact Work index. The ledger holds
+// its read lock across selection and supplies the generation fence.
+func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) recordings.WorkerSessionWorkFacts {
+	facts := recordings.WorkerSessionWorkFacts{
+		Associations:  make(map[string]recordings.WorkerSessionAssociationFacts),
+		Requests:      make(map[string]interfaces.FactoryWorldDispatch),
+		StateCursors:  make(map[string]recordings.CanonicalEventCursor),
+		ResponseTimes: make(map[string]time.Time),
+		Interruptions: make(map[string]interfaces.DispatchInterruptedEventPayload),
+		World:         interfaces.FactoryWorldState{ActiveDispatches: make(map[string]interfaces.FactoryWorldDispatch)},
+	}
+	if projection == nil || projection.reducer == nil || projection.workerWork == nil {
+		return facts
+	}
+	index, state := projection.workerWork, projection.reducer.stateValue
+	_, facts.KnownWork = index.known[workID]
+	if item, ok := state.WorkItemsByID[workID]; ok {
+		facts.KnownWork, facts.WorkName = true, item.DisplayName
+	}
+	for dispatchID := range index.byWork[workID] {
+		association, ok := index.associations[dispatchID]
+		if !ok || association.WorkerSessionID == "" {
+			continue
+		}
+		association.Model = cloneWorkerFactString(association.Model)
+		association.ReasoningEffort = cloneWorkerFactString(association.ReasoningEffort)
+		facts.Associations[dispatchID] = association
+		facts.Requests[dispatchID] = cloneWorkerFactDispatch(index.requests[dispatchID])
+		if cursor, ok := index.cursors[dispatchID]; ok {
+			facts.StateCursors[dispatchID] = cursor
+		}
+		facts.ResponseTimes[dispatchID] = index.responseTimes[dispatchID]
+		if interruption, ok := index.interruptions[dispatchID]; ok {
+			facts.Interruptions[dispatchID] = cloneWorkerFactInterruption(interruption)
+			if _, completed := index.completions[dispatchID]; !completed && len(index.interruptedWorkIDs[dispatchID]) > 0 {
+				request := facts.Requests[dispatchID]
+				request.WorkItemIDs = append([]string(nil), index.interruptedWorkIDs[dispatchID]...)
+				facts.Requests[dispatchID] = request
+			}
+		}
+		if active, ok := state.ActiveDispatches[dispatchID]; ok {
+			facts.World.ActiveDispatches[dispatchID] = cloneWorkerFactDispatch(active)
+		}
+		if position, ok := index.completions[dispatchID]; ok {
+			facts.World.CompletedDispatches = append(facts.World.CompletedDispatches, interfaces.CloneFactoryWorldDispatchCompletion(state.CompletedDispatches[position]))
+		}
+		if position, ok := index.providers[dispatchID]; ok {
+			facts.World.ProviderSessions = append(facts.World.ProviderSessions, interfaces.CloneFactoryWorldProviderSessionRecord(state.ProviderSessions[position]))
+		}
+	}
+	return facts
+}
+
+func cloneWorkerFactString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneWorkerFactInterruption(value interfaces.DispatchInterruptedEventPayload) interfaces.DispatchInterruptedEventPayload {
+	value.ProviderSessionRef = value.ProviderSessionRef.Clone()
+	if value.CheckpointRef == nil {
+		return value
+	}
+	checkpoint := *value.CheckpointRef
+	checkpoint.Label = cloneWorkerFactString(checkpoint.Label)
+	checkpoint.Summary = cloneWorkerFactString(checkpoint.Summary)
+	if checkpoint.Timestamp != nil {
+		timestamp := *checkpoint.Timestamp
+		checkpoint.Timestamp = &timestamp
+	}
+	if checkpoint.ArtifactRef != nil {
+		artifact := *checkpoint.ArtifactRef
+		artifact.ContentHash = cloneWorkerFactString(artifact.ContentHash)
+		if artifact.SizeBytes != nil {
+			size := *artifact.SizeBytes
+			artifact.SizeBytes = &size
+		}
+		checkpoint.ArtifactRef = &artifact
+	}
+	value.CheckpointRef = &checkpoint
+	return value
+}
+
+func cloneWorkerFactDispatch(value interfaces.FactoryWorldDispatch) interfaces.FactoryWorldDispatch {
+	value.WorkItemIDs = append([]string(nil), value.WorkItemIDs...)
+	value.Inputs = interfaces.CloneWorkstationInputs(value.Inputs)
+	value.Resources = append([]interfaces.FactoryResourceUnit(nil), value.Resources...)
+	value.TraceIDs = append([]string(nil), value.TraceIDs...)
+	value.PreviousChainingTraceIDs = append([]string(nil), value.PreviousChainingTraceIDs...)
+	value.ExpectedArtifactContext = value.ExpectedArtifactContext.Clone()
+	return value
 }
 
 // SnapshotSessionProjectionFacts returns detached event-derived session facts.
