@@ -318,7 +318,7 @@ func TestRuntimeOpeningCompletionSelectionsAndOrdering(t *testing.T) {
 	for _, id := range []string{"first", "peer"} {
 		selected[id], cleanups[id] = fixture.open(t, id)
 	}
-	if selected["first"].State.Owner == selected["peer"].State.Owner {
+	if selected["first"].State.(*runtimebinding.SessionState).Owner == selected["peer"].State.(*runtimebinding.SessionState).Owner {
 		t.Fatal("overlapping openings shared runtime")
 	}
 	want := []string{"first:webhook", "first:register", "first:models", "first:route", "first:publish", "first:host", "peer:webhook", "peer:register", "peer:models", "peer:route", "peer:publish", "peer:host"}
@@ -508,5 +508,18 @@ func TestRuntimeOpeningModelsBindingRetainsAcquiredCapability(t *testing.T) {
 	}
 	if openedModelsScopeBinding(inertHostedInstance{}) != nil {
 		t.Fatal("absent optional capability became a binding")
+	}
+}
+
+func TestRuntimeOpeningBindingRejectsAbsentSelectedState(t *testing.T) {
+	t.Parallel()
+	state := openingState(nil)
+	if state != nil {
+		t.Fatal("absent selected record became a nonnil mutation handle")
+	}
+	err := (&RuntimeOpeningBinding{}).Bind(t.Context(), RuntimeOpeningBindingRequest{}, state,
+		nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || err.Error() != "construct runtime scope: completed session state is unavailable" {
+		t.Fatalf("absent-state binding = %v", err)
 	}
 }

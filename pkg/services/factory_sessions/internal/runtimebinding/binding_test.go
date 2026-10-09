@@ -1104,3 +1104,32 @@ func assertNextShutdownRetiresReplacement(t *testing.T, state *sessionruntime.Se
 		t.Fatal("next shutdown did not retire only its owned replacement")
 	}
 }
+
+func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
+	t.Parallel()
+	selected, peer := &runtimebinding.SessionState{}, &runtimebinding.SessionState{}
+	resume := &recordings.ResumeRecoveryMetadata{SourceRecordingID: "source"}
+	recovery := &factorysessions.StartupRecovery{Cause: "quarantined"}
+	metadata := runtimebinding.OpeningMetadata{
+		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator",
+		SkippedBoardRecordings: []string{"selected.skipped"},
+		ReplayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "selected"}},
+		ResumeRecoveryMetadata: resume, StartupRecovery: recovery,
+	}
+	var opening runtimebinding.OpeningState = selected
+	opening.SetOpeningMetadata(metadata)
+	peer.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
+	metadata.SkippedBoardRecordings[0] = "changed"
+	metadata.ReplayMetadataWarnings[0].Key = "changed"
+	resume.SourceRecordingID, recovery.Cause = "changed", "changed"
+	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" ||
+		selected.SkippedBoardRecordings[0] != "selected.skipped" || selected.ReplayMetadataWarnings[0].Key != "selected" ||
+		selected.ResumeRecoveryMetadata.SourceRecordingID != "source" || selected.StartupRecovery.Cause != "quarantined" || peer.ResumeRecoveryMetadata != nil {
+		t.Fatal("opening metadata aliases caller or peer state")
+	}
+	opening.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
+	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.SkippedBoardRecordings != nil ||
+		selected.ReplayMetadataWarnings != nil || selected.ResumeRecoveryMetadata != nil || selected.StartupRecovery != nil {
+		t.Fatal("absent opening metadata retained previous facts")
+	}
+}

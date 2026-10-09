@@ -88,7 +88,8 @@ func (fixture runtimeOpeningFixture) newFactory() (*runtimeOpeningTestRoot, erro
 	initialEngine := NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation)
 	inventory, _ := fixture.Assembly.(recordings.RecordedSessionInventory)
 	durable, _ := fixture.Assembly.(durableexecution.Service)
-	opening := NewRuntimeOpening(fixture.Assembly, durable, fixture.preparation(), fixture.snapshotSelection(), fixture.resourceAcquisition(), fixture.DurableOpening, initialEngine,
+	selectedAssembly, _ := fixture.Assembly.(openingAssembly)
+	opening := NewRuntimeOpening(selectedAssembly, durable, fixture.preparation(), fixture.snapshotSelection(), fixture.resourceAcquisition(), fixture.DurableOpening, initialEngine,
 		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
 		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner), fixture.RuntimeRoot,
 		recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner),

@@ -7,7 +7,6 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -69,16 +68,13 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 	inspection := replay.Inspection()
 	release := func() {}
 	if inspection.Checkpoint != nil {
-		binder, ok := r.assembly.SessionGateway.(interface {
-			BindHistoricalExecution(string, durableexecution.Service) func()
-		})
-		if !ok {
+		release, err = r.assembly.BindHistoricalOpening(inspection.Session.SessionID, replay)
+		if err != nil {
 			if closeReplay != nil {
 				_ = closeReplay()
 			}
-			return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay Sessions routing is unavailable")
+			return HistoricalApplicationInspection{}, false, err
 		}
-		release = binder.BindHistoricalExecution(inspection.Session.SessionID, replay)
 	}
 	closeInspection := func() error {
 		defer release()

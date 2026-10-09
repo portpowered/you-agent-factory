@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -30,10 +29,19 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// openingAssembly contains only operations consumed by opening and inspection.
+type openingAssembly = interface {
+	Resolve(string) *livesession.LiveSession
+	PrepareNewFactoryScaffold(string) (string, error)
+	CloseSession(context.Context, string) error
+	ListLiveSessionIDs() []string
+	BindHistoricalOpening(string, durableexecution.Service) (func(), error)
+}
+
 // RuntimeOpening owns fixed preparation, activation, live binding and historical acquisition behavior.
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
-	assembly                  *legacyservice.Assembly
+	assembly                  openingAssembly
 	durable                   durableexecution.Service
 	startFlights              singleflight.Group
 	factoryDefinitions        factorydefinitions.Service
@@ -61,7 +69,7 @@ type RuntimeOpening struct {
 }
 
 // NewRuntimeOpening constructs inert behavior; acquisition happens only on a request.
-func NewRuntimeOpening(assembly roles.RuntimeAssembly, durable durableexecution.Service,
+func NewRuntimeOpening(assembly openingAssembly, durable durableexecution.Service,
 	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
 	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
 	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
@@ -75,9 +83,8 @@ func NewRuntimeOpening(assembly roles.RuntimeAssembly, durable durableexecution.
 	resolveHome factorysessions.HomeDirectoryResolver,
 	definitions factorydefinitions.Service, inventory recordings.RecordedSessionInventory,
 ) *RuntimeOpening {
-	concrete, _ := assembly.(*legacyservice.Assembly)
 	return &RuntimeOpening{
-		assembly: concrete, durable: durable, factoryDefinitions: definitions, resolveHome: resolveHome,
+		assembly: assembly, durable: durable, factoryDefinitions: definitions, resolveHome: resolveHome,
 		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger,
 		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
@@ -171,24 +178,25 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 
 // bindSelectedState retains opening facts on the exact record selected by
 // completion. Start must not transport them or select another record later.
-func (opening *sessionRuntimeOpening) bindSelectedState(state *runtimebinding.SessionState) {
-	state.CurrentBoardRecordPath = opening.configured.Recordings.RecordPath
-	state.OperatorSettingsPath = opening.operatorSettingsPath
-	state.SkippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
-	state.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
-	state.ResumeRecoveryMetadata = nil
-	if opening.resumeInput != nil {
-		metadata := opening.resumeInput.RecoveryMetadata
-		metadata.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
-		state.ResumeRecoveryMetadata = &metadata
+func (opening *sessionRuntimeOpening) bindSelectedState(state runtimebinding.OpeningState) {
+	metadata := runtimebinding.OpeningMetadata{
+		CurrentBoardRecordPath: opening.configured.Recordings.RecordPath,
+		OperatorSettingsPath:   opening.operatorSettingsPath,
+		SkippedBoardRecordings: opening.skippedBoardRecordings,
+		ReplayMetadataWarnings: opening.load.ReplayMetadataWarnings,
 	}
-	state.StartupRecovery = nil
+	if opening.resumeInput != nil {
+		resume := opening.resumeInput.RecoveryMetadata
+		resume.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
+		metadata.ResumeRecoveryMetadata = &resume
+	}
 	if recovery := opening.startupRecovery; recovery != nil {
-		state.StartupRecovery = &factorysessions.StartupRecovery{
+		metadata.StartupRecovery = &factorysessions.StartupRecovery{
 			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
 			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
 		}
 	}
+	state.SetOpeningMetadata(metadata)
 	state.SetWorkerSettings(opening.durableExecution.WorkerSettings)
 }
 
@@ -574,7 +582,7 @@ type RuntimeCompletionRequest struct {
 type RuntimeCompletionResult struct {
 	RuntimeService factoryruntime.Service
 	BindRuntime    func(string, factoryruntime.RuntimeBinding) error
-	State          *runtimebinding.SessionState
+	State          runtimebinding.OpeningState
 	Lifecycle      roles.LifecycleRuntime
 	ProcessRuntime roles.ProcessRuntime
 }
@@ -667,7 +675,14 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	}); ok {
 		bindRuntime = selected.BindRuntime
 	}
-	return RuntimeCompletionResult{RuntimeService: service, BindRuntime: bindRuntime, State: state, Lifecycle: lifecycle, ProcessRuntime: process}, nil
+	return RuntimeCompletionResult{RuntimeService: service, BindRuntime: bindRuntime, State: openingState(state), Lifecycle: lifecycle, ProcessRuntime: process}, nil
+}
+
+func openingState(state *runtimebinding.SessionState) runtimebinding.OpeningState {
+	if state == nil {
+		return nil
+	}
+	return state
 }
 
 func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session roles.ApplicationRuntime,

@@ -54,7 +54,7 @@ type openingRuntimeObservations = interface {
 }
 
 func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request RuntimeOpeningBindingRequest,
-	state *runtimebinding.SessionState, selectedClock factoryruntime.Clock, startup openingRuntimeObservations,
+	state runtimebinding.OpeningState, selectedClock factoryruntime.Clock, startup openingRuntimeObservations,
 	rootRuntime factoryruntime.Service, processRuntime roles.ProcessRuntime,
 	execution durableexecution.Service,
 	publishCurrentBoard func(context.Context) error, cleanup interface {
@@ -91,13 +91,13 @@ func (operation *RuntimeOpeningBinding) Bind(ctx context.Context, request Runtim
 		return nil
 	})
 	operation.bindState(ctx, state, request.Facts, rootRuntime, startup, processRuntime)
-	state.Clock = selectedClock
-	state.OrderlyStop = operation.orderlyStop(request.Facts.RuntimeID, request.RecordPath, publishCurrentBoard)
+	state.SetOpeningClock(selectedClock)
+	state.SetOpeningOrderlyStop(operation.orderlyStop(request.Facts.RuntimeID, request.RecordPath, publishCurrentBoard))
 	return nil
 }
 
 //nolint:contextcheck // Preserve detached callers' nil-context compatibility.
-func (operation *RuntimeOpeningBinding) bindState(ctx context.Context, state *runtimebinding.SessionState,
+func (operation *RuntimeOpeningBinding) bindState(ctx context.Context, state runtimebinding.OpeningState,
 	facts roles.SessionOpeningFacts, rootRuntime factoryruntime.Service, startup openingRuntimeObservations,
 	processRuntime roles.ProcessRuntime,
 ) {
@@ -105,16 +105,16 @@ func (operation *RuntimeOpeningBinding) bindState(ctx context.Context, state *ru
 		ctx = context.Background()
 	}
 	effectiveID := operation.resolveOpenedFactorySessionID(ctx, strings.TrimSpace(facts.FactorySessionID))
-	state.Process = processRuntime
-	state.ModelInvocation = modelinvocation.RuntimeModelInvocation{
+	state.SetOpeningProcess(processRuntime)
+	state.SetOpeningModelInvocation(modelinvocation.RuntimeModelInvocation{
 		FactorySessionID: effectiveID, Scope: facts.ModelsScope,
 		RuntimeID: facts.RuntimeID, GenerationID: startup.StreamGeneration(),
 		FactoryDirectory: facts.Directory, WorkingDirectory: facts.Directory,
-	}
-	state.ModelsScope = facts.ModelsScope
+	})
+	state.SetOpeningModelsScope(facts.ModelsScope)
 	state.SetWorkerSessions(openedWorkerSessionsObservation(rootRuntime, startup, effectiveID))
-	state.Logger = startup.RuntimeLogger()
-	state.Diagnostics = startup.RuntimeDiagnostics()
+	state.SetOpeningLogger(startup.RuntimeLogger())
+	state.SetOpeningDiagnostics(startup.RuntimeDiagnostics())
 }
 
 func (operation *RuntimeOpeningBinding) orderlyStop(runtimeID, recordPath string,

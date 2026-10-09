@@ -149,6 +149,32 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 	return fallback
 }
 
+// OpeningState exposes only the mutations performed on the selected opening
+// record. Its private runtime and projection handles stay with SessionState.
+type OpeningState = interface {
+	SetOpeningProcess(roles.ProcessRuntime)
+	SetOpeningModelInvocation(modelinvocation.RuntimeModelInvocation)
+	SetOpeningModelsScope(models.RuntimeScopeRef)
+	SetWorkerSessions(workersessions.ObservationService)
+	SetOpeningLogger(*zap.Logger)
+	SetOpeningDiagnostics(factoryruntime.RuntimeLogDiagnostics)
+	SetOpeningClock(factoryruntime.Clock)
+	SetOpeningOrderlyStop(func(context.Context) error)
+	SetMockWorkers(*workers.MockWorkersConfig)
+	SetWorkerSettings(*factoryruntime.JavaScriptWorkerSettings)
+	SetOpeningMetadata(OpeningMetadata)
+}
+
+// OpeningMetadata contains detached observations from one completed opening.
+type OpeningMetadata struct {
+	CurrentBoardRecordPath string
+	OperatorSettingsPath   string
+	SkippedBoardRecordings []string
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
+	StartupRecovery        *factorysessions.StartupRecovery
+}
+
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
@@ -191,6 +217,35 @@ type SessionState struct {
 	controlMu          sync.Mutex
 	lastControlKey     string
 	lastControlResult  factorysessions.SessionControlResult
+}
+
+func (s *SessionState) SetOpeningProcess(process roles.ProcessRuntime) { s.Process = process }
+func (s *SessionState) SetOpeningModelInvocation(facts modelinvocation.RuntimeModelInvocation) {
+	s.ModelInvocation = facts
+}
+func (s *SessionState) SetOpeningModelsScope(scope models.RuntimeScopeRef) { s.ModelsScope = scope }
+func (s *SessionState) SetOpeningLogger(logger *zap.Logger)                { s.Logger = logger }
+func (s *SessionState) SetOpeningDiagnostics(diagnostics factoryruntime.RuntimeLogDiagnostics) {
+	s.Diagnostics = diagnostics
+}
+func (s *SessionState) SetOpeningClock(clock factoryruntime.Clock)             { s.Clock = clock }
+func (s *SessionState) SetOpeningOrderlyStop(stop func(context.Context) error) { s.OrderlyStop = stop }
+
+func (s *SessionState) SetOpeningMetadata(metadata OpeningMetadata) {
+	s.CurrentBoardRecordPath = metadata.CurrentBoardRecordPath
+	s.OperatorSettingsPath = metadata.OperatorSettingsPath
+	s.SkippedBoardRecordings = append([]string(nil), metadata.SkippedBoardRecordings...)
+	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), metadata.ReplayMetadataWarnings...)
+	s.ResumeRecoveryMetadata = nil
+	if metadata.ResumeRecoveryMetadata != nil {
+		copy := *metadata.ResumeRecoveryMetadata
+		s.ResumeRecoveryMetadata = &copy
+	}
+	s.StartupRecovery = nil
+	if metadata.StartupRecovery != nil {
+		copy := *metadata.StartupRecovery
+		s.StartupRecovery = &copy
+	}
 }
 
 func (s *SessionState) inheritApplicationValues(previous *SessionState) {

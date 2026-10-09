@@ -19,6 +19,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -706,4 +707,15 @@ func (a *Assembly) FactoryConfigForSession(ctx context.Context, sessionID string
 		return nil, err
 	}
 	return projection.Context.FactoryCfg, nil
+}
+
+// BindHistoricalOpening keeps optional historical routing at its existing owner.
+func (a *Assembly) BindHistoricalOpening(sessionID string, owner durableexecution.Service) (func(), error) {
+	binder, ok := a.SessionGateway.(interface {
+		BindHistoricalExecution(string, durableexecution.Service) func()
+	})
+	if !ok {
+		return nil, fmt.Errorf("historical replay Sessions routing is unavailable")
+	}
+	return binder.BindHistoricalExecution(sessionID, owner), nil
 }

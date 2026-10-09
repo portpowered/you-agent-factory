@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -119,8 +120,22 @@ var (
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 )
 
+// OpeningAssembly projects the existing owner onto the opening operations.
+type OpeningAssembly = interface {
+	Resolve(string) *livesession.LiveSession
+	PrepareNewFactoryScaffold(string) (string, error)
+	CloseSession(context.Context, string) error
+	ListLiveSessionIDs() []string
+	BindHistoricalOpening(string, DurableExecutionService) (func(), error)
+}
+
+func RuntimeOpeningAssembly(assembly RuntimeAssembly) OpeningAssembly {
+	opening, _ := assembly.(OpeningAssembly)
+	return opening
+}
+
 // NewRuntimeOpening keeps the private implementation behind the Sessions Wire boundary.
-func NewRuntimeOpening(assembly RuntimeAssembly, durable DurableExecutionService,
+func NewRuntimeOpening(assembly OpeningAssembly, durable DurableExecutionService,
 	preparation *RuntimePreparation, snapshots *RuntimeSnapshotSelection,
 	resources *RuntimeResourceAcquisition, durableOpening *DurableOpening,
 	initialEngine *RuntimeInitialEngine, completion *RuntimeOpeningCompletion,
