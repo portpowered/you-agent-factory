@@ -2,7 +2,10 @@ package start_retry_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,5 +88,60 @@ func assertGatedPeerWork(t *testing.T, scenario initialOpeningScenario, baseURL 
 	case err := <-peerDone:
 		t.Fatalf("peer invocation ended before its gate was released: %v", err)
 	default:
+	}
+}
+
+// Select the failed listener through the public host request. The exact edge
+// fails once; retry uses the same session identity and listener request.
+const completionFailurePort = 24188
+
+func testCompletionHostFailure(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, gate *selectedProviderGate, cause error, retryAPI *support.ProcessAPIServer) {
+	t.Helper()
+	defer gate.unblock()
+	peer := scenario.request()
+	peer.SessionID, peer.FolderPath = scenario.peerID, scenario.peerDir
+	peer.RuntimeSelection.DefinitionSourcePath = scenario.peerDir + "/factory.json"
+	peer.RuntimeSelection.ExecutionBaseDir, peer.RuntimeSelection.RuntimeInstanceID = scenario.peerDir, uuid.NewString()
+	startInitialOpeningSession(t, sessions, peer)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- selectedProviderInvoke(ctx, sessions, scenario.peerID) }()
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("peer did not enter command gate")
+	}
+	history := initialOpeningHistory(t, sessions, scenario.peerID)
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session", scenario.candidateID, "--dir", scenario.candidateDir, "--continuously", "--with-server", "--server", "http://127.0.0.1:24188", "--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	err := process.Execute(inputs.Input)
+	if !errors.Is(err, cause) && (err == nil || !strings.Contains(inputs.Stderr(), cause.Error())) {
+		t.Fatalf("host failure lost primary cause: %v stderr=%s", err, inputs.Stderr())
+	}
+	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, history)
+	select {
+	case err := <-done:
+		t.Fatalf("host rollback ended gated peer: %v", err)
+	default:
+	}
+	retry := support.StartProcessCommand(t, process, inputs.Input)
+	retryAPI.WaitForURL(t)
+	t.Cleanup(func() { retry.Stop(t) })
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, history)
+	gate.unblock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("peer lost result after retry: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("peer did not complete")
+	}
+	if err := selectedProviderInvoke(ctx, sessions, scenario.peerID); err != nil {
+		t.Fatal(err)
 	}
 }
