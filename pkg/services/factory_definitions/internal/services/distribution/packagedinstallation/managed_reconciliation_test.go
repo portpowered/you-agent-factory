@@ -23,7 +23,7 @@ func TestEnsurePackagedFactories_ManagedInstallIsCurrentAndAdoptsEquivalentLegac
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	logger := &packagedInstallationLogger{}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	legacy, err := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		Definition:         definition,
@@ -68,7 +68,7 @@ func TestEnsurePackagedFactories_ManagedInstallReplacesInvalidEvidenceWithoutRep
 
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -109,7 +109,7 @@ func TestEnsurePackagedFactories_ManagedRefreshPreservesStaleActiveDirectory(t *
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	logger := &packagedInstallationLogger{}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -169,7 +169,7 @@ func TestEnsurePackagedFactories_ManagedCustomerModificationIsReportedAndPreserv
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	logger := &packagedInstallationLogger{}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -210,7 +210,7 @@ func TestEnsurePackagedFactories_ManagedReplacementFailurePreservesActiveAndClea
 		replaceErr:                 errors.New("replacement unavailable"),
 	}
 	logger := &packagedInstallationLogger{}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
+	installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -242,7 +242,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	basePersistence := packagedInstallationTestPersistence()
-	installer := New(basePersistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(basePersistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -251,7 +251,7 @@ func TestEnsurePackagedFactories_ManagedNilReplacementPreservesActiveAndCleansBa
 	updated := definition
 	updated.JSON = bytes.Replace(updated.JSON, []byte("fixture-v1"), []byte("nil replacement content"), 1)
 
-	failed, err := New(
+	failed, err := newNativeTestInstaller(
 		&nilManagedReplacementPersistence{PackagedFactoryPersistence: basePersistence},
 		platformfilesystem.Local{},
 		os.Mkdir,
@@ -277,7 +277,7 @@ func TestEnsurePackagedFactories_ManagedStampPublicationFailureReportsFailedOutc
 	root := t.TempDir()
 	fileSystem := &managedStampFailureFileSystem{Local: platformfilesystem.Local{}}
 	logger := &packagedInstallationLogger{}
-	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logger)
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logger)
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -327,7 +327,7 @@ func TestWriteManagedStampFailureCleansTemporaryEvidence(t *testing.T) {
 		Local:        platformfilesystem.Local{},
 		writeFileErr: errors.New("management evidence write unavailable"),
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
+	service := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if err := service.writeManagedStamp(t.Context(), targetDir, "@you/goal", "published", "installed"); err == nil {
 		t.Fatal("writeManagedStamp() error = nil, want write failure")
 	}
@@ -345,7 +345,7 @@ func TestWriteManagedStampCancellationCleansTemporaryEvidence(t *testing.T) {
 		Local:  platformfilesystem.Local{},
 		cancel: cancel,
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
+	service := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	err := service.writeManagedStamp(ctx, targetDir, "@you/goal", "published", "installed")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("writeManagedStamp() error = %v, want context.Canceled", err)
@@ -365,7 +365,7 @@ func TestContentIdentityReportsFilesystemInspectionFailures(t *testing.T) {
 		statPath: root,
 		statErr:  statFailure,
 	}
-	service := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
+	service := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if _, err := service.contentIdentity(root); !errors.Is(err, statFailure) {
 		t.Fatalf("contentIdentity() stat error = %v, want %v", err, statFailure)
 	}
@@ -377,7 +377,7 @@ func TestEnsurePackagedFactories_ManagedStampReadFailureIsActionable(t *testing.
 	definition := installationDefinitionFixture()
 	root := t.TempDir()
 	fileSystem := &managedStampReadFailureFileSystem{Local: platformfilesystem.Local{}}
-	installer := New(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), fileSystem, os.Mkdir, logging.NoopLogger{})
 	if _, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition}); err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestEnsurePackagedFactories_ManagedPreparationRequiresPreparedLayout(t *tes
 
 	root := t.TempDir()
 	definition := installationDefinitionFixture()
-	installer := New(
+	installer := newNativeTestInstaller(
 		&nilManagedPreparationPersistence{PackagedFactoryPersistence: packagedInstallationTestPersistence()},
 		platformfilesystem.Local{},
 		os.Mkdir,
@@ -416,7 +416,7 @@ func TestEnsurePackagedFactories_ManagedBackupReservationFailureIsActionable(t *
 		}
 		return os.Mkdir(path, mode)
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, directoryCreator, logging.NoopLogger{})
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, directoryCreator, logging.NoopLogger{})
 	created, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("initial ensure: %v", err)
@@ -442,7 +442,7 @@ func TestEnsurePackagedFactories_ConcurrentManagedRefreshesConverge(t *testing.T
 		replacementStarted:         make(chan struct{}),
 		allowReplacement:           make(chan struct{}),
 	}
-	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+	installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 	if _, err := installer.EnsurePackagedFactories(t.Context(), root, "managed-test", []factorydefinitions.PackagedDefinition{definition}); err != nil {
 		t.Fatalf("initial ensure: %v", err)
 	}

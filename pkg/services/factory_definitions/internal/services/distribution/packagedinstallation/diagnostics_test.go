@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,8 +17,82 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func newNativeTestInstaller(
+	persistence factorydefinitions.PackagedFactoryPersistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	logger logging.Logger,
+) *Service {
+	return New(persistence, fileSystem, directoryCreator, (platformprocess.IncarnationProbe{ReadFile: os.ReadFile}).LookupProcess, logger)
+}
+
+func TestInstallPackagedFactory_DeadPIDReclaimsLease(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("native incarnation queries require Windows or Linux")
+	}
+	const deadPID = 2147483647
+	if _, err := (platformprocess.IncarnationProbe{ReadFile: os.ReadFile}).LookupProcess(deadPID); !errors.Is(err, platformprocess.ErrProcessGone) {
+		t.Fatalf("native absence prerequisite: %v", err)
+	}
+	root := t.TempDir()
+	definition := installationDefinitionFixture()
+	staging := stagingOwnershipPath(root, definition.Name)
+	if err := os.MkdirAll(staging, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staging, stagingOwnerMetadataName), []byte(`{"pid":2147483647}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	observed := false
+	persistence := &installationPersistenceStub{prepareObserve: func() {
+		assertRecoveredNativeOwner(t, staging)
+		observed = true
+	}}
+	logger := &packagedInstallationLogger{}
+	result, err := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logger).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition, Format: factorydefinitions.PackagedFactoryFormatJSON})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observed || result.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+		t.Fatalf("result=%+v observed=%v", result, observed)
+	}
+	data, err := os.ReadFile(filepath.Join(result.FactoryDir, "factory.json"))
+	if err != nil || string(data) != string(definition.JSON) {
+		t.Fatalf("target=%s error=%v", data, err)
+	}
+	paths, err := filepath.Glob(staging + "*")
+	if err != nil || len(paths) != 0 {
+		t.Fatalf("lease cleanup: %v %v", paths, err)
+	}
+	for _, entry := range logger.snapshot() {
+		if entry.fields["outcome"] == "reclaimed-orphan" {
+			return
+		}
+	}
+	t.Fatal("missing reclaimed-orphan diagnostic")
+}
+
+func assertRecoveredNativeOwner(t *testing.T, staging string) {
+	t.Helper()
+	paths, err := filepath.Glob(staging + "-recovered-*")
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("replacement lease: %v %v", paths, err)
+	}
+	data, err := os.ReadFile(filepath.Join(paths[0], stagingOwnerMetadataName))
+	var owner ownerRecord
+	if err != nil || json.Unmarshal(data, &owner) != nil || owner.PID != os.Getpid() {
+		t.Fatalf("replacement owner: %s %v", data, err)
+	}
+	identity, err := (platformprocess.IncarnationProbe{ReadFile: os.ReadFile}).CurrentProcess()
+	if err != nil || owner.Host != identity.Host || owner.Start != identity.Start {
+		t.Fatalf("published identity=%+v native=%+v error=%v", owner, identity, err)
+	}
+}
 
 type packagedInstallationLogEntry struct {
 	level   string
@@ -81,7 +156,7 @@ func TestInstallPackagedFactory_LogsStructuredScopeAndSuccess(t *testing.T) {
 	scopeID := "local-diagnostic-scope"
 	name := "@test/structured-logging"
 
-	_, err := New(
+	_, err := newNativeTestInstaller(
 		&successfulPackagedInstallationPersistence{},
 		platformfilesystem.Local{},
 		os.Mkdir,
@@ -130,7 +205,7 @@ func TestManagedInstallationFailureUsesErrorDiagnostic(t *testing.T) {
 	t.Parallel()
 
 	logger := &packagedInstallationLogger{}
-	service := New(
+	service := newNativeTestInstaller(
 		packagedInstallationTestPersistence(),
 		platformfilesystem.Local{},
 		os.Mkdir,
@@ -428,7 +503,7 @@ func TestSelectedLoggerInstallCreateSkipReplace(t *testing.T) {
 	t.Parallel()
 	root, definition := t.TempDir(), installationDefinitionFixture()
 	logger := &packagedInstallationLogger{}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
+	installer := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logger)
 	params := factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, BackendScopeID: "  selected-install  ", Definition: definition}
 	created, err := installer.InstallPackagedFactory(t.Context(), params)
 	if err != nil || created.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
@@ -463,7 +538,7 @@ func TestSelectedLoggerFailurePreservesContentAndOwnership(t *testing.T) {
 			t.Run(fmt.Sprintf("managed=%t/%s", managed, mode), func(t *testing.T) {
 				t.Parallel()
 				root, definition := t.TempDir(), installationDefinitionFixture()
-				quiet := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+				quiet := newNativeTestInstaller(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 				prior, err := quiet.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition, ManagedRefresh: managed})
 				if err != nil {
 					t.Fatal(err)
@@ -485,7 +560,7 @@ func TestSelectedLoggerFailurePreservesContentAndOwnership(t *testing.T) {
 				}
 				definition.JSON = []byte("private malformed payload")
 				logger := &packagedInstallationLogger{}
-				installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
+				installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logger)
 				var result factorydefinitions.PackagedFactoryInstallResult
 				if managed {
 					results, installErr := installer.EnsurePackagedFactories(ctx, root, "", []factorydefinitions.PackagedDefinition{definition})
@@ -581,7 +656,7 @@ func TestExplicitNoopInstallationResultsAndFailures(t *testing.T) {
 				cause = context.Canceled
 				cancel()
 			}
-			installer := New(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
+			installer := newNativeTestInstaller(persistence, platformfilesystem.Local{}, os.Mkdir, logging.NoopLogger{})
 			result, err := installer.InstallPackagedFactory(ctx, factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition})
 			if !errors.Is(err, cause) {
 				t.Fatalf("installation = %#v, %v, want %v", result, err, cause)

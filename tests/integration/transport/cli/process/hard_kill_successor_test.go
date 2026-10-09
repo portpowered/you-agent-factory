@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -31,21 +32,21 @@ type hardKillProcessControl struct {
 	terminate func() error
 }
 
-// TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention proves the
+// TestCLISuccessorAfterHardKillRecoversAbandonedStaging proves the
 // actual process boundary around startup. It observes the first durable
 // startup checkpoint and packaged-factory staging acquisition, force-kills the
 // predecessor at that boundary, and starts a successor with the same isolated
 // HOME, factory, and persisted backend scope. The test deliberately observes
 // the packaged-factory staging resource rather than assuming that backend
-// scope identity is a lock.
-func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.T) {
+// scope identity is a lock. The successor must reclaim abandoned ownership,
+// reach public readiness, preserve that scope and stop through the public CLI.
+func TestCLISuccessorAfterHardKillRecoversAbandonedStaging(t *testing.T) {
+	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 	writeIdleCurrentFactory(t, session.WorkDir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	binaryPath := buildYouBinary(t, ctx, harness.RepoRoot)
+	binaryPath := quietShutdownArtifact(t)
 	args := hardKillSuccessorArgs(session)
 
 	predecessor := startHardKillCLIProcess(t, binaryPath, session, args...)
@@ -67,7 +68,6 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 	if _, err := os.Stat(stagingPath); err != nil {
 		t.Fatalf("hard-killed predecessor did not retain staged resource %s: %v", stagingPath, err)
 	}
-	ownershipResourcesBeforeSuccessor := listStagingOwnershipResources(t, session.HomeDir)
 	retainedFiles := listRegularFiles(t, session.HomeDir)
 	ownershipCandidates := make([]string, 0)
 	for _, path := range retainedFiles {
@@ -85,38 +85,45 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 
 	successor := startHardKillCLIProcess(t, binaryPath, session, args...)
 	t.Cleanup(func() { _ = successor.stop() })
-	successorErr := successor.waitForBoundedFailure(t, "successor")
-	if successorErr == nil {
-		t.Fatal("successor returned success after retained pre-runtime staging contention")
-	}
-	if stdout := successor.stdoutText(); strings.Contains(stdout, "Dashboard URL:") {
-		t.Fatalf("successor reached runtime despite retained staging contention: stdout=%q stderr=%q", stdout, successor.stderrText())
-	}
-	for _, want := range []string{
-		stagingPath,
-		"outcome=indeterminate-contention",
-		"owner_liveness=indeterminate",
-		fmt.Sprintf("owner_pid=%d", predecessor.command.Process.Pid),
-		"verify no you process is still installing",
-		"remove only " + stagingPath,
-	} {
-		if !strings.Contains(successor.stderrText(), want) {
-			t.Fatalf("successor stderr = %q, want %q; process=%s", successor.stderrText(), want, successor.processState())
-		}
-	}
+	assertHardKillSuccessorRecovery(t, binaryPath, session, successor, stagingPath, predecessorScope)
+}
+
+func assertHardKillSuccessorRecovery(
+	t *testing.T,
+	binaryPath string,
+	session *builtcliacceptance.Session,
+	successor *hardKillCLIProcess,
+	stagingPath, predecessorScope string,
+) {
+	t.Helper()
+	successor.waitForReadiness(t)
+	// This compiled child owns the listener; public status polling crosses the
+	// real process boundary and cannot be replaced by an in-process event.
+	waitForStatus(t, session.ServerURL, hardKillSuccessorReadinessTimeout, func(status factoryapi.StatusResponse) bool {
+		return status.FactoryState == "RUNNING"
+	})
 	if got := readPersistedBackendScopeID(t, session); got != predecessorScope {
 		t.Fatalf("successor changed persisted backendScopeID to %q, want predecessor scope %q", got, predecessorScope)
 	}
-	if _, err := os.Stat(stagingPath); err != nil {
-		t.Fatalf("successor removed retained staging resource %s: %v", stagingPath, err)
+	if _, err := os.Stat(stagingPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("successor did not release abandoned staging resource %s: %v", stagingPath, err)
 	}
-	if got := listStagingOwnershipResources(t, session.HomeDir); !sameStringSet(got, ownershipResourcesBeforeSuccessor) {
-		t.Fatalf(
-			"successor changed staging ownership resources: before=%v after=%v",
-			ownershipResourcesBeforeSuccessor,
-			got,
-		)
+	if got := listStagingOwnershipResources(t, session.HomeDir); len(got) != 0 {
+		t.Fatalf("successor retained staging ownership resources after readiness: %v", got)
 	}
+	stopCtx, cancel := context.WithTimeout(t.Context(), hardKillProcessExitTimeout)
+	defer cancel()
+	result, err := runBuiltYouBinary(stopCtx, binaryPath, session, "--server", session.ServerURL, "server", "stop")
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("public successor shutdown: %v; result=%#v", err, result)
+	}
+	if err, exited := successor.waitForExit(hardKillProcessExitTimeout); !exited || err != nil {
+		t.Fatalf("successor did not exit cleanly after public shutdown: exited=%v err=%v stderr=%q", exited, err, successor.stderrText())
+	}
+	if err, scanned := successor.waitForScanner(hardKillProcessExitTimeout); !scanned || (err != nil && !errors.Is(err, os.ErrClosed)) {
+		t.Fatalf("successor stdout scanner: scanned=%v err=%v", scanned, err)
+	}
+	t.Logf("hard-killed owner recovered: public readiness, preserved backend scope, lease release and public shutdown; staging=%s", stagingPath)
 }
 
 func hardKillSuccessorArgs(session *builtcliacceptance.Session) []string {
@@ -140,25 +147,10 @@ type hardKillCLIProcess struct {
 	waitDone chan struct{}
 	waitErr  error
 
+	ready    chan struct{}
 	scanDone chan struct{}
 	scanErr  error
 	mu       sync.Mutex
-}
-
-func sameStringSet(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	leftSet := make(map[string]struct{}, len(left))
-	for _, value := range left {
-		leftSet[value] = struct{}{}
-	}
-	for _, value := range right {
-		if _, ok := leftSet[value]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtcliacceptance.Session, args ...string) *hardKillCLIProcess {
@@ -175,6 +167,7 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 		command:  command,
 		waitDone: make(chan struct{}),
 		scanDone: make(chan struct{}),
+		ready:    make(chan struct{}, 1),
 	}
 	command.Stderr = lockedProcessWriter{output: &process.stderr}
 	if err := command.Start(); err != nil {
@@ -185,6 +178,12 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 		for scanner.Scan() {
 			line := scanner.Text()
 			process.stdout.append([]byte(line + "\n"))
+			if strings.HasPrefix(line, "Dashboard URL: ") {
+				select {
+				case process.ready <- struct{}{}:
+				default:
+				}
+			}
 		}
 		process.mu.Lock()
 		process.scanErr = scanner.Err()
@@ -194,32 +193,20 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 	return process
 }
 
-func (process *hardKillCLIProcess) waitForBoundedFailure(t testing.TB, role string) error {
+func (process *hardKillCLIProcess) waitForReadiness(t testing.TB) {
 	t.Helper()
-	waitErr, exited := process.waitForExit(hardKillSuccessorReadinessTimeout)
-	if !exited {
-		_ = process.kill()
-		_, _ = process.waitForExit(hardKillProcessExitTimeout)
-		t.Fatalf("%s did not return a bounded failure: stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
+	timer := time.NewTimer(hardKillSuccessorReadinessTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-process.ready:
+			return
+		case <-process.scanDone:
+			t.Fatalf("successor exited before readiness: stdout=%q stderr=%q", process.stdoutText(), process.stderrText())
+		case <-timer.C:
+			t.Fatalf("successor did not reach readiness: stdout=%q stderr=%q", process.stdoutText(), process.stderrText())
+		}
 	}
-	scanErr, scanned := process.waitForScanner(hardKillProcessExitTimeout)
-	if !scanned {
-		t.Fatalf("%s stdout scanner did not finish within %s: stdout=%q stderr=%q process=%s", role, hardKillProcessExitTimeout, process.stdoutText(), process.stderrText(), process.processState())
-	}
-	// waitForExit above already reaped the child, so Cmd.Wait has closed the
-	// StdoutPipe by this point. The scanner can therefore observe that terminal
-	// descriptor close as fs.ErrClosed instead of EOF, the same race stopWith
-	// tolerates when this helper's own termination wins it. Here the process is
-	// known to have exited on its own, so accept only that expected terminal
-	// error; every other scanner error remains actionable. Truncated output stays
-	// detectable because callers still assert on stdout contents.
-	if scanErr != nil && !(exited && errors.Is(scanErr, os.ErrClosed)) {
-		t.Fatalf("%s stdout scanner failed: %v; stdout=%q stderr=%q process=%s", role, scanErr, process.stdoutText(), process.stderrText(), process.processState())
-	}
-	if waitErr == nil {
-		t.Fatalf("%s returned success; stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
-	}
-	return waitErr
 }
 
 func (process *hardKillCLIProcess) stop() error {
@@ -253,14 +240,6 @@ func (process *hardKillCLIProcess) stopWith(terminate func() error) error {
 		return fmt.Errorf("stdout scanner: %w", scanErr)
 	}
 	return nil
-}
-
-func (process *hardKillCLIProcess) kill() error {
-	if process == nil || process.command == nil || process.command.Process == nil {
-		return nil
-	}
-	_, err := process.killWith(process.command.Process.Kill)
-	return err
 }
 
 func (process *hardKillCLIProcess) killWith(terminate func() error) (bool, error) {

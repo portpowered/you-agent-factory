@@ -2,7 +2,14 @@ package factorydefinitions
 
 import (
 	"io/fs"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
+
+// PackagedInstallationProcessProbe observes local process identity without
+// deciding installation ownership. A successful PID-only observation has an
+// empty Start; only ErrProcessGone establishes affirmative absence.
+type PackagedInstallationProcessProbe func(int) (platformprocess.Incarnation, error)
 
 // PackagedInstallationFileSystem is the exact filesystem effect used to
 // inspect and materialize a packaged Factory installation after the ownership
