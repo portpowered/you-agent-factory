@@ -1,4 +1,4 @@
-"""Isolated diagnostics tests: controlled text, no application or prompt scan."""
+"""Isolated diagnostics and authored mission-policy contract tests."""
 
 import importlib.util
 from pathlib import Path
@@ -505,6 +505,54 @@ class LanePromptPolicyTests(unittest.TestCase):
                         prompts[owner] += '\n' + text
                         self.assertEqual(policy.check_recovery_policy(prompts),
                                          [f'{owner}:recovery-ceiling: conflicting recovery instruction; remove or reconcile it'])
+
+
+class AuthoredMissionPolicyTests(unittest.TestCase):
+    """The mission instructions themselves are the published policy contract."""
+
+    @classmethod
+    def setUpClass(cls):
+        prompt = SCRIPT.parent.parent / 'workstations/verify-mission/AGENTS.md'
+        cls.mission = ' '.join(prompt.read_text(encoding='utf-8').split())
+
+    def test_read_only_preconditions_are_resolved_before_deciding(self):
+        clauses = (
+            'Before deciding, resolve read-only preconditions yourself: git fetch origin main, file reads, and GET requests.',
+            'Fetch missing merge objects before ancestry checks; unavailable objects are not observed product defects.',
+            'Use the read helper for these operations, retrying once; do not retry fetch, reads or checks beyond its budget.',
+            'Use python factory/scripts/mission-read.py [--required] -- <read-command> [args...]',
+            'Each failed read retries once; retain both attempts and available output.',
+            'Never retry mutations through the helper or add an agent retry after exhaustion.',
+            'Execute only the bound mission, including cron-origin missions. Run every named command/read and report every named value, unit and source;',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+
+    def test_unsatisfied_preconditions_name_missing_values_without_filing(self):
+        clauses = (
+            'Required read/command failures return FAILED with the exact reason and available values.',
+            'If a precondition cannot be satisfied here, report exactly what is missing in output.precondition with available values.',
+            'This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.',
+            'Do not restart the daemon or mutate product state to satisfy a precondition.',
+            'Use the exact key output.precondition with a non-blank string for an unmet precondition.',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+
+    def test_corrective_work_requires_an_observed_defect_and_same_pr_tests(self):
+        clauses = (
+            'Only an observed product or factory defect qualifies as a corrective gap below.',
+            'File corrective work as a lane that changes behavior with tests shipped in the same PR.',
+            'Never file a lane whose outcome is evidence, verification, characterization, measurement or re-running a check.',
+            'Never file amendment or retrospective lanes, or corrective Work merely to make merge evidence available.',
+            'For gaps, prepare a narrow corrective batch plus its own dependent loopback.',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+        self.assertLess(self.mission.index(clauses[0]), self.mission.index(clauses[-1]))
 
 
 if __name__ == '__main__':
