@@ -129,6 +129,7 @@ func exerciseSupervisorRecord(t *testing.T, tc supervisorRecordCase) {
 
 func assertSupervisorPrivateFailure(t *testing.T, events []factoryapi.FactoryEvent, listed factoryapi.ListWorkResponse, response *factoryapi.DispatchResponseEventPayload) {
 	t.Helper()
+	const want = "admission blocked by <redacted>"
 	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse || event.Type == factoryapi.FactoryEventTypeModelResponse || event.Type == factoryapi.FactoryEventTypeAgentRunResponse {
 			raw, _ := json.Marshal(event)
@@ -138,11 +139,11 @@ func assertSupervisorPrivateFailure(t *testing.T, events []factoryapi.FactoryEve
 		}
 	}
 	for _, w := range listed.Results {
-		if w.FailureDetail == nil || strings.Contains(w.FailureDetail.Message, "supervisor-private-value") {
+		if w.FailureDetail == nil || w.FailureDetail.Message != want || string(w.FailureDetail.Reason) != "worker_declared_failure" {
 			t.Fatalf("unsafe work failure: %#v", w.FailureDetail)
 		}
 	}
-	if !strings.Contains(response.FailureDetail.Message, "admission blocked") || strings.Contains(response.FailureDetail.Message, "supervisor-private-value") {
+	if response.FailureDetail.Message != want || response.Feedback == nil || *response.Feedback != want {
 		t.Fatalf("unsafe detail=%#v", response.FailureDetail)
 	}
 }

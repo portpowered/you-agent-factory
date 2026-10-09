@@ -69,6 +69,42 @@ func TestExecuteTypedFailurePrecedesDeclaredOutcome(t *testing.T) {
 	}
 }
 
+func TestExecuteRedactsOverlappingPrivateValuesAcrossSources(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, sensitive, source, workstation, inherited string
+	}{
+		{"workstation prefix of inherited", "", "", "supervisor-", "supervisor-private-value"},
+		{"argument prefix of workstation", "supervisor-", "", "supervisor-private-value", ""},
+		{"source prefix of inherited", "", "supervisor-", "", "supervisor-private-value"},
+		{"inherited prefix of argument", "supervisor-private-value", "", "", "supervisor-"},
+		{"marker is also private", "", "", "supervisor-private-value", "redacted"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runner := &stubRunner{execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				return workers.RunnerExecutionResult{Outcome: workers.OutcomeFailed, Content: "preserved output", Feedback: "admission blocked by supervisor-private-value"}, nil
+			}}
+			request := validExecuteRequest("overlap-dispatch", "overlap-attempt")
+			request.Input.Invocation.Arguments = map[string]work.InvocationArgument{
+				"secret": {Sensitive: true, Values: []string{tc.sensitive}},
+				"source": {Sources: []work.InvocationArgumentSource{{Redact: true}}, Values: []string{tc.source}},
+			}
+			request.Target.Environment.Vars = map[string]string{"SUPERVISOR_SECRET": tc.workstation}
+			request.Target.Environment.ProcessEnvironment = []string{"OPENAI_API_KEY=" + tc.inherited}
+			result, err := mustExecuteService(t, runner, nil).Execute(t.Context(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const want = "admission blocked by <redacted>"
+			assertDeclaredFailure(t, result, want)
+			if result.Failure.Message != want || result.Output.Feedback != want || len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != "preserved output" {
+				t.Fatalf("failure=%#v output=%#v", result.Failure, result.Output)
+			}
+		})
+	}
+}
+
 func assertDeclaredFailure(t *testing.T, result workers.ExecuteResult, want string) {
 	t.Helper()
 	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil || result.Failure.Type != workers.WorkFailureTypeWorkerDeclaredFailure || result.Failure.RetryHint {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -24,35 +25,37 @@ func declaredFailureMessage(feedback string) string {
 }
 
 func declaredFailureFeedback(feedback string, request workers.ExecuteRequest) string {
-	message := feedback
+	var privateValues []string
 	for _, argument := range request.Input.Invocation.Arguments {
 		sensitive := argument.Sensitive
 		for _, source := range argument.Sources {
 			sensitive = sensitive || source.Redact
 		}
 		if sensitive {
-			for _, value := range argument.Values {
-				message = redactDeclaredFailureValue(message, value)
-			}
+			privateValues = append(privateValues, argument.Values...)
 		}
 	}
 	for key, value := range request.Target.Environment.Vars {
 		if diagnostics.ClassifyCommandEnvKey(key) == workers.CommandEnvClassificationRedacted {
-			message = redactDeclaredFailureValue(message, value)
+			privateValues = append(privateValues, value)
 		}
 	}
 	for _, entry := range request.Target.Environment.ProcessEnvironment {
 		key, value, ok := strings.Cut(entry, "=")
 		if ok && diagnostics.ClassifyCommandEnvKey(key) == workers.CommandEnvClassificationRedacted {
-			message = redactDeclaredFailureValue(message, value)
+			privateValues = append(privateValues, value)
 		}
 	}
-	return message
-}
-
-func redactDeclaredFailureValue(message, value string) string {
-	if value == "" {
-		return message
+	// Match the original feedback once. A shorter value from any source must
+	// not hide a longer private value or rescan an inserted redaction marker.
+	sort.Slice(privateValues, func(i, j int) bool {
+		return len(privateValues[i]) > len(privateValues[j])
+	})
+	replacements := make([]string, 0, 2*len(privateValues))
+	for _, value := range privateValues {
+		if value != "" {
+			replacements = append(replacements, value, "<redacted>")
+		}
 	}
-	return strings.ReplaceAll(message, value, "<redacted>")
+	return strings.NewReplacer(replacements...).Replace(feedback)
 }
