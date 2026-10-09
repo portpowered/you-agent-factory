@@ -209,6 +209,14 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	}
 	peerBefore := concurrencyWorkByID(t, survivor, second.WorkId)
 	peerEventsBefore := concurrencySessionEvents(t, fixture.baseURL, survivor.id)
+	queued := submitConcurrencyWork(t, canceled, "cc09-queued")
+	waitConcurrencyCategories(t, fixture.baseURL, canceled.id, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 1
+	})
+	queuedBefore := concurrencyWorkByID(t, canceled, queued.WorkId)
+	if canceled.runner.callCount() != 1 {
+		t.Fatal("AWC queued Work executed while the original attempt held capacity")
+	}
 	control := cancelAdmittedWorkSession(t, canceled)
 	observedCancel := canceled.runner.waitCanceled(t, concurrencySharedProcessTimeout)
 	if observedCancel.index != canceledCall.index {
@@ -219,6 +227,7 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	terminal := admittedWorkCancellationEvent(t, canceled)
 	t.Logf("AWC public control operation=%s outcome=%s status=%s", control.Operation, control.Outcome, control.Status)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
+	assertStoppedQueuedWork(t, canceled, queued, queuedBefore)
 	if survivor.runner.activeCallCount() != 1 || survivor.runner.callCount() != 1 || survivor.runner.canceledCount() != 0 || channelClosed(survivorCall.returned) ||
 		!reflect.DeepEqual(peerBefore, concurrencyWorkByID(t, survivor, second.WorkId)) {
 		t.Fatal("AWC peer original command/Work changed during selected-session cancellation")
@@ -234,6 +243,22 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	completeAdmittedWork(t, survivor, survivorEvents, later, laterCall, "cc09-later")
 	assertAdmittedWorkEventIsolation(t, canceled, survivor)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
+	assertStoppedQueuedWork(t, canceled, queued, queuedBefore)
+}
+
+func assertStoppedQueuedWork(t *testing.T, session *concurrencySession, queued factoryapi.SubmitWorkResponse, before factoryapi.Work) {
+	t.Helper()
+	if after := concurrencyWorkByID(t, session, queued.WorkId); !reflect.DeepEqual(before, after) {
+		t.Fatalf("queued Work changed after stop: before=%#v after=%#v", before, after)
+	}
+	for _, event := range concurrencySessionEvents(t, session.fixture.baseURL, session.id) {
+		if event.Type == factoryapi.FactoryEventTypeDispatchRequest && concurrencyEventHasWork(event, stringPointerValue(queued.WorkId)) {
+			t.Fatalf("queued Work was dispatched after stop: %#v", event)
+		}
+	}
+	if session.runner.callCount() != 1 || session.runner.callsForMarker("cc09-queued") != 0 {
+		t.Fatal("stopped session executed queued Work")
+	}
 }
 
 func ownAdmittedWorkSession(t *testing.T, session *concurrencySession, liveEvents bool) *support.FactoryEventStream {
@@ -618,7 +643,28 @@ func (fixture *concurrencySharedProcessFixture) runPartialFailure(t *testing.T) 
 		t.Fatalf("CC-10 calls/active = %d/%d, want two/zero", got, session.runner.activeCallCount())
 	}
 	assertConcurrencyCounts(t, session, 2, 2)
+	assertCompletedResultsSurviveStop(t, session, failing, succeeding)
 	session.closeAndAssertGone(t)
+}
+
+func assertCompletedResultsSurviveStop(t *testing.T, session *concurrencySession, failing, succeeding factoryapi.SubmitWorkResponse) {
+	t.Helper()
+	session.runner.joinCalls(t)
+	beforeFailure := concurrencyWorkByID(t, session, failing.WorkId)
+	beforeSuccess := concurrencyWorkByID(t, session, succeeding.WorkId)
+	beforeDispatches := support.ObserveDispatchEvents(t, concurrencySessionEvents(t, session.fixture.baseURL, session.id))
+	if len(beforeDispatches) != 2 || beforeDispatches[0].Response == nil || beforeDispatches[1].Response == nil {
+		t.Fatalf("result readiness requires both canonical terminal dispatches: %#v", beforeDispatches)
+	}
+	cancelAdmittedWorkSession(t, session)
+	afterDispatches := support.ObserveDispatchEvents(t, concurrencySessionEvents(t, session.fixture.baseURL, session.id))
+	if !reflect.DeepEqual(beforeFailure, concurrencyWorkByID(t, session, failing.WorkId)) ||
+		!reflect.DeepEqual(beforeSuccess, concurrencyWorkByID(t, session, succeeding.WorkId)) || !reflect.DeepEqual(beforeDispatches, afterDispatches) {
+		t.Fatal("later session stop changed an accepted success or typed failure result")
+	}
+	if session.runner.callCount() != 2 || session.runner.canceledCount() != 0 {
+		t.Fatal("later session stop executed or canceled an already completed command")
+	}
 }
 
 func (fixture *concurrencySharedProcessFixture) runSessionOrdering(t *testing.T) {
