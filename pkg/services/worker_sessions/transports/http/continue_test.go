@@ -55,6 +55,54 @@ func TestContinueWorkerSessionReturnsAcceptedLineageAfterAdmission(t *testing.T)
 	}
 }
 
+func TestControlPreflightUsesFleetCandidatesBeforeBoundRegistry(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"continue", "interrupt"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			bound := &fakeObservationService{}
+			candidates := workersessions.NewAmbiguousAddressError([]workersessions.AddressCandidate{
+				{WorkerSessionID: "source", FactorySessionID: "owner-a", State: workersessions.StateCompleted},
+				{WorkerSessionID: "source", FactorySessionID: "owner-b", State: workersessions.StateCompleted},
+			})
+			fleet := &fakeObservationService{getByWorkerErr: candidates}
+			adapter := NewAdapterWithStartAndContinueAndInterrupt(bound, bound, bound, bound, workServiceStub{}).WithTopLevelObservationService(fleet)
+			var err error
+			if operation == "continue" {
+				_, err = adapter.ContinueWorkerSession(context.Background(), "source", factoryapi.WorkerSessionContinueRequest{
+					RequestId: "request", SuccessorWorkerSessionId: "successor", FollowUpInput: "follow up",
+				})
+			} else {
+				_, err = adapter.InterruptWorkerSession(context.Background(), "source", factoryapi.WorkerSessionInterruptRequest{
+					RequestId: "request", SuccessorWorkerSessionId: "successor", ReplacementMessage: "replacement",
+				})
+			}
+			if !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) || bound.continueCalled || bound.interruptCalled {
+				t.Fatalf("ambiguous fleet control = %v; bound Continue=%t Interrupt=%t", err, bound.continueCalled, bound.interruptCalled)
+			}
+		})
+	}
+}
+
+func TestControlPreflightFreezesSelectedFleetOwner(t *testing.T) {
+	t.Parallel()
+	bound := &fakeObservationService{}
+	fleet := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "source", FactorySessionID: "owner"}}
+	adapter := NewAdapterWithStartAndContinueAndInterrupt(bound, bound, bound, bound, workServiceStub{}).WithTopLevelObservationService(fleet)
+	_, err := adapter.ContinueWorkerSession(context.Background(), "source", factoryapi.WorkerSessionContinueRequest{
+		RequestId: "continue", SuccessorWorkerSessionId: "successor", FollowUpInput: "follow up",
+	})
+	if err != nil || bound.continueRequest.FactorySessionID != "owner" {
+		t.Fatalf("Continue owner = %q, %v", bound.continueRequest.FactorySessionID, err)
+	}
+	_, err = adapter.InterruptWorkerSession(context.Background(), "source", factoryapi.WorkerSessionInterruptRequest{
+		RequestId: "interrupt", SuccessorWorkerSessionId: "successor", ReplacementMessage: "replacement",
+	})
+	if err != nil || bound.interruptRequest.FactorySessionID != "owner" {
+		t.Fatalf("Interrupt owner = %q, %v", bound.interruptRequest.FactorySessionID, err)
+	}
+}
+
 func TestContinueWorkerSessionRejectsMalformedPayloadBeforeService(t *testing.T) {
 	service := &fakeObservationService{}
 	handler := NewHandler(NewAdapterWithStartAndContinue(service, service, service, workServiceStub{}), zap.NewNop())

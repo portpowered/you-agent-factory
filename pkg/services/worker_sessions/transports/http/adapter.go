@@ -225,6 +225,10 @@ func (a *Adapter) ContinueWorkerSession(
 	if err != nil {
 		return factoryapi.WorkerSessionContinueResponse{}, err
 	}
+	continuation.FactorySessionID, err = a.controlSourceScope(ctx, continuation.SourceWorkerSessionID, continuation.FactorySessionID)
+	if err != nil {
+		return factoryapi.WorkerSessionContinueResponse{}, err
+	}
 	result, err := a.continuer.Continue(ctx, continuation)
 	if err != nil {
 		return factoryapi.WorkerSessionContinueResponse{}, err
@@ -250,11 +254,35 @@ func (a *Adapter) InterruptWorkerSession(
 	if err != nil {
 		return factoryapi.WorkerSessionInterruptResponse{}, err
 	}
+	interrupt.FactorySessionID, err = a.controlSourceScope(ctx, interrupt.SourceWorkerSessionID, interrupt.FactorySessionID)
+	if err != nil {
+		return factoryapi.WorkerSessionInterruptResponse{}, err
+	}
 	result, err := a.interrupter.Interrupt(ctx, interrupt)
 	if err != nil {
 		return factoryapi.WorkerSessionInterruptResponse{}, err
 	}
 	return WorkerSessionInterruptResponseToAPI(result), nil
+}
+
+// Resolve through the same process-wide view as show before entering a
+// runtime-bound control service. A registry alone cannot see retained peers
+// exposed by other Factory Sessions. Keep missing observations on the existing
+// control path so durable request replays retain their documented semantics.
+func (a *Adapter) controlSourceScope(ctx context.Context, workerID, scope string) (string, error) {
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerID, FactorySessionID: scope,
+	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return scope, nil
+	}
+	if err != nil {
+		return scope, err
+	}
+	if observation.FactorySessionID != "" {
+		return observation.FactorySessionID, nil
+	}
+	return scope, nil
 }
 
 func firstSessionScopeResolver(resolvers []SessionScopeResolver) SessionScopeResolver {
