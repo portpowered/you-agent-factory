@@ -21,13 +21,13 @@ import (
 func (r *Root) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (runtimeProducts, error) {
+) (runtimeProducts, *factoryruntime.RuntimeActivation, error) {
 	if err := ctx.Err(); err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	definition, err := definitionRequestFromActivation(request)
 	if err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	session := sessionRequestFromActivation(request)
 	worker := workerRequestFromActivation(request.Inputs.Workers)
@@ -39,7 +39,7 @@ func (r *Root) activateRuntime(
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
 	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
 		strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
@@ -54,8 +54,7 @@ func (r *Root) activateRuntime(
 	if canonicalSessionIDGenerated && ctx.Err() != nil {
 		openingContext = context.WithoutCancel(ctx)
 	}
-	products, err := r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
-	return products, err
+	return r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
 }
 
 // newRuntimeActivation retains the acquired activation's declared handles and
@@ -274,14 +273,12 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	}
 	var products runtimeProducts
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
-		opened, openErr := r.activateRuntime(activationCtx, activation)
+		opened, published, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
-			partial, _ := newRuntimeActivation(opened.activation, opened.closeArtifacts)
-			return partial, openErr
+			return published, openErr
 		}
 		products = opened
-		published, activationErr := newRuntimeActivation(opened.activation, opened.closeArtifacts)
-		return published, activationErr
+		return published, nil
 	})
 	if err != nil {
 		return runtimeProducts{}, err

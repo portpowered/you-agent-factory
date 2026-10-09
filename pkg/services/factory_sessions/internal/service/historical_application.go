@@ -49,7 +49,7 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	session := request
 	selection := runtimeSelectionForStart(request)
-	products, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	products, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}

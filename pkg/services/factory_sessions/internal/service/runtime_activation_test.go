@@ -488,10 +488,11 @@ func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name   string
-		engine factoryruntime.Service
+		opened *factoryruntime.RuntimeActivation
 	}{
-		{name: "missing engine"},
-		{name: "missing ingress", engine: controlOnlyEngineFake{}},
+		{name: "partial acquisition without activation"},
+		{name: "missing engine", opened: &factoryruntime.RuntimeActivation{}},
+		{name: "missing ingress", opened: &factoryruntime.RuntimeActivation{Service: controlOnlyEngineFake{}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -505,7 +506,7 @@ func TestRuntimeActivationValidationFailureRetainsCleanup(t *testing.T) {
 				}
 				return nil
 			})
-			activation, err := newRuntimeActivation(&factoryruntime.RuntimeActivation{Service: test.engine}, cleanup.Close)
+			activation, err := newRuntimeActivation(test.opened, cleanup.Close)
 			if err == nil || activation == nil || activation.Close == nil {
 				t.Fatalf("validation = (%v, %v), want failed activation with owned cleanup", activation, err)
 			}

@@ -42,27 +42,32 @@ func (r *Root) openRuntimeWithOptions(
 	baseLogger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
-) (products runtimeProducts, err error) {
+) (products runtimeProducts, activation *factoryruntime.RuntimeActivation, err error) {
 	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
 	if err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		return r.openHistoricalSessionRuntime(ctx, opening)
+		historical, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
+		return historical, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	defer func() {
-		if err != nil {
+		// A native publication result transfers cleanup to Runtime Root, including
+		// validation failures. Earlier acquisition failures unwind here.
+		if err != nil && activation == nil {
 			if cleanupErr := cleanup.Close(); cleanupErr != nil {
 				err = errors.Join(err, cleanupErr)
 				products.closeArtifacts = cleanup.Close
+				activation, _ = newRuntimeActivation(nil, cleanup.Close)
 			}
 			if opening.initial == nil {
 				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
 					err = errors.Join(err, logErr)
 					products.closeArtifacts = cleanup.Close
+					activation, _ = newRuntimeActivation(nil, cleanup.Close)
 				}
 			}
 		}
@@ -72,20 +77,20 @@ func (r *Root) openRuntimeWithOptions(
 		ModelsRuntime: modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg),
 	}, opening.clock, opening.logger, cleanup)
 	if err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	opening.operatorSettingsPath = resources.OperatorSettingsPath
 	opening.durableExecution = resources.DurableExecution
 	opening.observations = resources.Observations
 	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
 		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
-		return runtimeProducts{}, err
+		return runtimeProducts{}, nil, err
 	}
 	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
@@ -96,12 +101,12 @@ func (r *Root) openRuntimeWithOptions(
 	if err == nil {
 		products.lifecycle = completed.Lifecycle
 		products.closeArtifacts = cleanup.Close
-		products.activation = opening.activation
 		rootRuntime := completed.SessionRuntime.(factoryruntime.Service)
 		products.bindRuntime = runtimeBindingForSession(rootRuntime, opening.sessionID)
 		opening.bindSelectedState(completed.State)
+		activation, err = newRuntimeActivation(opening.activation, cleanup.Close)
 	}
-	return products, err
+	return products, activation, err
 }
 
 // bindSelectedState retains opening facts on the exact record selected by
