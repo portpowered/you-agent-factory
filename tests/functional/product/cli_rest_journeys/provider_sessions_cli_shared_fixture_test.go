@@ -292,6 +292,9 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
+	for index := range 2 {
+		addSuccessRoute(fmt.Sprintf("worker-session-correlated-scope-%d", index), fmt.Sprintf("session_fixture_codex_correlated_scope_%d", index))
+	}
 	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
 	addSuccessRoute("worker-session-scoped-fresh", "session_fixture_codex_scoped_fresh")
 	for _, kind := range []string{"cancel", "corrupt", "unavailable"} {

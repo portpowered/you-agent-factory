@@ -24,6 +24,77 @@ import (
 
 const workScopedAttemptCount = 3
 
+// Both scopes admit the same explicit Work identities atomically. A two-input
+// workstation creates one physical attempt correlated with both Works.
+func testWorkerSessionsListWorkScopedCorrelatedScopes(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	seen := make(map[string]bool)
+	var reread []func()
+	for index := range 2 {
+		c := newWorkerSessionsCLICase(t)
+		route := fmt.Sprintf("worker-session-correlated-scope-%d", index)
+		c.registerRoutes(t, route)
+		writeCorrelatedScopedFactory(t, c.factoryDir, route)
+		sessionID := c.openSession(t)
+		request := `{"requestId":"correlated-request","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"correlated-plan","name":"plan","workTypeName":"plan","payload":{}},{"workId":"correlated-task","name":"task","workTypeName":"task","payload":{}}]}`
+		executeCLI(t, ctx, c.fixture.process, functionalEnvironment(c.fixture.homeDir), c.factoryDir,
+			"--server", c.fixture.baseURL, "--json", "submit", "batch", "--session", sessionID, request)
+		var physicalID string
+		for _, workID := range []string{"correlated-plan", "correlated-task"} {
+			endpoint := c.fixture.baseURL + "/factory-sessions/" + sessionID + "/worker-sessions?workId=" + workID
+			waitForScopedUsageCommit(t, ctx, endpoint)
+			inputs := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+			reread = append(reread, func() {
+				after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
+				assertNormalizedFleetJSONEqual(t, "coexisting scopes preserve complete correlated rows", []byte(inputs.Stdout()), []byte(after.Stdout()))
+			})
+			var listed workerSessionListJSON
+			decodeCLIJSON(t, inputs, &listed)
+			if len(listed.Sessions) != 1 {
+				t.Fatalf("scope %s Work %s rows=%+v, want one physical attempt", sessionID, workID, listed)
+			}
+			row := listed.Sessions[0]
+			if row.FactorySessionID == nil || *row.FactorySessionID != sessionID || !containsString(row.WorkIDs, "correlated-plan") || !containsString(row.WorkIDs, "correlated-task") {
+				t.Fatalf("lost scope or multi-Work correlation: %+v", row)
+			}
+			assertScopedCapturedUsage(t, row)
+			if physicalID == "" {
+				physicalID = row.WorkerSessionID
+			} else if physicalID != row.WorkerSessionID {
+				t.Fatalf("participating Works returned different physical attempts: %s / %s", physicalID, row.WorkerSessionID)
+			}
+		}
+		if physicalID == "" || seen[physicalID] {
+			t.Fatalf("physical identity leaked across Factory Sessions: %q", physicalID)
+		}
+		seen[physicalID] = true
+	}
+	for _, read := range reread {
+		read()
+	}
+}
+
+func writeCorrelatedScopedFactory(t *testing.T, factoryDir, route string) {
+	t.Helper()
+	types := make([]any, 0, 2)
+	inputs, outputs := make([]any, 0, 2), make([]any, 0, 2)
+	for _, kind := range []string{"plan", "task"} {
+		types = append(types, map[string]any{"name": kind, "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "done", "type": "TERMINAL"}}})
+		inputs = append(inputs, map[string]any{"workType": kind, "state": "init"})
+		outputs = append(outputs, map[string]any{"workType": kind, "state": "done"})
+	}
+	raw, err := json.Marshal(map[string]any{"name": "correlated-scopes", "workTypes": types, "workers": []any{map[string]any{"name": "worker"}}, "workstations": []any{map[string]any{"name": "pair", "worker": "worker", "inputs": inputs, "outputs": outputs}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	support.WriteWorkstationConfig(t, factoryDir, "pair", "---\ntype: MODEL_WORKSTATION\n---\nworker-session-route="+route+"\n")
+}
+
 // Selected durable reads fail the entire customer list, unlike optional
 // transcript reads. Each fault is isolated by physical Worker identity on the
 // shared process; request cancellation must drain without canceling the Work.
