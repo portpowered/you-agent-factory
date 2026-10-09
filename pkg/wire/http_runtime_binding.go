@@ -129,7 +129,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 	attribution recordings.WorkerWorkAttributionReader,
 	logger *zap.Logger,
 ) (httpRuntimeBinding, error) {
-	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || snapshots == nil {
+	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || logs == nil || clock == nil || attribution == nil || logger == nil || snapshots == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	definitionMapping := factorydefinitionmapping.New(definitions)
@@ -150,13 +150,14 @@ func provideHTTPRuntimeBindingWithMetrics(
 	modelsHandler := modelshttp.NewHandler(modelshttp.NewSessionAdapter(modelService, root, modelsContent, modelshttp.ModelsScope, modelshttp.SessionID), logger)
 	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(costsQuery, costshttp.RuntimePaths, metricsScopeResolver), logger)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(metricsQuery, metricsScopeResolver, factoryvisualizationhttp.MetricsRoot), logger)
+	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, logs, writer, clock, snapshots, attribution, logger)
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
 				return nil, err
 			}
 		}
-		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, workService, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, logs, writer, clock, snapshots, attribution, logger)
+		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, workerSessionsHandler, logger)
 	}, nil
 }
 
@@ -166,18 +167,13 @@ func newHTTPRuntimeHandlerWithMetrics(
 	sessionsHandler *factorysessionshttp.Handler,
 	factoryDefinitionsHandler *factorydefinitionshttp.Handler,
 	workHandler *workhttp.Adapter,
-	workService work.Service,
 	sessionID string,
 	cancellation initializer.InvocationCancellation,
 	providerSessionsHTTP *providersessionshttp.Handler,
 	modelsHandler *modelshttp.Handler,
 	metricsHandler *factoryvisualizationhttp.MetricsHandler,
 	costsHandler *costshttp.Handler,
-	logs workersessions.Service,
-	writer recordings.WorkerRecordingWriter,
-	clock factoryruntime.Clock,
-	snapshots *workersessionswire.HistorySnapshotBudget,
-	attribution recordings.WorkerWorkAttributionReader,
+	workerSessionsHandler *workersessionshttp.Handler,
 	logger *zap.Logger,
 ) (http.Handler, error) {
 	if root == nil {
@@ -187,7 +183,6 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err != nil {
 		return nil, err
 	}
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, presentation, logs, writer, clock, snapshots, attribution)
 	return newHTTPRuntimeServer(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler,
 		providerSessionsHTTP, factoryDefinitionsHandler, presentation, sessionID, cancellation, metricsHandler,
@@ -226,41 +221,36 @@ func newHTTPSessionsHandler(
 func newHTTPWorkerSessionsHandler(
 	root *factorysessionwire.Root,
 	workService work.Service,
-	presentation factorysessionwire.SessionPresentation,
 	logs workersessions.Service,
 	writer recordings.WorkerRecordingWriter,
 	clock platformclock.Source,
 	snapshots *workersessionswire.HistorySnapshotBudget,
 	attribution recordings.WorkerWorkAttributionReader,
+	logger *zap.Logger,
 ) *workersessionshttp.Handler {
-	if presentation.WorkerSessions == nil {
-		return nil
-	}
 	resolver := newWorkerSessionsFactorySessionScopeResolver(root)
+	sources := func(ctx context.Context) ([]workersessions.Service, error) {
+		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
+		return workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+	}
 	controller := workerSessionControlRouter{
 		archived: logs,
-		sources: func(ctx context.Context) ([]workersessions.Service, error) {
-			return workerSessionObservationSources(ctx, root, presentation.WorkerSessions)
-		},
+		sources:  sources,
 	}
 	adapter := workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
-		presentation.WorkerSessions, presentation.WorkerSessions, presentation.WorkerSessions,
-		controller, presentation.WorkerSessions, workService, attribution, resolver,
+		logs, logs, logs,
+		controller, logs, workService, attribution, resolver,
 	)
-	if adapter == nil {
-		return nil
-	}
 	captured, _ := writer.(recordings.WorkerCapturedActivityReader)
-	fleet := workersessionswire.NewFleetObservationService(func(ctx context.Context) ([]workersessions.Service, error) {
-		return workerSessionObservationSources(ctx, root, presentation.WorkerSessions)
-	}, captured, clock, logging.NewZapLogger(presentation.Logger, false), snapshots)
-	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), presentation.Logger)
+	fleet := workersessionswire.NewFleetObservationService(sources, captured, clock, logging.NewZapLogger(logger, false), snapshots)
+	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), logger)
 }
 
 func workerSessionObservationSources(
 	ctx context.Context,
 	root interface {
 		ListLiveSessionIDs() []string
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
 	},
 	current workersessions.Service,
 ) ([]workersessions.Service, error) {
@@ -270,15 +260,6 @@ func workerSessionObservationSources(
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	provider, ok := any(root).(interface {
-		WorkerSessionsObservationForSession(string) workersessions.Service
-	})
-	if !ok {
-		if current != nil {
-			sources = append(sources, current)
-		}
-		return sources, nil
 	}
 	// Discovery needs only live identities, not session or Work projections.
 	// Building those projections here makes every fleet read wait on unrelated
@@ -297,7 +278,7 @@ func workerSessionObservationSources(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if observation := provider.WorkerSessionsObservationForSession(id); observation != nil {
+		if observation := root.WorkerSessionsObservationForSession(id); observation != nil {
 			sources = append(sources, observation)
 		}
 	}
@@ -305,7 +286,7 @@ func workerSessionObservationSources(
 		return nil, err
 	}
 	// Runtime-owned registries are authoritative for Factory Worker Sessions.
-	// Keep the process-default registry last so duplicate restored identities do
+	// Keep the selected host registry last so duplicate restored identities do
 	// not hide the successor runtime's canonical session attribution.
 	if current != nil {
 		sources = append(sources, current)
@@ -449,7 +430,8 @@ func newHTTPRuntimeServer(
 	metricsRoot := presentation.MetricsRootDir
 	settingsPath := presentation.OperatorSettingsPath
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := modelshttp.WithRuntimeSelection(r.Context(), sessionID, modelsScope)
+		ctx := workersessionshttp.WithRuntimeHostSession(r.Context(), sessionID)
+		ctx = modelshttp.WithRuntimeSelection(ctx, sessionID, modelsScope)
 		ctx = costshttp.WithRuntimePaths(ctx, metricsRoot, settingsPath)
 		ctx = factoryvisualizationhttp.WithMetricsRoot(ctx, metricsRoot)
 		handler.ServeHTTP(w, r.WithContext(ctx))

@@ -50,6 +50,104 @@ type sessionObservationServiceStub struct {
 	lastListRequest workersessions.ListObservationsRequest
 }
 
+// hostAdmissionResolver keeps immutable selections shared by concurrent hosts.
+type hostAdmissionResolver struct {
+	sources map[string]workersessions.ObservationService
+	err     error
+}
+
+func (resolver hostAdmissionResolver) ResolveWorkerSessionScope(ctx context.Context, id string) (SessionScope, error) {
+	if err := ctx.Err(); err != nil {
+		return SessionScope{}, err
+	}
+	return SessionScope{EffectiveID: id}, resolver.err
+}
+
+func (resolver hostAdmissionResolver) WorkerSessionsObservationForSession(id string) workersessions.ObservationService {
+	return resolver.sources[id]
+}
+
+type hostAdmissionSource struct {
+	workersessions.Service
+	admission *fakeObservationService
+	recording string
+}
+
+func (source hostAdmissionSource) Start(ctx context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
+	request.Execution.Execution.RecordingID = source.recording
+	return source.admission.Start(ctx, request)
+}
+
+func TestSharedWorkerSessionAdmissionSelectsHostRecording(t *testing.T) {
+	t.Parallel()
+	direct := &fakeObservationService{}
+	selected := &fakeObservationService{startResult: workersessions.StartResult{Session: workersessions.Session{ID: "selected-worker"}}}
+	peer := &fakeObservationService{startResult: workersessions.StartResult{Session: workersessions.Session{ID: "peer-worker"}}}
+	resolver := hostAdmissionResolver{sources: map[string]workersessions.ObservationService{
+		"selected": hostAdmissionSource{admission: selected, recording: "selected-recording"},
+		"peer":     hostAdmissionSource{admission: peer, recording: "peer-recording"},
+	}}
+	adapter := NewAdapterWithStart(direct, direct, workServiceStub{}, resolver)
+	t.Cleanup(func() {
+		if direct.startCalled {
+			t.Error("host admission reached the process-default source")
+		}
+	})
+	for id, source := range map[string]*fakeObservationService{"selected": selected, "peer": peer} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			var request factoryapi.WorkerSessionStartRequest
+			if err := json.Unmarshal([]byte(workerSessionStartMappingJSON), &request); err != nil {
+				t.Fatal(err)
+			}
+			response, err := adapter.StartWorkerSession(WithRuntimeHostSession(t.Context(), id), request)
+			if err != nil || response.WorkerSessionId != id+"-worker" || !source.startCalled {
+				t.Fatalf("host admission = %+v, %v", response, err)
+			}
+			if source.startRequest.Execution.Execution.RecordingID != id+"-recording" {
+				t.Fatalf("host recording = %q", source.startRequest.Execution.Execution.RecordingID)
+			}
+			if source.startRequest.RequestID != "request-1" || source.startRequest.ID != "worker-1" {
+				t.Fatalf("admission changed request identity: %+v", source.startRequest)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionHostAdmissionNeverFallsBackAfterSelectionFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		resolver SessionScopeResolver
+		canceled bool
+		want     error
+	}{
+		{name: "missing-scoped-source", resolver: hostAdmissionResolver{}, want: workersessions.ErrObservationProjectionUnavailable},
+		{name: "missing-host", resolver: hostAdmissionResolver{err: workersessions.ErrObservationSessionNotFound}, want: workersessions.ErrObservationSessionNotFound},
+		{name: "missing-authority", resolver: &sessionScopeResolverStub{}, want: workersessions.ErrObservationProjectionUnavailable},
+		{name: "canceled", resolver: hostAdmissionResolver{}, canceled: true, want: context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			direct := &fakeObservationService{}
+			adapter := NewAdapterWithStart(direct, direct, workServiceStub{}, tc.resolver)
+			var request factoryapi.WorkerSessionStartRequest
+			if err := json.Unmarshal([]byte(workerSessionStartMappingJSON), &request); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tc.canceled {
+				cancel()
+			}
+			_, err := adapter.StartWorkerSession(WithRuntimeHostSession(ctx, "selected"), request)
+			if !errors.Is(err, tc.want) || direct.startCalled {
+				t.Fatalf("failed host admission = %v, default called = %t; want %v", err, direct.startCalled, tc.want)
+			}
+		})
+	}
+}
+
 func (stub *sessionObservationServiceStub) ListObservations(_ context.Context, request workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
 	stub.listCalls++
 	stub.lastListRequest = request

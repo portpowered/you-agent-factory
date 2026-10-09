@@ -73,6 +73,20 @@ type sessionObservationResolver interface {
 	WorkerSessionsObservationForSession(string) workersessions.ObservationService
 }
 
+type runtimeHostSessionKey struct{}
+
+// WithRuntimeHostSession carries only the hosting Factory Session identity.
+// Admission uses its scoped recording authority; reusable owners stay injected.
+func WithRuntimeHostSession(ctx context.Context, sessionID string) context.Context {
+	return context.WithValue(ctx, runtimeHostSessionKey{}, sessionID)
+}
+
+// RuntimeHostSession returns the selected host identity carried by the route.
+func RuntimeHostSession(ctx context.Context) (string, bool) {
+	id, selected := ctx.Value(runtimeHostSessionKey{}).(string)
+	return id, selected
+}
+
 type Adapter struct {
 	logs         workersessions.Service
 	observations observationService
@@ -200,7 +214,22 @@ func (a *Adapter) StartWorkerSession(
 	if err != nil {
 		return factoryapi.WorkerSessionStartResponse{}, err
 	}
-	result, err := a.starter.Start(ctx, start)
+	starter := a.starter
+	if hostID, selected := RuntimeHostSession(ctx); selected {
+		resolver, ok := a.resolver.(sessionObservationResolver)
+		if !ok {
+			return factoryapi.WorkerSessionStartResponse{}, workersessions.ErrObservationProjectionUnavailable
+		}
+		scope, scopeErr := a.resolveWorkerSessionScope(ctx, hostID)
+		if scopeErr != nil {
+			return factoryapi.WorkerSessionStartResponse{}, scopeErr
+		}
+		starter = resolver.WorkerSessionsObservationForSession(scope.effectiveID)
+		if starter == nil {
+			return factoryapi.WorkerSessionStartResponse{}, workersessions.ErrObservationProjectionUnavailable
+		}
+	}
+	result, err := starter.Start(ctx, start)
 	if err != nil {
 		return factoryapi.WorkerSessionStartResponse{}, err
 	}

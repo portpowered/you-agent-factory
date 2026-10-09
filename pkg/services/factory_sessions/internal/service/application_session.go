@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
@@ -127,7 +126,6 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 // session. HTTP peer services are injected directly by process composition.
 type SessionPresentation struct {
 	ModelsScope          models.RuntimeScopeRef
-	WorkerSessions       workersessions.ObservationService
 	Logger               *zap.Logger
 	Projections          recordings.ProjectionService
 	Clock                factoryruntime.Clock
@@ -142,7 +140,6 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 	}
 	return SessionPresentation{
 		ModelsScope:          bound.ModelsScope,
-		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
 		Projections:          r.recordingProjections,
 		Clock:                bound.Clock,
