@@ -81,14 +81,31 @@ func (r *Root) openRuntimeWithOptions(
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return runtimeProducts{}, err
 	}
-	completed, err := r.openingCompletion.Complete(ctx, opening.completionRequest(),
+	completionRequest := opening.completionRequest()
+	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
 		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	products, err = r.bindSessionOpeningProducts(ctx, opening, cleanup, completed.SessionRuntime, completed.ProcessRuntime)
+	products, err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
+		Facts:       completionRequest.Facts,
+		RecordPath:  opening.configured.Recordings.RecordPath,
+		MockWorkers: opening.configured.Workers.MockWorkers,
+	}, opening.clock, opening.startupRuntime, completed.SessionRuntime, completed.ProcessRuntime,
+		opening.activation, opening.durableExecution.Service, opening.publishCurrentBoardWriter, cleanup)
 	if err == nil {
 		products.lifecycle = completed.Lifecycle
+		products.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
+		products.currentBoardRecordPath = opening.configured.Recordings.RecordPath
+		if recovery := opening.startupRecovery; recovery != nil {
+			products.startupRecovery = &factorysessions.StartupRecovery{
+				Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
+				Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
+			}
+		}
+		products.operatorSettingsPath = opening.operatorSettingsPath
+		products.workerSettings = opening.durableExecution.WorkerSettings
+		products.replayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...)
 	}
 	return products, err
 }
@@ -577,83 +594,6 @@ func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session
 		return nil
 	})
 	return nil
-}
-
-func (r *Root) bindSessionOpeningProducts(
-	ctx context.Context,
-	opening *sessionRuntimeOpening,
-	cleanup *runtimeOpeningCleanup,
-	sessionRuntime roles.ApplicationRuntime,
-	processRuntime roles.ProcessRuntime,
-) (runtimeProducts, error) {
-	if recording, ok := opening.startupRuntime.(recordings.RuntimeRecordingStartup); ok {
-		recording.DeferRecordingPublication()
-	}
-	rootRuntime, ok := sessionRuntime.(factoryruntime.Service)
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
-	}
-	// A JavaScript workflow's children are detached Workers. The Workers root is
-	// already composed before opening; Runtime contributes only the identity and
-	// resource-admission capability that the child request needs. The existing
-	// live-change Runtime bind remains separate and is not an execution route.
-	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
-	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
-		resourceLeaseAdmission = admission
-	}
-	releaseScope, err := r.executionBinding.Bind(
-		opening.sessionID,
-		opening.durableExecution.Service,
-		rootRuntime,
-		resourceLeaseAdmission,
-		opening.configured.Runtime.RuntimeInstanceID,
-		opening.startupRuntime.StreamGeneration(),
-		opening.startupRuntime.RecordingLedger(),
-		opening.configured.Workers.MockWorkers,
-		runtimeProgressPublisher(opening.startupRuntime),
-		runtimeWorkerAttemptStarter(opening.startupRuntime),
-	)
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-	cleanup.Add(func() error { releaseScope(); return nil })
-	opened := assembleRuntimeProducts(
-		ctx,
-		r.SessionGateway,
-		rootRuntime,
-		opening.modelsBind.Scope,
-		opening.startupRuntime,
-		sessionRuntime,
-		processRuntime,
-		opening.configured.Definition.Directory,
-		opening.configured.Runtime.RuntimeInstanceID,
-		opening.sessionSelection.BackendScopeID,
-		cleanup.Close,
-		opening.sessionID,
-	)
-	opened.engine = opening.activation.Service
-	opened.activation = opening.activation
-	opened.clock = opening.clock
-	opened.orderlyStop = opening.orderlyCurrentBoardStop(newOrderlyRecordingFlush(
-		r.recordingsService,
-		opened.runtimeInstanceID,
-		opening.configured.Recordings.RecordPath,
-	))
-	opened.skippedBoardRecordings = append([]string(nil), opening.skippedBoardRecordings...)
-	opened.currentBoardRecordPath = opening.configured.Recordings.RecordPath
-	if recovery := opening.startupRecovery; recovery != nil {
-		opened.startupRecovery = &factorysessions.StartupRecovery{
-			Code: "DURABLE_STATE_QUARANTINED", File: recovery.file,
-			Cause: recovery.cause, QuarantinedFile: recovery.quarantinedFile,
-		}
-	}
-	opened.operatorSettingsPath = opening.operatorSettingsPath
-	opened.workerSettings = opening.durableExecution.WorkerSettings
-	opened.replayMetadataWarnings = append(
-		[]recordings.MetadataMismatchWarning(nil),
-		opening.load.ReplayMetadataWarnings...,
-	)
-	return opened, nil
 }
 
 func startFactoryWebhookSubscription(

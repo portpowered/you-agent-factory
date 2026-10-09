@@ -87,49 +87,6 @@ func (r *Root) historicalReplayRuntimeProducts(
 	}
 }
 
-func assembleRuntimeProducts(
-	ctx context.Context,
-	factorySessionGateway roles.SessionGateway,
-	factoryRuntime factoryruntime.Service,
-	modelsScope models.RuntimeScopeRef,
-	startup runtimeports.RuntimeInstance,
-	lifecycle roles.LifecycleRuntime,
-	process roles.ProcessRuntime,
-	directory string,
-	runtimeInstanceID string,
-	backendScopeID string,
-	closeResources func() error,
-	factorySessionIDs ...string,
-) runtimeProducts {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	factorySessionID := ""
-	if len(factorySessionIDs) > 0 {
-		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
-	}
-	bindRuntime := runtimeBindingForSession(factoryRuntime, factorySessionID)
-	effectiveFactorySessionID := resolveOpenedFactorySessionID(ctx, factorySessionGateway, factorySessionID)
-	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
-	modelInvocation := modelinvocation.RuntimeModelInvocation{
-		FactorySessionID: effectiveFactorySessionID, Scope: modelsScope,
-		RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
-		FactoryDirectory: directory, WorkingDirectory: directory,
-	}
-
-	return runtimeProducts{
-		bindRuntime: bindRuntime,
-		process:     process, lifecycle: lifecycle,
-		modelInvocation: modelInvocation,
-		factoryRuntime:  factoryRuntime,
-		modelsScope:     modelsScope,
-		workerSessions:  workerSessions,
-		logger:          startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
-		directory: directory, runtimeInstanceID: runtimeInstanceID, backendScopeID: backendScopeID,
-		closeArtifacts: closeResources,
-	}
-}
-
 func runtimeBindingForSession(
 	factoryRuntime factoryruntime.Service,
 	factorySessionID string,
@@ -146,25 +103,6 @@ func runtimeBindingForSession(
 	return func(binding factoryruntime.RuntimeBinding) error {
 		return binder.BindRuntime(factorySessionID, binding)
 	}
-}
-
-func resolveOpenedFactorySessionID(
-	ctx context.Context,
-	factorySessionGateway roles.SessionGateway,
-	factorySessionID string,
-) string {
-	effectiveID := factorySessionID
-	if factorySessionGateway == nil || factorySessionID == "" {
-		return effectiveID
-	}
-	projection, err := factorySessionGateway.GetFactorySession(ctx, factorySessionID)
-	if err != nil {
-		return effectiveID
-	}
-	if resolved := strings.TrimSpace(projection.Context.FactorySessionID); resolved != "" {
-		return resolved
-	}
-	return effectiveID
 }
 
 func openedWorkerSessionsObservation(
