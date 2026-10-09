@@ -22,8 +22,8 @@ def mission_read(command, required=False, run=subprocess.run):
               "records": records}
     for _ in range(MAX_ATTEMPTS):
         try:
-            completed = run(command, capture_output=True, text=True, timeout=ATTEMPT_TIMEOUT,
-                            shell=False)
+            completed = run(command, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace", timeout=ATTEMPT_TIMEOUT, shell=False)
             record = {"returncode": completed.returncode, "value": text_output(completed.stdout)}
             if completed.returncode in (-2, 130, 0xC000013A):
                 records.append(record)

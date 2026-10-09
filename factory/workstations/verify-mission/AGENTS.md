@@ -12,7 +12,7 @@ On correction, fix the field named in the checker reason above.
 Keep the full bound mission and available evidence.
 
 Execute only the bound mission, including cron-origin missions. Run every named command/read and report every named value, unit and source; never invent evidence.
-Use canonical server http://127.0.0.1:7437 and the explicit bound Factory Session for all API-backed commands. Preserve the payload, Work identity and project tag.
+API-backed commands about the bound Factory Session use http://127.0.0.1:7437 and that Session. When the mission builds its own binary or names an isolated server, port, HOME or rig, run those checks there as the mission says; that is authorized and is not a precondition conflict. Preserve the payload, Work identity and project tag.
 Read factory/docs/batch-inputs.md for corrective batch shape and relations.
 Before deciding, resolve read-only preconditions yourself: git fetch origin main, file reads, and GET requests.
 Fetch missing merge objects before ancestry checks; unavailable objects are not observed product defects.
