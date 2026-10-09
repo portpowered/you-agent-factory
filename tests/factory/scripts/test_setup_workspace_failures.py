@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -80,6 +80,25 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         finally:
             os.chdir(original_cwd)
         return raised.exception.code, stderr.getvalue()
+
+    def test_progress_write_failure_reports_stage_without_ready_json(self):
+        init_local_repo(self.repo_path)
+        name = "progress-write-failure"
+        write_prd(self.repo_path, name)
+        stdout = io.StringIO()
+        with mock.patch.object(self.module, "sync_main", return_value="already up to date"), \
+             mock.patch.object(self.module, "prune_worktrees"), \
+             mock.patch.object(self.module, "create_or_reuse_worktree", return_value=False), \
+             mock.patch.object(self.module, "validate_registered_worktree"), \
+             mock.patch.object(self.module, "copy_prd_files", return_value=(self.repo_path / "prd.json", None)), \
+             mock.patch.object(self.module, "copy_standing_rules"), \
+             mock.patch.object(self.module, "initialize_progress_log", side_effect=PermissionError("progress.txt: write denied")), \
+             redirect_stdout(stdout):
+            exit_code, stderr = self.run_main_in_repo(name)
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("Progress log initialization failed: progress.txt: write denied", stderr)
+        self.assertNotIn("Traceback", stderr)
 
     def test_reports_root_sync_failure_with_concrete_reason(self):
         init_local_repo(self.repo_path)
