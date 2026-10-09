@@ -18,10 +18,7 @@ func probeOwnerPID(pid int) ownerLiveness {
 		// reuse as proof of identity and never removes an active resource.
 		return ownerLivenessActive
 	case errors.Is(err, syscall.ESRCH):
-		// A missing PID does not prove that an incomplete stage is safe to
-		// remove: process identity can be reused and the stage contents may
-		// still be incomplete. Keep the resource and require an explicit clear.
-		return ownerLivenessIndeterminate
+		return ownerLivenessOrphaned
 	case errors.Is(err, syscall.EPERM):
 		return ownerLivenessPermissionDenied
 	default:

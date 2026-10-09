@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,8 +17,64 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func TestInstallPackagedFactory_DeadPIDReclaimsLease(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("native incarnation queries require Windows or Linux")
+	}
+	const deadPID = 2147483647
+	if _, err := (platformprocess.IncarnationProbe{}).LookupProcess(deadPID); !errors.Is(err, platformprocess.ErrProcessGone) {
+		t.Fatalf("native absence prerequisite: %v", err)
+	}
+	root := t.TempDir()
+	definition := installationDefinitionFixture()
+	staging := stagingOwnershipPath(root, definition.Name)
+	if err := os.MkdirAll(staging, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staging, stagingOwnerMetadataName), []byte(`{"pid":2147483647}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	observed := false
+	persistence := &installationPersistenceStub{prepareObserve: func() {
+		paths, err := filepath.Glob(staging + "-recovered-*")
+		if err != nil || len(paths) != 1 {
+			t.Fatalf("replacement lease: %v %v", paths, err)
+		}
+		data, err := os.ReadFile(filepath.Join(paths[0], stagingOwnerMetadataName))
+		var owner ownerRecord
+		if err != nil || json.Unmarshal(data, &owner) != nil || owner.PID != os.Getpid() {
+			t.Fatalf("replacement owner: %s %v", data, err)
+		}
+		observed = true
+	}}
+	logger := &packagedInstallationLogger{}
+	result, err := New(persistence, platformfilesystem.Local{}, os.Mkdir, logger).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{NamedFactoriesRoot: root, Definition: definition, Format: factorydefinitions.PackagedFactoryFormatJSON})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observed || result.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+		t.Fatalf("result=%+v observed=%v", result, observed)
+	}
+	data, err := os.ReadFile(filepath.Join(result.FactoryDir, "factory.json"))
+	if err != nil || string(data) != string(definition.JSON) {
+		t.Fatalf("target=%s error=%v", data, err)
+	}
+	paths, err := filepath.Glob(staging + "*")
+	if err != nil || len(paths) != 0 {
+		t.Fatalf("lease cleanup: %v %v", paths, err)
+	}
+	for _, entry := range logger.snapshot() {
+		if entry.fields["outcome"] == "reclaimed-orphan" {
+			return
+		}
+	}
+	t.Fatal("missing reclaimed-orphan diagnostic")
+}
 
 type packagedInstallationLogEntry struct {
 	level   string

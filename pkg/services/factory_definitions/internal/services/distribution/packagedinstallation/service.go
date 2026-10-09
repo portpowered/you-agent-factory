@@ -8,10 +8,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
@@ -35,7 +37,9 @@ const (
 )
 
 type ownerRecord struct {
-	PID int `json:"pid"`
+	PID   int    `json:"pid"`
+	Host  string `json:"host,omitempty"`
+	Start string `json:"start,omitempty"`
 }
 
 type ownerLiveness string
@@ -53,14 +57,66 @@ type ownerProbe interface {
 	Classify(ownerRecord) ownerLiveness
 }
 
-type localOwnerProbe struct{}
-
-func (localOwnerProbe) Current() (ownerRecord, error) {
-	return ownerRecord{PID: os.Getpid()}, nil
+type incarnationLookup interface {
+	LookupProcess(int) (platformprocess.Incarnation, error)
 }
 
-func (localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
-	return probeOwnerPID(owner.PID)
+type localOwnerProbe struct{ incarnations incarnationLookup }
+
+func (probe localOwnerProbe) lookup(pid int) (platformprocess.Incarnation, error) {
+	if probe.incarnations != nil {
+		return probe.incarnations.LookupProcess(pid)
+	}
+	return (platformprocess.IncarnationProbe{}).LookupProcess(pid)
+}
+
+func (probe localOwnerProbe) Current() (ownerRecord, error) {
+	owner := ownerRecord{PID: os.Getpid()}
+	if identity, err := probe.lookup(owner.PID); err == nil && identity.Host != "" && identity.Start != "" {
+		owner.Host, owner.Start = identity.Host, identity.Start
+	}
+	return owner, nil
+}
+
+func (probe localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
+	if owner.PID <= 0 || (owner.Host == "") != (owner.Start == "") {
+		return ownerLivenessIndeterminate
+	}
+	if owner.Host != "" {
+		host, err := os.Hostname()
+		if err != nil || host != owner.Host {
+			return ownerLivenessIndeterminate
+		}
+	}
+	identity, err := probe.lookup(owner.PID)
+	switch {
+	case errors.Is(err, platformprocess.ErrProcessGone):
+		return ownerLivenessOrphaned
+	case errors.Is(err, fs.ErrPermission):
+		return ownerLivenessPermissionDenied
+	case err != nil:
+		// Native PID probing preserves legacy support on platforms without
+		// incarnation queries. Generic lookup failures never prove identity reuse.
+		if probe.incarnations == nil && runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+			return probeOwnerPID(owner.PID)
+		}
+		return ownerLivenessIndeterminate
+	default:
+		return probe.classifyLiveOwner(owner, identity)
+	}
+}
+
+func (localOwnerProbe) classifyLiveOwner(owner ownerRecord, identity platformprocess.Incarnation) ownerLiveness {
+	switch {
+	case identity.PID != owner.PID || identity.Host == "" || identity.Start == "":
+		return ownerLivenessIndeterminate
+	case owner.Host != "" && identity.Host != owner.Host:
+		return ownerLivenessIndeterminate
+	case owner.Start != "" && identity.Start != owner.Start:
+		return ownerLivenessOrphaned
+	default:
+		return ownerLivenessActive
+	}
 }
 
 func New(
@@ -545,9 +601,13 @@ func (service *Service) readOwnerRecord(path string) (ownerRecord, ownerLiveness
 		return ownerRecord{}, ownerLivenessIndeterminate, err
 	}
 	var owner ownerRecord
-	if err := json.Unmarshal(data, &owner); err != nil || owner.PID <= 0 {
+	var fields map[string]json.RawMessage
+	decodeErr := json.Unmarshal(data, &fields)
+	_, hasHost := fields["host"]
+	_, hasStart := fields["start"]
+	if err := json.Unmarshal(data, &owner); err != nil || decodeErr != nil || owner.PID <= 0 || hasHost != hasStart || (hasHost && (owner.Host == "" || owner.Start == "")) {
 		if err == nil {
-			err = fmt.Errorf("owner PID must be positive")
+			err = fmt.Errorf("owner PID must be positive and optional identity must be complete")
 		}
 		return ownerRecord{}, ownerLivenessIndeterminate, fmt.Errorf("invalid staging owner metadata: %w", err)
 	}
