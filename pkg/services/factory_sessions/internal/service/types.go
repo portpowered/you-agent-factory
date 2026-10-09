@@ -27,7 +27,6 @@ type runtimeProducts struct {
 	lifecycle       roles.LifecycleRuntime
 	replayExecution *recordingreplay.Scope
 	closeArtifacts  func() error
-	bindRuntime     func(factoryruntime.RuntimeBinding) error
 }
 
 type workerSessionsObservationProvider interface {
@@ -36,24 +35,6 @@ type workerSessionsObservationProvider interface {
 
 type workerSessionsObservationForSessionProvider interface {
 	WorkerSessionsObservationForSession(string) workersessions.ObservationService
-}
-
-func runtimeBindingForSession(
-	factoryRuntime factoryruntime.Service,
-	factorySessionID string,
-) func(factoryruntime.RuntimeBinding) error {
-	if strings.TrimSpace(factorySessionID) == "" {
-		return nil
-	}
-	binder, ok := factoryRuntime.(interface {
-		BindRuntime(string, factoryruntime.RuntimeBinding) error
-	})
-	if !ok {
-		return nil
-	}
-	return func(binding factoryruntime.RuntimeBinding) error {
-		return binder.BindRuntime(factorySessionID, binding)
-	}
 }
 
 func openedWorkerSessionsObservation(

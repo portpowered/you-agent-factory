@@ -359,3 +359,51 @@ func bindingIdentityReader(gateway roles.SessionGateway) OpeningSessionIdentity 
 	}
 	return bindingIdentityAdapter{gateway: gateway}
 }
+
+func TestRuntimeOpeningPublishesBindingToAcquiredOwner(t *testing.T) {
+	t.Parallel()
+	for _, fails := range []bool{false, true} {
+		t.Run(map[bool]string{false: "selected capability", true: "typed publication failure"}[fails], func(t *testing.T) {
+			t.Parallel()
+			var failure error
+			if fails {
+				failure = errors.New("selected owner rejected publication")
+			}
+			selected := &openingPublicationOwner{err: failure}
+			runtime := &bindingLegacyRuntime{}
+			binding := (factoryruntime.RuntimeBinding{}).New("selected-generation", runtime)
+			operation := &RuntimeOpeningBinding{}
+			err := operation.PublishRuntime(selected, "selected-session", binding)
+			if !errors.Is(err, failure) || selected.calls != 1 || selected.sessionID != "selected-session" || !selected.binding.Equal(binding) || selected.binding.Service() != runtime {
+				t.Fatalf("publication = %v, owner=%+v, want selected identity/capability and original cause", err, selected)
+			}
+		})
+	}
+}
+
+func TestRuntimeOpeningBindingPreservesOptionalPublication(t *testing.T) {
+	t.Parallel()
+	selected := &openingPublicationOwner{}
+	operation := &RuntimeOpeningBinding{}
+	if err := operation.PublishRuntime(selected, " ", factoryruntime.RuntimeBinding{}); err != nil || selected.calls != 0 {
+		t.Fatalf("empty session publication = %v, calls=%d", err, selected.calls)
+	}
+	if err := operation.PublishRuntime(nil, "selected-session", factoryruntime.RuntimeBinding{}); err != nil {
+		t.Fatalf("absent binding capability = %v", err)
+	}
+}
+
+type openingPublicationOwner struct {
+	roles.ApplicationRuntime
+	calls     int
+	sessionID string
+	binding   factoryruntime.RuntimeBinding
+	err       error
+}
+
+func (owner *openingPublicationOwner) BindRuntime(sessionID string, binding factoryruntime.RuntimeBinding) error {
+	owner.calls++
+	owner.sessionID = sessionID
+	owner.binding = binding
+	return owner.err
+}

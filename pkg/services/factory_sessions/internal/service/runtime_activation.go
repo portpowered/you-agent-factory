@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -21,13 +22,13 @@ import (
 func (r *Root) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (runtimeProducts, *factoryruntime.RuntimeActivation, error) {
+) (runtimeProducts, *factoryruntime.RuntimeActivation, roles.ApplicationRuntime, error) {
 	if err := ctx.Err(); err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	definition, err := definitionRequestFromActivation(request)
 	if err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	session := sessionRequestFromActivation(request)
 	worker := workerRequestFromActivation(request.Inputs.Workers)
@@ -39,7 +40,7 @@ func (r *Root) activateRuntime(
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
 	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
 		strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
@@ -272,12 +273,14 @@ func (r *Root) openActivatedRuntimeWithInputs(
 		return runtimeProducts{}, err
 	}
 	var products runtimeProducts
+	var selectedRuntime roles.ApplicationRuntime
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
-		opened, published, openErr := r.activateRuntime(activationCtx, activation)
+		opened, published, selected, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
 			return published, openErr
 		}
 		products = opened
+		selectedRuntime = selected
 		return published, nil
 	})
 	if err != nil {
@@ -288,8 +291,8 @@ func (r *Root) openActivatedRuntimeWithInputs(
 		binding = result.Runtime.Binding
 	}
 	closeRuntime := r.activationCloser(binding, result.RuntimeID)
-	if !binding.IsZero() && products.bindRuntime != nil {
-		if err := products.bindRuntime(binding); err != nil {
+	if !binding.IsZero() {
+		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
 			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}

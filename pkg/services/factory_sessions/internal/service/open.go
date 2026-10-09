@@ -43,16 +43,16 @@ func (r *Root) openRuntimeWithOptions(
 	baseLogger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
-) (products runtimeProducts, activation *factoryruntime.RuntimeActivation, err error) {
+) (products runtimeProducts, activation *factoryruntime.RuntimeActivation, selectedRuntime roles.ApplicationRuntime, err error) {
 	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
 	if err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
 		replay, closeReplay, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
-		return runtimeProducts{replayExecution: replay, closeArtifacts: closeReplay}, nil, historicalErr
+		return runtimeProducts{replayExecution: replay, closeArtifacts: closeReplay}, nil, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	defer func() {
@@ -78,20 +78,20 @@ func (r *Root) openRuntimeWithOptions(
 		ModelsRuntime: modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg),
 	}, opening.clock, opening.logger, cleanup)
 	if err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	opening.operatorSettingsPath = resources.OperatorSettingsPath
 	opening.durableExecution = resources.DurableExecution
 	opening.observations = resources.Observations
 	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
 		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
 	if err != nil {
-		return runtimeProducts{}, nil, err
+		return runtimeProducts{}, nil, nil, err
 	}
 	err = r.openingBinding.Bind(ctx, RuntimeOpeningBindingRequest{
 		Facts:       completionRequest.Facts,
@@ -102,12 +102,11 @@ func (r *Root) openRuntimeWithOptions(
 	if err == nil {
 		products.lifecycle = completed.Lifecycle
 		products.closeArtifacts = cleanup.Close
-		rootRuntime := completed.SessionRuntime.(factoryruntime.Service)
-		products.bindRuntime = runtimeBindingForSession(rootRuntime, opening.sessionID)
+		selectedRuntime = completed.SessionRuntime
 		opening.bindSelectedState(completed.State)
 		activation, err = newRuntimeActivation(opening.activation, cleanup.Close)
 	}
-	return products, activation, err
+	return products, activation, selectedRuntime, err
 }
 
 // bindSelectedState retains opening facts on the exact record selected by

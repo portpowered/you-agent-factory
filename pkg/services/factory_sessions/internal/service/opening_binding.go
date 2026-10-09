@@ -169,3 +169,20 @@ func (operation *RuntimeOpeningBinding) recordingFlush(
 		return nil
 	}
 }
+
+// PublishRuntime binds the acquired scoped owner after Runtime Root publishes its
+// opaque activation capability. It never selects a current or replacement owner.
+func (*RuntimeOpeningBinding) PublishRuntime(selected roles.ApplicationRuntime,
+	sessionID string, binding factoryruntime.RuntimeBinding,
+) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	binder, ok := selected.(interface {
+		BindRuntime(string, factoryruntime.RuntimeBinding) error
+	})
+	if !ok {
+		return nil
+	}
+	return binder.BindRuntime(sessionID, binding)
+}

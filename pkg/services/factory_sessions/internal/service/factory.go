@@ -181,7 +181,7 @@ func (r *Root) openForRequest(
 	recording := recordingRequestForStart(request)
 	open := func(replayInput *recordings.LoadReplayInputResult) (runtimeProducts, error) {
 		session := request
-		products, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+		products, _, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
 		return products, err
 	}
 	// Historical replay, whether portable or legacy, is an inspection-only
