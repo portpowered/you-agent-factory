@@ -34,8 +34,11 @@ def validate_reply(reply):
     output = reply.get("output")
     if not isinstance(output, dict):
         return "output must be a native object with measurements or a named unmet precondition"
-    if "precondition" in output and not nonblank(output["precondition"]):
-        return "output.precondition must name the unmet precondition"
+    if "precondition" in output:
+        precondition = output["precondition"]
+        if not (nonblank(precondition) or
+                isinstance(precondition, dict) and any(nonblank(value) for value in precondition.values())):
+            return "output.precondition must name the unmet precondition"
     if "measurements" in output:
         measurements = output["measurements"]
         if not isinstance(measurements, list) or not measurements:
