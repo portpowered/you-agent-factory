@@ -96,13 +96,9 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 	if err := ctx.Err(); err != nil {
 		return nameProjection{}, err
 	}
-	artifact := recordings.RecordingArtifactReference(page.Catalog.OriginatingArtifact)
-	if artifact == "" {
-		var err error
-		artifact, err = r.currentBoard(ctx, page.Catalog.FactorySessionID)
-		if err != nil {
-			return nameProjection{}, err
-		}
+	artifact, err := r.workerFactoryArtifact(ctx, page)
+	if err != nil {
+		return nameProjection{}, err
 	}
 	identity := recordings.HistoricalRecordingIdentity{RecordingID: recordings.RecordingID(page.Catalog.RecordingID), Artifact: artifact, Scope: recordings.CanonicalEventScope{FactorySessionID: page.Catalog.FactorySessionID}}
 	if artifact == "" {
@@ -121,6 +117,26 @@ func (r *ArtifactHistoryReader) readWorkerFactoryNames(ctx context.Context, page
 		return nameProjection{}, &recordings.HistoricalRecordingQueryError{Kind: kind, RecordingID: identity.RecordingID, Cause: err}
 	}
 	return r.sharedNames(ctx, nameDecodeKey{key, read.digest}, identity, read.payload)
+}
+
+// Resolve legacy selection before request-local sharing. The caller keeps the
+// original capture for legacy association validation; this is only the exact
+// source selected for this read, never persisted provenance.
+func (r *ArtifactHistoryReader) workerFactoryArtifact(ctx context.Context, page recordings.WorkerCapturedActivityPage) (recordings.RecordingArtifactReference, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if artifact := page.Catalog.OriginatingArtifact; artifact != "" {
+		return recordings.RecordingArtifactReference(artifact), nil
+	}
+	artifact, err := r.currentBoard(ctx, page.Catalog.FactorySessionID)
+	if err != nil {
+		return "", err
+	}
+	if artifact == "" {
+		return "", &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory, RecordingID: recordings.RecordingID(page.Catalog.RecordingID)}
+	}
+	return artifact, nil
 }
 
 // Share only an in-flight source read, not a completed source snapshot. Each

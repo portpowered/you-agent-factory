@@ -183,14 +183,7 @@ func TestRetainedNamesBatchSharesArtifactAcrossAttemptGenerations(t *testing.T) 
 	check := func(name string, unavailable bool) {
 		t.Helper()
 		got, err := service.ResolveWorkerWorkAttribution(t.Context(), requests)
-		if err != nil || len(got) != len(requests) {
-			t.Fatalf("batch = %+v, %v", got, err)
-		}
-		for i, row := range got {
-			if row.WorkerSessionID != requests[i].WorkerSessionID || row.WorkName != name || row.HistoryUnavailable != unavailable {
-				t.Fatalf("row %d = %+v", i, row)
-			}
-		}
+		assertAttributionBatch(t, got, err, requests, name, unavailable)
 	}
 	check("Alpha", false)
 	if reads != 1 || len(query.requests) != 1 {
@@ -204,8 +197,14 @@ func TestRetainedNamesBatchSharesArtifactAcrossAttemptGenerations(t *testing.T) 
 	}
 	readErr = os.ErrNotExist
 	check("", true)
+	if reads != 3 {
+		t.Fatalf("missing source read %d times; want one read per batch", reads)
+	}
 	readErr = nil
 	check("Beta", false)
+	if reads != 4 {
+		t.Fatalf("restored source read count = %d; want fresh retry", reads)
+	}
 	// Sharing the projection must never skip validation of the second opening.
 	page := captures.pages["worker-b"]
 	page.Opening.Payload = []byte("broken")
@@ -219,6 +218,65 @@ func TestRetainedNamesBatchSharesArtifactAcrossAttemptGenerations(t *testing.T) 
 	captures.pages["worker-b"] = page
 	if _, err := service.ResolveWorkerWorkAttribution(t.Context(), requests); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("conflicting sibling association = %v", err)
+	}
+}
+
+func TestRetainedNamesLegacyBatchSharesOnlyResolvedSource(t *testing.T) {
+	t.Parallel()
+	captures := &captureFake{pages: make(map[string]recordings.WorkerCapturedActivityPage)}
+	var requests []recordings.WorkerWorkAttributionRequest
+	var history recordings.HistoricalRecordingQueryResult
+	for _, id := range []string{"worker-a", "worker-b", "worker-c"} {
+		page := capturePage(t, id, "scope", "recording", "dispatch-"+id, "work")
+		page.Catalog.RecordingGenerationID = "generation-" + id
+		page.Catalog.OriginatingArtifact = ""
+		captures.pages[id] = page
+		requests = append(requests, recordings.WorkerWorkAttributionRequest{WorkerSessionID: id, FactorySessionID: "scope", WorkID: "work"})
+		other := namedHistory(t, "scope", id, "dispatch-"+id, "work", "Alpha")
+		if len(history.Events) == 0 {
+			history = other
+		} else {
+			history.Events = append(history.Events, other.Events[1:]...)
+		}
+	}
+	query := &canonicalQueryFake{result: history}
+	selected := 0
+	var reads []string
+	reader := NewArtifactHistoryReader(query, func(context.Context, string) (recordings.RecordingArtifactReference, error) {
+		selected++
+		if selected%3 == 0 {
+			return "second.json", nil
+		}
+		return "first.json", nil
+	}, func(path string) ([]byte, error) { reads = append(reads, path); return []byte(path), nil })
+	service := New(captures, reader)
+	for batch := range 2 {
+		got, err := service.ResolveWorkerWorkAttribution(t.Context(), requests)
+		assertAttributionBatch(t, got, err, requests, "Alpha", false)
+		if len(reads) != (batch+1)*2 {
+			t.Fatalf("batch %d source reads = %v", batch, reads)
+		}
+	}
+	if selected != 6 || !reflect.DeepEqual(reads, []string{"first.json", "second.json", "first.json", "second.json"}) || len(query.requests) != 2 {
+		t.Fatalf("legacy source selection/read/decode = %d/%v/%d", selected, reads, len(query.requests))
+	}
+	// Resolving a legacy candidate must not turn it into explicit provenance:
+	// absence of its association remains optional/unavailable, never borrowed.
+	query.result = namedHistory(t, "scope", "unrelated", "dispatch-unrelated", "work", "Shadow")
+	reader.readFile = func(string) ([]byte, error) { return []byte("replacement"), nil }
+	got, err := service.ResolveWorkerWorkAttribution(t.Context(), requests)
+	assertAttributionBatch(t, got, err, requests, "", true)
+}
+
+func assertAttributionBatch(t *testing.T, got []recordings.WorkerWorkAttribution, err error, requests []recordings.WorkerWorkAttributionRequest, name string, unavailable bool) {
+	t.Helper()
+	if err != nil || len(got) != len(requests) {
+		t.Fatalf("batch = %+v, %v", got, err)
+	}
+	for i, row := range got {
+		if row.WorkerSessionID != requests[i].WorkerSessionID || row.WorkName != name || row.HistoryUnavailable != unavailable {
+			t.Fatalf("row %d = %+v", i, row)
+		}
 	}
 }
 
