@@ -153,3 +153,15 @@ func NewRuntimeSourceOpening(reader factoryvisualization.RuntimeReader) func(str
 func NewResponsePresentation() factoryvisualization.ResponsePresentation {
 	return responseeventpresentationwire.NewService()
 }
+
+// NewScopeOpening preconstructs the reusable Visualization owners. Its returned
+// operation allocates only scoped subscription/projection/presentation handles.
+func NewScopeOpening(peer recordings.Service) func(factoryvisualization.Source, factoryvisualization.Clock, factoryvisualization.Sink, factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
+	activation := activationlifecyclewire.NewOwner(peer)
+	projection := liveviewprojectionwire.NewOwner(peer)
+	presentation := responseeventpresentationwire.NewService()
+	owner := internalservice.NewScopeOwner(activation.Open, projection.Open, presentation, peer)
+	return func(source factoryvisualization.Source, clock factoryvisualization.Clock, sink factoryvisualization.Sink, reportError factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
+		return owner.Open(source, clock, sink, reportError)
+	}
+}

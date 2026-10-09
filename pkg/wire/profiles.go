@@ -524,15 +524,15 @@ func provideFactoryVisualizationFactory(
 	recordingsService recordings.Service,
 ) factoryvisualization.RuntimeFactory {
 	openSource := factoryvisualizationwire.NewRuntimeSourceOpening(root)
+	openScope := factoryvisualizationwire.NewScopeOpening(recordingsService)
 	return func(
 		sessionID string,
 		clock factoryvisualization.Clock,
 		sink factoryvisualization.Sink,
 		reportError factoryvisualization.ErrorReporter,
 	) (factoryvisualization.Service, error) {
-		return factoryvisualizationwire.NewRoot(
+		return openScope(
 			openSource(sessionID),
-			recordingsService,
 			clock,
 			sink,
 			reportError,

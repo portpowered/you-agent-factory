@@ -18,3 +18,11 @@ func NewService(
 ) (activationlifecycle.Service, error) {
 	return lifecycleservice.New(source, recordingsPeer, clock, sink, reportError)
 }
+
+// Owner is the private behavior owner retained by Visualization composition.
+type Owner = lifecycleservice.Owner
+
+// NewOwner constructs the fixed behavior once, before any runtime opening.
+func NewOwner(peer recordings.Service) *Owner {
+	return lifecycleservice.NewOwner(peer)
+}

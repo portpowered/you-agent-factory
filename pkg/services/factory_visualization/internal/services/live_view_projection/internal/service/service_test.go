@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -146,3 +147,24 @@ func (s *sourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojecti
 type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }
+
+func TestSharedProjectionOwnerKeepsScopedObservationsIndependent(t *testing.T) {
+	t.Parallel()
+	owner := projectionservice.NewOwner(newProjectionStub())
+	for index := range 2 {
+		t.Run(fmt.Sprintf("scope-%d", index), func(t *testing.T) {
+			t.Parallel()
+			clock := fixedClock{now: time.Unix(int64(index+1), 0)}
+			handle := owner.Open(&sourceStub{snapshot: &liveviewprojection.RuntimeSnapshotFacts{
+				RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: index + 1},
+			}}, clock, liveviewprojection.SinkFunc(func(liveviewprojection.View) { t.Error("Observe must not emit presentation") }), nil)
+			observed, err := handle.Observe(context.Background(), liveviewprojection.ObserveRequest{Mode: liveviewprojection.ObserveModeRetainedThenLive})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if observed.View.TickCount != index+1 || !observed.View.ObservedAt.Equal(clock.now) {
+				t.Fatalf("scope observation = %#v", observed.View)
+			}
+		})
+	}
+}

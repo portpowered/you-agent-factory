@@ -125,3 +125,55 @@ type lifecycleSinkFunc func(activationlifecycle.View)
 func (f lifecycleSinkFunc) PresentFactoryView(view activationlifecycle.View) { f(view) }
 
 var _ activationlifecycle.Service = (*lifecycleservice.Service)(nil)
+
+func TestSharedActivationOwnerKeepsScopedSubscriptionsIndependent(t *testing.T) {
+	t.Parallel()
+	owner := lifecycleservice.NewOwner(&recordingsstub.Service{})
+	type scope struct {
+		handle activationlifecycle.Service
+		live   chan factorydefinitions.FactoryEvent
+		views  chan activationlifecycle.View
+	}
+	scopes := make([]scope, 2)
+	for index := range scopes {
+		live := make(chan factorydefinitions.FactoryEvent)
+		views := make(chan activationlifecycle.View, 8)
+		clock := fixedLifecycleClock{now: time.Unix(int64(index+1), 0)}
+		handle := owner.Open(&lifecycleSourceStub{
+			stream:   &factorydefinitions.FactoryEventStream{History: []factorydefinitions.FactoryEvent{{Id: "history", Context: factorydefinitions.FactoryEventContext{Sequence: index + 1}}}, Events: live},
+			snapshot: &activationlifecycle.EngineObservation{TickCount: index + 1},
+		}, clock, lifecycleSinkFunc(func(view activationlifecycle.View) { views <- view }), nil)
+		scopes[index] = scope{handle: handle, live: live, views: views}
+		t.Cleanup(func() { _, _ = handle.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{}) })
+		select {
+		case view := <-views:
+			t.Fatalf("inert scope emitted %#v", view)
+		default:
+		}
+		if _, err := handle.Activate(context.Background(), activationlifecycle.ActivateRequest{Mode: activationlifecycle.ActivateModeRetainedThenLive}); err != nil {
+			t.Fatal(err)
+		}
+		view := <-views
+		if view.EngineObservation.TickCount != index+1 || !view.ObservedAt.Equal(clock.now) {
+			t.Fatalf("selected scope view = %#v", view)
+		}
+	}
+	for range 2 {
+		if _, err := scopes[0].handle.StopDrain(context.Background(), activationlifecycle.StopDrainRequest{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := scopes[0].handle.Join(context.Background(), activationlifecycle.JoinRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	scopes[1].live <- factorydefinitions.FactoryEvent{Id: "peer-live", Context: factorydefinitions.FactoryEventContext{Sequence: 3}}
+	<-scopes[1].views
+	for index, scope := range scopes {
+		if retained := scope.handle.RetainedEvents(); len(retained) != index+1 {
+			t.Fatalf("scope %d retained = %#v", index, retained)
+		}
+	}
+	if cursor := scopes[1].handle.ReconnectCursor(); cursor == nil || cursor.AfterEventID != "peer-live" {
+		t.Fatalf("peer cursor = %#v", cursor)
+	}
+}

@@ -31,3 +31,11 @@ func BindRetainedEventsSupplier(
 ) {
 	projectionservice.BindRetainedEventsSupplier(svc, supplier)
 }
+
+// Owner is the private behavior owner retained by Visualization composition.
+type Owner = projectionservice.Owner
+
+// NewOwner constructs the fixed behavior once, before any runtime opening.
+func NewOwner(peer recordings.Service) *Owner {
+	return projectionservice.NewOwner(peer)
+}
