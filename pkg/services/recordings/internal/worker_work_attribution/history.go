@@ -144,7 +144,11 @@ func (r *ArtifactHistoryReader) workerFactoryArtifact(ctx context.Context, page 
 // are owned by the participating calls and never retained in the name cache.
 // The synchronous leader owns the IO; canceled waiters leave independently and
 // surviving waiters retry a canceled leader with a new source snapshot.
+// Capture generations identify Worker attempts, not Factory source revisions.
+// Share IO only for the exact scoped recording/artifact; each caller validates
+// its own opening and association before using the resulting projection.
 func (r *ArtifactHistoryReader) sharedArtifact(ctx context.Context, key historyIdentity) (*artifactRead, error) {
+	key.generation = ""
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -190,8 +194,8 @@ func (r *ArtifactHistoryReader) sharedArtifact(ctx context.Context, key historyI
 // Different source digests never share results, even at the same artifact path.
 func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeKey, identity recordings.HistoricalRecordingIdentity, payload []byte) (nameProjection, error) {
 	// Attempts sharing one exact scoped Factory snapshot decode the same facts.
-	// Keep the capture generation for source reads, but not for this digest-keyed
-	// reduction. Every caller has read its own source and validates its opening
+	// Source reads coalesce across attempts only while in flight; this reduction
+	// also shares completed facts by digest. Every caller validates its opening
 	// and association separately before attributing a name.
 	key.identity.generation = ""
 	for {
@@ -236,8 +240,8 @@ func (r *ArtifactHistoryReader) sharedNames(ctx context.Context, key nameDecodeK
 }
 
 // Caller holds mu. The decoder consumes Factory scope, recording, artifact and
-// bytes, not the capture generation. Reuse only after a fresh source read with
-// the full capture key and an equal digest. Each caller still validates its own
+// bytes, not the capture generation. Reuse only after a fresh source read for
+// the exact scoped artifact and an equal digest. Each caller validates its own
 // opening and association in attributionQuery; no capture facts are borrowed.
 // Keeping one entry per source avoids eviction churn from many Worker attempts.
 func (r *ArtifactHistoryReader) cachedProjection(key nameDecodeKey) (nameProjection, bool) {

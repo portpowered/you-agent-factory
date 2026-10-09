@@ -603,8 +603,11 @@ func awaitNamesSignal(t *testing.T, signal <-chan struct{}) {
 
 func TestRetainedNamesSharesArtifactReadWithIndependentCancellation(t *testing.T) {
 	t.Parallel()
-	for _, canceled := range []string{"waiter", "leader"} {
-		t.Run(canceled, func(t *testing.T) {
+	for _, scenario := range []struct {
+		canceled     string
+		otherAttempt bool
+	}{{"waiter", false}, {"leader", false}, {"waiter", true}, {"leader", true}} {
+		t.Run(fmt.Sprintf("%s/other-attempt=%t", scenario.canceled, scenario.otherAttempt), func(t *testing.T) {
 			t.Parallel()
 			page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
 			page.Catalog.OriginatingArtifact = "exact.json"
@@ -628,12 +631,16 @@ func TestRetainedNamesSharesArtifactReadWithIndependentCancellation(t *testing.T
 			leader := startNamesRead(leaderCtx, reader, page)
 			awaitNamesSignal(t, entered)
 			waitCtx := &observedWaitContext{Context: waiterCtx, waiting: make(chan struct{})}
-			waiter := startNamesRead(waitCtx, reader, page)
+			otherAttempt := page
+			if scenario.otherAttempt {
+				otherAttempt.Catalog.RecordingGenerationID = "another-attempt"
+			}
+			waiter := startNamesRead(waitCtx, reader, otherAttempt)
 			awaitNamesSignal(t, waitCtx.waiting)
 			if reads.Load() != 1 {
 				t.Fatal("concurrent waiter read the artifact again")
 			}
-			if canceled == "waiter" {
+			if scenario.canceled == "waiter" {
 				cancelWaiter()
 				awaitNamesResult(t, waiter, "", context.Canceled)
 				unblock()
@@ -643,6 +650,13 @@ func TestRetainedNamesSharesArtifactReadWithIndependentCancellation(t *testing.T
 				unblock()
 				awaitNamesResult(t, leader, "", context.Canceled)
 				awaitNamesResult(t, waiter, "Alpha", nil)
+			}
+			wantReads := int32(1)
+			if scenario.canceled == "leader" {
+				wantReads = 2 // The surviving waiter retries the canceled source read.
+			}
+			if reads.Load() != wantReads {
+				t.Fatalf("completed source reads = %d; want %d", reads.Load(), wantReads)
 			}
 			before := reads.Load()
 			awaitNamesResult(t, startNamesRead(t.Context(), reader, page), "Alpha", nil)
@@ -674,7 +688,9 @@ func TestRetainedNamesSharedUnavailableReadRetries(t *testing.T) {
 	leader := startNamesRead(t.Context(), reader, page)
 	awaitNamesSignal(t, entered)
 	waitCtx := &observedWaitContext{Context: t.Context(), waiting: make(chan struct{})}
-	waiter := startNamesRead(waitCtx, reader, page)
+	otherAttempt := page
+	otherAttempt.Catalog.RecordingGenerationID = "another-attempt"
+	waiter := startNamesRead(waitCtx, reader, otherAttempt)
 	awaitNamesSignal(t, waitCtx.waiting)
 	unblock()
 	for _, result := range []<-chan namesResult{leader, waiter} {
@@ -715,7 +731,7 @@ func TestRetainedNamesInFlightReadKeepsProvenanceSeparate(t *testing.T) {
 	})
 	leader := startNamesRead(t.Context(), reader, page)
 	awaitNamesSignal(t, entered)
-	for _, dimension := range []string{"factory", "recording", "generation", "artifact"} {
+	for _, dimension := range []string{"factory", "recording", "artifact"} {
 		candidate := page
 		var want error
 		switch dimension {
@@ -724,15 +740,13 @@ func TestRetainedNamesInFlightReadKeepsProvenanceSeparate(t *testing.T) {
 			want = recordings.ErrInvalidProjectionScope
 		case "recording":
 			candidate.Catalog.RecordingID = "another-recording"
-		case "generation":
-			candidate.Catalog.RecordingGenerationID = "another-generation"
 		case "artifact":
 			candidate.Catalog.OriginatingArtifact = "another.json"
 		}
 		// Each different provenance completes while the original source is gated.
 		awaitNamesResult(t, startNamesRead(t.Context(), reader, candidate), "Alpha", want)
 	}
-	if reads.Load() != 5 {
+	if reads.Load() != 4 {
 		t.Fatalf("distinct provenance reads = %d", reads.Load())
 	}
 	unblock()
