@@ -1,12 +1,14 @@
 package service
 
 import (
+	"context"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -44,7 +46,9 @@ type ScriptCommandRunner interface {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
-	opening *RuntimeOpening
+	start             func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
+	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error)
+	durable           durableexecution.Service
 	*legacyservice.Assembly
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
@@ -61,26 +65,28 @@ type Root struct {
 }
 
 func NewRoot(
-	opening *RuntimeOpening,
-	providerSessions providersessions.Service,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	definitions factorydefinitions.Service,
 	assembly roles.RuntimeAssembly,
-	generateSessionID factorysessions.SessionIDGenerator,
+	durable durableexecution.Service,
+	start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error),
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
+	definitions factorydefinitions.Service,
 	workService work.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
 	workerService workers.Service,
-	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	providerSessions providersessions.Service,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	recordingProjections recordings.ProjectionService,
+	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
+	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
 	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
 	if err != nil {
 		return nil, err
 	}
 	root := &Root{
-		opening:                        opening,
+		start: start, inspectHistorical: inspectHistorical, durable: durable,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		modelInvocation:                modelInvocation,

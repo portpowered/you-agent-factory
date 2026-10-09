@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -194,7 +196,7 @@ func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.
 	}
 }
 
-func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*Root, error) {
+func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*runtimeOpeningTestRoot, error) {
 	return validRootInputs(coordinator).call()
 }
 
@@ -239,7 +241,7 @@ func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) 
 	}
 }
 
-func (in rootTestInputs) call() (*Root, error) {
+func (in rootTestInputs) call() (*runtimeOpeningTestRoot, error) {
 	assembly, err := in.callAssembly()
 	if err != nil {
 		return nil, err
@@ -437,5 +439,116 @@ func TestSelectedModelInvocationKeepsGenerationFactsAndTypedResult(t *testing.T)
 				t.Fatalf("typed failure = %v", err)
 			}
 		})
+	}
+}
+
+// These isolated Root witnesses inject operations and a durable owner directly;
+// no RuntimeOpening or composed process participates in their forwarding proof.
+func TestStartUsesInjectedOperationsAndPreservesTypedFailure(t *testing.T) {
+	for _, failing := range []bool{false, true} {
+		name := "success"
+		if failing {
+			name = "typed failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := factorysessions.SessionStartRequest{FolderPath: "/selected", Correlation: factorysessions.SessionOperationCorrelation{RequestID: "selected-request"}}
+			cause := &os.PathError{Op: "open", Path: "/selected", Err: os.ErrPermission}
+			var outcomeErr error
+			if failing {
+				outcomeErr = cause
+			}
+			ctx := t.Context()
+			calls := 0
+			startResult := factorysessions.SessionStartResult{SessionID: "opened-selected"}
+			replay := &factorysessions.HistoricalReplayInspection{}
+			inspectionResult := HistoricalApplicationInspection{Replay: replay}
+			start := func(gotCtx context.Context, got factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+				calls++
+				if gotCtx != ctx || !reflect.DeepEqual(got, request) {
+					t.Fatal("start changed selected context/request")
+				}
+				return startResult, outcomeErr
+			}
+			inspect := func(gotCtx context.Context, got factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+				calls++
+				if gotCtx != ctx || !reflect.DeepEqual(got, request) {
+					t.Fatal("inspection changed selected context/request")
+				}
+				return inspectionResult, true, outcomeErr
+			}
+			root, err := NewRoot(&legacyservice.Assembly{}, nil, start, livechange.NewCoordinator(), inspect,
+				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 0 {
+				t.Fatal("construction invoked opening operations")
+			}
+			got, err := root.Start(ctx, request)
+			if !reflect.DeepEqual(got, startResult) || err != outcomeErr {
+				t.Fatalf("start = (%+v, %v)", got, err)
+			}
+			if failing {
+				var typed *os.PathError
+				if !errors.As(err, &typed) || typed != cause {
+					t.Fatalf("lost typed cause: %v", err)
+				}
+			}
+			inspected, historical, err := root.InspectHistoricalApplication(ctx, request)
+			if inspected.Replay != replay || !historical || err != outcomeErr {
+				t.Fatalf("inspection = (%+v, %v, %v)", inspected, historical, err)
+			}
+			if calls != 2 {
+				t.Fatalf("operation calls = %d, want 2", calls)
+			}
+		})
+	}
+}
+
+type rootDurableStartStub struct {
+	durableexecution.Service
+	request               factorysessions.StartRequest
+	ctx                   context.Context
+	failure               error
+	syncCalls, asyncCalls int
+}
+
+func (s *rootDurableStartStub) StartSync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	s.ctx, s.request = ctx, request
+	s.syncCalls++
+	return factorysessions.SyncStartResult{AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "sync-selected"}}, s.failure
+}
+func (s *rootDurableStartStub) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	s.ctx, s.request = ctx, request
+	s.asyncCalls++
+	return factorysessions.AsyncStartResult{SessionID: "async-selected"}, s.failure
+}
+func TestStartUsesInjectedDurableOwner(t *testing.T) {
+	t.Parallel()
+	owner := &rootDurableStartStub{failure: &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}}
+	root, err := NewRoot(&legacyservice.Assembly{}, owner, nil, livechange.NewCoordinator(), nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := factorysessions.StartRequest{WorkerSettings: &factoryruntime.JavaScriptWorkerSettings{}}
+	ctx := t.Context()
+	syncResult, err := root.StartSync(ctx, request)
+	if err != owner.failure || syncResult.SessionID != "sync-selected" {
+		t.Fatalf("sync = (%+v, %v)", syncResult, err)
+	}
+	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
+		t.Fatal("sync changed selected request/context")
+	}
+	asyncResult, err := root.StartAsync(ctx, request)
+	if err != owner.failure || asyncResult.SessionID != "async-selected" {
+		t.Fatalf("async = (%+v, %v)", asyncResult, err)
+	}
+	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
+		t.Fatal("async changed selected request/context")
+	}
+	if owner.syncCalls != 1 || owner.asyncCalls != 1 {
+		t.Fatalf("durable calls = %d/%d", owner.syncCalls, owner.asyncCalls)
 	}
 }

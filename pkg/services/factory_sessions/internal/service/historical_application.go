@@ -27,7 +27,7 @@ func (r *Root) InspectHistoricalApplication(ctx context.Context, request factory
 	if r == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay input service is required")
 	}
-	return r.opening.InspectHistoricalApplication(ctx, request)
+	return r.inspectHistorical(ctx, request)
 }
 
 // InspectHistoricalApplication classifies a replay input before live session

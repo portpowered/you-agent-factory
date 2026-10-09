@@ -381,6 +381,8 @@ var servicesSet = wire.NewSet(
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRoot,
 	factorysessionwire.NewRuntimeOpening,
+	factorysessionwire.RuntimeOpeningStart,
+	factorysessionwire.RuntimeOpeningHistoricalInspection,
 	factorysessionwire.NewExecutionBinding,
 	factorysessionwire.NewRuntimeResourceAcquisition,
 	factorysessionwire.NewRuntimeOpeningCompletion,

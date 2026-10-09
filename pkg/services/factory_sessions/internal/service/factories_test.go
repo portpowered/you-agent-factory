@@ -79,26 +79,26 @@ type runtimeOpeningFixture struct {
 	InitialActivation            factoryruntime.InitialRuntimeActivationOperation
 }
 
-func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
+type runtimeOpeningTestRoot struct {
+	*Root
+	opening *RuntimeOpening
+}
+
+func (fixture runtimeOpeningFixture) newFactory() (*runtimeOpeningTestRoot, error) {
 	initialEngine := NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation)
 	inventory, _ := fixture.Assembly.(recordings.RecordedSessionInventory)
-	return NewRoot(
-		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory, fixture.resourceAcquisition(),
-			NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
-			NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner), fixture.RuntimeRoot, fixture.snapshotSelection(), fixture.Logger, fixture.Assembly, fixture.Definitions, fixture.ResolveHome),
-		fixture.ProviderSessions,
-		fixture.WorkflowPreview,
-		fixture.Definitions,
-		fixture.Assembly,
-		fixture.GenerateSessionID,
-		fixture.WorkService,
-		fixture.ModelService,
-		fixture.RecordingsService,
-		fixture.WorkerService,
-		nil,
-		fixture.LiveChangeCoordinator,
-		fixture.RecordingProjections,
-	)
+	opening := NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory, fixture.resourceAcquisition(),
+		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
+		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner), fixture.RuntimeRoot, fixture.snapshotSelection(), fixture.Logger, fixture.Assembly, fixture.Definitions, fixture.ResolveHome)
+	durable, _ := fixture.Assembly.(durableexecution.Service)
+	root, err := NewRoot(fixture.Assembly, durable, opening.Start, fixture.LiveChangeCoordinator,
+		opening.InspectHistoricalApplication, fixture.Definitions, fixture.WorkService, fixture.ModelService,
+		fixture.RecordingsService, fixture.WorkerService, fixture.ProviderSessions, fixture.WorkflowPreview,
+		fixture.RecordingProjections, nil, fixture.GenerateSessionID)
+	if err != nil {
+		return nil, err
+	}
+	return &runtimeOpeningTestRoot{Root: root, opening: opening}, nil
 }
 func TestNewFactoryRemainsInert(t *testing.T) {
 	t.Parallel()

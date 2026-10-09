@@ -451,7 +451,7 @@ func portableCheckpointOwnerFixture(t *testing.T) *runtimeOwnerFixture {
 	}
 }
 
-func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableReplayRuntimeOwner) *Root {
+func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableReplayRuntimeOwner) *runtimeOpeningTestRoot {
 	t.Helper()
 	path := testpath.MustRepoPathFromCaller(
 		t,

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"github.com/google/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -136,38 +137,32 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding, runtimeRoot, snapshots, logger, assembly, definitions, resolveHome)
 }
 
+// RuntimeOpeningStart selects the fixed opening operation without retaining Root.
+func RuntimeOpeningStart(opening *RuntimeOpening) func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return opening.Start
+}
+
+func RuntimeOpeningHistoricalInspection(opening *RuntimeOpening) func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+	return opening.InspectHistoricalApplication
+}
+
 func NewRoot(
-	opening *RuntimeOpening,
-	providerSessions providersessions.Service,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	definitions factorydefinitions.Service,
-
 	assembly RuntimeAssembly,
-	generateSessionID factorysessions.SessionIDGenerator,
-	workService work.Service,
-	modelService models.Service,
-	recordingsService recordings.Service,
-	workerService workers.Service,
-	modelInvocation RuntimeModelInvocationOperation,
+	durable DurableExecutionService,
+	start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error),
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
+	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error),
+	definitions factorydefinitions.Service, workService work.Service,
+	modelService models.Service, recordingsService recordings.Service,
+	workerService workers.Service, providerSessions providersessions.Service,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	recordingProjections recordings.ProjectionService,
+	modelInvocation RuntimeModelInvocationOperation,
+	generateSessionID factorysessions.SessionIDGenerator,
 ) (*Root, error) {
-	return service.NewRoot(
-		opening,
-		providerSessions,
-		workflowPreview,
-		definitions,
-
-		assembly,
-		generateSessionID,
-		workService,
-		modelService,
-		recordingsService,
-		workerService,
-		modelInvocation,
-		liveChangeCoordinator,
-		recordingProjections,
-	)
+	return service.NewRoot(assembly, durable, start, liveChangeCoordinator, inspectHistorical,
+		definitions, workService, modelService, recordingsService, workerService, providerSessions,
+		workflowPreview, recordingProjections, modelInvocation, generateSessionID)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {

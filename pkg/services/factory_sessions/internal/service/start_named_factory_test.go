@@ -384,7 +384,7 @@ func (s *startNamedDefinitions) ResolveNamedFactory(_ context.Context, request f
 
 func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 	definitions := &startNamedDefinitions{}
-	root := &Root{opening: &RuntimeOpening{factoryDefinitions: definitions}}
+	root := &runtimeOpeningTestRoot{opening: &RuntimeOpening{factoryDefinitions: definitions}}
 	project := t.TempDir()
 	home := t.TempDir()
 	request := factorysessions.SessionStartRequest{
@@ -410,7 +410,7 @@ func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 
 func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 	definitions := &startNamedDefinitions{}
-	root := &Root{opening: &RuntimeOpening{factoryDefinitions: definitions}}
+	root := &runtimeOpeningTestRoot{opening: &RuntimeOpening{factoryDefinitions: definitions}}
 	project := t.TempDir()
 	factoryDir := filepath.Join(project, "factory", "@you", "subagent")
 	request := factorysessions.SessionStartRequest{
@@ -426,7 +426,7 @@ func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 
 func TestActivationOnlyStartAllocatesDistinctSessionIdentities(t *testing.T) {
 	generated := 0
-	root := &Root{opening: &RuntimeOpening{generateSessionID: func() string {
+	root := &runtimeOpeningTestRoot{opening: &RuntimeOpening{generateSessionID: func() string {
 		generated++
 		return "chat-session-" + string(rune('0'+generated))
 	}}}
