@@ -319,6 +319,9 @@ not completion of the T17Q behavior matrix or the later T28/T29 gates.
 | Cut-made compatibility constructors and forwarding helpers | Removed. | Canonical gateway composition uses `NewWithLiveChangeCoordinator`; activation uses `activationRequestWithInputs`; invocation uses its separately consumed snapshot/event selectors. Removed wrappers have no production caller to preserve. |
 
 Generation cleanup remains an acquired owner-private operation. Public
-`SessionStartResult` and `SessionOpenResult` return detached opening outcomes,
-not cleanup closures. Repeated generation release has component witnesses;
-the exact F04-release compound functional witness remains unproved.
+`SessionStartResult` and `SessionOpenResult` return detached opening outcomes.
+Owner-package tests protect repeated stale release during replacement and peer
+Work; public replacement and response-cursor journeys remain functional tests.
+The observation layer follows the binding operator decision without adding a
+production export or changing a package boundary. Final T28/T29 and independent
+validation remain at their existing gates.
