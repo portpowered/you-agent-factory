@@ -212,11 +212,39 @@ func TestRuntimeWorkerSessionBoundaryPreservesRecordingReader(t *testing.T) {
 
 type selectedWorkerRecordingReader struct {
 	workersessions.Service
-	load func(context.Context, string) (recordings.WorkerRecordingSnapshot, error)
+	load   func(context.Context, string) (recordings.WorkerRecordingSnapshot, error)
+	health func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
 }
 
 func (reader *selectedWorkerRecordingReader) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
 	return reader.load(ctx, id)
+}
+
+func (reader *selectedWorkerRecordingReader) CurrentWorkerRecordingHealth(ctx context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	return reader.health(ctx, id, ids)
+}
+
+func TestRuntimeWorkerSessionBoundaryPreservesSelectedHealth(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	failure := errors.New("selected-health-failure")
+	for _, err := range []error{nil, failure, context.Canceled} {
+		calls := 0
+		source := &selectedWorkerRecordingReader{health: func(actual context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+			calls++
+			if actual != ctx || id != "owned" || !reflect.DeepEqual(ids, []string{"worker"}) {
+				t.Fatalf("selected health correlation = %v, %s, %v", actual, id, ids)
+			}
+			return recordings.WorkerRecordingSnapshot{RecordingID: id}, err
+		}}
+		result, actual := (runtimeWorkerSessionBoundary{Service: source}).CurrentWorkerRecordingHealth(ctx, "owned", []string{"worker"})
+		if !errors.Is(actual, err) || calls != 1 || result.RecordingID != "owned" {
+			t.Fatalf("selected health = %+v, %v, calls=%d", result, actual, calls)
+		}
+	}
+	if _, err := (runtimeWorkerSessionBoundary{}).CurrentWorkerRecordingHealth(ctx, "owned", nil); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("unsupported selected health = %v", err)
+	}
 }
 
 func TestRuntimeWorkerResolutionRetainsDirectExecutionContext(t *testing.T) {

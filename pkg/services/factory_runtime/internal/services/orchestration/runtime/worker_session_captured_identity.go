@@ -13,6 +13,41 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// Scoped lists select only matching capture health from the activated store.
+// An empty selection still checks the selected recording's prepared health.
+func (s *recordedWorkerSessionObservation) selectedRecordingHealth(ctx context.Context, recorded, live []workersessions.Observation) (map[string]workerRecordingHealth, error) {
+	if s.recordingReader == nil || s.recordingID == "" {
+		return nil, nil
+	}
+	reader, ok := s.recordingReader.(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return nil, workersessions.ErrObservationProjectionUnavailable
+	}
+	ids := make([]string, 0, len(recorded)+len(live))
+	seen := make(map[string]bool, cap(ids))
+	for _, rows := range [][]workersessions.Observation{recorded, live} {
+		for _, row := range rows {
+			if !seen[row.WorkerSessionID] {
+				seen[row.WorkerSessionID] = true
+				ids = append(ids, row.WorkerSessionID)
+			}
+		}
+	}
+	snapshot, err := reader.CurrentWorkerRecordingHealth(ctx, s.recordingID, ids)
+	if err != nil {
+		return nil, recordingHealthLoadError(err)
+	}
+	if err := observationContextError(ctx); err != nil {
+		return nil, err
+	}
+	for _, session := range snapshot.Sessions {
+		if !seen[session.WorkerSessionID] {
+			return nil, workersessions.ErrObservationRecordingCorrupt
+		}
+	}
+	return workerRecordingHealthMap(snapshot, s.recordingID)
+}
+
 // Canonical-ID summaries retain Factory lifecycle facts, but usage must come
 // from the committed Worker capture rather than provider files or diagnostics.
 func (s *recordedWorkerSessionObservation) withCapturedWorkerIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {

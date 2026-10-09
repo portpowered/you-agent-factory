@@ -12,6 +12,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type selectedHealthRecordingFake struct {
+	recordings.WorkerSessionRecordingService
+	read func(context.Context, string, []string) (recordings.WorkerRecordingSnapshot, error)
+}
+
+func (fake *selectedHealthRecordingFake) CurrentWorkerRecordingHealth(ctx context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	return fake.read(ctx, id, ids)
+}
+
+func TestCapturedSummaryForwardsSelectedRecordingHealth(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	failure := errors.New("selected-health-failure")
+	for _, want := range []error{nil, failure, context.Canceled} {
+		calls := 0
+		fake := &selectedHealthRecordingFake{read: func(actual context.Context, id string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+			calls++
+			if actual != ctx || id != "owned" || len(ids) != 1 || ids[0] != "worker" {
+				t.Fatalf("selected health correlation = %v, %s, %v", actual, id, ids)
+			}
+			return recordings.WorkerRecordingSnapshot{RecordingID: id}, want
+		}}
+		result, err := (&registry{recording: fake}).CurrentWorkerRecordingHealth(ctx, "owned", []string{"worker"})
+		if !errors.Is(err, want) || result.RecordingID != "owned" || calls != 1 {
+			t.Fatalf("selected health = %+v, %v, calls=%d", result, err, calls)
+		}
+	}
+	for _, registry := range []*registry{nil, {}, {recording: &observationRecordingServiceStub{}}} {
+		if _, err := registry.CurrentWorkerRecordingHealth(ctx, "owned", nil); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+			t.Fatalf("missing selected health = %v", err)
+		}
+	}
+}
+
 type capturedSummaryFake struct {
 	capturedActivityFake
 	snapshot recordings.WorkerRecordingSnapshot

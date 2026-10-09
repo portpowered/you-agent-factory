@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -197,6 +199,126 @@ func (session *recordingSession) copySummaryStamp(stamps map[string]time.Time, p
 }
 
 var _ recordings.WorkerCapturedSummaryReader = (*FileWriter)(nil)
+
+var _ recordings.WorkerRecordingHealthReader = (*FileWriter)(nil)
+
+// CurrentWorkerRecordingHealth joins the selected recording's append barrier.
+// Activation validates the complete source; requests copy only selected opening
+// facts and never hydrate, scan the catalog, or copy sibling activity records.
+func (writer *FileWriter) CurrentWorkerRecordingHealth(ctx context.Context, id string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	if strings.TrimSpace(id) == "" {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	writer.mu.Lock()
+	entry := writer.entries[id]
+	prepared := writer.healthPrepared
+	preparationErr := writer.preparationErrors[filepath.Base(writer.path(id))]
+	if preparationErr == nil {
+		preparationErr = writer.preparationErrors[filepath.Base(writer.path(id)+"l")]
+	}
+	writer.mu.Unlock()
+	if preparationErr != nil {
+		return recordings.WorkerRecordingSnapshot{}, preparationErr
+	}
+	if entry == nil {
+		if !prepared {
+			return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+		}
+		return recordings.WorkerRecordingSnapshot{}, os.ErrNotExist
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.preparationError != nil {
+		return recordings.WorkerRecordingSnapshot{}, entry.preparationError
+	}
+	if !entry.loaded {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if !entry.exists {
+		return recordings.WorkerRecordingSnapshot{}, os.ErrNotExist
+	}
+	result := recordings.WorkerRecordingSnapshot{RecordingID: id}
+	seen := make(map[string]bool, len(workerIDs))
+	for _, workerID := range workerIDs {
+		if err := ctx.Err(); err != nil {
+			return recordings.WorkerRecordingSnapshot{}, err
+		}
+		session := entry.sessions[workerID]
+		if seen[workerID] || session == nil {
+			continue
+		}
+		seen[workerID] = true
+		result.Sessions = append(result.Sessions, session.healthSnapshot(workerID))
+	}
+	return result, ctx.Err()
+}
+
+func (writer *FileWriter) markHealthPrepared() {
+	writer.mu.Lock()
+	writer.healthPrepared = true
+	writer.mu.Unlock()
+}
+
+func (session *recordingSession) healthSnapshot(workerID string) recordings.WorkerSessionRecordingSnapshot {
+	p := session.projection
+	selected := recordings.WorkerSessionRecordingSnapshot{
+		WorkerSessionID: workerID, Status: p.Status, Failure: p.Degradation,
+		InterruptionReason: p.InterruptionReason,
+	}
+	if p.Status == recordings.WorkerRecordingStatusIncomplete && selected.InterruptionReason == "" {
+		selected.InterruptionReason = p.Degradation
+		if selected.InterruptionReason == "" {
+			selected.InterruptionReason = recordings.WorkerRecordingInterruptionProcessStopped
+		}
+	}
+	if len(session.records) > 0 {
+		selected.Records = []events.Record{session.records[0].Detached()}
+	}
+	return selected
+}
+
+func safeWorkerPreparationError(err error) error {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if errors.Is(err, recordings.ErrWorkerRecordingReplay) || errors.Is(err, recordings.ErrWorkerRecordingCompatibility) ||
+		errors.Is(err, recordings.ErrWorkerRecordingOrder) || errors.Is(err, recordings.ErrWorkerRecordingDuplicate) ||
+		errors.Is(err, recordings.ErrWorkerRecordingTerminal) || errors.Is(err, recordings.ErrWorkerRecordingOpening) ||
+		errors.Is(err, recordings.ErrWorkerRecordingDelivery) {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	// Raw decoder/storage errors can disclose payloads or private paths.
+	return recordings.ErrMissingWorkerRecordingReader
+}
+
+func (writer *FileWriter) rememberPreparationError(filename string, err error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if writer.preparationErrors == nil {
+		writer.preparationErrors = make(map[string]error)
+	}
+	if safe := safeWorkerPreparationError(err); safe != nil {
+		writer.preparationErrors[filename] = safe
+	} else {
+		delete(writer.preparationErrors, filename)
+	}
+}
+
+// The caller owns entry.mu. A canceled preparation cannot invalidate a prior
+// committed projection; only a deliberate successful hydration repairs a fault.
+func (writer *FileWriter) rememberHydrationResult(id string, entry *recordingEntry, err error) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	entry.preparationError = safeWorkerPreparationError(err)
+	if err == nil {
+		writer.rememberPreparationError(filepath.Base(writer.path(id)), nil)
+		writer.rememberPreparationError(filepath.Base(writer.path(id)+"l"), nil)
+	}
+}
 
 // LookupWorkerSessionSummary joins the append barrier, selecting only metadata
 // slots already admitted by durable sync. It never retries journal hydration.

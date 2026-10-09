@@ -56,7 +56,14 @@ func (owner *scopedWorkLiveOwner) ListObservations(context.Context, workersessio
 	return result, nil
 }
 
-func (reader *scopedWorkHealthReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+func (*scopedWorkHealthReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	panic("scoped list copied whole Worker recording")
+}
+
+func (reader *scopedWorkHealthReader) CurrentWorkerRecordingHealth(_ context.Context, _ string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	if len(ids) != 1 || ids[0] != "worker" {
+		panic("scoped list selected unrelated or duplicate capture health")
+	}
 	reader.reads++
 	if reader.onRead != nil {
 		reader.onRead()
@@ -118,6 +125,12 @@ func TestScopedWorkListSharesSelectedFactsAndHealthAcrossConfirmation(t *testing
 	read(9, workersessions.ConfirmationStateUnconfirmed)
 	watermark.watermark.Sequence = 9
 	read(9, workersessions.ConfirmationStateConfirmed)
+	assertScopedWorkListFailures(t, service, ledger, health, fixture.workID)
+	read(9, workersessions.ConfirmationStateConfirmed)
+}
+
+func assertScopedWorkListFailures(t *testing.T, service *recordedWorkerSessionObservation, ledger *selectedWorkFactsLedger, health *scopedWorkHealthReader, workID string) {
+	t.Helper()
 	for _, test := range []struct {
 		name string
 		err  error
@@ -128,7 +141,7 @@ func TestScopedWorkListSharesSelectedFactsAndHealthAcrossConfirmation(t *testing
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ledger.err = test.err
-			result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
+			result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: workID})
 			if !errors.Is(err, test.want) || len(result.Observations) != 0 {
 				t.Fatalf("selected failure returned partial success: %+v, %v", result, err)
 			}
@@ -145,7 +158,7 @@ func TestScopedWorkListSharesSelectedFactsAndHealthAcrossConfirmation(t *testing
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			health.err = test.err
-			result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
+			result, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: workID})
 			if !errors.Is(err, test.want) || len(result.Observations) != 0 {
 				t.Fatalf("health failure returned partial success: %+v, %v", result, err)
 			}
@@ -154,11 +167,10 @@ func TestScopedWorkListSharesSelectedFactsAndHealthAcrossConfirmation(t *testing
 	health.err = nil
 	ctx, cancel := context.WithCancel(t.Context())
 	health.onRead = cancel
-	if result, err := service.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: fixture.workID}); !errors.Is(err, workersessions.ErrObservationCanceled) || len(result.Observations) != 0 {
+	if result, err := service.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID}); !errors.Is(err, workersessions.ErrObservationCanceled) || len(result.Observations) != 0 {
 		t.Fatalf("canceled read returned partial success: %+v, %v", result, err)
 	}
 	health.onRead = nil
-	read(9, workersessions.ConfirmationStateConfirmed)
 }
 
 func TestRecordedListWorkerSessionWorkUsesPreparedFacts(t *testing.T) {
@@ -197,6 +209,59 @@ func TestRecordedListWorkerSessionWorkUsesPreparedFacts(t *testing.T) {
 }
 
 type forbiddenCapturedProviderProjection struct{ providersessions.Service }
+
+type selectedHealthResponse struct {
+	recordings.WorkerRecordingReader
+	snapshot recordings.WorkerRecordingSnapshot
+	ids      []string
+}
+
+func (reader *selectedHealthResponse) CurrentWorkerRecordingHealth(_ context.Context, _ string, ids []string) (recordings.WorkerRecordingSnapshot, error) {
+	reader.ids = append([]string(nil), ids...)
+	return reader.snapshot, nil
+}
+
+func (*selectedHealthResponse) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	panic("selected health loaded full capture")
+}
+
+func TestScopedWorkHealthRejectsForeignAndMalformedSelections(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		snapshot recordings.WorkerRecordingSnapshot
+	}{
+		{name: "foreign recording", snapshot: recordings.WorkerRecordingSnapshot{RecordingID: "foreign"}},
+		{name: "foreign worker", snapshot: recordings.WorkerRecordingSnapshot{Sessions: []recordings.WorkerSessionRecordingSnapshot{{WorkerSessionID: "foreign"}}}},
+		{name: "duplicate worker", snapshot: recordings.WorkerRecordingSnapshot{Sessions: []recordings.WorkerSessionRecordingSnapshot{
+			{WorkerSessionID: "selected", Status: recordings.WorkerRecordingStatusComplete},
+			{WorkerSessionID: "selected", Status: recordings.WorkerRecordingStatusComplete},
+		}}},
+		{name: "invalid health", snapshot: recordings.WorkerRecordingSnapshot{Sessions: []recordings.WorkerSessionRecordingSnapshot{{WorkerSessionID: "selected", Status: "INVALID"}}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			reader := &selectedHealthResponse{snapshot: test.snapshot}
+			service := &recordedWorkerSessionObservation{recordingReader: reader, recordingID: "owned"}
+			rows := []workersessions.Observation{{WorkerSessionID: "selected"}}
+			if result, err := service.selectedRecordingHealth(t.Context(), rows, rows); !errors.Is(err, workersessions.ErrObservationRecordingCorrupt) || len(result) != 0 {
+				t.Fatalf("invalid selected health = %+v, %v", result, err)
+			}
+			if len(reader.ids) != 1 || reader.ids[0] != "selected" {
+				t.Fatalf("capture selectors = %v", reader.ids)
+			}
+		})
+	}
+	reader := &selectedHealthResponse{snapshot: recordings.WorkerRecordingSnapshot{RecordingID: "owned"}}
+	service := &recordedWorkerSessionObservation{recordingReader: reader, recordingID: "owned"}
+	if result, err := service.selectedRecordingHealth(t.Context(), nil, nil); err != nil || len(result) != 0 || len(reader.ids) != 0 {
+		t.Fatalf("empty selected health = %+v, %v, selectors=%v", result, err, reader.ids)
+	}
+	service.recordingReader = &scriptedWorkerRecordingReader{}
+	if _, err := service.selectedRecordingHealth(t.Context(), nil, nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("missing prepared-health capability = %v", err)
+	}
+}
 
 func TestScopedTerminalConfirmationUsesSelectedResponseCursor(t *testing.T) {
 	t.Parallel()

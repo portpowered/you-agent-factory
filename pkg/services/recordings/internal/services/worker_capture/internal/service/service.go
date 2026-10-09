@@ -79,6 +79,18 @@ func (service *Service) LoadWorkerRecording(
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
+// CurrentWorkerRecordingHealth uses the same activated store as live capture.
+func (service *Service) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := service.writer.(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
+}
+
 // PersistWorkerRecord forwards a source-native record to the same durable
 // writer used by live capture. Worker Sessions uses this optional capability
 // for a continuation link that is appended after the source's execution

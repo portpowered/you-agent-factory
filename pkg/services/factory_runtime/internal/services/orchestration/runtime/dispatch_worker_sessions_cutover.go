@@ -421,7 +421,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	health, err := s.recordingHealth(ctx)
+	health, err := s.selectedRecordingHealth(ctx, recorded, live.Observations)
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
@@ -449,19 +449,9 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 // One request retains one detached selected snapshot for both row projection
 // and terminal confirmation. A concurrent append is visible on the next read.
 func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context.Context, workID string, live map[string]workersessions.Observation) ([]workersessions.Observation, bool, *recordings.WorkerSessionWorkFacts, error) {
-	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
-	if !ok {
-		return nil, false, nil, workersessions.ErrObservationProjectionUnavailable
-	}
-	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
+	facts, err := s.readSelectedWorkFacts(ctx, workID)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, false, nil, workersessions.ErrObservationCanceled
-		}
-		if canceled := observationContextError(ctx); canceled != nil {
-			return nil, false, nil, canceled
-		}
-		return nil, false, nil, workersessions.ErrObservationProjectionUnavailable
+		return nil, false, nil, err
 	}
 	requests := make(map[string]recordedDispatchRequest, len(facts.Requests))
 	for id, request := range facts.Requests {
@@ -505,6 +495,24 @@ func (s *recordedWorkerSessionObservation) projectListedWorkSnapshot(ctx context
 		result = append(result, observation)
 	}
 	return result, facts.KnownWork, &facts, nil
+}
+
+func (s *recordedWorkerSessionObservation) readSelectedWorkFacts(ctx context.Context, workID string) (recordings.WorkerSessionWorkFacts, error) {
+	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
+	if !ok {
+		return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
+	if err == nil {
+		return facts, nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationCanceled
+	}
+	if canceled := observationContextError(ctx); canceled != nil {
+		return recordings.WorkerSessionWorkFacts{}, canceled
+	}
+	return recordings.WorkerSessionWorkFacts{}, workersessions.ErrObservationProjectionUnavailable
 }
 
 func recordedObservationListResult(

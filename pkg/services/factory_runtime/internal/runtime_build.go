@@ -354,6 +354,16 @@ func (boundary runtimeWorkerSessionBoundary) LoadWorkerRecording(ctx context.Con
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
+// CurrentWorkerRecordingHealth retains the activated selected-read capability
+// across the same admission boundary, without a full-recording fallback.
+func (boundary runtimeWorkerSessionBoundary) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	reader, ok := boundary.Service.(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
+}
+
 // artifactWorkerAttempts binds capture provenance at the Runtime admission
 // boundary, where the exact originating Factory artifact is known. This
 // persistence adapter carries Runtime-owned selection into Recordings capture

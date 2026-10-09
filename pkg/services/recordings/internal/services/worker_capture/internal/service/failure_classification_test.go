@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,182 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestSelectedWorkerRecordingHealthIsPreparedDetachedAndFresh(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	for _, id := range []string{"selected", "sibling", "foreign"} {
+		recordingID := "owned"
+		if id == "foreign" {
+			recordingID = "other"
+		}
+		if err := writer.PersistWorkerRecord(t.Context(), journalRecord(t, recordingID, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store, err := NewFileWriter(probe, probe, probe, &captureTimeProbe{}, writer.root, "historical", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := store.(*FileWriter)
+	if _, err := restored.CurrentWorkerRecordingHealth(t.Context(), "owned", nil); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("unprepared health = %v", err)
+	}
+	if err := restored.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.mu.Lock()
+	before := probe.reads
+	probe.mu.Unlock()
+	read := func() recordings.WorkerRecordingSnapshot {
+		t.Helper()
+		return requireSelectedWorkerHealth(t, restored)
+	}
+	first := read()
+	first.Sessions[0].Records[0].Payload[0] = '!'
+	assertConcurrentSelectedHealth(t, restored)
+	record := journalRecord(t, "owned", "selected")
+	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, "selected"), 2)
+	if err := restored.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	if got := read().Sessions[0].Status; got != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("committed health = %s", got)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := restored.CurrentWorkerRecordingHealth(ctx, "owned", nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled health = %v", err)
+	}
+	if empty, err := restored.CurrentWorkerRecordingHealth(t.Context(), "owned", nil); err != nil || len(empty.Sessions) != 0 {
+		t.Fatalf("empty selected health = %+v, %v", empty, err)
+	}
+	if _, err := restored.CurrentWorkerRecordingHealth(t.Context(), "absent", nil); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("absent prepared recording = %v", err)
+	}
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if probe.reads != before {
+		t.Fatalf("selected health read files: %d -> %d", before, probe.reads)
+	}
+}
+
+func requireSelectedWorkerHealth(t *testing.T, reader recordings.WorkerRecordingHealthReader) recordings.WorkerRecordingSnapshot {
+	t.Helper()
+	result, err := reader.CurrentWorkerRecordingHealth(t.Context(), "owned", []string{"selected", "selected", "foreign", "absent"})
+	if err != nil || len(result.Sessions) != 1 || result.Sessions[0].WorkerSessionID != "selected" || len(result.Sessions[0].Records) != 1 {
+		t.Fatalf("selected health = %+v, %v", result, err)
+	}
+	return result
+}
+
+func assertConcurrentSelectedHealth(t *testing.T, reader recordings.WorkerRecordingHealthReader) {
+	t.Helper()
+	var readers sync.WaitGroup
+	for range 8 {
+		readers.Go(func() {
+			result, err := reader.CurrentWorkerRecordingHealth(t.Context(), "owned", []string{"selected"})
+			if err != nil || len(result.Sessions) != 1 || result.Sessions[0].Records[0].Payload[0] == '!' {
+				t.Errorf("detached concurrent health = %+v, %v", result, err)
+			}
+		})
+	}
+	readers.Wait()
+}
+
+type selectedHealthStorageFault struct {
+	platformreplay.Local
+	unavailable string
+}
+
+func (fault *selectedHealthStorageFault) ReadFile(path string) ([]byte, error) {
+	if path == fault.unavailable {
+		return nil, errors.New("private-path-secret-sentinel")
+	}
+	return fault.Local.ReadFile(path)
+}
+
+func TestSelectedWorkerRecordingHealthRetainsPreparationErrors(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"corrupt", "invalid-opening", "unavailable", "torn"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			fault := &selectedHealthStorageFault{Local: platformreplay.NewLocal(runtime.GOOS)}
+			writer := journalWriter(t, fault)
+			record := journalRecord(t, "damaged", "worker")
+			if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+				t.Fatal(err)
+			}
+			path := writer.path("damaged") + "l"
+			switch kind {
+			case "corrupt":
+				if err := fault.AppendFile(path, []byte("private-path-secret-sentinel\n")); err != nil {
+					t.Fatal(err)
+				}
+			case "invalid-opening":
+				if err := fault.WriteFile(path, []byte("private-path-secret-sentinel\n")); err != nil {
+					t.Fatal(err)
+				}
+			case "unavailable":
+				fault.unavailable = path
+			case "torn":
+				if err := fault.AppendFile(path, []byte("uncommitted-tail")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			store, err := NewFileWriter(fault, fault, fault, &captureTimeProbe{}, writer.root, "historical", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored := store.(*FileWriter)
+			if err := restored.RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := restored.CurrentWorkerRecordingHealth(t.Context(), "unrelated", nil); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("unrelated recording inherited damage: %v", err)
+			}
+			assertSelectedPreparationError(t, restored, kind)
+			assertSelectedHealthRepair(t, restored, fault, kind)
+		})
+	}
+}
+
+func assertSelectedHealthRepair(t *testing.T, restored *FileWriter, fault *selectedHealthStorageFault, kind string) {
+	t.Helper()
+	if kind != "unavailable" {
+		return
+	}
+	fault.unavailable = ""
+	// A deliberate recording read may repair availability. The ordinary
+	// health read itself never retries the failed source.
+	if _, err := restored.LoadWorkerRecording(t.Context(), "damaged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restored.CurrentWorkerRecordingHealth(t.Context(), "damaged", []string{"worker"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertSelectedPreparationError(t *testing.T, reader recordings.WorkerRecordingHealthReader, kind string) {
+	t.Helper()
+	for _, ids := range [][]string{nil, {"worker"}} {
+		result, err := reader.CurrentWorkerRecordingHealth(t.Context(), "damaged", ids)
+		if kind == "torn" {
+			if err != nil || len(result.Sessions) != len(ids) || (len(ids) > 0 && result.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete) {
+				t.Fatalf("torn committed prefix = %+v, %v", result, err)
+			}
+			continue
+		}
+		want := recordings.ErrWorkerRecordingReplay
+		if kind == "unavailable" {
+			want = recordings.ErrMissingWorkerRecordingReader
+		}
+		if !errors.Is(err, want) || strings.Contains(err.Error(), "sentinel") || len(result.Sessions) != 0 {
+			t.Fatalf("prepared %s health = %+v, %v; want safe %v", kind, result, err, want)
+		}
+	}
+}
 
 func TestFileWriterLegacyContinuationTerminalReplays(t *testing.T) {
 	t.Parallel()

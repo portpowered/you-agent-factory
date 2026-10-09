@@ -12,6 +12,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// CurrentWorkerRecordingHealth preserves the Recordings-owned selected health
+// capability for runtime observation readers using this same capture service.
+func (r *registry) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
+}
+
 // GetObservationByWorkerSessionID reads archived identity without restoring a
 // registry, execution authority, or a provider-native transcript reader.
 func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
