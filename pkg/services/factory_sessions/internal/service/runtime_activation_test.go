@@ -1115,7 +1115,7 @@ func TestRuntimeOpeningActivationCancellationStopsBeforeAcquisition(t *testing.T
 				t.Fatalf("activation error = %v, want cancellation", err)
 			}
 			if lifecycle != nil || replay != nil || closeArtifacts != nil || activation != nil || selected != nil || calls != 0 {
-				t.Fatalf("cancelled activation acquired handles or allocated identity: lifecycle=%v replay=%v cleanup=%v activation=%v selected=%v identities=%d", lifecycle, replay, closeArtifacts != nil, activation, selected, calls)
+				t.Fatalf("cancelled activation acquired handles or allocated identity: lifecycle=%v replay=%v cleanup=%v activation=%v publication=%v identities=%d", lifecycle, replay, closeArtifacts != nil, activation, selected != nil, calls)
 			}
 		})
 	}

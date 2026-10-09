@@ -563,7 +563,7 @@ func TestRuntimeOpeningPreparationFailureDoesNotAllocateCanonicalMetricsIdentity
 				factoryruntime.RuntimeSelection{RuntimeInstanceID: id + "-already-selected"}, session, false,
 				workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil)
 			if !errors.Is(err, cause) || lifecycle != nil || replay != nil || closeArtifacts != nil || activation != nil || selectedRuntime != nil || loadRequests != 1 || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
-				t.Fatalf("failed opening: lifecycle=%v replay=%v cleanup=%v activation=%v runtime=%v error=%v loads=%d allocations=%d", lifecycle, replay, closeArtifacts != nil, activation, selectedRuntime, err, loadRequests, identityRequests)
+				t.Fatalf("failed opening: lifecycle=%v replay=%v cleanup=%v activation=%v publication=%v error=%v loads=%d allocations=%d", lifecycle, replay, closeArtifacts != nil, activation, selectedRuntime != nil, err, loadRequests, identityRequests)
 			}
 		})
 	}

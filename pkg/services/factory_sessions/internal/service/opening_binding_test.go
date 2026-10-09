@@ -388,12 +388,15 @@ func TestRuntimeOpeningPublishesBindingToAcquiredOwner(t *testing.T) {
 				failure = errors.New("selected owner rejected publication")
 			}
 			selected := &openingPublicationOwner{err: failure}
+			publish := selected.BindRuntime
+			acquired := selected
+			selected = &openingPublicationOwner{}
 			runtime := &bindingLegacyRuntime{}
 			binding := (factoryruntime.RuntimeBinding{}).New("selected-generation", runtime)
 			operation := &RuntimeOpeningBinding{}
-			err := operation.PublishRuntime(selected, "selected-session", binding)
-			if !errors.Is(err, failure) || selected.calls != 1 || selected.sessionID != "selected-session" || !selected.binding.Equal(binding) || selected.binding.Service() != runtime {
-				t.Fatalf("publication = %v, owner=%+v, want selected identity/capability and original cause", err, selected)
+			err := operation.PublishRuntime(publish, "selected-session", binding)
+			if err != failure || acquired.calls != 1 || acquired.sessionID != "selected-session" || !acquired.binding.Equal(binding) || acquired.binding.Service() != runtime || selected.calls != 0 {
+				t.Fatalf("publication = %v, acquired=%+v replacement=%+v, want acquired identity/capability and exact cause", err, acquired, selected)
 			}
 		})
 	}
@@ -403,7 +406,7 @@ func TestRuntimeOpeningBindingPreservesOptionalPublication(t *testing.T) {
 	t.Parallel()
 	selected := &openingPublicationOwner{}
 	operation := &RuntimeOpeningBinding{}
-	if err := operation.PublishRuntime(selected, " ", factoryruntime.RuntimeBinding{}); err != nil || selected.calls != 0 {
+	if err := operation.PublishRuntime(selected.BindRuntime, " ", factoryruntime.RuntimeBinding{}); err != nil || selected.calls != 0 {
 		t.Fatalf("empty session publication = %v, calls=%d", err, selected.calls)
 	}
 	if err := operation.PublishRuntime(nil, "selected-session", factoryruntime.RuntimeBinding{}); err != nil {
@@ -412,7 +415,6 @@ func TestRuntimeOpeningBindingPreservesOptionalPublication(t *testing.T) {
 }
 
 type openingPublicationOwner struct {
-	roles.ApplicationRuntime
 	calls     int
 	sessionID string
 	binding   factoryruntime.RuntimeBinding

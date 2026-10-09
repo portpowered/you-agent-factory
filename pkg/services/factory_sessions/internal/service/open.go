@@ -102,7 +102,7 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	baseLogger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
-) (lifecycle roles.LifecycleRuntime, replay *recordingreplay.Scope, closeArtifacts func() error, activation *factoryruntime.RuntimeActivation, selectedRuntime roles.ApplicationRuntime, err error) {
+) (lifecycle roles.LifecycleRuntime, replay *recordingreplay.Scope, closeArtifacts func() error, activation *factoryruntime.RuntimeActivation, bindRuntime func(string, factoryruntime.RuntimeBinding) error, err error) {
 	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
@@ -163,11 +163,15 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	if err == nil {
 		lifecycle = completed.Lifecycle
 		closeArtifacts = cleanup.Close
-		selectedRuntime = completed.SessionRuntime
+		if selected, ok := completed.SessionRuntime.(interface {
+			BindRuntime(string, factoryruntime.RuntimeBinding) error
+		}); ok {
+			bindRuntime = selected.BindRuntime
+		}
 		opening.bindSelectedState(completed.State)
 		activation, err = newRuntimeActivation(opening.activation, cleanup.Close)
 	}
-	return lifecycle, replay, closeArtifacts, activation, selectedRuntime, err
+	return lifecycle, replay, closeArtifacts, activation, bindRuntime, err
 }
 
 // bindSelectedState retains opening facts on the exact record selected by

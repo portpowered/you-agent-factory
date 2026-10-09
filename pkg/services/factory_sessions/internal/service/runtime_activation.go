@@ -23,7 +23,7 @@ import (
 func (r *RuntimeOpening) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, *factoryruntime.RuntimeActivation, roles.ApplicationRuntime, error) {
+) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, *factoryruntime.RuntimeActivation, func(string, factoryruntime.RuntimeBinding) error, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -275,7 +275,7 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	}
 	var lifecycle roles.LifecycleRuntime
 	var replay *recordingreplay.Scope
-	var selectedRuntime roles.ApplicationRuntime
+	var bindRuntime func(string, factoryruntime.RuntimeBinding) error
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
 		openedLifecycle, openedReplay, _, published, selected, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
@@ -283,7 +283,7 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 		}
 		lifecycle = openedLifecycle
 		replay = openedReplay
-		selectedRuntime = selected
+		bindRuntime = selected
 		return published, nil
 	})
 	if err != nil {
@@ -295,7 +295,7 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	}
 	closeRuntime := activationCloser(r.runtimeRoot, binding, result.RuntimeID)
 	if !binding.IsZero() {
-		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
+		if err := r.openingBinding.PublishRuntime(bindRuntime, activationRequest.FactorySessionID, binding); err != nil {
 			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
