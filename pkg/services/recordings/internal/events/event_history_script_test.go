@@ -174,40 +174,59 @@ func TestFactoryEventHistory_RecordScriptEvent_PreservesStdinFingerprint(t *test
 			}
 			history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 			history.RecordScriptEvent(workerexecution.ScriptEvent{ID: "request-event", DispatchID: "dispatch", Kind: workerexecution.ScriptEventKindRequest, Request: payload})
-			encoded, err := json.Marshal(history.CanonicalEvents())
-			if err != nil {
-				t.Fatal(err)
-			}
-			var events []interfaces.FactoryEvent
-			if err := json.Unmarshal(encoded, &events); err != nil {
-				t.Fatal(err)
-			}
+			recorded := roundTripScriptRequestEvent(t, history.CanonicalEvents())
 			var decoded workerexecution.ScriptRequestEventPayload
-			if len(events) != 1 {
-				t.Fatalf("canonical events = %d, want one", len(events))
-			}
-			if err := json.Unmarshal(events[0].Payload, &decoded); err != nil {
+			if err := json.Unmarshal(recorded, &decoded); err != nil {
 				t.Fatal(err)
 			}
 			public, err := generatedHistoryEvents(t, history)[0].Payload.AsScriptRequestEventPayload()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (decoded.StdinByteLength != nil) != present || (decoded.StdinSha256 != nil) != present ||
-				(public.StdinByteLength != nil) != present || (public.StdinSha256 != nil) != present {
-				t.Fatalf("fingerprint presence changed: canonical=%#v public=%#v", decoded, public)
-			}
-			if present && (*decoded.StdinByteLength != length || *public.StdinByteLength != length || *decoded.StdinSha256 != digest || *public.StdinSha256 != digest) {
-				t.Fatal("fingerprint changed across canonical/public serialization")
-			}
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(events[0].Payload, &fields); err != nil {
-				t.Fatal(err)
-			}
-			if _, exists := fields["stdin"]; exists {
-				t.Fatal("raw stdin exposed")
-			}
+			assertScriptStdinFingerprint(t, "canonical", decoded.StdinByteLength, decoded.StdinSha256, payload)
+			assertScriptStdinFingerprint(t, "public", public.StdinByteLength, public.StdinSha256, payload)
+			assertScriptRequestExcludesRawStdin(t, recorded)
 		})
+	}
+}
+
+func roundTripScriptRequestEvent(t *testing.T, canonical []interfaces.FactoryEvent) json.RawMessage {
+	t.Helper()
+	encoded, err := json.Marshal(canonical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events []interfaces.FactoryEvent
+	if err := json.Unmarshal(encoded, &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %d, want one", len(events))
+	}
+	return events[0].Payload
+}
+
+func assertScriptStdinFingerprint(t *testing.T, representation string, length *int64, digest *string, expected *workerexecution.ScriptRequestEventPayload) {
+	t.Helper()
+	if (length != nil) != (expected.StdinByteLength != nil) || (digest != nil) != (expected.StdinSha256 != nil) {
+		t.Fatalf("%s fingerprint presence changed: length=%v digest=%v", representation, length, digest)
+	}
+	if length != nil && *length != *expected.StdinByteLength {
+		t.Fatalf("%s stdin byte length = %d, want %d", representation, *length, *expected.StdinByteLength)
+	}
+	if digest != nil && *digest != *expected.StdinSha256 {
+		t.Fatalf("%s stdin SHA-256 = %q, want %q", representation, *digest, *expected.StdinSha256)
+	}
+}
+
+func assertScriptRequestExcludesRawStdin(t *testing.T, payload json.RawMessage) {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := fields["stdin"]; exists {
+		t.Fatal("raw stdin exposed")
 	}
 }
 

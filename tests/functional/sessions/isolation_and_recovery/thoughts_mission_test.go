@@ -96,7 +96,11 @@ func TestThoughtsMissionPayloadSurvivesRestart(t *testing.T) {
 		if !reflect.DeepEqual(before.Payload, item.Payload) || !reflect.DeepEqual(before.Tags, item.Tags) || !reflect.DeepEqual(before.Relations, item.Relations) {
 			t.Fatal("restoration changed payload, tags or target")
 		}
-		restartProbePost(t, support.SessionWorkURL(baseURL, sessionID, "/work/held-idea/move"), []byte(`{"stateName":"complete"}`))
+		release := support.FakeInputs(t.Context(), []string{"you", "--server", baseURL, "--session", sessionID, "--json", "work", "move", "held-idea", "complete"})
+		release.Input.Env, release.Input.WorkingDirectory = inputs.Input.Env, project
+		if err := process.Execute(release.Input); err != nil {
+			t.Fatalf("release prerequisite: %v; %s %s", err, release.Stdout(), release.Stderr())
+		}
 		support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 15*time.Second)
 		item = support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(baseURL, sessionID, "/work/restored-thought"))
 		runner.mu.Lock()
