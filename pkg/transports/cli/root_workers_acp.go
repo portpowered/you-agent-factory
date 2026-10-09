@@ -452,7 +452,8 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 		return err
 	}
 	return continueOperation(workersessionscli.ContinueConfig{
-		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		FactorySessionIDExplicit: cmd.Flags().Changed("session"),
+		Context:                  cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		FactorySessionID: inputs.factorySessionID, RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, FollowUpInput: inputs.userMessage,
 		Prompt: inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
@@ -526,8 +527,9 @@ func executeGeneratedWorkerSessionsInterruptWithValues(
 		return err
 	}
 	return interrupt(workersessionscli.InterruptConfig{
-		FactorySessionID: inputs.factorySessionID,
-		Context:          cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		FactorySessionIDExplicit: cmd.Flags().Changed("session"),
+		FactorySessionID:         inputs.factorySessionID,
+		Context:                  cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage, ResumeMode: inputs.resumeMode,
 		Prompt: inputs.replacementInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
@@ -762,7 +764,8 @@ func executeGeneratedWorkerSessionsShowWithValues(
 	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return show(workersessionscli.ShowConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		SessionIDExplicit: cmd.Flags().Changed("session"),
+		Context:           cmd.Context(), Server: globals.server, SessionID: sessionID,
 		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,

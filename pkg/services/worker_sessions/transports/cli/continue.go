@@ -29,6 +29,7 @@ type ContinueConfig struct {
 	Remote  bool
 
 	FactorySessionID         string
+	FactorySessionIDExplicit bool
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -104,6 +105,9 @@ func continueWorkerSession(config ContinueConfig) error {
 }
 
 func validateContinueConfig(config ContinueConfig) error {
+	if config.FactorySessionIDExplicit && strings.TrimSpace(config.FactorySessionID) == "" {
+		return newCLIError("WORKER_SESSION_CONTINUATION_INVALID", "--session requires a non-empty Factory Session identity", nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}

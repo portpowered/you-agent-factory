@@ -21,20 +21,21 @@ import (
 
 // ShowConfig holds parameters for the Worker Sessions show command.
 type ShowConfig struct {
-	Context         context.Context
-	Server          string
-	SessionID       string
-	WorkerSessionID string
-	Provider        string
-	Kind            string
-	ID              string
-	OutputFormat    string
-	JSON            bool
-	Verbose         bool
-	Debug           bool
-	Output          io.Writer
-	Diagnostics     io.Writer
-	HTTP            clihttp.Protocol
+	Context           context.Context
+	Server            string
+	SessionID         string
+	SessionIDExplicit bool
+	WorkerSessionID   string
+	Provider          string
+	Kind              string
+	ID                string
+	OutputFormat      string
+	JSON              bool
+	Verbose           bool
+	Debug             bool
+	Output            io.Writer
+	Diagnostics       io.Writer
+	HTTP              clihttp.Protocol
 }
 
 // NewShow returns the composition-facing show operation bound to one HTTP
@@ -91,6 +92,9 @@ func show(config ShowConfig) error {
 }
 
 func validateShowConfig(config ShowConfig) error {
+	if config.SessionIDExplicit && strings.TrimSpace(config.SessionID) == "" {
+		return newCLIError("WORKER_SESSION_SHOW_INVALID", "--session requires a non-empty Factory Session identity", nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}

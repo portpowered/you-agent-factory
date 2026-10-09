@@ -271,6 +271,7 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 	}
 
 	continueValues := map[string]any{
+		"you.worker-sessions.continue.flag.session":                     "",
 		"you.worker-sessions.continue.arg.0":                            "source-1",
 		"you.worker-sessions.continue.flag.request-id":                  "request-1",
 		"you.worker-sessions.continue.flag.successor-worker-session-id": "successor-1",
@@ -281,6 +282,7 @@ func TestWorkerSessionsInvokeAndContinueReadersReportTypedInputErrors(t *testing
 	}
 	for _, key := range []string{
 		"you.worker-sessions.continue.arg.0",
+		"you.worker-sessions.continue.flag.session",
 		"you.worker-sessions.continue.flag.async",
 	} {
 		candidate := cloneCLIInputValues(continueValues)

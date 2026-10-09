@@ -44,6 +44,7 @@ type InterruptConfig struct {
 	Remote  bool
 
 	FactorySessionID         string
+	FactorySessionIDExplicit bool
 	RequestID                string
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
@@ -126,6 +127,9 @@ func interruptWorkerSession(config InterruptConfig) error {
 }
 
 func validateInterruptConfig(config InterruptConfig) error {
+	if config.FactorySessionIDExplicit && strings.TrimSpace(config.FactorySessionID) == "" {
+		return newInterruptCLIError("WORKER_SESSION_INTERRUPT_INVALID", "--session requires a non-empty Factory Session identity", string(workersessions.InterruptPhaseValidation), nil)
+	}
 	if config.Context == nil {
 		return fmt.Errorf("context is required")
 	}
