@@ -18,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -52,7 +53,7 @@ func TestArchivedSummaryExcludesRejectedProviderUsage(t *testing.T) {
 	}
 	host.Close(t)
 	gate := &readGate{}
-	archived := startHost(t, factory, profile, gate)
+	archived := startHost(t, factory, profile, gate, &rejectUsageStore{})
 	gate.denied.Store(true)
 	for range 3 {
 		committed := readSummary(t, archived.URL()+"/worker-sessions/committed-usage", http.StatusOK)
@@ -60,10 +61,9 @@ func TestArchivedSummaryExcludesRejectedProviderUsage(t *testing.T) {
 			t.Fatalf("committed explicit zero lost: %+v", committed)
 		}
 		got := readSummary(t, archived.URL()+"/worker-sessions/rejected-usage", http.StatusOK)
-		if got.WorkerSessionId != "rejected-usage" || got.Model == nil || *got.Model != "functional-model" || got.TokenUsage != nil || got.RecordingHealth == nil || string(*got.RecordingHealth) != "DEGRADED" || string(got.State) != "COMPLETED" || got.TerminalCause == nil || string(*got.TerminalCause) != "COMPLETED" {
-			t.Fatalf("archived summary advertised rejected usage or lost committed facts: %+v", got)
-		}
+		assertRejectedUsageSummary(t, got)
 	}
+	readSummary(t, archived.URL()+"/worker-sessions/missing-after-wrapper-restart", http.StatusNotFound)
 	if gate.attempts.Load() != 0 {
 		t.Fatalf("archived detail attempted %d recording reads", gate.attempts.Load())
 	}
@@ -118,5 +118,22 @@ func invokeSummaryWorker(t *testing.T, host *support.FunctionalAPIServer, dir st
 	}
 	if json.Unmarshal([]byte(input.Stdout()), &result) != nil || result.State != "COMPLETED" || result.WorkerSessionID != id {
 		t.Fatalf("invoke terminal result: %s", input.Stdout())
+	}
+}
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *rejectUsageStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *rejectUsageStore) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func assertRejectedUsageSummary(t *testing.T, got factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if got.WorkerSessionId != "rejected-usage" || got.Model == nil || *got.Model != "functional-model" || got.TokenUsage != nil || got.RecordingHealth == nil || string(*got.RecordingHealth) != "DEGRADED" || string(got.State) != "COMPLETED" || got.TerminalCause == nil || string(*got.TerminalCause) != "COMPLETED" {
+		t.Fatalf("archived summary advertised rejected usage or lost committed facts: %+v", got)
 	}
 }

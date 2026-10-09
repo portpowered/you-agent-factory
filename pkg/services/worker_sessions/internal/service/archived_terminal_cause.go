@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
-
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -15,8 +14,28 @@ func (s *LogReader) applyArchivedTerminalCause(ctx context.Context, page recordi
 		return
 	}
 	observation.TerminalCause = s.archivedTerminalCause(ctx, page, *observation)
-	if page.Health == recordings.WorkerRecordingStatusIncomplete && page.HealthReason == "OWNER_LOST" &&
-		page.Terminal.Phase == workers.PhaseFailed && page.Terminal.Position == 0 && observation.State == workersessions.StateFailed {
+	applyArchivedOwnerLoss(page.Terminal, page.Health, page.HealthReason, observation)
+}
+
+// Catalog summaries already contain the committed terminal record. Listing
+// must not clone every session's transcript to select that single fact.
+func (s *LogReader) applyArchivedCatalogTerminalCause(ctx context.Context, item recordings.WorkerCapturedCatalogItem, observation *workersessions.Observation) {
+	if item.Terminal == nil {
+		return
+	}
+	observation.TerminalCause = naturalTerminalCause(observation.State)
+	if observation.TerminalCause == nil && item.Terminal.Position > 0 && uint64(item.Terminal.Position) <= item.Catalog.CommittedPosition {
+		attempt := capturedTerminalRecordAttempt(item.MetadataRecords, uint64(item.Terminal.Position), observation.State)
+		if attempt != "" {
+			observation.TerminalCause = s.archivedControlCause(ctx, item.Catalog, *observation, attempt)
+		}
+	}
+	applyArchivedOwnerLoss(item.Terminal, item.Health, item.HealthReason, observation)
+}
+
+func applyArchivedOwnerLoss(terminal *recordings.WorkerRecordingTerminal, health recordings.WorkerRecordingStatus, reason string, observation *workersessions.Observation) {
+	if health == recordings.WorkerRecordingStatusIncomplete && reason == "OWNER_LOST" &&
+		terminal.Phase == workers.PhaseFailed && terminal.Position == 0 && observation.State == workersessions.StateFailed {
 		cause := "OWNER_LOST"
 		observation.TerminalCause = &cause
 		observation.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone, Detail: "the recorded worker supervisor is no longer alive"}
@@ -30,8 +49,7 @@ func (s *LogReader) archivedTerminalCause(ctx context.Context, page recordings.W
 	// Legacy/capture-only readers may lack control rows. They still expose
 	// identity and history, but cannot establish an operator cause.
 	reader, readable := s.reader.(recordings.WorkerRecordingReader)
-	operations, controllable := s.reader.(recordings.WorkerControlOperationStore)
-	if !readable || !controllable {
+	if !readable {
 		return nil
 	}
 	snapshot, err := reader.LoadWorkerRecording(ctx, page.Catalog.RecordingID)
@@ -42,10 +60,18 @@ func (s *LogReader) archivedTerminalCause(ctx context.Context, page recordings.W
 	if attemptID == "" {
 		return nil
 	}
+	return s.archivedControlCause(ctx, page.Catalog, observation, attemptID)
+}
+
+func (s *LogReader) archivedControlCause(ctx context.Context, catalog recordings.WorkerSessionCatalogEntry, observation workersessions.Observation, attemptID string) *string {
+	operations, ok := s.reader.(recordings.WorkerControlOperationStore)
+	if !ok {
+		return nil
+	}
 	target := recordings.WorkerControlTarget{
-		RecordingID: page.Catalog.RecordingID, WorkerSessionID: observation.WorkerSessionID,
-		FactorySessionID: observation.FactorySessionID, RecordingGenerationID: page.Catalog.RecordingGenerationID,
-		OwnerEpoch: page.Catalog.OwnerEpoch, ExpectedAttemptID: attemptID,
+		RecordingID: catalog.RecordingID, WorkerSessionID: observation.WorkerSessionID,
+		FactorySessionID: observation.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
+		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: attemptID,
 	}
 	records, err := operations.ListWorkerControlOperations(ctx, target)
 	if err != nil {
@@ -59,12 +85,12 @@ func capturedTerminalAttempt(snapshot recordings.WorkerRecordingSnapshot, id str
 		if session.WorkerSessionID != id {
 			continue
 		}
-		return capturedTerminalAttemptRecords(session.Records, position, state)
+		return capturedTerminalRecordAttempt(session.Records, position, state)
 	}
 	return ""
 }
 
-func capturedTerminalAttemptRecords(records []events.Record, position uint64, state workersessions.State) string {
+func capturedTerminalRecordAttempt(records []events.Record, position uint64, state workersessions.State) string {
 	for _, record := range records {
 		if uint64(record.ID.Position) != position || !isTerminalLifecycleRecord(record) {
 			continue
@@ -97,7 +123,7 @@ func applySummaryTerminalCause(summary recordings.WorkerCapturedSummary, observa
 	if observation.TerminalCause != nil {
 		return
 	}
-	attempt := capturedTerminalAttemptRecords(item.MetadataRecords, uint64(item.Terminal.Position), observation.State)
+	attempt := capturedTerminalRecordAttempt(item.MetadataRecords, uint64(item.Terminal.Position), observation.State)
 	if attempt == "" {
 		return
 	}

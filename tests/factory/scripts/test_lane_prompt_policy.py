@@ -1,8 +1,12 @@
-"""Isolated diagnostics tests: controlled text, no application or prompt scan."""
+"""Checker units, controlled lint regressions, and authored mission-policy contracts."""
 
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
+import io
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[3] / 'factory/scripts/lint-lane-prompts.py'
@@ -12,21 +16,20 @@ spec.loader.exec_module(policy)
 
 PLAN = '''
 Plan at most ONE independently mergeable slice per lane.
-Use at most 2 stories, about 8 unique process-owned criteria total, and a PR under about 2,000 changed lines (added plus deleted).
-Keep JSON below 20 KB (20,000 UTF-8 bytes), including status updates.
+Use at most 2 stories, about 8 unique process-owned criteria total.
 For larger asks, retain the first correct slice; list remaining names/outcomes/requirements and merge gates in Markdown's "Named successor slices — not admitted".
 State "None" if empty; exclude successors from userStories; only lead/operator admits them through existing routes.
 Preserve immutable criteria/IDs, source-plan alignment, required sections/proof and later owning gates.
-Never evade caps with compound scope or weakened acceptance; escalate indivisible scope. No runtime/routing change or invented approval.
+Never evade behavior/criterion caps with compound scope or weakened acceptance. No runtime/routing change or invented approval.
 Each named successor must depend on this lane's merge before lead/operator admission.
 '''
 PROCESS = '''
-Keep new prd.json below 20 KB (20,000 UTF-8 bytes); update minimal status/passes/blockers only.
-Preserve requirements/amendments; never falsely pass unproved/delegated criteria; escalate if minimal status cannot fit.
-Add at most one short four-line progress.txt entry per visit (visit/story, changed, blocker, next), even blocked/interrupted.
+Update minimal status/passes/blockers only.
+Preserve requirements/amendments; never falsely pass unproved/delegated criteria.
+Keep concise visit/story, changed, blocker and next records, even blocked/interrupted.
 Include concise patterns/browser status/deferred handoffs there; put deferred handoffs in the PR body too.
-Evidence/transcripts/audits/CI references go only in PR comments; retain in session before a PR exists.
-Never commit scaffolding/verification records. Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive; only new entries follow these rules.
+Retain observations in session before a PR exists.
+Never commit scaffolding/verification records. Preserve existing artifacts without retroactive rewrite/truncation/compaction/archive.
 Push at most once per visit, at its end, after focused tests/lint, when the visit changed code.
 If previous-head CI is still running, push anyway; the superseding push cancels it.
 Never spend a visit only waiting for CI or return CONTINUE solely because CI is running.
@@ -102,6 +105,14 @@ Post-merge or integrated Project validation stays with its named later gate.
 
 
 MISSION = """
+{{range .Inputs}}{{if eq .DataType "work"}}
+Payload: {{.Payload}}
+Work ID: {{.WorkID}}
+Tags: {{.Tags}}
+Previous output: {{.PreviousOutput}}
+Correction feedback (verbatim checker reason): {{.RejectionFeedback}}
+{{end}}{{end}}
+On correction, fix the field named in the checker reason above.
 Run every named command/read and report every named value, unit and source.
 Each failed read retries once; retain both attempts and available output.
 Optional exhaustion is a recorded gap, not alone FAILED.
@@ -113,6 +124,10 @@ The existing project-report route informs the owning lead, who owns admission an
 output is a native JSON object containing non-empty measurements
 or a non-empty precondition naming the unmet requirement with available values.
 do not reset the rejection marker.
+Use the exact key output.precondition with a non-blank string for an unmet precondition.
+Each measurement requires value. Zero, false and null are valid values.
+{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
+{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
 """
 
 
@@ -121,8 +136,7 @@ RECOVERY = {
 positive integer with no ceiling; reconcile with the same request ID.
 tags.recovery-worktree uses a normalized repo-relative managed path.
 Bind replacements by targetWorkId within the evidenced failed DEPENDS_ON closure.
-operatorOverride repair remain forbidden even after operator answers.
-Keep about 2,000 changed lines (added plus deleted).''',
+operatorOverride repair remain forbidden even after operator answers.''',
     'project-lead-wake': '''Apply the lead's Corrected successor recovery procedure.
 positive integer with no ceiling; targetWorkId; reconcile with the same request ID.''',
     'project-lead-checkin': '''Apply the lead's Corrected successor recovery procedure.
@@ -139,7 +153,101 @@ Preserve positive integer attempt, with no ceiling.''',
 }
 
 
+OUTPUT_POLICY = """
+Do not prescribe arbitrary output-size requirements unless the customer explicitly asks for them.
+Measurements, timings, calibration runs and evidence belong in the PR body or a PR comment; CI evidence belongs only in PR comments.
+Committed tests protect customer behavior and ship with the change.
+Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof files.
+Each observable process outcome names one measurement or test and can close in one visit once the behavior and witness exist.
+Do not invent gates that demand repeated or escalating proof; preserve independent review, CI and merge obligations.
+"""
+
+
 class LanePromptPolicyTests(unittest.TestCase):
+    def test_changed_line_checker_accepts_retained_caps_and_explanations(self):
+        source = '''For oversized recovery, retain the independently mergeable PR slice with at
+most 2 stories, about 8 criteria total, and JSON below 20 KB (20,000 UTF-8 bytes)
+with status headroom.
+Do not impose a changed-line budget. Changed-line filtering explains the diff.
+The physical prompt must be under 60 lines. Bound paid calls to 5 and time to 60 seconds.
+'''
+        self.assertEqual(policy.check_changed_line_budgets({'lead/AGENTS.md': source}), [])
+
+    def test_changed_line_checker_rejects_original_and_wrapped_mixed_case(self):
+        source = 'most 2 stories, about 8 criteria total, about 2,000 changed lines (added plus deleted), and JSON below 20 KB.'
+        path = 'factory/workstations/project-lead/AGENTS.md'
+        for text in (source, source.upper().replace(' ', '\n\t')):
+            with self.subTest(text=text):
+                self.assertEqual(policy.check_changed_line_budgets({path: text}), [
+                    f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts'])
+
+    def test_changed_line_checker_rejects_representative_diff_budgets(self):
+        for source in ('PR under about 2,000 changed lines', 'changed-line budget of 1500',
+                       'diff limit: 2000 lines', 'at most 1,500 lines (added plus deleted)'):
+            for text in (source, source.upper().replace(' ', '\n')):
+                with self.subTest(text=text):
+                    self.assertEqual(policy.check_changed_line_budgets({'other/AGENTS.md': text}), [
+                        'other/AGENTS.md:changed-line-budget: remove changed-line budgets from lane-facing prompts'])
+
+    def test_output_policy_accepts_compliant_and_wrapped_roles(self):
+        for text in (OUTPUT_POLICY, OUTPUT_POLICY.replace(' ', '\n')):
+            prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), text)
+            self.assertEqual(policy.check_output_policy(prompts), [])
+
+    def test_missing_output_policy_names_role_and_rule(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        for owner in prompts:
+            for name, clause in policy.OUTPUT_RULES:
+                with self.subTest(owner=owner, rule=name):
+                    changed = dict(prompts)
+                    changed[owner] = changed[owner].replace(clause, '')
+                    self.assertEqual(policy.check_output_policy(changed), [
+                        f'{owner}:{name}: missing policy clause: {clause}'])
+
+    def test_output_budgets_are_rejected_beside_correct_policy(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        cases = (
+            'Use a PR under about 2,000 changed lines (added plus deleted).',
+            'Keep JSON below 20 KB (20,000 UTF-8 bytes).',
+            'Use at most 12 files.',
+            'Add a maximum of 40 tests.',
+            'The diff target is 1500 lines.',
+            'Set a file-count budget of 20.',
+            'Set a test-count cap: 30.',
+            'Keep the packet budget 20000 bytes.',
+            'Keep output below 300 lines.',
+            'Escalate indivisible scope.',
+            'Add at most one short four-line progress.txt entry per visit.',
+        )
+        for owner in prompts:
+            for instruction in cases:
+                for text in (instruction, instruction.replace(' ', '\n')):
+                    with self.subTest(owner=owner, instruction=text):
+                        changed = dict(prompts)
+                        changed[owner] += text
+                        self.assertEqual(policy.check_output_policy(changed), [
+                            f'{owner}:output-size: conflicting output policy; remove arbitrary output budgets or committed proof instructions'])
+
+    def test_committed_proof_requests_are_rejected(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'), OUTPUT_POLICY)
+        for owner in prompts:
+            for instruction in ('You must commit proof.',
+                                'Always commit a calibration harness.',
+                                'Add an evidence document to the PR.'):
+                with self.subTest(owner=owner, instruction=instruction):
+                    changed = dict(prompts)
+                    changed[owner] += instruction
+                    self.assertEqual(policy.check_output_policy(changed), [
+                        f'{owner}:committed-proof: conflicting output policy; remove arbitrary output budgets or committed proof instructions'])
+
+    def test_runtime_resource_limits_and_slice_caps_are_preserved(self):
+        prompts = dict.fromkeys(('plan', 'process', 'review', 'planning-standard'),
+                               OUTPUT_POLICY + 'Use at most 2 stories and about 8 unique process-owned criteria total. '
+                               'Bound paid validation to 5 calls, 60 seconds and 10 dollars. '
+                               'The customer explicitly requests output-size requirements. '
+                               'Preserve the customer requirement verbatim in its criterion.')
+        self.assertEqual(policy.check_output_policy(prompts), [])
+
     def test_mission_compliant_and_wrapped_policy(self):
         self.assertEqual(policy.check_mission_policy(MISSION), [])
         self.assertEqual(policy.check_mission_policy(MISSION.replace(' ', '\n')), [
@@ -347,20 +455,16 @@ class LanePromptPolicyTests(unittest.TestCase):
         self.assertEqual(policy.check_policy(PLAN, PROCESS), [])
         self.assertEqual(policy.check_policy(PLAN.replace(' ', '\n'), PROCESS.replace(' ', '\n')), [])
 
-    def test_missing_budgets_and_authority_have_specific_diagnostics(self):
+    def test_missing_slice_and_authority_rules_have_specific_diagnostics(self):
         cases = (
             ('plan', 'at most 2 stories', 'stories'),
             ('plan', 'about 8 unique process-owned criteria total', 'criteria'),
-            ('plan', 'about 2,000 changed lines (added plus deleted)', 'lines'),
-            ('plan', '20,000 UTF-8 bytes', 'bytes'),
             ('plan', 'only lead/operator admits them through existing routes', 'admission'),
             ('plan', 'Preserve immutable criteria/IDs', 'immutable'),
             ('plan', "Each named successor must depend on this lane's merge", 'merge-gate'),
-            ('process', 'escalate if minimal status cannot fit', 'overflow'),
             ('process', 'Never claim evidence was published when it was not', 'comment-failure'),
-            ('process', 'at most one short four-line progress.txt entry per visit', 'entry'),
-            ('process', 'no retroactive rewrite/truncation/compaction/archive', 'legacy'),
-            ('process', 'go only in PR comments', 'evidence'),
+            ('process', 'Keep concise visit/story, changed, blocker and next records', 'entry'),
+            ('process', 'without retroactive rewrite/truncation/compaction/archive', 'legacy'),
             ('process', 'never falsely pass unproved/delegated criteria', 'false-pass'),
             ('process', 'review owns terminal CI/conflicts/merge', 'review'),
             ('process', 'the superseding push cancels it', 'running-ci'),
@@ -430,6 +534,131 @@ class LanePromptPolicyTests(unittest.TestCase):
                         prompts[owner] += '\n' + text
                         self.assertEqual(policy.check_recovery_policy(prompts),
                                          [f'{owner}:recovery-ceiling: conflicting recovery instruction; remove or reconcile it'])
+
+
+class LanePromptLintTests(unittest.TestCase):
+    """Observe lint status/streams and read-only behavior on isolated authored files."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        prompts = dict(RECOVERY)
+        prompts['plan'] += PLAN + MAILBOX + OWNER_PLAN + OUTPUT_POLICY
+        prompts['process'] += PROCESS + MAILBOX + OWNER_PROCESS + OUTPUT_POLICY
+        prompts['review'] += OWNER_REVIEW + OUTPUT_POLICY
+        prompts['project-lead'] += LEAD
+        for owner, rules in policy.LOOPBACK_RULES.items():
+            prompts[owner] = prompts.get(owner, '') + '\n' + '\n'.join(clause for _, clause in rules)
+        prompts['verify-mission'] = MISSION
+        for owner, text in prompts.items():
+            self.write(f'factory/workstations/{owner}/AGENTS.md', text)
+        self.write('factory/docs/standards/planning-standards.md', OUTPUT_POLICY)
+
+    def write(self, path, text):
+        target = self.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding='utf-8')
+        return target
+
+    def run_lint(self):
+        before = {path: path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = policy.main([str(self.root)])
+        self.assertEqual({path: path.read_bytes() for path in self.root.rglob('*') if path.is_file()}, before)
+        return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_clean_root_preserves_success_message(self):
+        self.assertEqual(self.run_lint(), (0, 'Lane prompt policy validation passed\n', ''))
+
+    def test_new_nested_role_and_lead_produce_ordered_path_diagnostics(self):
+        nested = 'factory/workstations/new-role/nested/AGENTS.md'
+        self.write(nested, 'diff limit: 2000 lines')
+        self.assertEqual(self.run_lint(), (1, '',
+            f'{nested}:changed-line-budget: remove changed-line budgets from lane-facing prompts\n'))
+        lead = 'factory/workstations/project-lead/AGENTS.md'
+        target = self.root / lead
+        target.write_text(target.read_text(encoding='utf-8') + '\nabout 2,000 changed lines (added plus deleted)', encoding='utf-8')
+        self.assertEqual(self.run_lint(), (1, '', ''.join(
+            f'{path}:changed-line-budget: remove changed-line budgets from lane-facing prompts\n'
+            for path in (nested, lead))))
+
+    def test_missing_required_prompt_fails_with_read_error(self):
+        (self.root / 'factory/workstations/process/AGENTS.md').unlink()
+        status, stdout, stderr = self.run_lint()
+        self.assertEqual((status, stdout), (1, ''))
+        self.assertTrue(stderr.startswith('lane prompt policy: cannot read authored prompts:'), stderr)
+        self.assertIn('AGENTS.md', stderr)
+
+    def test_invalid_utf8_discovered_prompt_fails_with_read_error(self):
+        target = self.write('factory/workstations/new-role/nested/AGENTS.md', '')
+        target.write_bytes(b'\xff')
+        status, stdout, stderr = self.run_lint()
+        self.assertEqual((status, stdout), (1, ''))
+        self.assertTrue(stderr.startswith('lane prompt policy: cannot read authored prompts:'), stderr)
+        self.assertIn('decode', stderr)
+
+    def test_discovered_prompt_oserror_is_not_silently_skipped(self):
+        target = self.write('factory/workstations/new-role/nested/AGENTS.md', 'valid prompt')
+        read_text = Path.read_text
+
+        def controlled_read(path, *args, **kwargs):
+            if path == target:
+                raise OSError('controlled discovered prompt read failure')
+            return read_text(path, *args, **kwargs)
+
+        with patch.object(Path, 'read_text', controlled_read):
+            self.assertEqual(self.run_lint(), (1, '',
+                'lane prompt policy: cannot read authored prompts: controlled discovered prompt read failure\n'))
+
+
+class AuthoredMissionPolicyTests(unittest.TestCase):
+    """The mission instructions themselves are the published policy contract."""
+
+    @classmethod
+    def setUpClass(cls):
+        prompt = SCRIPT.parent.parent / 'workstations/verify-mission/AGENTS.md'
+        cls.mission = ' '.join(prompt.read_text(encoding='utf-8').split())
+
+    def test_read_only_preconditions_are_resolved_before_deciding(self):
+        clauses = (
+            'Before deciding, resolve read-only preconditions yourself: git fetch origin main, file reads, and GET requests.',
+            'Fetch missing merge objects before ancestry checks; unavailable objects are not observed product defects.',
+            'Use the read helper for these operations, retrying once; do not retry fetch, reads or checks beyond its budget.',
+            'Use python factory/scripts/mission-read.py [--required] -- <read-command> [args...]',
+            'Each failed read retries once; retain both attempts and available output.',
+            'Never retry mutations through the helper or add an agent retry after exhaustion.',
+            'Execute only the bound mission, including cron-origin missions. Run every named command/read and report every named value, unit and source;',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+
+    def test_unsatisfied_preconditions_name_missing_values_without_filing(self):
+        clauses = (
+            'Required read/command failures return FAILED with the exact reason and available values.',
+            'If a precondition cannot be satisfied here, report exactly what is missing in output.precondition with available values.',
+            'This includes exhausted required reads and a daemon not restarted onto a fix; file no corrective Work or proposal for it.',
+            'Do not restart the daemon or mutate product state to satisfy a precondition.',
+            'Use the exact key output.precondition with a non-blank string for an unmet precondition.',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+
+    def test_corrective_work_requires_an_observed_defect_and_same_pr_tests(self):
+        clauses = (
+            'Only an observed product or factory defect qualifies as a corrective gap below.',
+            'File corrective work as a lane that changes behavior with tests shipped in the same PR.',
+            'Never file a lane whose outcome is evidence, verification, characterization, measurement or re-running a check.',
+            'Never file amendment or retrospective lanes, or corrective Work merely to make merge evidence available.',
+            'For gaps, prepare a narrow corrective batch plus its own dependent loopback.',
+        )
+        for clause in clauses:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, self.mission)
+        self.assertLess(self.mission.index(clauses[0]), self.mission.index(clauses[-1]))
 
 
 if __name__ == '__main__':

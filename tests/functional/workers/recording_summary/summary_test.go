@@ -124,14 +124,22 @@ func TestArchivedDirectSummaryWithoutRecordingReads(t *testing.T) {
 	stopHost(t, restarted)
 }
 
-func startHost(t *testing.T, factory, profile string, gate *readGate) *support.FunctionalAPIServer {
+func startHost(t *testing.T, factory, profile string, gate *readGate, store ...*rejectUsageStore) *support.FunctionalAPIServer {
 	t.Helper()
+	var writer recordings.WorkerRecordingWriter
+	var observe func(recordings.WorkerRecordingStore)
+	if len(store) > 0 {
+		writer = store[0]
+		observe = func(base recordings.WorkerRecordingStore) { store[0].WorkerRecordingStore = base }
+	}
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factory, WorkingDirectory: profile, ServerReadyTimeout: time.Minute,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
 			FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: profile},
 			RecordingReadFile:               gate.read,
+			WorkerRecordingWriter:           writer,
+			WorkerRecordingStoreObserver:    observe,
 		},
 	})
 }

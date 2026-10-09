@@ -17,6 +17,17 @@ type archivedCauseStore struct {
 	unavailableWorkerControlStore
 	records []recordings.WorkerControlOperationRecord
 	listErr error
+	items   []recordings.WorkerCapturedCatalogItem
+	loads   int
+}
+
+func (f *archivedCauseStore) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
+	f.loads++
+	return f.capturedSummaryFake.LoadWorkerRecording(ctx, id)
+}
+
+func (f *archivedCauseStore) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return recordings.WorkerCapturedCatalogPage{Items: f.items}, nil
 }
 
 func (f *archivedCauseStore) ListWorkerControlOperations(_ context.Context, _ recordings.WorkerControlTarget) ([]recordings.WorkerControlOperationRecord, error) {
@@ -72,6 +83,25 @@ func TestTerminalCauseArchivedUsesPhysicalTerminalAttemptAndExactCapture(t *test
 				}
 			} else if cause != nil {
 				t.Fatalf("invalid archived evidence claimed %s", *cause)
+			}
+			// The same physical-attempt and strict-JSON evidence is available in
+			// the compact catalog. Fleet queries must use it without asking the
+			// recording owner to detach every transcript in the recording.
+			fake.items = []recordings.WorkerCapturedCatalogItem{{Catalog: page.Catalog, Opening: page.Opening,
+				Terminal: page.Terminal, Health: page.Health, MetadataRecords: fake.snapshot.Sessions[0].Records}}
+			loads := fake.loads
+			for _, history := range []workersessions.ObservationHistory{workersessions.ObservationHistoryArchived, workersessions.ObservationHistoryAll} {
+				rows, err := reader.archivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{History: history}, nil)
+				if err != nil || len(rows) != 1 {
+					t.Fatalf("%s compact rows=%+v, err=%v", history, rows, err)
+				}
+				got := rows[0].TerminalCause
+				if (cause == nil) != (got == nil) || (cause != nil && *cause != *got) {
+					t.Fatalf("%s compact cause=%v, single-observation cause=%v", history, got, cause)
+				}
+				if fake.loads != loads {
+					t.Fatalf("%s loaded full recording for a compact terminal fact", history)
+				}
 			}
 		})
 	}

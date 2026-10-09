@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"maps"
 	"os"
 	"sort"
 	"strconv"
@@ -107,7 +107,7 @@ func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []re
 		}
 		items = append(items, item)
 	}
-	if writer.catalogGeneration(writer.catalogEntries()) != generation {
+	if _, current := writer.catalogMembership(); current != generation {
 		return nil, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return items, nil
@@ -140,8 +140,28 @@ func (writer *FileWriter) capturedCatalogItem(ctx context.Context, catalog recor
 }
 
 func (session *recordingSession) capturedSummary() recordings.WorkerCapturedCatalogItem {
+	if session.catalogSummary == nil {
+		item := session.buildCapturedSummary()
+		session.catalogSummary = &item
+	}
+	// The cached selection references immutable committed records. Only the
+	// returned page owns mutable payloads/maps; callers cannot poison later
+	// lists. Owner and reverse-lineage facts are sampled separately by the
+	// writer under their existing barriers, never cached with this selection.
+	item := *session.catalogSummary
+	item.Opening = item.Opening.Detached()
+	item.Terminal = cloneWorkerRecordingTerminal(item.Terminal)
+	item.CapturedAt = maps.Clone(item.CapturedAt)
+	item.MetadataRecords = make([]events.Record, len(session.catalogSummary.MetadataRecords))
+	for index, record := range session.catalogSummary.MetadataRecords {
+		item.MetadataRecords[index] = record.Detached()
+	}
+	return item
+}
+
+func (session *recordingSession) buildCapturedSummary() recordings.WorkerCapturedCatalogItem {
 	item := recordings.WorkerCapturedCatalogItem{
-		Opening:  session.records[0].Detached(),
+		Opening:  session.records[0],
 		Terminal: cloneWorkerRecordingTerminal(session.projection.ExecutionTerminal),
 		Health:   session.projection.Status, HealthReason: session.projection.Degradation,
 		CapturedAt: make(map[string]time.Time), MetadataRecords: make([]events.Record, 0, summaryFactCount+1),
@@ -163,7 +183,7 @@ func (session *recordingSession) capturedSummary() recordings.WorkerCapturedCata
 	session.copySummaryStamp(item.CapturedAt, 1)
 	for _, position := range ordered {
 		// The reducer admits contiguous positions starting at one.
-		item.MetadataRecords = append(item.MetadataRecords, session.records[position-1].Detached())
+		item.MetadataRecords = append(item.MetadataRecords, session.records[position-1])
 		session.copySummaryStamp(item.CapturedAt, position)
 	}
 	return item
@@ -187,7 +207,7 @@ func (writer *FileWriter) LookupWorkerSessionSummary(ctx context.Context, id str
 	if strings.TrimSpace(id) == "" {
 		return recordings.WorkerCapturedSummary{}, recordings.ErrInvalidWorkerRecordingRequest
 	}
-	catalog, err := writer.preparedSummaryIdentity(id)
+	catalog, err := writer.preparedSummaryIdentity(ctx, id)
 	if err != nil {
 		return recordings.WorkerCapturedSummary{}, err
 	}
@@ -220,7 +240,7 @@ func (writer *FileWriter) summaryCatalogMatches(catalog recordings.WorkerSession
 	return indexed && current.RecordingID == catalog.RecordingID && current.RecordingGenerationID == catalog.RecordingGenerationID && current.FactorySessionID == catalog.FactorySessionID
 }
 
-func (writer *FileWriter) preparedSummaryIdentity(id string) (recordings.WorkerSessionCatalogEntry, error) {
+func (writer *FileWriter) preparedSummaryIdentity(ctx context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
 	writer.catalogMu.Lock()
 	catalog, exists := writer.catalog[id]
 	_, ambiguous := writer.ambiguous[id]
@@ -231,9 +251,11 @@ func (writer *FileWriter) preparedSummaryIdentity(id string) (recordings.WorkerS
 		return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
 	}
 	if !exists {
-		writer.rebuildMu.Lock()
+		if err := writer.lockCatalogRebuild(ctx); err != nil {
+			return recordings.WorkerSessionCatalogEntry{}, err
+		}
 		prepared := writer.catalogLoaded
-		writer.rebuildMu.Unlock()
+		writer.unlockCatalogRebuild()
 		if !prepared || damaged {
 			return recordings.WorkerSessionCatalogEntry{}, recordings.ErrWorkerRecordingReplay
 		}
@@ -279,38 +301,4 @@ func (entry *recordingEntry) summaryControls(item recordings.WorkerCapturedCatal
 		return result[i].Operation.RequestID < result[j].Operation.RequestID
 	})
 	return result
-}
-
-// Activation inventories every retained file even when one is unreadable. A
-// damaged inventory cannot prove absence, but healthy peers remain inspectable.
-func (writer *FileWriter) prepareSummaryCatalog(ctx context.Context) error {
-	writer.rebuildMu.Lock()
-	defer writer.rebuildMu.Unlock()
-	if writer.catalogLoaded {
-		return ctx.Err()
-	}
-	err := writer.directory.ScanDirectory(writer.root, 64, func(files []os.DirEntry) error {
-		for _, file := range files {
-			if err := writer.indexCatalogFiles(ctx, []os.DirEntry{file}); err != nil {
-				if canceled := ctx.Err(); canceled != nil {
-					return canceled
-				}
-				if !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
-					return err
-				}
-				writer.catalogMu.Lock()
-				writer.catalogDamaged = true
-				writer.catalogMu.Unlock()
-			}
-		}
-		return nil
-	})
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return recordings.ErrWorkerRecordingReplay
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	writer.catalogLoaded = true
-	return nil
 }

@@ -1,6 +1,7 @@
 package prompting
 
 import (
+	"fmt"
 	"github.com/portpowered/infinite-you/internal/testpath"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -885,5 +886,57 @@ func TestPromptRendererSubmittedProjectPayloadIsComplete(t *testing.T) {
 	}
 	if got != "Project project-witness: "+payload {
 		t.Fatalf("project-lead prompt=%q", got)
+	}
+}
+
+func TestPromptRenderer_WorkBindingPreservesMissionOnCorrection(t *testing.T) {
+
+	t.Parallel()
+	const payload = `{"mission":"measure café 😀","reads":["recording"],"budget":{"paid":0}}`
+	const reason = "mission-output-invalid: output.precondition must name the unmet precondition"
+	const diagnostic = `{"invalidReply":"shape-invalid reply"}`
+	const tmpl = `{{range .Inputs}}{{if eq .DataType "work"}}Payload: {{.Payload}}
+Work ID: {{.WorkID}}
+Tags: {{index .Tags "project"}}
+Previous output: {{.PreviousOutput}}
+Correction feedback (verbatim checker reason): {{.RejectionFeedback}}
+{{end}}{{end}}Factory Session: {{.Context.SessionID}}`
+	resource := workers.Token{Color: workers.Color{
+		WorkID: "slot:0", DataType: factoryruntime.RuntimeTokenDataTypeResource,
+	}}
+	for _, corrected := range []bool{false, true} {
+		for _, resourceFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("corrected=%v/resourceFirst=%v", corrected, resourceFirst), func(t *testing.T) {
+				t.Parallel()
+				tags := map[string]string{"project": "mission-project"}
+				previous, feedback := "", ""
+				if corrected {
+					previous, feedback = diagnostic, reason
+					tags["_last_output"], tags["_rejection_feedback"] = previous, feedback
+				}
+				bound := workers.Token{Color: workers.Color{
+					WorkID: "mission-work", DataType: factoryruntime.RuntimeTokenDataTypeWork,
+					Payload: []byte(payload), Tags: tags,
+				}}
+				tokens := []workers.Token{bound, resource}
+				if resourceFirst {
+					tokens = []workers.Token{resource, bound}
+				}
+				renderer := &DefaultPromptRenderer{}
+				got, err := renderer.Render(tmpl, tokens, &workers.Context{SessionID: "mission-session"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := "Payload: " + payload + "\nWork ID: mission-work\nTags: mission-project\nPrevious output: " + previous +
+					"\nCorrection feedback (verbatim checker reason): " + feedback + "\nFactory Session: mission-session"
+				if got != want {
+					t.Fatalf("bound prompt=%q, want %q", got, want)
+				}
+				positional, err := renderer.Render(`{{(index .Inputs 0).WorkID}}/{{(index .Inputs 1).WorkID}}`, tokens, nil)
+				if err != nil || positional != tokens[0].Color.WorkID+"/"+tokens[1].Color.WorkID {
+					t.Fatalf("positional inputs changed: %q, %v", positional, err)
+				}
+			})
+		}
 	}
 }

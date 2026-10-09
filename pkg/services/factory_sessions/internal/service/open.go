@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -80,7 +81,16 @@ func (r *Root) openRuntimeWithOptions(
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return runtimeProducts{}, err
 	}
-	return r.completeSessionOpening(ctx, opening, cleanup)
+	completed, err := r.openingCompletion.Complete(ctx, opening.completionRequest(),
+		opening.initial, opening.startupRuntime, opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	products, err = r.bindSessionOpeningProducts(ctx, opening, cleanup, completed.SessionRuntime, completed.ProcessRuntime)
+	if err == nil {
+		products.lifecycle = completed.Lifecycle
+	}
+	return products, err
 }
 
 // sessionRuntimeOpening retains one opening's selections and partial results.
@@ -437,96 +447,136 @@ func (opening *sessionRuntimeOpening) warnMissingBoardHistory() {
 	}
 }
 
-func (r *Root) completeSessionOpening(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) (runtimeProducts, error) {
-	webhookSubscription, err := startFactoryWebhookSubscription(
-		ctx,
-		r.webhooksService,
-		opening.startupRuntime.RecordingLedger(),
-		opening.load.LoadedFactoryCfg,
-		opening.load.ReplayArtifact == nil,
-		opening.sessionID,
-	)
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-	if webhookSubscription != nil {
-		cleanup.Add(func() error {
-			return webhookSubscription(context.WithoutCancel(ctx))
-		})
-	}
-	if r.factoryDefinitions == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions service is required")
-	}
-	if r.definitionRuntimeRouter == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
-	}
-	sessionRuntime, definitionHost, definitionActivationGateway, release, err := r.factorySessionsRuntimeAssembly.RegisterOpening(
-		ctx, roles.SessionOpeningFacts{
+// RuntimeOpeningCompletion retains four fixed collaborators; selections and
+// acquired handles belong to each call, including its rollback actions.
+type RuntimeOpeningCompletion struct {
+	registration openingRegistration
+	routing      openingDefinitionRouting
+	webhooks     webhooks.Service
+	host         roles.ProcessRuntimeFactory
+}
+
+type openingRegistration interface {
+	RegisterOpening(context.Context, roles.SessionOpeningFacts, *factoryruntime.RuntimeInitialOpening,
+		factoryruntime.Clock, *zap.Logger) (roles.ApplicationRuntime, factorysessions.DefinitionHost,
+		factorydefinitions.DefinitionActivationGateway, func(context.Context) error, error)
+	Resolve(string) *livesession.LiveSession
+}
+
+type openingDefinitionRouting interface {
+	Bind(string, factorysessions.DefinitionHost, factorysessions.DefinitionActivationGateway) error
+	Unbind(string)
+}
+
+func NewRuntimeOpeningCompletion(registration openingRegistration, routing openingDefinitionRouting,
+	webhooksService webhooks.Service, host roles.ProcessRuntimeFactory) *RuntimeOpeningCompletion {
+	return &RuntimeOpeningCompletion{registration: registration, routing: routing, webhooks: webhooksService, host: host}
+}
+
+type RuntimeCompletionRequest struct {
+	Facts               roles.SessionOpeningFacts
+	LoadedFactory       factorydefinitions.MutableLoadedFactorySource
+	ActivateWebhooks    bool
+	MockWorkers         *workers.MockWorkersConfig
+	Host                factorysessions.RuntimeHostRequest
+	PublishCurrentBoard func(context.Context) error
+}
+
+type RuntimeCompletionResult struct {
+	SessionRuntime roles.ApplicationRuntime
+	Lifecycle      roles.LifecycleRuntime
+	ProcessRuntime roles.ProcessRuntime
+}
+
+func (opening *sessionRuntimeOpening) completionRequest() RuntimeCompletionRequest {
+	request := RuntimeCompletionRequest{
+		Facts: roles.SessionOpeningFacts{
 			FactorySessionID: opening.sessionID, RuntimeID: opening.configured.Runtime.RuntimeInstanceID,
 			GenerationID: opening.startupRuntime.StreamGeneration(), FactoryRootDir: opening.root.FactoryRootDir,
 			Directory: opening.configured.Definition.Directory, ExecutionBaseDir: opening.configured.Definition.ExecutionBaseDir,
 			RuntimeMode: opening.configured.Runtime.Mode, BackendScopeID: opening.sessionSelection.BackendScopeID,
 			WorkFile: opening.sessionSelection.WorkFile, WorkflowID: opening.configured.Recordings.WorkflowID,
 			ModelsScope: opening.modelsBind.Scope,
-		}, opening.initial, opening.clock, opening.startupRuntime.RuntimeLogger(),
-	)
-	if release != nil {
-		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
-	}
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-
-	if bound := runtimebinding.SessionStateFrom(r.factorySessionsRuntimeAssembly.Resolve(opening.sessionID)); bound != nil {
-		bound.SetMockWorkers(opening.configured.Workers.MockWorkers)
-	}
-	if binder, ok := opening.startupRuntime.(interface {
-		BindModelsRuntimeScope(models.RuntimeScopeRef) error
-	}); ok {
-		if err := binder.BindModelsRuntimeScope(opening.modelsBind.Scope); err != nil {
-			return runtimeProducts{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
-		}
-	}
-	if err := r.definitionRuntimeRouter.Bind(
-		opening.sessionID,
-		definitionHost,
-		definitionActivationGateway,
-	); err != nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
-	}
-	cleanup.Add(func() error {
-		current := r.factorySessionsRuntimeAssembly.Resolve(opening.sessionID)
-		bound := runtimebinding.SessionStateFrom(current)
-		if current == nil || (bound != nil && any(bound.Owner) == any(sessionRuntime)) {
-			r.definitionRuntimeRouter.Unbind(opening.sessionID)
-		}
-		return nil
-	})
-	if r.processRuntimeFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
-	}
-	var startup roles.LifecycleRuntime = sessionRuntime
-	if (opening.usesImplicitCurrentBoard() && opening.startupRecovery == nil) || (opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "") {
-		startup = &successorBoardStartup{LifecycleRuntime: sessionRuntime, publish: opening.publishCurrentBoardReference}
-	}
-	processRuntime, err := r.processRuntimeFactory.Bind(
-		startup,
-		factorysessions.RuntimeHostRequest{
+		},
+		LoadedFactory: opening.load.LoadedFactoryCfg, ActivateWebhooks: opening.load.ReplayArtifact == nil,
+		MockWorkers: opening.configured.Workers.MockWorkers,
+		Host: factorysessions.RuntimeHostRequest{
 			Directory: opening.configured.Definition.Directory, RuntimeMode: opening.configured.Runtime.Mode,
 			WorkFile: opening.sessionSelection.WorkFile, MockWorkers: opening.configured.Workers.MockWorkers != nil,
 			Host: opening.sessionSelection.Host.Host, Port: opening.sessionSelection.Host.Port,
 			AutoPort: opening.sessionSelection.Host.AutoPort, Pprof: opening.sessionSelection.Host.Pprof,
 		},
-		opening.startupRuntime.RuntimeLogger(),
-	)
+	}
+	if (opening.usesImplicitCurrentBoard() && opening.startupRecovery == nil) || (opening.publishesCurrentBoardWriter() && strings.TrimSpace(opening.configured.Recordings.ResumePath) != "") {
+		request.PublishCurrentBoard = opening.publishCurrentBoardReference
+	}
+	return request
+}
+
+func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request RuntimeCompletionRequest,
+	initial *factoryruntime.RuntimeInitialOpening, runtime runtimeports.RuntimeInstance,
+	clock factoryruntime.Clock, logger *zap.Logger, cleanup interface{ Add(func() error) }) (result RuntimeCompletionResult, err error) {
+	logger.Debug("completing Factory Session opening", zap.String("session_id", request.Facts.FactorySessionID),
+		zap.String("runtime_id", request.Facts.RuntimeID), zap.String("generation_id", request.Facts.GenerationID))
+	defer func() {
+		logger.Debug("Factory Session opening completion finished", zap.String("session_id", request.Facts.FactorySessionID),
+			zap.Bool("completed", err == nil), zap.String("cause", logging.SafeErrorCause(err)))
+	}()
+	subscription, err := startFactoryWebhookSubscription(ctx, operation.webhooks, runtime.RecordingLedger(),
+		request.LoadedFactory, request.ActivateWebhooks, request.Facts.FactorySessionID)
 	if err != nil {
-		return runtimeProducts{}, err
+		return RuntimeCompletionResult{}, err
 	}
-	products, err := r.bindSessionOpeningProducts(ctx, opening, cleanup, sessionRuntime, processRuntime)
-	if err == nil {
-		products.lifecycle = startup
+	if subscription != nil {
+		cleanup.Add(func() error { return subscription(context.WithoutCancel(ctx)) })
 	}
-	return products, err
+	session, definitionHost, activation, release, err := operation.registration.RegisterOpening(ctx,
+		request.Facts, initial, clock, logger)
+	if release != nil {
+		cleanup.Add(func() error { return release(context.WithoutCancel(ctx)) })
+	}
+	if err != nil {
+		return RuntimeCompletionResult{}, err
+	}
+	if bound := runtimebinding.SessionStateFrom(operation.registration.Resolve(request.Facts.FactorySessionID)); bound != nil {
+		bound.SetMockWorkers(request.MockWorkers)
+	}
+	if binder, ok := runtime.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	}); ok {
+		if err := binder.BindModelsRuntimeScope(request.Facts.ModelsScope); err != nil {
+			return RuntimeCompletionResult{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
+		}
+	}
+	if err := operation.bindRouting(request.Facts.FactorySessionID, session, definitionHost, activation, cleanup); err != nil {
+		return RuntimeCompletionResult{}, err
+	}
+	var lifecycle roles.LifecycleRuntime = session
+	if request.PublishCurrentBoard != nil {
+		lifecycle = &successorBoardStartup{LifecycleRuntime: session, publish: request.PublishCurrentBoard}
+	}
+	process, err := operation.host.Bind(lifecycle, request.Host, logger)
+	if err != nil {
+		return RuntimeCompletionResult{}, err
+	}
+	return RuntimeCompletionResult{SessionRuntime: session, Lifecycle: lifecycle, ProcessRuntime: process}, nil
+}
+
+func (operation *RuntimeOpeningCompletion) bindRouting(sessionID string, session roles.ApplicationRuntime,
+	host factorysessions.DefinitionHost, activation factorysessions.DefinitionActivationGateway,
+	cleanup interface{ Add(func() error) }) error {
+	if err := operation.routing.Bind(sessionID, host, activation); err != nil {
+		return fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
+	}
+	cleanup.Add(func() error {
+		current := operation.registration.Resolve(sessionID)
+		bound := runtimebinding.SessionStateFrom(current)
+		if current == nil || (bound != nil && any(bound.Owner) == any(session)) {
+			operation.routing.Unbind(sessionID)
+		}
+		return nil
+	})
+	return nil
 }
 
 func (r *Root) bindSessionOpeningProducts(

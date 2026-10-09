@@ -158,9 +158,18 @@ func assertInterruptMetadataRecovery(t *testing.T, process support.Process, host
 	if len(page["sessions"].([]any)) != 2 {
 		t.Fatalf("recovery lost source/successor membership: %v", page)
 	}
+	all := historyParityPage(t, ctx, session, reopened, "all", "direct", "")
+	assertJSONEqual(t, page, all)
 	for _, value := range page["sessions"].([]any) {
 		observation := value.(map[string]any)
 		id := observation["workerSessionId"].(string)
+		wantCause := "OPERATOR_TERMINATE"
+		if id == "source" {
+			wantCause = "OPERATOR_CANCEL"
+		}
+		if observation["terminalCause"] != wantCause {
+			t.Fatalf("recovery lost committed stop cause: %v", observation)
+		}
 		if observation["provider"] != "codex" || observation["model"] != "test-model" {
 			t.Fatalf("recovery lost captured selection: %v", observation)
 		}
@@ -507,4 +516,14 @@ func interruptModePayload(message, mode string) map[string]any {
 		payload["resumeMode"] = mode
 	}
 	return payload
+}
+
+// Preserve the real store's bounded read and activation capabilities while
+// keeping this decorator's controlled write/activity faults.
+func (store *failingSuccessorStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *failingSuccessorStore) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
 }

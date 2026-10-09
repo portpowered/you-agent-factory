@@ -11,6 +11,20 @@ When tests change, also read and enforce
 `factory/docs/standards/testing-standards.md` as the authoritative layer,
 boundary, parallelism, artifact, and suite-placement standard.
 
+## Output and evidence policy
+
+Do not prescribe arbitrary output-size requirements unless the customer explicitly asks
+for them.
+Measurements, timings, calibration runs and evidence belong in the PR body or a PR
+comment; CI evidence belongs only in PR comments.
+Committed tests protect customer behavior and ship with the change.
+Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof
+files.
+Each observable process outcome names one measurement or test and can close in one visit
+once the behavior and witness exist.
+Do not invent gates that demand repeated or escalating proof; preserve independent
+review, CI and merge obligations.
+
 ## Your Task
 
 You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .Inputs 0).WorkTypeID }} that is relative to the work item named {{ (index .Inputs 0).Name }}.

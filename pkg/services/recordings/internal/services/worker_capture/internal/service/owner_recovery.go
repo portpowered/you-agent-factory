@@ -25,31 +25,45 @@ func (writer *FileWriter) RecoverWorkerOwners(ctx context.Context) error {
 	if writer.ownerRecoveryDone {
 		return nil
 	}
+	// Activation and the first catalog read share one scan and the same
+	// hydrated, committed prefixes. A request must not start a second rebuild
+	// while recovery is still deciding which owners can be fenced.
+	if err := writer.lockCatalogRebuild(ctx); err != nil {
+		return err
+	}
+	defer writer.unlockCatalogRebuild()
 	if writer.ownerDeaths == nil {
 		writer.ownerDeaths = make(map[string]bool)
 	}
 	seen := make(map[string]bool)
+	complete := true
 	err := writer.directory.ScanDirectory(writer.root, 64, func(files []os.DirEntry) error {
-		return writer.recoverOwnerFiles(ctx, files, seen)
+		available, err := writer.recoverOwnerFiles(ctx, files, seen)
+		complete = complete && available
+		return err
 	})
+	if canceled := ctx.Err(); canceled != nil {
+		return canceled
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		err = nil
 	}
 	if err == nil {
-		err = writer.prepareSummaryCatalog(ctx)
-	}
-	if err == nil {
 		writer.ownerRecoveryDone = true
+		// Unavailable files grant neither recovery authority nor proof of
+		// catalog membership. Ordinary reads retry them without a restart.
+		writer.catalogLoaded = complete
 	}
 	return err
 }
 
-func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirEntry, seen map[string]bool) error {
+func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirEntry, seen map[string]bool) (bool, error) {
+	complete := true
 	for _, file := range files {
 		if err := ctx.Err(); err != nil {
-			return err
+			return false, err
 		}
-		if file.IsDir() || (!strings.HasSuffix(file.Name(), ".worker.jsonl") && !strings.HasSuffix(file.Name(), ".worker.json")) {
+		if file.IsDir() || seen[file.Name()] || (!strings.HasSuffix(file.Name(), ".worker.jsonl") && !strings.HasSuffix(file.Name(), ".worker.json")) {
 			continue
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
@@ -57,25 +71,48 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 			// An unavailable journal grants no recovery authority. Keep hosting
 			// unrelated work; public reads retain their typed unavailable result
 			// and may recover when storage becomes readable again.
+			complete = false
 			continue
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
-		if err != nil || seen[id] {
+		if err != nil {
+			writer.markCatalogDamaged()
 			continue // Unreadable identities grant no recovery authority.
 		}
-		seen[id] = true
-		if err := writer.recoverRecordingOwner(ctx, id); err != nil {
-			return err
+		// Hydration combines the legacy snapshot and its journal. Enumerating
+		// the second file must not read those same source bytes again.
+		seen[filepath.Base(writer.path(id))] = true
+		seen[filepath.Base(writer.path(id)+"l")] = true
+		scanned := scannedWorkerFile{path: filepath.Join(writer.root, file.Name()), data: data}
+		if err := writer.recoverRecordingOwner(ctx, id, &scanned); err != nil {
+			return false, err
+		}
+		// Recovery hydrated this entry behind the append barrier. Reuse it
+		// to index ended sessions as well as newly fenced owners.
+		if err := writer.rebuildRecordingIndex(ctx, id); err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				return false, canceled
+			}
+			writer.indexUnavailableCapture(file.Name(), data)
+			// Hydration may fail at a transient read edge after the identity
+			// read succeeds. Leave the catalog retryable in that case too.
+			complete = false
 		}
 	}
-	return nil
+	return complete, nil
 }
 
-func (writer *FileWriter) recoverRecordingOwner(ctx context.Context, id string) error {
+func (writer *FileWriter) markCatalogDamaged() {
+	writer.catalogMu.Lock()
+	writer.catalogDamaged = true
+	writer.catalogMu.Unlock()
+}
+
+func (writer *FileWriter) recoverRecordingOwner(ctx context.Context, id string, scanned *scannedWorkerFile) error {
 	entry := writer.entry(id)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
-	if err := writer.hydrate(ctx, id, entry); err != nil {
+	if err := writer.hydrateFromScan(ctx, id, entry, scanned); err != nil {
 		return nil // Corrupt journals remain unreadable; never append through them.
 	}
 	if entry.damaged {

@@ -7,7 +7,6 @@ func TestReviewFailureRecoveryJourneys(t *testing.T) {
 	initializeFactoryreviewfailureroutingFixture(t)
 	t.Parallel()
 	resetfactoryreviewfailurerouting1State()
-	resetfactoryreviewfailurerouting7State()
 	t.Run("TestEscalatePlanFailure_ConsumesFailedPlanSoRestoredIdeaIsNotReescalated", testFactoryreviewfailureroutingEscalatePlanFailure_ConsumesFailedPlanSoRestoredIdeaIsNotReescalated)
 	t.Run("TestMergedPRRoute_CompletionAndUnmergedLimits", testFactoryreviewfailureroutingMergedPRRoute_CompletionAndUnmergedLimits)
 	t.Run("TestReviewRetirement_RequiresMatchingCompletedTask", testReviewRetirement_RequiresMatchingCompletedTask)

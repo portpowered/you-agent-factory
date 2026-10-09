@@ -93,7 +93,7 @@ owns its independent checks, terminal CI, conflicts, merge and later validation.
   behavioral proof to a later test task or to final loopback.
 - Run the story's declared verification at its highest feasible scope and
   dependency fidelity. Record the exact procedure, artifact, observed result,
-  property proved, and remaining unproven edges in PR comments only; retain
+  property proved, and remaining unproven edges in the PR body or a PR comment; retain
   observations in session before a PR exists. Do not claim a real edge from
   substitute evidence.
 - Preserve the parent behavior lane's executable spine. If reality contradicts
@@ -195,28 +195,28 @@ operatorOverride. Preserve original lineage and positive integer attempt, with n
 
 ## Bounded visit records
 
-Keep new prd.json below 20 KB (20,000 UTF-8 bytes); update minimal status/passes/blockers only.
-Preserve requirements/amendments; never falsely pass unproved/delegated criteria; escalate if minimal status cannot fit.
-Add at most one short four-line progress.txt entry per visit (visit/story, changed, blocker, next), even blocked/interrupted.
-Include concise patterns/browser status/deferred handoffs there; put deferred handoffs in the PR body too.
-Evidence/transcripts/audits/CI references go only in PR comments; retain in session before a PR exists.
-Never commit scaffolding/verification records. Grandfather oversized files: no retroactive rewrite/truncation/compaction/archive; only new entries follow these rules.
+Update minimal status/passes/blockers only. Preserve requirements/amendments;
+never falsely pass unproved/delegated criteria. Keep the complete contract,
+criterion IDs, source-plan alignment and later owning gates intact.
+Keep concise visit/story, changed, blocker and next records, even blocked/interrupted.
+Include patterns/browser status/deferred handoffs; put deferred handoffs in the PR body too.
+Retain observations in session before a PR exists. Never commit scaffolding/verification records.
+Preserve existing artifacts and Codebase Patterns without retroactive rewrite/truncation/compaction/archive.
 
-Measure UTF-8 bytes before writing a new PRD status update. Keep the complete
-contract, criterion IDs, source-plan alignment and later owning gates intact.
-If minimal status cannot fit, report a structured blocker to its authority;
-never shorten requirements to make room. Preserve oversized legacy PRD bytes
-without reserialization; keep its new status in PR comments instead.
-Append one entry only, using this template (no additional learnings entry):
-```
-## [Date/Time] - [Story ID]
-- Changed: implementation/files; concise reusable learning or handoff if needed
-- Blocker: none, or current blocker/browser availability status
-- Next: next action or review handoff
-```
-Keep existing Codebase Patterns intact; new patterns belong in the Changed line.
+Do not prescribe arbitrary output-size requirements unless the customer explicitly asks
+for them.
+Measurements, timings, calibration runs and evidence belong in the PR body or a PR
+comment; CI evidence belongs only in PR comments.
+Committed tests protect customer behavior and ship with the change.
+Do not commit large one-off fixtures, calibration harnesses, evidence documents or proof
+files.
+Each observable process outcome names one measurement or test and can close in one visit
+once the behavior and witness exist.
+Do not invent gates that demand repeated or escalating proof; preserve independent
+review, CI and merge obligations.
+
 If a PR comment fails or a visit is interrupted, retain observations in session,
-record the blocker in this same entry and leave unproved criteria unsatisfied.
+record the blocker in the visit entry and leave unproved criteria unsatisfied.
 Never claim evidence was published when it was not. Retry publication through
 the existing route; do not dump evidence into either scaffolding file.
 

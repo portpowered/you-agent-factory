@@ -9,12 +9,12 @@ import (
 
 // NewWorkerWorkAttributionReader binds the same profile's captured catalog and
 // canonical-history owner. Legacy writers without reads cannot enrich names.
-func NewWorkerWorkAttributionReader(writer recordings.WorkerRecordingWriter, query HistoricalQueryOwner, currentBoard workerworkattribution.CurrentBoardArtifact) recordings.WorkerWorkAttributionReader {
+func NewWorkerWorkAttributionReader(writer recordings.WorkerRecordingWriter, query HistoricalQueryOwner, currentBoard workerworkattribution.CurrentBoardArtifact, readFile recordings.RecordingReadFile, revision func(string) (string, error)) recordings.WorkerWorkAttributionReader {
 	captures, _ := writer.(workerworkattribution.CaptureReader)
 	if captures == nil {
 		captures = uncapturedWorkerActivity{}
 	}
-	return workerworkattribution.New(captures, workerworkattribution.NewArtifactHistoryReader(query, currentBoard))
+	return workerworkattribution.New(captures, workerworkattribution.NewArtifactHistoryReader(revision, query, currentBoard, readFile))
 }
 
 type uncapturedWorkerActivity struct{}
