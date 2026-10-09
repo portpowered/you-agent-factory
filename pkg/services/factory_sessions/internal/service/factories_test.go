@@ -83,7 +83,9 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 	initialEngine := NewRuntimeInitialEngine(fixture.snapshotSelection().Resolve, fixture.InitialActivation)
 	inventory, _ := fixture.Assembly.(recordings.RecordedSessionInventory)
 	return NewRoot(
-		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory),
+		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory, fixture.resourceAcquisition(),
+			NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
+			NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner)),
 		fixture.ProviderSessions,
 		fixture.Logger,
 		fixture.WorkflowPreview,
@@ -91,9 +93,6 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.Definitions,
 		fixture.snapshotSelection(),
 		fixture.Assembly,
-		fixture.resourceAcquisition(),
-		NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
-		NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner),
 		fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID,
 		fixture.ResolveHome,
@@ -558,17 +557,17 @@ func TestRuntimeOpeningPreparationFailureDoesNotAllocateCanonicalMetricsIdentity
 				func() (string, error) { return preparationPath("home"), nil }, nil, nil, nil, nil, nil)
 			operation := NewRuntimeOpening(preparation, nil, nil, nil, nil,
 				&recordingsRootConstructionStub{}, &recordingsRootConstructionStub{}, nil, nil, nil,
-				func() string { identityRequests++; return id + "-metrics-identity" }, nil, nil, nil)
+				func() string { identityRequests++; return id + "-metrics-identity" }, nil, nil, nil, nil, nil, nil)
 			if loadRequests != 0 || identityRequests != 0 {
 				t.Fatal("construction performed request-scoped work")
 			}
 			session := &factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{}}
-			opening, err := operation.prepareRuntimeOpening(context.Background(),
+			lifecycle, replay, closeArtifacts, activation, selectedRuntime, err := operation.openRuntimeWithOptions(context.Background(),
 				factorydefinitions.RuntimeSelection{Directory: preparationPath("root")},
 				factoryruntime.RuntimeSelection{RuntimeInstanceID: id + "-already-selected"}, session, false,
 				workers.RuntimeSelection{}, recordings.RuntimeSelection{}, "", operatorsettings.ResolvedDefaults{}, zap.NewNop(), nil, nil)
-			if !errors.Is(err, cause) || opening != nil || loadRequests != 1 || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
-				t.Fatalf("failed preparation: opening=%#v error=%v loads=%d allocations=%d", opening, err, loadRequests, identityRequests)
+			if !errors.Is(err, cause) || lifecycle != nil || replay != nil || closeArtifacts != nil || activation != nil || selectedRuntime != nil || loadRequests != 1 || identityRequests != 0 || session.RuntimeSelection.CanonicalSessionID != "" {
+				t.Fatalf("failed opening: lifecycle=%v replay=%v cleanup=%v activation=%v runtime=%v error=%v loads=%d allocations=%d", lifecycle, replay, closeArtifacts != nil, activation, selectedRuntime, err, loadRequests, identityRequests)
 			}
 		})
 	}

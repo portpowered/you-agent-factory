@@ -127,10 +127,11 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
+	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
 ) *RuntimeOpening {
 	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
 		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
-		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory)
+		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding)
 }
 
 func NewRoot(
@@ -144,9 +145,6 @@ func NewRoot(
 	snapshotSelection *RuntimeSnapshotSelection,
 
 	assembly RuntimeAssembly,
-	resourceAcquisition *RuntimeResourceAcquisition,
-	openingCompletion *RuntimeOpeningCompletion,
-	openingBinding *RuntimeOpeningBinding,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -170,9 +168,6 @@ func NewRoot(
 		snapshotSelection,
 
 		assembly,
-		resourceAcquisition,
-		openingCompletion,
-		openingBinding,
 		generateSessionID,
 		generateRuntimeInstanceID,
 		resolveHome,

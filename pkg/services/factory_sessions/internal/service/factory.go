@@ -55,9 +55,6 @@ type Root struct {
 	*legacyservice.Assembly
 	startFlights                   singleflight.Group
 	liveChangeCoordinator          factorysessioncontracts.LiveChangeCoordinator
-	openingCompletion              *RuntimeOpeningCompletion
-	openingBinding                 *RuntimeOpeningBinding
-	resourceAcquisition            *RuntimeResourceAcquisition
 	modelInvocation                modelinvocation.RuntimeModelInvocationOperation
 	workerService                  workers.Service
 	modelService                   models.Service
@@ -87,9 +84,6 @@ func NewRoot(
 	definitions factorydefinitions.Service,
 	snapshotSelection *RuntimeSnapshotSelection,
 	assembly roles.RuntimeAssembly,
-	resourceAcquisition *RuntimeResourceAcquisition,
-	openingCompletion *RuntimeOpeningCompletion,
-	openingBinding *RuntimeOpeningBinding,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -111,7 +105,6 @@ func NewRoot(
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		modelInvocation:                modelInvocation,
-		resourceAcquisition:            resourceAcquisition,
 		workerService:                  workerService,
 		modelService:                   modelService,
 		factorySessionsRuntimeAssembly: assembly,
@@ -125,8 +118,6 @@ func NewRoot(
 		workflowPreview:                workflowPreview,
 		snapshotSelection:              snapshotSelection,
 		baseLogger:                     logger,
-		openingCompletion:              openingCompletion,
-		openingBinding:                 openingBinding,
 		generateSessionID:              generateSessionID,
 		generateRuntimeInstanceID:      generateRuntimeInstanceID,
 		resolveHome:                    resolveHome,
@@ -146,7 +137,7 @@ func (r *Root) openForRequest(
 	recording := recordingRequestForStart(request)
 	open := func(replayInput *recordings.LoadReplayInputResult) (roles.LifecycleRuntime, *recordingreplay.Scope, func() error, error) {
 		session := request
-		lifecycle, replay, closeArtifacts, _, _, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+		lifecycle, replay, closeArtifacts, _, _, err := r.opening.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
 		return lifecycle, replay, closeArtifacts, err
 	}
 	// Historical replay, whether portable or legacy, is an inspection-only

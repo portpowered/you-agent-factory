@@ -56,7 +56,7 @@ func (r *Root) activateRuntime(
 	if canonicalSessionIDGenerated && ctx.Err() != nil {
 		openingContext = context.WithoutCancel(ctx)
 	}
-	return r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
+	return r.opening.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
 }
 
 // newRuntimeActivation retains the acquired activation's declared handles and
@@ -295,7 +295,7 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	}
 	closeRuntime := activationCloser(r.runtimeRoot, binding, result.RuntimeID)
 	if !binding.IsZero() {
-		if err := r.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
+		if err := r.opening.openingBinding.PublishRuntime(selectedRuntime, activationRequest.FactorySessionID, binding); err != nil {
 			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}

@@ -28,9 +28,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// RuntimeOpening owns fixed preparation, engine opening and historical acquisition behavior.
+// RuntimeOpening owns fixed preparation, live binding and historical acquisition behavior.
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
+	resourceAcquisition       *RuntimeResourceAcquisition
+	openingCompletion         *RuntimeOpeningCompletion
+	openingBinding            *RuntimeOpeningBinding
 	generateSessionID         factorysessions.SessionIDGenerator
 	recordedInventory         recordings.RecordedSessionInventory
 	preparation               *RuntimePreparation
@@ -56,8 +59,9 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
+	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
 ) *RuntimeOpening {
-	return &RuntimeOpening{generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
+	return &RuntimeOpening{resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
 		replayBehavior: replayBehavior, recordingsService: recordingsService,
 		recordingsRuntime: recordingsRuntime, clock: clock, resolveClock: resolveClock,
@@ -67,7 +71,7 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 
 // openRuntimeWithOptions opens session-owned state using the collaborators already
 // injected into this owner. Only invocation selections cross this boundary.
-func (r *Root) openRuntimeWithOptions(
+func (r *RuntimeOpening) openRuntimeWithOptions(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeSelection,
 	runtime factoryruntime.RuntimeSelection,
@@ -81,14 +85,14 @@ func (r *Root) openRuntimeWithOptions(
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (lifecycle roles.LifecycleRuntime, replay *recordingreplay.Scope, closeArtifacts func() error, activation *factoryruntime.RuntimeActivation, selectedRuntime roles.ApplicationRuntime, err error) {
-	opening, err := r.opening.prepareRuntimeOpening(ctx, definition, runtime, session,
+	opening, err := r.prepareRuntimeOpening(ctx, definition, runtime, session,
 		canonicalSessionIDGenerated, worker, recording, modelCacheDirectory,
 		operatorDefaults, baseLogger, definitionSnapshot, replayInput)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 	if opening.load.HistoricalReplay != nil {
-		replay, closeReplay, historicalErr := r.opening.openHistoricalSessionRuntime(ctx, opening)
+		replay, closeReplay, historicalErr := r.openHistoricalSessionRuntime(ctx, opening)
 		return nil, replay, closeReplay, nil, nil, historicalErr
 	}
 	cleanup := &runtimeOpeningCleanup{}
@@ -102,7 +106,7 @@ func (r *Root) openRuntimeWithOptions(
 				activation, _ = newRuntimeActivation(nil, cleanup.Close)
 			}
 			if opening.initial == nil {
-				if logErr := r.opening.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
+				if logErr := r.logFailedSessionOpening(opening, err, cleanup); logErr != nil {
 					err = errors.Join(err, logErr)
 					closeArtifacts = cleanup.Close
 					activation, _ = newRuntimeActivation(nil, cleanup.Close)
@@ -121,7 +125,7 @@ func (r *Root) openRuntimeWithOptions(
 	opening.durableExecution = resources.DurableExecution
 	opening.observations = resources.Observations
 	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
-	if err = r.opening.openSessionEngine(ctx, opening, cleanup); err != nil {
+	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 	completionRequest := opening.completionRequest()
