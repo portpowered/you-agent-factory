@@ -60,6 +60,23 @@ func TestIncrementalSessionProjection_WorkerSessionWorkSelectsAndDetachesMatchin
 	if facts.StateCursors[dispatchID].Sequence != 3 || !facts.Interruptions[dispatchID].InterruptedAt.Equal(when.Add(time.Minute)) || len(facts.Associations) != 1 {
 		t.Fatalf("interruption did not update selected facts: %+v", facts)
 	}
+	if len(facts.ResponseCursors) != 0 {
+		t.Fatal("interruption invented a committed response cursor")
+	}
+	response := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventContext{DispatchID: &dispatchID, EventTime: when.Add(2 * time.Minute), Sequence: 4},
+		workerexecution.DispatchResponseEventPayload{Outcome: workerexecution.OutcomeAccepted})
+	if err := projection.Apply(response); err != nil {
+		t.Fatal(err)
+	}
+	facts = projection.WorkerSessionWorkFacts("work-a")
+	if facts.ResponseCursors[dispatchID].Sequence != 4 {
+		t.Fatalf("committed response cursor = %+v", facts.ResponseCursors)
+	}
+	delete(facts.ResponseCursors, dispatchID)
+	if projection.WorkerSessionWorkFacts("work-a").ResponseCursors[dispatchID].Sequence != 4 || len(projection.WorkerSessionWorkFacts("work-c").ResponseCursors) != 0 {
+		t.Fatal("response selection lost detachment or Work isolation")
+	}
 }
 
 type incrementalProjectionScenario struct {

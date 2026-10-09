@@ -681,6 +681,7 @@ type WorkerSessionWorkFacts struct {
 	Requests           map[string]FactoryWorldDispatch
 	StateCursors       map[string]CanonicalEventCursor
 	ResponseTimes      map[string]time.Time
+	ResponseCursors    map[string]CanonicalEventCursor
 	Interruptions      map[string]DispatchInterruptedEventPayload
 }
 

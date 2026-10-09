@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -778,12 +779,78 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 		return
 	}
 	s.confirmLiveTerminalStates(observations, sample)
+	applyKnownConfirmation(observations, sample)
+}
+
+func applyKnownConfirmation(observations []workersessions.Observation, sample completedFlushWatermarkSample) {
 	for index := range observations {
 		observation := &observations[index]
-		if observation.StateSequenceKnown &&
+		observation.ConfirmationState = workersessions.ConfirmationStateUnconfirmed
+		if sample.available && observation.StateSequenceKnown &&
 			observation.StreamGenerationID == sample.generationID &&
 			observation.StateSequence <= int64(sample.watermark.Sequence) {
 			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
+		}
+	}
+}
+
+// Scoped lists confirm live terminal outcomes from selected committed response
+// cursors. A later reconciliation cursor must not replace the response cursor.
+func (s *recordedWorkerSessionObservation) applyWorkConfirmation(
+	ctx context.Context,
+	workID string,
+	observations []workersessions.Observation,
+	sample completedFlushWatermarkSample,
+) error {
+	reader, ok := s.ledger.(recordings.WorkerSessionWorkProjectionReader)
+	if !ok {
+		s.applyConfirmation(observations, sample)
+		return nil
+	}
+	needsConfirmation := false
+	for _, observation := range observations {
+		if sample.available && observation.State.Terminal() && !observation.StateSequenceKnown {
+			needsConfirmation = true
+			break
+		}
+	}
+	if needsConfirmation {
+		facts, err := reader.CurrentWorkerSessionWorkFacts(ctx, workID)
+		if err != nil {
+			if observationContextError(ctx) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return workersessions.ErrObservationCanceled
+			}
+			return workersessions.ErrObservationProjectionUnavailable
+		}
+		confirmSelectedTerminalStates(observations, facts, sample)
+	}
+	applyKnownConfirmation(observations, sample)
+	return observationContextError(ctx)
+}
+
+func confirmSelectedTerminalStates(
+	observations []workersessions.Observation,
+	facts recordings.WorkerSessionWorkFacts,
+	sample completedFlushWatermarkSample,
+) {
+	if facts.StreamGenerationID != sample.generationID {
+		return
+	}
+	completed := recordedDispatchStateMaps(facts.World)
+	for index := range observations {
+		observation := &observations[index]
+		if observation.StateSequenceKnown || !observation.State.Terminal() {
+			continue
+		}
+		id := observation.AttemptID
+		association, associated := facts.Associations[id]
+		response, responded := completed[id]
+		cursor, known := facts.ResponseCursors[id]
+		if associated && responded && known && association.WorkerSessionID == observation.WorkerSessionID &&
+			cursor.StreamGenerationID == sample.generationID && recordedDispatchObservationState(response.Result) == observation.State {
+			observation.StateSequence = int64(cursor.Sequence)
+			observation.StateSequenceKnown = true
+			observation.StreamGenerationID = sample.generationID
 		}
 	}
 }

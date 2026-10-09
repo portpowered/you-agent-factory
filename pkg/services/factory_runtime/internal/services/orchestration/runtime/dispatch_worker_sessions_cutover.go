@@ -482,8 +482,12 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if len(recorded) > 0 || len(live.Observations) > 0 {
 		sample = s.sampleCompletedFlushWatermark()
 	}
-	s.applyConfirmation(recorded, sample)
-	s.applyConfirmation(live.Observations, sample)
+	if err := s.applyWorkConfirmation(ctx, req.WorkID, recorded, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
+	if err := s.applyWorkConfirmation(ctx, req.WorkID, live.Observations, sample); err != nil {
+		return workersessions.ListObservationsResult{}, err
+	}
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
 }
 

@@ -385,6 +385,7 @@ type workerSessionWorkIndex struct {
 	providers          map[string]int
 	cursors            map[string]recordings.CanonicalEventCursor
 	responseTimes      map[string]time.Time
+	responseCursors    map[string]recordings.CanonicalEventCursor
 	interruptions      map[string]interfaces.DispatchInterruptedEventPayload
 	interruptedWorkIDs map[string][]string
 }
@@ -398,6 +399,7 @@ func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
 		completions:    make(map[string]int), providers: make(map[string]int),
 		cursors:            make(map[string]recordings.CanonicalEventCursor),
 		responseTimes:      make(map[string]time.Time),
+		responseCursors:    make(map[string]recordings.CanonicalEventCursor),
 		interruptions:      make(map[string]interfaces.DispatchInterruptedEventPayload),
 		interruptedWorkIDs: make(map[string][]string),
 	}
@@ -442,6 +444,7 @@ func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state 
 		index.requests[dispatchID] = state.ActiveDispatches[dispatchID]
 	case interfaces.FactoryEventTypeDispatchResponse:
 		index.responseTimes[dispatchID] = event.Context.EventTime.UTC()
+		index.responseCursors[dispatchID] = recordings.CanonicalEventCursor{Sequence: recordings.CanonicalEventSequence(event.Context.Sequence)}
 	case interfaces.FactoryEventTypeDispatchInterrupted:
 		var payload interfaces.DispatchInterruptedEventPayload
 		if err := event.DecodePayload(&payload); err != nil {
@@ -500,12 +503,13 @@ func (index *workerSessionWorkIndex) updateMembership(dispatchID string, state i
 // its read lock across selection and supplies the generation fence.
 func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID string) recordings.WorkerSessionWorkFacts {
 	facts := recordings.WorkerSessionWorkFacts{
-		Associations:  make(map[string]recordings.WorkerSessionAssociationFacts),
-		Requests:      make(map[string]interfaces.FactoryWorldDispatch),
-		StateCursors:  make(map[string]recordings.CanonicalEventCursor),
-		ResponseTimes: make(map[string]time.Time),
-		Interruptions: make(map[string]interfaces.DispatchInterruptedEventPayload),
-		World:         interfaces.FactoryWorldState{ActiveDispatches: make(map[string]interfaces.FactoryWorldDispatch)},
+		Associations:    make(map[string]recordings.WorkerSessionAssociationFacts),
+		Requests:        make(map[string]interfaces.FactoryWorldDispatch),
+		StateCursors:    make(map[string]recordings.CanonicalEventCursor),
+		ResponseTimes:   make(map[string]time.Time),
+		ResponseCursors: make(map[string]recordings.CanonicalEventCursor),
+		Interruptions:   make(map[string]interfaces.DispatchInterruptedEventPayload),
+		World:           interfaces.FactoryWorldState{ActiveDispatches: make(map[string]interfaces.FactoryWorldDispatch)},
 	}
 	if projection == nil || projection.reducer == nil || projection.workerWork == nil {
 		return facts
@@ -528,6 +532,9 @@ func (projection *IncrementalSessionProjection) WorkerSessionWorkFacts(workID st
 			facts.StateCursors[dispatchID] = cursor
 		}
 		facts.ResponseTimes[dispatchID] = index.responseTimes[dispatchID]
+		if cursor, ok := index.responseCursors[dispatchID]; ok {
+			facts.ResponseCursors[dispatchID] = cursor
+		}
 		if interruption, ok := index.interruptions[dispatchID]; ok {
 			facts.Interruptions[dispatchID] = cloneWorkerFactInterruption(interruption)
 			if _, completed := index.completions[dispatchID]; !completed && len(index.interruptedWorkIDs[dispatchID]) > 0 {

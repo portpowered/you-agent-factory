@@ -68,6 +68,76 @@ func TestRecordedListWorkerSessionWorkUsesPreparedFacts(t *testing.T) {
 
 type forbiddenCapturedProviderProjection struct{ providersessions.Service }
 
+func TestScopedTerminalConfirmationUsesSelectedResponseCursor(t *testing.T) {
+	t.Parallel()
+	const generation = "selected-generation"
+	ledger := &selectedWorkFactsLedger{facts: recordings.WorkerSessionWorkFacts{
+		StreamGenerationID: generation,
+		Associations:       map[string]recordings.WorkerSessionAssociationFacts{"attempt": {WorkerSessionID: "worker"}},
+		ResponseCursors:    map[string]recordings.CanonicalEventCursor{"attempt": {StreamGenerationID: generation, Sequence: 7}},
+		StateCursors:       map[string]recordings.CanonicalEventCursor{"attempt": {StreamGenerationID: generation, Sequence: 9}},
+		World: interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: "attempt", Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
+		}}},
+	}}
+	service := &recordedWorkerSessionObservation{ledger: ledger}
+	sample := completedFlushWatermarkSample{generationID: generation, available: true,
+		watermark: recordings.CanonicalEventCursor{StreamGenerationID: generation, Sequence: 7}}
+	for _, test := range []struct {
+		name      string
+		mutate    func(*recordings.WorkerSessionWorkFacts, *workersessions.Observation)
+		confirmed bool
+	}{
+		{name: "matching response", confirmed: true},
+		{name: "different generation", mutate: func(f *recordings.WorkerSessionWorkFacts, _ *workersessions.Observation) {
+			f.StreamGenerationID = "other"
+		}},
+		{name: "different response generation", mutate: func(f *recordings.WorkerSessionWorkFacts, _ *workersessions.Observation) {
+			f.ResponseCursors = map[string]recordings.CanonicalEventCursor{"attempt": {StreamGenerationID: "other", Sequence: 7}}
+		}},
+		{name: "response beyond watermark", mutate: func(f *recordings.WorkerSessionWorkFacts, _ *workersessions.Observation) {
+			f.ResponseCursors = map[string]recordings.CanonicalEventCursor{"attempt": {StreamGenerationID: generation, Sequence: 8}}
+		}},
+		{name: "different worker", mutate: func(_ *recordings.WorkerSessionWorkFacts, o *workersessions.Observation) { o.WorkerSessionID = "other" }},
+		{name: "different attempt", mutate: func(_ *recordings.WorkerSessionWorkFacts, o *workersessions.Observation) { o.AttemptID = "other" }},
+		{name: "different outcome", mutate: func(_ *recordings.WorkerSessionWorkFacts, o *workersessions.Observation) {
+			o.State = workersessions.StateFailed
+		}},
+		{name: "active", mutate: func(_ *recordings.WorkerSessionWorkFacts, o *workersessions.Observation) {
+			o.State = workersessions.StateRunning
+		}},
+		{name: "no response", mutate: func(f *recordings.WorkerSessionWorkFacts, _ *workersessions.Observation) { f.ResponseCursors = nil }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ledger := &selectedWorkFactsLedger{facts: ledger.facts}
+			service := &recordedWorkerSessionObservation{ledger: ledger}
+			rows := []workersessions.Observation{{WorkerSessionID: "worker", AttemptID: "attempt", State: workersessions.StateCompleted}}
+			if test.mutate != nil {
+				test.mutate(&ledger.facts, &rows[0])
+			}
+			if err := service.applyWorkConfirmation(t.Context(), "selected-work", rows, sample); err != nil {
+				t.Fatal(err)
+			}
+			if got := rows[0].ConfirmationState == workersessions.ConfirmationStateConfirmed; got != test.confirmed {
+				t.Fatalf("confirmation = %+v, want confirmed=%v", rows[0], test.confirmed)
+			}
+			if test.confirmed && (rows[0].StateSequence != 7 || !rows[0].StateSequenceKnown || ledger.workID != "selected-work") {
+				t.Fatalf("selected response cursor = %+v, selector=%q", rows[0], ledger.workID)
+			}
+		})
+	}
+	ledger.err = errors.New("selected read failed")
+	rows := []workersessions.Observation{{State: workersessions.StateCompleted}}
+	if err := service.applyWorkConfirmation(t.Context(), "selected-work", rows, sample); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("selected error = %v", err)
+	}
+	ledger.err = context.Canceled
+	if err := service.applyWorkConfirmation(t.Context(), "selected-work", rows, sample); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("selected cancellation = %v", err)
+	}
+}
+
 func (forbiddenCapturedProviderProjection) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
 	panic("canonical Worker ID read consulted provider files")
 }

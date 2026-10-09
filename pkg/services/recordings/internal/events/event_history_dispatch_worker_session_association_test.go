@@ -24,6 +24,13 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 	history.RecordWorkstationRequest(1, record, when)
 	history.RecordDispatchWorkerSessionAssociationWithExecution(1, "dispatch-selected", "worker-selected", "turn-selected", recordings.DispatchWorkerSessionExecutionFacts{Model: "model-one"}, when)
 	prefix := history.CanonicalEvents()
+	responsePayload, err := json.Marshal(workers.DispatchResponseEventPayload{Outcome: workers.OutcomeAccepted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatchID := "dispatch-selected"
+	prefix = append(prefix, interfaces.FactoryEvent{Id: "response-selected", Type: interfaces.FactoryEventTypeDispatchResponse,
+		Context: interfaces.FactoryEventContext{DispatchID: &dispatchID, Sequence: prefix[len(prefix)-1].Context.Sequence + 1, EventTime: when}, Payload: responsePayload})
 	seeded := newTestFactoryEventHistory(nil, func() time.Time { return when })
 	if err := seeded.SeedCanonicalEvents(prefix); err != nil {
 		t.Fatal(err)
@@ -35,6 +42,9 @@ func TestFactoryEventHistory_WorkerSessionWorkFactsSurviveSeedAndFreshAppend(t *
 	}
 	if facts.StreamGenerationID != seeded.StreamGenerationID() || facts.StateCursors["dispatch-selected"].StreamGenerationID != facts.StreamGenerationID {
 		t.Fatal("selected facts lost the generation fence")
+	}
+	if cursor := facts.ResponseCursors[dispatchID]; cursor.StreamGenerationID != facts.StreamGenerationID || int(cursor.Sequence) != prefix[len(prefix)-1].Context.Sequence {
+		t.Fatalf("seeded response cursor = %+v", cursor)
 	}
 	if seeded.CanonicalHistoryReadStats() != before {
 		t.Fatal("selected projection read canonical history")

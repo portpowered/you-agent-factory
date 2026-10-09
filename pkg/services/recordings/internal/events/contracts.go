@@ -99,6 +99,10 @@ func (h *FactoryEventHistory) CurrentWorkerSessionWorkFacts(ctx context.Context,
 		cursor.StreamGenerationID = h.streamGenerationID
 		facts.StateCursors[id] = cursor
 	}
+	for id, cursor := range facts.ResponseCursors {
+		cursor.StreamGenerationID = h.streamGenerationID
+		facts.ResponseCursors[id] = cursor
+	}
 	return facts, nil
 }
 
