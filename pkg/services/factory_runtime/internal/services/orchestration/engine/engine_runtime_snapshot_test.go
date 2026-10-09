@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestRuntimeStateSnapshotPublishesWholeDispatchBatchBeforeExecution(t *testing.T) {
@@ -224,5 +227,101 @@ func TestRuntimeStateSnapshotDoesNotWaitForActiveDispatchHandler(t *testing.T) {
 	final := eng.GetRuntimeStateSnapshot()
 	if final.TickCount != 1 || len(final.Dispatches) != 1 {
 		t.Fatalf("final snapshot = tick %d, dispatches %d; want completed tick boundary", final.TickCount, len(final.Dispatches))
+	}
+}
+
+func TestScopedWorkIdentityUsesPublishedBoundary(t *testing.T) {
+	t.Parallel()
+	eng := &FactoryEngine{}
+	snapshot := engineStateSnapshot{Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"a":        {ID: "cursor-a", Color: factorytoken.Color{WorkID: "work-a", Name: "First"}},
+		"b":        {ID: "work-a", Color: factorytoken.Color{WorkID: "work-b", Name: "Cursor wins"}},
+		"c":        {ID: "cursor-c", Color: factorytoken.Color{WorkID: "work-c"}},
+		"d":        {ID: "cursor-d"},
+		"resource": {ID: "resource", Color: factorytoken.Color{WorkID: "hidden", DataType: factorytoken.DataTypeResource}},
+		"time":     {ID: "time", Color: factorytoken.Color{WorkID: "hidden-time", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
+	}}}
+	snapshot.Dispatches = map[string]*interfaces.DispatchEntry{
+		"dispatch": {ConsumedTokens: []workers.Token{
+			{ID: "flight-cursor", Color: workers.Color{WorkID: "flight-work", Name: "In flight"}},
+			{ID: "stale-cursor", Color: workers.Color{WorkID: "work-a", Name: "Consumed old name"}},
+		}},
+	}
+	eng.storePublishedSnapshot(snapshot)
+	// The owner can be busy preparing its next boundary. Selected reads still
+	// use the last publication, without trying to copy or lock runtime state.
+	eng.mu.Lock()
+	for id, want := range map[string]work.WorkerSessionWork{
+		"cursor-a":      {WorkID: "work-a", Name: "First"},
+		"flight-work":   {WorkID: "flight-work", Name: "In flight"},
+		"flight-cursor": {WorkID: "flight-work", Name: "In flight"},
+		"work-a":        {WorkID: "work-b", Name: "Cursor wins"},
+		"work-b":        {WorkID: "work-b", Name: "Cursor wins"},
+		"work-c":        {WorkID: "work-c", Name: "work-c"},
+		"cursor-d":      {Name: "cursor-d"},
+	} {
+		got, err := eng.ReadWorkerSessionWork(context.Background(), id)
+		if err != nil || got != want {
+			t.Fatalf("selected %q = %#v, %v; want %#v", id, got, err, want)
+		}
+		got.Name = "caller mutation"
+	}
+	eng.mu.Unlock()
+	for _, id := range []string{"missing", "hidden", "hidden-time", "stale-cursor"} {
+		if _, err := eng.ReadWorkerSessionWork(context.Background(), id); !errors.Is(err, work.ErrWorkNotFound) {
+			t.Fatalf("%q: %v", id, err)
+		}
+	}
+	snapshot.Marking.Tokens["a"].Color.Name = "Next"
+	got, err := eng.ReadWorkerSessionWork(context.Background(), "cursor-a")
+	if err != nil || got.Name != "First" {
+		t.Fatalf("unpublished mutation leaked: %#v, %v", got, err)
+	}
+	eng.storePublishedSnapshot(snapshot)
+	got, err = eng.ReadWorkerSessionWork(context.Background(), "cursor-a")
+	if err != nil || got.Name != "Next" {
+		t.Fatalf("new boundary missing: %#v, %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := eng.ReadWorkerSessionWork(ctx, "cursor-a"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled read: %v", err)
+	}
+	var nilEngine *FactoryEngine
+	if _, err := nilEngine.ReadWorkerSessionWork(context.Background(), "cursor-a"); err == nil {
+		t.Fatal("nil engine succeeded")
+	}
+}
+
+func TestScopedWorkIdentityConcurrentPublication(t *testing.T) {
+	t.Parallel()
+	eng := &FactoryEngine{}
+	snapshot := engineStateSnapshot{Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"selected": {ID: "cursor", Color: factorytoken.Color{WorkID: "work", Name: "Before"}},
+	}}}
+	eng.storePublishedSnapshot(snapshot)
+	var readers sync.WaitGroup
+	start := make(chan struct{})
+	for range 4 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			<-start
+			for range 100 {
+				got, err := eng.ReadWorkerSessionWork(context.Background(), "work")
+				if err != nil || got.WorkID != "work" || (got.Name != "Before" && got.Name != "After") {
+					t.Errorf("inconsistent selected boundary: %#v, %v", got, err)
+					return
+				}
+			}
+		}()
+	}
+	close(start)
+	snapshot.Marking.Tokens["selected"].Color.Name = "After"
+	eng.storePublishedSnapshot(snapshot)
+	readers.Wait()
+	got, err := eng.ReadWorkerSessionWork(context.Background(), "work")
+	if err != nil || got.Name != "After" {
+		t.Fatalf("latest boundary: %#v, %v", got, err)
 	}
 }

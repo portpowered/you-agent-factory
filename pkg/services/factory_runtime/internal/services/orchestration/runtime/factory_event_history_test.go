@@ -459,7 +459,7 @@ func TestRecordedWorkerSessionObservationHistoricalProjectionOutcomes(t *testing
 func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
 	fixture := newRecordedExactObservationFixture(t)
 	adapter := fixture.service.(*recordedWorkerSessionObservation)
-	ledger := adapter.ledger.(*recordingfixtures.ScriptedRuntimeLedger)
+	ledger := adapter.ledger.(*preparedScopedTestLedger).RuntimeLedger.(*recordingfixtures.ScriptedRuntimeLedger)
 
 	for _, test := range []struct {
 		name string

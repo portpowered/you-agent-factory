@@ -286,6 +286,7 @@ func TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronological
 		platformclock.NewDeterministic(base, time.Second),
 		nil,
 	)
+	prepareScopedTestFacts(service)
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
 		t.Fatalf("ListObservations() error = %v", err)
@@ -347,6 +348,7 @@ func TestRecordedWorkerSessionObservationUsesRestoredWorldState(t *testing.T) {
 		&restored,
 		events,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
@@ -576,6 +578,7 @@ func TestRecordedWorkerSessionObservation_KnownWorkWithoutSessionsIsExplicitlyEm
 		platformclock.Real{},
 		nil,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {
@@ -668,17 +671,17 @@ func TestWorkerSessionDispatchOutcomeBranches(t *testing.T) {
 }
 
 func TestRecordedObservationListBranches(t *testing.T) {
-	if got, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live"}}}, nil); err != nil || len(got.Observations) != 1 {
+	if got, _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live"}}}, nil); err != nil || len(got.Observations) != 1 {
 		t.Fatalf("live fallback = %#v, %v", got, err)
 	}
-	if _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound); !errors.Is(err, workersessions.ErrObservationWorkNotFound) {
+	if _, _, err := recordedObservationListResult(nil, false, workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound); !errors.Is(err, workersessions.ErrObservationWorkNotFound) {
 		t.Fatalf("missing work error = %v", err)
 	}
 	recorded := []workersessions.Observation{{WorkerSessionID: "b", AttemptID: "b"}, {WorkerSessionID: "a", AttemptID: "a"}}
-	if got, err := recordedObservationListResult(recorded, true, workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable); err != nil || got.Observations[0].AttemptID != "a" {
-		t.Fatalf("recorded result = %#v, %v", got, err)
+	if got, comparisons, err := recordedObservationListResult(recorded, true, workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable); err != nil || got.Observations[0].AttemptID != "a" || comparisons != 1 {
+		t.Fatalf("recorded result = %#v, comparisons=%d, %v", got, comparisons, err)
 	}
-	if got, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
+	if got, _, err := recordedObservationListResult(nil, true, workersessions.ListObservationsResult{Observations: []workersessions.Observation{{WorkerSessionID: "live-known"}}}, nil); err != nil || len(got.Observations) != 1 {
 		t.Fatalf("known live fallback = %#v, %v", got, err)
 	}
 
@@ -754,7 +757,7 @@ func TestMergeRecordedObservationsUsesCanonicalWorkerStartTimestamp(t *testing.T
 	recordedStarted := time.Date(2026, 8, 10, 12, 0, 0, 100, time.UTC)
 	authoritativeStarted := recordedStarted.Add(500 * time.Microsecond)
 
-	merged := mergeRecordedObservations(
+	merged, _ := mergeRecordedObservations(
 		[]workersessions.Observation{{
 			WorkerSessionID: "worker-1",
 			StartedAt:       &recordedStarted,
@@ -785,7 +788,7 @@ func TestMergeRecordedObservationsUsesAllLiveFacts(t *testing.T) {
 			recorded.ProviderSessionAvailable = true
 			recorded.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure}
 			historyOnly := workersessions.Observation{WorkerSessionID: "historical", State: workersessions.StateCompleted}
-			merged := mergeRecordedObservations([]workersessions.Observation{recorded, recorded, historyOnly}, []workersessions.Observation{live, live})
+			merged, _ := mergeRecordedObservations([]workersessions.Observation{recorded, recorded, historyOnly}, []workersessions.Observation{live, live})
 			if len(merged) != 2 {
 				t.Fatalf("merged attempts = %#v, want two unique identities", merged)
 			}
@@ -995,20 +998,6 @@ func TestRecordedProviderMetadataBranches(t *testing.T) {
 
 func TestRecordedWorldStateBranches(t *testing.T) {
 	base, events := recordedDispatchFactTestEvents(t)
-	world := interfaces.FactoryWorldState{
-		WorkItemsByID:       map[string]work.FactoryWorkItem{"work-map": {ID: "work-map"}},
-		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{"work-active": {ID: "work-active"}},
-		TerminalWorkByID:    map[string]interfaces.FactoryTerminalWork{"work-terminal": {}},
-		FailedWorkItemsByID: map[string]work.FactoryWorkItem{"work-failed": {ID: "work-failed"}},
-	}
-	for _, workID := range []string{"work-map", "work-active", "work-terminal", "work-failed", "work-from-context"} {
-		if !recordedWorkExists(world, events, workID) {
-			t.Fatalf("recordedWorkExists(%q) = false, want true", workID)
-		}
-	}
-	if recordedWorkExists(world, nil, "missing") {
-		t.Fatal("recordedWorkExists(missing) = true")
-	}
 	completedWithResponseTimeZero := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1"}
 	if ended := recordedDispatchEnd(completedWithResponseTimeZero, newRecordedDispatchEventIndex(events), "dispatch-1"); ended == nil || !ended.Equal(base.Add(4*time.Second)) {
 		t.Fatalf("recordedDispatchEnd(event fallback) = %v", ended)

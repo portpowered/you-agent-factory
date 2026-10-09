@@ -149,6 +149,25 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 	return a.state.Resolve(sessionID)
 }
 
+// ResolveWorkerSessionWorkRuntime binds the selected read without registering
+// or catching up the unrelated Work admission projection on its first request.
+func (a *Assembly) ResolveWorkerSessionWorkRuntime(sessionID string) (work.WorkerSessionWorkRuntimeReader, error) {
+	for {
+		session := a.Resolve(sessionID)
+		if session == nil || runtimebinding.ServiceForSession(session) == nil {
+			return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+		}
+		runtime := session.Runtime
+		var ledger recordings.Ledger
+		if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+			ledger = bundle.RecordingLedger()
+		}
+		if a.workRuntimeGenerationIsCurrent(sessionID, runtime, ledger) {
+			return workRuntimeAdapter{runtime: runtimebinding.ServiceForSession(session)}, nil
+		}
+	}
+}
+
 // ResolveWorkRuntime adapts the Factory Sessions registry to Work's
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {

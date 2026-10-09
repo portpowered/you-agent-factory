@@ -794,3 +794,70 @@ func (attributionStub) ResolveWorkerWorkAttribution(_ context.Context, requests 
 	}
 	return results, nil
 }
+
+func (s workServiceStub) ResolveWorkerSessionWork(ctx context.Context, session, id string) (work.WorkerSessionWork, error) {
+	item, err := s.GetWork(ctx, session, id)
+	return work.WorkerSessionWork{WorkID: item.WorkID, Name: item.Name}, err
+}
+
+type selectedWorkAuthority struct {
+	work.Service
+	read func(context.Context, string, string) (work.WorkerSessionWork, error)
+}
+
+func (s selectedWorkAuthority) ResolveWorkerSessionWork(ctx context.Context, session, id string) (work.WorkerSessionWork, error) {
+	return s.read(ctx, session, id)
+}
+
+type selectedListObserver struct {
+	*fakeObservationService
+	request workersessions.ListObservationsRequest
+}
+
+func (s *selectedListObserver) ListObservations(ctx context.Context, request workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	s.request = request
+	return s.fakeObservationService.ListObservations(ctx, request)
+}
+
+func TestScopedWorkListUsesMinimalAuthorityAndOriginalMembership(t *testing.T) {
+	t.Parallel()
+	reads := 0
+	peer := &selectedListObserver{fakeObservationService: &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{
+		{WorkerSessionID: "worker", WorkIDs: []string{"cursor"}},
+	}}}}
+	authority := selectedWorkAuthority{read: func(ctx context.Context, session, id string) (work.WorkerSessionWork, error) {
+		reads++
+		if session != "session-a" || id != "cursor" {
+			t.Fatalf("authority scope = %s/%s", session, id)
+		}
+		// A cursor can shadow a Work ID. Its resolved Work supplies the name, while
+		// physical attempt membership retains the exact requested identity.
+		return work.WorkerSessionWork{WorkID: "resolved-work", Name: "Cursor name"}, nil
+	}}
+	adapter := NewAdapter(peer, authority)
+	result, err := adapter.ListWorkerSessions(context.Background(), "session-a", " cursor ")
+	if err != nil || len(result.Sessions) != 1 || reads != 1 {
+		t.Fatalf("selected list = %#v, %v; reads=%d", result, err, reads)
+	}
+	if peer.request.FactorySessionID != "session-a" || peer.request.WorkID != "cursor" {
+		t.Fatalf("attempt membership = %#v", peer.request)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || !strings.Contains(string(encoded), "Cursor name") {
+		t.Fatalf("Work name missing: %s, %v", encoded, err)
+	}
+}
+
+func TestScopedWorkListAuthorityFailureDoesNotReadAttempts(t *testing.T) {
+	t.Parallel()
+	for _, want := range []error{work.ErrWorkNotFound, context.Canceled, context.DeadlineExceeded} {
+		peer := &fakeObservationService{}
+		adapter := NewAdapter(peer, selectedWorkAuthority{read: func(context.Context, string, string) (work.WorkerSessionWork, error) {
+			return work.WorkerSessionWork{}, want
+		}})
+		result, err := adapter.ListWorkerSessions(context.Background(), "session-a", "work")
+		if !errors.Is(err, want) || peer.listCalled || result.Sessions != nil {
+			t.Fatalf("failed authority = %#v, %v; attempts read=%v", result, err, peer.listCalled)
+		}
+	}
+}

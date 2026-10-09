@@ -9,6 +9,109 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestIncrementalSessionProjection_WorkerSessionWorkSelectsAndDetachesMatchingDispatches(t *testing.T) {
+	t.Parallel()
+	projection := NewIncrementalSessionProjection()
+	when := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	for _, dispatch := range []struct {
+		id      string
+		workIDs []string
+	}{
+		{"selected", []string{"work-a", "work-b", "work-a"}},
+		{"sibling", []string{"work-c"}},
+	} {
+		request := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchRequest,
+			interfaces.FactoryEventContext{DispatchID: &dispatch.id, WorkIDs: &dispatch.workIDs, EventTime: when, Sequence: 1},
+			interfaces.DispatchRequestEventPayload{TransitionID: "station"})
+		association := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			interfaces.FactoryEventContext{DispatchID: &dispatch.id, EventTime: when, Sequence: 2},
+			map[string]string{"workerSessionId": "worker-" + dispatch.id, "model": "model-one", "reasoningEffort": "high"})
+		for _, event := range []interfaces.FactoryEvent{request, association} {
+			if err := projection.Apply(event); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, workID := range []string{"work-a", "work-b"} {
+		assertSelectedWorkerFactsDetached(t, projection, workID)
+	}
+	if missing, visits := projection.WorkerSessionWorkFacts("missing"); missing.KnownWork || len(missing.Associations) != 0 || visits != 0 {
+		t.Fatalf("missing Work = %+v, visits = %d", missing, visits)
+	}
+	assertSelectedWorkerFactsInterruptionAndResponse(t, projection, when)
+	assertUnassociatedWorkerFactsVisit(t, projection)
+}
+
+func assertSelectedWorkerFactsDetached(t *testing.T, projection *IncrementalSessionProjection, workID string) {
+	t.Helper()
+	facts, visits := projection.WorkerSessionWorkFacts(workID)
+	if visits != 1 {
+		t.Fatalf("dispatch visits for %s = %d, want 1", workID, visits)
+	}
+	if !facts.KnownWork || len(facts.Associations) != 1 || facts.Associations["selected"].WorkerSessionID != "worker-selected" || len(facts.World.ActiveDispatches) != 1 {
+		t.Fatalf("selected facts for %s = %+v", workID, facts)
+	}
+	*facts.Associations["selected"].Model = "poisoned"
+	facts.Requests["selected"].WorkItemIDs[0] = "poisoned"
+	facts.World.ActiveDispatches["selected"].Inputs[0].WorkItem.ID = "poisoned"
+	delete(facts.Associations, "selected")
+	again, _ := projection.WorkerSessionWorkFacts(workID)
+	if *again.Associations["selected"].Model != "model-one" || again.Requests["selected"].WorkItemIDs[0] != "work-a" || again.World.ActiveDispatches["selected"].Inputs[0].WorkItem.ID != "work-a" {
+		t.Fatal("returned Worker facts poisoned the projection")
+	}
+}
+
+func assertSelectedWorkerFactsInterruptionAndResponse(t *testing.T, projection *IncrementalSessionProjection, when time.Time) {
+	t.Helper()
+	dispatchID := "selected"
+	interruption := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventContext{DispatchID: &dispatchID, WorkIDs: &[]string{"work-a", "work-b"}, EventTime: when.Add(time.Minute), Sequence: 3},
+		interfaces.DispatchInterruptedEventPayload{Reason: "process stopped"})
+	if err := projection.Apply(interruption); err != nil {
+		t.Fatal(err)
+	}
+	facts, _ := projection.WorkerSessionWorkFacts("work-a")
+	if facts.StateCursors[dispatchID].Sequence != 3 || !facts.Interruptions[dispatchID].InterruptedAt.Equal(when.Add(time.Minute)) || len(facts.Associations) != 1 {
+		t.Fatalf("interruption did not update selected facts: %+v", facts)
+	}
+	if len(facts.ResponseCursors) != 0 {
+		t.Fatal("interruption invented a committed response cursor")
+	}
+	response := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventContext{DispatchID: &dispatchID, EventTime: when.Add(2 * time.Minute), Sequence: 4},
+		workerexecution.DispatchResponseEventPayload{Outcome: workerexecution.OutcomeAccepted})
+	if err := projection.Apply(response); err != nil {
+		t.Fatal(err)
+	}
+	facts, _ = projection.WorkerSessionWorkFacts("work-a")
+	if facts.ResponseCursors[dispatchID].Sequence != 4 {
+		t.Fatalf("committed response cursor = %+v", facts.ResponseCursors)
+	}
+	delete(facts.ResponseCursors, dispatchID)
+	selected, _ := projection.WorkerSessionWorkFacts("work-a")
+	sibling, _ := projection.WorkerSessionWorkFacts("work-c")
+	if selected.ResponseCursors[dispatchID].Sequence != 4 || len(sibling.ResponseCursors) != 0 {
+		t.Fatal("response selection lost detachment or Work isolation")
+	}
+}
+
+func assertUnassociatedWorkerFactsVisit(t *testing.T, projection *IncrementalSessionProjection) {
+	t.Helper()
+	// A dispatch without a physical association still costs a candidate visit.
+	// Counting returned rows would conceal this inspected-and-discarded entry.
+	unassociated := "unassociated"
+	request := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventContext{DispatchID: &unassociated, WorkIDs: &[]string{"work-a"}, Sequence: 5},
+		interfaces.DispatchRequestEventPayload{TransitionID: "station"})
+	if err := projection.Apply(request); err != nil {
+		t.Fatal(err)
+	}
+	selected, visits := projection.WorkerSessionWorkFacts("work-a")
+	if visits != 2 || len(selected.Associations) != 1 {
+		t.Fatalf("inspected dispatches = %d, returned associations = %d", visits, len(selected.Associations))
+	}
+}
+
 type incrementalProjectionScenario struct {
 	startedAt, pausedAt, resumedAt, completedAt time.Time
 	artifactCapturedAt, checkpointTimestamp     time.Time

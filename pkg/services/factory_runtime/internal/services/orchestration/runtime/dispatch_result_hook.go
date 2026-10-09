@@ -572,27 +572,6 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 	}
 }
 
-func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {
-	if _, ok := world.WorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.ActiveWorkItemsByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.TerminalWorkByID[workID]; ok {
-		return true
-	}
-	if _, ok := world.FailedWorkItemsByID[workID]; ok {
-		return true
-	}
-	for _, event := range events {
-		if containsRecordedWorkID(pointerStringSlice(event.Context.WorkIDs), workID) {
-			return true
-		}
-	}
-	return false
-}
-
 func recordedObservationState(outcome string) workersessions.State {
 	switch workers.WorkOutcome(outcome) {
 	case workers.OutcomeAccepted, workers.OutcomeContinue:
@@ -751,9 +730,9 @@ func recordedProviderFailureKind(detail *workers.FailureDetail) providers.Execut
 	}
 }
 
-func mergeRecordedObservations(recorded, live []workersessions.Observation) []workersessions.Observation {
+func mergeRecordedObservations(recorded, live []workersessions.Observation) ([]workersessions.Observation, int) {
 	if len(recorded) == 0 && len(live) == 0 {
-		return nil
+		return nil, 0
 	}
 
 	// The registry owns all facts for identities it still holds, including
@@ -785,12 +764,14 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 		seen[liveObservation.WorkerSessionID] = struct{}{}
 		merged = append(merged, liveObservation.Clone())
 	}
-	sortObservationAttempts(merged)
-	return merged
+	comparisons := sortObservationAttempts(merged)
+	return merged, comparisons
 }
 
-func sortObservationAttempts(observations []workersessions.Observation) {
+func sortObservationAttempts(observations []workersessions.Observation) int {
+	comparisons := 0
 	sort.SliceStable(observations, func(i, j int) bool {
+		comparisons++
 		left, right := observations[i], observations[j]
 		switch {
 		case left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt):
@@ -805,6 +786,7 @@ func sortObservationAttempts(observations []workersessions.Observation) {
 			return left.WorkerSessionID < right.WorkerSessionID
 		}
 	})
+	return comparisons
 }
 
 func cloneAndSortFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEvent {

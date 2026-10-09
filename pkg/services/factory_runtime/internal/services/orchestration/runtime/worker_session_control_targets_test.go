@@ -790,6 +790,7 @@ func TestRecordedWorkerSessionObservationConfirmationFollowsCompletedFlushWaterm
 		}, nil
 	}
 	service := newRecordedWorkerSessionObservation(nil, ledger, factory.WorldStateProjector(projector), platformclock.Real{}, nil)
+	prepareScopedTestFacts(service)
 
 	before := mustListWorkerSessionObservation(t, service, workID, "before flush")
 	if before.ConfirmationState != workersessions.ConfirmationStateUnconfirmed || before.StateSequence != 3 || !before.StateSequenceKnown || before.StreamGenerationID != generationID {
@@ -878,6 +879,7 @@ func TestRecordedWorkerSessionObservationListSamplesWatermarkOnceForMergedSource
 		},
 		platformclock.Real{}, nil,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil {

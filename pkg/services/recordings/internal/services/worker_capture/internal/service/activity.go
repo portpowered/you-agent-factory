@@ -120,12 +120,14 @@ func (writer *FileWriter) rebuildCatalog(ctx context.Context) error {
 		return canceled
 	}
 	if errors.Is(err, os.ErrNotExist) {
+		writer.markHealthPrepared()
 		writer.catalogLoaded = true
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read Worker capture index: %w", err)
 	}
+	writer.markHealthPrepared()
 	writer.catalogLoaded = true
 	return nil
 }
@@ -161,6 +163,7 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
 		if err != nil {
+			writer.rememberPreparationError(file.Name(), err)
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
@@ -170,11 +173,13 @@ func (writer *FileWriter) indexCatalogFiles(ctx context.Context, files []os.DirE
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
 		if err != nil {
+			writer.rememberPreparationError(file.Name(), err)
 			writer.catalogMu.Lock()
 			writer.catalogDamaged = true
 			writer.catalogMu.Unlock()
 			continue
 		}
+		writer.rememberPreparationError(file.Name(), nil)
 		if err := writer.rebuildRecordingIndex(ctx, id); err != nil {
 			if err := ctx.Err(); err != nil {
 				return err

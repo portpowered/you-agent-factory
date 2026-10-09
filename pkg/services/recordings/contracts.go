@@ -4,9 +4,10 @@ package recordings
 
 import (
 	"errors"
-)
 
-import recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
+)
 
 type (
 	ActiveThrottlePause                                        = recordingcontracts.ActiveThrottlePause
@@ -661,6 +662,16 @@ type RuntimeReadMetric struct {
 // A function type keeps the optional capability narrow without publishing a
 // second service-root interface.
 type RuntimeReadMetricsRecorder func(RuntimeReadMetric)
+
+// WorkerSessionWorkProjectionReader selects prepared dispatch facts for an
+// exact Work identity within one Factory Session ledger.
+type WorkerSessionWorkProjectionReader = recordingcontracts.WorkerSessionWorkProjectionReader
+
+// WorkerSessionWorkFacts contains detached, selected Work and dispatch facts.
+// The dependency-neutral vocabulary is shared by the ledger and projection.
+type WorkerSessionWorkFacts = sessionprojectionfacts.WorkerSessionWorkFacts
+
+type WorkerSessionAssociationFacts = sessionprojectionfacts.WorkerSessionAssociationFacts
 
 // CanonicalHistoryReadStats is a detached snapshot of canonical-history work
 // observed by one runtime ledger.

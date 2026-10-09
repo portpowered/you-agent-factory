@@ -97,6 +97,23 @@ func TestMaterializationServiceNilBinderReturnsNil(t *testing.T) {
 	}
 }
 
+func TestPartialWorkRootsRejectWorkerSessionStateAccess(t *testing.T) {
+	t.Parallel()
+	for name, service := range map[string]Service{
+		"materialization":   materializationService{},
+		"admission content": admissionContentService{},
+		"invocation policy": invocationPolicyServiceAdapter{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := service.ResolveWorkerSessionWork(context.Background(), "session", "work")
+			if got != (WorkerSessionWork{}) || err == nil || !strings.Contains(err.Error(), "does not support state access") {
+				t.Fatalf("selected state access = (%#v, %v), want unsupported", got, err)
+			}
+		})
+	}
+}
+
 func TestAdmissionContentServiceNilBinderReturnsNil(t *testing.T) {
 	t.Parallel()
 	if got := AdmissionContentService(nil, mustRequestPreparationService(t)); got != nil {

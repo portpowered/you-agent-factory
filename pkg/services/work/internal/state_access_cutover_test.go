@@ -104,3 +104,8 @@ func TestNewServiceDelegatesReadsToCompletedStateAccess(t *testing.T) {
 		}
 	}
 }
+
+func (s completedStateAccess) ResolveWorkerSessionWork(ctx context.Context, session, id string) (work.WorkerSessionWork, error) {
+	item, err := s.get(ctx, session, id)
+	return work.WorkerSessionWork{WorkID: item.WorkID, Name: item.Name}, err
+}

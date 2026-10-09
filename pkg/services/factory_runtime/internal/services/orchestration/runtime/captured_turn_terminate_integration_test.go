@@ -36,6 +36,7 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 	restored := &recordedWorkerSessionObservation{
 		Service: live, factorySessionID: successorSession,
 		restoredWorldState: &interfaces.FactoryWorldState{},
+		restoredSessionIDs: map[string]struct{}{historicalSession: {}},
 		restoredEventPrefix: []interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{
 			SessionID: stringPointerForRecordedTest(historicalSession),
 		}}},
@@ -51,7 +52,7 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 	}
 }
 
-func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *testing.T) {
+func TestRecordedWorkerSessionObservationSelectsPreparedRestoredHistory(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-restored-growth"
 	events := recordedObservationTestEvents(t, base, workID)
@@ -83,7 +84,7 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 		},
 	}
 
-	t.Run("projects appended runtime event", func(t *testing.T) {
+	t.Run("selects appended runtime facts", func(t *testing.T) {
 		projectorCalls := 0
 		service := newRecordedWorkerSessionObservationWithRestoredState(
 			nil,
@@ -100,16 +101,21 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 			&restored,
 			prefix,
 		)
+		prepareScopedTestFacts(service)
+		if projectorCalls != 1 {
+			t.Fatalf("fixture preparation calls = %d, want one projection of appended facts", projectorCalls)
+		}
+		projectorCalls = 0
 
 		result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 		if err != nil {
 			t.Fatalf("ListObservations() error = %v", err)
 		}
-		if projectorCalls != 1 {
-			t.Fatalf("full world projection calls = %d, want 1 after appended runtime event", projectorCalls)
+		if projectorCalls != 0 {
+			t.Fatalf("request projection calls = %d, want prepared selection only", projectorCalls)
 		}
 		if len(result.Observations) != 2 || result.Observations[0].State != workersessions.StateCompleted || result.Observations[1].State != workersessions.StateCompleted {
-			t.Fatalf("reprojected observations = %#v, want two projected completed attempts", result.Observations)
+			t.Fatalf("selected observations = %#v, want two completed attempts", result.Observations)
 		}
 	})
 
@@ -128,6 +134,7 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 			&restored,
 			prefix,
 		)
+		prepareScopedTestFacts(service)
 
 		_, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 		if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
@@ -863,4 +870,63 @@ func TestMain(m *testing.M) {
 
 func (*continuationFanOutExecution) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
 	return request.Validate()
+}
+
+func TestRecordedWorkerSessionObservationBindsPreparedRestorationBeforeFirstRead(t *testing.T) {
+	t.Parallel()
+	const historical = "factory-historical"
+	prefix := []interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{
+		SessionID: stringPointerForRecordedTest("  " + historical + "  "),
+	}}}
+	live := &processLocalWorkerSessionService{getByWorkerResult: workersessions.Observation{
+		WorkerSessionID: "worker-restored", FactorySessionID: historical,
+	}}
+	cfg := &runtimeConfig{workerSessions: live, restoredWorldState: &interfaces.FactoryWorldState{}, restoredEventPrefix: prefix}
+	runtime := newFactoryImpl(cfg, nil, nil, nil, nil, nil, nil)
+	// The caller retains its startup input; later edits cannot change membership.
+	*prefix[0].Context.SessionID = "factory-foreign"
+	for _, scope := range []string{"factory-successor-a", "factory-successor-b"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			reader := runtime.WorkerSessionsObservationForSession(scope)
+			request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-restored"}
+			first, err := reader.GetObservationByWorkerSessionID(context.Background(), request)
+			if err != nil || first.FactorySessionID != scope {
+				t.Fatalf("first restored read = %#v, %v; want scope %q", first, err, scope)
+			}
+			first.FactorySessionID = "poison"
+			second, err := reader.GetObservationByWorkerSessionID(context.Background(), request)
+			if err != nil || second.FactorySessionID != scope {
+				t.Fatalf("subsequent restored read = %#v, %v; want scope %q", second, err, scope)
+			}
+		})
+	}
+}
+
+func TestRecordedWorkerSessionObservationReplayBindingKeepsExistingView(t *testing.T) {
+	t.Parallel()
+	runtime := newFactoryImpl(&runtimeConfig{restoredWorldState: &interfaces.FactoryWorldState{}}, nil, nil, nil, nil, nil, nil)
+	input := []interfaces.FactoryEvent{{Id: "replay-before", Context: interfaces.FactoryEventContext{
+		SessionID: stringPointerForRecordedTest("factory-original"),
+	}}}
+	runtime.SetReplayEvents(input)
+	first := runtime.WorkerSessionsObservationForSession("successor").(*recordedWorkerSessionObservation)
+	input[0].Id = "caller-mutation"
+	*input[0].Context.SessionID = "foreign"
+	runtime.SetReplayEvents([]interfaces.FactoryEvent{{Id: "replay-after"}})
+	second := runtime.WorkerSessionsObservationForSession("successor").(*recordedWorkerSessionObservation)
+	if got := first.canonicalEvents(); len(got) != 1 || got[0].Id != "replay-before" {
+		t.Fatalf("existing view lost its replay snapshot: %#v", got)
+	}
+	if got := second.canonicalEvents(); len(got) != 1 || got[0].Id != "replay-after" {
+		t.Fatalf("new view did not observe the replay replacement: %#v", got)
+	}
+	observation := workersessions.Observation{FactorySessionID: "factory-original"}
+	if !first.liveObservationBelongsToRestoredPrefix(observation) || !second.liveObservationBelongsToRestoredPrefix(observation) {
+		t.Fatal("replay replacement lost original restoration membership")
+	}
+	observation.Direct = true
+	if first.liveObservationBelongsToRestoredPrefix(observation) {
+		t.Fatal("direct worker acquired restored attribution")
+	}
 }

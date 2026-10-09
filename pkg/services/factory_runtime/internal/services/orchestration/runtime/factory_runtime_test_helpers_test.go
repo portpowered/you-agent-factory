@@ -2321,6 +2321,7 @@ func TestRecordedWorkerSessionObservation_ProjectsRestartInterruptionAsTerminalF
 		platformclock.Real{},
 		nil,
 	)
+	prepareScopedTestFacts(service)
 
 	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
 	if err != nil || len(result.Observations) != 1 {

@@ -714,18 +714,18 @@ func TestRecordedObservationMergeBranches(t *testing.T) {
 		Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live failure"},
 	}
 	recorded := []workersessions.Observation{{WorkerSessionID: "worker-1"}}
-	merged := mergeRecordedObservations(recorded, []workersessions.Observation{liveObservation})
+	merged, _ := mergeRecordedObservations(recorded, []workersessions.Observation{liveObservation})
 	assertMergedLiveObservation(t, merged)
 	assertRecordedObservationUnchanged(t, recorded)
 
 	liveOnly := workersessions.Observation{WorkerSessionID: "worker-live-only", WorkIDs: []string{"work-live-only"}}
-	liveOnlyResult := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-recorded-only"}}, []workersessions.Observation{liveOnly})
+	liveOnlyResult, _ := mergeRecordedObservations([]workersessions.Observation{{WorkerSessionID: "worker-recorded-only"}}, []workersessions.Observation{liveOnly})
 	assertLiveOnlyMerge(t, liveOnlyResult, liveOnly)
 	liveOnlyResult[0].WorkIDs[0] = "mutated"
 	if liveOnly.WorkIDs[0] != "work-live-only" {
 		t.Fatal("mergeRecordedObservations(live-only) returned a source-owned WorkIDs slice")
 	}
-	got := mergeRecordedObservations(nil, []workersessions.Observation{liveObservation})
+	got, _ := mergeRecordedObservations(nil, []workersessions.Observation{liveObservation})
 	if len(got) != 1 {
 		t.Fatalf("mergeRecordedObservations(empty recorded) returned %d observations, want 1", len(got))
 	}
@@ -797,7 +797,7 @@ func TestRecordedObservationMergePreservesExecutionFacts(t *testing.T) {
 	recordedEffort := "medium"
 	liveModel := "live-model"
 	liveEffort := "high"
-	merged := mergeRecordedObservations(
+	merged, _ := mergeRecordedObservations(
 		[]workersessions.Observation{
 			{WorkerSessionID: "recorded-only", Model: &recordedModel, ReasoningEffort: &recordedEffort},
 			{WorkerSessionID: "overlapping"},
@@ -818,7 +818,7 @@ func TestRecordedObservationMergePreservesExecutionFacts(t *testing.T) {
 	assertExecutionFacts(t, "live-only", byID["live-only"], liveModel, liveEffort)
 	assertExecutionFacts(t, "overlapping", byID["overlapping"], liveModel, liveEffort)
 
-	legacy := mergeRecordedObservations(
+	legacy, _ := mergeRecordedObservations(
 		[]workersessions.Observation{{WorkerSessionID: "legacy"}},
 		[]workersessions.Observation{{WorkerSessionID: "legacy"}},
 	)
@@ -826,7 +826,7 @@ func TestRecordedObservationMergePreservesExecutionFacts(t *testing.T) {
 
 	emptyModel := ""
 	emptyEffort := ""
-	retained := mergeRecordedObservations(
+	retained, _ := mergeRecordedObservations(
 		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &recordedModel, ReasoningEffort: &recordedEffort}},
 		[]workersessions.Observation{{WorkerSessionID: "retained", Model: &emptyModel, ReasoningEffort: &emptyEffort}},
 	)

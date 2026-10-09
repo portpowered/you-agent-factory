@@ -33,6 +33,7 @@ type WorkerCapturedArtifactReader interface {
 type WorkerRecordingStore interface {
 	WorkerRecordingWriter
 	WorkerRecordingReader
+	WorkerRecordingHealthReader
 	WorkerRecordingFailureWriter
 	WorkerCapturedActivityReader
 	WorkerControlOperationStore
@@ -96,6 +97,13 @@ type WorkerSessionRecordingFinalizer interface {
 // WorkerRecordingReader is the durable read side of a Worker recording store.
 type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (workerrecording.WorkerRecordingSnapshot, error)
+}
+
+// WorkerRecordingHealthReader selects prepared health for exact Worker IDs.
+// The snapshot contains only opening records, never activity history. The
+// selected recording's preparation error is returned even for an empty ID set.
+type WorkerRecordingHealthReader interface {
+	CurrentWorkerRecordingHealth(context.Context, string, []string) (workerrecording.WorkerRecordingSnapshot, error)
 }
 
 // WorkerRecordingProjectionReader observes one live capture projection.

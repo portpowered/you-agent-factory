@@ -778,12 +778,59 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 		return
 	}
 	s.confirmLiveTerminalStates(observations, sample)
+	applyKnownConfirmation(observations, sample)
+}
+
+func applyKnownConfirmation(observations []workersessions.Observation, sample completedFlushWatermarkSample) {
 	for index := range observations {
 		observation := &observations[index]
-		if observation.StateSequenceKnown &&
+		observation.ConfirmationState = workersessions.ConfirmationStateUnconfirmed
+		if sample.available && observation.StateSequenceKnown &&
 			observation.StreamGenerationID == sample.generationID &&
 			observation.StateSequence <= int64(sample.watermark.Sequence) {
 			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
+		}
+	}
+}
+
+// Scoped lists confirm live terminal outcomes from selected committed response
+// cursors. A later reconciliation cursor must not replace the response cursor.
+func applySelectedWorkConfirmation(
+	ctx context.Context,
+	observations []workersessions.Observation,
+	facts recordings.WorkerSessionWorkFacts,
+	sample completedFlushWatermarkSample,
+) error {
+	if sample.available {
+		confirmSelectedTerminalStates(observations, facts, sample)
+	}
+	applyKnownConfirmation(observations, sample)
+	return observationContextError(ctx)
+}
+
+func confirmSelectedTerminalStates(
+	observations []workersessions.Observation,
+	facts recordings.WorkerSessionWorkFacts,
+	sample completedFlushWatermarkSample,
+) {
+	if facts.StreamGenerationID != sample.generationID {
+		return
+	}
+	completed := recordedDispatchStateMaps(facts.World)
+	for index := range observations {
+		observation := &observations[index]
+		if observation.StateSequenceKnown || !observation.State.Terminal() {
+			continue
+		}
+		id := observation.AttemptID
+		association, associated := facts.Associations[id]
+		response, responded := completed[id]
+		cursor, known := facts.ResponseCursors[id]
+		if associated && responded && known && association.WorkerSessionID == observation.WorkerSessionID &&
+			cursor.StreamGenerationID == sample.generationID && recordedDispatchObservationState(response.Result) == observation.State {
+			observation.StateSequence = int64(cursor.Sequence)
+			observation.StateSequenceKnown = true
+			observation.StreamGenerationID = sample.generationID
 		}
 	}
 }
@@ -926,79 +973,6 @@ func cloneFactoryEventsInOrder(events []interfaces.FactoryEvent) []interfaces.Fa
 	return cloned
 }
 
-func (s *recordedWorkerSessionObservation) projectRecordedWorldState(
-	ctx context.Context,
-	events []interfaces.FactoryEvent,
-	ordered []interfaces.FactoryEvent,
-	selectedTick int,
-) (interfaces.FactoryWorldState, error) {
-	if restored, ok := restoredWorldStateForEvents(s.restoredWorldState, s.restoredEventPrefix, events); ok {
-		return *restored, nil
-	}
-	if s == nil || s.projector == nil {
-		return interfaces.FactoryWorldState{}, workersessions.ErrObservationProjectionUnavailable
-	}
-	world, err := s.projector(ordered, selectedTick)
-	if err != nil {
-		return interfaces.FactoryWorldState{}, workersessions.ErrObservationProjectionUnavailable
-	}
-	return world, nil
-}
-
-func sameFactoryEventIdentity(left, right interfaces.FactoryEvent) bool {
-	if left.Id != "" || right.Id != "" {
-		return left.Id == right.Id
-	}
-	return left.Type == right.Type &&
-		left.Context.Tick == right.Context.Tick &&
-		left.Context.Sequence == right.Context.Sequence &&
-		left.Context.EventTime.Equal(right.Context.EventTime)
-}
-
-func factoryEventRequiresWorkerSessionProjection(
-	state interfaces.FactoryWorldState,
-	event interfaces.FactoryEvent,
-) bool {
-	switch event.Type {
-	case interfaces.FactoryEventTypeRunRequest,
-		interfaces.FactoryEventTypeInitialStructureRequest,
-		interfaces.FactoryEventTypeSessionStarted,
-		interfaces.FactoryEventTypeSessionLifecycleControl,
-		interfaces.FactoryEventTypeSessionPaused,
-		interfaces.FactoryEventTypeSessionResultUpdated,
-		interfaces.FactoryEventTypeSessionResumed,
-		interfaces.FactoryEventTypeSessionCompleted,
-		interfaces.FactoryEventTypeRunResponse:
-		return false
-	case interfaces.FactoryEventTypeWorkRequest:
-		return !restoredWorkRequestEventIsKnown(state, event)
-	default:
-		return true
-	}
-}
-
-func restoredWorkRequestEventIsKnown(
-	state interfaces.FactoryWorldState,
-	event interfaces.FactoryEvent,
-) bool {
-	workIDs := pointerStringSlice(event.Context.WorkIDs)
-	for _, workID := range workIDs {
-		if _, ok := state.WorkItemsByID[workID]; !ok {
-			return false
-		}
-	}
-	requestID := stringPointerValue(event.Context.RequestID)
-	if requestID != "" {
-		for key, request := range state.WorkRequestsByID {
-			if key == requestID || request.RequestID == requestID {
-				return len(workIDs) > 0 || len(request.WorkItems) > 0
-			}
-		}
-		return false
-	}
-	return len(workIDs) > 0
-}
-
 func newRecordedWorkerSessionObservationWithRestoredState(
 	live workersessions.Service,
 	ledger recordings.RuntimeLedger,
@@ -1016,19 +990,22 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 	if len(factorySessionIDs) > 0 {
 		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
 	}
+	history := prepareRecordedObservationHistory(replayEvents, restoredEventPrefix)
 	return &recordedWorkerSessionObservation{
-		Service:             live,
-		ledger:              ledger,
-		durability:          completedFlushWatermarkReader(ledger),
-		projector:           projector,
-		clock:               clock,
-		providerSessions:    providerSessions,
-		replayEvents:        cloneAndSortFactoryEvents(replayEvents),
-		restoredWorldState:  restoredWorldState,
-		restoredEventPrefix: cloneFactoryEventsInOrder(restoredEventPrefix),
-		recordingID:         strings.TrimSpace(recordingID),
-		recordingReader:     recordingReader,
-		factorySessionID:    factorySessionID,
+		Service:              live,
+		ledger:               ledger,
+		durability:           completedFlushWatermarkReader(ledger),
+		projector:            projector,
+		clock:                clock,
+		providerSessions:     providerSessions,
+		replayEvents:         history.replayEvents,
+		restoredWorldState:   restoredWorldState,
+		restoredEventPrefix:  history.restoredEventPrefix,
+		restoredSessionIDs:   history.restoredSessionIDs,
+		restoredWorkerScopes: history.restoredWorkerScopes,
+		recordingID:          strings.TrimSpace(recordingID),
+		recordingReader:      recordingReader,
+		factorySessionID:     factorySessionID,
 	}
 }
 
@@ -1042,10 +1019,53 @@ func (s *recordedWorkerSessionObservation) liveObservationBelongsToRestoredPrefi
 	if observationSessionID == "" {
 		return false
 	}
-	for _, event := range s.restoredEventPrefix {
-		if event.Context.SessionID != nil && strings.TrimSpace(*event.Context.SessionID) == observationSessionID {
-			return true
+	_, belongs := s.restoredSessionIDs[observationSessionID]
+	return belongs
+}
+
+// preparedWorkerSessionHistory is prepared before runtime publication. Views
+// share its detached values read-only; request results remain detached.
+type preparedWorkerSessionHistory struct {
+	replayEvents         []interfaces.FactoryEvent
+	restoredEventPrefix  []interfaces.FactoryEvent
+	restoredSessionIDs   map[string]struct{}
+	restoredWorkerScopes map[string]string
+}
+
+func prepareRecordedObservationHistory(replay, prefix []interfaces.FactoryEvent, readers ...recordings.WorkerRecordingReader) preparedWorkerSessionHistory {
+	history := preparedWorkerSessionHistory{
+		replayEvents:         cloneAndSortFactoryEvents(replay),
+		restoredEventPrefix:  cloneFactoryEventsInOrder(prefix),
+		restoredSessionIDs:   make(map[string]struct{}),
+		restoredWorkerScopes: prepareCapturedWorkerScopes(replay, prefix),
+	}
+	for _, event := range history.restoredEventPrefix {
+		if id := strings.TrimSpace(stringPointerValue(event.Context.SessionID)); id != "" {
+			history.restoredSessionIDs[id] = struct{}{}
+
 		}
 	}
-	return false
+	for _, reader := range readers {
+		prepareCapturedWorkerAliasScopes(history.restoredWorkerScopes, reader, replay, prefix)
+	}
+	return history
+}
+
+// Resume may bind replay events without a restored world checkpoint. Both
+// activation sources carry original physical capture membership.
+func prepareCapturedWorkerScopes(sources ...[]interfaces.FactoryEvent) map[string]string {
+	scopes := make(map[string]string)
+	for _, events := range sources {
+		for _, event := range events {
+			if event.Type != interfaces.FactoryEventTypeDispatchWorkerSessionAssoc {
+				continue
+			}
+			scope := strings.TrimSpace(stringPointerValue(event.Context.SessionID))
+			var association interfaces.DispatchWorkerSessionAssociationEventPayload
+			if scope != "" && event.DecodePayload(&association) == nil && association.WorkerSessionID != "" {
+				scopes[association.WorkerSessionID] = scope
+			}
+		}
+	}
+	return scopes
 }

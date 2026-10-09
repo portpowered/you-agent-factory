@@ -143,6 +143,14 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 	return &snap, nil
 }
 
+// ReadWorkerSessionWork keeps scoped authority reads on the published index.
+func (f *factoryImpl) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if f == nil || f.engine == nil {
+		return work.WorkerSessionWork{}, factory.ErrNotRunning
+	}
+	return f.engine.ReadWorkerSessionWork(ctx, id)
+}
+
 // GetWorkStateSnapshot returns the published runtime boundary needed by the
 // Work read adapter. Work list reads do not need enablement, uptime, or the
 // unrelated Factory world-state projection; keeping those calculations out of

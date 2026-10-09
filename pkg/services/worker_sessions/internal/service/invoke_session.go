@@ -1027,15 +1027,17 @@ func (r *registry) indexObservationBySessionWorkLocked(id string, current *obser
 	}
 }
 
-func (r *registry) observationCandidatesForWork(req workersessions.ListObservationsRequest) []observationOrder {
+func (r *registry) observationCandidatesForWork(req workersessions.ListObservationsRequest) ([]observationOrder, int) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	workID := strings.TrimSpace(req.WorkID)
 	factorySessionID := strings.TrimSpace(req.FactorySessionID)
 	ids := make([]observationOrder, 0)
+	visits := 0
 	if factorySessionID != "" {
 		for id := range r.observationIDsBySessionWork[observationWorkKey{factorySessionID: factorySessionID, workID: workID}] {
+			visits++
 			metadata := r.observations[id]
 			if metadata == nil || metadata.factorySessionID != factorySessionID || !containsString(metadata.workIDs, workID) {
 				continue
@@ -1045,10 +1047,11 @@ func (r *registry) observationCandidatesForWork(req workersessions.ListObservati
 			}
 			ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
 		}
-		return ids
+		return ids, visits
 	}
 
 	for id, metadata := range r.observations {
+		visits++
 		if metadata == nil || !containsString(metadata.workIDs, workID) {
 			continue
 		}
@@ -1057,7 +1060,7 @@ func (r *registry) observationCandidatesForWork(req workersessions.ListObservati
 		}
 		ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
 	}
-	return ids
+	return ids, visits
 }
 
 func observationWorkerSessionIDFromTopic(topic events.Topic) string {

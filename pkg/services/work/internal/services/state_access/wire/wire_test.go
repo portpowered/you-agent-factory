@@ -142,3 +142,7 @@ func TestRuntimeSessionResolverResolveSessionAdapter(t *testing.T) {
 		}
 	})
 }
+
+func (*stubRuntime) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}

@@ -261,3 +261,7 @@ func wireBehavioralNewService(t *testing.T, workRuntime work.Runtime) (work.Serv
 	t.Helper()
 	return wireBehavioralRuntimeService(t, workRuntime), nil
 }
+
+func (*wireBehavioralRuntime) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}

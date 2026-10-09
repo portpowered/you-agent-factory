@@ -12,6 +12,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// LookupWorkerSessionSummary carries the same activated capture source across
+// the runtime observation adapter; it never falls back to a recording load.
+func (r *registry) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := r.recording.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LookupWorkerSessionSummary(ctx, id)
+}
+
+// CurrentWorkerRecordingHealth preserves the Recordings-owned selected health
+// capability for runtime observation readers using this same capture service.
+func (r *registry) CurrentWorkerRecordingHealth(ctx context.Context, recordingID string, workerIDs []string) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingHealthReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.CurrentWorkerRecordingHealth(ctx, recordingID, workerIDs)
+}
+
 // GetObservationByWorkerSessionID reads archived identity without restoring a
 // registry, execution authority, or a provider-native transcript reader.
 func (s *LogReader) GetObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {

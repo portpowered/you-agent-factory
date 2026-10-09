@@ -49,6 +49,7 @@ func (writer *FileWriter) RecoverWorkerOwners(ctx context.Context) error {
 		err = nil
 	}
 	if err == nil {
+		writer.markHealthPrepared()
 		writer.ownerRecoveryDone = true
 		// Unavailable files grant neither recovery authority nor proof of
 		// catalog membership. Ordinary reads retry them without a restart.
@@ -68,6 +69,7 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 		}
 		data, err := writer.storage.ReadFile(filepath.Join(writer.root, file.Name()))
 		if err != nil {
+			writer.rememberPreparationError(file.Name(), err)
 			// An unavailable journal grants no recovery authority. Keep hosting
 			// unrelated work; public reads retain their typed unavailable result
 			// and may recover when storage becomes readable again.
@@ -76,9 +78,11 @@ func (writer *FileWriter) recoverOwnerFiles(ctx context.Context, files []os.DirE
 		}
 		id, err := writer.recordingFileIdentity(file.Name(), data)
 		if err != nil {
+			writer.rememberPreparationError(file.Name(), err)
 			writer.markCatalogDamaged()
 			continue // Unreadable identities grant no recovery authority.
 		}
+		writer.rememberPreparationError(file.Name(), nil)
 		// Hydration combines the legacy snapshot and its journal. Enumerating
 		// the second file must not read those same source bytes again.
 		seen[filepath.Base(writer.path(id))] = true

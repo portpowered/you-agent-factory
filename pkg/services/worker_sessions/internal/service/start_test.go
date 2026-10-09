@@ -4126,6 +4126,16 @@ func (r *usageSnapshotRecording) LoadWorkerRecording(context.Context, string) (r
 	return r.snapshot, nil
 }
 
+func (r *usageSnapshotRecording) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	item := recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{WorkerSessionID: id, RecordingID: r.snapshot.RecordingID, CommittedPosition: ^uint64(0)}}
+	for _, session := range r.snapshot.Sessions {
+		if session.WorkerSessionID == id {
+			item.MetadataRecords = session.Records
+		}
+	}
+	return recordings.WorkerCapturedSummary{Capture: item}, nil
+}
+
 func newUsagePublicationService(t *testing.T, captured bool) workersessions.Service {
 	t.Helper()
 	var registry workersessions.Service
