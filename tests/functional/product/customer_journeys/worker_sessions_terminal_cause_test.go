@@ -275,7 +275,7 @@ func assertShutdownAdmissionRefused(t *testing.T, server *fleetCharacterizationS
 }
 
 // Pause the existing capture write at opening acknowledgement. Runtime close
-// must wait for preparation, then journal and join the exact admitted attempt.
+// must wait for preparation, then join whether provider admission wins or loses.
 type shutdownOpeningGate struct {
 	recordings.WorkerRecordingStore
 	entered chan string
@@ -364,19 +364,57 @@ func TestShutdownTerminalCauseOpeningClose(t *testing.T) {
 		t.Fatal("provider admitted before opening acknowledgement")
 	}
 	opening.release()
+	ownedCount := joinShutdownOpeningClose(t, runner, closed)
 	waitFleetCharacterizationSignal(t, submitted, "opening submission returned")
-	waitFleetCharacterizationSignal(t, runner.slots[0].started, "admitted opening")
-	waitFleetCharacterizationSignal(t, runner.slots[0].canceled, "opening canceled through scoped close")
-	runner.slots[0].release()
-	waitFleetCharacterizationSignal(t, closed, "opening close joined")
+	archived := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+id)
+	if archived.State != "CANCELED" {
+		t.Fatalf("opening close state=%s, owned provider calls=%d", archived.State, ownedCount)
+	}
 	assertCapturedStopCause(t, server.URL(), id, "OPERATOR_CANCEL")
 	assertShutdownSingleTerminal(t, server, id)
 	assertShutdownAdmissionRefused(t, server, owned)
-	peerStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), peer))
-	peerAttempt := submitShutdownWork(t, server, peerStream, runner.slots[1], peer, "peer-after-opening-close")
-	assertShutdownRunning(t, server, runner.slots[1], peerAttempt)
-	if runner.callCount() != 2 {
-		t.Fatalf("opening close admitted extra execution: calls=%d", runner.callCount())
+	if runner.callCount() != ownedCount {
+		t.Fatalf("closed scope admitted provider: calls=%d, want %d", runner.callCount(), ownedCount)
 	}
-	closeShutdownScope(t, server, peer, runner.slots[1])
+	peerStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), peer))
+	peerSlot := runner.slots[ownedCount]
+	peerAttempt := submitShutdownWork(t, server, peerStream, peerSlot, peer, "peer-after-opening-close")
+	assertShutdownRunning(t, server, peerSlot, peerAttempt)
+	if runner.callCount() != ownedCount+1 {
+		t.Fatalf("opening close provider calls=%d, want %d", runner.callCount(), ownedCount+1)
+	}
+	closeShutdownScope(t, server, peer, peerSlot)
+}
+
+func joinShutdownOpeningClose(t *testing.T, runner *fleetCharacterizationRunner, closed <-chan struct{}) int {
+	t.Helper()
+	slot := runner.slots[0]
+	select {
+	case <-slot.started:
+		waitFleetCharacterizationSignal(t, slot.canceled, "opening canceled through scoped close")
+		slot.release()
+	case <-closed:
+	case <-time.After(functionalWorkerSignalTimeout):
+		t.Fatal("opening neither admitted nor joined scoped close")
+	}
+	waitFleetCharacterizationSignal(t, closed, "opening close joined")
+	// Both signals can be ready. The selected arm does not determine admission;
+	// reconcile effects after close has joined and before starting the peer.
+	ownedCount := runner.callCount()
+	switch ownedCount {
+	case 0:
+		select {
+		case <-slot.started:
+			t.Fatal("opening provider started with no recorded call")
+		default:
+		}
+	case 1:
+		waitFleetCharacterizationSignal(t, slot.started, "admitted opening")
+		waitFleetCharacterizationSignal(t, slot.canceled, "opening canceled through scoped close")
+		waitFleetCharacterizationSignal(t, slot.returned, "opening provider joined")
+	default:
+		t.Fatalf("opening provider calls=%d, want zero or one", ownedCount)
+	}
+	t.Logf("opening close joined: owned provider calls=%d, expected calls after peer=%d", ownedCount, ownedCount+1)
+	return ownedCount
 }
