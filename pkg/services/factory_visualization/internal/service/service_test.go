@@ -37,25 +37,25 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 		want string
 	}{
 		{"source", func() (*Service, error) {
-			return New(activation, projection, presentation, nil, recordingsPeer, clock, sink, nil)
+			return assembleRoot(activation, projection, presentation, nil, recordingsPeer, clock, sink, nil)
 		}, "event source"},
 		{"recordings", func() (*Service, error) {
-			return New(activation, projection, presentation, source, nil, clock, sink, nil)
+			return assembleRoot(activation, projection, presentation, source, nil, clock, sink, nil)
 		}, "recordings service"},
 		{"clock", func() (*Service, error) {
-			return New(activation, projection, presentation, source, recordingsPeer, nil, sink, nil)
+			return assembleRoot(activation, projection, presentation, source, recordingsPeer, nil, sink, nil)
 		}, "clock"},
 		{"sink", func() (*Service, error) {
-			return New(activation, projection, presentation, source, recordingsPeer, clock, nil, nil)
+			return assembleRoot(activation, projection, presentation, source, recordingsPeer, clock, nil, nil)
 		}, "presentation sink"},
 		{"presentation", func() (*Service, error) {
-			return New(activation, projection, nil, source, recordingsPeer, clock, sink, nil)
+			return assembleRoot(activation, projection, nil, source, recordingsPeer, clock, sink, nil)
 		}, "response event presentation service"},
 		{"activation", func() (*Service, error) {
-			return New(nil, projection, presentation, source, recordingsPeer, clock, sink, nil)
+			return assembleRoot(nil, projection, presentation, source, recordingsPeer, clock, sink, nil)
 		}, "activation lifecycle owner"},
 		{"projection", func() (*Service, error) {
-			return New(activation, nil, presentation, source, recordingsPeer, clock, sink, nil)
+			return assembleRoot(activation, nil, presentation, source, recordingsPeer, clock, sink, nil)
 		}, "live view projection owner"},
 	}
 	for _, test := range tests {
@@ -89,37 +89,13 @@ func newComposedService(
 	if !ok {
 		return nil, errors.New("test composition: recordings.Service is required")
 	}
-	activation, err := activationlifecyclewire.NewService(
-		ActivationEventSourceAdapter{Source: source},
-		recordingsPeer,
-		clock,
-		ActivationViewSinkAdapter{Sink: sink},
-		activationlifecycle.ErrorReporter(reportError),
-	)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := liveviewprojectionwire.NewService(
-		activation.RetainedEvents,
-		source,
-		recordingsPeer,
-		clock,
-		sink,
-		reportError,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return New(
-		activation,
-		projection,
+	owner := NewScopeOwner(
+		activationlifecyclewire.NewOwner(recordingsPeer).Open,
+		liveviewprojectionwire.NewOwner(recordingsPeer).Open,
 		presentation,
-		source,
 		recordingsPeer,
-		clock,
-		sink,
-		reportError,
 	)
+	return owner.Open(source, clock, sink, reportError)
 }
 
 type activationOwnerStub struct{}

@@ -32,31 +32,6 @@ type Service struct {
 	presentations   map[PresentationSessionID]*rootPresentationSession
 }
 
-// New assembles an inert Factory Visualization root from already-constructed
-// parent-private owners. The owning wire package composes those owners before
-// calling this implementation constructor.
-func New(
-	activation activationlifecycle.Service,
-	projection liveviewprojection.Service,
-	presentation responseeventpresentation.Service,
-	source Source,
-	recordingsPeer recordings.Service,
-	clock Clock,
-	sink Sink,
-	reportError ErrorReporter,
-) (*Service, error) {
-	return assembleRoot(
-		activation,
-		projection,
-		presentation,
-		source,
-		recordingsPeer,
-		clock,
-		sink,
-		reportError,
-	)
-}
-
 // Start subscribes once to retained-then-live canonical Factory events.
 func (s *Service) Start(ctx context.Context) error {
 	if s == nil || s.activation == nil {

@@ -53,7 +53,7 @@ type wireClock struct{}
 
 func (wireClock) Now() time.Time { return time.Unix(1, 0) }
 
-func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
+func TestScopeOpeningRejectsMissingResources(t *testing.T) {
 	t.Parallel()
 
 	clock := wireClock{}
@@ -68,28 +68,28 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 		{
 			name: "source",
 			new: func() (factoryvisualization.Root, error) {
-				return factoryvisualizationwire.NewRoot(nil, projections, clock, sink, nil)
+				return openVisualizationScope(nil, projections, clock, sink, nil)
 			},
 			want: "event source is required",
 		},
 		{
 			name: "projections",
 			new: func() (factoryvisualization.Root, error) {
-				return factoryvisualizationwire.NewRoot(source, nil, clock, sink, nil)
+				return openVisualizationScope(source, nil, clock, sink, nil)
 			},
 			want: "recordings service is required",
 		},
 		{
 			name: "clock",
 			new: func() (factoryvisualization.Root, error) {
-				return factoryvisualizationwire.NewRoot(source, projections, nil, sink, nil)
+				return openVisualizationScope(source, projections, nil, sink, nil)
 			},
 			want: "clock is required",
 		},
 		{
 			name: "sink",
 			new: func() (factoryvisualization.Root, error) {
-				return factoryvisualizationwire.NewRoot(source, projections, clock, nil, nil)
+				return openVisualizationScope(source, projections, clock, nil, nil)
 			},
 			want: "presentation sink is required",
 		},
@@ -100,16 +100,16 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 			t.Parallel()
 			root, err := test.new()
 			if root != nil {
-				t.Fatal("NewRoot() returned non-nil root, want nil")
+				t.Fatal("ScopeOpening() returned non-nil root, want nil")
 			}
 			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewRoot() error = %v, want %q", err, test.want)
+				t.Fatalf("ScopeOpening() error = %v, want %q", err, test.want)
 			}
 		})
 	}
 }
 
-func TestWireConstructorsKeepAdaptersInertAndValidateServiceAlias(t *testing.T) {
+func TestWireOwnersKeepAdaptersInertAndRejectMissingResources(t *testing.T) {
 	t.Parallel()
 
 	if source := factoryvisualizationwire.NewRuntimeSourceOpening(nil)("selected-session"); source == nil {
@@ -118,8 +118,8 @@ func TestWireConstructorsKeepAdaptersInertAndValidateServiceAlias(t *testing.T) 
 	if presentation := factoryvisualizationwire.NewResponsePresentation(); presentation == nil {
 		t.Fatal("NewResponsePresentation() returned nil presentation")
 	}
-	if root, err := factoryvisualizationwire.NewService(nil, nil, nil, nil, nil); root != nil || err == nil {
-		t.Fatalf("NewService() = (%v, %v), want nil root and validation error", root, err)
+	if root, err := openVisualizationScope(nil, nil, nil, nil, nil); root != nil || err == nil {
+		t.Fatalf("ScopeOpening() = (%v, %v), want nil root and validation error", root, err)
 	}
 }
 
@@ -151,7 +151,7 @@ func requirePresentationError(
 
 func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
 	t.Helper()
-	root, err := factoryvisualizationwire.NewRoot(
+	root, err := openVisualizationScope(
 		wireSourceStub{},
 		&recordingsstub.Service{},
 		wireClock{},
@@ -159,15 +159,15 @@ func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
+		t.Fatalf("ScopeOpening() error = %v", err)
 	}
 	if root == nil {
-		t.Fatal("NewRoot() returned nil root")
+		t.Fatal("ScopeOpening() returned nil root")
 	}
 	return root
 }
 
-func TestNewRootServesPublishedPeerBehavior(t *testing.T) {
+func TestScopeOpeningServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
 	var root factoryvisualization.Root = mustNewWireRoot(t)
@@ -214,7 +214,7 @@ func TestNewRootActivatesAndObservesThroughComposedOwners(t *testing.T) {
 		},
 	}
 	presented := make(chan factoryvisualization.View, 1)
-	root, err := factoryvisualizationwire.NewRoot(
+	root, err := openVisualizationScope(
 		source,
 		&recordingsstub.Service{DashboardData: recordings.SimpleDashboardRenderData{InFlightDispatchCount: 7}},
 		wireClock{},
@@ -224,7 +224,7 @@ func TestNewRootActivatesAndObservesThroughComposedOwners(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
+		t.Fatalf("ScopeOpening() error = %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -291,7 +291,7 @@ func TestNewRootConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	root, err := factoryvisualizationwire.NewRoot(
+	root, err := openVisualizationScope(
 		source,
 		projections,
 		wireClock{},
@@ -299,15 +299,15 @@ func TestNewRootConstructsInertRoot(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
+		t.Fatalf("ScopeOpening() error = %v", err)
 	}
 	if root == nil {
-		t.Fatal("NewRoot() returned nil root")
+		t.Fatal("ScopeOpening() returned nil root")
 	}
 	var peer factoryvisualization.Root = root
 	if subscribeCalls != 0 || presentCalls != 0 || projectionReads != 0 {
 		t.Fatalf(
-			"NewRoot() side effects: subscribe=%d present=%d projection=%d, want inert construction",
+			"ScopeOpening() side effects: subscribe=%d present=%d projection=%d, want inert construction",
 			subscribeCalls, presentCalls, projectionReads,
 		)
 	}
@@ -347,4 +347,13 @@ func newWireRecordingProjectionStub(hook func()) *wireRecordingProjectionStub {
 		}, nil
 	}
 	return stub
+}
+
+func openVisualizationScope(source factoryvisualization.Source, peer recordings.Service, clock factoryvisualization.Clock, sink factoryvisualization.Sink, reportError factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
+	return factoryvisualizationwire.NewScopeOpening(
+		factoryvisualizationwire.NewActivationOpening(peer),
+		factoryvisualizationwire.NewProjectionOpening(peer),
+		factoryvisualizationwire.NewResponsePresentation(),
+		peer,
+	)(source, clock, sink, reportError)
 }

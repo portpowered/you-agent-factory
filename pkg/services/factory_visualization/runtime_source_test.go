@@ -13,6 +13,7 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -107,7 +108,7 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 			})
 		},
 	}
-	service, err := factoryvisualizationwire.NewRoot(
+	service, err := openVisualizationScope(
 		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
@@ -144,7 +145,7 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	service, err := factoryvisualizationwire.NewRoot(
+	service, err := openVisualizationScope(
 		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
@@ -269,4 +270,13 @@ func (f *sessionBoundRuntimeFactory) Observe(
 		return factoryruntime.ObserveResult{}, f.observeErr
 	}
 	return factoryruntime.ObserveResult{Observation: f.observation}, nil
+}
+
+func openVisualizationScope(source Source, peer recordings.Service, clock Clock, sink Sink, reportError ErrorReporter) (Service, error) {
+	return factoryvisualizationwire.NewScopeOpening(
+		factoryvisualizationwire.NewActivationOpening(peer),
+		factoryvisualizationwire.NewProjectionOpening(peer),
+		factoryvisualizationwire.NewResponsePresentation(),
+		peer,
+	)(source, clock, sink, reportError)
 }

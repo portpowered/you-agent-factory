@@ -70,81 +70,6 @@ func (owner *runtimeSinkOwner) CloseRuntimeSink(id factoryvisualization.RuntimeS
 	owner.mu.Unlock()
 }
 
-// NewRoot constructs an inert Factory Visualization root from construction and
-// process-edge ports. It composes the accepted root through parent-private
-// activation_lifecycle, live_view_projection, and response_event_presentation
-// owner construction without publishing owner types on the returned peer surface.
-// Missing required construction ports fail with a deterministic construction error
-// and a nil root.
-func NewRoot(
-	source factoryvisualization.Source,
-	peer recordings.Service,
-	clock factoryvisualization.Clock,
-	sink factoryvisualization.Sink,
-	reportError factoryvisualization.ErrorReporter,
-) (factoryvisualization.Service, error) {
-	switch {
-	case source == nil:
-		return nil, fmt.Errorf("construct Factory Visualization: event source is required")
-	case peer == nil:
-		return nil, fmt.Errorf("construct Factory Visualization: recordings service is required")
-	case clock == nil:
-		return nil, fmt.Errorf("construct Factory Visualization: clock is required")
-	case sink == nil:
-		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
-	}
-	activation, err := activationlifecyclewire.NewService(
-		internalservice.ActivationEventSourceAdapter{Source: source},
-		peer,
-		clock,
-		internalservice.ActivationViewSinkAdapter{Sink: sink},
-		activationlifecycle.ErrorReporter(reportError),
-	)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := liveviewprojectionwire.NewService(
-		activation.RetainedEvents,
-		source,
-		peer,
-		clock,
-		sink,
-		reportError,
-	)
-	if err != nil {
-		return nil, err
-	}
-	presentation := responseeventpresentationwire.NewService()
-	root, err := internalservice.New(
-		activation,
-		projection,
-		presentation,
-		source,
-		peer,
-		clock,
-		sink,
-		reportError,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if root == nil {
-		return nil, fmt.Errorf("construct Factory Visualization: implementation rejected its dependencies")
-	}
-	return root, nil
-}
-
-// NewService is the canonical Factory Visualization root constructor.
-func NewService(
-	source factoryvisualization.Source,
-	peer recordings.Service,
-	clock factoryvisualization.Clock,
-	sink factoryvisualization.Sink,
-	reportError factoryvisualization.ErrorReporter,
-) (factoryvisualization.Service, error) {
-	return NewRoot(source, peer, clock, sink, reportError)
-}
-
 // NewRuntimeSourceOpening constructs one addressed runtime observation owner.
 // Its returned operation allocates only a session identity handle.
 func NewRuntimeSourceOpening(reader factoryvisualization.RuntimeReader) func(string) factoryvisualization.Source {
@@ -181,6 +106,10 @@ func NewProjectionOpening(peer recordings.Service) ProjectionOpening {
 func NewScopeOpening(activation ActivationOpening, projection ProjectionOpening, presentation factoryvisualization.ResponsePresentation, peer recordings.Service) ScopeOpening {
 	owner := internalservice.NewScopeOwner(activation, projection, presentation, peer)
 	return func(source factoryvisualization.Source, clock factoryvisualization.Clock, sink factoryvisualization.Sink, reportError factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
-		return owner.Open(source, clock, sink, reportError)
+		root, err := owner.Open(source, clock, sink, reportError)
+		if err != nil {
+			return nil, err
+		}
+		return root, nil
 	}
 }

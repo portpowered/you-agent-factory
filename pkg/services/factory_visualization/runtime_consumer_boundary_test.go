@@ -53,7 +53,7 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 		},
 	}
 	emitted := make([]View, 0, 2)
-	service, err := factoryvisualizationwire.NewRoot(
+	service, err := openVisualizationScope(
 		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: now},
@@ -181,7 +181,7 @@ func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *tes
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	service, err := factoryvisualizationwire.NewRoot(
+	service, err := openVisualizationScope(
 		factoryvisualizationwire.NewRuntimeSourceOpening(reader)("selected-session"),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
