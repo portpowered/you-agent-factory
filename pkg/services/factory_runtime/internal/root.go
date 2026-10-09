@@ -429,6 +429,13 @@ func (r *Root) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStat
 	return nil, factoryruntime.ErrNotRunning
 }
 
+func (r *Root) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if reader, ok := r.delegate().(work.WorkerSessionWorkRuntimeReader); ok {
+		return reader.ReadWorkerSessionWork(ctx, id)
+	}
+	return work.WorkerSessionWork{}, factoryruntime.ErrNotRunning
+}
+
 func (r *Root) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
 	if service := r.delegate(); service != nil {
 		return service.CleanInvocationSnapshot(ctx)
@@ -643,6 +650,13 @@ func (service *boundRuntimeService) GetWorkStateSnapshot(ctx context.Context) (*
 		}
 	}
 	return nil, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if reader, ok := service.target().(work.WorkerSessionWorkRuntimeReader); ok {
+		return reader.ReadWorkerSessionWork(ctx, id)
+	}
+	return work.WorkerSessionWork{}, factoryruntime.ErrNotRunning
 }
 
 func (service *boundRuntimeService) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {

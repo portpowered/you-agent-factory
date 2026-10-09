@@ -109,6 +109,16 @@ func (wrapped *invocationScheduleFactory) WorkerSessionsObservationForSession(fa
 	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }
 
+// ReadWorkerSessionWork preserves selected reads through the schedule wrapper.
+func (wrapped *invocationScheduleFactory) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if wrapped != nil {
+		if reader, ok := wrapped.Engine.(work.WorkerSessionWorkRuntimeReader); ok {
+			return reader.ReadWorkerSessionWork(ctx, id)
+		}
+	}
+	return work.WorkerSessionWork{}, factory.ErrNotRunning
+}
+
 // GetWorkStateSnapshot forwards the Work-specific runtime boundary through the
 // automation decorator. Work reads must retain the fast published snapshot
 // path even when invocation scheduling wraps the underlying Factory service.

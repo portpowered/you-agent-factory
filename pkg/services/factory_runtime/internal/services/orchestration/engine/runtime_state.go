@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -334,7 +335,64 @@ func (e *FactoryEngine) publishRuntimeSnapshotLocked() {
 }
 
 func (e *FactoryEngine) storePublishedSnapshot(snapshot engineStateSnapshot) {
+	e.publishedWork.Store(newWorkerSessionWorkIndex(snapshot))
 	e.publishedSnapshot.Store(&snapshot)
+}
+
+type workerSessionWorkIndex struct {
+	byCursor map[string]work.WorkerSessionWork
+	byWork   map[string]work.WorkerSessionWork
+}
+
+func newWorkerSessionWorkIndex(snapshot engineStateSnapshot) *workerSessionWorkIndex {
+	index := &workerSessionWorkIndex{
+		byCursor: make(map[string]work.WorkerSessionWork),
+		byWork:   make(map[string]work.WorkerSessionWork),
+	}
+	// Retain marking precedence, token ordering, resource exclusions and
+	// visibility of consumed in-flight Work from public materialization.
+	selected := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
+	for _, token := range selected.Tokens {
+		name := token.Color.Name
+		if name == "" {
+			name = token.Color.WorkID
+		}
+		if name == "" {
+			name = token.ID
+		}
+		item := work.WorkerSessionWork{WorkID: token.Color.WorkID, Name: name}
+		if _, exists := index.byCursor[token.ID]; !exists {
+			index.byCursor[token.ID] = item
+		}
+		if _, exists := index.byWork[item.WorkID]; !exists {
+			index.byWork[item.WorkID] = item
+		}
+	}
+	return index
+}
+
+// ReadWorkerSessionWork selects the last complete published boundary without
+// acquiring the tick mutex or copying unrelated runtime facts on a request.
+func (e *FactoryEngine) ReadWorkerSessionWork(ctx context.Context, id string) (work.WorkerSessionWork, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return work.WorkerSessionWork{}, err
+		}
+	}
+	if e == nil {
+		return work.WorkerSessionWork{}, factoryruntime.ErrNotRunning
+	}
+	index := e.publishedWork.Load()
+	if index == nil {
+		return work.WorkerSessionWork{}, factoryruntime.ErrNotRunning
+	}
+	if item, ok := index.byCursor[id]; ok {
+		return item, nil
+	}
+	if item, ok := index.byWork[id]; ok {
+		return item, nil
+	}
+	return work.WorkerSessionWork{}, work.ErrWorkNotFound
 }
 
 func cloneEngineStateSnapshot(snapshot engineStateSnapshot) engineStateSnapshot {

@@ -478,3 +478,7 @@ func namedArgumentInputsFromInternal(inputs []invocationreturnpolicy.NamedArgume
 	}
 	return converted
 }
+
+func (invocationPolicyServiceAdapter) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
+	return WorkerSessionWork{}, fmt.Errorf("Work invocationPolicyServiceAdapter does not support state access")
+}

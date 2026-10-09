@@ -3,6 +3,7 @@ package wire
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
@@ -23,6 +24,14 @@ func NewService(
 
 type runtimeSessionResolver struct {
 	runtimes work.RuntimeResolver
+}
+
+func (r runtimeSessionResolver) ResolveWorkerSessionWorkAdapter(sessionID string) (work.WorkerSessionWorkRuntimeReader, error) {
+	resolver, ok := r.runtimes.(work.WorkerSessionWorkRuntimeResolver)
+	if !ok {
+		return nil, fmt.Errorf("selected Work runtime resolver is required")
+	}
+	return resolver.ResolveWorkerSessionWorkRuntime(sessionID)
 }
 
 // NewRuntimeSessionResolver adapts Work's consumer-owned runtime resolver into

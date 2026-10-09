@@ -5,10 +5,23 @@ import (
 	"io/fs"
 )
 
+// WorkerSessionWork contains selected authority and presentation facts.
+type WorkerSessionWork struct {
+	WorkID string
+	Name   string
+}
+
+// WorkerSessionWorkRuntimeReader selects a published Work identity without
+// materializing the complete Work snapshot or replaying canonical history.
+type WorkerSessionWorkRuntimeReader interface {
+	ReadWorkerSessionWork(context.Context, string) (WorkerSessionWork, error)
+}
+
 // Runtime is the narrow live-session capability consumed by Work operations.
 type Runtime interface {
 	SubmitWorkRequest(context.Context, WorkRequest) (WorkRequestSubmitResult, error)
 	ReadWorkSnapshot(context.Context) (ReadSnapshot, error)
+	ReadWorkerSessionWork(context.Context, string) (WorkerSessionWork, error)
 	MoveWork(
 		context.Context,
 		string,
@@ -22,6 +35,12 @@ type Runtime interface {
 // Factory Sessions adapts its registry to this consumer-owned port.
 type RuntimeResolver interface {
 	ResolveWorkRuntime(string) (Runtime, error)
+}
+
+// WorkerSessionWorkRuntimeResolver resolves only the selected read capability;
+// unrelated admission projections must not be activated by a scoped list.
+type WorkerSessionWorkRuntimeResolver interface {
+	ResolveWorkerSessionWorkRuntime(string) (WorkerSessionWorkRuntimeReader, error)
 }
 
 // RequestIDGenerator supplies opaque identity components for Work Requests and
@@ -72,6 +91,9 @@ type Service interface {
 	// GetWork is part of the published state-access slice. Peers look up one Work
 	// by id and receive a detached ReadModel, or ErrWorkNotFound when missing.
 	GetWork(context.Context, string, string) (ReadModel, error)
+	// ResolveWorkerSessionWork keeps cursor-before-Work precedence for authority
+	// and name, without projecting unrelated Work or changing attempt membership.
+	ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error)
 	// MoveWorkAndRead is the combined state-access outcome peers already rely on:
 	// apply an operator move, then return the detached post-move ReadModel (or a
 	// typed state-access failure such as ErrWorkNotFound or

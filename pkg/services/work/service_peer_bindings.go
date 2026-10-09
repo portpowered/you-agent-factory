@@ -221,3 +221,11 @@ func (admissionContentService) ResolvePrimaryResult(
 ) (PrimaryResultSelection, error) {
 	return PrimaryResultSelection{}, fmt.Errorf("Work admission content service does not support invocation policy")
 }
+
+func (materializationService) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
+	return WorkerSessionWork{}, fmt.Errorf("Work materializationService does not support state access")
+}
+
+func (admissionContentService) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
+	return WorkerSessionWork{}, fmt.Errorf("Work admissionContentService does not support state access")
+}

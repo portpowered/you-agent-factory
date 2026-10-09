@@ -75,6 +75,7 @@ type FactoryEngine struct {
 	// when the engine is busy in a tick so read-only observation never waits on
 	// dispatch, submission hooks, or other work performed under mu.
 	publishedSnapshot           atomic.Pointer[engineStateSnapshot]
+	publishedWork               atomic.Pointer[workerSessionWorkIndex]
 	pendingProjectionRequestIDs map[string]struct{}
 }
 

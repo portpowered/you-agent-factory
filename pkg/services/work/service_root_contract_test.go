@@ -839,3 +839,8 @@ func TestServiceRootContract_InvocationAndReturnPolicyTypedFailures(t *testing.T
 		})
 	}
 }
+
+func (f *rootServiceFake) ResolveWorkerSessionWork(ctx context.Context, session, id string) (work.WorkerSessionWork, error) {
+	item, err := f.GetWork(ctx, session, id)
+	return work.WorkerSessionWork{WorkID: item.WorkID, Name: item.Name}, err
+}

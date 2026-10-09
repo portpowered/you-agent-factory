@@ -373,3 +373,11 @@ func (r *isolatedWorkRuntime) MoveWork(
 	r.mu.Unlock()
 	return work.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
 }
+
+func (*recordingFactory) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}
+
+func (*isolatedWorkRuntime) ReadWorkerSessionWork(context.Context, string) (work.WorkerSessionWork, error) {
+	panic("unexpected selected Work read in legacy fixture")
+}
