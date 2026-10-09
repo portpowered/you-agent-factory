@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -78,6 +79,7 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 		t.Fatal("selected visualization was not opened")
 	}
 	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 30*time.Second)
+	assertCompletedSessionMetrics(t, server.URL(), sessionID)
 	livePaths := functionalMetricArtifactPaths(t, metricsRoot)
 	if len(livePaths) != 1 {
 		t.Fatalf("live metrics artifacts = %#v, want exactly one regular active artifact", livePaths)
@@ -241,5 +243,113 @@ func assertFunctionalFileContents(t *testing.T, path, want string) {
 	}
 	if string(contents) != want {
 		t.Fatalf("%q contents = %q, want %q", path, contents, want)
+	}
+}
+
+// M1-F: the customer's root path is a file. Startup must retain the filesystem
+// cause and leave that file and its peer unchanged rather than run without metrics.
+func TestRuntimeMetricsStartupRejectsFileRootThroughSharedProcess(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	root := filepath.Join(home, "metrics-file")
+	peer := filepath.Join(home, "peer.txt")
+	writeFunctionalFile(t, root, "root contents")
+	writeFunctionalFile(t, peer, "peer contents")
+	inputs, _ := runtimeMetricsRunInputs(t, home, root)
+	err := runtimeMetricsProcess(t).Execute(inputs.Input)
+	var pathErr *fs.PathError
+	if !errors.As(err, &pathErr) || !strings.HasPrefix(filepath.Clean(pathErr.Path), root) ||
+		!strings.Contains(err.Error(), "runtime metrics") {
+		t.Fatalf("startup error = %v, want metrics filesystem path failure under %q", err, root)
+	}
+	if strings.Contains(inputs.Stdout(), "runtime metrics COMPLETE") {
+		t.Fatalf("failed metrics startup published successful Work: %s", inputs.Stdout())
+	}
+	assertFunctionalFileContents(t, root, "root contents")
+	assertFunctionalFileContents(t, peer, "peer contents")
+}
+
+// M2-S/F: size retention prunes the oldest eligible file and protects a
+// recognized name that is already a directory when startup inventories it.
+func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
+	t.Parallel()
+	for _, protectDirectory := range []bool{false, true} {
+		t.Run(fmt.Sprintf("protected directory=%t", protectDirectory), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			root := platformmetrics.RuntimeMetricsRoot(home)
+			oldest := filepath.Join(root, "2026", "08", "20", "000000.000000000-runtime-metrics-oldest.log")
+			newer := writeFunctionalMetricsFixture(t, root, "2026/08/20", "010000.000000000-runtime-metrics-newer.log", "newer")
+			unknown := filepath.Join(root, "2026", "08", "20", "keep.txt")
+			writeFunctionalFile(t, unknown, "unknown file")
+			if protectDirectory {
+				writeFunctionalFile(t, filepath.Join(oldest, "child.txt"), "protected contents")
+				oldest = filepath.Join(root, "2026", "08", "20", "003000.000000000-runtime-metrics-eligible.log")
+			}
+			writeFunctionalFile(t, oldest, strings.Repeat("x", 1024*1024+1))
+			inputs, _ := runtimeMetricsRunInputs(t, home, root,
+				"--runtime-metrics-max-size-mb", "1", "--runtime-metrics-max-age-days", "0")
+			if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
+				t.Fatalf("size retention Work: %v; stderr=%s", err, inputs.Stderr())
+			}
+			if _, err := os.Stat(oldest); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("oldest eligible artifact stat = %v, want pruned", err)
+			}
+			assertFunctionalFileContents(t, unknown, "unknown file")
+			assertFunctionalFileContents(t, newer, "{\"metric_name\":\"newer\",\"value\":1}\n")
+			paths := functionalMetricArtifactPaths(t, root)
+			if len(paths) != 2 {
+				t.Fatalf("retained artifacts = %v, want newer and completed active artifact", paths)
+			}
+			for _, path := range paths {
+				if path != newer {
+					assertFunctionalRuntimeMetricsRecords(t, path)
+				}
+			}
+			if protectDirectory {
+				assertFunctionalFileContents(t, filepath.Join(root, "2026", "08", "20",
+					"000000.000000000-runtime-metrics-oldest.log", "child.txt"), "protected contents")
+			}
+		})
+	}
+}
+
+func runtimeMetricsRunInputs(t *testing.T, home, root string, flags ...string) (*support.CapturedInputs, string) {
+	t.Helper()
+	factory := support.ScaffoldSingleStepFactory(t, "retention-work")
+	testutil.WriteSeedFile(t, factory, "task", []byte(`{"title":"retention Work"}`))
+	support.WriteAgentConfig(t, factory, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	session := uuid.NewString()
+	args := append([]string{"you", "run", "--dir", factory, "--session", session,
+		"--quiet", "--no-record", "--runtime-metrics-dir", root}, flags...)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = home
+	return inputs, session
+}
+
+// M1-S uses the owning host while its completed session still has a retained
+// metrics scope. A different host cannot resolve that session under the public
+// contract, even when it points at the same artifact directory.
+func assertCompletedSessionMetrics(t *testing.T, server, session string) {
+	t.Helper()
+	query := retainedMetricsInputs(t, t.TempDir(), server, "--session", session)
+	if err := runtimeMetricsProcess(t).Execute(query.Input); err != nil {
+		t.Fatalf("completed session metrics: %v", err)
+	}
+	var report struct {
+		Scope struct {
+			Session string `json:"factory_session_id"`
+		} `json:"scope"`
+		Totals struct {
+			Input  float64 `json:"input_tokens"`
+			Output float64 `json:"output_tokens"`
+		} `json:"totals"`
+	}
+	if err := json.Unmarshal([]byte(query.Stdout()), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Scope.Session != session || report.Totals.Input <= 0 || report.Totals.Output <= 0 || query.Stderr() != "" {
+		t.Fatalf("selected session report = %+v, stderr=%q; want %q and positive provider tokens", report, query.Stderr(), session)
 	}
 }

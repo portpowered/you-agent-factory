@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -18,10 +19,21 @@ var runtimeMetricsProcessState struct {
 	err     error
 }
 
+type retainedMetricsServerKey struct{}
+
 func runtimeMetricsProcess(t testing.TB) support.ApplicationProcess {
 	t.Helper()
 	runtimeMetricsProcessState.once.Do(func() {
-		runtimeMetricsProcessState.process, runtimeMetricsProcessState.err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+		runtimeMetricsProcessState.process, runtimeMetricsProcessState.err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("runtime metrics COMPLETE"),
+			APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+				server, ok := ctx.Value(retainedMetricsServerKey{}).(*support.ProcessAPIServer)
+				if !ok {
+					return fmt.Errorf("metrics scenario server is required")
+				}
+				return server.Start(ctx, request)
+			},
+		})
 	})
 	if runtimeMetricsProcessState.err != nil {
 		t.Fatalf("build runtime metrics CLI process: %v", runtimeMetricsProcessState.err)
