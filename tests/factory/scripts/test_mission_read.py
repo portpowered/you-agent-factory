@@ -24,7 +24,15 @@ class MissionReadTests(unittest.TestCase):
         self.assertTrue(result["available"])
         self.assertEqual(result["value"], "zero=0")
         self.assertEqual(result["attempts"], 1)
-        run.assert_called_once_with(command, capture_output=True, text=True, timeout=30, shell=False)
+        run.assert_called_once_with(command, capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace", timeout=30, shell=False)
+
+    def test_non_ascii_output_is_read_without_the_locale_codec(self):
+        script = "import sys; sys.stdout.buffer.write('“ok” \x9d'.encode('utf-8'))"
+        import sys as _sys
+        result, code = reader.mission_read([_sys.executable, "-c", script])
+        self.assertEqual(code, 0)
+        self.assertTrue(result["value"].startswith("“ok”"))
 
     def test_retry_success_retains_first_partial_output(self):
         run = Mock(side_effect=[subprocess.CompletedProcess([], 1, "partial", "secret error body"),
