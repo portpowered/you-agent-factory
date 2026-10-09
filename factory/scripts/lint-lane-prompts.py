@@ -351,7 +351,8 @@ MISSION_RULES = (
     ('commands', 'Run every named command/read and report every named value, unit and source'),
     ('retry', 'Each failed read retries once; retain both attempts and available output'),
     ('optional', 'Optional exhaustion is a recorded gap, not alone FAILED'),
-    ('required', 'Required read/command failures return FAILED with the exact reason and available values'),
+    ('required', 'Observed defects and command failures unrelated to prerequisites return FAILED with the exact reason and available values'),
+    ('precondition-accepted', 'If the only problem is an unmet precondition, return ACCEPTED with output.precondition and available values, including partial measurements.'),
     ('correction', 'For gaps, prepare a narrow corrective batch plus its own dependent loopback'),
     ('receipt', 'For untagged Work, use a stable request ID, dry-run, idempotent submission and verified receipt'),
     ('tagged', 'Dry-run only in the bound Factory Session; submit no Project children'),
@@ -362,7 +363,7 @@ MISSION_RULES = (
     ('precondition-key', 'Use the exact key output.precondition with a non-blank string for an unmet precondition.'),
     ('values', 'Each measurement requires value. Zero, false and null are valid values.'),
     ('measurements-example', '{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}'),
-    ('precondition-example', '{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}'),
+    ('precondition-example', '{"decision":"ACCEPTED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}'),
 )
 
 
