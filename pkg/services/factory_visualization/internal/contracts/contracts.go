@@ -11,6 +11,7 @@ import (
 // Visualization.
 type RuntimeReader interface {
 	WithRuntimeRead(func(*factorysessions.LiveRuntime) error) error
+	WithRuntimeReadForSession(string, func(*factorysessions.LiveRuntime) error) error
 }
 
 // RuntimeSinkID is the opaque selection identity retained by composition

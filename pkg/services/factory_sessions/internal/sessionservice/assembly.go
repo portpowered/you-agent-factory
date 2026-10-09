@@ -326,6 +326,13 @@ func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error
 	return a.state.WithRuntimeRead(read)
 }
 
+func (a *Assembly) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
+	if a == nil || a.state == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return a.state.WithRuntimeReadForSession(sessionID, read)
+}
+
 func (a *Assembly) InferenceProgressPublisherFactory(logger *zap.Logger) func(string) factorysessions.ProgressPublisher {
 	if a == nil || a.streams == nil {
 		return nil

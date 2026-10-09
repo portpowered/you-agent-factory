@@ -45,6 +45,7 @@ type CurrentRuntimeResolver interface {
 
 type RuntimeReader interface {
 	WithRuntimeRead(func(*factorysessions.LiveRuntime) error) error
+	WithRuntimeReadForSession(string, func(*factorysessions.LiveRuntime) error) error
 }
 
 type DirectoryInspection = factorysessions.DirectoryInspection

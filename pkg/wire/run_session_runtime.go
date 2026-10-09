@@ -314,10 +314,8 @@ func newRunVisualizationComponent(
 				return err
 			}
 			logger := view.Logger
-			if logger == nil {
-				logger = zap.NewNop()
-			}
-			visualization, err = visualizationFactory(view.Reader, view.Projections, view.Clock, sink, func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) })
+			reader := selectedVisualizationRuntimeReader{root: root, sessionID: process.ID()}
+			visualization, err = visualizationFactory(reader, view.Projections, view.Clock, sink, func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) })
 			if err != nil {
 				return err
 			}
@@ -334,6 +332,21 @@ func newRunVisualizationComponent(
 			return err
 		},
 	}
+}
+
+// selectedVisualizationRuntimeReader retains only a session selection over the
+// fixed Sessions owner. Current Factory changes cannot redirect this host.
+type selectedVisualizationRuntimeReader struct {
+	root      *factorysessionwire.Root
+	sessionID string
+}
+
+func (reader selectedVisualizationRuntimeReader) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
+	return reader.root.WithRuntimeReadForSession(reader.sessionID, read)
+}
+
+func (reader selectedVisualizationRuntimeReader) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
+	return reader.root.WithRuntimeReadForSession(sessionID, read)
 }
 
 type historicalRunProcess struct{}

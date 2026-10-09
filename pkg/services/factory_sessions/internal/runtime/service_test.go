@@ -22,6 +22,68 @@ func newRuntimeTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(platformclock.Real{})
 }
 
+type addressedReadRegistry struct {
+	sessionregistry.Service
+	sessions map[string]*livesession.LiveSession
+	current  *livesession.LiveSession
+}
+
+func (registry addressedReadRegistry) Get(id string) *livesession.LiveSession {
+	return registry.sessions[id]
+}
+func (registry addressedReadRegistry) IDs() []string                     { return []string{"selected", "peer", "inactive"} }
+func (registry addressedReadRegistry) Current() *livesession.LiveSession { return registry.current }
+
+type addressedReadFactory struct{ factoryruntime.Service }
+
+func TestSessionAuthorityAddressedReadPreservesSelectionAndFailures(t *testing.T) {
+	t.Parallel()
+	selectedRuntime := &factorysessions.LiveRuntime{Factory: &addressedReadFactory{}}
+	peerRuntime := &factorysessions.LiveRuntime{Factory: &addressedReadFactory{}}
+	selected := &livesession.LiveSession{ID: "selected", Runtime: selectedRuntime}
+	peer := &livesession.LiveSession{ID: "peer", Runtime: peerRuntime}
+	registry := addressedReadRegistry{
+		sessions: map[string]*livesession.LiveSession{"selected": selected, "peer": peer, "inactive": {ID: "inactive"}},
+		current:  peer,
+	}
+	state := sessionruntime.NewWithResponseService(registry, nil, nil, nil, nil, nil, nil)
+	failure := errors.New("observation failed")
+	for _, testCase := range []struct {
+		id      string
+		want    *factorysessions.LiveRuntime
+		failure error
+	}{
+		{" selected ", selectedRuntime, nil},
+		{"peer", peerRuntime, nil},
+		{"selected", selectedRuntime, failure},
+		{"missing", nil, factorysessions.ErrSessionNotFound},
+		{"", nil, factorysessions.ErrSessionNotFound},
+		{"inactive", nil, factorysessions.ErrRuntimeNotAvailable},
+	} {
+		called := false
+		err := state.WithRuntimeReadForSession(testCase.id, func(runtime *factorysessions.LiveRuntime) error {
+			called = true
+			if runtime != testCase.want {
+				t.Fatalf("read %q selected another runtime", testCase.id)
+			}
+			return testCase.failure
+		})
+		if !errors.Is(err, testCase.failure) || called != (testCase.want != nil) {
+			t.Fatalf("read %q = (%v, callback %v), want (%v, callback %v)", testCase.id, err, called, testCase.failure, testCase.want != nil)
+		}
+	}
+	// A failed addressed observation leaves the peer readable, with its own
+	// runtime facts rather than a fallback to the selected Current Factory.
+	if err := state.WithRuntimeReadForSession("peer", func(runtime *factorysessions.LiveRuntime) error {
+		if runtime != peerRuntime {
+			t.Fatal("failure redirected peer observation")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServiceRegistrationResponseEventsArmsAfterHistoricalReplay(t *testing.T) {
 	t.Parallel()
 

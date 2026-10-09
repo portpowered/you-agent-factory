@@ -9,7 +9,6 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -130,7 +129,6 @@ type SessionPresentation struct {
 	ModelsScope          models.RuntimeScopeRef
 	WorkerSessions       workersessions.ObservationService
 	Logger               *zap.Logger
-	Reader               roles.RuntimeReader
 	Projections          recordings.ProjectionService
 	Clock                factoryruntime.Clock
 	MetricsRootDir       string
@@ -146,12 +144,17 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 		ModelsScope:          bound.ModelsScope,
 		WorkerSessions:       bound.WorkerSessionsObservation(),
 		Logger:               bound.Logger,
-		Reader:               r.factorySessionsRuntimeAssembly,
 		Projections:          r.recordingProjections,
 		Clock:                bound.Clock,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
 	}, nil
+}
+
+// WithRuntimeReadForSession exposes the canonical addressed observation owner;
+// consumers never recover that owner from presentation values.
+func (r *Root) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
+	return r.factorySessionsRuntimeAssembly.WithRuntimeReadForSession(sessionID, read)
 }
 
 func (r *Root) ApplicationReplayMetadataWarnings(sessionID string) ([]recordings.MetadataMismatchWarning, error) {

@@ -181,6 +181,10 @@ func (s sessionRuntimeReaderStub) WithRuntimeRead(
 	return s.withRuntimeRead(fn)
 }
 
+func (s sessionRuntimeReaderStub) WithRuntimeReadForSession(_ string, fn func(*factorysessions.LiveRuntime) error) error {
+	return s.WithRuntimeRead(fn)
+}
+
 type sessionBoundRuntimeFactory struct {
 	factoryruntime.Service
 	subscribeHook   func()
