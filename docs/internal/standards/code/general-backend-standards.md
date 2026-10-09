@@ -78,6 +78,24 @@ Rules:
   Standards **MUST NOT** duplicate migration inventories, temporary package
   exceptions, or planned target paths as permanent architecture rules.
 
+### Recording reads and materialized facts
+
+A Factory Session event history or Worker capture journal **MUST** be read only
+when the customer explicitly requests a recording: replay, recording export or
+inspection, `you run --resume <recording>`, board restore at startup, or canonical
+event-stream delivery. Every other API **MUST** read facts materialized for that
+API by its owning service. Record facts when they become known (for example,
+the Work name when a capture opens), or cache the projection of an immutable
+ended recording by its generation. An ordinary request **MUST NOT** replay or
+decode a full recording to answer a non-recording question, even on its first
+request after readiness. Prepare required retained projections during activation.
+
+The shared `recordingreads` go/analysis analyzer, registered with golangci-lint,
+enforces typed recording entrypoints and exact recording-request declarations.
+Retained debt is an exact, deletion-only baseline; an allowance documents an
+unresolved violation, not permission for another caller. Fix ordinary callers
+by materializing their facts, never by widening the recording-request allowlist.
+
 ### Minimal Internal Transformations
 
 - Each ownership boundary **MUST** keep one canonical representation for its
