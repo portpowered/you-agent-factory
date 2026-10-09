@@ -521,7 +521,7 @@ func provideProcessRuntimeFactory(
 
 func provideFactoryVisualizationFactory(
 	root *factorysessionwire.Root,
-	projections recordings.ProjectionService,
+	recordingsService recordings.Service,
 ) factoryvisualization.RuntimeFactory {
 	openSource := factoryvisualizationwire.NewRuntimeSourceOpening(root)
 	return func(
@@ -532,7 +532,7 @@ func provideFactoryVisualizationFactory(
 	) (factoryvisualization.Service, error) {
 		return factoryvisualizationwire.NewRoot(
 			openSource(sessionID),
-			projections,
+			recordingsService,
 			clock,
 			sink,
 			reportError,

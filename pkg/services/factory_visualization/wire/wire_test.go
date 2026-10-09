@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type wireSourceStub struct {
@@ -78,7 +77,7 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 			new: func() (factoryvisualization.Root, error) {
 				return factoryvisualizationwire.NewRoot(source, nil, clock, sink, nil)
 			},
-			want: "projection service is required",
+			want: "recordings service is required",
 		},
 		{
 			name: "clock",
@@ -168,24 +167,6 @@ func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
 	return root
 }
 
-func TestNewRootAdaptsProjectionOnlyPeer(t *testing.T) {
-	t.Parallel()
-
-	root, err := factoryvisualizationwire.NewRoot(
-		wireSourceStub{},
-		recordingswire.NewProjectionService(),
-		wireClock{},
-		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewRoot() returned nil root")
-	}
-}
-
 func TestNewRootServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
@@ -235,7 +216,7 @@ func TestNewRootActivatesAndObservesThroughComposedOwners(t *testing.T) {
 	presented := make(chan factoryvisualization.View, 1)
 	root, err := factoryvisualizationwire.NewRoot(
 		source,
-		&recordingsstub.Service{},
+		&recordingsstub.Service{DashboardData: recordings.SimpleDashboardRenderData{InFlightDispatchCount: 7}},
 		wireClock{},
 		factoryvisualization.SinkFunc(func(view factoryvisualization.View) {
 			presented <- view
@@ -261,6 +242,9 @@ func TestNewRootActivatesAndObservesThroughComposedOwners(t *testing.T) {
 	case view := <-presented:
 		if view.Runtime.TickCount != 3 {
 			t.Fatalf("activated view tick = %d, want 3", view.Runtime.TickCount)
+		}
+		if view.RenderData.InFlightDispatchCount != 7 {
+			t.Fatalf("activated dashboard = %#v, want injected Recordings facts", view.RenderData)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for activated view")

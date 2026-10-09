@@ -76,7 +76,7 @@ func (owner *runtimeSinkOwner) CloseRuntimeSink(id factoryvisualization.RuntimeS
 // and a nil root.
 func NewRoot(
 	source factoryvisualization.Source,
-	peer recordings.ProjectionService,
+	peer recordings.Service,
 	clock factoryvisualization.Clock,
 	sink factoryvisualization.Sink,
 	reportError factoryvisualization.ErrorReporter,
@@ -85,19 +85,15 @@ func NewRoot(
 	case source == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: event source is required")
 	case peer == nil:
-		return nil, fmt.Errorf("construct Factory Visualization: projection service is required")
+		return nil, fmt.Errorf("construct Factory Visualization: recordings service is required")
 	case clock == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: clock is required")
 	case sink == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
 	}
-	recordingsPeer, err := recordingsPeerFromProjectionService(peer)
-	if err != nil {
-		return nil, err
-	}
 	activation, err := activationlifecyclewire.NewService(
 		internalservice.ActivationEventSourceAdapter{Source: source},
-		recordingsPeer,
+		peer,
 		clock,
 		internalservice.ActivationViewSinkAdapter{Sink: sink},
 		activationlifecycle.ErrorReporter(reportError),
@@ -107,7 +103,7 @@ func NewRoot(
 	}
 	projection, err := liveviewprojectionwire.NewService(
 		source,
-		recordingsPeer,
+		peer,
 		clock,
 		sink,
 		reportError,
@@ -121,7 +117,7 @@ func NewRoot(
 		projection,
 		presentation,
 		source,
-		recordingsPeer,
+		peer,
 		clock,
 		sink,
 		reportError,
@@ -138,7 +134,7 @@ func NewRoot(
 // NewService is the canonical Factory Visualization root constructor.
 func NewService(
 	source factoryvisualization.Source,
-	peer recordings.ProjectionService,
+	peer recordings.Service,
 	clock factoryvisualization.Clock,
 	sink factoryvisualization.Sink,
 	reportError factoryvisualization.ErrorReporter,
