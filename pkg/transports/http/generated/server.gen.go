@@ -2221,8 +2221,10 @@ type ErrorFamily string
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	// Code Stable machine-readable error code.
-	Code    ErrorResponseCode            `json:"code"`
-	Details *WorkerSessionAddressDetails `json:"details,omitempty"`
+	Code ErrorResponseCode `json:"code"`
+
+	// Details Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates.
+	Details interface{} `json:"details,omitempty"`
 
 	// Family Stable machine-readable error family for broader client grouping.
 	Family  ErrorFamily `json:"family"`

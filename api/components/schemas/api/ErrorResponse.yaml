@@ -154,5 +154,7 @@ properties:
     $ref: './FactorySessionResourceCapacityErrorDetails.yaml'
     description: Resource accounting for a rejected capacity reduction.
   details:
-    $ref: ./WorkerSessionAddressDetails.yaml
-    description: Exact candidate identities when code is WORKER_SESSION_AMBIGUOUS.
+    description: >-
+      Optional error-specific JSON details, including legacy string values.
+      When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails
+      object containing exact candidate identities in candidates.

@@ -171,7 +171,7 @@ func workerSessionShowHTTPError(response *http.Response, status int) error {
 		if code == "" {
 			code = "WORKER_SESSION_SHOW_FAILED"
 		}
-		return &CLIError{Code: code, Message: apiError.Message, Details: apiError.Details}
+		return &CLIError{Code: code, Message: apiError.Message, Details: remoteAddressDetails(apiError)}
 	}
 	if status == http.StatusNotFound {
 		return newCLIError("WORKER_SESSION_NOT_FOUND", "worker session not found", nil)

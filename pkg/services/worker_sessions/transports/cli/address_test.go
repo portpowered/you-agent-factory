@@ -81,6 +81,30 @@ func mapWorkerAddressTestError(operation, placement string, response *http.Respo
 	}
 }
 
+func TestWorkerSessionGeneralErrorDetailsCLI(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"show", "continue"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			body := `{"code":"INTERNAL_ERROR","family":"INTERNAL_SERVER_ERROR","message":"server failure","details":"private-upstream-data"}`
+			response := &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader(body))}
+			mapped := mapWorkerAddressTestError(operation, "remote", response, nil)
+			var output bytes.Buffer
+			_ = emitWorkerAddressTestError(operation, &output, mapped)
+			var payload struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Code != "INTERNAL_ERROR" || payload.Message != "server failure" || strings.Contains(output.String(), "private-upstream-data") {
+				t.Fatalf("diagnostic = %s", output.String())
+			}
+		})
+	}
+}
+
 func emitWorkerAddressTestError(operation string, output *bytes.Buffer, err error) error {
 	ctx := context.Background()
 	switch operation {

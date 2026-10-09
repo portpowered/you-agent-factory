@@ -2719,8 +2719,8 @@ export interface components {
       targets?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Resource accounting for a rejected capacity reduction. */
       resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
-      /** @description Exact candidate identities when code is WORKER_SESSION_AMBIGUOUS. */
-      details?: components["schemas"]["WorkerSessionAddressDetails"];
+      /** @description Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates. */
+      details?: unknown;
     };
     ShutdownAcceptedResponse: {
       /** @enum {string} */

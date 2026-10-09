@@ -326,7 +326,7 @@ func remoteContinueHTTPError(response *http.Response, status int) error {
 		if code == "" {
 			code = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 		}
-		return &CLIError{Code: code, Message: apiError.Message, Details: apiError.Details}
+		return &CLIError{Code: code, Message: apiError.Message, Details: remoteAddressDetails(apiError)}
 	}
 	return newCLIError("WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", fmt.Sprintf("remote Worker Session continuation failed (%d)", status), nil)
 }

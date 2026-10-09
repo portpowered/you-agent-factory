@@ -2,9 +2,11 @@ package clihttp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +176,32 @@ func TestDecodeAPIError(t *testing.T) {
 	decoded, ok := DecodeAPIError(response)
 	if !ok || decoded.Message != "invalid session" {
 		t.Fatalf("decoded = %#v, ok = %t", decoded, ok)
+	}
+}
+
+func TestDecodeAPIErrorPreservesErrorSpecificDetails(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, code, details string
+	}{
+		{"string", "COST_FIXTURE_FAILED", `"private-cost-payload"`},
+		{"candidates", "WORKER_SESSION_AMBIGUOUS", `{"candidates":[{"factorySessionId":"owner","workerSessionId":"legacy","workId":"work-owner","state":"RUNNING"},{"factorySessionId":"peer","workerSessionId":"legacy","workId":null,"state":"COMPLETED"}]}`},
+		{"array", "INTERNAL_ERROR", `["legacy",42]`},
+		{"null", "INTERNAL_ERROR", `null`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			body := `{"code":"` + test.code + `","family":"INTERNAL_SERVER_ERROR","message":"typed failure","details":` + test.details + `}`
+			response := &http.Response{Body: io.NopCloser(strings.NewReader(body))}
+			decoded, ok := DecodeAPIError(response)
+			var expected any
+			if err := json.Unmarshal([]byte(test.details), &expected); err != nil {
+				t.Fatal(err)
+			}
+			if !ok || string(decoded.Code) != test.code || decoded.Message != "typed failure" || !reflect.DeepEqual(decoded.Details, expected) {
+				t.Fatalf("decoded = %#v, ok = %t, want details %#v", decoded, ok, expected)
+			}
+		})
 	}
 }
 

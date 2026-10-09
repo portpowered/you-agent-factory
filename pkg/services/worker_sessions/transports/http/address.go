@@ -30,7 +30,7 @@ func writeAmbiguousAddressError(w http.ResponseWriter, err error, phase string) 
 		Phase string `json:"phase,omitempty"`
 	}{ErrorResponse: factoryapi.ErrorResponse{
 		Message: ambiguous.Error(), Family: factoryapi.ErrorFamilyConflict,
-		Code: factoryapi.ErrorResponseCodeWORKERSESSIONAMBIGUOUS, Details: &details,
+		Code: factoryapi.ErrorResponseCodeWORKERSESSIONAMBIGUOUS, Details: details,
 	}, Phase: phase}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusConflict)
