@@ -7,6 +7,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -66,6 +67,19 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 		return HistoricalApplicationInspection{}, false, err
 	}
 	inspection := replay.Inspection()
+	closeInspection, err := r.historicalInspectionCloser(inspection, replay, closeReplay)
+	if err != nil {
+		return HistoricalApplicationInspection{}, false, err
+	}
+	return HistoricalApplicationInspection{
+		Replay:                 &inspection,
+		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...),
+		Close:                  closeInspection,
+	}, true, nil
+}
+
+func (r *RuntimeOpening) historicalInspectionCloser(inspection factorysessions.HistoricalReplayInspection, replay *recordingreplay.Scope, closeReplay func() error) (func() error, error) {
+	var err error
 	release := func() {}
 	if inspection.Checkpoint != nil {
 		release, err = r.assembly.BindHistoricalOpening(inspection.Session.SessionID, replay)
@@ -73,7 +87,7 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 			if closeReplay != nil {
 				_ = closeReplay()
 			}
-			return HistoricalApplicationInspection{}, false, err
+			return nil, err
 		}
 	}
 	closeInspection := func() error {
@@ -83,9 +97,5 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 		}
 		return nil
 	}
-	return HistoricalApplicationInspection{
-		Replay:                 &inspection,
-		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), opening.load.ReplayMetadataWarnings...),
-		Close:                  closeInspection,
-	}, true, nil
+	return closeInspection, nil
 }

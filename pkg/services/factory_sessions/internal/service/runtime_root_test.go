@@ -652,7 +652,7 @@ func TestRuntimeOpeningCleanupRetainsSelectedIdentityAndRetriesWithoutCallerCanc
 				return nil
 			}
 			factory := &RuntimeOpening{runtimeRoot: root}
-			closeRuntime := activationCloser(factory.runtimeRoot, factoryruntime.RuntimeBinding{}, "selected-generation")
+			closeRuntime := activationCloser(context.WithoutCancel(caller), factory.runtimeRoot, factoryruntime.RuntimeBinding{}, "selected-generation")
 			peer := &cleanupRoutingRoot{}
 			factory.runtimeRoot = peer
 			firstErr := closeRuntime()

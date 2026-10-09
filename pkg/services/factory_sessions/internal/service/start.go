@@ -33,7 +33,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 // The selected runtime is published to the canonical Assembly registry.
 func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	if r == nil || r.assembly == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions opening owner is required")
+		return factorysessions.SessionStartResult{}, fmt.Errorf("factory sessions opening owner is required")
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
 		return r.startDurable(ctx, r.prepareDurableStartRequest(request))
@@ -138,13 +138,13 @@ func (r *Root) StartSync(ctx context.Context, request factorysessions.StartReque
 		return factorysessions.SyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
 	if request.WorkerSettings == nil {
-		request.WorkerSettings = currentWorkerSettings(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerAttemptStarter == nil {
-		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerResourceAdmission == nil {
-		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	return r.durable.StartSync(ctx, request)
 }
@@ -154,13 +154,13 @@ func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequ
 		return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
 	if request.WorkerSettings == nil {
-		request.WorkerSettings = currentWorkerSettings(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerAttemptStarter == nil {
-		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerAttemptStarter = currentWorkerAttemptStarter(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	if request.WorkerResourceAdmission == nil {
-		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Assembly.Resolve(factorysessions.DefaultSessionID))
+		request.WorkerResourceAdmission = currentWorkerResourceAdmission(r.Resolve(factorysessions.DefaultSessionID))
 	}
 	return r.durable.StartAsync(ctx, request)
 }

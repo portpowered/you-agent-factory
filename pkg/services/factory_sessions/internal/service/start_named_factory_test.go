@@ -46,26 +46,7 @@ func TestRuntimeOpeningRetainsSelectedFactsWithoutAliasing(t *testing.T) {
 			}) {
 				t.Fatalf("selected recovery = %+v", selected.StartupRecovery)
 			}
-			settings.DefaultModel = "changed"
-			recovery.cause = "changed"
-			opening.skippedBoardRecordings[0] = "changed"
-			opening.load.ReplayMetadataWarnings[0].Key = "changed"
-			if selected.WorkerSettingsSnapshot().DefaultModel != name || selected.StartupRecovery.Cause != "CORRUPT_STATE" ||
-				selected.SkippedBoardRecordings[0] != name+".skipped" || selected.ReplayMetadataWarnings[0] != warning {
-				t.Fatal("later opening mutation changed retained session facts")
-			}
-			peer := &runtimebinding.SessionState{}
-			(&sessionRuntimeOpening{}).bindSelectedState(peer)
-			if peer.StartupRecovery != nil || peer.WorkerSettingsSnapshot() != nil || len(peer.ReplayMetadataWarnings) != 0 ||
-				selected.WorkerSettingsSnapshot().DefaultModel != name {
-				t.Fatal("empty peer opening inherited or changed selected facts")
-			}
-			(&sessionRuntimeOpening{}).bindSelectedState(selected)
-			if selected.StartupRecovery != nil || selected.WorkerSettingsSnapshot() != nil ||
-				selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" ||
-				len(selected.SkippedBoardRecordings) != 0 || len(selected.ReplayMetadataWarnings) != 0 {
-				t.Fatal("empty opening retained stale facts")
-			}
+			assertOpeningFactsDetachedAndCleared(t, name, opening, selected, settings, recovery, warning)
 		})
 	}
 }
@@ -475,5 +456,29 @@ func TestRuntimeOpeningStartAdmissionFailurePreservesCauseAndCanRetry(t *testing
 				t.Fatalf("corrected admission = %+v, error=%v, homes=%d identities=%d", result, err, homes, identities)
 			}
 		})
+	}
+}
+
+func assertOpeningFactsDetachedAndCleared(t *testing.T, name string, opening *sessionRuntimeOpening, selected *runtimebinding.SessionState, settings *factoryruntime.JavaScriptWorkerSettings, recovery *currentBoardStartupRecovery, warning recordings.MetadataMismatchWarning) {
+	t.Helper()
+	settings.DefaultModel = "changed"
+	recovery.cause = "changed"
+	opening.skippedBoardRecordings[0] = "changed"
+	opening.load.ReplayMetadataWarnings[0].Key = "changed"
+	if selected.WorkerSettingsSnapshot().DefaultModel != name || selected.StartupRecovery.Cause != "CORRUPT_STATE" ||
+		selected.SkippedBoardRecordings[0] != name+".skipped" || selected.ReplayMetadataWarnings[0] != warning {
+		t.Fatal("later opening mutation changed retained session facts")
+	}
+	peer := &runtimebinding.SessionState{}
+	(&sessionRuntimeOpening{}).bindSelectedState(peer)
+	if peer.StartupRecovery != nil || peer.WorkerSettingsSnapshot() != nil || len(peer.ReplayMetadataWarnings) != 0 ||
+		selected.WorkerSettingsSnapshot().DefaultModel != name {
+		t.Fatal("empty peer opening inherited or changed selected facts")
+	}
+	(&sessionRuntimeOpening{}).bindSelectedState(selected)
+	if selected.StartupRecovery != nil || selected.WorkerSettingsSnapshot() != nil ||
+		selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" ||
+		len(selected.SkippedBoardRecordings) != 0 || len(selected.ReplayMetadataWarnings) != 0 {
+		t.Fatal("empty opening retained stale facts")
 	}
 }

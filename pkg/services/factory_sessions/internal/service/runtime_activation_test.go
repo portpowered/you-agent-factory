@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -544,49 +543,6 @@ func TestRuntimeBindingPublicationErrorPreservesPrimaryAndCleanupFailures(t *tes
 	}
 }
 
-func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
-	t.Parallel()
-
-	service := &activationServiceFake{}
-	var calls atomic.Int32
-	binding := factoryruntime.RuntimeBinding{}.New(
-		"runtime-1",
-		service,
-		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
-			calls.Add(1)
-			return factoryruntime.RuntimeDeactivationResult{}, nil
-		},
-	)
-	closer := activationCloser(nil, binding, "runtime-1")
-
-	const callers = 16
-	var wait sync.WaitGroup
-	wait.Add(callers)
-	errs := make(chan error, callers)
-	for range callers {
-		go func() {
-			defer wait.Done()
-			errs <- closer()
-		}()
-	}
-	wait.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			t.Fatalf("activation closer error = %v, want nil", err)
-		}
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("deactivation calls = %d, want exactly once", got)
-	}
-	if err := closer(); err != nil {
-		t.Fatalf("second activation closer call = %v, want nil", err)
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("deactivation calls after second close = %d, want exactly once", got)
-	}
-}
-
 type activationServiceFake struct {
 	factoryruntime.Service
 	submitCalls    atomic.Int32
@@ -936,7 +892,7 @@ func TestSelectedReplayReadFailurePreservesExactCauseBeforeActivation(t *testing
 			} else {
 				_, _, _, err = opening.openForRequest(t.Context(), request)
 			}
-			if err != cause || calls != 1 || root.activations != 0 {
+			if !errors.Is(err, cause) || calls != 1 || root.activations != 0 {
 				t.Fatalf("error=%v reads=%d activations=%d; want exact cause, one read and no activation", err, calls, root.activations)
 			}
 		})

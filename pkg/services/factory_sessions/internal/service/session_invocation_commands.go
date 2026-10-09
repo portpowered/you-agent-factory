@@ -116,7 +116,7 @@ func (r *Root) ResolveInvocationInputForSession(_ context.Context, sessionID str
 	if err != nil {
 		return factorysessions.ResolvedInvocationInput{}, err
 	}
-	return r.Assembly.ResolveInvocationInput(config.FactoryConfig(), request)
+	return r.ResolveInvocationInput(config.FactoryConfig(), request)
 }
 
 func (r *Root) ModelsScopeForSession(_ context.Context, sessionID string) (models.RuntimeScopeRef, error) {

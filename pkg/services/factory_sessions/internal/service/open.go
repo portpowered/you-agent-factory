@@ -383,35 +383,41 @@ func (r *RuntimeOpening) restoreSessionOpeningHistory(ctx context.Context, openi
 				return err
 			}
 		}
-		var restoredBoard *currentBoardHistory
-		restoredBoard, err = restoreCurrentBoardHistory(
-			r.recordingsService,
-			opening.configured.Recordings.RecordPath,
+		return r.restoreSelectedBoardHistory(ctx, opening)
+	}
+	return nil
+}
+
+func (r *RuntimeOpening) restoreSelectedBoardHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
+	var err error
+	var restoredBoard *currentBoardHistory
+	restoredBoard, err = restoreCurrentBoardHistory(
+		r.recordingsService,
+		opening.configured.Recordings.RecordPath,
+		opening.sessionID,
+		opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
+	)
+	if err != nil {
+		if opening.usesImplicitCurrentBoard() {
+			return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
+		}
+		logCurrentBoardHistoryFailure(
+			opening.logger,
 			opening.sessionID,
-			opening.boardHistoryOpening.allowMissingHistory && !opening.hasCurrentBoardReference,
+			factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
+			err,
 		)
-		if err != nil {
-			if opening.usesImplicitCurrentBoard() {
-				return r.quarantineSelectedCurrentBoardRecording(ctx, opening, err)
+		return err
+	}
+	if restoredBoard != nil {
+		if opening.hasCurrentBoardReference {
+			if err := validateCurrentBoardFactoryDirectory(restoredBoard.events, opening.load.LoadedFactoryCfg.FactoryDir()); err != nil {
+				return currentBoardHistoryFailure(opening.configured.Recordings.RecordPath, opening.sessionID,
+					"CORRUPT_HISTORY: selected recording does not match this repository; preserve the recording and reference", err)
 			}
-			logCurrentBoardHistoryFailure(
-				opening.logger,
-				opening.sessionID,
-				factoryruntime.RecordingPath(opening.configured.Recordings.RecordPath).ForSession(opening.sessionID),
-				err,
-			)
-			return err
 		}
-		if restoredBoard != nil {
-			if opening.hasCurrentBoardReference {
-				if err := validateCurrentBoardFactoryDirectory(restoredBoard.events, opening.load.LoadedFactoryCfg.FactoryDir()); err != nil {
-					return currentBoardHistoryFailure(opening.configured.Recordings.RecordPath, opening.sessionID,
-						"CORRUPT_HISTORY: selected recording does not match this repository; preserve the recording and reference", err)
-				}
-			}
-			opening.restoredWorldState = restoredBoard.state
-			opening.restoredEventHistory = restoredBoard.events
-		}
+		opening.restoredWorldState = restoredBoard.state
+		opening.restoredEventHistory = restoredBoard.events
 	}
 	return nil
 }
@@ -441,6 +447,10 @@ func (r *RuntimeOpening) openSessionEngine(ctx context.Context, opening *session
 		}
 	}
 
+	return r.openSelectedSessionEngine(ctx, opening, cleanup)
+}
+
+func (r *RuntimeOpening) openSelectedSessionEngine(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
 	initial, err := r.initialEngine.OpenLive(ctx, opening.initialEngineRequest(), opening.observations)
 	if initial != nil {
 		opening.initial = initial

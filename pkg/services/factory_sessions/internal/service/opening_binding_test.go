@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -426,7 +428,7 @@ func TestRuntimeOpeningPublishesBindingToAcquiredOwner(t *testing.T) {
 			binding := (factoryruntime.RuntimeBinding{}).New("selected-generation", runtime)
 			operation := &RuntimeOpeningBinding{}
 			err := operation.PublishRuntime(publish, "selected-session", binding)
-			if err != failure || acquired.calls != 1 || acquired.sessionID != "selected-session" || !acquired.binding.Equal(binding) || acquired.binding.Service() != runtime || selected.calls != 0 {
+			if !errors.Is(err, failure) || acquired.calls != 1 || acquired.sessionID != "selected-session" || !acquired.binding.Equal(binding) || acquired.binding.Service() != runtime || selected.calls != 0 {
 				t.Fatalf("publication = %v, acquired=%+v replacement=%+v, want acquired identity/capability and exact cause", err, acquired, selected)
 			}
 		})
@@ -457,4 +459,52 @@ func (owner *openingPublicationOwner) BindRuntime(sessionID string, binding fact
 	owner.sessionID = sessionID
 	owner.binding = binding
 	return owner.err
+}
+
+func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
+	t.Parallel()
+
+	caller, cancel := context.WithCancel(t.Context())
+	service := &activationServiceFake{}
+	var calls atomic.Int32
+	binding := factoryruntime.RuntimeBinding{}.New(
+		"runtime-1",
+		service,
+		func(ctx context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			if ctx.Err() != nil {
+				return factoryruntime.RuntimeDeactivationResult{}, ctx.Err()
+			}
+			calls.Add(1)
+			return factoryruntime.RuntimeDeactivationResult{}, nil
+		},
+	)
+	closer := activationCloser(context.WithoutCancel(caller), nil, binding, "runtime-1")
+
+	cancel()
+	const callers = 16
+	var wait sync.WaitGroup
+	wait.Add(callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			defer wait.Done()
+			errs <- closer()
+		}()
+	}
+	wait.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("activation closer error = %v, want nil", err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("deactivation calls = %d, want exactly once", got)
+	}
+	if err := closer(); err != nil {
+		t.Fatalf("second activation closer call = %v, want nil", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("deactivation calls after second close = %d, want exactly once", got)
+	}
 }

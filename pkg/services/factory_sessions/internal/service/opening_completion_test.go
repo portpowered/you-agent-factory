@@ -139,7 +139,7 @@ func TestRuntimeOpeningCompletionRetainsSelectedRuntimeCapabilities(t *testing.T
 				if result.RuntimeService != selected || result.BindRuntime == nil {
 					t.Fatal("completion lost selected capabilities")
 				}
-				if err := result.BindRuntime("selected", binding); err != cause || calls != 1 {
+				if err := result.BindRuntime("selected", binding); !errors.Is(err, cause) || calls != 1 {
 					t.Fatalf("selected publication cause: %v calls=%d", err, calls)
 				}
 			} else if result.RuntimeService != nil || result.BindRuntime != nil {
@@ -503,7 +503,7 @@ func TestRuntimeOpeningModelsBindingRetainsAcquiredCapability(t *testing.T) {
 	if bind == nil || calls != 0 {
 		t.Fatal("capability selection activated Models binding")
 	}
-	if err := bind(scope); err != cause || calls != 1 {
+	if err := bind(scope); !errors.Is(err, cause) || calls != 1 {
 		t.Fatalf("selected binding: %v calls=%d", err, calls)
 	}
 	if openedModelsScopeBinding(inertHostedInstance{}) != nil {

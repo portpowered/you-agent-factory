@@ -487,20 +487,7 @@ func TestStartUsesInjectedOperationsAndPreservesTypedFailure(t *testing.T) {
 			if calls != 0 {
 				t.Fatal("construction invoked opening operations")
 			}
-			got, err := root.Start(ctx, request)
-			if !reflect.DeepEqual(got, startResult) || err != outcomeErr {
-				t.Fatalf("start = (%+v, %v)", got, err)
-			}
-			if failing {
-				var typed *os.PathError
-				if !errors.As(err, &typed) || typed != cause {
-					t.Fatalf("lost typed cause: %v", err)
-				}
-			}
-			inspected, historical, err := root.InspectHistoricalApplication(ctx, request)
-			if inspected.Replay != replay || !historical || err != outcomeErr {
-				t.Fatalf("inspection = (%+v, %v, %v)", inspected, historical, err)
-			}
+			assertInjectedOpeningOutcomes(t, root, ctx, request, startResult, replay, outcomeErr, cause, failing)
 			if calls != 2 {
 				t.Fatalf("operation calls = %d, want 2", calls)
 			}
@@ -537,14 +524,14 @@ func TestStartUsesInjectedDurableOwner(t *testing.T) {
 	request := factorysessions.StartRequest{WorkerSettings: &factoryruntime.JavaScriptWorkerSettings{}}
 	ctx := t.Context()
 	syncResult, err := root.StartSync(ctx, request)
-	if err != owner.failure || syncResult.SessionID != "sync-selected" {
+	if !errors.Is(err, owner.failure) || syncResult.SessionID != "sync-selected" {
 		t.Fatalf("sync = (%+v, %v)", syncResult, err)
 	}
 	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
 		t.Fatal("sync changed selected request/context")
 	}
 	asyncResult, err := root.StartAsync(ctx, request)
-	if err != owner.failure || asyncResult.SessionID != "async-selected" {
+	if !errors.Is(err, owner.failure) || asyncResult.SessionID != "async-selected" {
 		t.Fatalf("async = (%+v, %v)", asyncResult, err)
 	}
 	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) {
@@ -610,20 +597,43 @@ func TestRuntimeOpeningUsesInjectedDurableStartOwner(t *testing.T) {
 			if request.Args["selected"] != "original" || owner.request.WorkerSettings == request.WorkerSettings {
 				t.Fatal("durable owner retained mutable caller selections")
 			}
-			cause := &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}
-			owner.failure = cause
-			if _, err := opening.Start(t.Context(), request); !errors.Is(err, cause) {
-				t.Fatalf("typed cause = %v", err)
-			}
-			owner.failure = nil
-			if _, err := opening.Start(t.Context(), request); err != nil || owner.calls != 3 {
-				t.Fatalf("corrected retry = %v, calls = %d", err, owner.calls)
-			}
-			request.Wait.TimeoutMillis = -1
-			var invalid *factorysessions.DetachedRequestError
-			if _, err := opening.Start(t.Context(), request); !errors.As(err, &invalid) || invalid.Field != "wait.timeoutMillis" || owner.calls != 3 {
-				t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
-			}
+			assertDurableOpeningRetryAndValidation(t, opening, owner, request)
 		})
+	}
+}
+
+func assertInjectedOpeningOutcomes(t *testing.T, root *Root, ctx context.Context, request factorysessions.SessionStartRequest, startResult factorysessions.SessionStartResult, replay *factorysessions.HistoricalReplayInspection, outcomeErr error, cause *os.PathError, failing bool) {
+	t.Helper()
+	got, err := root.Start(ctx, request)
+	if !reflect.DeepEqual(got, startResult) || !errors.Is(err, outcomeErr) {
+		t.Fatalf("start = (%+v, %v)", got, err)
+	}
+	if failing {
+		var typed *os.PathError
+		if !errors.As(err, &typed) || typed != cause {
+			t.Fatalf("lost typed cause: %v", err)
+		}
+	}
+	inspected, historical, err := root.InspectHistoricalApplication(ctx, request)
+	if inspected.Replay != replay || !historical || !errors.Is(err, outcomeErr) {
+		t.Fatalf("inspection = (%+v, %v, %v)", inspected, historical, err)
+	}
+}
+
+func assertDurableOpeningRetryAndValidation(t *testing.T, opening *RuntimeOpening, owner *openingDurableStartStub, request factorysessions.SessionStartRequest) {
+	t.Helper()
+	cause := &os.PathError{Op: "write", Path: "/selected", Err: os.ErrPermission}
+	owner.failure = cause
+	if _, err := opening.Start(t.Context(), request); !errors.Is(err, cause) {
+		t.Fatalf("typed cause = %v", err)
+	}
+	owner.failure = nil
+	if _, err := opening.Start(t.Context(), request); err != nil || owner.calls != 3 {
+		t.Fatalf("corrected retry = %v, calls = %d", err, owner.calls)
+	}
+	request.Wait.TimeoutMillis = -1
+	var invalid *factorysessions.DetachedRequestError
+	if _, err := opening.Start(t.Context(), request); !errors.As(err, &invalid) || invalid.Field != "wait.timeoutMillis" || owner.calls != 3 {
+		t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
 	}
 }
