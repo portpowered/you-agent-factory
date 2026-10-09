@@ -2,6 +2,7 @@ package script_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -197,5 +198,29 @@ func runScriptPayloadScenario(t *testing.T, fixture *scriptSharedSpineFixture, t
 		}
 	} else if len(edge.requests) != 1 || string(edge.requests[0].Stdin) != tc.payload {
 		t.Fatalf("received requests=%#v, want complete submitted payload", edge.requests)
+	}
+	// Public event reads own the API event contract; ordinary Work journeys
+	// continue to use the existing shared public invocation spine.
+	requests := 0
+	for _, event := range support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID) {
+		if event.Type != factoryapi.FactoryEventTypeScriptRequest {
+			continue
+		}
+		requests++
+		payload, err := event.Payload.AsScriptRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload.StdinByteLength == nil || *payload.StdinByteLength != int64(len(tc.payload)) ||
+			payload.StdinSha256 == nil || *payload.StdinSha256 != fmt.Sprintf("%x", sha256.Sum256([]byte(tc.payload))) {
+			t.Fatalf("SCRIPT_REQUEST fingerprint does not match received payload: %#v", payload)
+		}
+	}
+	wantRequests := 1
+	if tc.stdin == "{{" {
+		wantRequests = 0
+	}
+	if requests != wantRequests {
+		t.Fatalf("SCRIPT_REQUEST count = %d, want %d", requests, wantRequests)
 	}
 }

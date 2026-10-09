@@ -767,7 +767,28 @@ func (reusable *seededReplayResumeProcess) runForSession(
 		}
 	})
 	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, home: home, daemon: daemon}
+	// Readiness and early command failure are separate observable outcomes.
+	// Polling is needed because the public HTTP edge and command completion do
+	// not expose a combined readiness signal.
+	type startupObservation struct {
+		url string
+		err error
+	}
+	ready, waitErr := support.WaitForObservation(time.Minute, func() (startupObservation, error) {
+		if url, ok := api.BaseURL(); ok {
+			return startupObservation{url: url}, nil
+		}
+		select {
+		case <-daemon.Done():
+			return startupObservation{err: fmt.Errorf("resume exited before HTTP readiness: %v", daemon.Err())}, nil
+		default:
+			return startupObservation{}, nil
+		}
+	}, func(observed startupObservation) bool { return observed.url != "" || observed.err != nil })
+	if waitErr != nil || ready.err != nil {
+		t.Fatalf("resume startup: %v; command=%v; stderr=%s", waitErr, ready.err, inputs.Stderr())
+	}
+	return seededReplayResumeRun{url: ready.url, sessionID: sessionID, home: home, daemon: daemon}
 }
 
 func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {

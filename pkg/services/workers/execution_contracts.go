@@ -265,6 +265,8 @@ type ScriptRequestEventPayload struct {
 	DispatchID      string   `json:"dispatchId"`
 	ScriptRequestID string   `json:"scriptRequestId"`
 	TransitionID    string   `json:"transitionId"`
+	StdinByteLength *int64   `json:"stdinByteLength,omitempty"`
+	StdinSha256     *string  `json:"stdinSha256,omitempty"`
 }
 
 // ScriptResponseEventPayload records one script attempt outcome.

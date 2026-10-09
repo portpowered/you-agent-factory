@@ -134,7 +134,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 // retain completed-dispatch associations after Factory Session recovery.
 func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.CompletedDispatch) error {
 	if e == nil || e.runtimeState == nil {
-		return fmt.Errorf("Factory Runtime engine is required")
+		return fmt.Errorf("factory runtime engine is required")
 	}
 	if len(history) == 0 {
 		return nil
@@ -148,6 +148,29 @@ func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.Complet
 	for index := range history {
 		e.runtimeState.DispatchHistory[index] = deepCopyCompletedDispatch(history[index])
 	}
+	e.publishRuntimeSnapshotLocked()
+	return nil
+}
+
+// SeedRestoredDispatch retains an already-executed dispatch's original claims
+// until its recorded result passes through the normal completion phases.
+// The opening owns removal of these claims from the fresh marking.
+func (e *FactoryEngine) SeedRestoredDispatch(entry interfaces.DispatchEntry) error {
+	if e == nil || e.runtimeState == nil {
+		return fmt.Errorf("factory runtime engine is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.runLoopActive || e.runtimeState.TickCount != 0 || entry.DispatchID == "" || len(entry.ConsumedTokens) == 0 {
+		return fmt.Errorf("recorded dispatch claims can only be restored before execution")
+	}
+	if _, exists := e.runtimeState.Dispatches[entry.DispatchID]; exists {
+		return fmt.Errorf("recorded dispatch %q already has restored claims", entry.DispatchID)
+	}
+	entry.ConsumedTokens = cloneWorkerTokens(entry.ConsumedTokens)
+	entry.ExpectedArtifactContext = entry.ExpectedArtifactContext.Clone()
+	e.runtimeState.Dispatches[entry.DispatchID] = &entry
+	e.runtimeState.InFlightCount++
 	e.publishRuntimeSnapshotLocked()
 	return nil
 }
@@ -473,6 +496,33 @@ func (e *FactoryEngine) SetReplayHistoricalWorks(existing []work.ExistingWork) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
+}
+
+// SetReplayLifecycleControls preserves the scheduling boundary of paused
+// completion ticks. Replay advances its logical clock and consumes recorded
+// results; it never interprets those ticks as a live restart or resume.
+func (e *FactoryEngine) SetReplayLifecycleControls(events []interfaces.FactoryEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.replayPauseControls = nil
+	for _, event := range events {
+		if event.Type == interfaces.FactoryEventTypeSessionPaused || event.Type == interfaces.FactoryEventTypeSessionResumed {
+			e.replayPauseControls = append(e.replayPauseControls, interfaces.FactoryEvent{Type: event.Type, Context: interfaces.FactoryEventContext{Tick: event.Context.Tick}})
+		}
+	}
+}
+
+func (e *FactoryEngine) replayPauseAtTick(tick int) (paused, pending, finished bool) {
+	for _, event := range e.replayPauseControls {
+		// Controls are recorded between ticks: their scheduling effect begins
+		// on the next tick, including the first paused completion tick.
+		if event.Context.Tick >= tick {
+			pending = true
+			continue
+		}
+		paused = event.Type == interfaces.FactoryEventTypeSessionPaused
+	}
+	return paused, pending, paused && !pending && e.runtimeState.InFlightCount == 0
 }
 
 // existingWorksForAdmissionLocked returns the current board identities used

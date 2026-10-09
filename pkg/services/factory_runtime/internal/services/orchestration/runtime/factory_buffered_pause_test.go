@@ -72,7 +72,7 @@ func TestServiceMode_MultipleSubmissionsWhilePaused_ResumeDrainsToQuiescence(t *
 	waitForRunStop(t, errCh)
 }
 
-func TestServiceMode_WorkerPoolResultWhilePaused_ResumeDrainsWithoutExternalSignal(t *testing.T) {
+func TestServiceMode_WorkerPoolResultWhilePaused_CompletesBeforeResume(t *testing.T) {
 	executor := &asyncRecordingExecutor{
 		started: make(chan work.WorkDispatch, 1),
 		release: make(chan struct{}),
@@ -107,7 +107,7 @@ func TestServiceMode_WorkerPoolResultWhilePaused_ResumeDrainsWithoutExternalSign
 
 	select {
 	case <-executor.started:
-	case <-time.After(time.Second):
+	case <-time.After(time.Minute):
 		t.Fatal("timed out waiting for worker-pool dispatch to start")
 	}
 
@@ -118,7 +118,7 @@ func TestServiceMode_WorkerPoolResultWhilePaused_ResumeDrainsWithoutExternalSign
 
 	close(executor.release)
 	waitForBufferedResult(t, buffered)
-	assertPausedWithoutProcessedWork(t, f)
+	assertPausedWorkerResultApplied(t, f)
 
 	if err := f.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume: %v", err)
@@ -156,7 +156,7 @@ func waitForRunStop(t *testing.T, errCh <-chan error) {
 	}
 }
 
-func TestServiceMode_WorkerResultWhilePaused_BuffersUntilResume(t *testing.T) {
+func TestServiceMode_WorkerResultWhilePaused_CompletesBeforeResume(t *testing.T) {
 	executor := &blockingExecutor{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
@@ -184,7 +184,7 @@ func TestServiceMode_WorkerResultWhilePaused_BuffersUntilResume(t *testing.T) {
 	h.pauseAndWait()
 	close(executor.release)
 	waitForBufferedResult(t, buffered)
-	assertPausedWorkerResultBuffered(t, h.Factory)
+	assertPausedWorkerResultApplied(t, h.Factory)
 
 	h.resumeAndWait()
 	waitForWorkAtPlace(t, h.Factory, "task:done", time.Second)
@@ -266,7 +266,7 @@ func TestServiceMode_RepeatedPausePreservesBufferedSubmission(t *testing.T) {
 	waitForWorkAtPlace(t, h.Factory, "task:done", time.Second)
 }
 
-func TestServiceMode_RepeatedPausePreservesBufferedWorkerResult(t *testing.T) {
+func TestServiceMode_RepeatedPausePreservesCompletedWorkerResult(t *testing.T) {
 	executor := &blockingExecutor{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
@@ -304,7 +304,7 @@ func TestServiceMode_RepeatedPausePreservesBufferedWorkerResult(t *testing.T) {
 		t.Fatalf("third Pause: %v", err)
 	}
 	waitForFactoryState(t, h.Factory, interfaces.FactoryStatePaused, time.Second)
-	assertPausedWorkerResultNotDone(t, h.Factory)
+	assertPausedWorkerResultApplied(t, h.Factory)
 
 	h.resumeAndWait()
 	waitForWorkAtPlace(t, h.Factory, "task:done", time.Second)

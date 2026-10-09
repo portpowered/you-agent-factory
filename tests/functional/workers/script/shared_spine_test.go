@@ -272,6 +272,7 @@ func newScriptSharedSpineScenarios(t *testing.T) []scriptSharedScenario {
 	}
 	scenarios = append(scenarios, newScriptSharedExecutionScenarios(t)...)
 	scenarios = append(scenarios, newScriptSharedEnvironmentScenarios(t)...)
+	scenarios = append(scenarios, newGatedMissionScenarios(t)...)
 	return append(scenarios, newScriptPayloadScenarios(t)...)
 }
 

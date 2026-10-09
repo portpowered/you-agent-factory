@@ -10782,6 +10782,15 @@ components:
           description: Fully resolved command arguments passed to the script command runner.
           items:
             type: string
+        stdinByteLength:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Byte length of rendered stdin passed to the command runner, including zero for empty stdin.
+        stdinSha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Lowercase SHA-256 digest of rendered stdin bytes passed to the command runner.
     ScriptResponseEventPayload:
       type: object
       additionalProperties: false

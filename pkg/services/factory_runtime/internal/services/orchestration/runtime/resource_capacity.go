@@ -346,9 +346,17 @@ func reconcileRestoredDispatches(cfg *runtimeConfig, eventHistory recordings.Run
 	sort.Strings(activeDispatchIDs)
 
 	existingEvents := eventHistory.CanonicalEvents()
+	if err := validateRestoredAcceptedResponses(cfg, existingEvents); err != nil {
+		return err
+	}
 	for _, dispatchID := range activeDispatchIDs {
 		dispatch := cfg.restoredWorldState.ActiveDispatches[dispatchID]
 		if restoredDispatchHasTerminalEvent(existingEvents, dispatchID) {
+			continue
+		}
+		if _, accepted := restoredAcceptanceIndex(existingEvents, dispatchID); accepted {
+			// Opening restores this claim and delivers its recorded result through
+			// the normal dispatch hook. Acceptance is never an interruption.
 			continue
 		}
 		// Historical dispatch reconstruction requires a transition-bearing
