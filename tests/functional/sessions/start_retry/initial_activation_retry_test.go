@@ -88,6 +88,12 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
+	policies := []initialOpeningScenario{newOpeningPolicyScenario(t), newOpeningPolicyScenario(t)}
+	policyGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	for _, scenario := range policies {
+		policyGate.paths[scenario.candidateDir] = scenario.candidateID
+	}
+	t.Cleanup(policyGate.unblock)
 	overlap := newInitialOpeningProviderScenario(t)
 	canceledWork := []initialOpeningScenario{
 		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
@@ -150,7 +156,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate, policy: policyGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Port == completionFailurePort {
@@ -260,6 +266,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("selected prompts and results survive overlapping live Work", func(t *testing.T) {
 		t.Parallel()
 		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
+	})
+	t.Run("quiet and verbose invocations retain selected observations across current selection", func(t *testing.T) {
+		t.Parallel()
+		testOpeningPolicyOverlap(t, process, sessions, policies, policyGate, api.WaitForURL(t), logs)
 	})
 	t.Run("four explicit sessions overlap and closing one preserves three gated peers", func(t *testing.T) {
 		t.Parallel()
@@ -533,6 +543,7 @@ type initialOpeningProviderRunner struct {
 	canceled *selectedProviderGate
 	host     *selectedProviderGate
 	binding  *bindingChildGate
+	policy   *selectedProviderGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -540,6 +551,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.policy != nil && runner.policy.paths[request.WorkDir] != "" {
+		return runner.policy.run(ctx, request)
+	}
 	if runner.binding != nil && runner.binding.selected[request.WorkDir] != "" {
 		return runner.binding.run(ctx, request)
 	}

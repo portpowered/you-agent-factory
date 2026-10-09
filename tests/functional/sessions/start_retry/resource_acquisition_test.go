@@ -129,22 +129,34 @@ func assertSelectedProviderResponses(t *testing.T, ctx context.Context, sessions
 				t.Fatalf("peer response lost identity or ordering: %+v", event)
 			}
 			lastSequence = event.Sequence
-			if event.Kind != factorysessions.ResponseEventKindMessage || event.Phase != factorysessions.ResponseEventPhaseCompleted || event.Provenance.Delivery != factorysessions.ResponseEventDeliveryNativeStream {
-				continue
+			if assertSelectedProviderNativeMessage(t, id, event) {
+				messages++
 			}
-			var message factorysessions.ResponseEventMessage
-			if err := json.Unmarshal(event.Payload, &message); err != nil {
-				t.Fatal(err)
-			}
-			if event.Provenance.Provider != "codex" || len(message.ContentBlocks) != 1 || message.ContentBlocks[0].Text != id+" COMPLETE" {
-				t.Fatalf("peer response crossed provider/session output: %s", event.Payload)
-			}
-			messages++
 		}
 	}
 	if messages != 1 {
 		t.Fatalf("peer completed native response messages=%d, want one", messages)
 	}
+	assertSelectedProviderCursorReplay(t, ctx, sessions, id, observed)
+}
+
+func assertSelectedProviderNativeMessage(t *testing.T, id string, event factorysessions.FactoryResponseEvent) bool {
+	t.Helper()
+	if event.Kind != factorysessions.ResponseEventKindMessage || event.Phase != factorysessions.ResponseEventPhaseCompleted || event.Provenance.Delivery != factorysessions.ResponseEventDeliveryNativeStream {
+		return false
+	}
+	var message factorysessions.ResponseEventMessage
+	if err := json.Unmarshal(event.Payload, &message); err != nil {
+		t.Fatal(err)
+	}
+	if event.Provenance.Provider != "codex" || len(message.ContentBlocks) != 1 || message.ContentBlocks[0].Text != id+" COMPLETE" {
+		t.Fatalf("peer response crossed provider/session output: %s", event.Payload)
+	}
+	return true
+}
+
+func assertSelectedProviderCursorReplay(t *testing.T, ctx context.Context, sessions factorysessions.Service, id string, observed []factorysessions.FactoryResponseEvent) {
+	t.Helper()
 	if len(observed) < 2 {
 		t.Fatal("selected response history has no acknowledged prefix and suffix")
 	}
