@@ -1,6 +1,7 @@
 package workersessions_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -552,19 +553,22 @@ func assertReusedWorkAttribution(t *testing.T, row map[string]any, name string, 
 // sequential. Reuse the existing parity helpers rather than a second harness.
 func runArchivedWorkAttributionNamedCloseJourneys(t *testing.T, process support.Process) {
 	t.Parallel()
-	for _, recorded := range []bool{false, true} {
-		name := "unrecorded"
-		if recorded {
-			name = "recorded"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, scenario := range []struct {
+		name                string
+		recorded, ownerLost bool
+	}{
+		{name: "unrecorded"},
+		{name: "recorded", recorded: true},
+		{name: "owner lost retains named Work", recorded: true, ownerLost: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
-			runArchivedWorkAttributionNamedClose(t, process, recorded)
+			runArchivedWorkAttributionNamedClose(t, process, scenario.recorded, scenario.ownerLost)
 		})
 	}
 }
 
-func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process, recorded bool) {
+func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process, recorded, ownerLost bool) {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "archived-attribution")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
@@ -583,15 +587,7 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 		scopeID = support.OpenFactorySessionAt(t, host.URL(), dir).Session.Id
 	}
 	name := "archive-alpha"
-	support.SubmitSessionWorkAt(t, host.URL(), scopeID, factoryapi.SubmitWorkRequest{
-		WorkTypeName: "task", Name: &name, Payload: "hold named Work until cancellation",
-	})
-	var done <-chan struct{}
-	select {
-	case done = <-runner.started:
-	case <-ctx.Done():
-		t.Fatal("named Work did not reach provider edge")
-	}
+	done := admitNamedAttributionWork(t, ctx, host, runner, scopeID, name)
 	active := historyParityPage(t, ctx, session, host, "active", "factory", "")
 	rows := active["sessions"].([]any)
 	if len(rows) != 1 {
@@ -613,12 +609,19 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 		// The recorded host owns its default scope. Orderly host closure joins
 		// that scope; a fresh host reads the same profile without a live Work.
 		host.Close(t)
+		if ownerLost {
+			retainAttributionCapturePrefix(t, dir, id)
+		}
 		cfg.Args = nil
 		host = support.StartFunctionalAPIServer(t, cfg)
 		session, ctx = startMCP(t, process, host.URL())
 		endpoint = host.URL() + "/worker-sessions/" + url.PathEscape(id)
 	} else {
 		support.CloseFactorySessionAt(t, host.URL(), scopeID)
+	}
+	if ownerLost {
+		assertNamedOwnerLostHistory(t, ctx, session, host, id, live)
+		return
 	}
 	archived := historyParityPage(t, ctx, session, host, "archived", "factory", "")
 	closed := assertArchivedAttributionRow(t, archived, id, live, recorded)
@@ -631,6 +634,102 @@ func runArchivedWorkAttributionNamedClose(t *testing.T, process support.Process,
 	assertFactoryCLIParity(t, host, id, selected)
 	assertJSONEqual(t, logs, getHost(t, endpoint+"/logs"))
 	assertArchivedAttributionTable(t, ctx, host, name, recorded)
+}
+
+func admitNamedAttributionWork(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer, runner controlHostRunner, scopeID, name string) <-chan struct{} {
+	t.Helper()
+	support.SubmitSessionWorkAt(t, host.URL(), scopeID, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Name: &name, Payload: "hold named Work until cancellation",
+	})
+	var done <-chan struct{}
+	select {
+	case done = <-runner.started:
+	case <-ctx.Done():
+		t.Fatal("named Work did not reach provider edge")
+	}
+	return done
+}
+
+// F-03 seeds the last committed pre-terminal capture at the file edge only
+// after the original host has joined. The Factory artifact remains intact;
+// recovery must use its exact association rather than a live Work or sibling.
+func retainAttributionCapturePrefix(t *testing.T, dir, workerID string) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(dir, ".you-agent-factory", "worker-recordings", "*.worker.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var prefix []byte
+		for _, line := range bytes.Split(bytes.TrimSuffix(data, []byte{'\n'}), []byte{'\n'}) {
+			var entry struct {
+				WorkerSessionID string `json:"workerSessionId"`
+				Kind            string `json:"kind"`
+				Record          *struct {
+					Payload struct {
+						Phase string `json:"phase"`
+					} `json:"payload"`
+				} `json:"record"`
+			}
+			if err := json.Unmarshal(line, &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry.WorkerSessionID != workerID {
+				break
+			}
+			if entry.Kind != "record" || entry.Record == nil || entry.Record.Payload.Phase == "CANCELED" || entry.Record.Payload.Phase == "COMPLETED" || entry.Record.Payload.Phase == "FAILED" {
+				if len(prefix) == 0 {
+					t.Fatal("capture has no committed opening prefix")
+				}
+				if err := os.WriteFile(path, prefix, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			prefix = append(append(prefix, line...), '\n')
+		}
+	}
+	t.Fatal("named capture has no removable terminal boundary")
+}
+
+func assertNamedOwnerLostHistory(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string, live map[string]any) {
+	t.Helper()
+	active := historyParityPage(t, ctx, session, host, "active", "factory", "")
+	if len(active["sessions"].([]any)) != 0 {
+		t.Fatalf("recovery invented an active owner: %v", active)
+	}
+	selected := getHost(t, host.URL()+"/worker-sessions/"+url.PathEscape(id)).(map[string]any)
+	if selected["state"] != "FAILED" || selected["confirmationState"] != "UNCONFIRMED" || selected["recordingHealth"] != "INCOMPLETE" || selected["failure"].(map[string]any)["kind"] != "PROCESS_GONE" {
+		t.Fatalf("owner loss invented completion or confirmation: %v", selected)
+	}
+	if selected["workName"] != "archive-alpha" || selected["provider"] != "codex" || selected["endedAt"] != nil {
+		t.Fatalf("owner loss lost authored facts or invented a terminal timestamp: %v", selected)
+	}
+	for _, field := range []string{"workerSessionId", "factorySessionId", "workId", "workName", "provider"} {
+		if selected[field] != live[field] {
+			t.Fatalf("owner loss changed retained %s: got=%v live=%v", field, selected, live)
+		}
+	}
+	for _, view := range []string{"archived", "all"} {
+		page := historyParityPage(t, ctx, session, host, view, "factory", "")
+		rows := page["sessions"].([]any)
+		if len(rows) != 1 {
+			t.Fatalf("%s lost or duplicated recovered membership: %v", view, page)
+		}
+		assertJSONEqual(t, selected, rows[0])
+	}
+	assertFactoryCLIParity(t, host, id, selected)
+	assertRuntimeObservationParity(t, selected, callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"])
+	assertAttributionMarker(t, getHost(t, host.URL()+"/worker-sessions/"+url.PathEscape(id)+"/logs"))
+	// Both hosts run in this test process. A changed supervisor epoch does not
+	// prove OS death or acquire authority to stop a historical child.
+	for _, operation := range []string{"cancel", "terminate"} {
+		assertUnwitnessedHistoryControlRefused(t, host, id, operation)
+	}
 }
 
 func assertAdmittedAttributionName(t *testing.T, work any, name string) {
