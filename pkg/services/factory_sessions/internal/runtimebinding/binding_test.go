@@ -673,6 +673,12 @@ func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	var runtimeState runtimebinding.State
 	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
+	const sourceSessionID = "recorded-source-session"
+	sessions.Register(sessionruntime.Registration{
+		SessionID: sessionID, RuntimeFactorySessionID: sessionID,
+		RuntimeEventSessionID: sourceSessionID,
+		Handle:                &runtimebinding.SessionState{Instance: bundle},
+	})
 	runtimeState.SetStartup(bundle)
 	target := factorysessions.Target{
 		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "factory-a"},
@@ -697,6 +703,9 @@ func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
 	session := sessions.Resolve(sessionID)
 	if session == nil || runtimebinding.HandleFromSession(session) != handle {
 		t.Fatalf("explicit session = %#v, want started handle", session)
+	}
+	if session.RuntimeEventSessionID != sourceSessionID || session.RuntimeFactorySessionID != sessionID {
+		t.Fatalf("running successor lost prepared identity: runtime=%q events=%q", session.RuntimeFactorySessionID, session.RuntimeEventSessionID)
 	}
 	if sessions.Resolve(factorysessions.DefaultSessionID) != nil {
 		t.Fatal("explicit startup also registered the compatibility default session")

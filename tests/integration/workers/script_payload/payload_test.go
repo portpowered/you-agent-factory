@@ -142,6 +142,7 @@ sys.exit(result.returncode)
 		"workers":      []any{map[string]any{"name": "router", "type": "SCRIPT_WORKER", "command": python, "args": []string{probe, `{{ (index .Inputs 0).Name }}`, project, filepath.Join(repo, "factory", "scripts", "route-thoughts.py")}, "stdin": `{{ (index .Inputs 0).Payload }}`}},
 		"workstations": []any{map[string]any{"name": "route", "type": "CLASSIFIER_WORKSTATION", "worker": "router", "inputs": []any{map[string]any{"workType": "thoughts", "state": "init"}}, "classificationRoutes": []any{map[string]any{"label": "mission", "outputs": []any{map[string]any{"workType": "thoughts", "state": "mission-ready"}}}, map[string]any{"label": "supervision", "outputs": []any{map[string]any{"workType": "thoughts", "state": "supervising"}}}}, "onFailure": []any{map[string]any{"workType": "thoughts", "state": "reporting-failed"}}, "workPropagation": map[string]any{"mode": "PRESERVE_INPUT"}}},
 	}
+	config["workTypes"] = append(config["workTypes"].([]any), map[string]any{"name": "idea", "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "complete", "type": "TERMINAL"}}})
 	raw, err := json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)

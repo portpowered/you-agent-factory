@@ -5066,6 +5066,13 @@ export interface components {
       command: string;
       /** @description Fully resolved command arguments passed to the script command runner. */
       args: string[];
+      /**
+       * Format: int64
+       * @description Byte length of rendered stdin passed to the command runner, including zero for empty stdin.
+       */
+      stdinByteLength?: number;
+      /** @description Lowercase SHA-256 digest of rendered stdin bytes passed to the command runner. */
+      stdinSha256?: string;
     };
     /** @description Response details captured after a script-backed worker command returns or fails before a normal exit code. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
     ScriptResponseEventPayload: {

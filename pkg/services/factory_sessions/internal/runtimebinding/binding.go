@@ -366,7 +366,8 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
-	previous := SessionStateFrom(state.Resolve(input.SessionID))
+	previousSession := state.Resolve(input.SessionID)
+	previous := SessionStateFrom(previousSession)
 	if previous != nil {
 		projectionOwner = previous.Owner
 		invoker = previous.Invoker
@@ -378,8 +379,17 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	}
 	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation, Process: process, Diagnostics: diagnostics}
 	handle.inheritApplicationValues(previous)
+	// Opening already selected the canonical identity and the retained source
+	// event scope. Keep both when attaching the running handle, including named
+	// successors: their Work admission history still belongs to the source.
+	var runtimeSessionID, eventSessionID string
+	if previousSession != nil {
+		runtimeSessionID = previousSession.RuntimeFactorySessionID
+		eventSessionID = previousSession.RuntimeEventSessionID
+	}
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
+		RuntimeFactorySessionID: runtimeSessionID, RuntimeEventSessionID: eventSessionID,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
 		Handle: handle,
 		Runtime: &factorysessions.LiveRuntime{
