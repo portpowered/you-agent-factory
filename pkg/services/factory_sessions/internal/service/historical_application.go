@@ -36,7 +36,7 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 ) (HistoricalApplicationInspection, bool, error) {
-	if r == nil || r.replayInputs == nil {
+	if r == nil || r.snapshotSelection == nil || r.snapshotSelection.replayInputs == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay input service is required")
 	}
 	if request.RuntimeSelection == nil || strings.TrimSpace(request.RuntimeSelection.Recording.ReplayPath) == "" ||
@@ -46,9 +46,7 @@ func (r *RuntimeOpening) InspectHistoricalApplication(
 	if strings.TrimSpace(request.FolderPath) == "" {
 		return HistoricalApplicationInspection{}, false, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
 	}
-	input, err := r.replayInputs.LoadReplayInput(recordings.LoadReplayInputRequest{
-		Path: request.RuntimeSelection.Recording.ReplayPath,
-	})
+	input, err := r.snapshotSelection.loadReplayInputForActivation(request.RuntimeSelection.Recording.ReplayPath, nil)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}

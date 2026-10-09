@@ -124,7 +124,7 @@ func (s *RuntimeSnapshotSelection) resolveLegacyReplaySnapshot(
 	}
 	input, err := s.loadReplayInputForActivation(recording.ReplayPath, preloadedReplayInput)
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, err
+		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: load replay input for activation: %w", err)
 	}
 	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, nil
@@ -222,7 +222,7 @@ func (s *RuntimeSnapshotSelection) loadReplayInputForActivation(
 		recordings.LoadReplayInputRequest{Path: replayPath},
 	)
 	if err != nil {
-		return recordings.LoadReplayInputResult{}, fmt.Errorf("open Factory Runtime: load replay input for activation: %w", err)
+		return recordings.LoadReplayInputResult{}, err
 	}
 	return loaded, nil
 }

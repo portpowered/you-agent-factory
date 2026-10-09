@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -866,11 +867,10 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 	replayInputs := &legacyReplayInputsStub{}
 	factory := &RuntimeOpening{
 		runtimeRoot:               root,
-		replayInputs:              replayInputs,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		snapshotSelection: NewRuntimeSnapshotSelection((activationDefinitionsStub{snapshot: activationSnapshot()}).ResolveRuntimeSnapshot, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
 			return replayRuntimeConfigStub{}, nil
-		}, nil, nil, nil),
+		}, replayInputs, nil, nil),
 	}
 	_, _, _, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
@@ -906,6 +906,38 @@ func TestOpenForRequestReplayRequiresRuntimeRootAndReplayInputs(t *testing.T) {
 			_, _, _, err := test.factory.openForRequest(t.Context(), request)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("openForRequest() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestSelectedReplayReadFailurePreservesExactCauseBeforeActivation(t *testing.T) {
+	t.Parallel()
+	for _, historical := range []bool{false, true} {
+		t.Run(fmt.Sprintf("historical=%t", historical), func(t *testing.T) {
+			t.Parallel()
+			cause := &recordings.ReplayInputError{Cause: errors.New("selected replay unavailable")}
+			calls := 0
+			loader := runtimeInputReplayFunc(func(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+				calls++
+				if request.Path != "selected.recording.json" {
+					t.Fatalf("replay path = %q", request.Path)
+				}
+				return recordings.LoadReplayInputResult{}, cause
+			})
+			root := &replayRoutingRoot{}
+			opening := &RuntimeOpening{runtimeRoot: root,
+				snapshotSelection: NewRuntimeSnapshotSelection(nil, nil, loader, nil, nil)}
+			request := (runtimeOwnerFixture{FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+				Recordings: recordings.RuntimeSelection{ReplayPath: "selected.recording.json"}}).startRequest()
+			var err error
+			if historical {
+				_, _, err = opening.InspectHistoricalApplication(t.Context(), request)
+			} else {
+				_, _, _, err = opening.openForRequest(t.Context(), request)
+			}
+			if err != cause || calls != 1 || root.activations != 0 {
+				t.Fatalf("error=%v reads=%d activations=%d; want exact cause, one read and no activation", err, calls, root.activations)
 			}
 		})
 	}

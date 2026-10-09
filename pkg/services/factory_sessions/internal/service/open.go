@@ -41,7 +41,6 @@ type RuntimeOpening struct {
 	runtimeRoot               FactoryRuntimeRoot
 	snapshotSelection         *RuntimeSnapshotSelection
 	baseLogger                *zap.Logger
-	replayInputs              recordings.ReplayInputLoader
 	resourceAcquisition       *RuntimeResourceAcquisition
 	openingCompletion         *RuntimeOpeningCompletion
 	openingBinding            *RuntimeOpeningBinding
@@ -79,7 +78,7 @@ func NewRuntimeOpening(assembly roles.RuntimeAssembly, durable durableexecution.
 	concrete, _ := assembly.(*legacyservice.Assembly)
 	return &RuntimeOpening{
 		assembly: concrete, durable: durable, factoryDefinitions: definitions, resolveHome: resolveHome,
-		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger, replayInputs: recordingsRuntime,
+		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger,
 		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,
 		replayBehavior: replayBehavior, recordingsService: recordingsService,
@@ -882,12 +881,10 @@ func (r *RuntimeOpening) openForRequest(
 		if r.runtimeRoot == nil {
 			return nil, nil, nil, fmt.Errorf("open Factory Runtime: Factory Runtime root is required for replay")
 		}
-		if r.replayInputs == nil {
+		if r.snapshotSelection == nil || r.snapshotSelection.replayInputs == nil {
 			return nil, nil, nil, fmt.Errorf("open Factory Runtime: replay input capability is required for replay")
 		}
-		input, err := r.replayInputs.LoadReplayInput(
-			recordings.LoadReplayInputRequest{Path: recording.ReplayPath},
-		)
+		input, err := r.snapshotSelection.loadReplayInputForActivation(recording.ReplayPath, nil)
 		if err != nil {
 			// The loader has already classified and safely detached the
 			// replay input. Propagating that result preserves the one-read
