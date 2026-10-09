@@ -241,3 +241,17 @@ func TestSafeWorkDiagnosticsEventPayloadPreservesPublicFieldNamesAndMetadataKeys
 		t.Fatalf("round trip = %#v, want %#v", decoded, diagnostics)
 	}
 }
+func TestSafeDiagnosticsPreserveDeclaredFailureType(t *testing.T) {
+	t.Parallel()
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
+			"failure_type": "worker_declared_failure", "authorization": "private-value",
+		}},
+	})
+	if safe.Provider.ResponseMetadata["failure_type"] != "worker_declared_failure" {
+		t.Fatalf("metadata=%#v", safe.Provider.ResponseMetadata)
+	}
+	if _, ok := safe.Provider.ResponseMetadata["authorization"]; ok {
+		t.Fatal("private metadata survived")
+	}
+}

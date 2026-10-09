@@ -58,7 +58,12 @@ func (s *Service) normalizeSuccessfulResult(
 		len(runnerResult.RecordedOutputWork) > 0
 	switch result.Outcome {
 	case workers.ExecutionOutcomeFailed:
-		return result, errors.New("runner returned failed outcome")
+		result.Output.Feedback = declaredFailureFeedback(runnerResult.Feedback, request)
+		message := declaredFailureMessage(result.Output.Feedback)
+		result.Failure = failureFromError(workers.NewProviderError(
+			workers.WorkFailureTypeWorkerDeclaredFailure, message, nil,
+		))
+		return result, nil
 	case workers.ExecutionOutcomeRejected:
 		if s != nil && providerOverrideApplies(&request, s.providerOverride) &&
 			resolveRunnerIdentity(request.Target) == runners.AgentIdentity &&

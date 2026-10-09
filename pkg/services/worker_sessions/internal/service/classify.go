@@ -442,6 +442,7 @@ var knownFailureFamilies = map[workers.WorkFailureFamily]bool{
 // knownFailureTypes whitelists the exact WorkFailureType constants Workers
 // documents. See knownFailureFamilies for why this whitelist exists.
 var knownFailureTypes = map[workers.WorkFailureType]bool{
+	workers.WorkFailureTypeWorkerDeclaredFailure:           true,
 	workers.WorkFailureTypeAuthFailure:                     true,
 	workers.WorkFailureTypePermanentBadRequest:             true,
 	workers.WorkFailureTypeThrottled:                       true,

@@ -124,3 +124,18 @@ func TestHistoricalDispatchReadMappingRequiresExplicitConfirmation(t *testing.T)
 		t.Fatalf("explicit historical dispatch detail = %q, want CONFIRMED", detail.ConfirmationState)
 	}
 }
+func TestStopSummaryPreservesWorkerDeclaredFailure(t *testing.T) {
+	t.Parallel()
+	summary := &factorysessions.StopSummary{StopKind: factorysessions.StopKindBlocked, LatestDispatch: &factorysessions.StopDispatchSummary{
+		DispatchID: "declared-failure", Status: factorysessions.StopDispatchStatusFailed,
+		FailureDetail: &factorysessions.StopFailureDetail{Reason: "worker_declared_failure", Message: "admission was not confirmed"},
+	}}
+	mapped := factorysessionmapping.StopSummaryToAPI(summary)
+	if mapped.LatestDispatch.FailureDetail.Reason != factoryapi.WorkFailureTypeWorkerDeclaredFailure {
+		t.Fatalf("detail=%#v", mapped.LatestDispatch.FailureDetail)
+	}
+	detached := factorysessionmapping.StopSummaryFromAPI(mapped)
+	if detached.LatestDispatch.FailureDetail.Reason != "worker_declared_failure" {
+		t.Fatalf("detail=%#v", detached.LatestDispatch.FailureDetail)
+	}
+}
