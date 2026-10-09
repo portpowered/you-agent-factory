@@ -46,6 +46,8 @@ Return only decision, feedback and output. decision is ACCEPTED or FAILED,
 feedback is a string, and output is a native JSON object containing non-empty measurements
 or a non-empty precondition naming the unmet requirement with available values.
 Use the exact key output.precondition with a non-blank string for an unmet precondition.
+Alternatively, output.precondition may be a non-empty object with at least one immediate non-blank string value.
+Object example: {"precondition":{"requirement":"daemon running the fix","observed":"old revision","needed":"restart"}}.
 Every supplied measurements list must be non-empty; name/source must be non-blank.
 Each measurement requires value. Zero, false and null are valid values.
 Keep optional read records, units, corrective receipt and proposal path in output.
