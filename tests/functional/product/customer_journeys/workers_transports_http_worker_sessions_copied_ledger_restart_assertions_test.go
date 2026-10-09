@@ -2,6 +2,7 @@ package customer_journeys_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,67 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// A public move after recovery must append one new physical attempt without
+// changing any committed historical rows, including an unrelated failure.
+func assertCopiedLedgerNewAttempt(t *testing.T, server *support.FunctionalAPIServer,
+	factoryID, workID, failureWorkID, firstWorkerSessionID string, before copiedLedgerPublicSnapshot) {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: "review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		copiedLedgerWorkURL(server.URL(), factoryID, workID)+"/move", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(response.Body)
+		t.Fatalf("move restored Work status=%d body=%s", response.StatusCode, data)
+	}
+	waitCopiedLedgerWorkState(t, server.URL(), factoryID, workID, "complete")
+	endpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions/" + url.PathEscape(factoryID) +
+		"/worker-sessions?workId=" + url.QueryEscape(workID)
+	// Use the existing public confirmation predicate; execution completion
+	// alone is insufficient to prove the capture and canonical flush settled.
+	listed, err := support.WaitForObservation(copiedLedgerReplayTimeout, func() (factoryapi.ListWorkerSessionsResponse, error) {
+		var list factoryapi.ListWorkerSessionsResponse
+		err := readCopiedLedgerJSON(t.Context(), endpoint, &list)
+		return list, err
+	}, func(list factoryapi.ListWorkerSessionsResponse) bool {
+		if len(list.Sessions) != 3 {
+			return false
+		}
+		for _, row := range list.Sessions {
+			if !copiedLedgerAttemptConfirmed(row, factoryID, workID, factoryapi.WorkerSessionObservationStateCompleted) || row.TokenUsage == nil {
+				return false
+			}
+		}
+		return true
+	})
+	if err != nil {
+		t.Fatalf("new restored attempt did not commit: %v; rows=%#v", err, listed)
+	}
+	assertCopiedLedgerWorkRows(t, listed, factoryID, workID, 3, factoryapi.WorkerSessionObservationStateCompleted)
+	if !reflect.DeepEqual(listed.Sessions[:2], before.lists[workID].Sessions) {
+		t.Fatalf("new commit changed ordered historical attempts: before=%#v after=%#v", before.lists[workID], listed)
+	}
+	if listed.Sessions[2].Model == nil || *listed.Sessions[2].Model != copiedLedgerReplayTargetModel {
+		t.Fatalf("new attempt lost model: %#v", listed.Sessions[2])
+	}
+	failure := support.ListSessionWorkerSessions(t, server.URL(), factoryID, failureWorkID)
+	assertCopiedLedgerSessionListsEqual(t, map[string]factoryapi.ListWorkerSessionsResponse{failureWorkID: before.lists[failureWorkID]},
+		map[string]factoryapi.ListWorkerSessionsResponse{failureWorkID: failure})
+	before.lists[workID] = listed
+	assertCopiedLedgerCLIParity(t, server, factoryID, workID, firstWorkerSessionID, before)
+}
 
 func assertCopiedLedgerEventsEqual(
 	t *testing.T,

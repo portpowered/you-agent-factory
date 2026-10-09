@@ -178,6 +178,7 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	assertCopiedLedgerRepeatedCursorResume(t, resumedServer.URL(), fixture.factoryID, firstWorkerSessionID, after.events[firstWorkerSessionID])
 	assertCopiedLedgerSyncPreflight(t, resumedServer.URL(), fixture.factoryID)
 	assertCopiedLedgerCLIParity(t, resumedServer, fixture.factoryID, targetWorkID, firstWorkerSessionID, after)
+	assertCopiedLedgerNewAttempt(t, resumedServer, fixture.factoryID, targetWorkID, failureWorkID, firstWorkerSessionID, after)
 }
 
 func assertCopiedLedgerSyncPreflight(t *testing.T, baseURL, sessionID string) {
@@ -647,6 +648,9 @@ func assertCopiedLedgerWorkRows(
 			observation.RecordingHealth == nil || *observation.RecordingHealth != factoryapi.WorkerSessionObservationRecordingHealthComplete {
 			t.Fatalf("Work %q attempt %q lacks captured confirmation/timing/recording evidence: %#v", workID, observation.WorkerSessionId, observation)
 		}
+		if index > 0 && observation.StartedAt.Before(*response.Sessions[index-1].StartedAt) {
+			t.Fatalf("Work %q attempts lost chronological order: %#v", workID, response.Sessions)
+		}
 		if !observation.ProviderSessionAvailable || observation.ProviderSession == nil || strings.TrimSpace(observation.ProviderSession.Id) == "" {
 			t.Fatalf("Work %q attempt %q lacks exact Provider Session identity: %#v", workID, observation.WorkerSessionId, observation)
 		}
@@ -682,12 +686,24 @@ func startCopiedLedgerResumeProcess(
 	t.Helper()
 	successorPath := filepath.Join(filepath.Dir(recordingPath), "worker-session-resume-successor.json")
 	workerRecordingWriter := &copiedLedgerWorkerRecordingWriter{}
+	release := make(chan struct{})
+	close(release)
+	runner := &copiedLedgerReplayRunner{
+		homeDir:       homeDir,
+		successOutput: readRemoteProviderFixture(t, "codex", "success", "stdout.jsonl"),
+		failureOutput: readRemoteProviderFixture(t, "codex", "structured-failure", "stdout.jsonl"),
+		rollout:       readRemoteProviderFixture(t, "codex", "success", "rollout.jsonl"),
+		release:       release, targetStarted: make(chan struct{}),
+	}
+	// A resumed execution must not reuse any original Provider identity.
+	runner.calls.Store(1000)
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       remoteFunctionalEnvironment(homeDir),
 		Args:                      []string{"--resume", recordingPath, "--record", successorPath},
 		Edges: serviceedges.Edges{
+			ProviderCommandRunner:                    runner,
 			FactorySessionIDGenerator:                func() string { return factoryID },
 			FactorySessionRuntimeInstanceIDGenerator: func() string { return runtimeInstanceID },
 			WorkerRecordingWriter:                    workerRecordingWriter,
