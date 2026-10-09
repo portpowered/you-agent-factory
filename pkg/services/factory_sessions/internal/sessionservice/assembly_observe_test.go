@@ -605,7 +605,7 @@ func assertScopedControlCompletion(t *testing.T, completed scopedControlCompleti
 // response-cursor journeys remain in the functional suite.
 func TestRegisterOpeningRepeatedStaleReleaseDuringReplacementAndPeerWork(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	state := newWorkResolverSessionState()
 	clock := projectionClockStub{now: time.Unix(1234, 0)}
@@ -627,9 +627,12 @@ func TestRegisterOpeningRepeatedStaleReleaseDuringReplacementAndPeerWork(t *test
 	newRuntime, newEffect, _ := registerStaleReleaseWork(t, assembly, "candidate", "new", proceed, clock)
 	peerRuntime, peerEffect, _ := registerStaleReleaseWork(t, assembly, "peer", "peer", proceed, clock)
 	var joined sync.WaitGroup
-	defer joined.Wait()
 	// Unblock before joining even when an assertion exits early.
-	defer unblock.Do(func() { close(proceed) })
+	defer func() {
+		cancel()
+		unblock.Do(func() { close(proceed) })
+		joined.Wait()
+	}()
 	results := make(chan staleReleaseWorkResult, 2)
 	startStaleReleaseWork(ctx, &joined, results, newRuntime, "candidate", "new-work")
 	startStaleReleaseWork(ctx, &joined, results, peerRuntime, "peer", "peer-work")
