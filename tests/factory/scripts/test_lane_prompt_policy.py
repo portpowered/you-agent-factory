@@ -102,6 +102,14 @@ Post-merge or integrated Project validation stays with its named later gate.
 
 
 MISSION = """
+{{range .Inputs}}{{if eq .DataType "work"}}
+Payload: {{.Payload}}
+Work ID: {{.WorkID}}
+Tags: {{.Tags}}
+Previous output: {{.PreviousOutput}}
+Correction feedback (verbatim checker reason): {{.RejectionFeedback}}
+{{end}}{{end}}
+On correction, fix the field named in the checker reason above.
 Run every named command/read and report every named value, unit and source.
 Each failed read retries once; retain both attempts and available output.
 Optional exhaustion is a recorded gap, not alone FAILED.
@@ -113,6 +121,10 @@ The existing project-report route informs the owning lead, who owns admission an
 output is a native JSON object containing non-empty measurements
 or a non-empty precondition naming the unmet requirement with available values.
 do not reset the rejection marker.
+Use the exact key output.precondition with a non-blank string for an unmet precondition.
+Each measurement requires value. Zero, false and null are valid values.
+{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}
+{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}
 """
 
 

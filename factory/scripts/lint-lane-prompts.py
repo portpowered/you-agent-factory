@@ -298,6 +298,13 @@ def check_loopback_policy(prompts):
 
 
 MISSION_RULES = (
+    ('binding', '{{range .Inputs}}{{if eq .DataType "work"}}'),
+    ('payload', 'Payload: {{.Payload}}'),
+    ('identity', 'Work ID: {{.WorkID}}'),
+    ('tags', 'Tags: {{.Tags}}'),
+    ('previous', 'Previous output: {{.PreviousOutput}}'),
+    ('feedback', 'Correction feedback (verbatim checker reason): {{.RejectionFeedback}}'),
+    ('field', 'On correction, fix the field named in the checker reason above.'),
     ('commands', 'Run every named command/read and report every named value, unit and source'),
     ('retry', 'Each failed read retries once; retain both attempts and available output'),
     ('optional', 'Optional exhaustion is a recorded gap, not alone FAILED'),
@@ -309,6 +316,10 @@ MISSION_RULES = (
     ('shape', 'output is a native JSON object containing non-empty measurements'),
     ('precondition', 'or a non-empty precondition naming the unmet requirement with available values'),
     ('marker', 'do not reset the rejection marker'),
+    ('precondition-key', 'Use the exact key output.precondition with a non-blank string for an unmet precondition.'),
+    ('values', 'Each measurement requires value. Zero, false and null are valid values.'),
+    ('measurements-example', '{"decision":"ACCEPTED","feedback":"Measured pending Work.","output":{"measurements":[{"name":"pending","value":0,"source":"authorized Work list"}]}}'),
+    ('precondition-example', '{"decision":"FAILED","feedback":"Required read unavailable.","output":{"precondition":"Required recording read unavailable; pending Work observed: 0"}}'),
 )
 
 
