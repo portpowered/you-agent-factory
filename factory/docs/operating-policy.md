@@ -8,8 +8,10 @@ model selection. This document governs decisions made by those Workstations.
 
 The canonical local Factory server for this deployment is
 http://127.0.0.1:7437. Workers must pass that server explicitly to every
-API-backed you command. Port 7437 is the Factory endpoint; do not infer a
-server from the CLI default.
+API-backed you command about this Factory. Port 7437 is the Factory endpoint; do not infer a
+server from the CLI default. A product test that builds its own binary and
+runs it on a private port, HOME and fixtures is separate: it uses that
+isolated server and never 7437.
 
 ## Mission and control structure
 
