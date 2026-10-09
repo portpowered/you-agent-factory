@@ -41,6 +41,7 @@ func TestRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 		}}},
 		Edges: serviceedges.Edges{ProviderCommandRunner: deny, ScriptCommandRunner: deny},
 	})
+	support.WaitForRuntimeIdle(t, server.URL(), 10*time.Second)
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
 	execution := map[string]any{
@@ -57,7 +58,6 @@ func TestRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := map[string]any{"requestId": "mock-interrupt", "successorWorkerSessionId": "mock-successor", "replacementMessage": "replacement message", "resumeMode": "recorded"}
-	endpoint := server.URL() + "/worker-sessions/mock-source/interrupt"
 	cli := support.FakeInputs(ctx, []string{"you", "--remote", "--server", server.URL(), "--json", "worker-sessions", "interrupt", "mock-source",
 		"--request-id", "mock-interrupt", "--successor-worker-session-id", "mock-successor", "--replacement-message", "replacement message", "--resume-mode", "recorded", "--async"})
 	cli.Input.Env, cli.Input.WorkingDirectory = environment, dir
@@ -77,6 +77,13 @@ func TestRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 	if successor.Model == nil || *successor.Model != "mock-model" || successor.ReasoningEffort == nil || *successor.ReasoningEffort != "high" {
 		t.Fatalf("successor lost settings: %+v", successor)
 	}
+	checkMockInterruptReplay(t, ctx, server.URL(), request, first)
+	checkMockInterruptCompletion(t, server.URL(), gate, source, tokens, deny)
+}
+
+func checkMockInterruptReplay(t *testing.T, ctx context.Context, baseURL string, request map[string]any, first factoryapi.WorkerSessionInterruptResponse) {
+	t.Helper()
+	endpoint := baseURL + "/worker-sessions/mock-source/interrupt"
 	replay := interruptPost(t, ctx, endpoint, request, http.StatusAccepted)
 	var replayed factoryapi.WorkerSessionInterruptResponse
 	if err := json.Unmarshal(replay, &replayed); err != nil || !reflect.DeepEqual(first, replayed) {
@@ -100,20 +107,24 @@ func TestRecordedInterruptPreservesMockExecutionPolicy(t *testing.T) {
 		interruptPost(t, ctx, endpoint, request, http.StatusConflict)
 		request[key] = original
 	}
-	listed := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?scope=direct")
+	listed := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, baseURL+"/worker-sessions?scope=direct")
 	if len(listed.Sessions) != 2 {
 		t.Fatalf("direct sessions after replay/conflict = %+v, want one source and one successor", listed.Sessions)
 	}
+}
+
+func checkMockInterruptCompletion(t *testing.T, baseURL string, gate *support.MockWorkerGate, source factoryapi.WorkerSessionObservation, tokens int64, deny *interruptDenyNative) {
+	t.Helper()
 	gate.Release()
 	final, err := support.WaitForObservation(10*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
-		return support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/mock-successor"), nil
+		return support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/mock-successor"), nil
 	}, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == "COMPLETED" || observation.State == "FAILED"
 	})
 	if err != nil || final.State != "COMPLETED" || final.TokenUsage == nil || final.TokenUsage.InputTokens == nil || int64(*final.TokenUsage.InputTokens) != tokens {
 		t.Fatalf("successor completion/usage = %+v, %v", final, err)
 	}
-	after := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/mock-source")
+	after := support.GetJSON[factoryapi.WorkerSessionObservation](t, baseURL+"/worker-sessions/mock-source")
 	if !reflect.DeepEqual(after.TokenUsage, source.TokenUsage) {
 		t.Fatalf("successor changed source usage: before %+v, after %+v", source.TokenUsage, after.TokenUsage)
 	}
