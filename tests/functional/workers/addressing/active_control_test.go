@@ -248,6 +248,9 @@ type addressingRunner struct {
 	started              chan struct{}
 	release              chan struct{}
 	releaseOnce          sync.Once
+	cancelObserved       chan struct{}
+	cancelReturn         chan struct{}
+	cancelObserveOnce    sync.Once
 	calls, cancellations atomic.Int32
 }
 
@@ -270,6 +273,10 @@ func (r *addressingRunner) RunStreaming(ctx context.Context, req platformprocess
 	select {
 	case <-ctx.Done():
 		r.cancellations.Add(1)
+		if r.cancelObserved != nil {
+			r.cancelObserveOnce.Do(func() { close(r.cancelObserved) })
+			<-r.cancelReturn
+		}
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
 		output := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
